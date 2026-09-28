@@ -11,6 +11,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/flutter_sdk_readings.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
@@ -21,7 +22,6 @@ class FlutterSdkSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final environments = ref.watch(environmentsControllerProvider);
     final paths = ref.watch(
       settingsControllerProvider.select((s) => s.flutterSdkPaths),
@@ -33,12 +33,7 @@ class FlutterSdkSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Only needed where Flutter is not on PATH.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          const SettingsNote('Only needed where Flutter is not on PATH.'),
           for (final environment in environments)
             _FlutterSdkRow(
               // Keyed by environment, not position: discovery can insert a row
@@ -122,8 +117,8 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.md),
+    // One ruled entry per machine, like every list on a settings page.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -132,7 +127,7 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
               Expanded(
                 child: Text(
                   widget.environment.name,
-                  style: theme.textTheme.bodyMedium,
+                  style: SettingsStyles.rowLabel(context),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

@@ -8,8 +8,8 @@ import 'settings_catalog.dart';
 export 'settings_catalog.dart'
     show SettingsAnchor, SettingsGroup, SettingsSectionId, SettingsTarget;
 
-/// The settings rail: a search box over the pages, grouped. While the box holds
-/// a query the rail narrows to the pages it matches and lists the settings it
+/// The settings page list: a search box over the pages, grouped. While the box holds
+/// a query the list narrows to the pages it matches and lists the settings it
 /// found under each. Up/Down move the page selection while a row has focus;
 /// the search box keeps its own arrows.
 class SettingsNav extends StatefulWidget {
@@ -79,24 +79,54 @@ class _SettingsNavState extends State<SettingsNav> {
   Widget build(BuildContext context) {
     final pages = _visible;
     final hits = searchSettings(_filter.text);
+    final theme = Theme.of(context);
+    final tones = SurfaceTones.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    const fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
+      borderSide: BorderSide.none,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Board N5: a 28 px search box on the `raised` tone, no outline, over
+        // the grouped list, all inside the column's 12 × 8 padding.
         Padding(
           padding: const EdgeInsets.fromLTRB(
             Insets.sm,
-            Insets.sm,
+            Insets.md,
             Insets.sm,
             Insets.xs,
           ),
           child: TextField(
             controller: _filter,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
+            decoration: InputDecoration(
               isDense: true,
+              filled: true,
+              fillColor: tones.raised,
+              border: fieldBorder,
+              enabledBorder: fieldBorder,
+              focusedBorder: fieldBorder.copyWith(
+                borderSide: BorderSide(color: theme.colorScheme.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: Insets.xs + 2,
+              ),
               hintText: 'Search settings',
-              prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-              prefixIconConstraints: BoxConstraints(minWidth: 30),
+              hintStyle: theme.textTheme.bodySmall?.copyWith(color: muted),
+              prefixIcon: Icon(
+                AppIcons.magnifyingGlass,
+                size: Chrome.iconSmall,
+                color: muted,
+              ),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: Chrome.row + 2,
+              ),
             ),
           ),
         ),
@@ -106,15 +136,17 @@ class _SettingsNavState extends State<SettingsNav> {
             canRequestFocus: false,
             skipTraversal: true,
             onKeyEvent: _onListKey,
-            // Widget order, not reading order: the rail scrolls in a short
+            // Widget order, not reading order: the page list scrolls in a short
             // window, and reading order re-sorts the rows as they move, so Tab
             // would come back to a row it had already visited.
             child: FocusTraversalGroup(
               policy: WidgetOrderTraversalPolicy(),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Insets.xs,
-                  vertical: Insets.xs,
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.sm,
+                  0,
+                  Insets.sm,
+                  Insets.md,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -158,7 +190,7 @@ class _SettingsNavState extends State<SettingsNav> {
   }
 }
 
-/// A group's name above its pages in the rail.
+/// A group's name above its pages in the page list.
 class SettingsNavGroupHeader extends StatelessWidget {
   const SettingsNavGroupHeader({required this.group, super.key});
 
@@ -167,13 +199,14 @@ class SettingsNavGroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Board `.grp`: 10.5, semibold, tracked, uppercase, dim, 12 px above.
     return Semantics(
       header: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-          Insets.sm,
-          Insets.sm,
-          Insets.sm,
+          Insets.md - 2,
+          Insets.md,
+          Insets.md - 2,
           Insets.xs,
         ),
         child: Text(
@@ -182,7 +215,11 @@ class SettingsNavGroupHeader extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.labelSmall
               ?.merge(Chrome.groupLabel)
-              .copyWith(color: theme.colorScheme.onSurfaceVariant),
+              .copyWith(
+                fontSize: 10.5,
+                letterSpacing: 0.5,
+                color: theme.colorScheme.outline,
+              ),
         ),
       ),
     );
@@ -260,48 +297,44 @@ class _NavRow extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Board `.nav`: a 28 px row, text only — no icon — muted until it is the
+  /// page on screen, which takes the `selected` tone and the full ink; the
+  /// `hover` tone under the pointer.
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final tones = SurfaceTones.of(context);
     return Semantics(
       button: true,
       selected: selected,
       label: page.label,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 2),
-        child: InkWell(
+        padding: const EdgeInsets.only(bottom: 1),
+        child: Material(
+          color: selected ? tones.selected : Colors.transparent,
           borderRadius: BorderRadius.circular(Radii.sm),
-          onTap: onTap,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: Chrome.row + 2),
-            padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-            decoration: BoxDecoration(
-              color: selected
-                  ? StateLayers.selected(scheme)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radii.sm),
-            ),
-            child: Row(
-              children: [
-                ExcludeSemantics(
-                  child: Icon(page.icon, size: Chrome.icon, color: color),
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: ExcludeSemantics(
-                    child: Text(
-                      page.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: selected ? scheme.primary : scheme.onSurface,
-                      ),
-                    ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            hoverColor: tones.hover,
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: Chrome.row + 2),
+              padding: const EdgeInsets.symmetric(horizontal: Insets.md - 2),
+              alignment: Alignment.centerLeft,
+              child: ExcludeSemantics(
+                child: Text(
+                  page.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 12.5,
+                    color: selected
+                        ? scheme.onSurface
+                        : scheme.onSurfaceVariant,
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),

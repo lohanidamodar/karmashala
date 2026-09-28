@@ -31,7 +31,7 @@ class WatchSetSection extends ConsumerWidget {
     return SettingsSection(
       title: SettingsAnchor.sessionWatching.heading,
       child: coverage == null
-          ? Text('Nothing measured yet.', style: theme.textTheme.bodySmall)
+          ? const SettingsNote('Nothing measured yet.')
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -90,21 +90,13 @@ class WatchSetSection extends ConsumerWidget {
       period == null ? 'never' : 'every ${period.inSeconds}s';
 }
 
-/// The right-hand half of a diagnostics row: a fact, not a control.
+/// The right-hand half of a diagnostics row: a fact, not a control — the
+/// board's value pill without a caret.
 class _Value extends StatelessWidget {
   const _Value(this.text);
 
   final String text;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Text(
-      text,
-      textAlign: TextAlign.end,
-      style: theme.textTheme.bodyMedium?.copyWith(
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SettingsValue(label: text);
 }

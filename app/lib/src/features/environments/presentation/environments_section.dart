@@ -9,6 +9,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
 import 'package:karmashala_environments/ssh.dart';
 import '../../ssh/application/companion_route_store.dart';
@@ -27,7 +28,6 @@ class EnvironmentsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final environments = ref.watch(environmentsControllerProvider);
     final installations = ref.watch(agentInstallationsControllerProvider);
     final hosts = ref.watch(sshHostsControllerProvider);
@@ -42,8 +42,9 @@ class EnvironmentsSection extends ConsumerWidget {
         label: const Text('Find local'),
       ),
       child: environments.isEmpty
-          ? Text('No environments known yet.', style: theme.textTheme.bodySmall)
+          ? const SettingsNote('No environments known yet.')
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final environment in environments)
                   _EnvironmentCard(
@@ -97,21 +98,23 @@ class _EnvironmentCard extends ConsumerWidget {
         children: [
           Row(
             children: [
+              // The board's row head: a quiet glyph, the name in the row
+              // label's hand, the kind as a small dim tag.
               Icon(
                 _iconFor(environment.kind),
-                size: Chrome.iconTitle,
-                color: theme.colorScheme.tertiary,
+                size: Chrome.iconSmall,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
                   environment.name,
-                  style: theme.textTheme.titleSmall,
+                  style: SettingsStyles.rowLabel(context),
                 ),
               ),
               Text(
                 _kindLabel(environment.kind),
-                style: theme.textTheme.labelSmall,
+                style: SettingsStyles.sectionLabel(context),
               ),
             ],
           ),

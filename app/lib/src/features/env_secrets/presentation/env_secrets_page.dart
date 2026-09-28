@@ -19,7 +19,6 @@ class EnvSecretsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final names = ref.watch(envVariablesProvider);
 
     return Column(
@@ -36,16 +35,15 @@ class EnvSecretsPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const _Honesty(),
-              const SizedBox(height: Insets.md),
               if (names == null)
-                Text(
+                const SettingsNote(
                   'Waiting for the Karmashala server to say which are set.',
-                  style: theme.textTheme.bodySmall,
                 )
               else if (names.isEmpty)
-                Text('Nothing defined yet.', style: theme.textTheme.bodySmall)
+                const SettingsNote('Nothing defined yet.')
               else
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final variable in names)
                       _VariableCard(variable: variable),
@@ -57,7 +55,7 @@ class EnvSecretsPage extends ConsumerWidget {
         SettingsSection(
           title: 'WHERE THEY GO',
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Fact(
                 icon: AppIcons.terminal,
@@ -100,20 +98,20 @@ class _Honesty extends StatelessWidget {
     final quiet = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    return Container(
-      padding: const EdgeInsets.all(Insets.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(Radii.sm),
-      ),
+    // A ruled row like the rest of the page, not a box: the warning glyph in
+    // the attention tone carries the weight a filled panel used to.
+    return SettingsRuled(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(AppIcons.warning, size: Chrome.icon, color: scheme.tertiary),
+              Icon(
+                AppIcons.warning,
+                size: Chrome.icon,
+                color: SemanticColors.of(context).attention,
+              ),
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
@@ -147,8 +145,8 @@ class _Fact extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.sm),
+    // One ruled row per fact, in the section's rhythm.
+    return SettingsRuled(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -13,7 +13,7 @@ import 'settings_section.dart';
 
 /// Settings → Appearance → Sidebar & context panel: which tools the context
 /// panel's **More** menu lists, and how much a project row in the sidebar
-/// says. The same list as View › Side panel items.
+/// says. The same list as Tools in More.
 ///
 /// Only More's own tools are listed: Changes, Repo and History are tabs, and
 /// taking one out of More never touched them, so a box for them would do
@@ -23,7 +23,6 @@ class SidePanelItemsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
     final surfaces = [
       for (final surface in SidePanelSurface.offered(
@@ -54,16 +53,11 @@ class SidePanelItemsSection extends ConsumerWidget {
             ),
             onChanged: controller.setExplorerProjectDetails,
           ),
-          const SizedBox(height: Insets.md),
-          Text(
+          // A ruled note with the tools under it, in the section's rhythm.
+          SettingsNote(
             'Listed under the context panel’s More menu. A tool left out '
             'still opens from the View menu and quick open.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: Insets.sm),
-          _CheckGrid(
+            child: _CheckGrid(
             children: [
               for (final surface in surfaces)
                 SidePanelSurfaceCheckRow(
@@ -75,6 +69,7 @@ class SidePanelItemsSection extends ConsumerWidget {
                   ),
                 ),
             ],
+          ),
           ),
         ],
       ),

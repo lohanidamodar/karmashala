@@ -438,13 +438,41 @@ enum SettingsAnchor {
     'reset',
     'continue',
   ]),
-  defaultAgent(SettingsSectionId.agents, 'Default agent', ['default agent']),
-  detection(SettingsSectionId.agents, 'Detection', ['detect', 'scan']),
-  executables(SettingsSectionId.agents, 'Executables', [
-    'executable',
-    'path',
-    'cli',
+  // Agents and accounts, in the order the page draws them (spec §6, board
+  // N5): Defaults, then each agent's block — Claude's and Codex's anchors land
+  // on theirs, and the default model on the first agent's behaviour — then
+  // usage, updates, executables and detection. Titles are the headings the
+  // page draws, so a search hit names the section it opens.
+  defaultAgent(SettingsSectionId.agents, 'Defaults', [
+    'default agent',
+    'defaults',
+    'new session',
   ]),
+  claudeAccounts(SettingsSectionId.agents, 'Claude Code · accounts', [
+    'claude',
+    'accounts',
+    'machines',
+    'sign in',
+    'capture',
+    'switch account',
+  ]),
+  codexAccounts(SettingsSectionId.agents, 'Codex CLI · accounts', [
+    'codex',
+    'accounts',
+    'machines',
+    'sign in',
+    'capture',
+  ]),
+  defaultModel(SettingsSectionId.agents, 'Claude Code · behaviour', [
+    'default model',
+    'model',
+    'opus',
+    'sonnet',
+    'behaviour',
+    'permission mode',
+    'sandbox',
+  ]),
+  usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
   agentUpdates(SettingsSectionId.agents, 'Agent updates', [
     'update',
     'updates',
@@ -455,21 +483,16 @@ enum SettingsAnchor {
     'antivirus',
     'bitdefender',
   ]),
-  claudeAccounts(SettingsSectionId.agents, 'Claude accounts', [
-    'claude',
-    'accounts',
+  executables(SettingsSectionId.agents, 'Executables', [
+    'executable',
+    'path',
+    'cli',
   ]),
-  codexAccounts(SettingsSectionId.agents, 'Codex accounts', [
-    'codex',
-    'accounts',
-  ]),
-  usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
-  // Behaviour last, after installs and accounts (spec §6).
-  defaultModel(SettingsSectionId.agents, 'Default model', [
-    'default model',
-    'model',
-    'opus',
-    'sonnet',
+  detection(SettingsSectionId.agents, 'Find agents', [
+    'detect',
+    'detection',
+    'scan',
+    'rescan',
   ]),
   permissionModes(SettingsSectionId.tools, 'Permission modes', [
     'ask',
@@ -871,10 +894,10 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['continue', 'message', 'prompt'],
   ),
   SettingsEntry(
-    'Default agent',
+    'Agent for new sessions',
     anchor: SettingsAnchor.defaultAgent,
     description: 'Pre-selected when starting a session.',
-    keywords: ['new session', 'pre-selected'],
+    keywords: ['default agent', 'new session', 'pre-selected'],
   ),
   SettingsEntry(
     'Default model',
@@ -883,10 +906,19 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['model', 'opus', 'sonnet', 'gpt'],
   ),
   SettingsEntry(
-    'Detect agents',
+    'Detection',
     anchor: SettingsAnchor.detection,
     description: 'Search every environment for installed agent CLIs again.',
-    keywords: ['detect', 'scan', 'install', 'claude', 'codex', 'antigravity'],
+    keywords: [
+      'detect',
+      'detect agents',
+      'rescan',
+      'scan',
+      'install',
+      'claude',
+      'codex',
+      'antigravity',
+    ],
   ),
   SettingsEntry(
     'Executable path',
@@ -918,7 +950,7 @@ const settingsEntries = <SettingsEntry>[
     ],
   ),
   SettingsEntry(
-    'Claude accounts',
+    'Claude Code accounts',
     anchor: SettingsAnchor.claudeAccounts,
     description: 'Signed-in and saved Claude Code accounts.',
     keywords: ['claude', 'login', 'sign in', 'switch account'],

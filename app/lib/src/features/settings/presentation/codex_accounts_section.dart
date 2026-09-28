@@ -29,7 +29,7 @@ class CodexAccountsSection extends ConsumerWidget {
       title: SettingsAnchor.codexAccounts.heading,
       child: installations.isEmpty
           ? Text(
-              'No Codex found. Press Discover under Environments.',
+              'No Codex found. Find agents under Settings → Machines.',
               style: theme.textTheme.bodySmall,
             )
           : Column(

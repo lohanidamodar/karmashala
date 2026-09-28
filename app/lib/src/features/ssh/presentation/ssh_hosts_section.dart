@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../../files/application/files_tab_actions.dart';
@@ -26,7 +27,6 @@ class SshHostsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final hosts = ref.watch(sshHostsControllerProvider);
 
     return SettingsSection(
@@ -37,11 +37,13 @@ class SshHostsSection extends ConsumerWidget {
         label: const Text('Add host'),
       ),
       child: hosts.isEmpty
-          ? Text(
+          ? const SettingsNote(
               'No remote hosts yet. Passwords and passphrases are never saved.',
-              style: theme.textTheme.bodySmall,
             )
-          : Column(children: [for (final host in hosts) _HostCard(host: host)]),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (final host in hosts) _HostCard(host: host)],
+            ),
     );
   }
 }
@@ -132,10 +134,12 @@ class _HostCard extends ConsumerWidget {
           children: [
             Row(
               children: [
+                // The board's row head: a quiet glyph, then the name in the
+                // row label's hand.
                 Icon(
                   AppIcons.globe,
-                  size: Chrome.iconTitle,
-                  color: theme.colorScheme.tertiary,
+                  size: Chrome.iconSmall,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: Insets.sm),
                 Expanded(
@@ -147,24 +151,14 @@ class _HostCard extends ConsumerWidget {
                           host.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall,
+                          style: SettingsStyles.rowLabel(context),
                         ),
                       ),
                       if (projects.isNotEmpty) ...[
-                        const SizedBox(width: Insets.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Insets.xs,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(Radii.md),
-                          ),
-                          child: Text(
-                            '${projects.length} project${projects.length == 1 ? '' : 's'}',
-                            style: theme.textTheme.labelSmall,
-                          ),
+                        const SizedBox(width: Insets.sm),
+                        Text(
+                          '${projects.length} project${projects.length == 1 ? '' : 's'}',
+                          style: SettingsStyles.rowHelp(context),
                         ),
                       ],
                     ],

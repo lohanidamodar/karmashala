@@ -25,16 +25,9 @@ class MachinesSection extends ConsumerWidget {
     final machines = ref.watch(machinesProvider);
     final active = ref.watch(activeMachineProvider);
     final paired = ref.watch(pairedMachinesProvider).value ?? const [];
-    final theme = Theme.of(context);
+    // Board rows: a row per server, then adding one as the list's last row.
     return SettingsSection(
       title: 'MACHINES',
-      trailing: machines == null
-          ? null
-          : TextButton(
-              key: const Key('machines-add'),
-              onPressed: () => AddMachineDialog.show(context),
-              child: const Text('Add a machine'),
-            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -52,17 +45,24 @@ class MachinesSection extends ConsumerWidget {
               onUse: () => _switch(context, ref, machine),
               onForget: () => _forget(context, ref, machine),
             ),
-          if (paired.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xs),
-              child: Text(
-                'Use a server on another machine — a droplet, another PC: '
-                'run `karmashala_host pair --grants desktop` there, then Add '
-                'a machine here.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+          if (machines != null)
+            SettingsRow(
+              label: 'A server on another machine',
+              help: paired.isEmpty
+                  ? 'A droplet, another PC: run `karmashala_host pair '
+                        '--grants desktop` there, then add it here.'
+                  : null,
+              control: OutlinedButton(
+                key: const Key('machines-add'),
+                onPressed: () => AddMachineDialog.show(context),
+                child: const Text('Add a machine'),
               ),
+            )
+          else if (paired.isEmpty)
+            const SettingsNote(
+              'Use a server on another machine — a droplet, another PC: '
+              'run `karmashala_host pair --grants desktop` there, then Add '
+              'a machine here.',
             ),
         ],
       ),
@@ -147,8 +147,9 @@ class _MachineRow extends StatelessWidget {
     control: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // A value, not a chip: the board states a fact in a pill.
         if (inUse)
-          const Chip(label: Text('In use'))
+          const SettingsValue(label: 'In use')
         else if (onUse != null)
           TextButton(onPressed: onUse, child: const Text('Use')),
         if (onForget != null && !inUse)

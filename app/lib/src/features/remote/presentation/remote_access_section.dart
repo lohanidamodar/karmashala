@@ -19,6 +19,7 @@ import 'rename_device_dialog.dart';
 import 'ssh_relays_panel.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
+import '../../settings/presentation/settings_theme.dart';
 
 /// Settings → Remote and pairing: the enable switch, the local and hosted
 /// relays, the relays on SSH hosts, the paired devices with last-seen and
@@ -303,7 +304,6 @@ class _PairedDevicesList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -315,7 +315,7 @@ class _PairedDevicesList extends StatelessWidget {
           spacing: Insets.sm,
           runSpacing: Insets.xs,
           children: [
-            Text('Paired devices', style: theme.textTheme.labelMedium),
+            Text('Paired devices', style: SettingsStyles.sectionLabel(context)),
             FilledButton.icon(
               onPressed: () => PairingDialog.show(context),
               icon: const Icon(AppIcons.deviceMobile, size: Chrome.icon),
@@ -325,15 +325,7 @@ class _PairedDevicesList extends StatelessWidget {
         ),
         const SizedBox(height: Insets.xs),
         if (devices.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-            child: Text(
-              'No paired devices yet.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          )
+          const SettingsNote('No paired devices yet.')
         else
           for (final device in devices)
             _DeviceRow(

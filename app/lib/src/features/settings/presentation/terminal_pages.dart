@@ -201,9 +201,11 @@ class TerminalThemeSection extends ConsumerWidget {
               onChanged: (id) => controller.setTerminalThemeSource(id),
             ),
           ),
+          // Said under the row it is about, in its own tone, not as a loose
+          // red line between rows.
           if (selected != null && value == null)
             Padding(
-              padding: const EdgeInsets.only(top: Insets.sm),
+              padding: const EdgeInsets.only(bottom: Insets.sm),
               child: Text(
                 'The saved theme is no longer where it was; using the built-in '
                 'colours.',
@@ -214,7 +216,7 @@ class TerminalThemeSection extends ConsumerWidget {
             ),
           if (loaded is ThemeLoadError)
             Padding(
-              padding: const EdgeInsets.only(top: Insets.sm),
+              padding: const EdgeInsets.only(bottom: Insets.sm),
               child: Text(
                 '${loaded.reason} Using the built-in colours.',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -223,13 +225,7 @@ class TerminalThemeSection extends ConsumerWidget {
               ),
             ),
           if (loaded is ThemeLoadOk && loaded.notes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.sm),
-              child: Text(
-                loaded.notes.join(' '),
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
+            SettingsNote(loaded.notes.join(' ')),
         ],
       ),
     );
@@ -268,11 +264,9 @@ class TerminalChordsSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'Shortcuts a focused terminal gives back to the app.',
-            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: Insets.sm),
           for (final chord in contested)
             _ChordRow(
               chord: chord,
@@ -286,6 +280,9 @@ class TerminalChordsSection extends ConsumerWidget {
   }
 }
 
+/// One contested chord as a board row: the chord, what it does while the app
+/// holds it (or that it goes to the shell), what the shell gives up for it,
+/// and the switch.
 class _ChordRow extends StatelessWidget {
   const _ChordRow({
     required this.chord,
@@ -299,50 +296,19 @@ class _ChordRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // The price is on screen only while it is being paid.
     final cost = claimed ? chord.shellCost : null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 96,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(chord.label, style: MonoStyles.body),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    claimed ? chord.does : 'Goes to the shell',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: claimed
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                if (cost != null)
-                  Text(
-                    'The shell loses $cost',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      letterSpacing: 0,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Switch(value: claimed, onChanged: onChanged),
-        ],
+    return MergeSemantics(
+      child: SettingsRow(
+        label: chord.label,
+        helpWidget: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(claimed ? chord.does : 'Goes to the shell'),
+            if (cost != null) Text('The shell loses $cost'),
+          ],
+        ),
+        control: Switch(value: claimed, onChanged: onChanged),
       ),
     );
   }

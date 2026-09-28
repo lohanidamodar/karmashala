@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
 
 /// Settings → Projects and files: what Karmashala can do with each kind of
@@ -13,19 +14,14 @@ class ProjectKindsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SettingsSection(
       title: 'APP PROJECTS',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'What each checkout is detected as, and what it builds.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
           ),
-          const SizedBox(height: Insets.sm),
           for (final kind in ProjectKind.values)
             _KindRow(kind: kind, descriptor: descriptorFor(kind)),
         ],
@@ -43,8 +39,8 @@ class _KindRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.md),
+    // One ruled entry per kind, like every list on a settings page.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -54,7 +50,7 @@ class _KindRow extends StatelessWidget {
             spacing: Insets.sm,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(kind.label, style: theme.textTheme.titleSmall),
+              Text(kind.label, style: SettingsStyles.rowLabel(context)),
               if (descriptor == null || !descriptor!.canBuild)
                 Semantics(
                   label: '${kind.label}: detection only',

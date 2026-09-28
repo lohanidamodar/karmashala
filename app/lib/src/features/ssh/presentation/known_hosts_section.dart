@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/known_hosts_controller.dart';
 import 'host_key_changed_alert.dart';
@@ -17,28 +18,33 @@ class KnownHostsSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final keys = ref.watch(knownHostsControllerProvider);
 
+    // Board rows: one per pinned key — host and port as the label, the key
+    // under it in the ledger hand, Forget as the row's action.
     return SettingsSection(
       title: 'TRUSTED HOST KEYS',
       child: keys.isEmpty
-          ? Text(
+          ? const SettingsNote(
               'None yet. A host key is pinned only if you accept it.',
-              style: theme.textTheme.bodySmall,
             )
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final key in keys)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(AppIcons.checkCircle),
-                    title: Text('${key.host}:${key.port}'),
-                    subtitle: Text(
+                  SettingsRow(
+                    label: '${key.host}:${key.port}',
+                    helpWidget: Text(
                       '${key.keyType} · ${key.fingerprint}\n'
                       'trusted ${key.trustedAt.toLocal()}',
-                      style: MonoStyles.small,
+                      style: MonoStyles.small.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    isThreeLine: true,
-                    trailing: TextButton(
+                    leading: Icon(
+                      AppIcons.checkCircle,
+                      size: Chrome.iconSmall,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    control: TextButton(
                       onPressed: () => ForgetHostKeyDialog.show(
                         context,
                         host: key.host,

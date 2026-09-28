@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_browser/browser.dart';
 
@@ -16,7 +15,8 @@ import 'settings_section.dart';
 import 'settings_notice.dart';
 
 /// Settings → Tools and reach → Permission modes: per-agent defaults for new
-/// and existing sessions.
+/// and existing sessions, one flat row per agent, purpose and axis — the
+/// board's rows, not a card per agent.
 class PermissionModesSection extends ConsumerWidget {
   const PermissionModesSection({super.key});
 
@@ -27,9 +27,14 @@ class PermissionModesSection extends ConsumerWidget {
     return SettingsSection(
       title: SettingsAnchor.permissionModes.heading,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Which way precedence runs: a session that chose keeps its own.
+          const SettingsNote(
+            'Defaults only: a mode picked on a session keeps it.',
+          ),
           for (final descriptor in AgentRegistry.builtIn.descriptors)
-            _PermissionCard(
+            _PermissionRows(
               descriptor: descriptor,
               permissions: settings.permissionsFor(descriptor.id),
               onNew: (m) =>
@@ -43,8 +48,8 @@ class PermissionModesSection extends ConsumerWidget {
   }
 }
 
-class _PermissionCard extends StatelessWidget {
-  const _PermissionCard({
+class _PermissionRows extends StatelessWidget {
+  const _PermissionRows({
     required this.descriptor,
     required this.permissions,
     required this.onNew,
@@ -58,7 +63,7 @@ class _PermissionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final name = descriptor.displayName;
     final support = descriptor.launch.permission;
     final newSelection = support.resolveStored(permissions.newSessions);
     final existingSelection = support.resolveStored(
@@ -67,84 +72,85 @@ class _PermissionCard extends StatelessWidget {
     final dangerous =
         support.isDangerous(newSelection) ||
         support.isDangerous(existingSelection);
-    return SettingsCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(descriptor.displayName, style: theme.textTheme.titleSmall),
-          const SizedBox(height: Insets.sm),
-          if (!support.isKnown)
-            // An agent whose modes are unestablished offers no dropdowns.
-            Text(
-              unknownAgentReason(descriptor.displayName),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
+    // An agent whose modes are unestablished offers no dropdowns.
+    if (!support.isKnown) {
+      return SettingsNote(
+        name,
+        child: SettingsNotice(
+          tone: SettingsNoticeTone.danger,
+          message: unknownAgentReason(name),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // One row per axis per purpose: Codex's four do not fit one row.
+        for (final (purpose, selection, onChanged) in [
+          ('new sessions', newSelection, onNew),
+          ('existing sessions', existingSelection, onExisting),
+        ])
+          for (final axis in permissionAxisOptionsFor(
+            descriptor,
+            selection: selection,
+          ))
+            SettingsRow(
+              label: '$name · $purpose',
+              help: axis.label,
+              controlMaxWidth: 260,
+              control: PermissionAxisDropdown(
+                axis: axis,
+                selection: selection,
+                support: support,
+                labelled: false,
+                onChanged: onChanged,
               ),
-            )
-          else ...[
-            // One picker per axis per purpose: Codex's four do not fit a Row.
-            for (final (label, selection, onChanged) in [
-              ('New sessions', newSelection, onNew),
-              ('Existing sessions', existingSelection, onExisting),
-            ]) ...[
-              Text(label, style: theme.textTheme.labelSmall),
-              const SizedBox(height: Insets.xs),
-              Wrap(
-                spacing: Insets.md,
-                runSpacing: Insets.sm,
-                children: [
-                  for (final axis in permissionAxisOptionsFor(
-                    descriptor,
-                    selection: selection,
-                  ))
-                    // At most 260, not exactly: a split pane narrower than
-                    // that would overflow a fixed width.
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 260),
-                      child: _axisDropdown(axis, selection, support, onChanged),
-                    ),
-                ],
-              ),
-              const SizedBox(height: Insets.sm),
-            ],
-          ],
-          const SizedBox(height: Insets.xs),
-          // Which way precedence runs: a session that chose keeps its own.
-          Text(
-            'Defaults only: a mode picked on a session keeps it.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            ),
+        if (dangerous)
+          SettingsNote(
+            '$name can act with nothing in the way.',
+            child: SettingsNotice(
+              tone: SettingsNoticeTone.danger,
+              icon: AppIcons.warning,
+              message:
+                  'This default lets $name act with nothing in the way. Use '
+                  'it only in trusted repositories.',
             ),
           ),
-          if (dangerous)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.sm),
-              child: SettingsNotice(
-                tone: SettingsNoticeTone.danger,
-                icon: AppIcons.warning,
-                message:
-                    'This default lets ${descriptor.displayName} act with '
-                    'nothing in the way. Use it only in trusted '
-                    'repositories.',
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
+}
 
-  /// One axis of one purpose, writing back the whole selection so the other
-  /// axis is not silently reset.
-  Widget _axisDropdown(
-    AgentPermissionAxisOptions axis,
-    PermissionSelection selection,
-    AgentPermissionSupport support,
-    ValueChanged<String> onChanged,
-  ) {
+/// One permission axis of one purpose as a dropdown, writing back the whole
+/// selection so the other axis is not silently reset. Shared by Tools and
+/// reach and each agent's behaviour on Agents and accounts, so the two cannot
+/// offer different modes.
+class PermissionAxisDropdown extends StatelessWidget {
+  const PermissionAxisDropdown({
+    required this.axis,
+    required this.selection,
+    required this.support,
+    required this.onChanged,
+    this.labelled = true,
+    super.key,
+  });
+
+  final AgentPermissionAxisOptions axis;
+  final PermissionSelection selection;
+  final AgentPermissionSupport support;
+  final ValueChanged<String> onChanged;
+
+  /// Whether the field carries the axis's name itself; off on a settings row,
+  /// whose label already says it.
+  final bool labelled;
+
+  @override
+  Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: axis.selectedId,
       isExpanded: true,
-      decoration: InputDecoration(labelText: axis.label),
+      decoration: InputDecoration(labelText: labelled ? axis.label : null),
       items: [
         for (final option in axis.options)
           DropdownMenuItem(
@@ -179,7 +185,6 @@ class BrowserConsentSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final projects = ref.watch(projectsControllerProvider);
     final store = ref.watch(browserConsentStoreProvider);
     // The store reads storage per call, so there is nothing to watch.
@@ -190,18 +195,13 @@ class BrowserConsentSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.sm),
-            child: Text(
-              'browser_evaluate runs agent JavaScript that can read your '
-              'cookies and tokens. Off until allowed, per project.',
-              style: theme.textTheme.bodySmall,
-            ),
+          const SettingsNote(
+            'browser_evaluate runs agent JavaScript that can read your '
+            'cookies and tokens. Off until allowed, per project.',
           ),
           if (projects.isEmpty)
-            Text(
+            const SettingsNote(
               'No projects yet. Add one and it will be listed here.',
-              style: theme.textTheme.bodySmall,
             )
           else
             for (final project in projects)

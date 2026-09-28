@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/session_token_totals.dart';
 import 'settings_notice.dart';
 import 'settings_section.dart';
+import 'settings_theme.dart';
 
 /// Tokens by project and by agent, over the sessions active in the last week.
 /// Counted only when asked: it reads every recent session's own file.
@@ -41,11 +42,10 @@ class _UsageTokensCardState extends ConsumerState<UsageTokensCard> {
           Row(
             children: [
               Expanded(
+                // In the row label's hand: on the board this is one more row.
                 child: Text(
                   'Tokens in the last 7 days',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: SettingsStyles.rowLabel(context),
                 ),
               ),
               if (loading)

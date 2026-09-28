@@ -31,15 +31,16 @@ class AboutSection extends StatelessWidget {
     );
     return SettingsSection(
       title: 'KARMASHALA',
+      // Board "Karmashala": flat rows — the version as a value, the build
+      // line under its row's label with Copy beside it, then the source and
+      // the licences.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'An agent development environment: Claude Code, Codex and '
             'Antigravity in terminal panes, across projects.',
-            style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(height: Insets.md),
           SettingsRow(
             label: 'Version',
             control: SelectableText(
@@ -49,29 +50,33 @@ class AboutSection extends StatelessWidget {
               style: mono,
             ),
           ),
-          const SizedBox(height: Insets.sm),
-          Text('Build', style: theme.textTheme.bodyMedium),
-          const SizedBox(height: Insets.xs),
-          // Selectable, because the point of this box is that the line ends
-          // up in an issue.
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(Insets.sm),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(Radii.sm),
+          SettingsRow(
+            label: 'Build',
+            // Selectable, because the point of this line is that it ends up
+            // in an issue.
+            helpWidget: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(identity, style: mono),
+                const SizedBox(height: Insets.xs),
+                const Text(
+                  'This is the line every log starts with — paste it into a '
+                  'bug report.',
+                ),
+              ],
             ),
-            child: SelectableText(identity, style: mono),
-          ),
-          const SizedBox(height: Insets.xs),
-          Text(
-            'This is the line every log starts with — paste it into a bug '
-            'report.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
+            control: OutlinedButton.icon(
+              icon: const Icon(AppIcons.copy),
+              label: const Text('Copy build details'),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: identity));
+                if (!context.mounted) return;
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                  const SnackBar(content: Text('Build details copied')),
+                );
+              },
             ),
           ),
-          const SizedBox(height: Insets.md),
           SettingsRow(
             label: 'Source',
             control: SelectableText(
@@ -81,33 +86,19 @@ class AboutSection extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: Insets.md),
-          Wrap(
-            spacing: Insets.sm,
-            runSpacing: Insets.sm,
-            children: [
-              OutlinedButton.icon(
-                icon: const Icon(AppIcons.copy, size: Chrome.iconAction),
-                label: const Text('Copy build details'),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: identity));
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                    const SnackBar(content: Text('Build details copied')),
-                  );
-                },
+          SettingsRow(
+            label: 'Licences',
+            help: 'The open source this build is made of.',
+            control: OutlinedButton(
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: 'Karmashala',
+                applicationVersion: appVersion.isEmpty
+                    ? 'version not recorded'
+                    : appVersion,
               ),
-              OutlinedButton(
-                onPressed: () => showLicensePage(
-                  context: context,
-                  applicationName: 'Karmashala',
-                  applicationVersion: appVersion.isEmpty
-                      ? 'version not recorded'
-                      : appVersion,
-                ),
-                child: const Text('Open source licences'),
-              ),
-            ],
+              child: const Text('Open source licences'),
+            ),
           ),
         ],
       ),

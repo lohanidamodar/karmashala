@@ -12,6 +12,7 @@ import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/setup_run_pane.dart';
 import '../application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -27,7 +28,6 @@ class WorktreeSetupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final settings = ref.watch(worktreeSetupsProvider);
     final repositories = ref.watch(workspaceDataProvider).repositories;
     // Watched so a project added while this is open reaches the "add a
@@ -60,19 +60,14 @@ class WorktreeSetupPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const SettingsNote(
                 'Ignored files to copy into a new worktree, and a command to run.',
-                style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: Insets.md),
               if (configured.isEmpty)
-                Text(
+                SettingsNote(
                   repositories.isEmpty
                       ? 'No checkouts have been scanned yet.'
                       : 'No checkout has a setup yet.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
                 )
               else
                 for (final repository in configured)
@@ -174,21 +169,15 @@ class _CheckoutCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final environment = ref
         .watch(environmentsDataProvider)
         .getById(repository.path.environmentId);
     final runs = ref.watch(worktreeSetupRunsProvider(repository.id));
     final now = ref.watch(clockProvider).nowUtc();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      padding: const EdgeInsets.all(Insets.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    // One ruled entry per checkout, like every list on a settings page — not
+    // a bordered box.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -197,7 +186,7 @@ class _CheckoutCard extends ConsumerWidget {
               Expanded(
                 child: Text(
                   repository.name,
-                  style: theme.textTheme.bodyMedium,
+                  style: SettingsStyles.rowLabel(context),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

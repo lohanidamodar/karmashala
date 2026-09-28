@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import 'settings_layout.dart';
+import 'settings_row.dart';
+import 'settings_theme.dart';
 
-/// One labelled block on the settings page. Extracted so sections that live in
-/// their own feature sit on the page looking like the ones that do not.
+export 'settings_row.dart' show SettingsNote, SettingsRuled;
+
+/// One labelled block on the settings page, drawn as the approved board
+/// draws one (N5 `.sec`): a small uppercase label 22 px under whatever came
+/// before, then the section's rows flat on the page, each under its own
+/// hairline. No card, no box: extracted so sections that live in their own
+/// feature sit on the page looking like the ones that do not.
 ///
 /// The header is a [Wrap], not a row: a trailing action ("Add a host", a
 /// switch, a pair of buttons) sits at the right while it fits beside the
@@ -25,15 +32,21 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final narrow = SettingsNarrowScope.of(context);
-    final heading = Text(
-      title,
-      style: theme.textTheme.labelSmall?.merge(Chrome.groupLabel),
+    final heading = Semantics(
+      header: true,
+      child: Text(title, style: SettingsStyles.sectionLabel(context)),
     );
+    final trailing = this.trailing;
     return Padding(
-      padding: EdgeInsets.only(bottom: narrow ? Insets.lg : Insets.xl),
+      padding: EdgeInsets.only(
+        top: narrow
+            ? SettingsLayout.sectionTopNarrow
+            : SettingsLayout.sectionTop,
+      ),
       child: Column(
+        // Start, not stretch: a section whose child is one button keeps the
+        // button's width. Rows stretch themselves in their own columns.
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (trailing == null)
@@ -48,10 +61,10 @@ class SettingsSection extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: Insets.sm,
                 runSpacing: Insets.xs,
-                children: [heading, trailing!],
+                children: [heading, trailing],
               ),
             ),
-          const SizedBox(height: Insets.sm),
+          const SizedBox(height: SettingsLayout.sectionLabelGap),
           child,
         ],
       ),
@@ -59,23 +72,16 @@ class SettingsSection extends StatelessWidget {
   }
 }
 
-/// One card on a settings page — an installation, an environment, a host.
-/// Every settings card is this one, so none drifts to its own margin or
-/// padding; on a narrow page it gives its content a little more of the width.
+/// One entry of a list on a settings page — an installation, an environment, a
+/// host. The board has no cards: a list entry is a row, so this is a row's
+/// frame — the hairline above and the row's padding — around content that is
+/// more than a label and a control. Every settings "card" is this one, so none
+/// drifts to its own margin, padding or fill.
 class SettingsCard extends StatelessWidget {
   const SettingsCard({required this.child, super.key});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final narrow = SettingsNarrowScope.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: EdgeInsets.all(narrow ? Insets.sm : Insets.md),
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SettingsRuled(child: child);
 }

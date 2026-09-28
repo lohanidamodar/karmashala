@@ -31,8 +31,9 @@ class SettingsScreen extends StatefulWidget {
   /// backs out — how [SettingsTabView] keeps the page outside a dropped `State`.
   final ValueChanged<SettingsSectionId?>? onSectionChanged;
 
-  /// The section list's width beside the page, in the two-column layout.
-  static const navWidth = 208.0;
+  /// The section list's width beside the page, in the two-column layout (the
+  /// approved board's 224).
+  static const navWidth = 224.0;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -128,34 +129,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = ShellWidth.of(constraints.maxWidth).isCompact;
         final showingSection = !compact || _openOnCompact;
+        // No header of its own (board N5): the workbench tab already says
+        // "Settings", and the page says which page it is. The page sits on
+        // the terminal's surface, like any tab's content.
         return Scaffold(
-          appBar: AppBar(
-            // A page header, not a chrome row: `Chrome.titleBar` is 30px.
-            toolbarHeight: 44,
-            // A workbench tab: an implied leading button would pop the
-            // app's own route.
-            automaticallyImplyLeading: false,
-            leading: null,
-            title: Row(
-              children: [
-                Icon(AppIcons.gearSix, color: theme.colorScheme.tertiary),
-                const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: Text(
-                    'Settings',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          backgroundColor: tones.term,
           // Each scrolling column is its own traversal group: reading order
           // sorts on global position, so scrolled content outranks the app bar.
           body: compact
@@ -183,11 +166,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Told apart from the page by tone, like the sidebar
-                    // from the workbench; the hairline beside it is
-                    // transparent unless "Lines between regions" is on.
+                    // Told apart from the page by tone (the board's `panel`
+                    // column); the hairline beside it is transparent unless
+                    // "Lines between regions" is on.
                     ColoredBox(
-                      color: tones.side,
+                      color: tones.panel,
                       child: SizedBox(
                         width: SettingsScreen.navWidth,
                         child: FocusTraversalGroup(
@@ -263,9 +246,11 @@ class _SectionContent extends StatelessWidget {
   /// finds both pages by their label and [SettingsSectionId.aliases].
 }
 
-/// **The sticky category picker** of a narrow Settings tab (spec §6): the
-/// page's name with a caret, opening every page by group, and Search, which
-/// opens the full list with its search field.
+/// **The sticky category picker** of a narrow Settings tab (spec §6, board N5
+/// narrow): on the `panel` tone, one wide button naming the page's group (dim)
+/// and the page (semibold) with a caret, opening every page by group; and a
+/// square Search button beside it, which opens the full list with its search
+/// field.
 class SettingsCategoryPicker extends StatelessWidget {
   const SettingsCategoryPicker({
     required this.selected,
@@ -278,70 +263,122 @@ class SettingsCategoryPicker extends StatelessWidget {
   final ValueChanged<SettingsSectionId> onSelect;
   final VoidCallback onSearch;
 
-  static const _search = '\u0000search';
+  /// The picker's buttons: the board's 34 px — a control and a step of air.
+  static const buttonHeight = Chrome.control + Insets.sm;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: SurfaceTones.of(context).chrome,
-      child: Builder(
-        builder: (anchor) => InkWell(
-          onTap: () async {
-            final picked = await showDesktopMenuUnder<String>(anchor, [
-              DesktopMenuItem(
-                value: _search,
-                label: 'Search settings…',
-                icon: AppIcons.magnifyingGlass,
+    final tones = SurfaceTones.of(context);
+    final radius = BorderRadius.circular(Radii.sm + 2);
+    return ColoredBox(
+      color: tones.panel,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.sm + 2,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Builder(
+                builder: (anchor) => Material(
+                  color: tones.raised,
+                  borderRadius: radius,
+                  child: InkWell(
+                    borderRadius: radius,
+                    hoverColor: tones.hover,
+                    onTap: () async {
+                      final picked = await showDesktopMenuUnder<String>(
+                        anchor,
+                        [
+                          for (final (index, group)
+                              in SettingsGroup.values.indexed) ...[
+                            if (index > 0) const DesktopMenuDivider(),
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              height: Chrome.menuRow,
+                              child: Text(
+                                group.label.toUpperCase(),
+                                style: theme.textTheme.labelSmall?.merge(
+                                  Chrome.groupLabel,
+                                ),
+                              ),
+                            ),
+                            for (final page in group.pages)
+                              DesktopMenuItem(
+                                value: page.name,
+                                label: page.label,
+                                icon: page.icon,
+                                selected: page == selected,
+                              ),
+                          ],
+                        ],
+                      );
+                      if (picked == null) return;
+                      onSelect(SettingsSectionId.values.byName(picked));
+                    },
+                    child: SizedBox(
+                      height: buttonHeight,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Insets.md,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              selected.group.label,
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                            ),
+                            const SizedBox(width: Insets.sm),
+                            Expanded(
+                              child: Text(
+                                selected.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              AppIcons.caretDown,
+                              size: Chrome.iconSmall,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              for (final group in SettingsGroup.values) ...[
-                const DesktopMenuDivider(),
-                PopupMenuItem<String>(
-                  enabled: false,
-                  height: Chrome.menuRow,
-                  child: Text(
-                    group.label.toUpperCase(),
-                    style: theme.textTheme.labelSmall?.merge(Chrome.groupLabel),
+            ),
+            const SizedBox(width: Insets.sm),
+            Material(
+              color: tones.raised,
+              borderRadius: radius,
+              child: InkWell(
+                borderRadius: radius,
+                hoverColor: tones.hover,
+                onTap: onSearch,
+                child: Tooltip(
+                  message: 'Search settings',
+                  child: SizedBox.square(
+                    dimension: buttonHeight,
+                    child: Icon(
+                      AppIcons.magnifyingGlass,
+                      size: Chrome.icon,
+                      color: theme.colorScheme.onSurfaceVariant,
+                      semanticLabel: 'Search settings',
+                    ),
                   ),
                 ),
-                for (final page in group.pages)
-                  DesktopMenuItem(
-                    value: page.name,
-                    label: page.label,
-                    icon: page.icon,
-                    selected: page == selected,
-                  ),
-              ],
-            ]);
-            if (picked == null) return;
-            if (picked == _search) {
-              onSearch();
-              return;
-            }
-            onSelect(SettingsSectionId.values.byName(picked));
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.lg,
-              vertical: Insets.sm,
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(selected.icon, size: Chrome.iconAction),
-                const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: Text(
-                    '${selected.group.label} · ${selected.label}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                const SizedBox(width: Insets.xs),
-                const Icon(AppIcons.caretDown, size: Chrome.iconSmall),
-              ],
-            ),
-          ),
+          ],
         ),
       ),
     );

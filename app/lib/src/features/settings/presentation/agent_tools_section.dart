@@ -4,29 +4,33 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
+import 'settings_theme.dart';
 
 /// Every tool the MCP bridge serves, grouped and described from
 /// `mcp_tool_catalogue` (under a test, so it cannot rot). Three of its five
 /// axes are shown; the other two say nothing a reader of this page needs.
+///
+/// Drawn as board rows: the count as the section's note, then one ruled row
+/// per family that opens to its tools.
 class AgentToolsSection extends StatelessWidget {
   const AgentToolsSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SettingsSection(
       title: SettingsAnchor.toolCatalogue.heading,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          SettingsNote(
             '${kMcpToolListings.length} tools, in '
             '${McpToolCategory.values.length} families.',
-            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: Insets.xs),
           for (final entry in kMcpToolsByCategory.entries)
-            _Family(category: entry.key, tools: entry.value),
+            SettingsRuled(
+              padding: EdgeInsets.zero,
+              child: _Family(category: entry.key, tools: entry.value),
+            ),
         ],
       ),
     );
@@ -62,7 +66,10 @@ class _Family extends StatelessWidget {
       title: Row(
         children: [
           Expanded(
-            child: Text(category.label, style: theme.textTheme.bodyMedium),
+            child: Text(
+              category.label,
+              style: SettingsStyles.rowLabel(context),
+            ),
           ),
           const SizedBox(width: Insets.sm),
           Text(
@@ -73,7 +80,7 @@ class _Family extends StatelessWidget {
           ),
         ],
       ),
-      subtitle: Text(category.blurb, style: theme.textTheme.bodySmall),
+      subtitle: Text(category.blurb, style: SettingsStyles.rowHelp(context)),
       children: [for (final name in tools) _ToolRow(name: name)],
     );
   }

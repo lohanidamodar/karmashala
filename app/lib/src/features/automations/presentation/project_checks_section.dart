@@ -18,7 +18,6 @@ class ProjectChecksSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final repositories = ref.watch(workspaceDataProvider).repositories;
 
     return SettingsSection(
@@ -26,18 +25,11 @@ class ProjectChecksSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'Automations need verification on and at least one check.',
-            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: Insets.md),
           if (repositories.isEmpty)
-            Text(
-              'No checkouts have been scanned yet.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            )
+            const SettingsNote('No checkouts have been scanned yet.')
           else
             for (final repository in repositories)
               _CheckoutChecks(
@@ -64,14 +56,9 @@ class _CheckoutChecks extends ConsumerWidget {
     );
     final checks = ref.watch(projectChecksProvider(repository.id));
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      padding: const EdgeInsets.all(Insets.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    // One ruled entry per checkout, like every list on a settings page — not
+    // a bordered box.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

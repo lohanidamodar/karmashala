@@ -13,6 +13,7 @@ import '../../settings/domain/usage_limit_settings.dart';
 import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'minute_ticker.dart';
@@ -25,7 +26,6 @@ class ScheduledResumesSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final live = ref.watch(liveScheduledResumesProvider);
     final ended = ref.watch(recentScheduledResumesProvider);
     final settings = ref.watch(settingsControllerProvider);
@@ -36,11 +36,7 @@ class ScheduledResumesSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Resume a session when its usage window resets.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: Insets.sm),
+          const SettingsNote('Resume a session when its usage window resets.'),
           SettingsRow(
             label: 'When an agent hits its usage limit',
             help: switch (settings.usageLimitBehavior) {
@@ -76,15 +72,15 @@ class ScheduledResumesSection extends ConsumerWidget {
               onChanged: controller.setResumeMessage,
             ),
           ),
-          const SizedBox(height: Insets.sm),
           if (live.isEmpty)
-            Text('No resume is waiting.', style: theme.textTheme.bodySmall)
+            const SettingsNote('No resume is waiting.')
           else
             for (final resume in live)
               _ResumeCard(key: ValueKey(resume.id), resume: resume),
           if (ended.isNotEmpty) ...[
-            const SizedBox(height: Insets.sm),
-            Text('Recent', style: theme.textTheme.labelMedium),
+            const SizedBox(height: Insets.md),
+            Text('Recent', style: SettingsStyles.sectionLabel(context)),
+            const SizedBox(height: Insets.xs),
             for (final resume in ended.take(8))
               _ResumeCard(key: ValueKey(resume.id), resume: resume),
           ],

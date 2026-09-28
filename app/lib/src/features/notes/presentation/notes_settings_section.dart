@@ -34,20 +34,16 @@ class NotesSettingsSection extends ConsumerWidget {
               // Said on the page rather than in a confirmation, because the
               // fear this answers ("will I lose them?") arrives before the
               // switch is touched, not after.
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  enabled
-                      ? 'Turning this off hides the button and the panel. '
-                            'Nothing you have saved is deleted.'
-                      : kept == 0
-                      ? 'Hidden. You have no saved notes.'
-                      : 'Hidden. Your $kept saved note'
-                            '${kept == 1 ? '' : 's'} '
-                            '${kept == 1 ? 'is' : 'are'} still here and comes '
-                            'back when you turn this on.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              SettingsNote(
+                enabled
+                    ? 'Turning this off hides the button and the panel. '
+                          'Nothing you have saved is deleted.'
+                    : kept == 0
+                    ? 'Hidden. You have no saved notes.'
+                    : 'Hidden. Your $kept saved note'
+                          '${kept == 1 ? '' : 's'} '
+                          '${kept == 1 ? 'is' : 'are'} still here and comes '
+                          'back when you turn this on.',
               ),
             ],
           ),

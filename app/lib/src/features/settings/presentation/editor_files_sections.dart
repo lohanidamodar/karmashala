@@ -115,7 +115,6 @@ class FileBrowsingSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final chosen = ref.watch(
       settingsControllerProvider.select((s) => s.useInAppFilePicker),
     );
@@ -130,48 +129,46 @@ class FileBrowsingSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('File picker', style: theme.textTheme.bodyMedium),
-          const SizedBox(height: Insets.xs),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: true,
-                icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
-                label: Text('Karmashala'),
-              ),
-              ButtonSegment(
-                value: false,
-                icon: Icon(AppIcons.stack, size: Chrome.icon),
-                label: Text('System dialog'),
-              ),
-            ],
-            selected: {inApp},
-            onSelectionChanged: (values) =>
-                controller.setUseInAppFilePicker(values.first),
-            showSelectedIcon: false,
-          ),
-          const SizedBox(height: Insets.sm),
-          Text(
-            _blurbFor(inApp),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: SemanticColors.of(context).neutral,
+          // One board row: the choice as its control, what it means as its
+          // help, and the way back to the default under it once chosen.
+          SettingsRow(
+            label: 'File picker',
+            help: _blurbFor(inApp),
+            controlMaxWidth: 280,
+            control: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
+                  label: Text('Karmashala'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(AppIcons.stack, size: Chrome.icon),
+                  label: Text('System dialog'),
+                ),
+              ],
+              selected: {inApp},
+              onSelectionChanged: (values) =>
+                  controller.setUseInAppFilePicker(values.first),
+              showSelectedIcon: false,
             ),
           ),
-          if (chosen != null) ...[
-            const SizedBox(height: Insets.xs),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => controller.setUseInAppFilePicker(null),
-                child: Text(
-                  FilePickerChoice.platformDefault
-                      ? 'Use what this platform defaults to (Karmashala)'
-                      : 'Use what this platform defaults to (system dialog)',
+          if (chosen != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => controller.setUseInAppFilePicker(null),
+                  child: Text(
+                    FilePickerChoice.platformDefault
+                        ? 'Use what this platform defaults to (Karmashala)'
+                        : 'Use what this platform defaults to (system dialog)',
+                  ),
                 ),
               ),
             ),
-          ],
-          const SizedBox(height: Insets.sm),
           SettingsSwitchRow(
             label: 'Show hidden files',
             help: 'Dot-files and hidden entries, in every file browser.',

@@ -12,6 +12,8 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_notice.dart';
+import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
 import '../../ssh/application/ssh_terminal_opener.dart';
 import '../../ssh/presentation/copyable_command.dart';
@@ -28,7 +30,6 @@ class SshRelaysPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final entries = ref.watch(sshRelaysProvider);
     final hosts = ref.watch(sshHostsControllerProvider);
     return Column(
@@ -44,7 +45,7 @@ class SshRelaysPanel extends ConsumerWidget {
           children: [
             Text(
               'Relays on your SSH hosts',
-              style: theme.textTheme.labelMedium,
+              style: SettingsStyles.sectionLabel(context),
             ),
             OutlinedButton.icon(
               onPressed: hosts.isEmpty
@@ -56,7 +57,7 @@ class SshRelaysPanel extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: Insets.xs),
-        Text(
+        SettingsNote(
           hosts.isEmpty
               ? 'Add an SSH host in Settings → Machines first. A machine '
                     'with an address of its own can be the relay phones meet '
@@ -68,9 +69,6 @@ class SshRelaysPanel extends ConsumerWidget {
               : 'Paired phones learn a new relay the next time they connect '
                     'and keep the one they paired through, so nothing has to '
                     'be paired again.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
         ),
         for (final entry in entries)
           _SshRelayRow(entry: entry, host: _hostFor(entry, hosts)),
@@ -104,8 +102,8 @@ class _SshRelayRow extends ConsumerWidget {
     final busy = view?.busy ?? false;
     final host = this.host;
 
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.sm),
+    // One ruled entry per relay, like every list on a settings page.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -9,6 +9,7 @@ import '../../workspaces/data/workspace_data.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import 'package:karmashala_git/cleanup.dart';
 import '../application/worktree_cleanup_providers.dart';
 
@@ -99,17 +100,14 @@ class _WorktreeCleanupSectionState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          SettingsNote(
             'Removes idle worktrees Karmashala made. Branches are kept.',
-            style: small,
+            child: Text(
+              key: const ValueKey('worktree-cleanup-squash-caveat'),
+              '"Branch merged" cannot see a squash merge; use "inactive".',
+              style: small,
+            ),
           ),
-          const SizedBox(height: Insets.xs),
-          Text(
-            key: const ValueKey('worktree-cleanup-squash-caveat'),
-            '"Branch merged" cannot see a squash merge; use "inactive".',
-            style: small,
-          ),
-          const SizedBox(height: Insets.sm),
           SettingsSwitchRow(
             key: const ValueKey('worktree-cleanup-enabled'),
             label: 'Clean up automatically',
@@ -124,7 +122,8 @@ class _WorktreeCleanupSectionState
           ),
           if (projects.isNotEmpty) ...[
             const SizedBox(height: Insets.md),
-            Text('Per project', style: theme.textTheme.titleSmall),
+            Text('Per project', style: SettingsStyles.sectionLabel(context)),
+            const SizedBox(height: Insets.xs),
             for (final project in projects)
               _ProjectPolicyRow(
                 key: ValueKey('worktree-cleanup-project ${project.id}'),
@@ -415,14 +414,9 @@ class _ReportView extends StatelessWidget {
         : report.withOutcome(WorktreeCleanupOutcome.removed).toList();
     final failed = report.withOutcome(WorktreeCleanupOutcome.failed).toList();
     final kept = report.withOutcome(WorktreeCleanupOutcome.kept).toList();
-    return Container(
+    // A ruled entry under the buttons, not a bordered box (board N5).
+    return SettingsRuled(
       key: const ValueKey('worktree-cleanup-report'),
-      padding: const EdgeInsets.all(Insets.md),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

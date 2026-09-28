@@ -137,7 +137,7 @@ class ScrollbackPersistenceSection extends ConsumerWidget {
     if (!container.exists(terminalSessionsControllerProvider)) {
       return SettingsSection(
         title: SettingsAnchor.scrollbackPersistence.heading,
-        child: const Text('The terminal has not been opened this run.'),
+        child: const SettingsNote('The terminal has not been opened this run.'),
       );
     }
     final telemetry = container
@@ -153,29 +153,29 @@ class ScrollbackPersistenceSection extends ConsumerWidget {
           SettingsRow(
             label: 'Panes owing a write',
             help: 'A number that never falls is work not being written.',
-            control: Text(
-              '${telemetry.dirtyPanes} of ${telemetry.livePanes}',
-              style: MonoStyles.body,
+            control: SettingsValue(
+              label: '${telemetry.dirtyPanes} of ${telemetry.livePanes}',
+              mono: true,
             ),
           ),
           SettingsRow(
             label: 'Longest wait',
             help: 'How long the pane waiting longest has owed a write.',
-            control: Text(
-              telemetry.oldestUnsaved == null
+            control: SettingsValue(
+              label: telemetry.oldestUnsaved == null
                   ? 'nothing owed'
                   : _age(telemetry.oldestUnsaved!),
-              style: MonoStyles.body,
+              mono: true,
             ),
           ),
           SettingsRow(
             label: 'Last write',
             help: 'Fewer than owed means the pass hit its 8 ms budget.',
-            control: Text(
-              write == null
+            control: SettingsValue(
+              label: write == null
                   ? 'not recorded'
                   : '${write.panes} pane(s) in ${_age(write.took)}',
-              style: MonoStyles.body,
+              mono: true,
             ),
           ),
         ],
@@ -206,36 +206,36 @@ class MemoryFootprintSection extends ConsumerWidget {
           SettingsRow(
             label: 'Resident memory',
             help: 'The whole process, not only this app\'s Dart objects.',
-            control: Text(
-              '${_mib(census.residentBytes)} · peak '
+            control: SettingsValue(
+              label: '${_mib(census.residentBytes)} · peak '
               '${_mib(census.peakResidentBytes)}',
-              style: MonoStyles.body,
+              mono: true,
             ),
           ),
           SettingsRow(
             label: 'Terminal panes',
             help: 'Unparsed panes hold their history as text.',
-            control: Text(
-              '${census.panes} (${census.detachedPanes} detached, '
+            control: SettingsValue(
+              label: '${census.panes} (${census.detachedPanes} detached, '
               '${census.unparsedPanes} unparsed)',
-              style: MonoStyles.body,
+              mono: true,
             ),
           ),
           SettingsRow(
             label: 'Scrollback held',
             help: 'Parsed rows, and history held as text.',
-            control: Text(
-              '${census.scrollbackRows} rows · '
+            control: SettingsValue(
+              label: '${census.scrollbackRows} rows · '
               '${census.heldScrollbackChars} chars',
-              style: MonoStyles.body,
+              mono: true,
             ),
           ),
           SettingsRow(
             label: 'Sessions watched',
             help: 'Sessions with a status, and log lines in memory.',
-            control: Text(
-              '${census.watchedSessions} · ${census.logLinesHeld} log lines',
-              style: MonoStyles.body,
+            control: SettingsValue(
+              label: '${census.watchedSessions} · ${census.logLinesHeld} log lines',
+              mono: true,
             ),
           ),
         ],

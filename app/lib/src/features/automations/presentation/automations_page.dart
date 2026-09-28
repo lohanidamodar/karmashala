@@ -35,7 +35,6 @@ class AutomationsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final automations = ref.watch(automationsProvider);
     final repositories = ref.watch(workspaceDataProvider).repositories;
     // Watched so a project added or rescanned while this is open reaches the
@@ -55,19 +54,14 @@ class AutomationsPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const SettingsNote(
                 'Runs an agent on a schedule, unwatched. Only you can arm one.',
-                style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: Insets.md),
               if (automations.isEmpty)
-                Text(
+                SettingsNote(
                   repositories.isEmpty
                       ? 'No checkouts have been scanned yet.'
                       : 'Nothing is armed.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
                 )
               else
                 for (final automation in automations)

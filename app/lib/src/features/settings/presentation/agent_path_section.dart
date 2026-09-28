@@ -14,6 +14,7 @@ import 'agent_label.dart';
 import 'path_field_row.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
+import 'settings_theme.dart';
 import 'settings_notice.dart';
 
 /// Settings → Agents and accounts: each agent's executable, whether it still
@@ -25,7 +26,6 @@ class AgentPathSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final installations = ref.watch(agentInstallationsControllerProvider);
     final repair = ref.watch(agentPathRepairProvider);
     if (installations.isEmpty) return const SizedBox.shrink();
@@ -40,14 +40,13 @@ class AgentPathSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          SettingsNote(
             repair.hasChecked
                 // Per §19: a measurement with no timestamp is over-trusted.
                 ? '${repair.summary} Checked '
                       '${describeAge(ref.watch(clockProvider).nowUtc().difference(repair.checkedAt!))}.'
                 // And never a claim of health that was not observed at all.
                 : 'These paths have not been checked yet this run.',
-            style: theme.textTheme.bodySmall,
           ),
           for (final install in installations)
             _ExecutableRow(
@@ -140,8 +139,8 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
       now: ref.watch(clockProvider).nowUtc(),
     );
 
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.sm),
+    // One ruled entry per install, like every list on the page.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -151,7 +150,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
                 child: Text(
                   '${agentLabel(install.agentId)} · $environment'
                   '${version == null ? '' : ' · $version'}',
-                  style: theme.textTheme.bodyMedium,
+                  style: SettingsStyles.rowLabel(context),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/environments_controller.dart';
 import '../application/toolchain_readings.dart';
 import '../domain/toolchain.dart';
@@ -51,7 +52,6 @@ class _ToolchainsSectionState extends ConsumerState<ToolchainsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final environments = ref.watch(environmentsControllerProvider);
     if (environments.isEmpty) return const SizedBox.shrink();
     ref.watch(toolchainReadingsProvider);
@@ -61,13 +61,9 @@ class _ToolchainsSectionState extends ConsumerState<ToolchainsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'SSH hosts are only checked when you press Check.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
           ),
-          const SizedBox(height: Insets.sm),
           for (final environment in environments)
             _EnvironmentToolchains(environment: environment),
         ],
@@ -96,8 +92,8 @@ class _EnvironmentToolchains extends ConsumerWidget {
         ? null
         : readings.values.first.readAt;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.md),
+    // One ruled entry per machine, like every list on a settings page.
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -106,9 +102,7 @@ class _EnvironmentToolchains extends ConsumerWidget {
               Expanded(
                 child: Text(
                   ref.watch(environmentLabelForIdProvider(environment.id)),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: SettingsStyles.rowLabel(context),
                 ),
               ),
               Text(

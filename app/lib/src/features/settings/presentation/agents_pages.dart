@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_self_update_providers.dart';
@@ -10,7 +9,6 @@ import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_label.dart';
-import 'agent_usage_section.dart';
 import 'claude_accounts_section.dart';
 import 'codex_accounts_section.dart';
 import 'settings_catalog.dart';
@@ -24,7 +22,6 @@ class DefaultAgentSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final installations = ref.watch(agentInstallationsControllerProvider);
@@ -34,15 +31,16 @@ class DefaultAgentSection extends ConsumerWidget {
         installations.any((i) => i.id == settings.defaultAgentInstallationId)
         ? settings.defaultAgentInstallationId
         : null;
+    // Board "Defaults": the page opens with what a new session starts on.
     return SettingsSection(
       title: SettingsAnchor.defaultAgent.heading,
       child: installations.isEmpty
-          ? Text(
-              'No agents found. Press "Detect agents" below.',
-              style: theme.textTheme.bodySmall,
+          ? const SettingsNote(
+              'No agents found. Rescan under Find agents below.',
             )
           : SettingsRow(
-              label: 'Pre-selected when starting a session',
+              label: 'Agent for new sessions',
+              help: 'Pre-selected when starting a session.',
               control: DropdownButtonFormField<String?>(
                 initialValue: currentId,
                 isExpanded: true,
@@ -80,7 +78,6 @@ class AgentUpdatesSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final mayUpdate = ref.watch(agentsMayUpdateThemselvesProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final registry = ref.watch(agentRegistryProvider);
@@ -106,31 +103,20 @@ class AgentUpdatesSection extends ConsumerWidget {
             value: mayUpdate,
             onChanged: controller.setLetAgentsUpdateThemselves,
           ),
+          // One row per agent: its update command is the row's value, in the
+          // ledger hand, so it reads as something to type.
           if (!mayUpdate && updatable.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
+            const SettingsNote(
               'Update an agent yourself by running its own command in a '
               'terminal:',
-              style: theme.textTheme.bodySmall,
             ),
-            const SizedBox(height: 6),
             for (final (agentId, command) in updatable)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: '${agentLabel(agentId)}:  '),
-                      TextSpan(
-                        text: command.join(' '),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: kMonoFamily,
-                          fontFamilyFallback: kMonoFallback,
-                        ),
-                      ),
-                    ],
-                  ),
-                  style: theme.textTheme.bodySmall,
+              SettingsRow(
+                label: agentLabel(agentId),
+                control: SettingsValue(
+                  label: command.join(' '),
+                  mono: true,
+                  tooltip: command.join(' '),
                 ),
               ),
           ],
@@ -165,18 +151,6 @@ class InstalledCodexAccountsSection extends ConsumerWidget {
       ref,
       (adapter) => adapter.accounts is OpenAiAuthFileAccounts,
     ),
-  );
-}
-
-/// Settings → Agents and accounts → Usage & limits, for the agents it can read.
-class InstalledUsageSection extends ConsumerWidget {
-  const InstalledUsageSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => UsageSection(
-    // An allowlist, not a blocklist: an agent whose adapter declares no usage
-    // endpoint is simply not offered one.
-    installations: _installationsWhere(ref, (adapter) => adapter.usage != null),
   );
 }
 

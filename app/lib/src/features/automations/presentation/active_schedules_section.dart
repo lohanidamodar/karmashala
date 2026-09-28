@@ -8,6 +8,7 @@ import '../../agents/presentation/usage_chip.dart'
     show formatResetClock, formatUsageDuration;
 import '../../sessions/application/session_providers.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/automation_providers.dart';
 import '../application/scheduled_resume_providers.dart';
 import '../application/unattended_preflight.dart';
@@ -25,7 +26,6 @@ class ActiveSchedulesSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final automations = ref
         .watch(automationsProvider)
         .where((a) => a.enabled)
@@ -36,12 +36,7 @@ class ActiveSchedulesSection extends ConsumerWidget {
       key: const ValueKey('active-schedules'),
       title: 'ACTIVE',
       child: automations.isEmpty && resumes.isEmpty
-          ? Text(
-              'Nothing is armed or waiting.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            )
+          ? const SettingsNote('Nothing is armed or waiting.')
           // One tick for the whole list: every row's countdown moves together.
           : MinuteTicker(
               builder: (context, now) {
@@ -209,11 +204,15 @@ class _ActiveRow extends StatelessWidget {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+    // A board row: ruled, a quiet glyph, the name in the row label's hand.
+    return SettingsRuled(
       child: Row(
         children: [
-          Icon(icon, size: Chrome.iconTitle, color: theme.colorScheme.primary),
+          Icon(
+            icon,
+            size: Chrome.iconSmall,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: Column(
@@ -221,7 +220,7 @@ class _ActiveRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: theme.textTheme.bodyMedium,
+                  style: SettingsStyles.rowLabel(context),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(detail, style: muted, overflow: TextOverflow.ellipsis),

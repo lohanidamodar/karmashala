@@ -2,7 +2,6 @@ import 'about_page.dart';
 import 'notifications_page.dart';
 import 'package:flutter/material.dart';
 
-import 'package:karmashala_ui/tokens.dart';
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_page.dart';
 import '../../automations/presentation/scheduled_resumes_section.dart';
@@ -19,6 +18,7 @@ import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
 import 'agent_detection_section.dart';
+import 'agents_and_accounts_page.dart';
 import 'agent_path_section.dart';
 import 'agent_tools_section.dart';
 import 'agents_pages.dart';
@@ -32,6 +32,7 @@ import 'keyboard_section.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
 import 'settings_layout.dart';
+import 'settings_theme.dart';
 import 'side_panel_items_section.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';
@@ -54,45 +55,33 @@ class SettingsPageBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = SettingsLayout.isNarrow(constraints.maxWidth, scaler);
         return SettingsNarrowScope(
           narrow: narrow,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  page.label,
-                  style:
-                      (narrow
-                              ? theme.textTheme.titleMedium
-                              : theme.textTheme.titleLarge)
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: Insets.xs),
-              Padding(
-                padding: EdgeInsets.only(
-                  bottom: narrow ? Insets.lg : Insets.xl,
-                ),
-                child: Text(
-                  page.description,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+          // The board's controls for every section on the page, whichever
+          // feature built it.
+          child: SettingsControlsTheme(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Board page header: the title (19, semibold) and its blurb
+                // (12.5, muted) two pixels under it; the first section's own
+                // 22 px sets it off from the rows.
+                Semantics(
+                  header: true,
+                  child: Text(
+                    page.label,
+                    style: SettingsStyles.pageTitle(context, narrow: narrow),
                   ),
                 ),
-              ),
-              for (final anchor in page.anchors)
-                SettingsAnchorTarget(
-                  anchor: anchor,
-                  child: settingsSectionFor(anchor),
-                ),
-            ],
+                const SizedBox(height: 2),
+                Text(page.description, style: SettingsStyles.pageBlurb(context)),
+                ...settingsPageChildren(page),
+              ],
+            ),
           ),
         );
       },
@@ -100,7 +89,25 @@ class SettingsPageBody extends StatelessWidget {
   }
 }
 
-/// The widget that draws [anchor]. Every section is named once, here.
+/// What [page] draws under its header, each section wrapped in its anchor so
+/// a deep link or a search hit can scroll to it. Catalogue order, except on
+/// Agents and accounts, which is laid out agent by agent (spec §6) and places
+/// its anchors itself.
+List<Widget> settingsPageChildren(SettingsSectionId page) =>
+    page == SettingsSectionId.agents
+    ? const [AgentsAndAccountsBody()]
+    : [
+        for (final anchor in page.anchors)
+          SettingsAnchorTarget(
+            anchor: anchor,
+            child: settingsSectionFor(anchor),
+          ),
+      ];
+
+/// The widget that draws [anchor]. Every section is named once, here — except
+/// that Agents and accounts lays its page out agent by agent
+/// ([AgentsAndAccountsBody]); its account and default-model anchors name the
+/// standalone sections they grew out of.
 Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.startup => const StartupSection(),
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
@@ -139,7 +146,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.agentUpdates => const AgentUpdatesSection(),
   SettingsAnchor.claudeAccounts => const InstalledClaudeAccountsSection(),
   SettingsAnchor.codexAccounts => const InstalledCodexAccountsSection(),
-  SettingsAnchor.usage => const InstalledUsageSection(),
+  SettingsAnchor.usage => const UsageAndLimitsSection(),
   SettingsAnchor.permissionModes => const PermissionModesSection(),
   SettingsAnchor.mcpBridge => const McpBridgeSection(),
   SettingsAnchor.toolCatalogue => const AgentToolsSection(),

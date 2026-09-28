@@ -33,14 +33,18 @@ class McpBridgeSection extends ConsumerWidget {
     final hooks = ref.watch(agentHookInstallationReportProvider);
     return SettingsSection(
       title: SettingsAnchor.mcpBridge.heading,
+      // Board rows: what the bridge is for as the section's note, then the
+      // verdict and everything it depends on as one ruled entry.
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'Agents connected here can act on your projects and sessions.',
-            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: Insets.sm),
+          SettingsRuled(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           // A completed handshake, not the file's existence: on 2026-09-03
           // WSL's interop handler went and a good file would not spawn.
           _BridgeVerdict(check: bridge, report: report),
@@ -93,6 +97,9 @@ class McpBridgeSection extends ConsumerWidget {
                 'is waiting for approval or has failed.',
               ),
           ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -220,13 +227,15 @@ class AgentSkillsSection extends ConsumerWidget {
     return SettingsSection(
       title: SettingsAnchor.skills.heading,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
+          const SettingsNote(
             'Skills let each agent find these tools without being told.',
-            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: Insets.sm),
+          SettingsRuled(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           if (!report.swept)
             const _HookNote.unknown(
               'Not written yet — that sweep runs just after the window opens.',
@@ -290,6 +299,9 @@ class AgentSkillsSection extends ConsumerWidget {
                   .sweepRemoval(),
               icon: const Icon(AppIcons.trash, size: Chrome.icon),
               label: const Text('Remove them'),
+            ),
+          ),
+              ],
             ),
           ),
         ],

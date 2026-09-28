@@ -9,6 +9,7 @@ import '../../agents/application/agent_redetect_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import 'agent_label.dart';
 import 'settings_catalog.dart';
+import 'settings_row.dart';
 import 'settings_section.dart';
 
 /// Settings → Agents and accounts: run agent detection again, and say what it
@@ -20,17 +21,22 @@ class AgentDetectionSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final state = ref.watch(agentRedetectControllerProvider);
 
+    // Board "Find agents": one row — Detection, what the last scan found, and
+    // Rescan — with the per-machine breakdown under it once there is one.
     return SettingsSection(
       title: SettingsAnchor.detection.heading,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+          SettingsRow(
+            label: 'Detection',
+            help: state.report == null
+                ? 'Look for agents installed since, on every machine. Not '
+                      'scanned yet in this session.'
+                : state.report!.summary,
+            control: TextButton.icon(
               onPressed: state.busy
                   ? null
                   : () => ref
@@ -39,19 +45,13 @@ class AgentDetectionSection extends ConsumerWidget {
               icon: state.busy
                   ? const InlineSpinner()
                   : const Icon(AppIcons.arrowsClockwise),
-              label: const Text('Detect agents'),
+              label: const Text('Rescan'),
             ),
           ),
-          const SizedBox(height: Insets.xs),
           if (state.error != null)
-            DesktopErrorBanner(state.error!)
-          else
-            Text(
-              state.report == null
-                  ? 'Not scanned yet in this session. Run this after '
-                        'installing or removing an agent CLI.'
-                  : state.report!.summary,
-              style: theme.textTheme.bodySmall,
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.sm),
+              child: DesktopErrorBanner(state.error!),
             ),
           if (state.report case final report?
               when report.environments.isNotEmpty)

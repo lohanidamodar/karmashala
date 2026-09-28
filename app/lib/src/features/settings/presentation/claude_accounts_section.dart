@@ -30,7 +30,7 @@ class ClaudeAccountsSection extends ConsumerWidget {
       title: SettingsAnchor.claudeAccounts.heading,
       child: installations.isEmpty
           ? Text(
-              'No Claude Code found. Press Discover under Environments.',
+              'No Claude Code found. Find agents under Settings → Machines.',
               style: theme.textTheme.bodySmall,
             )
           : Column(

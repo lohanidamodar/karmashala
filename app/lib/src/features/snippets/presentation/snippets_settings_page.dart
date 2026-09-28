@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../settings/presentation/settings_theme.dart';
 import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
 import 'snippet_dialogs.dart';
@@ -17,7 +18,6 @@ class SnippetsSettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // **Watched, not read**: a snippet saved from the library dialog, the palette
     // or `snippet_add` must appear here with nothing reopened.
     final snippets = ref.watch(commandSnippetsProvider);
@@ -34,18 +34,11 @@ class SnippetsSettingsPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const SettingsNote(
                 r'Pick one from the book button above a terminal, or $ in quick open.',
-                style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: Insets.md),
               if (snippets.isEmpty)
-                Text(
-                  'Nothing saved yet.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
+                const SettingsNote('Nothing saved yet.')
               else
                 for (final snippet in snippets)
                   _SnippetCard(key: ValueKey(snippet.id), snippet: snippet),
@@ -90,7 +83,7 @@ class _SnippetCard extends ConsumerWidget {
         icon: AppIcons.bookBookmark,
         title: Text(
           snippet.label,
-          style: theme.textTheme.titleSmall,
+          style: SettingsStyles.rowLabel(context),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),

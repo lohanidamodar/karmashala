@@ -254,58 +254,56 @@ class LauncherHotkeySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final hotKey = decodeLauncherHotKey(settings.launcherHotkeyJson);
     final enabled = settings.launcherHotkeyEnabled;
 
+    Future<void> change() async {
+      final recorded = await showDialog<HotKey>(
+        context: context,
+        builder: (_) => _HotkeyRecorderDialog(initial: hotKey),
+      );
+      if (recorded != null) {
+        controller.setLauncherHotkey(encodeLauncherHotKey(recorded));
+      }
+    }
+
+    // Board rows: the switch, then the chord as the row's value with Change
+    // beside it — dimmed, not hidden, while the hotkey is off.
     return SettingsSection(
       title: SettingsAnchor.launcherHotkey.heading,
-      trailing: Switch(
-        value: enabled,
-        onChanged: controller.setLauncherHotkeyEnabled,
-      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Brings Karmashala forward from any app, with quick open.',
-            style: theme.textTheme.bodySmall,
+          SettingsSwitchRow(
+            label: 'Use the launcher hotkey',
+            help: 'Brings Karmashala forward from any app, with quick open.',
+            value: enabled,
+            onChanged: controller.setLauncherHotkeyEnabled,
           ),
-          const SizedBox(height: Insets.sm),
           Opacity(
             opacity: enabled ? 1 : 0.5,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    launcherHotKeyLabel(hotKey),
-                    style: MonoStyles.label,
+            child: SettingsRow(
+              label: 'Hotkey',
+              stackedFit: SettingsControlFit.start,
+              control: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SettingsValue(
+                      label: launcherHotKeyLabel(hotKey),
+                      mono: true,
+                    ),
                   ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: enabled
-                      ? () async {
-                          final recorded = await showDialog<HotKey>(
-                            context: context,
-                            builder: (_) =>
-                                _HotkeyRecorderDialog(initial: hotKey),
-                          );
-                          if (recorded != null) {
-                            controller.setLauncherHotkey(
-                              encodeLauncherHotKey(recorded),
-                            );
-                          }
-                        }
-                      : null,
-                  icon: const Icon(
-                    AppIcons.pencilSimple,
-                    size: Chrome.iconAction,
+                  const SizedBox(width: Insets.sm),
+                  OutlinedButton.icon(
+                    onPressed: enabled ? change : null,
+                    icon: const Icon(AppIcons.pencilSimple),
+                    label: const Text('Change'),
                   ),
-                  label: const Text('Change'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // A chord another app holds only fails; changing it resets retries.
