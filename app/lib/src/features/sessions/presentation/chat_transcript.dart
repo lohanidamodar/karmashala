@@ -226,7 +226,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(
-                          maxWidth: Chrome.readableWidth,
+                          maxWidth: Chrome.chatWidth,
                         ),
                         child: _TranscriptNow(
                           now: DateTime.now(),
@@ -286,9 +286,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                 alignment: Alignment.topCenter,
                 heightFactor: 1,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: Chrome.readableWidth,
-                  ),
+                  constraints: const BoxConstraints(maxWidth: Chrome.chatWidth),
                   child: widget.footer!,
                 ),
               ),
@@ -616,10 +614,14 @@ class _UserMessageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return TranscriptTurnFrame(
-      // **No border.** `surfaceContainerHigh` already separates the card;
-      // the tool card keeps its border because its fill barely differs.
-      fill: scheme.surfaceContainerHigh,
+    // A bubble on the right, tinted with the accent (spec §5): the agent's
+    // turn is plain text on the left, so whose turn it is reads at a glance.
+    final tint = Color.alphaBlend(
+      scheme.primary.withValues(alpha: StateLayers.selectedAlpha),
+      SurfaceTones.of(context).raised,
+    );
+    final bubble = TranscriptTurnFrame(
+      fill: tint,
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.md,
         vertical: Insets.sm,
@@ -641,6 +643,17 @@ class _UserMessageCard extends StatelessWidget {
             selectable: false,
           ),
         ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: constraints.maxWidth * Chrome.chatBubbleShare,
+          ),
+          child: bubble,
+        ),
       ),
     );
   }

@@ -714,6 +714,14 @@ class Chrome {
   /// `860` in three places, and three copies of a measure drift apart.
   static const readableWidth = 860.0;
 
+  /// The chat view's one reading column (UI overhaul spec §5): narrower than
+  /// [readableWidth], because a conversation is read in turns, not pages.
+  static const chatWidth = 780.0;
+
+  /// The widest a user's message bubble grows, as a share of [chatWidth]:
+  /// the rest is the gutter that says whose turn it is.
+  static const chatBubbleShare = 0.85;
+
   /// One level of a file tree's indentation, narrower than [Insets.lg]: a 16px
   /// step runs a deep path off the side of a side panel.
   static const treeIndent = 14.0;

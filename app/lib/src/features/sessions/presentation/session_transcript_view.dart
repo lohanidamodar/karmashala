@@ -475,7 +475,23 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                       // it blocks the session: nothing typed is read
                       // until it is answered.
                       ApprovalRequestCard(sessionId: widget.sessionId),
-                      DeliveryStrip(sessionId: widget.sessionId),
+                      // The facts over the next step and Ship ▾ — the same
+                      // shape as the terminal's status line.
+                      DeliveryStateLine(sessionId: widget.sessionId),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Insets.sm,
+                          vertical: Insets.xs,
+                        ),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: DeliveryStrip(
+                            sessionId: widget.sessionId,
+                            hostedOnTerminal: true,
+                            folded: true,
+                          ),
+                        ),
+                      ),
                       // Directly above the box: "what is it doing right
                       // now" was only answerable by scrolling to the end.
                       ActivityStrip(sessionId: widget.sessionId),

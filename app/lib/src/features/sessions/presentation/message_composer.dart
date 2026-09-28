@@ -326,7 +326,7 @@ class _MessageComposerState extends State<MessageComposer> {
               Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
-                    maxWidth: Chrome.readableWidth,
+                    maxWidth: Chrome.chatWidth,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(Insets.sm),
@@ -369,7 +369,7 @@ class _MessageComposerState extends State<MessageComposer> {
     var height =
         1 + 2 * Insets.sm + 2 + 2 * Insets.sm + Chrome.control + Insets.sm;
     final toolbarWidth =
-        math.min(width, Chrome.readableWidth) - 4 * Insets.sm - 2;
+        math.min(width, Chrome.chatWidth) - 4 * Insets.sm - 2;
     if (widget.chips.isNotEmpty &&
         toolbarWidth <= _ComposerToolbar.rowMinWidth) {
       height += Insets.xs + Chrome.control;
