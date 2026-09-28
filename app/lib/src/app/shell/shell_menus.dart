@@ -358,7 +358,7 @@ class _SidePanelCheckItem extends ConsumerWidget {
       ),
       shortcut: commandActivator(LogicalKeyboardKey.digit3),
       onChanged: hasRoom ? (_) => actions.toggleSidePanel() : null,
-      child: Text(hasRoom ? 'Side panel' : 'Side panel  ·  $kSidePanelNoRoom'),
+      child: Text(hasRoom ? 'Context panel' : 'Context panel  ·  $kSidePanelNoRoom'),
     );
   }
 }
@@ -396,7 +396,7 @@ class _SidePanelItemsSubmenu extends ConsumerWidget {
           child: const Text('Show all'),
         ),
       ],
-      child: const Text('Side panel items'),
+      child: const Text('Tools in More'),
     );
   }
 }

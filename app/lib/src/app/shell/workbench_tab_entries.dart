@@ -45,7 +45,7 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
           detail: _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
               ? null
               : 'not running',
-          icon: _documentIconFor(tab) ?? AppIcons.terminal,
+          icon: documentIconFor(tab) ?? AppIcons.terminal,
           onSelect: () => activateTerminalTab(ref, tab.id),
         ),
         active: onPanes && tab.id == active,
@@ -87,7 +87,7 @@ bool _isDocumentTab(TerminalTab tab) => tab.layout.panes.every(isDocumentPane);
 
 /// The glyph a document tab wears in place of a liveness dot, or null when the
 /// tab holds a process. One table, so the strip and the picker cannot disagree.
-IconData? _documentIconFor(TerminalTab tab) {
+IconData? documentIconFor(TerminalTab tab) {
   if (tab.layout.panes.length != 1) return null;
   final paneId = tab.layout.panes.single;
   if (isSettingsPane(paneId)) return AppIcons.gearSix;

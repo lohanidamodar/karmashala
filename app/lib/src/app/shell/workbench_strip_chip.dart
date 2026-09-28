@@ -37,7 +37,7 @@ class _TabChip extends ConsumerWidget {
       agentStatus: _agentActivity(ref),
       // A document tab has nothing running in it, so it wears what it is rather
       // than a liveness dot reporting `exited`.
-      icon: _documentIconFor(tab),
+      icon: documentIconFor(tab),
       unsaved: _hasUnsaved(ref),
       selected: selected,
       accented: accented,

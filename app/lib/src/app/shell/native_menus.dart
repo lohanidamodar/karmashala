@@ -202,8 +202,8 @@ class NativeShellMenus extends ConsumerWidget {
             ),
             PlatformMenuItem(
               label: hasRoom
-                  ? (panel ? 'Hide Side Panel' : 'Show Side Panel')
-                  : 'Side Panel  ·  $kSidePanelNoRoom',
+                  ? (panel ? 'Hide Context Panel' : 'Show Context Panel')
+                  : 'Context Panel  ·  $kSidePanelNoRoom',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.digit3,
                 meta: true,
@@ -211,7 +211,7 @@ class NativeShellMenus extends ConsumerWidget {
               onSelected: hasRoom ? actions.toggleSidePanel : null,
             ),
             PlatformMenu(
-              label: 'Side Panel Items',
+              label: 'Tools in More',
               menus: [
                 PlatformMenuItemGroup(
                   members: [

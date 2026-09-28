@@ -92,7 +92,7 @@ class _Area extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: 40,
+          height: 44,
           child: Padding(
             padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xs),
             child: Row(

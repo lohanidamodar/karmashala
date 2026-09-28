@@ -300,13 +300,12 @@ class _CompactPaneSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(shellControllerProvider.notifier);
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: Chrome.tabStripOf(context) + Insets.sm,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        color: SurfaceTones.of(context).chrome,
+        border: Border(top: BorderSide(color: SurfaceTones.of(context).line)),
       ),
       child: SegmentedButton<ShellPane>(
         segments: const [

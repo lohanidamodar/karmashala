@@ -623,7 +623,7 @@ class QuickOpenSources {
                 ?note,
                 ?lastActive.label(now),
               ].join(' · '),
-              detail: session.status.name,
+              detail: _statusWord(session.status),
               icon: AppIcons.chatCircle,
               keywords: [
                 agent,
@@ -847,7 +847,8 @@ class QuickOpenSources {
             // same reason it does in the strip's picker.
             subtitle: sessions.instanceFor(tab.focusedPaneId)?.workingDirectory,
             detail: tab.id == terminals.activeTabId ? 'current' : null,
-            icon: AppIcons.terminal,
+            // Settings, a note or a file wear their own glyph, as in the strip.
+            icon: documentIconFor(tab) ?? AppIcons.terminal,
             keywords: const ['terminal', 'tab'],
             weight: _tabWeight,
             onSelect: () => dismiss(() {
@@ -1088,3 +1089,14 @@ class QuickOpenSources {
     );
   }
 }
+
+/// A session's status as the palette says it: a plain word, or nothing for
+/// the states that claim nothing — "unknown" and "created" read as faults.
+String? _statusWord(SessionStatus status) => switch (status) {
+  SessionStatus.running => 'running',
+  SessionStatus.idle => 'idle',
+  SessionStatus.completed => 'done',
+  SessionStatus.failed => 'failed',
+  SessionStatus.cancelled => 'stopped',
+  SessionStatus.created || SessionStatus.unknown => null,
+};

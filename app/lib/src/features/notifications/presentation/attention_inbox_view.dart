@@ -45,7 +45,7 @@ class AttentionInboxView extends ConsumerWidget {
       children: [
         // The same header every sidebar area has: its name, then its verbs.
         SizedBox(
-          height: 40,
+          height: 44,
           child: Padding(
             padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xs),
             child: Row(

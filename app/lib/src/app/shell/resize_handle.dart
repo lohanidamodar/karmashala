@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// A thin draggable divider that reports drag deltas. [axis] is the direction
 /// the handle *moves* in: [Axis.horizontal] is a vertical bar dragged sideways.
@@ -24,7 +25,6 @@ class ResizeHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final horizontal = axis == Axis.horizontal;
     void move(double delta) {
       onDelta(delta);
@@ -78,13 +78,13 @@ class ResizeHandle extends StatelessWidget {
                 ? SizedBox(
                     width: thickness,
                     child: Center(
-                      child: Container(width: 1, color: scheme.outlineVariant),
+                      child: Container(width: 1, color: SurfaceTones.of(context).line),
                     ),
                   )
                 : SizedBox(
                     height: thickness,
                     child: Center(
-                      child: Container(height: 1, color: scheme.outlineVariant),
+                      child: Container(height: 1, color: SurfaceTones.of(context).line),
                     ),
                   ),
           ),
@@ -125,13 +125,24 @@ class ResizableColumn extends StatelessWidget {
       onDelta: (dx) => onResize(width + (handleAtStart ? -dx : dx)),
       onEnd: onResizeEnd,
     );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (handleAtStart) handle,
-        SizedBox(width: width, child: child),
-        if (!handleAtStart) handle,
-      ],
+    // Over the column's edge, not beside it: a strip of its own showed the
+    // window's backdrop between two regions the tones already tell apart
+    // (spec §3 — no lines unless "Lines between regions" is on).
+    return SizedBox(
+      width: width,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          Positioned(
+            top: 0,
+            bottom: 0,
+            left: handleAtStart ? 0 : null,
+            right: handleAtStart ? null : 0,
+            child: handle,
+          ),
+        ],
+      ),
     );
   }
 }
