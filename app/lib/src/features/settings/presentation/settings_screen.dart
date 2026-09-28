@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/shell/app_shell.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'settings_nav.dart';
 import 'settings_page_body.dart';
@@ -46,9 +47,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       widget.initialSection ??
       SettingsSectionId.values.first;
 
-  /// Whether the compact layout shows a page; a deep link opens into one.
-  late bool _openOnCompact =
-      widget.initialSection != null || widget.initialAnchor != null;
+  /// Whether the compact layout shows a page, under its sticky picker (spec
+  /// §6), rather than the searchable list the picker's Search opens.
+  late bool _openOnCompact = true;
 
   /// One key per section of the page on screen, handed out by
   /// [SettingsAnchorScope]; replaced with the page.
@@ -142,18 +143,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // A workbench tab: an implied leading button would pop the
             // app's own route.
             automaticallyImplyLeading: false,
-            leading: compact && _openOnCompact
-                ? BackButton(onPressed: _backToList)
-                : null,
+            leading: null,
             title: Row(
               children: [
                 Icon(AppIcons.gearSix, color: theme.colorScheme.tertiary),
                 const SizedBox(width: Insets.sm),
                 Flexible(
                   child: Text(
-                    compact && showingSection
-                        ? 'Settings · ${_selected.label}'
-                        : 'Settings',
+                    'Settings',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -166,7 +163,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           body: compact
               ? FocusTraversalGroup(
                   child: showingSection
-                      ? _page()
+                      // The sticky picker over the page (spec §6): one
+                      // column, the category always one tap away.
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SettingsCategoryPicker(
+                              selected: _selected,
+                              onSelect: _select,
+                              onSearch: _backToList,
+                            ),
+                            Expanded(child: _page()),
+                          ],
+                        )
                       : SettingsNav(
                           selected: null,
                           onSelect: _select,
@@ -233,6 +242,91 @@ class _SectionContent extends StatelessWidget {
               maxWidth: SettingsScreen.contentMaxWidth,
             ),
             child: SettingsPageBody(page: section),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// **The sticky category picker** of a narrow Settings tab (spec §6): the
+/// page's name with a caret, opening every page by group, and Search, which
+/// opens the full list with its search field.
+class SettingsCategoryPicker extends StatelessWidget {
+  const SettingsCategoryPicker({
+    required this.selected,
+    required this.onSelect,
+    required this.onSearch,
+    super.key,
+  });
+
+  final SettingsSectionId selected;
+  final ValueChanged<SettingsSectionId> onSelect;
+  final VoidCallback onSearch;
+
+  static const _search = '\u0000search';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: SurfaceTones.of(context).chrome,
+      child: Builder(
+        builder: (anchor) => InkWell(
+          onTap: () async {
+            final picked = await showDesktopMenuUnder<String>(anchor, [
+              DesktopMenuItem(
+                value: _search,
+                label: 'Search settings…',
+                icon: AppIcons.magnifyingGlass,
+              ),
+              for (final group in SettingsGroup.values) ...[
+                const DesktopMenuDivider(),
+                PopupMenuItem<String>(
+                  enabled: false,
+                  height: Chrome.menuRow,
+                  child: Text(
+                    group.label.toUpperCase(),
+                    style: theme.textTheme.labelSmall?.merge(Chrome.groupLabel),
+                  ),
+                ),
+                for (final page in group.pages)
+                  DesktopMenuItem(
+                    value: page.name,
+                    label: page.label,
+                    icon: page.icon,
+                    selected: page == selected,
+                  ),
+              ],
+            ]);
+            if (picked == null) return;
+            if (picked == _search) {
+              onSearch();
+              return;
+            }
+            onSelect(SettingsSectionId.values.byName(picked));
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.xl,
+              vertical: Insets.sm,
+            ),
+            child: Row(
+              children: [
+                Icon(selected.icon, size: Chrome.iconAction),
+                const SizedBox(width: Insets.sm),
+                Flexible(
+                  child: Text(
+                    '${selected.group.label} · ${selected.label}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(width: Insets.xs),
+                const Icon(AppIcons.caretDown, size: Chrome.iconSmall),
+              ],
+            ),
           ),
         ),
       ),
