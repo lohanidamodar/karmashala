@@ -1001,7 +1001,7 @@ void main() {
     );
   });
 
-  testWidgets('the conversation draws the approval with the way back', (
+  testWidgets('the chat shows the same docked ask as the terminal', (
     tester,
   ) async {
     seedAPendingApproval();
@@ -1013,17 +1013,16 @@ void main() {
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
 
-    // Unchanged here, and for the reason the terminal does not need it: the
-    // conversation has no other way to see the prompt, so it quotes the agent,
-    // offers the keys and offers the way to the terminal.
+    // The pane's status bar is the same in both views (owner, 2026-09-28), so
+    // the ask docks in it here too — one card, not a second copy in the chat.
+    // The way back to the terminal is the bar's own view switch.
     expect(find.byType(ApprovalRequestCard), findsOneWidget);
-    expect(find.textContaining('is waiting for you'), findsOneWidget);
     expect(
       find.textContaining('Do you want to make this edit'),
       findsOneWidget,
     );
     expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Terminal view'), findsOneWidget);
+    expect(find.byTooltip('Terminal view'), findsOneWidget);
   });
 
   testWidgets('the terminal surface survives the window matrix without it', (
@@ -1152,9 +1151,9 @@ void main() {
     tester,
   ) async {
     // The live complaint: a finished turn nudged the user and the app offered
-    // Approve — a button that types Enter into a prompt with nothing open. The
-    // dock this was reported against is gone, so the case is asked of the
-    // surface that still carries the card.
+    // Approve — a button that types Enter into a prompt with nothing open.
+    // The dock is an ask or nothing, in both views: the chat's own composer
+    // is the answer to "waiting for your input".
     agentStatus = AgentActivityStatus.awaitingApproval;
     agentEvidence = const ['Claude is waiting for your input'];
     agentWaiting = AgentWaitKind.input;
@@ -1166,13 +1165,10 @@ void main() {
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
 
-    // The headline, not the quoted message: both say it, and only one of them
-    // is the app speaking.
     expect(
       find.textContaining('Claude Code is waiting for your input'),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.textContaining('nothing to approve'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Deny'), findsNothing);
   });

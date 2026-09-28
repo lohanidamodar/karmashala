@@ -39,8 +39,10 @@ class _SessionBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = session;
     final group = groupId;
+    // The same bar in both views (owner, 2026-09-28): in the chat it describes
+    // the session the chat shows.
     final sessionId = !onTerminal
-        ? null
+        ? selected?.id
         : selected != null && selected.paneId == null
         ? selected.id
         : group == null

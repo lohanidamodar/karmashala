@@ -41,16 +41,10 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
 import 'agent_status_badge.dart';
-import 'approval_request_card.dart';
 import 'chat_transcript.dart';
 import 'session_recap_card.dart';
-import 'delivery_strip.dart';
 import 'message_composer.dart';
-import 'permission_mode_chip.dart';
-import 'model_chip.dart';
-import 'session_notice_line.dart';
 import 'session_repositories_bar.dart';
-import 'session_stats_dialog.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -471,33 +465,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Above the handoff row and the composer, because
-                      // it blocks the session: nothing typed is read
-                      // until it is answered.
-                      ApprovalRequestCard(sessionId: widget.sessionId),
-                      // The facts over the next step and Ship ▾ — the same
-                      // shape as the terminal's status line.
-                      DeliveryStateLine(sessionId: widget.sessionId),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Insets.sm,
-                          vertical: Insets.xs,
-                        ),
-                        child: Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: DeliveryStrip(
-                            sessionId: widget.sessionId,
-                            hostedOnTerminal: true,
-                            folded: true,
-                          ),
-                        ),
-                      ),
-                      // Directly above the box: "what is it doing right
-                      // now" was only answerable by scrolling to the end.
+                      // The ask, the delivery facts, Ship and the notices
+                      // are the pane's status bar's, in both views; the
+                      // chat keeps only what is its own. Directly above
+                      // the box: "what is it doing right now" was only
+                      // answerable by scrolling to the end.
                       ActivityStrip(sessionId: widget.sessionId),
-                      // Directly above the composer whose chip row posts
-                      // it, so the answer sits next to the chip.
-                      SessionNoticeLine(sessionId: widget.sessionId),
                     ],
                   ),
                 ),
@@ -509,16 +482,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 ),
                 child: MessageComposer(
                   controller: _composer,
-                  // MonoCode's chip row: the session's own safety policy,
-                  // and what it has cost, beside the session itself.
-                  chips: [
-                    PermissionModeChip(sessionId: widget.sessionId),
-                    // The same pair as the terminal's own bar, in the
-                    // same order: what it may do without asking, and
-                    // what with.
-                    SessionModelChip(sessionId: widget.sessionId),
-                    SessionStatsButton(sessionId: widget.sessionId),
-                  ],
+                  // Attachments and the message, nothing else: mode, model
+                  // and stats are on the pane's status bar (owner, 2026-09-28).
+                  chips: const [],
                   hintText: active
                       // No emoji: the old hint named a 🖼 that is nowhere
                       // in the composer; the attach tooltip does.
