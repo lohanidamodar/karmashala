@@ -245,6 +245,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setSidebarArea(String area) {
+    if (state.sidebarArea == area) return;
+    state = state.copyWith(sidebarArea: area);
+    _save();
+  }
+
   void setSeparation(SurfaceSeparation separation) {
     state = state.copyWith(separation: separation);
     _save();

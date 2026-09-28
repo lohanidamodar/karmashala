@@ -74,6 +74,7 @@ class Settings {
     this.compactDensity = true,
     this.accent = AppAccent.blue,
     this.separation = SurfaceSeparation.tones,
+    this.sidebarArea,
     this.editorWordWrap = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
@@ -181,6 +182,10 @@ class Settings {
 
   /// Whether regions are told apart by tone alone or with hairlines too.
   final SurfaceSeparation separation;
+
+  /// The activity-strip area the sidebar last showed, by name; null until one
+  /// is picked. A name, not the shell's enum: settings know nothing of it.
+  final String? sidebarArea;
 
   /// Soft-wrap long lines in the in-app editor. Off by default, and the line
   /// numbers go with it: the gutter paints at a fixed row height, so a wrapped
@@ -356,6 +361,7 @@ class Settings {
     bool? compactDensity,
     AppAccent? accent,
     SurfaceSeparation? separation,
+    String? sidebarArea,
     bool? editorWordWrap,
     EditorAutoSave? editorAutoSave,
     int? editorAutoSaveDelayMs,
@@ -427,6 +433,7 @@ class Settings {
     compactDensity: compactDensity ?? this.compactDensity,
     accent: accent ?? this.accent,
     separation: separation ?? this.separation,
+    sidebarArea: sidebarArea ?? this.sidebarArea,
     editorWordWrap: editorWordWrap ?? this.editorWordWrap,
     editorAutoSave: editorAutoSave ?? this.editorAutoSave,
     editorAutoSaveDelayMs: editorAutoSaveDelayMs ?? this.editorAutoSaveDelayMs,
@@ -534,6 +541,7 @@ class Settings {
     'compactDensity': compactDensity,
     'accent': accent.name,
     'separation': separation.name,
+    'sidebarArea': ?sidebarArea,
     'editorWordWrap': editorWordWrap,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
@@ -673,6 +681,7 @@ class Settings {
           : true,
       accent: AppAccent.fromName(json['accent'] as String?),
       separation: SurfaceSeparation.fromName(json['separation'] as String?),
+      sidebarArea: json['sidebarArea'] as String?,
       editorWordWrap: json['editorWordWrap'] is bool
           ? json['editorWordWrap'] as bool
           : false,
@@ -816,6 +825,7 @@ class Settings {
       other.compactDensity == compactDensity &&
       other.accent == accent &&
       other.separation == separation &&
+      other.sidebarArea == sidebarArea &&
       other.editorWordWrap == editorWordWrap &&
       other.editorAutoSave == editorAutoSave &&
       other.editorAutoSaveDelayMs == editorAutoSaveDelayMs &&
@@ -873,7 +883,7 @@ class Settings {
     explorerPaneWidth,
     detailSidebarWidth,
     compactDensity,
-    Object.hash(accent, separation, windowWidth, windowHeight),
+    Object.hash(accent, separation, sidebarArea, windowWidth, windowHeight),
     defaultSystemTerminalId,
     customTerminalPath,
     defaultCodeEditorId,

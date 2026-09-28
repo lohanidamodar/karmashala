@@ -1,5 +1,6 @@
 import 'package:karmashala_devices/devices.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala/src/app/shell/shell_area.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -18,6 +19,27 @@ Future<Settings> _stored(FakeDataServer server) async {
 
 void main() {
   group('simulator slimming', _simulatorSlimmingTests);
+
+  group('the sidebar area', () {
+    test('is unset by default and survives a JSON round-trip', () {
+      expect(const Settings().sidebarArea, isNull);
+      const s = Settings(sidebarArea: 'sessions');
+      expect(Settings.fromJson(s.toJson()), s);
+      expect(s, isNot(const Settings()));
+    });
+
+    test('the shell remembers it across a restart', () async {
+      final server = FakeDataServer();
+      final first = ProviderContainer(overrides: [await server.override()]);
+      first.read(shellAreaProvider.notifier).select(ShellArea.sessions);
+      expect((await _stored(server)).sidebarArea, 'sessions');
+      first.dispose();
+
+      final second = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(second.dispose);
+      expect(second.read(shellAreaProvider), ShellArea.sessions);
+    });
+  });
 
   group('shell integration setting', () {
     test('is off by default', () {
