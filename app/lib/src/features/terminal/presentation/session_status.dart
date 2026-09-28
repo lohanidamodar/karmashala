@@ -109,6 +109,8 @@ class TabAgentStatusDot extends StatelessWidget {
           status: status,
           size: UiDensity.of(context).iconSmall,
           semanticLabel: message,
+          // The chip goes amber for this state; the shield breathes on it.
+          askShield: true,
         ),
       ),
     );

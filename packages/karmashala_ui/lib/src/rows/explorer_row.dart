@@ -64,8 +64,15 @@ class ExplorerRow extends StatelessWidget {
     this.band = false,
     this.spaceAbove = false,
     this.minHeight,
+    this.needsYou = false,
     super.key,
   });
+
+  /// Whether the row's session waits on the user (board N1): the row rests
+  /// on the attention tone instead of transparent — and keeps it when
+  /// selected, with the selection washed over it rather than put in its
+  /// place, because the amber is the thing the list exists to show.
+  final bool needsYou;
 
   /// The row's floor under a pointer, its own vertical padding included —
   /// the sidebar's 28px line (board A2). Null keeps the kind's default:
@@ -267,6 +274,7 @@ class ExplorerRow extends StatelessWidget {
             kind: kind,
             selected: selected,
             band: banded,
+            needsYou: needsYou,
             child: row,
           ),
         ),
@@ -298,11 +306,13 @@ class _ExplorerRowFill extends StatelessWidget {
     required this.selected,
     required this.band,
     required this.child,
+    this.needsYou = false,
   });
 
   final ExplorerRowKind kind;
   final bool selected;
   final bool band;
+  final bool needsYou;
   final Widget child;
 
   @override
@@ -313,7 +323,14 @@ class _ExplorerRowFill extends StatelessWidget {
     final hovered = interaction?.hovered ?? false;
     // Focus is a ring, not a fill.
     final Color? color;
-    if (touch || band) {
+    if (needsYou) {
+      // Amber whatever else is true (board N1's `.row.sel` over `--warnbg`):
+      // selection and hover are washes over it, so they still show.
+      var rest = SurfaceTones.of(context).attentionSurface;
+      if (selected) rest = Color.alphaBlend(StateLayers.selected(scheme), rest);
+      if (hovered) rest = Color.alphaBlend(StateLayers.hover(scheme), rest);
+      color = rest;
+    } else if (touch || band) {
       // A tile or a band already rests on a tone of its own — a project tile
       // on the very step `SurfaceTones.selected` names — so its states are
       // washes laid over that tone, not tones put in its place.

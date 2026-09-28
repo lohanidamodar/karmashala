@@ -3,14 +3,12 @@ import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 
-/// How far a sheet lifts off the workbench it covers. Named here because it
-/// is the one elevation the narrow shell uses: a sheet over a live pane has to
-/// read as *over* it, which a tone step alone does not do.
-const double kNarrowSheetElevation = 8;
-
-/// The wash over the workbench while a sheet covers part of it. Light: the
-/// workbench stays readable, it only stops looking like the thing in front.
-const double _scrimAlpha = 0.24;
+/// How a sheet lifts off the workbench it covers (board N4, Medium): one
+/// deep shadow cast away from the edge it comes in from — a sheet over a live
+/// pane has to read as *over* it, which a tone step alone does not do.
+const double _sheetShadowOffset = 12;
+const double _sheetShadowBlur = 30;
+const double _sheetShadowAlpha = 0.45;
 
 /// **A sheet over the workbench** (UI overhaul spec §5, Medium and Compact):
 /// the sidebar or the context panel, drawn on top of the workbench instead of
@@ -114,7 +112,9 @@ class _ShellSlideOverState extends State<ShellSlideOver>
     final previous = _previous;
     _previous = null;
     if (!_focus.hasFocus) return;
-    if (previous != null && previous.context != null && previous.canRequestFocus) {
+    if (previous != null &&
+        previous.context != null &&
+        previous.canRequestFocus) {
       previous.requestFocus();
     } else {
       _focus.unfocus();
@@ -141,7 +141,6 @@ class _ShellSlideOverState extends State<ShellSlideOver>
   @override
   Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
-    final edge = BorderSide(color: tones.floatingLine);
     return AnimatedBuilder(
       animation: _controller,
       // Gone once closed, not merely transparent: a sheet at opacity zero
@@ -155,25 +154,37 @@ class _ShellSlideOverState extends State<ShellSlideOver>
       child: Focus(
         focusNode: _focus,
         onKeyEvent: _onKey,
-        child: Material(
-          elevation: kNarrowSheetElevation,
-          // The sheet's own content paints its tone; this is the lift.
-          color: widget.fromStart ? tones.side : tones.panel,
-          shape: Border(
-            right: widget.fromStart ? edge : BorderSide.none,
-            left: widget.fromStart ? BorderSide.none : edge,
+        // The shadow, not a hairline, parts the sheet from the workbench.
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _sheetShadowAlpha),
+                offset: Offset(
+                  widget.fromStart ? _sheetShadowOffset : -_sheetShadowOffset,
+                  0,
+                ),
+                blurRadius: _sheetShadowBlur,
+              ),
+            ],
           ),
-          clipBehavior: Clip.hardEdge,
-          child: widget.child,
+          child: Material(
+            // The sheet's own content paints its tone; this is the ground.
+            color: widget.fromStart ? tones.side : tones.panel,
+            clipBehavior: Clip.hardEdge,
+            child: widget.child,
+          ),
         ),
       ),
     );
   }
 }
 
-/// The wash behind an open sheet. A click on it is a click outside the sheet,
-/// so it closes the sheet — and goes no further, rather than also landing on
-/// whatever pane was under it.
+/// What lies behind an open sheet. A click on it is a click outside the
+/// sheet, so it closes the sheet — and goes no further, rather than also
+/// landing on whatever pane was under it. Clear, not a wash (board N4): the
+/// sheet's shadow already says which is in front, and the workbench stays
+/// fully readable beside it.
 class ShellOverlayScrim extends StatelessWidget {
   const ShellOverlayScrim({required this.onDismiss, super.key});
 
@@ -186,11 +197,7 @@ class ShellOverlayScrim extends StatelessWidget {
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onDismiss,
-      child: ColoredBox(
-        color: Theme.of(
-          context,
-        ).colorScheme.scrim.withValues(alpha: _scrimAlpha),
-      ),
+      child: const SizedBox.expand(),
     ),
   );
 }

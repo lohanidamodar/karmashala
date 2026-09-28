@@ -87,19 +87,23 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
             // One column under 600 (spec §5): the strip is gone, so its
             // glyphs fold in beside the menu glyph, and the tab switcher
             // takes the quick panel's place — usage too, which has no room.
+            // Board N4: the menu, the session switcher, the Sessions list
+            // with who needs you — eight apart. The window's own menus and
+            // the dormant-session badges (nothing, unless there are some)
+            // follow; New, Zen and the side panel keep their chords and
+            // their rows in those menus.
             if (compactToolbar) {
               return Row(
                 children: [
-                  if (!useNativeMenus) const ShellOverflowMenu(),
-                  const ShellAreasMenuButton(),
                   const SizedBox(width: Insets.xs),
+                  const ShellAreasMenuButton(),
+                  const SizedBox(width: Insets.sm),
                   const Expanded(child: ShellTabSwitcher()),
-                  const _BarDivider(),
-                  const _NewButton(key: ValueKey('title-bar-new')),
+                  const SizedBox(width: Insets.sm),
+                  const ShellSessionsButton(),
                   const _RestoredSessionsBadge(),
                   const _BackgroundSessionsBadge(),
-                  const _FocusModeToggle(),
-                  const _SidePanelToggle(),
+                  if (!useNativeMenus) const ShellOverflowMenu(),
                 ],
               );
             }
@@ -210,9 +214,9 @@ class _BarDivider extends StatelessWidget {
     width: 1,
     height: Chrome.iconAction,
     margin: const EdgeInsets.symmetric(horizontal: Insets.sm),
-    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
-      alpha: 0.3,
-    ),
+    color: Theme.of(
+      context,
+    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
   );
 }
 

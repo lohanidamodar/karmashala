@@ -784,6 +784,17 @@ class Chrome {
   static double tabStripOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(tabStrip).clamp(tabStrip, 52.0);
 
+  /// The one-column window's top bar (UI overhaul board N4, Compact): taller
+  /// than [titleBar] because it carries the session switcher and two 34px
+  /// buttons — the controls a window that narrow is driven by.
+  static const compactTopBar = 44.0;
+
+  /// [compactTopBar], grown with the text scale as [titleBarOf] is.
+  static double compactTopBarOf(BuildContext context) =>
+      MediaQuery.textScalerOf(
+        context,
+      ).scale(compactTopBar).clamp(compactTopBar, 60.0);
+
   /// [statusBar], same treatment.
   static double statusBarOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(statusBar).clamp(statusBar, 38.0);

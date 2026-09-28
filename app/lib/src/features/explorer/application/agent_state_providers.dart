@@ -228,3 +228,26 @@ final agentStateGroupsProvider = Provider.autoDispose<List<AgentStateGroup>>(
     quiet: ref.watch(quietSessionsProvider),
   ),
 );
+
+/// The name of the project a session (native or imported) belongs to, or
+/// null when it has none we know — for an ask that has to say where it is
+/// from (board N1: "in karmashala-app" on the dock and the toast). Read on
+/// demand rather than watched: a project renamed under an open ask is not
+/// worth a subscription on every surface that shows one.
+final sessionProjectNameProvider = Provider<String? Function(String sessionId)>(
+  (ref) => (sessionId) {
+    final repositoryId =
+        ref.read(sessionsDataProvider).getById(sessionId)?.repositoryId ??
+        ref.read(importedSessionsProvider).getById(sessionId)?.repositoryId;
+    if (repositoryId == null) return null;
+    final projectId = ref
+        .read(workspaceDataProvider)
+        .repository(repositoryId)
+        ?.projectId;
+    if (projectId == null) return null;
+    for (final project in ref.read(sortedProjectsProvider)) {
+      if (project.id == projectId) return project.name;
+    }
+    return null;
+  },
+);

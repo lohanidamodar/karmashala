@@ -301,7 +301,15 @@ class _AppShellState extends ConsumerState<AppShell> {
         // 125%+), and `preferredSize` cannot read a context.
         // Zen is only the pane (spec §5): the title bar goes with the rest,
         // and a small bar floats in at the top edge instead.
-        appBar: zen ? null : ShellTitleBar(height: Chrome.titleBarOf(context)),
+        // Under 600 px it is the compact top bar (board N4), which is taller.
+        appBar: zen
+            ? null
+            : ShellTitleBar(
+                height:
+                    ShellWidth.of(MediaQuery.sizeOf(context).width).isCompact
+                    ? Chrome.compactTopBarOf(context)
+                    : Chrome.titleBarOf(context),
+              ),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -313,8 +321,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               // what the sidebar, workbench and panel share.
               final stripShown = !zen && !width.isCompact;
               final available =
-                  constraints.maxWidth -
-                  (stripShown ? kActivityStripWidth : 0);
+                  constraints.maxWidth - (stripShown ? kActivityStripWidth : 0);
               // Drawn closed on the layout that folds them, so a narrowing
               // window never flashes a sheet it is about to take away.
               final sidebarOpen = !folding && shell.explorerPaneVisible;
@@ -385,13 +392,16 @@ class _AppShellState extends ConsumerState<AppShell> {
                         panelWidth: _panelDrag ?? panelWidth,
                       ),
                     ),
-                  // Asks from sessions not on screen float over the
-                  // workbench's corner, above its status lines — and above a
-                  // sheet, because an ask still docks at every width.
-                  const Positioned(
+                  // Asks from sessions not on screen float at the
+                  // workbench's top right corner (board N1), clear of the
+                  // docks and status lines at the bottom — and above a
+                  // sheet, because an ask still reaches you at every width.
+                  // Each toast brings its own [Insets.sm] above it; in Zen
+                  // they start under the floating bar, not across it.
+                  Positioned(
                     right: Insets.lg,
-                    bottom: Insets.xl * 2,
-                    child: ShellAskToasts(),
+                    top: zen ? kZenBarRoom : Insets.xs,
+                    child: const ShellAskToasts(),
                   ),
                   if (zen)
                     const Positioned(

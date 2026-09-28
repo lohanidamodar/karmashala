@@ -185,6 +185,8 @@ class SessionCard extends StatelessWidget {
       kind: ExplorerRowKind.session,
       depth: depth,
       selected: selected,
+      // The same amber the Sessions lens gives a waiting row (board N1).
+      needsYou: needsYou,
       settled: settled && !selected,
       onTap: onTap,
       menuItemsBuilder: menuItemsBuilder,

@@ -22,6 +22,7 @@ class OffScreenAsk {
     required this.imported,
     required this.detail,
     required this.canAnswer,
+    this.project,
   });
 
   final String openId;
@@ -36,6 +37,10 @@ class OffScreenAsk {
   /// both, and there is a pane or a host to type them into.
   final bool canAnswer;
 
+  /// The project the session belongs to, when we know it — the toast's
+  /// right-hand label (board N1).
+  final String? project;
+
   @override
   bool operator ==(Object other) =>
       other is OffScreenAsk &&
@@ -43,10 +48,12 @@ class OffScreenAsk {
       other.label == label &&
       other.imported == imported &&
       other.detail == detail &&
-      other.canAnswer == canAnswer;
+      other.canAnswer == canAnswer &&
+      other.project == project;
 
   @override
-  int get hashCode => Object.hash(openId, label, imported, detail, canAnswer);
+  int get hashCode =>
+      Object.hash(openId, label, imported, detail, canAnswer, project);
 }
 
 /// The asks to raise toasts for (spec §5): every session waiting on an
@@ -57,6 +64,7 @@ final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
   final registry = ref.read(sessionStatusRegistryProvider);
   final agents = ref.read(agentRegistryProvider);
   final answerable = ref.read(sessionAnswerableProvider);
+  final projectOf = ref.read(sessionProjectNameProvider);
   return [
     for (final MapEntry(key: openId, value: source) in waiting.entries)
       if (openId != onScreen)
@@ -67,6 +75,7 @@ final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
             label: source.label,
             imported: source.imported,
             detail: report.evidence.isEmpty ? null : report.evidence.last,
+            project: projectOf(openId),
             canAnswer:
                 answerable(openId) &&
                 agents.byId(report.agentId)?.approval.approve != null &&
@@ -146,8 +155,10 @@ class _ShellAskToastsState extends ConsumerState<ShellAskToasts> {
   }
 }
 
-/// One ask, from values: who is asking and what, with Yes / No when it can
-/// be answered from here, Open, and a close.
+/// One ask, from values (board N1's toast): the session and its project,
+/// what the agent asks in its own words, then Yes / No when it can be
+/// answered from here, and Open — on the raised tone with a floating
+/// surface's hairline and shadow, 340px wide.
 class AskToast extends StatelessWidget {
   const AskToast({
     required this.ask,
@@ -165,38 +176,66 @@ class AskToast extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onDismiss;
 
+  /// The board's toast width.
+  static const width = 340.0;
+
+  /// The board's small buttons: shorter than [Chrome.control], because the
+  /// toast is a note, not a toolbar.
+  static const _buttonHeight = 24.0;
+
+  /// The toast's own shadow: deeper than [Shadows.floating], because it
+  /// floats over a live terminal rather than beside the thing it came from.
+  static const _shadow = [
+    BoxShadow(
+      color: Color.fromRGBO(0, 0, 0, 0.45),
+      offset: Offset(0, 16),
+      blurRadius: 40,
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
+    final density = UiDensity.of(context);
     final attention = SemanticColors.of(context).attention;
     final onAnswer = this.onAnswer;
-    ButtonStyle compact = TextButton.styleFrom(
-      minimumSize: const Size(0, Chrome.control),
-      padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+    ButtonStyle button({required bool quiet}) => TextButton.styleFrom(
+      foregroundColor: quiet ? scheme.onSurfaceVariant : scheme.onSurface,
+      backgroundColor: quiet ? Colors.transparent : tones.selected,
+      minimumSize: const Size(0, _buttonHeight),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
+      textStyle: theme.textTheme.labelMedium?.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
     );
+    final project = ask.project;
     return Semantics(
       container: true,
       liveRegion: true,
       label: '${ask.label} needs you',
-      child: Material(
-        color: tones.raised,
-        elevation: 6,
-        borderRadius: BorderRadius.circular(Radii.md),
-        child: Container(
-          width: 320,
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            Insets.sm,
-            Insets.xs,
-            Insets.sm,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.md),
-            border: Border(left: BorderSide(color: attention, width: 3)),
-          ),
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.fromLTRB(
+          Insets.md,
+          Insets.xs,
+          Insets.xs,
+          Insets.md,
+        ),
+        decoration: BoxDecoration(
+          color: tones.raised,
+          borderRadius: BorderRadius.circular(Radii.md),
+          border: Border.all(color: tones.floatingLine),
+          boxShadow: _shadow,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -204,25 +243,50 @@ class AskToast extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    AppIcons.warningCircle,
+                    AppIcons.shield,
                     size: Chrome.iconSmall,
                     color: attention,
                   ),
-                  const SizedBox(width: Insets.xs),
+                  const SizedBox(width: Insets.sm),
+                  // The session first, "needs you" after it muted: the name
+                  // is what the eye looks for, and the words keep a reader
+                  // who cannot see the amber told why this appeared.
                   Expanded(
-                    child: Text(
-                      '${ask.label} needs you',
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: ask.label),
+                          TextSpan(
+                            text: ' needs you',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: density.rowTitle(theme, strong: true),
                     ),
                   ),
+                  if (project != null) ...[
+                    const SizedBox(width: Insets.sm),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: Text(
+                        project,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: density.muted(theme),
+                      ),
+                    ),
+                  ],
                   IconButton(
                     tooltip: 'Dismiss',
                     visualDensity: VisualDensity.compact,
                     iconSize: Chrome.iconSmall,
+                    color: scheme.onSurfaceVariant,
                     icon: const Icon(AppIcons.x),
                     onPressed: onDismiss,
                   ),
@@ -230,48 +294,44 @@ class AskToast extends StatelessWidget {
               ),
               if (ask.detail case final detail?)
                 Padding(
-                  padding: const EdgeInsets.only(right: Insets.sm),
+                  padding: const EdgeInsets.only(
+                    right: Insets.sm,
+                    bottom: Insets.sm,
+                  ),
                   child: Text(
                     detail,
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: kMonoFamily,
-                      fontFamilyFallback: kMonoFallback,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: density
+                        .rowTitle(theme)
+                        ?.copyWith(fontWeight: FontWeight.w400),
                   ),
                 ),
-              const SizedBox(height: Insets.xs),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (onAnswer != null) ...[
-                    TextButton(
-                      style: compact,
-                      onPressed: () => onAnswer(false),
-                      child: const Text('No'),
-                    ),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, Chrome.control),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Insets.md,
-                        ),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
+              Padding(
+                padding: const EdgeInsets.only(right: Insets.sm),
+                child: Row(
+                  children: [
+                    if (onAnswer != null) ...[
+                      TextButton(
+                        style: button(quiet: false),
+                        onPressed: () => onAnswer(true),
+                        child: const Text('Yes'),
                       ),
-                      onPressed: () => onAnswer(true),
-                      child: const Text('Yes'),
+                      const SizedBox(width: 6),
+                      TextButton(
+                        style: button(quiet: false),
+                        onPressed: () => onAnswer(false),
+                        child: const Text('No'),
+                      ),
+                    ],
+                    const Spacer(),
+                    TextButton(
+                      style: button(quiet: true),
+                      onPressed: onOpen,
+                      child: const Text('Open'),
                     ),
-                    const SizedBox(width: Insets.xs),
                   ],
-                  TextButton(
-                    style: compact,
-                    onPressed: onOpen,
-                    child: const Text('Open'),
-                  ),
-                ],
+                ),
               ),
             ],
           ),

@@ -85,6 +85,12 @@ class LensSessionRow extends ConsumerWidget {
     final muted = density.muted(theme);
 
     final waiting = state == AgentState.needsYou;
+    // What it waits on, in one word (board N1): "approve" or "question" when
+    // the status source could tell, "waiting" when it could not. Read, not
+    // watched: [needsYou] and [live] already wake the row when it changes.
+    final waitKind = waiting
+        ? ref.read(sessionStatusLookupProvider)(id)?.waiting
+        : null;
     final order = SelectionOrderScope.maybeOf(context);
     void tap() {
       if (!handleSelectableClick(
@@ -102,6 +108,7 @@ class LensSessionRow extends ConsumerWidget {
       minHeight: Sidebar.rowHeight,
       depth: 0,
       selected: selected || ticked,
+      needsYou: waiting,
       settled: state == AgentState.ended,
       onTap: tap,
       menuItemsBuilder: () =>
@@ -139,7 +146,7 @@ class LensSessionRow extends ConsumerWidget {
           SizedBox(
             width: ExplorerRow.glyphSlot,
             child: Center(
-              child: _StateGlyph(state: state, entry: entry),
+              child: _StateGlyph(state: state, entry: entry, wait: waitKind),
             ),
           ),
           const SizedBox(width: ExplorerRow.textGap),
@@ -175,7 +182,11 @@ class LensSessionRow extends ConsumerWidget {
           if (waiting) ...[
             const SizedBox(width: Insets.xs),
             Text(
-              'waiting',
+              switch (waitKind) {
+                AgentWaitKind.approval => 'approve',
+                AgentWaitKind.question => 'question',
+                _ => 'waiting',
+              },
               style: muted?.copyWith(
                 color: SemanticColors.of(context).attention,
                 fontWeight: FontWeight.w600,
@@ -226,14 +237,29 @@ String? _knownBranch(WidgetRef ref, EnvironmentPath? directory) {
 }
 
 class _StateGlyph extends StatelessWidget {
-  const _StateGlyph({required this.state, required this.entry});
+  const _StateGlyph({required this.state, required this.entry, this.wait});
 
   final AgentState state;
   final WorkspaceSessionEntry entry;
 
+  /// What a waiting session waits on, when known.
+  final AgentWaitKind? wait;
+
   @override
   Widget build(BuildContext context) {
     const size = ExplorerRow.glyphSize;
+    // Board N1: an approval breathes a shield, a question wears its mark.
+    if (state == AgentState.needsYou && wait == AgentWaitKind.approval) {
+      return AskGlyph(size: size, semanticLabel: state.label);
+    }
+    if (state == AgentState.needsYou && wait == AgentWaitKind.question) {
+      return Icon(
+        AppIcons.question,
+        size: size,
+        color: SemanticColors.of(context).attention,
+        semanticLabel: state.label,
+      );
+    }
     final status = switch (state) {
       AgentState.needsYou => AgentActivityStatus.awaitingApproval,
       AgentState.quiet || AgentState.working => AgentActivityStatus.working,

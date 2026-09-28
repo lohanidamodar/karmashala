@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:agent_cli/descriptors.dart';
 
+import '../app_icons.dart';
 import '../design_tokens.dart';
 import '../stepped_ring.dart';
 import 'agent_status_appearance.dart';
@@ -16,11 +19,17 @@ class StatusGlyph extends StatelessWidget {
     required this.size,
     this.color,
     this.semanticLabel,
+    this.askShield = false,
     super.key,
   });
 
   final AgentActivityStatus status;
   final double size;
+
+  /// Draws "needs you" as the breathing [AskGlyph] shield (board N1) rather
+  /// than the still warning circle — where the mark heads a tab or a row that
+  /// takes the attention tone, so the two say the same thing together.
+  final bool askShield;
 
   /// Null takes the status's own semantic colour.
   final Color? color;
@@ -32,6 +41,9 @@ class StatusGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     final appearance = agentStatusAppearance(status);
     final colour = color ?? appearance.colour(SemanticColors.of(context));
+    if (askShield && status == AgentActivityStatus.awaitingApproval) {
+      return AskGlyph(size: size, semanticLabel: semanticLabel);
+    }
     if (status == AgentActivityStatus.working) {
       return WorkingSpinner(
         size: size,
@@ -81,6 +93,53 @@ class WorkingSpinner extends StatelessWidget {
           inset: inset,
         ),
       ),
+    );
+  }
+}
+
+/// **The mark of a session blocked on an approval** (UI overhaul board N1):
+/// a shield in the attention colour that breathes, on the tab and the sidebar
+/// row, so the one session that stops everything is found by the eye first.
+///
+/// It breathes on [StatusSpinnerClock] — the working spinners' shared timer —
+/// rather than a [Ticker]: one clock for every moving status mark, a frame
+/// only per step, and still (subscribed to nothing) under reduced motion, a
+/// disabled [TickerMode] or a hidden [Visibility], exactly as [SteppedRing].
+class AskGlyph extends StatelessWidget {
+  const AskGlyph({required this.size, this.semanticLabel, super.key});
+
+  final double size;
+
+  /// As [Icon.semanticLabel].
+  final String? semanticLabel;
+
+  /// The dimmest the shield gets: the board's `opacity: .45` at mid-pulse.
+  static const _floor = 0.45;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(
+      AppIcons.shield,
+      size: size,
+      color: SemanticColors.of(context).attention,
+      semanticLabel: semanticLabel,
+    );
+    final animate =
+        Motion.of(context).animate &&
+        TickerMode.valuesOf(context).enabled &&
+        Visibility.of(context);
+    if (!animate) return icon;
+    final clock = StatusSpinnerClock.instance;
+    return ListenableBuilder(
+      listenable: clock,
+      builder: (context, child) {
+        // One breath per turn of the spinner clock: full at step 0, dimmest
+        // half-way round, a cosine in between.
+        final phase = clock.step / Motion.statusSteps * 2 * math.pi;
+        final opacity = _floor + (1 - _floor) * (0.5 + 0.5 * math.cos(phase));
+        return Opacity(opacity: opacity, child: child);
+      },
+      child: icon,
     );
   }
 }

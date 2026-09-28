@@ -32,9 +32,11 @@ class WorkbenchTabChip extends StatelessWidget {
   /// strip: shorter, and selected on its *bottom* edge, so it reads as a header.
   final bool dense;
 
-  /// Whether the tab's session is waiting on the user (spec §5): the chip
-  /// takes the attention tone and edge, so a blocked session is seen from any
-  /// strip, focused or not.
+  /// Whether the tab's session is waiting on the user (spec §5, board N1's
+  /// `.wt.ask`): the chip takes the attention tone in place of the selected
+  /// one, with full ink and no accent rule — the amber, not the keyboard's
+  /// accent, is what the eye must find — so a blocked session is seen from
+  /// any strip, focused or not.
   final bool needsYou;
 
   final VoidCallback onTap;
@@ -58,7 +60,7 @@ class WorkbenchTabChip extends StatelessWidget {
     final rule = BorderSide(
       width: 2,
       color: needsYou
-          ? tones.attentionEdge
+          ? Colors.transparent
           : switch ((selected, accented)) {
               (true, null) || (true, true) => scheme.primary,
               _ => Colors.transparent,
@@ -105,7 +107,7 @@ class WorkbenchTabChip extends StatelessWidget {
                         .copyWith(
                           // Full ink only where the keyboard is: a strip nobody
                           // types in must not compete with the one that is.
-                          color: selected && (accented ?? true)
+                          color: needsYou || (selected && (accented ?? true))
                               ? scheme.onSurface
                               : scheme.onSurfaceVariant,
                         ),

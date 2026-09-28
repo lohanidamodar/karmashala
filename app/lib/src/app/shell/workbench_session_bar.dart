@@ -79,73 +79,131 @@ class _SessionBar extends ConsumerWidget {
             onTerminalView: onTerminalView,
             compact: compact,
           );
+    // Zen (spec §5, board N4): the status line stays, dimmed — state without
+    // chrome, on the pane's own tone rather than a bar of its own.
+    final zen = ref.watch(terminalMaximizedProvider);
+    final tones = SurfaceTones.of(context);
     // A tone step, not a rule, parts the bar from the surface above it.
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          constraints: const BoxConstraints(minHeight: Chrome.tabStrip),
-          color: SurfaceTones.of(context).chrome,
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: 2,
+        // **The ask dock** (spec §5, board N1): what the agent is waiting on,
+        // answerable here, floating on the pane's own surface just above the
+        // line that describes it — outside the bar, so the amber panel sits
+        // on the terminal's tone with a margin all round, in Zen as well.
+        // Nothing at all while it is not waiting.
+        if (sessionId != null)
+          ColoredBox(
+            color: tones.term,
+            child: ApprovalRequestCard(sessionId: sessionId, docked: true),
           ),
-          // Inside the [Container], so the bar's own surface grows with the
-          // reservation instead of leaving the terminal showing through.
-          child: _HeldHeight(
-            hold: reading,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // **The ask dock** (spec §5): what the agent is waiting on,
-                // answerable here, above the line that describes it. Nothing
-                // at all while it is not waiting.
-                if (sessionId != null)
-                  ApprovalRequestCard(sessionId: sessionId, docked: true),
-                // At width the pane's status is one line: the facts, then the
-                // controls. Below it the facts are a caption over the controls.
-                if (sessionId != null)
+        _ZenDimmed(
+          dim: zen,
+          child: Container(
+            constraints: BoxConstraints(
+              minHeight: zen ? Chrome.paneStrip : Chrome.tabStrip,
+            ),
+            color: zen ? tones.term : tones.chrome,
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: 2,
+            ),
+            // Inside the [Container], so the bar's own surface grows with the
+            // reservation instead of leaving the terminal showing through.
+            child: _HeldHeight(
+              hold: reading,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // At width the pane's status is one line: the facts, then the
+                  // controls. Below it the facts are a caption over the controls.
+                  if (sessionId != null)
+                    LayoutBuilder(
+                      builder: (context, constraints) =>
+                          constraints.maxWidth < thirdControl
+                          ? const SizedBox.shrink()
+                          : _SessionStatusLine(
+                              sessionId: sessionId,
+                              toggle: toggle?.call(false),
+                            ),
+                    ),
+                  if (sessionId != null)
+                    SessionNoticeLine(sessionId: sessionId),
+                  if (sessionId != null) ...[
+                    // The bar's own width: a `LayoutBuilder` inside the row would
+                    // read infinity for a non-flexible child.
+                    LayoutBuilder(
+                      builder: (context, constraints) =>
+                          constraints.maxWidth >= thirdControl
+                          ? const SizedBox.shrink()
+                          : _SessionFactsRow(sessionId: sessionId),
+                    ),
+                  ],
                   LayoutBuilder(
-                    builder: (context, constraints) =>
-                        constraints.maxWidth < thirdControl
-                        ? const SizedBox.shrink()
-                        : _SessionStatusLine(
-                            sessionId: sessionId,
-                            toggle: toggle?.call(false),
-                          ),
-                  ),
-                if (sessionId != null) SessionNoticeLine(sessionId: sessionId),
-                if (sessionId != null) ...[
-                  // The bar's own width: a `LayoutBuilder` inside the row would
-                  // read infinity for a non-flexible child.
-                  LayoutBuilder(
-                    builder: (context, constraints) =>
-                        constraints.maxWidth >= thirdControl
-                        ? const SizedBox.shrink()
-                        : _SessionFactsRow(sessionId: sessionId),
+                    builder: (context, constraints) {
+                      if (sessionId != null &&
+                          constraints.maxWidth >= thirdControl) {
+                        return const SizedBox.shrink();
+                      }
+                      final narrow = constraints.maxWidth < narrowBelow;
+                      return _SessionActionRow(
+                        sessionId: sessionId,
+                        narrow: narrow,
+                        toggle: toggle?.call(narrow),
+                      );
+                    },
                   ),
                 ],
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (sessionId != null &&
-                        constraints.maxWidth >= thirdControl) {
-                      return const SizedBox.shrink();
-                    }
-                    final narrow = constraints.maxWidth < narrowBelow;
-                    return _SessionActionRow(
-                      sessionId: sessionId,
-                      narrow: narrow,
-                      toggle: toggle?.call(narrow),
-                    );
-                  },
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The status line's Zen dimming (board N4): drawn at [_dimOpacity] — the
+/// board's `dim` ink on a line with no chrome of its own — and back to full
+/// while the pointer is over it or focus is inside it, so a control in it is
+/// never operated half-seen.
+class _ZenDimmed extends StatefulWidget {
+  const _ZenDimmed({required this.dim, required this.child});
+
+  final bool dim;
+  final Widget child;
+
+  @override
+  State<_ZenDimmed> createState() => _ZenDimmedState();
+}
+
+class _ZenDimmedState extends State<_ZenDimmed> {
+  /// About `--dim` over `--fg` on the terminal's tone.
+  static const _dimOpacity = 0.5;
+
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // The same wrappers in and out of Zen, so entering it keeps the line's
+    // state (an open chip menu, a held height) instead of rebuilding it.
+    final dimmed = widget.dim && !_hovered && !_focused;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        child: AnimatedOpacity(
+          opacity: dimmed ? _dimOpacity : 1,
+          duration: Motion.of(context).fast,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }

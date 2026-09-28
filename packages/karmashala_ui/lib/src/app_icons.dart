@@ -802,4 +802,22 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// An agent asking permission (UI overhaul board N1): the ask dock's
+  /// header, and the pulsing mark on a tab or row that waits on an approval.
+  static const IconData shield = IconData(
+    0xe40a,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// The compact top bar's menu button (board N4): the activity strip folded
+  /// into one glyph.
+  static const IconData list = IconData(
+    0xe2f0,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }
