@@ -235,7 +235,8 @@ class _StateHeader extends StatelessWidget {
     builder: (context) {
       final theme = Theme.of(context);
       return ExplorerRowLine(
-        lead: ExplorerRowLead(expanded: expanded),
+        // No glyph column: the label lines up with the titles below it.
+        lead: ExplorerRowLead(expanded: expanded, glyphColumn: false),
         title: Text(
           group.state.label.toUpperCase(),
           maxLines: 1,
