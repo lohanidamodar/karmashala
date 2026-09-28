@@ -3,8 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'package:karmashala_ui/icons.dart';
 
 /// The one description of the settings screen: its groups, pages, the titled
-/// sections on each page, and every option a search can land on. The rail,
-/// search, page layout and deep links all read this, so none can drift.
+/// sections on each page, and every option a search can land on. The page
+/// list, search, page layout and deep links all read this, so none can drift.
 /// See docs/settings-ia.md.
 enum SettingsGroup {
   general('App'),
@@ -23,8 +23,8 @@ enum SettingsGroup {
   ];
 }
 
-/// A page of the settings screen — one row in the rail. Declaration order is
-/// rail order: common first, advanced last. Labels quoted as "Settings → …" in
+/// A page of the settings screen — one row in its page list. Declaration
+/// order is list order: common first, advanced last. Labels quoted as "Settings → …" in
 /// refusals and tool descriptions (Agents, Environments, Tools, Permissions,
 /// Diagnostics, Remote access, Terminal) keep those words.
 enum SettingsSectionId {
@@ -38,7 +38,7 @@ enum SettingsSectionId {
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, accent, text size, density and the context panel.',
+    'Theme, accent, text size, density, the sidebar and the context panel.',
   ),
   terminal(
     'Terminal',
@@ -214,15 +214,20 @@ enum SettingsAnchor {
     'density',
     'compact',
   ]),
-  // Also the rail's right-click menu and View › Side panel items.
-  sidePanel(SettingsSectionId.appearance, 'Side panel', [
+  // Also View › Side panel items. The enum name is kept so old links resolve;
+  // the rail and Explorer it was named for are gone, but people still search
+  // by those words.
+  sidePanel(SettingsSectionId.appearance, 'Sidebar & context panel', [
+    'context panel',
+    'more menu',
     'side panel',
-    'rail',
-    'activity bar',
     'sidebar',
     'panel items',
-    'explorer',
+    'projects',
     'project path',
+    'rail',
+    'activity bar',
+    'explorer',
   ]),
   editor(SettingsSectionId.editorFiles, 'In-app editor', [
     'editor',
@@ -507,7 +512,7 @@ class SettingsEntry {
 
 String normaliseSettingsQuery(String query) => query.trim().toLowerCase();
 
-/// The options [query] finds, in rail order.
+/// The options [query] finds, in page-list order.
 List<SettingsEntry> searchSettings(String query) {
   final q = normaliseSettingsQuery(query);
   if (q.isEmpty) return const [];
@@ -570,16 +575,33 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['density', 'compact', 'roomy'],
   ),
   SettingsEntry(
-    'Side panel items',
+    'Tools in the More menu',
     anchor: SettingsAnchor.sidePanel,
-    description: 'Which tools keep a glyph on the side panel’s rail.',
-    keywords: ['hide', 'show', 'rail', 'activity bar', 'icons', 'glyphs'],
+    description: 'Which tools the context panel’s More menu lists.',
+    keywords: [
+      'hide',
+      'show',
+      'context panel',
+      'side panel items',
+      'more',
+      'rail',
+      'activity bar',
+    ],
   ),
   SettingsEntry(
-    'Project details in the Explorer',
+    'Project details in the sidebar',
     anchor: SettingsAnchor.sidePanel,
     description: 'A second line under each project: folder, branch, state.',
-    keywords: ['explorer', 'path', 'branch', 'compact', 'rows', 'density'],
+    keywords: [
+      'projects',
+      'sidebar',
+      'explorer',
+      'path',
+      'branch',
+      'compact',
+      'rows',
+      'density',
+    ],
   ),
   SettingsEntry(
     'Wrap long lines in the editor',
@@ -929,13 +951,13 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Debug mode',
     anchor: SettingsAnchor.debugMode,
-    description: 'Record fine detail and add a Logs panel.',
-    keywords: ['debug', 'verbose', 'logs panel'],
+    description: 'Record fine detail and add Logs to the context panel.',
+    keywords: ['debug', 'verbose', 'logs panel', 'logs'],
   ),
   SettingsEntry(
     'Lines kept in memory',
     anchor: SettingsAnchor.debugMode,
-    description: 'How much the Logs panel keeps.',
+    description: 'How much Logs in the context panel keeps.',
     keywords: ['buffer', 'log lines'],
   ),
   SettingsEntry(

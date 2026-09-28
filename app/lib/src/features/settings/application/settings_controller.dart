@@ -92,8 +92,9 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Leaves a side-panel surface off the rail, or puts it back. It stays
-  /// reachable from the View menu, quick open and its chord either way.
+  /// Leaves a surface out of the context panel's More menu, or puts it back.
+  /// It stays reachable from the View menu, quick open and its chord either
+  /// way.
   void setSidePanelSurfaceHidden(String surfaceId, {required bool hidden}) {
     final current = state.hiddenSidePanelSurfaces;
     if (current.contains(surfaceId) == hidden) return;
@@ -108,7 +109,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Every surface back on the rail — the default, so this is also the reset.
+  /// Every surface back in the More menu — the default, so this is also the reset.
   void showAllSidePanelSurfaces() {
     if (state.hiddenSidePanelSurfaces.isEmpty) return;
     state = state.copyWith(hiddenSidePanelSurfaces: const []);

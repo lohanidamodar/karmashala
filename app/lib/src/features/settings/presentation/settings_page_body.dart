@@ -34,8 +34,11 @@ import 'terminal_pages.dart';
 import 'tools_page.dart';
 import 'watch_set_section.dart';
 
-/// One settings page: its description, then each of its sections in catalogue
-/// order, each wrapped so a deep link or a search hit can scroll to it.
+/// One settings page: its title and description, then each of its sections in
+/// catalogue order, each wrapped so a deep link or a search hit can scroll to
+/// it. The title is drawn on the page itself (spec §3, page titles): scrolled
+/// away from the list, or under the narrow picker, a page still says what it
+/// is.
 class SettingsPageBody extends StatelessWidget {
   const SettingsPageBody({required this.page, super.key});
 
@@ -47,8 +50,18 @@ class SettingsPageBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Semantics(
+          header: true,
+          child: Text(
+            page.label,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: Insets.xs),
         Padding(
-          padding: const EdgeInsets.only(bottom: Insets.lg),
+          padding: const EdgeInsets.only(bottom: Insets.xl),
           child: Text(
             page.description,
             style: theme.textTheme.bodyMedium?.copyWith(

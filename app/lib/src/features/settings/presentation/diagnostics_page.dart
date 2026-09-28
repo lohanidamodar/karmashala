@@ -37,13 +37,15 @@ class DebugModeSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Debug mode',
-            help: 'Records extra detail and adds a Logs panel.',
+            help:
+                'Records extra detail and adds Logs to the context panel’s '
+                'More menu.',
             value: settings.debugMode,
             onChanged: controller.setDebugMode,
           ),
           SettingsRow(
             label: 'Lines kept in memory',
-            help: 'How many recent lines the Logs panel keeps.',
+            help: 'How many recent lines Logs keeps.',
             control: DropdownButtonFormField<int>(
               initialValue: _bufferSizes.contains(settings.logBufferSize)
                   ? settings.logBufferSize

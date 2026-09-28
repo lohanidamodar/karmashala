@@ -297,12 +297,14 @@ class Settings {
   /// agent". Persisted, so the header names what it is holding back.
   final List<String> explorerAgentFilter;
 
-  /// Side-panel surfaces left off the rail, by `SidePanelSurface.name`, sorted.
+  /// Surfaces left out of the context panel's More menu, by
+  /// `SidePanelSurface.name`, sorted. The key predates the panel's tabs.
   /// Ids, not positions, so a surface added later arrives visible; an id this
   /// build does not know is kept for the build that does.
   final List<String> hiddenSidePanelSurfaces;
 
-  /// Whether an Explorer project row draws its second line — path, branch,
+  /// Whether a project row in the sidebar (once the Explorer) draws its second
+  /// line — path, branch,
   /// what is running. Off is the one-line row, with those in tooltips.
   final bool explorerProjectDetails;
 
