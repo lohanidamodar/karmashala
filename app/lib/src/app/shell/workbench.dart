@@ -58,6 +58,8 @@ export 'workbench_tabs.dart';
 
 // `part`s rather than libraries of their own because privacy in Dart is per
 // library: every widget below is private and the tree golden records its name.
+import 'session_more_button.dart';
+
 part 'workbench_group.dart';
 part 'workbench_surface.dart';
 part 'workbench_session_bar.dart';

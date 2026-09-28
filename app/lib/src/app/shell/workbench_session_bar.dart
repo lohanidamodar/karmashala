@@ -250,6 +250,7 @@ class _SessionStatusLine extends StatelessWidget {
           hostedOnTerminal: true,
           folded: true,
         ),
+        SessionMoreButton(sessionId: sessionId),
         if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
       ],
     );
@@ -326,6 +327,7 @@ class _SessionActionRow extends StatelessWidget {
                           compact: true,
                           folded: true,
                         ),
+                        SessionMoreButton(sessionId: sessionId),
                       ],
                     ),
                   ),
@@ -364,6 +366,7 @@ class _SessionActionRow extends StatelessWidget {
               ),
             ),
           ),
+          SessionMoreButton(sessionId: sessionId),
         ],
         if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
       ],
