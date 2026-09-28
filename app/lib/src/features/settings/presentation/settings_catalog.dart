@@ -7,10 +7,10 @@ import 'package:karmashala_ui/icons.dart';
 /// search, page layout and deep links all read this, so none can drift.
 /// See docs/settings-ia.md.
 enum SettingsGroup {
-  general('General'),
-  workspace('Workspace'),
+  general('App'),
   agents('Agents'),
-  connections('Connections'),
+  workspace('Work'),
+  connections('Machines'),
   advanced('Advanced');
 
   const SettingsGroup(this.label);
@@ -38,13 +38,7 @@ enum SettingsSectionId {
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, text size, density and the side panel rail.',
-  ),
-  editorFiles(
-    'Editor & files',
-    AppIcons.fileCode,
-    SettingsGroup.general,
-    'The in-app editor, file browsing, and the apps work is handed to.',
+    'Theme, accent, text size, density and the context panel.',
   ),
   terminal(
     'Terminal',
@@ -66,17 +60,11 @@ enum SettingsSectionId {
     SettingsGroup.workspace,
     'How Android emulators and iOS simulators start.',
   ),
-  snippets(
-    'Snippets',
-    AppIcons.bookBookmark,
+  editorFiles(
+    'Editor & files',
+    AppIcons.fileCode,
     SettingsGroup.workspace,
-    'Saved commands you can insert into any terminal.',
-  ),
-  environmentVariables(
-    'Variables & secrets',
-    AppIcons.clipboardText,
-    SettingsGroup.workspace,
-    'Variables every new terminal starts with.',
+    'The in-app editor, file browsing, and the apps work is handed to.',
   ),
   agents(
     'Agents',
@@ -110,6 +98,12 @@ enum SettingsSectionId {
     SettingsGroup.agents,
     'The MCP bridge, its tools, and installed skills.',
   ),
+  snippets(
+    'Snippets',
+    AppIcons.bookBookmark,
+    SettingsGroup.agents,
+    'Saved commands you can insert into any terminal.',
+  ),
   environments(
     'Environments',
     AppIcons.terminalWindow,
@@ -121,6 +115,12 @@ enum SettingsSectionId {
     AppIcons.wifiHigh,
     SettingsGroup.connections,
     'Pair a phone to follow and answer sessions from anywhere.',
+  ),
+  environmentVariables(
+    'Variables & secrets',
+    AppIcons.clipboardText,
+    SettingsGroup.connections,
+    'Variables every new terminal starts with.',
   ),
   diagnostics(
     'Diagnostics',
