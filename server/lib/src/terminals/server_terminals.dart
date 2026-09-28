@@ -16,6 +16,27 @@ import '../sessions/pane_facts.dart';
 import '../sessions/pane_source.dart';
 import '../ssh/ssh_domain.dart' show RemoteSessionRefused, RemoteSessions;
 
+/// What every terminal this server starts on its own machine is told about the
+/// screen it draws on. The pane is an xterm with 24-bit colour, and ConPTY
+/// passes `38;2;r;g;b` through unchanged (measured 2026-09-29), so a program
+/// that looks for `COLORTERM` — Codex does — draws its real palette rather
+/// than a 256-colour approximation. A launch's own environment overrides both.
+const Map<String, String> kTerminalEnvironment = {
+  'TERM': 'xterm-256color',
+  'COLORTERM': 'truecolor',
+};
+
+/// Colour opt-outs withheld from a terminal when they are merely **inherited**
+/// from the server's own environment. The server's environment is whatever
+/// process happened to start it: an app launched from an agent's shell passes
+/// on that shell's `NO_COLOR=1` — Claude Code sets it for every command it
+/// runs (observed 2026-09-29 on a host an agent's `flutter run` started:
+/// `NO_COLOR=1` beside `CLAUDECODE=1`) — and every Claude Code and Codex pane
+/// the long-lived host then opens honours it and renders without a single
+/// colour. Removal comes before a launch's own environment is laid over, so a
+/// `NO_COLOR` a person sets in the environment vault still reaches the pane.
+const Set<String> kInheritedColourOptOuts = {'NO_COLOR'};
+
 /// **Every local and WSL terminal, run by the server** (slice 5a). A client
 /// names a profile or an agent launch; the launch is built here, with this
 /// machine's OS, its shells and its environment vault, and started in the
@@ -309,8 +330,11 @@ class ServerTerminals implements TerminalWork, PaneSource {
           // The launch's own, never the client's: a WSL launch carries its
           // Linux folder as `--cd`, which CreateProcess would refuse.
           workingDirectory: launch.workingDirectory,
-          environment: {'TERM': 'xterm-256color', ...launch.environment},
-          removedEnvironment: launch.removedEnvironment,
+          environment: {...kTerminalEnvironment, ...launch.environment},
+          removedEnvironment: {
+            ...kInheritedColourOptOuts,
+            ...launch.removedEnvironment,
+          },
           unrecorded: {
             for (final name in overlay.keys)
               if (launch.environment.containsKey(name)) name,
