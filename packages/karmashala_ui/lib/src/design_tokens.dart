@@ -687,9 +687,13 @@ class Chrome {
   /// The workbench tab strip, the context panel's header and every pane header.
   static const tabStrip = 30.0;
 
-  /// The menu-bar row at the top of the window — deliberately *the same* row as
-  /// [tabStrip]; 32 against 30 read as one undifferentiated slab, not two rows.
-  static const titleBar = tabStrip;
+  /// The title bar at the top of the window — board A2's 38px row, which the
+  /// owner chose over the 30px one it used to share with [tabStrip]. Its own
+  /// value, not [tabStrip]'s: the bar now carries the quick panel field and
+  /// the usage pills and wants the air around them, while the tab strip keeps
+  /// its dense 30. Eight pixels apart the two read as distinct rows, where 32
+  /// against 30 read as one slab.
+  static const titleBar = 38.0;
 
   /// A **pane** header. Deliberately not [tabStrip]: drawn at the same height,
   /// the region header read as "an extra tab that doesn't do anything".
@@ -774,7 +778,7 @@ class Chrome {
   );
 
   /// [titleBar] grown with the ambient text scale, and never shrunk below the
-  /// design height: a 150% menu label does not fit a 30px row, and clipping
+  /// design height: a 150% menu label does not fit a 38px row, and clipping
   /// the menu bar was exactly the "menus ignore text sizing" bug.
   static double titleBarOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(titleBar).clamp(titleBar, 52.0);
