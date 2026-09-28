@@ -1,12 +1,16 @@
+import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AccountUsageState, UsageFailure;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/presentation/toolbar_usage_strip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 
+import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
@@ -24,8 +28,12 @@ void main() {
     expect(toolbarUsageChipsThatFit(30, 5), 0, reason: 'only the +5');
   });
 
-  Future<ProviderContainer> accounts(WidgetTester tester, double width) async {
-    final db = seedUsageDatabase();
+  Future<ProviderContainer> accounts(
+    WidgetTester tester,
+    double width, {
+    FakeDataServer? server,
+  }) async {
+    final db = seedUsageDatabase(server: server);
     // Five readings: Claude on two environments under one email is one
     // account, so four chips' worth.
     seedUsage(
@@ -126,6 +134,38 @@ void main() {
     await tester.pumpAndSettle();
     final card = tester.widget<UsageChipPopover>(find.byType(UsageChipPopover));
     expect(card.environmentIds, unorderedEquals(['windows', 'wsl']));
+    await quiesce(tester, container);
+  });
+
+  testWidgets('the card\'s refresh asks about every environment of the '
+      'account, and says when the server could not read it', (tester) async {
+    final server = FakeDataServer();
+    final container = await accounts(tester, 1000, server: server);
+    server.agentWork.onRefresh = (key) => AccountUsageState(
+      accountKey: key,
+      agentId: 'claudeCode',
+      environmentId: key.split('@').last,
+      failure: const UsageFailure(
+        message: 'Usage request failed (HTTP 403).',
+        kind: UsageFailureKind.unusable,
+      ),
+    );
+    await tester.tap(find.text('30% · 2h11m'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+
+    expect(
+      server.agentWork.refreshes,
+      unorderedEquals(['claudeCode@windows', 'claudeCode@wsl']),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Tooltip && w.message == 'Usage request failed (HTTP 403).',
+      ),
+      findsOneWidget,
+    );
     await quiesce(tester, container);
   });
 }

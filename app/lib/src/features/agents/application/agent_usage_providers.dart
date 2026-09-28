@@ -60,9 +60,17 @@ class UsageReadings {
   }
 
   /// Asks the server to read [accountKey] now; what it read arrives as a
-  /// change.
-  Future<void> refresh(String accountKey) =>
-      _work.refreshUsage(accountKey).then((_) {}, onError: (Object _) {});
+  /// change too. Throws [UsageException] with the server's words when the
+  /// account could not be read.
+  Future<void> refresh(String accountKey) async {
+    final List<AccountUsageState> states;
+    try {
+      states = await _work.refreshUsage(accountKey);
+    } on DataRefused catch (refusal) {
+      throw UsageException(refusal.message, kind: UsageFailureKind.notAsked);
+    }
+    _readingOf(states.where((s) => s.accountKey == accountKey).firstOrNull);
+  }
 
   AgentUsage _readingOf(AccountUsageState? state) {
     final failure = state?.failure;

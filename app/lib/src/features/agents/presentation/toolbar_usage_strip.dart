@@ -5,6 +5,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/workbench_tabs.dart';
@@ -113,17 +114,7 @@ Widget _accountCard(
     footer: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Flexible(
-          child: TextButton.icon(
-            onPressed: () {
-              for (final key in account.accountKeys) {
-                unawaited(ref.read(usageReadingsProvider).refresh(key));
-              }
-            },
-            icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.iconAction),
-            label: const Text('Refresh', overflow: TextOverflow.ellipsis),
-          ),
-        ),
+        Flexible(child: _RefreshButton(accountKeys: account.accountKeys)),
         Flexible(
           child: TextButton(
             onPressed: () {
@@ -139,6 +130,66 @@ Widget _accountCard(
       ],
     ),
   );
+}
+
+/// The card's refresh: asks the server to read each of the account's
+/// environments now and waits for the answer — a spinner while it asks, and
+/// the server's words when it could not read. Firing the ask and forgetting
+/// it left a card that looked unchanged whether the read worked, failed or
+/// was answered from the throttle's memory.
+class _RefreshButton extends ConsumerStatefulWidget {
+  const _RefreshButton({required this.accountKeys});
+
+  final Set<String> accountKeys;
+
+  @override
+  ConsumerState<_RefreshButton> createState() => _RefreshButtonState();
+}
+
+class _RefreshButtonState extends ConsumerState<_RefreshButton> {
+  bool _loading = false;
+  String? _failure;
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    final readings = ref.read(usageReadingsProvider);
+    final failures = <String>[];
+    await Future.wait([
+      for (final key in widget.accountKeys)
+        readings.refresh(key).catchError((Object e) {
+          failures.add(e is UsageException ? e.message : '$e');
+        }),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _failure = failures.isEmpty ? null : failures.toSet().join('\n');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: Insets.md),
+        child: InlineSpinner(semanticsLabel: 'Checking usage'),
+      );
+    }
+    final failure = _failure;
+    final button = TextButton.icon(
+      onPressed: _refresh,
+      icon: Icon(
+        failure == null ? AppIcons.arrowsClockwise : AppIcons.warning,
+        size: Chrome.iconAction,
+        color: failure == null ? null : SemanticColors.of(context).failure,
+      ),
+      label: const Text('Refresh', overflow: TextOverflow.ellipsis),
+    );
+    return failure == null ? button : Tooltip(message: failure, child: button);
+  }
 }
 
 MenuStyle _cardStyle() => const MenuStyle(
