@@ -57,6 +57,12 @@ void main() {
     expect(find.bySemanticsLabel('Sessions, 2 need you'), findsOneWidget);
   });
 
+  testWidgets('the Devices badge counts devices, not asks', (tester) async {
+    await pump(tester, badges: {ShellArea.devices: 1});
+    expect(find.bySemanticsLabel('Devices, 1 connected'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('need you')), findsNothing);
+  });
+
   testWidgets('only the showing area is selected; none when hidden', (
     tester,
   ) async {

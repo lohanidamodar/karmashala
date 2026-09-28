@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
+import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
@@ -31,6 +32,7 @@ class ShellActivityStrip extends ConsumerWidget {
       selected: open ? area : null,
       badges: {
         ShellArea.sessions: ref.watch(needsYouCountProvider),
+        ShellArea.devices: ref.watch(readyDeviceCountProvider),
         ShellArea.inbox: ref.watch(attentionCountProvider),
       },
       // A hover worth having teaches the key that reaches the same place.
@@ -96,6 +98,8 @@ class ActivityStrip extends StatelessWidget {
               hint: hints[area],
               selected: area == selected,
               badge: badges[area] ?? 0,
+              // Devices counts what is there, not what wants the user.
+              urgent: area != ShellArea.devices,
               onPressed: () => onSelect(area),
             ),
           const Spacer(),
@@ -119,6 +123,7 @@ class _StripButton extends StatelessWidget {
     required this.selected,
     required this.onPressed,
     this.badge = 0,
+    this.urgent = true,
     this.hint,
   });
 
@@ -127,6 +132,10 @@ class _StripButton extends StatelessWidget {
   final String? hint;
   final bool selected;
   final int badge;
+
+  /// A count of things waiting on the user, on the attention tone; otherwise
+  /// a plain count on a neutral one.
+  final bool urgent;
   final VoidCallback onPressed;
 
   @override
@@ -145,7 +154,11 @@ class _StripButton extends StatelessWidget {
         child: Semantics(
           button: true,
           selected: selected,
-          label: badge > 0 ? '$label, $badge need you' : label,
+          label: badge == 0
+              ? label
+              : urgent
+              ? '$label, $badge need you'
+              : '$label, $badge connected',
           excludeSemantics: true,
           child: SizedBox(
             width: kActivityStripWidth,
@@ -191,7 +204,9 @@ class _StripButton extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: semantic.attention,
+                          color: urgent
+                              ? semantic.attention
+                              : theme.colorScheme.onSurfaceVariant,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

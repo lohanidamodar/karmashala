@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -8,7 +9,10 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
 import '../application/explorer_view_mode.dart';
+import '../application/session_selection.dart';
+import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
+import 'session_selection_bar.dart';
 
 /// The Explorer's way to the Agents page, and the one place it says how many
 /// sessions wait on the user. The count is drawn only above zero: an empty
@@ -115,6 +119,10 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
   @override
   Widget build(BuildContext context) {
     final groups = ref.watch(agentStateGroupsProvider);
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
+    final shownIds = <String>[];
     final items = <Widget>[];
     for (final group in groups) {
       if (group.isEmpty) continue;
@@ -136,6 +144,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
         ),
       );
       for (final entry in group.entries.take(shown)) {
+        shownIds.add(entry.id);
         items.add(LensSessionRow(key: ValueKey(entry.id), entry: entry));
       }
       if (group.state.fold == AgentStateFold.capped &&
@@ -154,11 +163,47 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     if (items.isEmpty) {
       return const PanePlaceholder(message: 'No sessions yet.');
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
-      itemCount: items.length,
-      itemBuilder: (context, index) => items[index],
+    // Shift-click and Select all range over the rows this page draws, in the
+    // order it draws them — not over the project tree's.
+    List<String> order(SelectionKind kind) =>
+        kind == SelectionKind.sessions ? shownIds : const [];
+    return SelectionOrderScope(
+      order: order,
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, event) => _selectionKeys(event, order),
+        child: Column(
+          children: [
+            if (selecting) const SessionSelectionBar(),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+                itemCount: items.length,
+                itemBuilder: (context, index) => items[index],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  /// Escape leaves selection mode; Ctrl+A ticks every row drawn.
+  KeyEventResult _selectionKeys(KeyEvent event, SelectionOrder order) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        ref.read(sessionSelectionProvider).active) {
+      ref.read(sessionSelectionProvider.notifier).leave();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyA &&
+        (keys.isMetaPressed || keys.isControlPressed) &&
+        selectAllVisible(ref, SelectionKind.sessions, order)) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 }
 

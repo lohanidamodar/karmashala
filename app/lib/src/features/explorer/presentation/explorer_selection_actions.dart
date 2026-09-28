@@ -41,6 +41,29 @@ List<ExplorerNode> explorerVisibleNodes(WidgetRef ref) =>
     ? ref.read(explorerSectionNodesProvider)
     : ref.read(explorerTreeProvider).nodes;
 
+/// The ids of a list that is not the Explorer tree — the Sessions area's
+/// state groups — in the order it draws them, for [kind].
+typedef SelectionOrder = List<String> Function(SelectionKind kind);
+
+/// Puts a list's own [order] under its rows and its selection bar, so a
+/// Shift-click ranges, and Select all ticks, over what that list draws rather
+/// than over the tree's rows.
+class SelectionOrderScope extends InheritedWidget {
+  const SelectionOrderScope({
+    required this.order,
+    required super.child,
+    super.key,
+  });
+
+  final SelectionOrder order;
+
+  static SelectionOrder? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<SelectionOrderScope>()?.order;
+
+  @override
+  bool updateShouldNotify(SelectionOrderScope oldWidget) => false;
+}
+
 /// What a click on a selectable row means, given the keys held: Shift ranges
 /// from the anchor, Cmd or Ctrl toggles (entering the mode), and a plain click
 /// in the mode ticks. Answers whether the click was spent here; when not, the
@@ -50,6 +73,7 @@ bool handleSelectableClick(
   WidgetRef ref, {
   required String id,
   required SelectionKind kind,
+  SelectionOrder? order,
 }) {
   final keys = HardwareKeyboard.instance;
   final controller = ref.read(sessionSelectionProvider.notifier);
@@ -57,7 +81,8 @@ bool handleSelectableClick(
     controller.extendTo(
       id,
       kind: kind,
-      order: selectableOrder(explorerVisibleNodes(ref), kind),
+      order:
+          order?.call(kind) ?? selectableOrder(explorerVisibleNodes(ref), kind),
     );
     return true;
   }
@@ -93,13 +118,21 @@ SelectionKind? focusedRowKind() {
 
 /// Ticks every visible row of [kind] — the focused row's kind, else the kind
 /// the selection already holds. Answers whether anything was selected.
-bool selectAllVisible(WidgetRef ref, [SelectionKind? kind]) {
+bool selectAllVisible(
+  WidgetRef ref, [
+  SelectionKind? kind,
+  SelectionOrder? order,
+]) {
   final chosen =
       kind ?? focusedRowKind() ?? ref.read(sessionSelectionProvider).kind;
   if (chosen == null) return false;
   return ref
       .read(sessionSelectionProvider.notifier)
-      .selectAll(selectableOrder(explorerVisibleNodes(ref), chosen), chosen);
+      .selectAll(
+        order?.call(chosen) ??
+            selectableOrder(explorerVisibleNodes(ref), chosen),
+        chosen,
+      );
 }
 
 /// The bulk verbs over the selection, as menu entries and as their effect.
@@ -246,7 +279,11 @@ class ExplorerSelectionVerbs {
             if (sessions.getById(id) != null) id,
         ]);
       case selectAll:
-        selectAllVisible(ref, _selection.kind ?? SelectionKind.sessions);
+        selectAllVisible(
+          ref,
+          _selection.kind ?? SelectionKind.sessions,
+          SelectionOrderScope.maybeOf(context),
+        );
       case done:
         ref.read(sessionSelectionProvider.notifier).leave();
     }

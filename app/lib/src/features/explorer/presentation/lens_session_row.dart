@@ -4,6 +4,7 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -15,11 +16,18 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
 import '../application/explorer_actions.dart';
+import '../application/session_selection.dart';
 import '../application/workspace_session_entry.dart';
+import 'explorer_selection_actions.dart';
 
-/// A session row in a cross-project lens: its state glyph, title and age, and
-/// a second line naming where it lives. Each row watches only its own facts,
-/// so a list of five hundred that shows thirty pays for thirty.
+/// A session row in a cross-project lens, on one line: its state glyph, its
+/// title, where it lives, and its age — or, while it waits on the user, that
+/// it waits. Each row watches only its own facts, so a list of five hundred
+/// that shows thirty pays for thirty.
+///
+/// Selectable like the tree's rows: Ctrl-click ticks, Shift-click ranges over
+/// the enclosing [SelectionOrderScope], and a ticked row's menu acts on the
+/// whole selection.
 class LensSessionRow extends ConsumerWidget {
   const LensSessionRow({required this.entry, super.key});
 
@@ -37,6 +45,16 @@ class LensSessionRow extends ConsumerWidget {
     final live = ref.watch(liveAgentStatusesProvider.select((m) => m[id]));
     final quiet = ref.watch(
       quietSessionsProvider.select((q) => q.contains(id)),
+    );
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
+    final ticked = ref.watch(
+      sessionSelectionProvider.select((s) => s.contains(id)),
+    );
+    // Flips only when the selection's kind does, so a tick moves no other row.
+    final tickEnabled = ref.watch(
+      sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
     );
     final state = agentStateOf(
       needsYou: needsYou,
@@ -65,48 +83,103 @@ class LensSessionRow extends ConsumerWidget {
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
 
+    final waiting = state == AgentState.needsYou;
+    final order = SelectionOrderScope.maybeOf(context);
+    void tap() {
+      if (!handleSelectableClick(
+        ref,
+        id: id,
+        kind: SelectionKind.sessions,
+        order: order,
+      )) {
+        _open(context, ref);
+      }
+    }
+
     return ExplorerRow(
       kind: ExplorerRowKind.session,
       depth: 0,
-      selected: selected,
+      selected: selected || ticked,
       settled: state == AgentState.ended,
-      onTap: () => _open(context, ref),
+      onTap: tap,
+      menuItemsBuilder: () =>
+          selectionRowMenu(ref, context, id) ??
+          [
+            DesktopMenuItem(value: 'open', label: 'Open', icon: AppIcons.play),
+            selectRowMenuItem(),
+          ],
+      onMenu: (action) {
+        if (runSelectionRowAction(
+          ref,
+          context,
+          action,
+          id: id,
+          kind: SelectionKind.sessions,
+        )) {
+          return;
+        }
+        if (action == 'open') _open(context, ref);
+      },
       builder: (context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (selecting)
+            SizedBox(
+              width: ExplorerRow.glyphSlot,
+              child: Center(
+                child: ExplorerRowTick(
+                  value: ticked,
+                  semanticLabel: 'Select "${entry.title}"',
+                  onChanged: tickEnabled ? tap : null,
+                  disabledTooltip: SelectionKind.projects.holdsLabel,
+                ),
+              ),
+            ),
           SizedBox(
             width: ExplorerRow.glyphSlot,
-            height: 18,
             child: Center(
               child: _StateGlyph(state: state, entry: entry),
             ),
           ),
           const SizedBox(width: ExplorerRow.textGap),
+          // The title first; where it lives after it, muted, on the same line
+          // and the first to give way.
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Text(
-                  entry.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: density.rowTitle(
-                    theme,
-                    strong: state == AgentState.needsYou,
-                  ),
-                ),
-                if (clauses.isNotEmpty)
-                  Text(
-                    clauses.join('  ·  '),
+                Flexible(
+                  flex: 3,
+                  child: Text(
+                    entry.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: muted,
+                    style: density.rowTitle(theme, strong: waiting),
                   ),
+                ),
+                if (clauses.isNotEmpty) ...[
+                  const SizedBox(width: Insets.sm),
+                  Flexible(
+                    flex: 2,
+                    child: Text(
+                      clauses.join('  ·  '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          if (dated) ...[
+          if (waiting) ...[
+            const SizedBox(width: Insets.xs),
+            Text(
+              'waiting',
+              style: muted?.copyWith(
+                color: SemanticColors.of(context).attention,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (dated) ...[
             const SizedBox(width: Insets.xs),
             Text(compactAge(now.difference(entry.activityAt)), style: muted),
           ],

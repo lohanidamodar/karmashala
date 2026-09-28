@@ -8,8 +8,10 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
+import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_selection_bar.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
@@ -236,6 +238,35 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget, reason: 'the root session');
     expect(find.text('Alpha  ·  feature-x'), findsOneWidget);
     expect(find.textContaining('alpha  ·'), findsNothing);
+  });
+
+  testWidgets('Ctrl-click ticks a row, Shift-click ranges over the page, '
+      'and Escape leaves selecting', (tester) async {
+    insert('s1');
+    insert('s2', age: const Duration(minutes: 1));
+    insert('s3', age: const Duration(minutes: 2));
+    final c = await pump(tester);
+    c.read(explorerLensProvider.notifier).toggle(ExplorerLens.agents);
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Chat s1'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(c.read(sessionSelectionProvider).ids, {'s1'});
+    expect(find.byType(SessionSelectionBar), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tap(find.text('Chat s3'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(c.read(sessionSelectionProvider).ids, {'s1', 's2', 's3'});
+    Focus.of(tester.element(find.text('Chat s2'))).requestFocus();
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(c.read(sessionSelectionProvider).active, isFalse);
   });
 
   testWidgets('the entry is reached and pressed from the keyboard, and '
