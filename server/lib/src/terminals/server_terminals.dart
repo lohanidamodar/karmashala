@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_launch/karmashala_launch.dart';
@@ -36,6 +37,17 @@ const Map<String, String> kTerminalEnvironment = {
 /// colour. Removal comes before a launch's own environment is laid over, so a
 /// `NO_COLOR` a person sets in the environment vault still reaches the pane.
 const Set<String> kInheritedColourOptOuts = {'NO_COLOR'};
+
+/// The markers an agent CLI sets for its own children (`CLAUDECODE`,
+/// `CLAUDE_CODE_*`, …, each descriptor's `parentSessionEnvironment`),
+/// withheld from **every** pane, not only agent launches: a host started from
+/// an agent's shell carries them (observed 2026-09-29), and a `claude` typed
+/// into a plain shell pane would otherwise believe it runs inside another
+/// Claude session - a child session, which saves no transcript.
+final Set<String> kInheritedAgentMarkers = {
+  for (final descriptor in AgentRegistry.builtIn.descriptors)
+    ...descriptor.launch.parentSessionEnvironment,
+};
 
 /// **Every local and WSL terminal, run by the server** (slice 5a). A client
 /// names a profile or an agent launch; the launch is built here, with this
@@ -333,6 +345,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
           environment: {...kTerminalEnvironment, ...launch.environment},
           removedEnvironment: {
             ...kInheritedColourOptOuts,
+            ...kInheritedAgentMarkers,
             ...launch.removedEnvironment,
           },
           unrecorded: {
