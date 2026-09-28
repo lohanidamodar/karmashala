@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
@@ -38,6 +39,7 @@ class DeliveryStrip extends ConsumerStatefulWidget {
     required this.sessionId,
     this.hostedOnTerminal = false,
     this.compact = false,
+    this.folded = false,
     super.key,
   });
 
@@ -46,6 +48,10 @@ class DeliveryStrip extends ConsumerStatefulWidget {
   /// Icon-only pills, for a workspace group too narrow to spell the verbs. Five
   /// labelled are ~440px against ~150; tooltip and semantics label survive.
   final bool compact;
+
+  /// On the pane's one status line: the primary action as the one filled
+  /// pill, everything else behind **Ship ▾**. Only with [hostedOnTerminal].
+  final bool folded;
 
   /// Whether the strip is drawn in the session bar under the terminal. The bar
   /// is already chrome, so no rule, no surface, no [DeliveryStateLine].
@@ -287,6 +293,84 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     void runChecks() => unawaited(
       ref.read(runningSessionChecksProvider.notifier).run(widget.sessionId),
     );
+
+    if (widget.hostedOnTerminal && widget.folded) {
+      final primary = actions.where((a) => a.isPrimary).firstOrNull;
+      List<_ShipEntry> entries(ReviewActionPresentation? offer) => [
+        for (final offered in actions)
+          if (!identical(offered, primary))
+            _ShipEntry(
+              icon: _actionIcon(offered.action),
+              label: offered.action.label,
+              onPressed: _busy || !offered.isEnabled
+                  ? null
+                  : () => _press(offered, delivery),
+            ),
+        if (review != null && offer != null)
+          _ShipEntry(
+            icon: AppIcons.listMagnifyingGlass,
+            label: review.label,
+            onPressed: _busy ? null : offer.onPressed,
+          ),
+        if (hasChecks)
+          _ShipEntry(
+            icon: AppIcons.listChecks,
+            label: checking ? 'Checking…' : 'Run checks',
+            onPressed: _busy || checking ? null : runChecks,
+          ),
+        if (delivery?.pullRequest != null)
+          _ShipEntry(
+            icon: AppIcons.gitMerge,
+            label: 'Attach PR…',
+            onPressed: _busy ? null : attachContext,
+          ),
+        if (canContinue)
+          _ShipEntry(
+            icon: AppIcons.arrowBendDownRight,
+            label: 'Continue with…',
+            onPressed: _busy ? null : continueWith,
+          ),
+      ];
+      Widget ship(ReviewActionPresentation? offer) {
+        final all = entries(offer);
+        return all.isEmpty ? const SizedBox.shrink() : _ShipMenu(entries: all);
+      }
+
+      final next = primary == null
+          ? null
+          : _BarAction(
+              icon: _actionIcon(primary.action),
+              label: primary.action.label,
+              tooltip: _actionTooltip(primary),
+              primary: true,
+              compact: widget.compact,
+              onPressed: _busy || !primary.isEnabled
+                  ? null
+                  : () => _press(primary, delivery),
+            );
+      // The next step's label ends before the row overflows — where the row
+      // has an edge. In a scrolling row it has none, and keeps its words.
+      return LayoutBuilder(
+        builder: (context, box) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (next != null) ...[
+              if (box.hasBoundedWidth) Flexible(child: next) else next,
+              const SizedBox(width: Insets.xs),
+            ],
+            // The review offer is decided inside [ReviewAction]; the menu only
+            // borrows what it says and does.
+            if (review != null)
+              ReviewAction(
+                sessionId: widget.sessionId,
+                builder: (context, offer) => ship(offer),
+              )
+            else
+              ship(null),
+          ],
+        ),
+      );
+    }
 
     if (widget.hostedOnTerminal) {
       // The action row, and only the action row: every button is the bar's own
@@ -612,6 +696,47 @@ class _ActionChip extends StatelessWidget {
     );
     return Tooltip(message: _actionTooltip(offered), child: chip);
   }
+}
+
+/// One verb behind **Ship ▾**; a null [onPressed] is drawn disabled.
+class _ShipEntry {
+  const _ShipEntry({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+}
+
+/// **Ship ▾**: the delivery verbs that are not the next one, in one menu.
+class _ShipMenu extends StatelessWidget {
+  const _ShipMenu({required this.entries});
+
+  final List<_ShipEntry> entries;
+
+  @override
+  Widget build(BuildContext context) => Builder(
+    builder: (anchor) => _BarAction(
+      icon: AppIcons.rocketLaunch,
+      label: 'Ship ▾',
+      tooltip: 'Review, checks, pull request and handing the session on',
+      onPressed: () async {
+        final picked = await showDesktopMenuUnder<int>(anchor, [
+          for (final (index, entry) in entries.indexed)
+            DesktopMenuItem(
+              value: index,
+              label: entry.label,
+              icon: entry.icon,
+              enabled: entry.onPressed != null,
+            ),
+        ]);
+        if (picked != null) entries[picked].onPressed?.call();
+      },
+    ),
+  );
 }
 
 /// The vertical padding every control on the session bar's action row draws

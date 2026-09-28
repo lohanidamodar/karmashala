@@ -761,11 +761,13 @@ void main() {
     expect(find.text('2 uncommitted'), findsOneWidget);
     expect(find.text('Commit'), findsOneWidget);
     // Handoff and fork, the two the brief named, behind the same one dialog the
-    // conversation opens.
+    // conversation opens — on the bar's Ship menu, beside the next step.
+    await tester.tap(find.text('Ship ▾'));
+    await tester.pumpAndSettle();
     expect(find.text('Continue with…'), findsOneWidget);
   });
 
-  group('the session bar is a state line over one action row', () {
+  group("the session bar is the pane's status line", () {
     /// Everything the bar can hold at once: a stage, a long branch name, a
     /// diff, a dirty tree, a base it is ahead of, four actions and both ends.
     ///
@@ -812,77 +814,51 @@ void main() {
       matching: find.text(text),
     );
 
-    testWidgets('the facts sit above the buttons, never among them', (
-      tester,
-    ) async {
-      seedTheFullestBar();
-      await pump(tester);
+    /// Everything the user can press, where it is: the next step on the bar,
+    /// the rest in the Ship menu.
+    Future<void> openShip(WidgetTester tester) async {
+      await tester.tap(find.text('Ship ▾'));
+      await tester.pumpAndSettle();
+    }
 
-      // Measured, not asserted by presence: the complaint was about where
-      // these landed, and only geometry can answer that. Every fact ends
-      // above where the first button starts, so no width can interleave them.
-      final lowestFact = facts
-          .map((text) => tester.getBottomLeft(find.text(text)).dy)
-          .reduce((a, b) => a > b ? a : b);
-      final highestAction = actions
-          .map((text) => tester.getTopLeft(inTheBar(text)).dy)
-          .reduce((a, b) => a < b ? a : b);
-      expect(
-        lowestFact,
-        lessThanOrEqualTo(highestAction),
-        reason: 'the state line is a line, not the first item in the row',
-      );
-    });
-
-    testWidgets('every control on the action row shares one centre-line', (
+    testWidgets('at width the facts and the controls share one line', (
       tester,
     ) async {
       seedTheFullestBar();
       await pump(tester, size: desktopWindow.size);
-
-      // The primary and its peers first: `Commit` was stranded up beside the
-      // branch name, a row above the three buttons it belongs with.
       final line = tester.getCenter(inTheBar('Commit')).dy;
-      for (final label in actions) {
+      for (final control in [
+        find.byType(PermissionModeChip),
+        find.byType(SessionModelChip),
+        find.byTooltip('Terminal view'),
+        find.text('Working'),
+      ]) {
         expect(
-          tester.getCenter(inTheBar(label)).dy,
-          moreOrLessEquals(line, epsilon: 0.5),
-          reason: '$label is not on the action row',
+          tester.getCenter(control).dy,
+          moreOrLessEquals(line, epsilon: 1),
+          reason: '$control is off the status line',
         );
       }
-
-      // And the two ends, which used to be centred against a two-row block and
-      // therefore lined up with nothing. They are the same height as the
-      // actions by construction, so this is exact rather than approximate.
-      expect(
-        tester.getCenter(find.byType(PermissionModeChip)).dy,
-        moreOrLessEquals(line, epsilon: 0.5),
-        reason: 'the permission control floats above the actions',
+      // Facts on the left, controls on the right: never interleaved. The facts
+      // slide inside their own viewport, which ends before the controls do.
+      final factsView = find.ancestor(
+        of: find.text('Working'),
+        matching: find.byType(SingleChildScrollView),
       );
       expect(
-        tester.getCenter(find.byTooltip('Terminal view')).dy,
-        moreOrLessEquals(line, epsilon: 0.5),
-        reason: 'the view toggle floats above the actions',
+        tester.getTopRight(factsView.first).dx,
+        lessThanOrEqualTo(
+          tester.getTopLeft(find.byType(PermissionModeChip)).dx,
+        ),
       );
     });
 
-    testWidgets('the model is chosen from the session, not the window', (
-      tester,
-    ) async {
+    testWidgets('the model sits beside the permission mode', (tester) async {
       seedTheFullestBar();
       await pump(tester, size: desktopWindow.size);
 
-      // It used to live in the window's status bar beside the account quota,
-      // which put a per-session control among window-wide ones — and left it
-      // describing whichever session the app believed was focused. It belongs
-      // with the other answer to "how does this session run": its permission
-      // mode, on the same centre-line as the actions it sits beside.
       final chip = find.byType(SessionModelChip);
       expect(chip, findsOneWidget);
-      expect(
-        tester.getCenter(chip).dy,
-        moreOrLessEquals(tester.getCenter(inTheBar('Commit')).dy, epsilon: 0.5),
-      );
       expect(
         tester.getRect(chip).left,
         greaterThan(tester.getRect(find.byType(PermissionModeChip)).right - 1),
@@ -890,27 +866,25 @@ void main() {
       );
     });
 
-    testWidgets('and steps aside when the bar has no room for it', (
+    testWidgets('one step is on the bar; the rest wait behind Ship ▾', (
       tester,
     ) async {
       seedTheFullestBar();
-      await pump(tester, size: minimumWindow.size);
+      await pump(tester, size: desktopWindow.size);
 
-      // At 720px the row is already 14px over with this chip squeezed to its
-      // glyphs. Absent beats crushed: the chat surface carries the same chip at
-      // full width, so a narrow terminal loses a shortcut rather than the
-      // control — and the actions keep the single line the complaint behind
-      // this bar was about.
-      expect(find.byType(SessionModelChip), findsNothing);
-      expect(find.byType(PermissionModeChip), findsOneWidget);
+      expect(inTheBar('Commit'), findsOneWidget);
+      for (final label in actions.where((label) => label != 'Commit')) {
+        expect(inTheBar(label), findsNothing, reason: '$label is not next');
+      }
+      await openShip(tester);
+      for (final label in actions.where((label) => label != 'Commit')) {
+        expect(find.text(label), findsOneWidget, reason: '$label is missing');
+      }
     });
 
     testWidgets('exactly one action is filled, and it is the next step', (
       tester,
     ) async {
-      // One weight for the group, one exception. `Commit` is primary while
-      // there is something to commit; the rest are peers, and nothing else in
-      // the bar borrows the emphasis.
       seedTheFullestBar();
       await pump(tester);
 
@@ -927,44 +901,32 @@ void main() {
       }
 
       expect(fillBehind('Commit'), scheme.primaryContainer);
-      for (final label in actions.where((label) => label != 'Commit')) {
-        expect(fillBehind(label), isNull, reason: '$label is not the primary');
-      }
+      expect(fillBehind('Ship ▾'), isNull);
     });
 
-    testWidgets('the groups survive the narrowest window', (tester) async {
-      // At 720x560 the actions run out of room and wrap. What must not happen
-      // is the old behaviour: a second run that starts with a fact and
-      // finishes with a button.
+    testWidgets('below its width the facts are a caption over the controls', (
+      tester,
+    ) async {
       seedTheFullestBar();
       await pump(tester, size: minimumWindow.size);
 
       final lowestFact = facts
           .map((text) => tester.getBottomLeft(find.text(text)).dy)
           .reduce((a, b) => a > b ? a : b);
-      final runs = actions
-          .map((text) => tester.getCenter(inTheBar(text)).dy)
-          .toList();
-      final firstRun = runs.reduce((a, b) => a < b ? a : b);
       expect(
         lowestFact,
         lessThanOrEqualTo(
-          actions
-              .map((text) => tester.getTopLeft(inTheBar(text)).dy)
-              .reduce((a, b) => a < b ? a : b),
+          tester.getTopLeft(find.byType(PermissionModeChip)).dy,
         ),
-        reason: 'the two groups still do not interleave',
+        reason: 'the state line is a line, not the first item in the row',
       );
-
-      // The ends hold the first run's line rather than drifting to the middle
-      // of the block — the whole reason the row is aligned to its start.
-      expect(
-        tester.getCenter(find.byType(PermissionModeChip)).dy,
-        moreOrLessEquals(firstRun, epsilon: 0.5),
-      );
+      // The controls hold one line between them.
       expect(
         tester.getCenter(find.byTooltip('Terminal view')).dy,
-        moreOrLessEquals(firstRun, epsilon: 0.5),
+        moreOrLessEquals(
+          tester.getCenter(find.byType(PermissionModeChip)).dy,
+          epsilon: 0.5,
+        ),
       );
     });
   });

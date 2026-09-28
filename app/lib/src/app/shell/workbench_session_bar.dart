@@ -1,11 +1,11 @@
 part of 'workbench.dart';
 
-/// The width, at 1x text, a bar needs for its third control: the model chip in
-/// the action row, the stats button in the facts line. At 720px the action row
-/// is already 14px over without it, and 23px at the 1.3x text step.
+/// The width, at 1x text, the bar is one status line from: facts, stats,
+/// mode, model, the next step, Ship ▾ and the toggle. Below it the facts
+/// become a caption over the controls.
 const double _sessionBarThirdControlWidth = 820;
 
-/// Below this, at 1x text, the action row scrolls instead of wrapping: a
+/// Below this, at 1x text, the action row draws its verbs as glyphs: a
 /// two-way split leaves a group 363px.
 const double _sessionBarNarrowWidth = 560;
 
@@ -69,15 +69,22 @@ class _SessionBar extends ConsumerWidget {
       _sessionBarNarrowWidth,
       textScaler,
     );
-    final scheme = Theme.of(context).colorScheme;
+    final toggle = selected == null
+        ? null
+        : (bool compact) => _ViewToggle(
+            onTerminal: onTerminal,
+            onChat: onChat,
+            onTerminalView: onTerminalView,
+            compact: compact,
+          );
+    // A tone step, not a rule, parts the bar from the surface above it.
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(height: 1),
         Container(
           constraints: const BoxConstraints(minHeight: Chrome.tabStrip),
-          color: scheme.surfaceContainerLow,
+          color: SurfaceTones.of(context).chrome,
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.sm,
             vertical: 2,
@@ -90,38 +97,40 @@ class _SessionBar extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Full width and above everything, so the facts read as a
-                // caption over the row rather than as the first item in it.
+                // At width the pane's status is one line: the facts, then the
+                // controls. Below it the facts are a caption over the controls.
+                if (sessionId != null)
+                  LayoutBuilder(
+                    builder: (context, constraints) =>
+                        constraints.maxWidth < thirdControl
+                        ? const SizedBox.shrink()
+                        : _SessionStatusLine(
+                            sessionId: sessionId,
+                            toggle: toggle?.call(false),
+                          ),
+                  ),
+                if (sessionId != null) SessionNoticeLine(sessionId: sessionId),
                 if (sessionId != null) ...[
                   // The bar's own width: a `LayoutBuilder` inside the row would
                   // read infinity for a non-flexible child.
                   LayoutBuilder(
-                    builder: (context, constraints) => _SessionFactsRow(
-                      sessionId: sessionId,
-                      // The width the action row buys its third control at —
-                      // narrower, and the usage chip beside it overflows.
-                      roomForStats: constraints.maxWidth >= thirdControl,
-                    ),
+                    builder: (context, constraints) =>
+                        constraints.maxWidth >= thirdControl
+                        ? const SizedBox.shrink()
+                        : _SessionFactsRow(sessionId: sessionId),
                   ),
-                  // Whatever this session has just been told, over the chips
-                  // that post it.
-                  SessionNoticeLine(sessionId: sessionId),
                 ],
                 LayoutBuilder(
                   builder: (context, constraints) {
+                    if (sessionId != null &&
+                        constraints.maxWidth >= thirdControl) {
+                      return const SizedBox.shrink();
+                    }
                     final narrow = constraints.maxWidth < narrowBelow;
                     return _SessionActionRow(
                       sessionId: sessionId,
                       narrow: narrow,
-                      roomForModel: constraints.maxWidth > thirdControl,
-                      toggle: selected == null
-                          ? null
-                          : _ViewToggle(
-                              onTerminal: onTerminal,
-                              onChat: onChat,
-                              onTerminalView: onTerminalView,
-                              compact: narrow,
-                            ),
+                      toggle: toggle?.call(narrow),
                     );
                   },
                 ),
@@ -134,13 +143,60 @@ class _SessionBar extends ConsumerWidget {
   }
 }
 
-/// The caption over the action row: the delivery state and, at width, the
-/// stats of the session. Usage is per account, so it is in the toolbar.
-class _SessionFactsRow extends StatelessWidget {
-  const _SessionFactsRow({required this.sessionId, required this.roomForStats});
+/// **The pane's status line** (spec §5), at width: the delivery facts and the
+/// session's stats on the left; mode, model, the next delivery step and
+/// **Ship ▾** on the right, then the view toggle.
+class _SessionStatusLine extends StatelessWidget {
+  const _SessionStatusLine({required this.sessionId, required this.toggle});
 
   final String sessionId;
-  final bool roomForStats;
+  final Widget? toggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final toggle = this.toggle;
+    return Row(
+      children: [
+        // One line, whatever the branch is called: the facts slide under the
+        // controls rather than wrapping the bar to a second row. The resume
+        // chip rides with them: it is nothing, and no width, until armed.
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                DeliveryStateLine(sessionId: sessionId),
+                ScheduledResumeChip(sessionId: sessionId),
+              ],
+            ),
+          ),
+        ),
+        SessionStatsButton(sessionId: sessionId),
+        const SizedBox(width: Insets.sm),
+        PermissionModeChip(sessionId: sessionId),
+        const SizedBox(width: Insets.xs),
+        SessionModelChip(
+          sessionId: sessionId,
+          maxLabelWidth: _sessionModelLabelWidth,
+        ),
+        const SizedBox(width: Insets.sm),
+        DeliveryStrip(
+          sessionId: sessionId,
+          hostedOnTerminal: true,
+          folded: true,
+        ),
+        if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
+      ],
+    );
+  }
+}
+
+/// The caption over the action row, below the status line's width: the
+/// delivery state. Usage is per account, so it is in the toolbar.
+class _SessionFactsRow extends StatelessWidget {
+  const _SessionFactsRow({required this.sessionId});
+
+  final String sessionId;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -160,12 +216,6 @@ class _SessionFactsRow extends StatelessWidget {
           },
         ),
       ),
-      // In the facts line and not the action row: what a session cost is not a
-      // control and must not compete for those pixels.
-      if (roomForStats) ...[
-        SessionStatsButton(sessionId: sessionId),
-        const SizedBox(width: Insets.xs),
-      ],
       // Nothing, and no width, until one is armed.
       Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
     ],
@@ -179,13 +229,11 @@ class _SessionActionRow extends StatelessWidget {
     required this.sessionId,
     required this.toggle,
     required this.narrow,
-    required this.roomForModel,
   });
 
   final String? sessionId;
   final Widget? toggle;
   final bool narrow;
-  final bool roomForModel;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +246,7 @@ class _SessionActionRow extends StatelessWidget {
           Expanded(
             child: sessionId == null
                 ? const SizedBox.shrink()
+                // Scrolled rather than squeezed, at a split's smallest group.
                 : SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -206,12 +255,11 @@ class _SessionActionRow extends StatelessWidget {
                       children: [
                         PermissionModeChip(sessionId: sessionId),
                         const SizedBox(width: Insets.xs),
-                        // Unbounded, so the `Wrap` lays out in one run and the
-                        // bar keeps one height.
                         DeliveryStrip(
                           sessionId: sessionId,
                           hostedOnTerminal: true,
                           compact: true,
+                          folded: true,
                         ),
                       ],
                     ),
@@ -231,20 +279,25 @@ class _SessionActionRow extends StatelessWidget {
           const SizedBox(width: Insets.xs),
           // Flexible, and the only control that is: a model name is the one
           // label whose width is unpredictable.
-          if (roomForModel) ...[
-            Flexible(
-              child: SessionModelChip(
+          Flexible(
+            child: SessionModelChip(
+              sessionId: sessionId,
+              maxLabelWidth: _sessionModelLabelWidth,
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          // The next step, and the rest behind Ship ▾: one run, one height,
+          // and it gives way (its labels end) before the row overflows.
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: DeliveryStrip(
                 sessionId: sessionId,
-                maxLabelWidth: _sessionModelLabelWidth,
+                hostedOnTerminal: true,
+                folded: true,
               ),
             ),
-            const SizedBox(width: Insets.sm),
-          ],
-          // The delivery actions take the room the other two do not, and wrap
-          // *within* this box.
-          Expanded(
-            flex: 8,
-            child: DeliveryStrip(sessionId: sessionId, hostedOnTerminal: true),
           ),
         ],
         if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
