@@ -329,6 +329,23 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Pins, or unpins, every one of [ids] at once — projects when [projects],
+  /// sessions otherwise — keeping the order the rest were pinned in.
+  void setPinned(
+    Iterable<String> ids, {
+    required bool projects,
+    required bool pinned,
+  }) {
+    final current = projects ? state.pinnedProjectIds : state.pinnedSessionIds;
+    final next = pinned
+        ? [...current, ...ids.where((id) => !current.contains(id))]
+        : [...current.where((id) => !ids.contains(id))];
+    state = projects
+        ? state.copyWith(pinnedProjectIds: next)
+        : state.copyWith(pinnedSessionIds: next);
+    _save();
+  }
+
   void togglePinnedSession(String sessionId) {
     final pinned = [...state.pinnedSessionIds];
     if (!pinned.remove(sessionId)) pinned.add(sessionId);

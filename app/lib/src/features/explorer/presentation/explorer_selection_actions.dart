@@ -10,6 +10,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../application/bulk_session_delete.dart';
@@ -148,6 +149,7 @@ class ExplorerSelectionVerbs {
   static const newContext = 'selection:new-context';
   static const remove = 'selection:remove';
   static const delete = 'selection:delete';
+  static const pin = 'selection:pin';
   static const resumeOnReset = 'selection:resume-on-reset';
   static const selectAll = 'selection:all';
   static const done = 'selection:done';
@@ -156,12 +158,32 @@ class ExplorerSelectionVerbs {
 
   SessionSelection get _selection => ref.read(sessionSelectionProvider);
 
+  /// Whether everything ticked is already pinned, so the verb unpins.
+  bool get _allPinned {
+    final settings = ref.read(settingsControllerProvider);
+    final pinned = _selection.kind == SelectionKind.projects
+        ? settings.pinnedProjectIds
+        : settings.pinnedSessionIds;
+    return _selection.ids.every(pinned.contains);
+  }
+
+  PopupMenuEntry<String> _pinItem(String? many) {
+    final unpin = _allPinned;
+    final verb = unpin ? 'Unpin' : 'Pin';
+    return DesktopMenuItem(
+      value: pin,
+      label: many == null ? verb : '$verb $many',
+      icon: unpin ? AppIcons.pushPinFill : AppIcons.pushPin,
+    );
+  }
+
   /// A ticked row's right-click: every verb, named with the count it acts on.
   List<PopupMenuEntry<String>> rowMenu() {
     final selection = _selection;
     final kind = selection.kind ?? SelectionKind.sessions;
     final many = kind.count(selection.count);
     return [
+      _pinItem(many),
       if (kind == SelectionKind.projects) ...[
         for (final workspace in ref.read(workspacesControllerProvider))
           DesktopMenuItem(
@@ -202,6 +224,7 @@ class ExplorerSelectionVerbs {
     final kind = _selection.kind;
     final some = _selection.count > 0;
     return [
+      if (some) _pinItem(null),
       if (kind == SelectionKind.projects)
         ...moveMenu(prefix: 'Move to ')
       else if (some) ...[
@@ -271,6 +294,14 @@ class ExplorerSelectionVerbs {
         _file(null, null);
       case delete:
         await _delete();
+      case pin:
+        ref
+            .read(settingsControllerProvider.notifier)
+            .setPinned(
+              _selection.ids,
+              projects: _selection.kind == SelectionKind.projects,
+              pinned: !_allPinned,
+            );
       case resumeOnReset:
         // Imported rows have no session of ours to resume, so they sit out.
         final sessions = ref.read(sessionsDataProvider);

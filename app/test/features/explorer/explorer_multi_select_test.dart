@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
@@ -348,6 +349,29 @@ void main() {
 
       expect(contextOf('p2'), 'w1');
       expect(contextOf('p3'), 'w1');
+    });
+  });
+
+  group('pinning', () {
+    testWidgets('Pin pins every ticked session, and then offers Unpin', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await clickWith(tester, 'Session 0', LogicalKeyboardKey.controlLeft);
+      await clickWith(tester, 'Session 1', LogicalKeyboardKey.controlLeft);
+
+      await rightClick(tester, 'Session 0');
+      await tester.tap(find.text('Pin 2 sessions'));
+      await tester.pumpAndSettle();
+      expect(
+        c.read(settingsControllerProvider).pinnedSessionIds,
+        unorderedEquals(['n0', 'n1']),
+      );
+
+      await rightClick(tester, 'Session 0');
+      await tester.tap(find.text('Unpin 2 sessions'));
+      await tester.pumpAndSettle();
+      expect(c.read(settingsControllerProvider).pinnedSessionIds, isEmpty);
     });
   });
 
