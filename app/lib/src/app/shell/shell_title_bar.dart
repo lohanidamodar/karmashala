@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/agents/presentation/toolbar_usage_strip.dart';
+import '../../features/projects/presentation/new_project_dialog.dart';
+import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'app_shell.dart' show ShellWidth;
@@ -14,8 +18,9 @@ import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_state.dart';
 
-/// The window's one chrome row: the menus, the command field and the pane
-/// toggles. Built as the tab strip's row, because it is chrome, not a heading.
+/// **The title bar** (UI overhaul spec §4): the menus, the quick panel field
+/// in the middle, each account's usage, then New and the window's toggles.
+/// The terminal's own verbs moved to View ▸ Terminal and their chords.
 class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   const ShellTitleBar({this.height = Chrome.titleBar, super.key});
 
@@ -30,12 +35,11 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   /// with the text scale.
   static const _menuTitlesWidth = 272.0;
 
-  /// Everything else in the row, which does not grow: padding, gaps, the four
-  /// toggles, room for both session badges, and the terminal toolbar in its
-  /// compact (+ and caret) or full width.
+  /// Everything else in the row, which does not grow: padding, gaps, New, the
+  /// two toggles and room for both session badges.
   static const _glyphsWidth = 204.0;
   static const _compactToolbarWidth = 52.0;
-  static const _fullToolbarWidth = 156.0;
+  static const _fullToolbarWidth = 52.0;
 
   /// Whether a row [width] wide has to fold the menus behind one glyph.
   static bool foldsMenus(
@@ -85,10 +89,8 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
                 // The field in the middle, the accounts' usage at the right.
                 const Expanded(child: _QuickOpenSlot()),
-                // The terminal's own verbs, on the pane the keyboard is in. Not
-                // per group: seven in every strip made a split narrower than
-                // its bar.
-                TerminalToolbar(compact: compactToolbar),
+                const _BarDivider(),
+                const _NewButton(key: ValueKey('title-bar-new')),
                 const _RestoredSessionsBadge(),
                 const _BackgroundSessionsBadge(),
                 const _FocusModeToggle(),
@@ -112,10 +114,10 @@ class _QuickOpenSlot extends StatelessWidget {
   static const _minWidth = 64.0;
 
   /// The field's own cap; it keeps that much first.
-  static const _fieldWidth = 480.0;
+  static const _fieldWidth = 440.0;
 
   /// The most the account chips take; the rest centres the field.
-  static const _usageWidth = 520.0;
+  static const _usageWidth = 4 * kToolbarUsageChipWidth;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -150,9 +152,9 @@ class _FocusModeToggle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => _ChromeToggle(
     icon: AppIcons.arrowsOutSimple,
-    label: 'Focus mode',
+    label: 'Zen',
     chord: shellChordLabel<ToggleFocusModeIntent>(),
-    note: 'Hides the Explorer and the side panel',
+    note: 'Only the pane',
     selected: ref.watch(terminalMaximizedProvider),
     onPressed: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
   );
@@ -171,6 +173,78 @@ class _SidePanelToggle extends ConsumerWidget {
       visibleSidePanelProvider.select((panel) => panel != null),
     ),
     onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
+  );
+}
+
+/// A hairline between the usage and the window's own controls.
+class _BarDivider extends StatelessWidget {
+  const _BarDivider();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 1,
+    height: Chrome.iconAction,
+    margin: const EdgeInsets.symmetric(horizontal: Insets.sm),
+    color: SurfaceTones.of(context).line,
+  );
+}
+
+/// **New**: one + for everything the window can make — a session, a terminal
+/// (with any profile), a project. Each keeps its own chord.
+class _NewButton extends ConsumerWidget {
+  const _NewButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Builder(
+    builder: (anchor) => _ChromeToggle(
+      icon: AppIcons.plus,
+      label: 'New session, terminal or project',
+      onPressed: () async {
+        final actions = TerminalActions(ref);
+        final profiles = actions.profiles();
+        final picked = await showDesktopMenuUnder<Object>(anchor, [
+          DesktopMenuItem(
+            value: #session,
+            label: 'New session',
+            icon: AppIcons.chatCircleDots,
+            shortcut: shellChordLabel<NewSessionIntent>(),
+          ),
+          DesktopMenuItem(
+            value: #terminal,
+            label: 'New terminal',
+            icon: AppIcons.terminal,
+            shortcut: shellChordLabel<NewTerminalTabIntent>(),
+          ),
+          if (profiles.length > 1) ...[
+            const DesktopMenuDivider(),
+            for (final profile in profiles)
+              DesktopMenuItem(
+                value: profile,
+                label: profile.label,
+                icon: AppIcons.terminalWindow,
+              ),
+          ],
+          const DesktopMenuDivider(),
+          DesktopMenuItem(
+            value: #project,
+            label: 'New project',
+            icon: AppIcons.folderPlus,
+            shortcut: shellChordLabel<NewProjectIntent>(),
+          ),
+        ]);
+        if (!anchor.mounted) return;
+        switch (picked) {
+          case #session:
+            await NewSessionDialog.show(anchor);
+          case #terminal:
+            actions.open(actions.defaultProfile());
+          case #project:
+            await NewProjectDialog.show(anchor);
+          case final TerminalProfile profile:
+            actions.open(profile);
+        }
+      },
+    ),
   );
 }
 

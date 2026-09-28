@@ -37,7 +37,16 @@ class UsageChipView {
     this.mark = UsageMark.live,
     this.reading,
     this.notes = const [],
+    this.short,
+    this.long,
   });
+
+  /// The shorter period as a number, for a chip drawn from parts (the title
+  /// bar's): the same window [label] spells. Null when nothing was measured.
+  final UsageFact? short;
+
+  /// The longer period as a number, the window [longLabel] spells.
+  final UsageFact? long;
 
   /// The reading the words were taken from — live or remembered — for the
   /// hover card's meters. Null when nothing was observed.
@@ -61,6 +70,32 @@ class UsageChipView {
   /// What the glyph may claim about the label. A glyph and not a colour, since
   /// the colour carries the quota; the age itself is in the tooltip.
   final UsageMark mark;
+}
+
+/// **One window as a number**: how much is spent, how long until it resets,
+/// and whether the spending so far is on course to run it out first.
+@immutable
+class UsageFact {
+  const UsageFact({
+    required this.percent,
+    required this.tone,
+    this.resetsIn,
+    this.onCourseToRunOut = false,
+  });
+
+  final int percent;
+
+  /// The countdown, as [formatUsageDuration] writes it; null when the reading
+  /// named no reset.
+  final String? resetsIn;
+
+  /// At this window's pace so far, it is spent before it resets (spec §4:
+  /// amber when a window is on course to run out).
+  final bool onCourseToRunOut;
+
+  /// The number's own loudness: [UsageTone.warning] at least when on course
+  /// to run out.
+  final UsageTone tone;
 }
 
 /// What the chip should say about [usage], as of [now]: live, checking, unknown
@@ -128,7 +163,42 @@ UsageChipView usageChipViewFor(
     mark: mark,
     reading: value,
     notes: notes,
+    short: _factOf(short, now),
+    long: long == null ? null : _factOf(long, now),
   );
+}
+
+UsageFact _factOf(_Reading reading, DateTime now) {
+  final reset = reading.window.resetsAt;
+  final onCourse = onCourseToRunOut(
+    percent: reading.percent,
+    span: reading.window.span,
+    resetsAt: reset,
+    now: now,
+  );
+  final tone = _toneFor(reading.percent);
+  return UsageFact(
+    percent: reading.percent.round(),
+    resetsIn: reset == null ? null : formatUsageDuration(reset.difference(now)),
+    onCourseToRunOut: onCourse,
+    tone: onCourse && tone == UsageTone.healthy ? UsageTone.warning : tone,
+  );
+}
+
+/// Whether a window [percent] spent is, at its pace so far, spent before it
+/// resets. Says nothing in a window's first tenth, where one busy minute
+/// would project to a run-out.
+bool onCourseToRunOut({
+  required double percent,
+  required Duration? span,
+  required DateTime? resetsAt,
+  required DateTime now,
+}) {
+  if (span == null || resetsAt == null || span <= Duration.zero) return false;
+  if (percent >= 100) return true;
+  final elapsed = span - resetsAt.difference(now);
+  if (elapsed < span * 0.1 || elapsed > span) return false;
+  return percent * span.inSeconds / elapsed.inSeconds >= 100;
 }
 
 /// **The two periods the chip draws**, shortest then longest, chosen by

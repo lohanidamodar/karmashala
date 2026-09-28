@@ -16,6 +16,7 @@ import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/presentation/terminal_actions.dart';
 import 'karmashala_about_dialog.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
@@ -296,6 +297,9 @@ class ViewMenu extends ConsumerWidget {
           onPressed: () => showShellArea(ref, ShellArea.inbox),
           child: const Text('Inbox'),
         ),
+        // The terminal's verbs left the title bar (spec §4: find, usage and
+        // nothing else); each keeps its chord, and here its name.
+        _TerminalSubmenu(),
         // The surfaces the context panel can show, so every tool is reachable
         // from the menu bar. They stay bare: more chords is more keys taken.
         for (final surface in surfaces)
@@ -431,4 +435,43 @@ class ToolsMenu extends StatelessWidget {
     ],
     child: const Text('Tools'),
   );
+}
+
+/// The focused terminal's own verbs: find in its scrollback, the snippets, and
+/// the commands it has run.
+class _TerminalSubmenu extends ConsumerWidget {
+  const _TerminalSubmenu();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasTabs = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
+    );
+    final actions = TerminalActions(ref);
+    return SubmenuButton(
+      leadingIcon: const Icon(AppIcons.terminal),
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.magnifyingGlass),
+          shortcut: commandActivator(LogicalKeyboardKey.keyF, shift: true),
+          onPressed: hasTabs ? actions.openSearch : null,
+          child: const Text('Find in scrollback'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.bookBookmark),
+          shortcut: commandActivator(LogicalKeyboardKey.keyS, shift: true),
+          onPressed: hasTabs
+              ? () => QuickOpen.show(context, initialQuery: r'$')
+              : null,
+          child: const Text('Command snippets'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.clockCounterClockwise),
+          onPressed: hasTabs ? () => actions.showCommands(context) : null,
+          child: const Text('Commands run here…'),
+        ),
+      ],
+      child: const Text('Terminal'),
+    );
+  }
 }

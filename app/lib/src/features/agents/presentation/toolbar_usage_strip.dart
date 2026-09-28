@@ -17,9 +17,9 @@ import 'agent_logo.dart';
 import 'usage_chip.dart';
 import 'usage_chip_popover.dart';
 
-/// The most one account's chip takes in the toolbar, its logo and both
-/// windows included; a longer label gives up its tail.
-const double kToolbarUsageChipWidth = 150;
+/// The most one account's chip takes in the toolbar: its mark, the gauge and
+/// both numbers.
+const double kToolbarUsageChipWidth = 112;
 
 /// The `+N` chip the accounts that do not fit fold into.
 const double kToolbarUsageMoreWidth = 44;
@@ -245,32 +245,24 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
                 horizontal: Insets.sm,
                 vertical: Insets.xs,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The agent's mark, not its name: the name is in the
-                  // semantics and the card, and the toolbar needs the room.
-                  AgentLogo(
-                    agentId: account.agentId,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Icon(
-                    switch (view.mark) {
-                      UsageMark.live => AppIcons.circleHalf,
-                      UsageMark.stale => AppIcons.clockCounterClockwise,
-                      UsageMark.unknown => AppIcons.question,
-                    },
-                    size: 12,
-                    color: colour,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Flexible(child: _words(context, view.label, colour)),
-                  if (view.longLabel case final longer?) ...[
+              // Spec §4: the agent's mark, the short window's number, the
+              // long window's dimmed after it. The resets, the account and
+              // the reading's age are in the card a click opens.
+              // Shrinks rather than clips at a large text size: the numbers
+              // are the chip.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AgentLogo(
+                      agentId: account.agentId,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: Insets.sm),
-                    Flexible(child: _words(context, longer, colour)),
+                    ..._facts(context, view, colour),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -279,13 +271,130 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
     );
   }
 
-  Widget _words(BuildContext context, String fact, Color colour) => Text(
-    fact,
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colour),
-  );
+  List<Widget> _facts(BuildContext context, UsageChipView view, Color colour) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final style = theme.textTheme.labelMedium?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final short = view.short;
+    if (short == null) {
+      // Nothing measured: a dash that is plainly not a reading, and the
+      // glyph that says whether one is on its way.
+      return [
+        Text('—', style: style?.copyWith(color: muted)),
+        if (view.mark != UsageMark.live) ...[
+          const SizedBox(width: Insets.xs),
+          Icon(AppIcons.question, size: 12, color: muted),
+        ],
+      ];
+    }
+    final long = view.long;
+    return [
+      _UsageGauge(short: short, long: long),
+      const SizedBox(width: Insets.xs + 2),
+      Text(
+        '${short.percent}%',
+        style: style?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: short.tone == UsageTone.healthy
+              ? theme.colorScheme.onSurface
+              : _toneColor(context, short.tone),
+        ),
+      ),
+      if (long != null) ...[
+        const SizedBox(width: Insets.xs + 2),
+        Text(
+          '${long.percent}%',
+          style: style?.copyWith(
+            color: long.tone == UsageTone.healthy
+                ? muted.withValues(alpha: 0.75)
+                : _toneColor(context, long.tone),
+          ),
+        ),
+      ],
+      // A number this read did not confirm says so with its glyph; the age is
+      // in the card.
+      if (view.mark == UsageMark.stale) ...[
+        const SizedBox(width: Insets.xs),
+        Icon(AppIcons.clockCounterClockwise, size: 11, color: colour),
+      ],
+    ];
+  }
 }
+
+/// **Two rings**, the short window outside and the long one inside: how full
+/// each is at a glance, before the numbers are read.
+class _UsageGauge extends StatelessWidget {
+  const _UsageGauge({required this.short, this.long});
+
+  final UsageFact short;
+  final UsageFact? long;
+
+  static const _size = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    Color toneOf(UsageFact fact) => fact.tone == UsageTone.healthy
+        ? Theme.of(context).colorScheme.primary
+        : _toneColor(context, fact.tone);
+    final long = this.long;
+    return SizedBox.square(
+      dimension: _size,
+      child: CustomPaint(
+        painter: _RingsPainter(
+          track: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
+            alpha: 0.22,
+          ),
+          outer: (short.percent / 100, toneOf(short)),
+          inner: long == null
+              ? null
+              : (long.percent / 100, toneOf(long).withValues(alpha: 0.6)),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingsPainter extends CustomPainter {
+  const _RingsPainter({required this.track, required this.outer, this.inner});
+
+  final Color track;
+  final (double, Color) outer;
+  final (double, Color)? inner;
+
+  static const _stroke = 2.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centre = size.center(Offset.zero);
+    void ring(double radius, (double, Color) fill) {
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawCircle(centre, radius, paint..color = track);
+      final share = fill.$1.clamp(0.0, 1.0);
+      if (share <= 0) return;
+      canvas.drawArc(
+        Rect.fromCircle(center: centre, radius: radius),
+        -1.5707963267948966,
+        6.283185307179586 * share,
+        false,
+        paint..color = fill.$2,
+      );
+    }
+
+    final radius = size.shortestSide / 2 - _stroke / 2;
+    ring(radius, outer);
+    if (inner case final inner?) ring(radius - _stroke - 1.5, inner);
+  }
+
+  @override
+  bool shouldRepaint(_RingsPainter old) =>
+      old.track != track || old.outer != outer || old.inner != inner;
+}
+
 
 class _MoreChip extends ConsumerStatefulWidget {
   const _MoreChip({required this.accounts});
