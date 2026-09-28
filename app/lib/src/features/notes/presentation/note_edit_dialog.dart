@@ -167,7 +167,10 @@ class _NoteEditDialogState extends ConsumerState<NoteEditDialog> {
             Text(
               'This is the text an agent will receive. It was kept word for '
               'word; edit it into the prompt you want.',
-              style: theme.textTheme.bodySmall,
+              // Muted: guidance about the field, not part of the note.
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

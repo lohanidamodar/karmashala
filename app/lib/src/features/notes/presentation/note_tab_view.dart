@@ -191,19 +191,30 @@ class _NoteTabViewState extends ConsumerState<NoteTabView> {
                   children: [
                     TextField(
                       controller: _title,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: InputDecoration.collapsed(
                         hintText: note.body.trim().isEmpty
                             ? 'Untitled note'
                             : '${note.displayTitle}  (named by its first line)',
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: Insets.sm),
+                    const SizedBox(height: Insets.xs),
                     NoteMetadata(note: note),
                   ],
                 ),
               ),
-              const Divider(height: 1),
+              // The structural line, not a Divider: under the Tones setting it
+              // is transparent and the heading simply sits above the text, as
+              // every other region is told apart (spec §2, "tone, not lines").
+              SizedBox(
+                height: 1,
+                child: ColoredBox(color: SurfaceTones.of(context).line),
+              ),
               Expanded(
                 child: _preview
                     ? NotePreview(body: draft.body)

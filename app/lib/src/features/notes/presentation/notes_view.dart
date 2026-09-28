@@ -5,6 +5,8 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/rows.dart' show compactAge;
+import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -16,7 +18,6 @@ import 'package:karmashala_notes/karmashala_notes.dart';
 import 'note_delete.dart';
 import '../../../app/shell/workbench_tabs.dart';
 import 'note_provenance.dart';
-import 'package:karmashala_ui/primitives.dart';
 
 /// The Notes surface. A note is a **deferred instruction**, so the list is
 /// arranged around sending one back to an agent's composer.
@@ -103,11 +104,10 @@ class _EmptyNotes extends ConsumerWidget {
       icon: AppIcons.note,
       message:
           'No notes yet.\n\n'
-          'A note keeps an idea you had mid-conversation without acting on '
-          'it. Use the note button under any message to save what was said, '
-          'word for word.\n\n'
-          'When you are ready to work on one, send it back: its text is '
-          'offered to that session for you to check before it goes.',
+          'A note keeps an idea from mid-conversation without acting on it — '
+          'use the note button under any message.\n\n'
+          'When you are ready, send it back: its text is offered to that '
+          'session for you to check first.',
       // The way out of the empty state, named. An icon-only **+** is how the
       // owner ended up asking "where can we add notes?" while looking at it.
       action: FilledButton.icon(
@@ -132,6 +132,8 @@ class _NoteCard extends ConsumerWidget {
     NotesView.debugCardBuildCount++;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
     // A note that kept its own session can name it for free, off its own row.
     // A note written here cannot, and does not subscribe to anything to find
     // out: [_sendBack] resolves the target on the click. See [_sendLabel].
@@ -140,51 +142,77 @@ class _NoteCard extends ConsumerWidget {
         : ref.read(sessionsDataProvider).getById(note.sourceSessionId!);
     final menuLabel = 'Actions for “${note.displayTitle}”';
     void act(String value) => _act(context, ref, value);
+    // Read, not watched, like the session above: an age that ticks would
+    // repaint every row each minute, and a note's age is a rough "when".
+    final age = compactAge(
+      ref.read(clockProvider).nowUtc().difference(note.updatedAt),
+    );
 
     return RowContextMenu(
       menuLabel: menuLabel,
       itemBuilder: () => _menuItems(source?.title),
       onSelected: act,
+      // A row, not a card: no border and no fill at rest, the panel's own tone
+      // under it. Hover washes it; the ink is what says it is one thing.
       builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.sm, 2),
+        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
         child: Material(
-          color: scheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            side: BorderSide(color: scheme.outlineVariant),
-          ),
+          type: MaterialType.transparency,
           child: InkWell(
             borderRadius: BorderRadius.circular(Radii.sm),
+            hoverColor: StateLayers.hover(scheme),
             onTap: () => openNoteTab(ref, note.id),
             child: Padding(
-              padding: const EdgeInsets.all(Insets.sm),
-              child: Column(
+              padding: EdgeInsets.fromLTRB(
+                density.padX + 2,
+                density.padY,
+                2,
+                density.padY,
+              ),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    note.displayTitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  // Clipped, never rewritten: a long note shows its opening and the whole text
-                  // is one tap away. The clip is passed to the hit test too — see [LinkableText].
-                  LinkableText(
-                    note.body,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: Insets.xs),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // The name and, at the right edge, how long ago it
+                        // was last touched: the two facts a list is scanned by.
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                note.displayTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: density.rowTitle(theme),
+                              ),
+                            ),
+                            const SizedBox(width: Insets.sm),
+                            Text(
+                              age,
+                              maxLines: 1,
+                              style: muted?.copyWith(
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: density.lineGap),
+                        // Clipped to a line, never rewritten: the whole text
+                        // is one click away, and a newline in the body is not
+                        // a reason for the row to grow.
+                        Text(
+                          _preview(note.body),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
+                        ),
+                        Text(
                           _origin(
                             source?.title,
                             note.projectId == null
@@ -193,22 +221,24 @@ class _NoteCard extends ConsumerWidget {
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          style: muted,
                         ),
-                      ),
-                      _CardAction(
-                        icon: AppIcons.paperPlaneRight,
-                        tooltip: _sendLabel(source?.title),
-                        onPressed: () => _sendBack(context, ref),
-                      ),
-                      RowMenuButton(
-                        tooltip: menuLabel,
-                        itemBuilder: () => _menuItems(source?.title),
-                        onSelected: act,
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  // Send stays drawn — it is what a note is *for* — but
+                  // small and muted; the rest waits behind the `⋮`, which
+                  // shows only while the row is hovered or focused.
+                  _CardAction(
+                    icon: AppIcons.paperPlaneRight,
+                    tooltip: _sendLabel(source?.title),
+                    onPressed: () => _sendBack(context, ref),
+                  ),
+                  RowMenuButton(
+                    tooltip: menuLabel,
+                    itemBuilder: () => _menuItems(source?.title),
+                    onSelected: act,
                   ),
                 ],
               ),
@@ -218,6 +248,11 @@ class _NoteCard extends ConsumerWidget {
       ),
     );
   }
+
+  /// The body on one line: its line breaks folded to spaces, so the preview is
+  /// the start of the note rather than the start of its first paragraph only.
+  static String _preview(String body) =>
+      body.trim().replaceAll(RegExp(r'\s*\n\s*'), '  ');
 
   /// What Send offers, in the only terms the card can honestly use: it is not
   /// subscribed to the selection, so it names *who*, never where.
@@ -310,13 +345,16 @@ class _CardAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
     tooltip: tooltip,
-    iconSize: Chrome.iconSmall,
+    iconSize: Chrome.iconAction,
     visualDensity: VisualDensity.compact,
     constraints: const BoxConstraints(
       minWidth: Chrome.control,
       minHeight: Chrome.control,
     ),
     padding: EdgeInsets.zero,
+    // Muted at rest, so the one always-drawn action does not out-shout the
+    // note's own title.
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
     icon: Icon(icon),
     onPressed: onPressed,
   );

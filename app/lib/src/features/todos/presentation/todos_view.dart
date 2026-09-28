@@ -38,6 +38,11 @@ class _TodosViewState extends ConsumerState<TodosView> {
   final _composer = TextEditingController();
   final _composerFocus = FocusNode();
 
+  /// Whether the finished group is folded away. Open by default, so ticking a
+  /// line off never makes it vanish from under the pointer; folding is the
+  /// user's own choice, for a long list of things already done.
+  bool _doneCollapsed = false;
+
   @override
   void dispose() {
     _composer.dispose();
@@ -60,8 +65,42 @@ class _TodosViewState extends ConsumerState<TodosView> {
       for (final todo in all)
         if (scope.contains(todo.projectId)) todo,
     ];
-    final open = shown.where((todo) => !todo.isDone).length;
-    final done = shown.length - open;
+    // Two groups, each in the order the user put it in: what is still to do,
+    // then what is finished. Split here rather than trusted to the store's
+    // order, so a tick moves a line to the other group and nowhere else.
+    final openTodos = [
+      for (final todo in shown)
+        if (!todo.isDone) todo,
+    ];
+    final doneTodos = [
+      for (final todo in shown)
+        if (todo.isDone) todo,
+    ];
+    final open = openTodos.length;
+    final done = doneTodos.length;
+
+    // The rows, flattened once: open lines, then the Done header, then — while
+    // it is unfolded — the finished lines under it.
+    final rows = <Widget>[
+      // The project is named under the line only while the panel shows more
+      // than one; under a filter it would repeat the header on every row.
+      for (final todo in openTodos)
+        _TodoRow(key: ValueKey(todo.id), todo: todo, showProject: scope.isAll),
+      if (done > 0)
+        _DoneHeader(
+          count: done,
+          collapsed: _doneCollapsed,
+          onToggle: () => setState(() => _doneCollapsed = !_doneCollapsed),
+          onClear: () => _clearDone(done, scope),
+        ),
+      if (!_doneCollapsed)
+        for (final todo in doneTodos)
+          _TodoRow(
+            key: ValueKey(todo.id),
+            todo: todo,
+            showProject: scope.isAll,
+          ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,14 +118,6 @@ class _TodosViewState extends ConsumerState<TodosView> {
                     ref.read(todoScopeProvider.notifier).select(next),
               ),
             ),
-            if (done > 0)
-              IconButton(
-                tooltip: 'Clear $done finished todo${done == 1 ? '' : 's'}',
-                iconSize: Chrome.icon,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.trash),
-                onPressed: () => _clearDone(done, scope),
-              ),
           ],
         ),
         const DataConnectionNotice(padding: DataConnectionNotice.inPanel),
@@ -100,24 +131,13 @@ class _TodosViewState extends ConsumerState<TodosView> {
           child: shown.isEmpty
               ? _EmptyTodos(scope: scope, hasAny: all.isNotEmpty)
               : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: Insets.sm),
-                  itemCount: shown.length,
-                  itemBuilder: (context, index) {
-                    final todo = shown[index];
-                    // The one divider in the list: everything under it is
-                    // finished, so a tick never makes a row disappear.
-                    final startsDone =
-                        todo.isDone && (index == 0 || !shown[index - 1].isDone);
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (startsDone) const _DoneDivider(),
-                        // The project is named under the line only while the panel shows more than
-                        // one; under a filter it would repeat the header on every row.
-                        _TodoRow(todo: todo, showProject: scope.isAll),
-                      ],
-                    );
-                  },
+                  padding: const EdgeInsets.only(
+                    left: Insets.xs,
+                    right: Insets.xs,
+                    bottom: Insets.sm,
+                  ),
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) => rows[index],
                 ),
         ),
       ],
@@ -174,6 +194,15 @@ class _Composer extends ConsumerWidget {
     final hint = scope.projectId == null
         ? 'New todo'
         : 'New todo in ${projectScopeLabel(scope, ref)}';
+    final theme = Theme.of(context);
+    final tones = SurfaceTones.of(context);
+    // A field drawn in the panel's own raised tone with no outline at rest:
+    // it reads as the list's first, empty line rather than as a form. The
+    // accent edge arrives with the cursor, the one moment it is the subject.
+    final rest = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(Radii.sm),
+      borderSide: BorderSide.none,
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.sm,
@@ -193,11 +222,32 @@ class _Composer extends ConsumerWidget {
         keyboardType: TextInputType.text,
         textInputAction: TextInputAction.done,
         onSubmitted: onSubmit,
-        style: Theme.of(context).textTheme.bodyMedium,
+        style: UiDensity.of(
+          context,
+        ).rowTitle(theme)?.copyWith(fontWeight: FontWeight.w400),
         decoration: InputDecoration(
           isDense: true,
+          filled: true,
+          fillColor: tones.raised,
           hintText: hint,
-          prefixIcon: const Icon(AppIcons.plus, size: Chrome.iconSmall),
+          hintStyle: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          border: rest,
+          enabledBorder: rest,
+          focusedBorder: rest.copyWith(
+            borderSide: BorderSide(
+              color: StateLayers.focusRing(theme.colorScheme),
+              width: StateLayers.focusRingWidth,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: Insets.sm,
+            vertical: 6,
+          ),
+          prefixIcon: Icon(
+            AppIcons.plus,
+            size: Chrome.iconSmall,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: Chrome.control,
             minHeight: Chrome.control,
@@ -208,18 +258,84 @@ class _Composer extends ConsumerWidget {
   }
 }
 
-class _DoneDivider extends StatelessWidget {
-  const _DoneDivider();
+/// The head of the finished group: a caret that folds it, its name and count,
+/// and the one way to clear it. Clear lives here rather than in the pane
+/// header because it acts on exactly the rows under this line.
+class _DoneHeader extends StatelessWidget {
+  const _DoneHeader({
+    required this.count,
+    required this.collapsed,
+    required this.onToggle,
+    required this.onClear,
+  });
+
+  final int count;
+  final bool collapsed;
+  final VoidCallback onToggle;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final label = theme.textTheme.labelSmall
+        ?.merge(Chrome.groupLabel)
+        .copyWith(color: muted);
+    final noun = 'finished todo${count == 1 ? '' : 's'}';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.md, Insets.md, 2),
-      child: Text(
-        'DONE',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
+      padding: const EdgeInsets.only(top: Insets.sm),
+      child: SizedBox(
+        height: Chrome.row,
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                button: true,
+                expanded: !collapsed,
+                label: collapsed ? 'Show $noun' : 'Hide $noun',
+                excludeSemantics: true,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  onTap: onToggle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+                    child: Row(
+                      children: [
+                        Icon(
+                          collapsed ? AppIcons.caretRight : AppIcons.caretDown,
+                          size: Chrome.iconSmall,
+                          color: muted,
+                        ),
+                        const SizedBox(width: Insets.xs),
+                        // Its own Text, so the word is the same whatever the
+                        // count: the group is "Done", and the number beside it.
+                        Text('DONE', style: label),
+                        const SizedBox(width: Insets.xs),
+                        Text(
+                          '$count',
+                          style: label?.copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Clear $count $noun',
+              iconSize: Chrome.iconAction,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(
+                minWidth: Chrome.control,
+                minHeight: Chrome.control,
+              ),
+              padding: EdgeInsets.zero,
+              icon: Icon(AppIcons.trash, color: muted),
+              onPressed: onClear,
+            ),
+          ],
         ),
       ),
     );
@@ -229,7 +345,7 @@ class _DoneDivider extends StatelessWidget {
 /// One todo: a tick, the line, and the menu that moves, files or removes it.
 /// The tick is the row's focus stop, which is what makes `Shift+F10` work.
 class _TodoRow extends ConsumerStatefulWidget {
-  const _TodoRow({required this.todo, required this.showProject});
+  const _TodoRow({required this.todo, required this.showProject, super.key});
 
   final Todo todo;
 
@@ -382,35 +498,60 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final todo = widget.todo;
     final project = todo.projectId == null
         ? null
         : projectNameById(ref, todo.projectId!);
     final menuLabel = 'Actions for “${todo.body}”';
+    // 13/18 under a pointer, with 4px above and below: a one-line todo is the
+    // tick's control square tall, and a long one wraps under its own line.
+    final bodyStyle = density
+        .rowTitle(theme)
+        ?.copyWith(
+          fontWeight: FontWeight.w400,
+          // Finished is dimmed and struck, never removed: it is still the user's
+          // line until they clear it.
+          color: todo.isDone ? scheme.onSurfaceVariant : null,
+          decoration: todo.isDone ? TextDecoration.lineThrough : null,
+          decorationColor: todo.isDone ? scheme.onSurfaceVariant : null,
+        );
 
     return RowContextMenu(
       menuLabel: menuLabel,
       itemBuilder: _menuItems,
       onSelected: _act,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      builder: (context) => _HoverWash(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Checkbox(
-              value: todo.isDone,
-              semanticLabel: todo.isDone
-                  ? 'Reopen “${todo.body}”'
-                  : 'Finish “${todo.body}”',
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              onChanged: (next) => ref
-                  .read(todosProvider.notifier)
-                  .setDone(todo.id, next ?? false),
+            SizedBox.square(
+              dimension: density.isTouch ? Touch.target : Chrome.control,
+              child: Checkbox(
+                value: todo.isDone,
+                semanticLabel: todo.isDone
+                    ? 'Reopen “${todo.body}”'
+                    : 'Finish “${todo.body}”',
+                // The tightest Material allows under a pointer, so the box
+                // fits the control square instead of its 40px default.
+                visualDensity: density.isTouch
+                    ? VisualDensity.standard
+                    : const VisualDensity(
+                        horizontal: VisualDensity.minimumDensity,
+                        vertical: VisualDensity.minimumDensity,
+                      ),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (next) => ref
+                    .read(todosProvider.notifier)
+                    .setDone(todo.id, next ?? false),
+              ),
             ),
+            const SizedBox(width: 2),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+                padding: EdgeInsets.symmetric(
+                  vertical: density.isTouch ? Insets.md : 4,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -425,10 +566,17 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                         // Same contract as the composer, for the same reason.
                         keyboardType: TextInputType.text,
                         textInputAction: TextInputAction.done,
-                        style: theme.textTheme.bodyMedium,
+                        // The row's own style, minus the strike: what is being
+                        // typed is read, not marked finished.
+                        style: bodyStyle?.copyWith(
+                          decoration: TextDecoration.none,
+                        ),
                         decoration: const InputDecoration(
                           isDense: true,
+                          filled: false,
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
                         ),
                         onSubmitted: (_) => _commitEditing(),
@@ -443,21 +591,14 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                       LinkableText(
                         todo.body,
                         onTapText: _startEditing,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: todo.isDone ? scheme.onSurfaceVariant : null,
-                          decoration: todo.isDone
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
+                        style: bodyStyle,
                       ),
                     if (project != null && widget.showProject)
                       Text(
                         project,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        style: density.muted(theme),
                       ),
                   ],
                 ),
@@ -473,6 +614,29 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A row's hover wash, read from its [RowInteractionScope] so only this box
+/// repaints as the pointer crosses — the row itself is not rebuilt, since
+/// [child] is the same widget either way.
+class _HoverWash extends StatelessWidget {
+  const _HoverWash({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final engaged = RowInteractionScope.maybeOf(context)?.hovered ?? false;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: engaged
+            ? StateLayers.hover(Theme.of(context).colorScheme)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: child,
     );
   }
 }
