@@ -359,6 +359,14 @@ class QuickOpenSources {
         keywords: const ['preferences', 'options'],
         onSelect: () => openSettingsTab(ref),
       ),
+      _command(
+        'Open Usage',
+        subtitle: 'Each account’s limits over time, and where the tokens went',
+        icon: AppIcons.chartBar,
+        shortcut: shellCommandLabel('usage.open'),
+        keywords: const ['usage', 'quota', 'limits', 'tokens', 'rate limit'],
+        onSelect: () => openUsageTab(ref),
+      ),
     ];
   }
 

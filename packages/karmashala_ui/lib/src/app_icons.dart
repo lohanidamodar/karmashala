@@ -793,4 +793,13 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// Usage: the accounts' quotas and tokens over time — the Usage tab and the
+  /// activity strip's way to it.
+  static const IconData chartBar = IconData(
+    0xe150,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }

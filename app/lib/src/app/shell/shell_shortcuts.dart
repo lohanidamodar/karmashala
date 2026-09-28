@@ -86,6 +86,11 @@ class OpenSettingsIntent extends Intent {
   const OpenSettingsIntent();
 }
 
+/// Intent: open the Usage tab (spec §5).
+class OpenUsageIntent extends Intent {
+  const OpenUsageIntent();
+}
+
 /// Intent: change the terminal grid's font size — not the UI scale, which is
 /// a considered setting in Settings → Appearance.
 class TerminalFontSizeIntent extends Intent {
@@ -419,6 +424,16 @@ List<ShellChord> _buildChords() => [
     command: 'settings.open',
     label: _commandLabel(','),
     does: 'Open Settings',
+    skipsShell: true,
+  ),
+  // Spec §5's chord. Shifted, so a terminal cannot encode it and a focused
+  // pane loses nothing by letting it through.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyU, shift: true),
+    intent: OpenUsageIntent(),
+    command: 'usage.open',
+    label: _commandLabel('U', shift: true),
+    does: 'Open Usage',
     skipsShell: true,
   ),
   // Tabs, shifted because a shell owns the bare keys — ^W deletes a word, ^T
@@ -919,6 +934,12 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
             onInvoke: (intent) {
               openSettingsTab(ref);
+              return null;
+            },
+          ),
+          OpenUsageIntent: CallbackAction<OpenUsageIntent>(
+            onInvoke: (intent) {
+              openUsageTab(ref);
               return null;
             },
           ),

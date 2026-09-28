@@ -59,8 +59,14 @@ class TimeSeriesChart extends StatefulWidget {
     this.breakAfter,
     this.area = true,
     this.height = 160,
+    this.forecast = const [],
     super.key,
   });
+
+  /// Where the line goes if nothing changes — drawn dashed, with no area and
+  /// no hover, so a projection never reads as a measurement. Empty for none.
+  /// Its first point is usually the last reading, so the two lines meet.
+  final List<TimeSeriesPoint> forecast;
 
   final List<TimeSeriesPoint> points;
   final DateTime start;
@@ -185,6 +191,7 @@ class _TimeSeriesChartState extends State<TimeSeriesChart> {
                             ink: ink,
                             area: widget.area,
                             selected: chosen,
+                            forecast: widget.forecast,
                           ),
                         ),
                       ),
@@ -310,7 +317,11 @@ class TimeSeriesPainter extends CustomPainter {
     this.breakAfter,
     this.area = true,
     this.selected,
+    this.forecast = const [],
   });
+
+  /// See [TimeSeriesChart.forecast].
+  final List<TimeSeriesPoint> forecast;
 
   final TimeSeriesGeometry geometry;
   final List<TimeSeriesPoint> points;
@@ -343,6 +354,7 @@ class TimeSeriesPainter extends CustomPainter {
       );
     }
     _paintSeries(canvas);
+    _paintForecast(canvas);
     canvas.restore();
 
     final chosen = selected;
@@ -467,6 +479,29 @@ class TimeSeriesPainter extends CustomPainter {
       canvas.drawPath(line, stroke);
     }
     canvas.drawCircle(runs.last.last, 2.5, Paint()..color = color);
+  }
+
+  /// The projection, dashed in the series colour: the same ink says it is the
+  /// same quantity, the dashes that nobody measured it.
+  void _paintForecast(Canvas canvas) {
+    if (forecast.length < 2) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    for (var i = 1; i < forecast.length; i++) {
+      drawDashedLine(
+        canvas,
+        Offset(
+          geometry.xFor(forecast[i - 1].at),
+          geometry.yFor(forecast[i - 1].value),
+        ),
+        Offset(geometry.xFor(forecast[i].at), geometry.yFor(forecast[i].value)),
+        paint,
+        dash: 4,
+        gap: 3,
+      );
+    }
   }
 
   @override

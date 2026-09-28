@@ -15,7 +15,8 @@ import 'workbench_tabs.dart';
 /// Width of the strip, the leftmost column of the window.
 const double kActivityStripWidth = 52;
 
-/// **The activity strip** (spec §4): one glyph per area, Settings at the foot.
+/// **The activity strip** (spec §4): one glyph per area, Usage and Settings
+/// at the foot.
 /// Pressing the area the sidebar already shows hides the sidebar; pressing
 /// another shows it with that area.
 class ShellActivityStrip extends ConsumerWidget {
@@ -42,8 +43,10 @@ class ShellActivityStrip extends ConsumerWidget {
           ),
       },
       settingsHint: shellChordLabel<OpenSettingsIntent>(),
+      usageHint: shellChordLabel<OpenUsageIntent>(),
       onSelect: (picked) => toggleShellArea(ref, picked),
       onSettings: () => openSettingsTab(ref),
+      onUsage: () => openUsageTab(ref),
     );
   }
 }
@@ -59,6 +62,8 @@ class ActivityStrip extends StatelessWidget {
     this.badges = const {},
     this.hints = const {},
     this.settingsHint,
+    this.onUsage,
+    this.usageHint,
     super.key,
   });
 
@@ -70,6 +75,11 @@ class ActivityStrip extends StatelessWidget {
   final String? settingsHint;
   final ValueChanged<ShellArea> onSelect;
   final VoidCallback onSettings;
+
+  /// Opens the Usage tab (spec §5). Null leaves its glyph out — a strip
+  /// drawn with no way to open the tab should not offer one.
+  final VoidCallback? onUsage;
+  final String? usageHint;
 
   static IconData iconFor(ShellArea area) => switch (area) {
     ShellArea.sessions => AppIcons.chatCircleDots,
@@ -100,6 +110,16 @@ class ActivityStrip extends StatelessWidget {
               onPressed: () => onSelect(area),
             ),
           const Spacer(),
+          // Above Settings, and like it never marked selected: both open a
+          // tab, and the tab strip already says which tab is in front.
+          if (onUsage case final onUsage?)
+            _StripButton(
+              icon: AppIcons.chartBar,
+              label: 'Usage',
+              hint: usageHint,
+              selected: false,
+              onPressed: onUsage,
+            ),
           _StripButton(
             icon: AppIcons.gearSix,
             label: 'Settings',

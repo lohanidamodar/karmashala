@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_terminal_core/geometry.dart';
 
+import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
@@ -65,6 +66,20 @@ void openSettingsTab(
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
       .openSettingsTab();
+  activateTerminalTab(ref, tabId);
+}
+
+/// Opens the Usage page as a workbench tab (spec §5), or brings the open one
+/// forward. Its own tab rather than a Settings page: it is read, not set.
+/// [accountId] ([usageAccountId]) lands it on that account — an account
+/// card's "Usage details" asks about the account it shows.
+void openUsageTab(WidgetRef ref, {String? accountId}) {
+  if (accountId != null) {
+    ref.read(usageTabSelectionProvider.notifier).selectAccount(accountId);
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openUsageTab();
   activateTerminalTab(ref, tabId);
 }
 

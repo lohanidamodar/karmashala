@@ -28,6 +28,14 @@ const String kDevicePaneId = '${kDocumentPanePrefix}device';
 /// Whether [paneId] is the Devices document.
 bool isDevicePane(String paneId) => paneId == kDevicePaneId;
 
+/// The Usage page as a tab (spec §5): every account's quota over time and
+/// where the tokens went. One, like Settings — it is a view of the accounts,
+/// which the whole app shares, so a second tab would only disagree with it.
+const String kUsagePaneId = '${kDocumentPanePrefix}usage';
+
+/// Whether [paneId] is the Usage document.
+bool isUsagePane(String paneId) => paneId == kUsagePaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';

@@ -110,6 +110,9 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// same page disagreeing with itself.
   String openSettingsTab() => openDocumentTab(kSettingsPaneId);
 
+  /// Usage is one view over every account, so, like Settings, one tab.
+  String openUsageTab() => openDocumentTab(kUsagePaneId);
+
   /// Opens [hostPath] in an editor tab: one tab per file, or two buffers would
   /// disagree about the same bytes.
   String openEditorTab(String hostPath) =>

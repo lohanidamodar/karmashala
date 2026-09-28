@@ -16,6 +16,7 @@ import '../application/usage_accounts.dart';
 import 'agent_logo.dart';
 import 'usage_chip.dart';
 import 'usage_chip_popover.dart';
+import 'usage_tab/usage_tab_state.dart' show usageAccountId;
 
 /// The most one account's chip takes in the toolbar: its mark, the gauge and
 /// both numbers.
@@ -115,6 +116,17 @@ Widget _accountCard(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Flexible(child: _RefreshButton(accountKeys: account.accountKeys)),
+        // Spec §5's "Usage details": this account in the Usage tab, where its
+        // windows have a range and its tokens a breakdown.
+        Flexible(
+          child: TextButton(
+            onPressed: () {
+              onLeave?.call();
+              openUsageTab(ref, accountId: usageAccountId(account));
+            },
+            child: const Text('Usage details', overflow: TextOverflow.ellipsis),
+          ),
+        ),
         Flexible(
           child: TextButton(
             onPressed: () {
@@ -343,9 +355,9 @@ class _UsageGauge extends StatelessWidget {
       dimension: _size,
       child: CustomPaint(
         painter: _RingsPainter(
-          track: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
-            alpha: 0.22,
-          ),
+          track: Theme.of(
+            context,
+          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.22),
           outer: (short.percent / 100, toneOf(short)),
           inner: long == null
               ? null
@@ -394,7 +406,6 @@ class _RingsPainter extends CustomPainter {
   bool shouldRepaint(_RingsPainter old) =>
       old.track != track || old.outer != outer || old.inner != inner;
 }
-
 
 class _MoreChip extends ConsumerStatefulWidget {
   const _MoreChip({required this.accounts});
