@@ -406,6 +406,66 @@ void main() {
     });
   });
 
+  group('the person stopping it', () {
+    test('stops it, and nothing starts it again until Start', () async {
+      final host = await serve();
+      final stops = <bool>[];
+      final starts = <String>[];
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        startServe: (path) async {
+          starts.add(path);
+          await serve();
+          return _ServeProcess(banner());
+        },
+        stopServe: (path, {required force}) async {
+          stops.add(force);
+          await host.kill();
+          return null;
+        },
+      );
+      final supervisor = supervise(access);
+      await supervisor.start();
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+
+      final reading = await supervisor.stopNow();
+      expect(stops, [false]);
+      expect(reading?.isReady, isFalse);
+      expect(supervisor.state.phase, HostSupervisionPhase.stopped);
+      expect(supervisor.state.reason, LocalHostSupervisor.stoppedByPerson);
+
+      // A stop is not a crash: the loss, a redial's nudge and the wait all
+      // leave it stopped.
+      supervisor.hostLost('the lifecycle link to it closed');
+      supervisor.nudge('the data client found no server');
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(starts, isEmpty, reason: 'held stopped');
+      expect(supervisor.state.phase, HostSupervisionPhase.stopped);
+
+      final back = await supervisor.restartNow();
+      expect(back?.isReady, isTrue);
+      expect(starts, hasLength(1));
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+    });
+
+    test('a stop the host refuses leaves it as it was, and says why', () async {
+      await serve();
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        startServe: (path) async => throw StateError('not started here'),
+        stopServe: (path, {required force}) async => 'it holds sessions',
+      );
+      final supervisor = supervise(access);
+      await supervisor.start();
+
+      await supervisor.stopNow();
+      expect(supervisor.state.phase, HostSupervisionPhase.running);
+      expect(supervisor.state.reason, contains('it holds sessions'));
+    });
+  });
+
   group('a host that speaks an older protocol', () {
     Future<_MismatchedHost> mismatched() async {
       final host = await _MismatchedHost.bind(paths.socketPath);
@@ -556,7 +616,11 @@ void main() {
         opener: (columns, rows) async {
           lastRegistry.open(
             'karmashala_local_p1',
-            PtySpawnRequest(argv: const ['/bin/sh'], columns: columns, rows: rows),
+            PtySpawnRequest(
+              argv: const ['/bin/sh'],
+              columns: columns,
+              rows: rows,
+            ),
           );
           return (
             sessionId: 'karmashala_local_p1',

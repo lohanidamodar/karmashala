@@ -154,6 +154,30 @@ class LocalHostSessionAccess implements HostSessionAccess {
     return deployment();
   }
 
+  /// Stops whatever host is running and starts nothing — [force] takes its
+  /// sessions with it. Only on an explicit request from the person (owner,
+  /// 2026-09-28: Stop beside Start, Restart and Check).
+  Future<HostDeployment> stopHost({required bool force}) async {
+    final binary = executable.locate();
+    if (binary == null) return observe();
+    final mismatched =
+        _last?.status == HostDeploymentStatus.protocolMismatch &&
+        (runningOnDisk()?.isEmpty ?? false);
+    final refused = await _stop(binary, force: force || mismatched);
+    forget();
+    if (refused != null) {
+      final now = DateTime.now();
+      return _last = HostDeployment(
+        status: HostDeploymentStatus.cannotStart,
+        observedAt: now,
+        reason: 'Could not stop the running session host: $refused',
+        platform: _platform(now),
+        remotePath: binary.path,
+      );
+    }
+    return observe();
+  }
+
   /// Looks, and starts nothing: reading Settings with the setting off must not
   /// launch a daemon. `unknown` when nothing answers.
   Future<HostDeployment> observe() async {

@@ -6,7 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
-    show HostSupervision, HostSupervisionPhase;
+    show HostSupervision, HostSupervisionPhase, LocalHostSupervisor;
 import '../../ssh/presentation/host_sessions_dialog.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../../terminal/presentation/session_status.dart';
@@ -77,9 +77,13 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
         TextButton(
           key: const ValueKey('session-host-start'),
           onPressed: () => ref.read(localHostStatusProvider.notifier).start(),
-          child: Text(
-            phase == HostSupervisionPhase.stopped ? 'Restart' : 'Restart now',
-          ),
+          child: Text(switch (phase) {
+            // Stopped by the person: starting it is what they left to do.
+            _ when supervision?.reason == LocalHostSupervisor.stoppedByPerson =>
+              'Start',
+            HostSupervisionPhase.stopped => 'Restart',
+            _ => 'Restart now',
+          }),
         ),
       ]);
     }
@@ -94,6 +98,12 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
           key: const ValueKey('session-host-sessions'),
           onPressed: () => HostSessionsDialog.showLocal(context),
           child: const Text('Sessions'),
+        ),
+        // Stop beside Start, Restart and Check (owner, 2026-09-28).
+        TextButton(
+          key: const ValueKey('session-host-stop'),
+          onPressed: () => _stop(reading!),
+          child: const Text('Stop'),
         ),
         restart,
       ]);
@@ -111,6 +121,31 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
       ]);
     }
     return check;
+  }
+
+  /// Stops the host, asking first when it runs sessions: they end with it.
+  Future<void> _stop(HostDeployment reading) async {
+    final held =
+        reading.liveSessionIds ??
+        await ref.read(localHostSessionAccessProvider)?.liveSessionIds();
+    if (!mounted) return;
+    final holdsSome = held == null || held.isNotEmpty;
+    if (holdsSome) {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Stop the session host?',
+        message: held == null
+            ? 'The running host would not say what it holds. Stopping it ends '
+                  'every session it is running, and nothing starts it again '
+                  'until you press Start.'
+            : 'This ends the ${held.length} session(s) it is running, and '
+                  'nothing starts it again until you press Start.',
+        confirmLabel: 'Stop',
+        destructive: true,
+      );
+      if (!confirmed || !mounted) return;
+    }
+    await ref.read(localHostStatusProvider.notifier).stop(force: holdsSome);
   }
 
   /// Ends what the old host holds only when the person says so, by name.

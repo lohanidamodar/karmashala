@@ -168,6 +168,13 @@ class LocalHostSupervisor {
   /// Whether the stop was a crash loop rather than a missing binary.
   var _crashLoop = false;
 
+  /// Whether the person stopped the host. Nothing starts it again — no
+  /// backoff, no slow look, no nudge — until [restartNow].
+  var _heldStopped = false;
+
+  /// Why a supervisor the person stopped says it is stopped.
+  static const stoppedByPerson = 'you stopped it · Start runs it again';
+
   /// When a stopped supervisor last looked, for [nudgeFloor].
   DateTime? _lastLook;
   var _disposed = false;
@@ -233,6 +240,7 @@ class LocalHostSupervisor {
   void nudge(String why) {
     if (_disposed ||
         _busy ||
+        _heldStopped ||
         _state.phase != HostSupervisionPhase.stopped ||
         _crashLoop) {
       return;
@@ -245,7 +253,10 @@ class LocalHostSupervisor {
 
   /// A stopped supervisor's look: start the host if it can be started now.
   Future<void> _look(String why) async {
-    if (_disposed || _busy || _state.phase != HostSupervisionPhase.stopped) {
+    if (_disposed ||
+        _busy ||
+        _heldStopped ||
+        _state.phase != HostSupervisionPhase.stopped) {
       return;
     }
     _lastLook = _now();
@@ -256,6 +267,7 @@ class LocalHostSupervisor {
   /// when one answers — stopped and started. [force] ends what it runs.
   Future<HostDeployment?> restartNow({bool force = false}) async {
     if (_disposed) return null;
+    _heldStopped = false;
     _next?.cancel();
     _attempts = 0;
     _lastOutput = const [];
@@ -282,6 +294,30 @@ class LocalHostSupervisor {
     }
     if (_disposed) return reading;
     _settle(reading ?? _failed('restarting the session host threw'));
+    return reading;
+  }
+
+  /// The person asked: the host is stopped and held stopped — the loss is
+  /// theirs, not a crash to recover from. [force] ends what it runs.
+  Future<HostDeployment?> stopNow({bool force = false}) async {
+    if (_disposed) return null;
+    _heldStopped = true;
+    _next?.cancel();
+    _stable?.cancel();
+    _busy = true;
+    HostDeployment? reading;
+    try {
+      reading = await _measure(() => access.stopHost(force: force));
+    } finally {
+      _busy = false;
+    }
+    if (_disposed) return reading;
+    final refused = reading?.status == HostDeploymentStatus.cannotStart;
+    if (refused) _heldStopped = false;
+    _set(
+      refused ? _state.phase : HostSupervisionPhase.stopped,
+      reason: refused ? reading!.reason : stoppedByPerson,
+    );
     return reading;
   }
 

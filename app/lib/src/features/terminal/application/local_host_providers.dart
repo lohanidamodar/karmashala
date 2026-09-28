@@ -149,6 +149,24 @@ class LocalHostStatusController extends Notifier<HostDeployment?> {
     }
   }
 
+  /// Stops the running host and starts nothing, until the person presses
+  /// Start. [force] ends the sessions it holds, so the caller asks first.
+  Future<void> stop({required bool force}) async {
+    final access = ref.read(localHostSessionAccessProvider);
+    if (access == null || _busy) return;
+    _busy = true;
+    try {
+      final supervisor = ref.read(localHostSupervisorProvider);
+      if (supervisor != null) {
+        state = await supervisor.stopNow(force: force) ?? state;
+        return;
+      }
+      state = await access.stopHost(force: force);
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// Replaces the running host with this app's. [force] ends the sessions it
   /// holds, so the caller asks the person first.
   Future<void> restart({required bool force}) async {
