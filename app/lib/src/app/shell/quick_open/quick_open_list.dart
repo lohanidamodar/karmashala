@@ -5,8 +5,10 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 /// Row geometry for every filtered list in the shell. Fixed, so a list can be
-/// scrolled to a selection it has not laid out yet.
-const double quickOpenRowHeight = 42.0;
+/// scrolled to a selection it has not laid out yet. A 13/18 title over an
+/// 11.5/16 subtitle, with 3px either side: two lines, and no more air than
+/// the compact rows elsewhere (spec §2.4).
+const double quickOpenRowHeight = 40.0;
 
 /// [quickOpenRowHeight] at the reader's text size. The constant is the height at
 /// 1.0; what must stay true is that every row is the *same* height.
@@ -105,12 +107,25 @@ class QuickOpenFrame extends StatelessWidget {
     // desktop inset overflowed the column.
     final height = MediaQuery.sizeOf(context).height;
     final topInset = (height * 0.09).clamp(Insets.lg, 72.0);
+    final tones = SurfaceTones.of(context);
+    // The quick panel floats, so it is one of the few things that keeps a
+    // hairline whatever the Separation setting says (spec §2.2): a raised
+    // tone, a large radius, the floating line and a shadow.
+    final rule = Divider(height: 1, thickness: 1, color: tones.floatingLine);
     return Dialog(
       alignment: Alignment.topCenter,
       insetPadding: EdgeInsets.only(
         top: topInset,
         left: Insets.xl,
         right: Insets.xl,
+      ),
+      backgroundColor: tones.raised,
+      surfaceTintColor: Colors.transparent,
+      elevation: Elevations.dialog,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.lg),
+        side: BorderSide(color: tones.floatingLine),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
@@ -120,12 +135,45 @@ class QuickOpenFrame extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               searchField,
-              const Divider(height: 1),
+              rule,
               Flexible(child: body),
-              const Divider(height: 1),
+              rule,
               footer,
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A key or chord drawn as a keycap: mono, on the selected tone, with the
+/// floating hairline round it. For a shortcut beside a row or a field — a
+/// chord in plain text reads as part of the name.
+class QuickOpenKeyChip extends StatelessWidget {
+  const QuickOpenKeyChip(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tones = SurfaceTones.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: Insets.hair),
+      decoration: BoxDecoration(
+        color: tones.selected,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: tones.floatingLine),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.fade,
+        style: MonoStyles.small.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          height: 16 / 11,
         ),
       ),
     );
@@ -165,12 +213,15 @@ class QuickOpenFooter extends StatelessWidget {
   }
 }
 
-/// The search box above a filtered list.
+/// The search box above a filtered list. Borderless, on the panel's own
+/// raised tone: the whole panel is the field, and the rule under it is the
+/// only edge it needs.
 class QuickOpenSearchField extends StatelessWidget {
   const QuickOpenSearchField({
     required this.controller,
     required this.onChanged,
     required this.hintText,
+    this.shortcut,
     super.key,
   });
 
@@ -178,24 +229,57 @@ class QuickOpenSearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final String hintText;
 
+  /// The chord that opens this list, drawn as a keycap at the field's end so
+  /// the way back in is learned on the way out. Null draws none.
+  final String? shortcut;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Insets.sm),
-    child: TextField(
-      controller: controller,
-      autofocus: true,
-      decoration: InputDecoration(
-        prefixIcon: const Icon(
-          AppIcons.magnifyingGlass,
-          size: Chrome.iconTitle,
-        ),
-        hintText: hintText,
-        border: const OutlineInputBorder(),
-        isDense: true,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    const none = OutlineInputBorder(borderSide: BorderSide.none);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xs,
+        vertical: Insets.xs,
       ),
-      onChanged: onChanged,
-    ),
-  );
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        style: theme.textTheme.bodyLarge?.copyWith(fontSize: 14),
+        decoration: InputDecoration(
+          filled: false,
+          prefixIcon: Icon(
+            AppIcons.magnifyingGlass,
+            size: Chrome.icon,
+            color: muted,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: Chrome.control + Insets.sm,
+            minHeight: Chrome.control,
+          ),
+          suffixIcon: shortcut == null
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(right: Insets.sm),
+                  child: QuickOpenKeyChip(shortcut!),
+                ),
+          suffixIconConstraints: const BoxConstraints(
+            minHeight: Chrome.control,
+          ),
+          hintText: hintText,
+          hintStyle: TextStyle(color: muted),
+          hintMaxLines: 1,
+          border: none,
+          enabledBorder: none,
+          focusedBorder: none,
+          contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+          isDense: true,
+        ),
+        onChanged: onChanged,
+      ),
+    );
+  }
 }
 
 /// One row of a filtered list: a glyph, a title with the matches picked out,
@@ -211,11 +295,16 @@ class QuickOpenRow extends StatelessWidget {
     this.detail,
     this.trailing,
     this.enabled = true,
+    this.detailIsShortcut = false,
     super.key,
   });
 
   final IconData icon;
   final String title;
+
+  /// Whether [detail] is a key chord, drawn as a keycap rather than as a
+  /// muted note — "Ctrl+Shift+N" in plain text reads as part of the title.
+  final bool detailIsShortcut;
 
   /// False draws the row muted: it is listed to say why it cannot be used.
   final bool enabled;
@@ -243,89 +332,103 @@ class QuickOpenRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final muted = scheme.onSurface.withValues(alpha: 0.45);
+    final tones = SurfaceTones.of(context);
+    // Pointer density, always: the palette is a desktop surface, and its row
+    // height is a constant the scroll arithmetic depends on.
+    const density = UiDensity.pointer;
+    final subtle = density.muted(theme);
+    final disabled = scheme.onSurface.withValues(alpha: 0.45);
     final foreground = !enabled
-        ? muted
+        ? disabled
         : selected
         ? scheme.primary
         : scheme.onSurfaceVariant;
+    final baseTitle = density
+        .rowTitle(theme)!
+        .copyWith(fontWeight: FontWeight.w400);
     final titleStyle = enabled
-        ? theme.textTheme.bodyMedium!
-        : theme.textTheme.bodyMedium!.copyWith(color: muted);
+        ? baseTitle.copyWith(color: scheme.onSurface)
+        : baseTitle.copyWith(color: disabled);
+    final radius = BorderRadius.circular(Radii.sm);
     return Semantics(
       selected: selected,
       button: true,
       enabled: enabled,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: quickOpenRowHeightOf(context),
-          // Selection is a wash plus a rule, not a filled bar: the row has to
-          // stay readable and the accent is the only colour in the palette.
-          decoration: BoxDecoration(
-            color: selected ? StateLayers.selected(scheme) : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: selected ? scheme.primary : Colors.transparent,
-                width: 2,
+      // Inset from the panel's edges, so the highlight is a rounded tile on
+      // the raised surface rather than a bar that runs into the border.
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: radius,
+            hoverColor: StateLayers.hover(scheme),
+            child: Container(
+              height: quickOpenRowHeightOf(context),
+              // Selection is the selected tone, one step up the ladder, and
+              // the accent only on the glyph: the row stays readable, and
+              // the accent keeps meaning "this one".
+              decoration: BoxDecoration(
+                color: selected ? tones.selected : Colors.transparent,
+                borderRadius: radius,
               ),
-            ),
-          ),
-          padding: EdgeInsets.only(
-            left: Insets.md,
-            right: trailing == null ? Insets.md : Insets.xs,
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                Icon(icon, size: Chrome.icon, color: foreground),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      HighlightedText(
-                        text: title,
-                        positions: titlePositions,
-                        style: titleStyle,
-                        accent: scheme.primary,
-                      ),
-                      if (subtitle != null)
-                        Text(
-                          subtitle!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+              padding: EdgeInsets.only(
+                left: Insets.sm,
+                right: trailing == null ? Insets.sm : Insets.xs,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    Icon(icon, size: Chrome.icon, color: foreground),
+                    const SizedBox(width: Insets.md),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          HighlightedText(
+                            text: title,
+                            positions: titlePositions,
+                            style: titleStyle,
+                            accent: scheme.primary,
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (detail != null) ...[
-                  const SizedBox(width: Insets.sm),
-                  // A note, not the row's subject: it gives up width before the
-                  // title does, and ends rather than overflowing.
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth * _detailShare,
-                    ),
-                    child: Text(
-                      detail!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                          if (subtitle != null)
+                            Text(
+                              subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: subtle,
+                            ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-                if (trailing != null) ...[
-                  const SizedBox(width: Insets.xs),
-                  trailing!,
-                ],
-              ],
+                    if (detail != null) ...[
+                      const SizedBox(width: Insets.sm),
+                      // A note, not the row's subject: it gives up width
+                      // before the title does, and ends rather than
+                      // overflowing.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth * _detailShare,
+                        ),
+                        child: detailIsShortcut
+                            ? QuickOpenKeyChip(detail!)
+                            : Text(
+                                detail!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: subtle,
+                              ),
+                      ),
+                    ],
+                    if (trailing != null) ...[
+                      const SizedBox(width: Insets.xs),
+                      trailing!,
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

@@ -12,6 +12,7 @@ import '../../../features/git/application/changes_providers.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../shell_shortcuts.dart';
 import 'conversation_hits.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
@@ -615,13 +616,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   Widget build(BuildContext context) {
     final count = _flat.length;
     return QuickOpenFrame(
-      maxWidth: 720,
-      maxHeight: 520,
+      // Wide enough for a path and its shortcut on one row, narrow enough that
+      // the eye does not travel from a title to a chip across the window.
+      maxWidth: 640,
+      maxHeight: 480,
       onKey: _onKey,
       searchField: QuickOpenSearchField(
         controller: _controller,
         onChanged: _onQueryChanged,
-        hintText: 'Go to a session, file or branch — or search what was said',
+        hintText: 'Jump to a session, project, file or command',
+        // Whatever the keymap binds today, so the hint is never a lie.
+        shortcut: shellCommandLabel('quickOpen.show'),
       ),
       body: _flat.isEmpty
           ? _Empty(query: _query)
@@ -675,6 +680,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
             titlePositions: result.titlePositions,
             subtitle: result.item.subtitle,
             detail: result.item.detail,
+            // A command's detail is the chord that runs it (see
+            // `QuickOpenSources._command`); every other group's is a note.
+            detailIsShortcut: result.item.group == QuickOpenGroup.commands,
             enabled: command?.enabled ?? true,
             trailing: dot == null ? null : _SessionDotView(dot: dot),
             selected: index == _selected,
@@ -795,10 +803,15 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Indented to the rows' own inset plus theirs, so the label stands over
+    // the glyphs of the group it names.
     return Container(
       height: quickOpenHeaderHeightOf(context),
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.only(left: Insets.md, top: Insets.xs),
+      alignment: Alignment.bottomLeft,
+      padding: const EdgeInsets.only(
+        left: Insets.xs + Insets.sm,
+        bottom: Insets.xs,
+      ),
       child: Text(
         label.toUpperCase(),
         maxLines: 1,
