@@ -26,11 +26,18 @@ import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
+import 'filter_menu_field.dart';
 import 'new_dialog_section.dart';
 import 'new_session_agent_cards.dart';
 
-/// Where a new session's work lands (spec §5, board N3).
-enum _WorkPlace { checkout, newWorktree, existingWorktree }
+/// Where a new session's work lands (spec §5, board N3). [existing] is an
+/// existing branch — checked out in a new worktree — or an existing worktree,
+/// joined.
+enum _WorkPlace { checkout, newWorktree, existing }
+
+/// The prefixes of an existing-place pick: one choice list holds both kinds.
+const _pickWorktree = 'worktree:';
+const _pickBranch = 'branch:';
 
 /// Whether [name] could be a branch: the refusals of
 /// `git check-ref-format --branch` a person is likely to type, caught before
@@ -92,8 +99,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// The destination's worktrees, read once per destination; null until read.
   List<GitWorktree>? _worktrees;
 
-  /// The existing worktree picked, by path.
-  String? _existingPath;
+  /// The destination's branches, local and remote-tracking, read once per
+  /// destination; null until read, or when the server could not list them —
+  /// then the bases fall back to the branches the worktrees name.
+  List<GitBranchRef>? _branches;
+  bool _branchesRead = false;
+
+  /// The existing branch or worktree picked: [_pickBranch] or [_pickWorktree]
+  /// and its name or path.
+  String? _existingPick;
   bool _external = false;
   SystemTerminal? _terminal;
   bool _busy = false;
@@ -124,9 +138,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   void _afterDestinationChanged() {
     _presence = GitPresence.unknown;
     _worktrees = null;
-    _existingPath = null;
+    _branches = null;
+    _branchesRead = false;
+    _existingPick = null;
     _base = null;
-    if (_place == _WorkPlace.existingWorktree) _place = _WorkPlace.checkout;
+    if (_place == _WorkPlace.existing) _place = _WorkPlace.checkout;
     Future(() async {
       if (!mounted) return;
       final runnable = await _runnable(_destination);
@@ -145,8 +161,36 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     ref.read(checkoutGitPresenceProvider(path).future).then((presence) {
       if (!mounted || _destination?.checkout?.path != path) return;
       setState(() => _presence = presence);
-      if (presence != GitPresence.notARepository) _readWorktrees(path);
+      if (presence != GitPresence.notARepository) {
+        _readWorktrees(path);
+        _readBranches(path);
+      }
     });
+  }
+
+  /// Every branch, for the base a new worktree starts from and the existing
+  /// branch one checks out. Read, not watched, for [_readPresence]'s reason —
+  /// and from the service rather than [checkoutBranchesProvider], which with
+  /// no listener could be disposed while a slow WSL or SSH git still runs.
+  void _readBranches(EnvironmentPath path) {
+    ref
+        .read(worktreeServiceProvider)
+        .branches(path)
+        .then(
+          (listed) {
+            if (!mounted || _destination?.checkout?.path != path) return;
+            setState(() {
+              _branches = listed;
+              _branchesRead = true;
+            });
+          },
+          onError: (Object _) {
+            // A server that predates the listing, or git refusing: the bases
+            // fall back to what the worktree listing names.
+            if (!mounted || _destination?.checkout?.path != path) return;
+            setState(() => _branchesRead = true);
+          },
+        );
   }
 
   /// The worktrees an existing-worktree launch can join, and the branches a new
@@ -174,15 +218,91 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       if (!w.isBare && !_isCheckout(w, checkout)) w,
   ];
 
-  /// Branches a new worktree can start from, as far as the worktree listing
-  /// knows them — there is no branch listing to ask yet.
-  List<String> _baseChoices(Repository? checkout) {
+  /// What a new worktree can start from: the checkout's HEAD (null), then
+  /// every other branch, local before remote-tracking. Without a branch
+  /// listing, the branches the worktree listing names.
+  List<FilterMenuEntry<String?>> _baseChoices(Repository? checkout) {
     final own = _ownBranch(checkout);
-    return {
-      for (final w in _worktrees ?? const <GitWorktree>[])
-        if (w.branch != null && w.branch != own) w.branch!,
-    }.toList();
+    final head = FilterMenuEntry<String?>(
+      value: null,
+      label: own ?? 'Current HEAD',
+      detail: 'What the checkout has out now',
+      icon: AppIcons.gitBranch,
+    );
+    final branches = _branches;
+    if (branches == null) {
+      return [
+        head,
+        for (final name in {
+          for (final w in _worktrees ?? const <GitWorktree>[])
+            if (w.branch != null && w.branch != own) w.branch!,
+        })
+          FilterMenuEntry(value: name, label: name, icon: AppIcons.gitBranch),
+      ];
+    }
+    return [
+      head,
+      for (final b in branches)
+        if (!b.isRemote && !b.isCurrent && b.name != own)
+          FilterMenuEntry(
+            value: b.name,
+            label: b.name,
+            detail: b.upstream == null ? 'Local' : 'Tracks ${b.upstream}',
+            icon: AppIcons.gitBranch,
+          ),
+      for (final b in branches)
+        if (b.isRemote)
+          FilterMenuEntry(
+            value: b.name,
+            label: b.name,
+            detail: 'On ${b.remote}, fetched first',
+            icon: AppIcons.globe,
+          ),
+    ];
   }
+
+  /// Whether [_base] is still among the bases offered.
+  bool _baseListed() =>
+      _baseChoices(_destination?.checkout).any((e) => e.value == _base);
+
+  /// Branches a new worktree can check out: a local branch no worktree has,
+  /// and a remote one with no local branch of its name (checking it out makes
+  /// one). A branch some worktree has is offered as that worktree instead.
+  List<GitBranchRef> _freeBranches() {
+    final branches = _branches ?? const <GitBranchRef>[];
+    final local = {
+      for (final b in branches)
+        if (!b.isRemote) b.name,
+    };
+    return [
+      for (final b in branches)
+        if (b.isRemote
+            ? !local.contains(b.localName)
+            : b.worktree == null && !b.isCurrent)
+          b,
+    ];
+  }
+
+  /// The existing places, worktrees first: each joinable worktree, then each
+  /// branch free to check out in a new one.
+  List<FilterMenuEntry<String?>> _existingChoices(Repository? checkout) => [
+    for (final w in _joinable(checkout))
+      FilterMenuEntry(
+        value: '$_pickWorktree${w.path.path}',
+        label: w.label,
+        detail: 'Join the worktree at ${w.path.path}',
+        icon: AppIcons.folder,
+      ),
+    for (final b in _freeBranches())
+      FilterMenuEntry(
+        value: '$_pickBranch${b.name}',
+        label: b.name,
+        detail: b.isRemote
+            ? 'New worktree on ${b.localName}, tracking ${b.name}'
+            : 'New worktree on this branch',
+        icon: b.isRemote ? AppIcons.globe : AppIcons.gitBranch,
+      ),
+  ];
 
   /// By place, not spelling: `git worktree list` writes `C:/src/x` for the
   /// checkout recorded as `C:\src\x`.
@@ -265,21 +385,37 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     AgentInstallation? installation, {
     required _WorkPlace place,
   }) async {
-    final useWorktree = place == _WorkPlace.newWorktree;
+    final newBranch = place == _WorkPlace.newWorktree;
     final branch = _branchController.text.trim();
-    if (useWorktree && branch.isNotEmpty && !_isBranchName(branch)) {
+    if (newBranch && branch.isNotEmpty && !_isBranchName(branch)) {
       setState(() => _error = '"$branch" is not a branch name git accepts.');
       return;
     }
-    final existing = place != _WorkPlace.existingWorktree
+    // Only a pick still on offer: a branch a worktree took since the dialog
+    // read the listing would otherwise be refused by git, less clearly.
+    final pick = place != _WorkPlace.existing
         ? null
-        : _joinable(
-            _destination?.checkout,
-          ).where((w) => w.path.path == _existingPath).firstOrNull?.path;
-    if (place == _WorkPlace.existingWorktree && existing == null) {
-      setState(() => _error = 'Choose the worktree to work in.');
+        : _existingChoices(_destination?.checkout)
+              .where((e) => e.value == _existingPick)
+              .firstOrNull
+              ?.value;
+    final existing = pick == null || !pick.startsWith(_pickWorktree)
+        ? null
+        : _joinable(_destination?.checkout)
+              .where((w) => w.path.path == pick.substring(_pickWorktree.length))
+              .firstOrNull
+              ?.path;
+    final existingBranch = pick == null || !pick.startsWith(_pickBranch)
+        ? null
+        : pick.substring(_pickBranch.length);
+    if (place == _WorkPlace.existing &&
+        existing == null &&
+        existingBranch == null) {
+      setState(() => _error = 'Choose the branch or worktree to work in.');
       return;
     }
+    // An existing branch is checked out in a worktree made for it.
+    final useWorktree = newBranch || existingBranch != null;
     final repo = _destination?.checkout;
     if (repo == null || installation == null) return;
     final terminal = _terminalFrom(
@@ -322,8 +458,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   ? SessionSurface.external
                   : SessionSurface.pane,
               useWorktree: useWorktree,
-              worktreeBranch: useWorktree && branch.isNotEmpty ? branch : null,
-              worktreeBase: useWorktree ? _base : null,
+              worktreeBranch: newBranch && branch.isNotEmpty ? branch : null,
+              worktreeBase: newBranch && _baseListed() ? _base : null,
+              worktreeExistingBranch: existingBranch,
               existingWorktree: existing,
               targetPaneId: widget.targetPaneId,
               firstMessage: _promptController.text.trim().isEmpty
@@ -442,15 +579,17 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// The three places of board N3, each with a line saying what it means.
   Widget _placeChoice(Repository? checkout) {
     final joinable = _joinable(checkout);
+    final free = _freeBranches();
+    final choices = _existingChoices(checkout);
     final own = _ownBranch(checkout);
-    final listed = _worktrees != null;
+    final listed = _worktrees != null && _branchesRead;
     return RadioGroup<_WorkPlace>(
       groupValue: _place,
       onChanged: (v) {
         if (_busy || v == null) return;
         setState(() {
           _place = v;
-          _existingPath ??= joinable.firstOrNull?.path.path;
+          _existingPick ??= choices.firstOrNull?.value;
         });
       },
       child: Column(
@@ -483,46 +622,34 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           if (_place == _WorkPlace.newWorktree) _newWorktreeFields(checkout),
           RadioListTile<_WorkPlace>(
             key: const ValueKey('new-session-place:existing'),
-            value: _WorkPlace.existingWorktree,
+            value: _WorkPlace.existing,
             dense: true,
             contentPadding: EdgeInsets.zero,
-            enabled: joinable.isNotEmpty,
-            title: const Text('An existing worktree'),
+            enabled: choices.isNotEmpty,
+            title: const Text('An existing branch or worktree'),
             subtitle: Text(
-              !listed
-                  ? 'Looking for worktrees…'
-                  : joinable.isEmpty
-                  ? 'This checkout has no other worktree.'
-                  : 'Pick one of ${joinable.length} '
-                        'worktree${joinable.length == 1 ? '' : 's'}.',
+              choices.isNotEmpty
+                  ? _existingSummary(joinable.length, free.length)
+                  : !listed
+                  ? 'Looking for branches and worktrees…'
+                  : 'Every branch is checked out, and this checkout has no '
+                        'other worktree.',
             ),
           ),
-          if (_place == _WorkPlace.existingWorktree && joinable.isNotEmpty)
+          if (_place == _WorkPlace.existing && choices.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: Insets.xl),
-              child: DropdownButtonFormField<String>(
-                // Keyed by checkout: the field keeps its own value, so a new
-                // destination must start a new field.
+              child: FilterMenuField<String?>(
                 key: ValueKey(
                   'new-session-existing-worktree:${checkout?.path.path}',
                 ),
-                initialValue: _existingPath,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Worktree'),
-                items: [
-                  for (final w in joinable)
-                    DropdownMenuItem(
-                      value: w.path.path,
-                      child: Text(
-                        '${w.label} · ${w.path.path}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() => _existingPath = v),
+                label: 'Branch or worktree',
+                entries: choices,
+                selected: _existingPick,
+                enabled: !_busy,
+                filterHint: 'Filter branches and worktrees',
+                emptyLabel: 'Choose one',
+                onSelected: (v) => setState(() => _existingPick = v),
               ),
             ),
         ],
@@ -530,10 +657,23 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     );
   }
 
+  /// How many of each kind the existing choice holds, in a sentence.
+  static String _existingSummary(int worktrees, int branches) {
+    final join = 'join one of $worktrees worktree${worktrees == 1 ? '' : 's'}';
+    final branch =
+        'check out one of $branches branch${branches == 1 ? '' : 'es'} in a '
+        'new worktree';
+    final said = worktrees > 0 && branches > 0
+        ? '$join, or $branch'
+        : worktrees > 0
+        ? join
+        : branch;
+    return '${said[0].toUpperCase()}${said.substring(1)}.';
+  }
+
   /// The new worktree's branch and what it starts from. Rows of Expanded, not
   /// a LayoutBuilder: the dialog measures intrinsics.
   Widget _newWorktreeFields(Repository? checkout) {
-    final own = _ownBranch(checkout);
     final bases = _baseChoices(checkout);
     return Padding(
       padding: const EdgeInsets.only(left: Insets.xl, bottom: Insets.xs),
@@ -553,31 +693,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           ),
           const SizedBox(width: Insets.sm),
           Expanded(
-            child: DropdownButtonFormField<String?>(
+            child: FilterMenuField<String?>(
               key: ValueKey('new-session-worktree-base:${checkout?.path.path}'),
-              initialValue: bases.contains(_base) ? _base : null,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'From'),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(
-                    own ?? 'Current HEAD',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                for (final b in bases)
-                  DropdownMenuItem<String?>(
-                    value: b,
-                    child: Text(
-                      b,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: _busy ? null : (v) => setState(() => _base = v),
+              label: 'From',
+              entries: bases,
+              // A base no longer listed reads as HEAD, which is what is sent.
+              selected: _baseListed() ? _base : null,
+              enabled: !_busy,
+              filterHint: 'Filter branches',
+              onSelected: (v) => setState(() => _base = v),
             ),
           ),
         ],

@@ -44,6 +44,7 @@ class HostedLaunch {
     this.worktree = false,
     this.worktreeBranch,
     this.worktreeBase,
+    this.worktreeExistingBranch,
     this.resuming,
     this.parentSessionId,
     this.parentLink,
@@ -91,6 +92,10 @@ class HostedLaunch {
 
   /// With [worktree]: what the new branch starts from; null is HEAD.
   final String? worktreeBase;
+
+  /// With [worktree]: an existing branch to check out in the new worktree,
+  /// in place of creating [worktreeBranch] from [worktreeBase].
+  final String? worktreeExistingBranch;
 
   /// The row being continued: its id, its conversation, its directory, its
   /// mode and model are kept (unless named here), and it is marked running.
@@ -295,6 +300,21 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         'A launch cannot both create a worktree and join an existing one.',
       );
     }
+    final existingBranch = launch.worktreeExistingBranch?.trim();
+    if (existingBranch != null && existingBranch.isNotEmpty) {
+      if (!launch.worktree) {
+        throw ArgumentError(
+          'An existing branch is checked out in a new worktree; this launch '
+          'makes none.',
+        );
+      }
+      if (launch.worktreeBranch != null || launch.worktreeBase != null) {
+        throw ArgumentError(
+          'A launch cannot both check out an existing branch and create a '
+          'new one.',
+        );
+      }
+    }
 
     final id = resuming?.id ?? launch.id ?? newId();
     var directory =
@@ -313,8 +333,11 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       final created = await service.create(
         repo: launch.repository.path,
         worktreeName: sessionWorktreeName(id),
-        branch: launch.worktreeBranch ?? sessionBranchName(id),
+        branch: existingBranch != null && existingBranch.isNotEmpty
+            ? existingBranch
+            : launch.worktreeBranch ?? sessionBranchName(id),
         baseRef: launch.worktreeBase,
+        existingBranch: existingBranch != null && existingBranch.isNotEmpty,
         launchesAgent: true,
       );
       directory = created.worktree.path;

@@ -71,6 +71,25 @@ class WorktreeService {
   Future<List<GitWorktree>> list(EnvironmentPath repo) =>
       _gitFor(repo).listWorktrees(repo);
 
+  /// The branches of [repo], local and remote-tracking, each local one naming
+  /// the worktree it is checked out in — what decides whether a new worktree
+  /// can take it or only joining the one that has it can.
+  Future<List<GitBranchRef>> branches(EnvironmentPath repo) async {
+    final git = _gitFor(repo);
+    final (refs, worktrees) = await (
+      git.listBranches(repo),
+      git.listWorktrees(repo),
+    ).wait;
+    final at = {
+      for (final w in worktrees)
+        if (w.branch != null && !w.isBare) w.branch!: w.path,
+    };
+    return [
+      for (final ref in refs)
+        ref.isRemote ? ref : ref.withWorktree(at[ref.name]),
+    ];
+  }
+
   /// Creates a worktree for [repo] on a new [branch], with no agent of its own.
   /// See [create].
   Future<GitWorktree> createForSession({
@@ -95,11 +114,20 @@ class WorktreeService {
   /// tracker is cancelled, and [GitException] when a stage the worktree cannot
   /// exist without fails; either way nothing half-made is left registered, or
   /// the tracker's record says what was left and why.
+  ///
+  /// With [existingBranch], [branch] names a branch that already exists and
+  /// the worktree checks it out rather than creating one; [baseRef] is then
+  /// ignored. A local branch is checked out as it is. A remote-tracking one
+  /// (`origin/x`) with no local `x` gets a local `x` tracking it, which a
+  /// failure removes again; one with a local `x` checks that out. A branch
+  /// already checked out in another worktree is refused before git is asked
+  /// to add anything: git allows it in one place only.
   Future<WorktreeCreated> create({
     required EnvironmentPath repo,
     required String worktreeName,
     required String branch,
     String? baseRef,
+    bool existingBranch = false,
     bool launchesAgent = false,
     WorktreeCreationTracker? tracker,
   }) async {
@@ -116,7 +144,8 @@ class WorktreeService {
         repo: repo,
         path: path,
         branch: branch,
-        baseRef: baseRef,
+        baseRef: existingBranch ? null : baseRef,
+        existingBranch: existingBranch,
         launchesAgent: launchesAgent,
         tracker: t,
       ).run();
@@ -169,9 +198,11 @@ class _Creation {
     required this.path,
     required this.branch,
     required this.baseRef,
+    required this.existingBranch,
     required this.launchesAgent,
     required this.tracker,
-  });
+  }) : _localBranch = branch,
+       _makesBranch = !existingBranch;
 
   final WorktreeService service;
   final ExecutionEnvironment env;
@@ -180,8 +211,22 @@ class _Creation {
   final EnvironmentPath path;
   final String branch;
   final String? baseRef;
+
+  /// Whether [branch] already exists and is checked out, not created.
+  final bool existingBranch;
   final bool launchesAgent;
   final WorktreeCreationTracker tracker;
+
+  /// The local branch the worktree ends up on: [branch], or — for an
+  /// existing remote-tracking `origin/x` — `x`.
+  String _localBranch;
+
+  /// Whether this creation makes [_localBranch], so a failure deletes it. Never
+  /// for an existing local branch: that is somebody's work.
+  bool _makesBranch;
+
+  /// The remote-tracking branch a new local one is made to track.
+  String? _trackRef;
 
   /// Whether git has registered the worktree, so a failure must remove it.
   bool _registered = false;
@@ -248,7 +293,7 @@ class _Creation {
     // After the setup: an index invalidated before the copies land would be
     // re-warmed on a directory that was still filling up.
     service.onCheckoutMoved?.call(path);
-    return GitWorktree(path: path, branch: branch);
+    return GitWorktree(path: path, branch: _localBranch);
   }
 
   void _persist(WorktreeCreationRecord record) {
@@ -284,7 +329,9 @@ class _Creation {
 
   Future<void> _fetch() async {
     await _stopIfCancelled(WorktreeStage.fetch);
-    final base = baseRef;
+    // An existing branch is fetched when it names a remote's, so a worktree on
+    // `origin/x` starts from what the remote has now.
+    final base = existingBranch ? branch : baseRef;
     final slash = base?.indexOf('/') ?? -1;
     String? remote;
     if (base != null && slash > 0) {
@@ -296,7 +343,10 @@ class _Creation {
       _stage(
         WorktreeStage.fetch,
         WorktreeStageState.skipped,
-        detail: base == null
+        detail: existingBranch
+            ? 'Checking out $branch as it is here, so there is nothing to '
+                  'fetch.'
+            : base == null
             ? 'Branching from the checkout\'s own HEAD, so there is nothing '
                   'to fetch.'
             : '"$base" does not name a remote branch, so there is nothing to '
@@ -358,13 +408,35 @@ class _Creation {
       detail: 'Registering the worktree with git.',
     );
     try {
-      await git.addWorktree(
-        repo,
-        worktreePath: path,
-        branch: branch,
-        baseRef: baseRef,
-        checkout: false,
-      );
+      if (existingBranch) {
+        await _resolveExisting();
+        if (_makesBranch) {
+          // A new local branch on the remote's, tracking it (git's default
+          // for a remote-tracking start point).
+          await git.addWorktree(
+            repo,
+            worktreePath: path,
+            branch: _localBranch,
+            baseRef: _trackRef,
+            checkout: false,
+          );
+        } else {
+          await git.addWorktreeOnBranch(
+            repo,
+            worktreePath: path,
+            branch: _localBranch,
+            checkout: false,
+          );
+        }
+      } else {
+        await git.addWorktree(
+          repo,
+          worktreePath: path,
+          branch: branch,
+          baseRef: baseRef,
+          checkout: false,
+        );
+      }
     } on Object catch (error) {
       // Nothing was registered: git refused before writing, in its own words.
       _stage(
@@ -408,6 +480,40 @@ class _Creation {
       );
     }
     _stage(WorktreeStage.checkout, WorktreeStageState.done);
+  }
+
+  /// Settles which local branch an existing-branch creation checks out, and
+  /// refuses one another worktree has — in words that say where, rather than
+  /// git's "already used by worktree".
+  Future<void> _resolveExisting() async {
+    String? local;
+    if (await git.revParse(repo, 'refs/heads/$branch') != null) {
+      local = branch;
+    } else {
+      final slash = branch.indexOf('/');
+      if (slash > 0 &&
+          await git.revParse(repo, 'refs/remotes/$branch') != null) {
+        local = branch.substring(slash + 1);
+        if (await git.revParse(repo, 'refs/heads/$local') == null) {
+          _trackRef = branch;
+          _makesBranch = true;
+        }
+      }
+    }
+    if (local == null) {
+      throw GitException('"$branch" is not a branch of this repository.');
+    }
+    _localBranch = local;
+    if (_makesBranch) return;
+    for (final w in await git.listWorktrees(repo)) {
+      if (w.branch == local) {
+        throw GitException(
+          '$local is already checked out at ${w.path.path}, and git lets a '
+          'branch be checked out in one place only. Join that worktree '
+          'instead, or pick another branch.',
+        );
+      }
+    }
   }
 
   // --- submodules ----------------------------------------------------------
@@ -641,6 +747,16 @@ class _Creation {
     } on Object {
       // The removal above is what is reported; a prune that fails leaves
       // nothing that removal did not already name.
+    }
+    final branch = _localBranch;
+    if (!_makesBranch) {
+      // An existing branch is not this creation's to delete.
+      service.onCheckoutMoved?.call(path);
+      return left.isEmpty
+          ? 'Removed the half-made worktree at ${path.path}; the branch '
+                '$branch is kept.'
+          : 'Could not remove ${left.join(', or ')}. Remove it with '
+                '`git worktree remove --force ${path.path}`.';
     }
     // Only once the worktree is gone: git will not delete a checked-out branch.
     if (left.isEmpty) {

@@ -60,6 +60,7 @@ class SessionLaunchRequest {
     this.useWorktree = false,
     this.worktreeBranch,
     this.worktreeBase,
+    this.worktreeExistingBranch,
     this.existingWorktree,
     this.workingDirectory,
     this.additionalRepositories = const [],
@@ -100,6 +101,12 @@ class SessionLaunchRequest {
 
   /// With [useWorktree]: what [worktreeBranch] starts from; null is HEAD.
   final String? worktreeBase;
+
+  /// With [useWorktree]: a branch that already exists — local, or
+  /// remote-tracking — for the new worktree to check out, rather than creating
+  /// [worktreeBranch] from [worktreeBase]. Refused when another worktree has
+  /// it checked out: that one is joined through [existingWorktree] instead.
+  final String? worktreeExistingBranch;
 
   /// Run in a worktree that already exists rather than creating one — what a
   /// handoff on the same branch needs. Mutually exclusive with [useWorktree].
@@ -175,6 +182,7 @@ class SessionLaunchRequest {
     useWorktree: useWorktree,
     worktreeBranch: worktreeBranch,
     worktreeBase: worktreeBase,
+    worktreeExistingBranch: worktreeExistingBranch,
     existingWorktree: existingWorktree,
     workingDirectory: workingDirectory,
     additionalRepositories: additionalRepositories,

@@ -26,6 +26,7 @@ import 'package:karmashala_git/git.dart'
         AheadBehind,
         FileChange,
         FileDiffStat,
+        GitBranchRef,
         GitCommit,
         GitPresence,
         GitWorktree,

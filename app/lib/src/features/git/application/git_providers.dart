@@ -29,6 +29,11 @@ class WorktreesClient {
   /// The worktrees of [repo], the main one first.
   Future<List<GitWorktree>> list(EnvironmentPath repo) => _git.worktreesOf(repo);
 
+  /// The branches of [repo], local and remote-tracking, each local one naming
+  /// the worktree that has it checked out.
+  Future<List<GitBranchRef>> branches(EnvironmentPath repo) =>
+      _git.branchesOf(repo);
+
   /// Makes a worktree in stages, told on [tracker] as they move, and
   /// published to [worktreeCreationsProvider] while it runs. With
   /// [launchesAgent] the agent stage is the caller's to settle on the tracker.
@@ -90,6 +95,14 @@ final worktreeServiceProvider = Provider<WorktreesClient>(
     showSetup: (paneId) => showSetupRun(ref, paneId),
   ),
 );
+
+/// The branches of a checkout, read again whenever the checkout is touched —
+/// a worktree made or removed moves which branches are free to check out.
+final checkoutBranchesProvider = FutureProvider.autoDispose
+    .family<List<GitBranchRef>, EnvironmentPath>((ref, checkout) {
+      ref.watchCheckout(checkout);
+      return ref.read(worktreeServiceProvider).branches(checkout);
+    });
 
 /// The worktree creations in flight, for a surface that did not start one.
 final worktreeCreationsProvider = Provider<WorktreeCreations>(

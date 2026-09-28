@@ -22,6 +22,7 @@ export 'src/git/data/worktree_copier.dart';
 export 'src/git/domain/diff_line.dart';
 export 'src/git/domain/diff_stat.dart';
 export 'src/git/domain/file_change.dart';
+export 'src/git/domain/git_branch_ref.dart';
 export 'src/git/domain/git_commit.dart';
 export 'src/git/domain/git_presence.dart';
 export 'src/git/domain/git_worktree.dart';

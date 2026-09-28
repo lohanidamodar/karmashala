@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
+import '../domain/git_branch_ref.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
 import '../domain/working_tree_status.dart';
@@ -94,6 +95,43 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
   }
   flush();
   return worktrees;
+}
+
+/// What [GitService.listBranches] asks `for-each-ref` to print per ref, tab
+/// separated: a ref name can hold no control character, so a tab never splits
+/// one.
+const String kBranchRefFormat =
+    '%(refname)%09%(HEAD)%09%(upstream:short)';
+
+/// Parses `git for-each-ref --format=<kBranchRefFormat>` over `refs/heads` and
+/// `refs/remotes`. A remote's symbolic `HEAD` (`origin/HEAD`) is not a branch
+/// anyone can pick, so it is left out.
+List<GitBranchRef> parseBranchRefs(String output) {
+  final refs = <GitBranchRef>[];
+  for (final raw in output.split(RegExp(r'[\r\n]'))) {
+    if (raw.trim().isEmpty) continue;
+    final fields = raw.split('\t');
+    final refname = fields[0].trim();
+    final current = fields.length > 1 && fields[1].trim() == '*';
+    final upstream = fields.length > 2 && fields[2].trim().isNotEmpty
+        ? fields[2].trim()
+        : null;
+    if (refname.startsWith('refs/heads/')) {
+      refs.add(
+        GitBranchRef(
+          name: refname.substring('refs/heads/'.length),
+          isCurrent: current,
+          upstream: upstream,
+        ),
+      );
+    } else if (refname.startsWith('refs/remotes/')) {
+      final short = refname.substring('refs/remotes/'.length);
+      final slash = short.indexOf('/');
+      if (slash <= 0 || short.endsWith('/HEAD')) continue;
+      refs.add(GitBranchRef(name: short, remote: short.substring(0, slash)));
+    }
+  }
+  return refs;
 }
 
 /// The directory for a session worktree of [repo]: a sibling
@@ -771,6 +809,48 @@ class GitService {
       throw GitException('git worktree add failed: ${result.stderr.trim()}');
     }
     return GitWorktree(path: worktreePath, branch: branch);
+  }
+
+  /// Adds a worktree at [worktreePath] on local [branch], which already
+  /// exists — `git worktree add <path> <branch>`, no `-b`. Git refuses a
+  /// branch checked out in another worktree, in its own words.
+  ///
+  /// [checkout] as in [addWorktree].
+  Future<GitWorktree> addWorktreeOnBranch(
+    EnvironmentPath repo, {
+    required EnvironmentPath worktreePath,
+    required String branch,
+    bool checkout = true,
+  }) async {
+    final result = await _git(repo, [
+      'worktree',
+      'add',
+      if (!checkout) '--no-checkout',
+      worktreePath.path,
+      branch,
+    ]);
+    if (!result.ok) {
+      throw GitException('git worktree add failed: ${result.stderr.trim()}');
+    }
+    return GitWorktree(path: worktreePath, branch: branch);
+  }
+
+  /// The local and remote-tracking branches of [repo], the most recently
+  /// committed to first; the one checked out is [GitBranchRef.isCurrent].
+  /// Where each is checked out is not git's `for-each-ref` to say on every
+  /// version — `WorktreeService.branches` joins that from the worktree list.
+  Future<List<GitBranchRef>> listBranches(EnvironmentPath repo) async {
+    final result = await _git(repo, [
+      'for-each-ref',
+      '--sort=-committerdate',
+      '--format=$kBranchRefFormat',
+      'refs/heads',
+      'refs/remotes',
+    ]);
+    if (!result.ok) {
+      throw GitException('git for-each-ref failed: ${result.stderr.trim()}');
+    }
+    return parseBranchRefs(result.stdout);
   }
 
   /// Runs `git -C [directory] [args]` as a stream, handing each output line to

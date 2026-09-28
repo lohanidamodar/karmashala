@@ -29,6 +29,7 @@ final class SessionStartSpec {
     this.worktree = false,
     this.worktreeBranch,
     this.worktreeBase,
+    this.worktreeExistingBranch,
     this.existingWorktree,
     this.workingDirectory,
     this.additionalRepositoryIds = const [],
@@ -67,6 +68,11 @@ final class SessionStartSpec {
 
   /// With [worktree]: what [worktreeBranch] starts from; null is HEAD.
   final String? worktreeBase;
+
+  /// With [worktree]: an existing branch the new worktree checks out, in
+  /// place of creating [worktreeBranch] from [worktreeBase]. A server that
+  /// predates it ignores it and makes a session-named branch instead.
+  final String? worktreeExistingBranch;
 
   /// A worktree that already exists, joined rather than created.
   final EnvironmentPath? existingWorktree;
@@ -110,6 +116,7 @@ final class SessionStartSpec {
     'worktree': worktree,
     'worktreeBranch': ?worktreeBranch,
     'worktreeBase': ?worktreeBase,
+    'worktreeExistingBranch': ?worktreeExistingBranch,
     if (existingWorktree != null)
       'existingWorktree': environmentPathToJson(existingWorktree!),
     if (workingDirectory != null)
@@ -157,6 +164,7 @@ final class SessionStartSpec {
       worktree: json['worktree'] == true,
       worktreeBranch: text('worktreeBranch'),
       worktreeBase: text('worktreeBase'),
+      worktreeExistingBranch: text('worktreeExistingBranch'),
       existingWorktree: json['existingWorktree'] == null
           ? null
           : environmentPathFromJson(json['existingWorktree']),

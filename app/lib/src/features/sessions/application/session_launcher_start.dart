@@ -50,6 +50,7 @@ extension SessionStartVerbs on SessionLauncher {
             worktree: request.useWorktree,
             worktreeBranch: request.worktreeBranch,
             worktreeBase: request.worktreeBase,
+            worktreeExistingBranch: request.worktreeExistingBranch,
             existingWorktree: request.existingWorktree,
             workingDirectory: request.workingDirectory,
             additionalRepositoryIds: [

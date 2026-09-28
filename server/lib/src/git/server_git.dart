@@ -267,6 +267,11 @@ class ServerGit implements GitWork {
         WorktreesOf(:final checkout) => worktrees.list(
           checkouts.pathOf(checkout),
         ),
+        // Through the worktree service, not a plain read: which worktree has
+        // each branch is half of the answer.
+        GitBranches(:final checkout) => worktrees.branches(
+          checkouts.pathOf(checkout),
+        ),
         final WorktreeCreate r => creations.create(
           checkouts.pathOf(r.checkout),
           r,

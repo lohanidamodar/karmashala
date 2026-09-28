@@ -264,6 +264,11 @@ class GitData {
   Future<List<GitWorktree>> worktreesOf(EnvironmentPath repo) =>
       _ask(WorktreesOf(_at(repo)));
 
+  /// Every local and remote-tracking branch of [repo], the most recently
+  /// committed to first, each local one naming the worktree it is out in.
+  Future<List<GitBranchRef>> branchesOf(EnvironmentPath repo) =>
+      _ask(GitBranches(_at(repo)));
+
   /// Worktree-or-not, branch and owner of recorded checkouts [ids].
   Future<Map<String, CheckoutLabel>> labels(List<String> ids) =>
       _ask(WorktreeLabels(ids));

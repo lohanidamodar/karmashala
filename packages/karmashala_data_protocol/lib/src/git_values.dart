@@ -158,6 +158,25 @@ GitWorktree gitWorktreeFromJson(Map<String, Object?> json) => GitWorktree(
   isBare: json['bare'] == true,
 );
 
+Map<String, Object?> gitBranchRefToJson(GitBranchRef branch) => {
+  'name': branch.name,
+  'remote': ?branch.remote,
+  if (branch.isCurrent) 'current': true,
+  'upstream': ?branch.upstream,
+  if (branch.worktree case final worktree?)
+    'worktree': environmentPathToJson(worktree),
+};
+
+GitBranchRef gitBranchRefFromJson(Map<String, Object?> json) => GitBranchRef(
+  name: json['name']! as String,
+  remote: json['remote'] as String?,
+  isCurrent: json['current'] == true,
+  upstream: json['upstream'] as String?,
+  worktree: json['worktree'] == null
+      ? null
+      : environmentPathFromJson(json['worktree']),
+);
+
 Map<String, Object?> repositoryOriginToJson(RepositoryOrigin origin) => {
   'url': ?origin.url,
   'head': ?origin.head,

@@ -283,6 +283,7 @@ class ServerSessionLauncher {
         worktree: spec.worktree,
         worktreeBranch: spec.worktreeBranch,
         worktreeBase: spec.worktreeBase,
+        worktreeExistingBranch: spec.worktreeExistingBranch,
         existingWorktree: spec.existingWorktree,
 
         workingDirectory: workingDirectory,

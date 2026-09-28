@@ -28,6 +28,7 @@ DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
       ),
       GitLog.name => GitLog(args._checkout(), limit: args.integer('limit')),
       GitBranch.name => GitBranch(args._checkout()),
+      GitBranches.name => GitBranches(args._checkout()),
       GitHead.name => GitHead(args._checkout()),
       GitRevParse.name => GitRevParse(args._checkout(), args.string('rev')),
       GitAheadBehind.name => GitAheadBehind(
@@ -342,6 +343,31 @@ final class GitBranch extends _CheckoutMaybeString {
 
   @override
   String get kind => name;
+}
+
+/// Every local and remote-tracking branch, the most recently committed to
+/// first: the one checked out marked, each local one naming the worktree it
+/// is checked out in. What a new worktree's base, or the existing branch it
+/// checks out, is picked from. A server that predates it refuses the kind, and
+/// a client falls back to the branches its worktree listing names.
+final class GitBranches extends CheckoutRequest<List<GitBranchRef>> {
+  const GitBranches(super.checkout);
+
+  static const String name = 'git.branches';
+
+  @override
+  String get kind => name;
+
+  @override
+  Object? resultToJson(List<GitBranchRef> result) => [
+    for (final branch in result) gitBranchRefToJson(branch),
+  ];
+
+  @override
+  List<GitBranchRef> resultFromJson(Object? json) => _decode(
+    kind,
+    () => [for (final item in _objects(json, kind)) gitBranchRefFromJson(item)],
+  );
 }
 
 /// What the checkout's `HEAD` file names — its branch, or a short sha when

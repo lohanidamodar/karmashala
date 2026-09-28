@@ -254,6 +254,9 @@ class FakeGitWork {
       if (!identical(ran, unhandled)) return ran;
     }
     switch (r) {
+      // No branches recorded: the dialog falls back to the worktree list.
+      case GitBranches():
+        return const <Object>[];
       case GitStatusOf():
         return statuses[c] ?? const WorkingTreeStatus();
       case GitChangesOf():
