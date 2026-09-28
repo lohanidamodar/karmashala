@@ -799,12 +799,24 @@ List<String> monoFallbackFor(TargetPlatform platform) => switch (platform) {
   TargetPlatform.android || TargetPlatform.fuchsia => const ['monospace'],
 };
 
-/// The ledger hand on this platform. Set it with [kMonoFallback] beside it.
-String get kMonoFamily => monoFamilyFor(defaultTargetPlatform);
-List<String> get kMonoFallback => monoFallbackFor(defaultTargetPlatform);
+/// The bundled ledger hand, JetBrains Mono (SIL OFL), declared in this
+/// package's pubspec: every machine draws the same figures. A package font is
+/// named with its package prefix.
+const String kBundledMonoFamily = 'packages/karmashala_ui/JetBrainsMono';
+
+/// The bundled UI face, Geist (SIL OFL).
+const String kBundledSansFamily = 'packages/karmashala_ui/Geist';
+
+/// The ledger hand. Set it with [kMonoFallback] beside it: the platform's own
+/// face follows the bundled one, for a glyph JetBrains Mono does not carry.
+String get kMonoFamily => kBundledMonoFamily;
+List<String> get kMonoFallback => [
+  monoFamilyFor(defaultTargetPlatform),
+  ...monoFallbackFor(defaultTargetPlatform),
+];
 
 /// The UI sans on Linux, where the system default varies by distribution.
-/// Elsewhere the platform's own UI font is used as it is.
+/// Elsewhere the platform's own UI font follows Geist as it is.
 List<String>? uiSansFallbackFor(TargetPlatform platform) =>
     platform == TargetPlatform.linux
     ? const ['Inter', 'Cantarell', 'Noto Sans']

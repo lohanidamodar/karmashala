@@ -10,6 +10,7 @@ import '../features/terminal/presentation/session_host_banner.dart';
 import 'shell/app_shell.dart';
 import 'shell/native_menus.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart' show AppearanceOptions;
 
 /// Root application widget: theming and the desktop shell. The `ProviderScope`
 /// is installed in `main.dart`, with the database override.
@@ -28,6 +29,11 @@ class KarmashalaApp extends ConsumerWidget {
     final uiTextScale = ref.watch(
       settingsControllerProvider.select((s) => s.uiTextScale),
     );
+    final appearance = ref.watch(
+      settingsControllerProvider.select(
+        (s) => AppearanceOptions(accent: s.accent, separation: s.separation),
+      ),
+    );
     final probe = ref.watch(probeModeProvider);
     return MaterialApp(
       title: probe.enabled ? 'Karmashala — PROBE' : 'Karmashala',
@@ -38,8 +44,12 @@ class KarmashalaApp extends ConsumerWidget {
         probe: probe,
         child: UiTextScale(scale: uiTextScale, child: child!),
       ),
-      theme: AppTheme.light().copyWith(visualDensity: density),
-      darkTheme: AppTheme.dark().copyWith(visualDensity: density),
+      theme: AppTheme.light(
+        options: appearance,
+      ).copyWith(visualDensity: density),
+      darkTheme: AppTheme.dark(
+        options: appearance,
+      ).copyWith(visualDensity: density),
       themeMode: switch (themeMode) {
         AppThemeMode.system => ThemeMode.system,
         AppThemeMode.light => ThemeMode.light,

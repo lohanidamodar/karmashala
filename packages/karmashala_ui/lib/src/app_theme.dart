@@ -1,100 +1,126 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
+import 'appearance.dart';
 import 'design_tokens.dart';
 
 /// A neutral desktop chrome with one accent. Written out rather than seeded:
 /// `fromSeed` tints every surface, which a neutral ramp must not do.
+///
+/// The Material roles sit on the tone ladder of the UI overhaul (spec §3):
+/// `surface` is the window, `surfaceContainerLowest` the terminal, then the
+/// sidebar, chrome, raised, selected steps. [SurfaceTones] names the same
+/// steps for the shell's regions.
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light() => _build(Brightness.light);
+  static ThemeData light({
+    AppearanceOptions options = const AppearanceOptions(),
+  }) => _build(Brightness.light, options);
 
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData dark({
+    AppearanceOptions options = const AppearanceOptions(),
+  }) => _build(Brightness.dark, options);
 
-  static ColorScheme _scheme(Brightness brightness) {
+  static ColorScheme _scheme(Brightness brightness, AppearanceOptions options) {
+    final accent = options.accent.forBrightness(brightness);
+    final borders = options.separation == SurfaceSeparation.borders;
     if (brightness == Brightness.light) {
-      const accent = AppColors.accentLight;
-      return const ColorScheme(
+      return ColorScheme(
         brightness: Brightness.light,
         primary: accent,
         onPrimary: Colors.white,
-        primaryContainer: Color(0xFFDCE6FB),
-        onPrimaryContainer: Color(0xFF10305F),
-        secondary: AppColors.lightOnVariant,
+        primaryContainer: Color.alphaBlend(
+          accent.withValues(alpha: 0.14),
+          const Color(0xFFFBFBFA),
+        ),
+        onPrimaryContainer: const Color(0xFF10203F),
+        secondary: const Color(0xFF6B6B73),
         onSecondary: Colors.white,
-        secondaryContainer: AppColors.lightHigh,
-        onSecondaryContainer: AppColors.lightOn,
+        secondaryContainer: const Color(0xFFE9E9E6),
+        onSecondaryContainer: const Color(0xFF1D1D20),
         tertiary: accent,
         onTertiary: Colors.white,
-        tertiaryContainer: Color(0xFFDCE6FB),
-        onTertiaryContainer: Color(0xFF10305F),
+        tertiaryContainer: Color.alphaBlend(
+          accent.withValues(alpha: 0.14),
+          const Color(0xFFFBFBFA),
+        ),
+        onTertiaryContainer: const Color(0xFF10203F),
         error: AppColors.dangerLight,
         onError: Colors.white,
-        errorContainer: Color(0xFFF9DEDC),
-        onErrorContainer: Color(0xFF410E0B),
-        surface: AppColors.lightSurface,
-        onSurface: AppColors.lightOn,
-        onSurfaceVariant: AppColors.lightOnVariant,
-        surfaceContainerLowest: AppColors.lightLowest,
-        surfaceContainerLow: AppColors.lightLow,
-        surfaceContainer: AppColors.lightContainer,
-        surfaceContainerHigh: AppColors.lightHigh,
-        surfaceContainerHighest: AppColors.lightHighest,
+        errorContainer: const Color(0xFFF9DEDC),
+        onErrorContainer: const Color(0xFF410E0B),
+        surface: const Color(0xFFFBFBFA),
+        onSurface: const Color(0xFF1D1D20),
+        onSurfaceVariant: const Color(0xFF6B6B73),
+        surfaceContainerLowest: const Color(0xFFFFFFFF),
+        surfaceContainerLow: const Color(0xFFF5F5F3),
+        surfaceContainer: const Color(0xFFEEEEEB),
+        surfaceContainerHigh: const Color(0xFFE9E9E6),
+        surfaceContainerHighest: const Color(0xFFDCDCD8),
         surfaceTint: accent,
-        outline: AppColors.lightOutline,
-        outlineVariant: AppColors.lightOutlineVariant,
-        inverseSurface: Color(0xFF2B2B31),
-        onInverseSurface: Color(0xFFF2F2F4),
-        inversePrimary: AppColors.accentDark,
+        outline: const Color(0xFF9A9AA2),
+        outlineVariant: borders
+            ? const Color(0xFFDCDCD8)
+            : const Color(0xFFE9E9E6),
+        inverseSurface: const Color(0xFF2B2B31),
+        onInverseSurface: const Color(0xFFF2F2F4),
+        inversePrimary: options.accent.onDark,
         shadow: Colors.black,
         scrim: Colors.black,
       );
     }
-    const accent = AppColors.accentDark;
-    return const ColorScheme(
+    return ColorScheme(
       brightness: Brightness.dark,
       primary: accent,
-      onPrimary: Color(0xFF0B1B36),
-      primaryContainer: Color(0xFF22365C),
-      onPrimaryContainer: Color(0xFFD7E3FF),
-      secondary: AppColors.darkOnVariant,
-      onSecondary: Color(0xFF14141A),
-      secondaryContainer: AppColors.darkHigh,
-      onSecondaryContainer: AppColors.darkOn,
+      onPrimary: const Color(0xFF0E0E10),
+      primaryContainer: Color.alphaBlend(
+        accent.withValues(alpha: 0.22),
+        const Color(0xFF0E0E10),
+      ),
+      onPrimaryContainer: const Color(0xFFE3EAFF),
+      secondary: const Color(0xFF8A8A93),
+      onSecondary: const Color(0xFF0E0E10),
+      secondaryContainer: const Color(0xFF1F1F24),
+      onSecondaryContainer: const Color(0xFFE7E7EA),
       tertiary: accent,
-      onTertiary: Color(0xFF0B1B36),
-      tertiaryContainer: Color(0xFF22365C),
-      onTertiaryContainer: Color(0xFFD7E3FF),
+      onTertiary: const Color(0xFF0E0E10),
+      tertiaryContainer: Color.alphaBlend(
+        accent.withValues(alpha: 0.22),
+        const Color(0xFF0E0E10),
+      ),
+      onTertiaryContainer: const Color(0xFFE3EAFF),
       error: AppColors.dangerDark,
-      onError: Color(0xFF3B0906),
-      errorContainer: Color(0xFF62211C),
-      onErrorContainer: Color(0xFFFFDAD6),
-      surface: AppColors.darkSurface,
-      onSurface: AppColors.darkOn,
-      onSurfaceVariant: AppColors.darkOnVariant,
-      surfaceContainerLowest: AppColors.darkLowest,
-      surfaceContainerLow: AppColors.darkLow,
-      surfaceContainer: AppColors.darkContainer,
-      surfaceContainerHigh: AppColors.darkHigh,
-      surfaceContainerHighest: AppColors.darkHighest,
+      onError: const Color(0xFF3B0906),
+      errorContainer: const Color(0xFF62211C),
+      onErrorContainer: const Color(0xFFFFDAD6),
+      surface: const Color(0xFF0E0E10),
+      onSurface: const Color(0xFFE7E7EA),
+      onSurfaceVariant: const Color(0xFF8A8A93),
+      surfaceContainerLowest: const Color(0xFF0C0C0E),
+      surfaceContainerLow: const Color(0xFF121215),
+      surfaceContainer: const Color(0xFF141417),
+      surfaceContainerHigh: const Color(0xFF17171B),
+      surfaceContainerHighest: const Color(0xFF1F1F24),
       surfaceTint: accent,
-      outline: AppColors.darkOutline,
-      outlineVariant: AppColors.darkOutlineVariant,
-      inverseSurface: Color(0xFFE4E4E9),
-      onInverseSurface: Color(0xFF1B1B1F),
-      inversePrimary: AppColors.accentLight,
+      outline: const Color(0xFF5F5F68),
+      outlineVariant: borders
+          ? const Color(0xFF26262C)
+          : const Color(0xFF1A1A1F),
+      inverseSurface: const Color(0xFFE7E7EA),
+      onInverseSurface: const Color(0xFF1D1D20),
+      inversePrimary: options.accent.onLight,
       shadow: Colors.black,
       scrim: Colors.black,
     );
   }
 
-  static ThemeData _build(Brightness brightness) {
-    final scheme = _scheme(brightness);
+  static ThemeData _build(Brightness brightness, AppearanceOptions options) {
+    final scheme = _scheme(brightness, options);
     final sansFallback = uiSansFallbackFor(defaultTargetPlatform);
-    final text = sansFallback == null
-        ? _textTheme(scheme)
-        : _textTheme(scheme).apply(fontFamilyFallback: sansFallback);
+    final text = _textTheme(
+      scheme,
+    ).apply(fontFamily: kBundledSansFamily, fontFamilyFallback: sansFallback);
 
     return ThemeData(
       useMaterial3: true,
@@ -104,9 +130,12 @@ class AppTheme {
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       scaffoldBackgroundColor: scheme.surface,
       textTheme: text,
-      fontFamily: null,
+      fontFamily: kBundledSansFamily,
       fontFamilyFallback: sansFallback,
-      extensions: [SemanticColors.forBrightness(brightness)],
+      extensions: [
+        SemanticColors.forBrightness(brightness),
+        SurfaceTones.forBrightness(brightness, separation: options.separation),
+      ],
       // A neutral chrome has no business tinting elevated surfaces towards the
       // accent; the ramp already says how high a surface is.
       applyElevationOverlayColor: false,

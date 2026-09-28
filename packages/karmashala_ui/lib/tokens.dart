@@ -4,3 +4,5 @@
 library;
 
 export 'src/design_tokens.dart';
+
+export 'src/appearance.dart';

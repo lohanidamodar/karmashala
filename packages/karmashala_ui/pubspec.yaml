@@ -54,3 +54,30 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   lints: ^6.1.0
+
+# The interface and code faces, bundled so every machine draws the same:
+# Geist for the UI, JetBrains Mono for terminals, code, paths and figures.
+# Both SIL OFL 1.1; the licences sit beside the files. Static weights, because
+# a single variable file renders every weight at its default instance.
+flutter:
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: fonts/Geist-Regular.ttf
+          weight: 400
+        - asset: fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Geist-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: fonts/JetBrainsMono-SemiBold.ttf
+          weight: 600
+        - asset: fonts/JetBrainsMono-Bold.ttf
+          weight: 700

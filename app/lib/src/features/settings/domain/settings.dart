@@ -1,5 +1,6 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_devices/devices.dart';
+import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
 import 'editor_settings.dart';
@@ -71,6 +72,8 @@ class Settings {
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
+    this.accent = AppAccent.blue,
+    this.separation = SurfaceSeparation.tones,
     this.editorWordWrap = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
@@ -172,6 +175,12 @@ class Settings {
   final double detailSidebarWidth;
 
   final bool compactDensity;
+
+  /// The accent selection, focus and the primary action wear (Appearance).
+  final AppAccent accent;
+
+  /// Whether regions are told apart by tone alone or with hairlines too.
+  final SurfaceSeparation separation;
 
   /// Soft-wrap long lines in the in-app editor. Off by default, and the line
   /// numbers go with it: the gutter paints at a fixed row height, so a wrapped
@@ -345,6 +354,8 @@ class Settings {
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
+    AppAccent? accent,
+    SurfaceSeparation? separation,
     bool? editorWordWrap,
     EditorAutoSave? editorAutoSave,
     int? editorAutoSaveDelayMs,
@@ -414,6 +425,8 @@ class Settings {
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
+    accent: accent ?? this.accent,
+    separation: separation ?? this.separation,
     editorWordWrap: editorWordWrap ?? this.editorWordWrap,
     editorAutoSave: editorAutoSave ?? this.editorAutoSave,
     editorAutoSaveDelayMs: editorAutoSaveDelayMs ?? this.editorAutoSaveDelayMs,
@@ -519,6 +532,8 @@ class Settings {
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
+    'accent': accent.name,
+    'separation': separation.name,
     'editorWordWrap': editorWordWrap,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
@@ -656,6 +671,8 @@ class Settings {
       compactDensity: json['compactDensity'] is bool
           ? json['compactDensity'] as bool
           : true,
+      accent: AppAccent.fromName(json['accent'] as String?),
+      separation: SurfaceSeparation.fromName(json['separation'] as String?),
       editorWordWrap: json['editorWordWrap'] is bool
           ? json['editorWordWrap'] as bool
           : false,
@@ -797,6 +814,8 @@ class Settings {
       other.explorerPaneWidth == explorerPaneWidth &&
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
+      other.accent == accent &&
+      other.separation == separation &&
       other.editorWordWrap == editorWordWrap &&
       other.editorAutoSave == editorAutoSave &&
       other.editorAutoSaveDelayMs == editorAutoSaveDelayMs &&
@@ -854,8 +873,7 @@ class Settings {
     explorerPaneWidth,
     detailSidebarWidth,
     compactDensity,
-    windowWidth,
-    windowHeight,
+    Object.hash(accent, separation, windowWidth, windowHeight),
     defaultSystemTerminalId,
     customTerminalPath,
     defaultCodeEditorId,

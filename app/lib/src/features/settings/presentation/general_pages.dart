@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
@@ -77,6 +78,24 @@ class ThemeTextSection extends ConsumerWidget {
               },
             ),
           ),
+          SettingsRow(
+            label: 'Accent',
+            help:
+                'Selection, focus and the primary action. Status colours '
+                'stay the same.',
+            control: _AccentSwatches(
+              selected: settings.accent,
+              onSelected: controller.setAccent,
+            ),
+          ),
+          SettingsSwitchRow(
+            label: 'Lines between regions',
+            help: 'Off, regions are told apart by tone alone.',
+            value: settings.separation == SurfaceSeparation.borders,
+            onChanged: (on) => controller.setSeparation(
+              on ? SurfaceSeparation.borders : SurfaceSeparation.tones,
+            ),
+          ),
           SettingsSwitchRow(
             label: 'Compact density',
             help: 'Denser lists and controls. Turn off for a roomier layout.',
@@ -84,6 +103,86 @@ class ThemeTextSection extends ConsumerWidget {
             onChanged: controller.setCompactDensity,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One swatch per accent; the picked one wears a ring. Each says its name, so
+/// the choice is never made by colour alone. One tab stop, like a radio group:
+/// the arrows move the choice.
+class _AccentSwatches extends StatelessWidget {
+  const _AccentSwatches({required this.selected, required this.onSelected});
+
+  final AppAccent selected;
+  final ValueChanged<AppAccent> onSelected;
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final step = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowRight || LogicalKeyboardKey.arrowDown => 1,
+      LogicalKeyboardKey.arrowLeft || LogicalKeyboardKey.arrowUp => -1,
+      _ => 0,
+    };
+    if (step == 0) return KeyEventResult.ignored;
+    const all = AppAccent.values;
+    onSelected(all[(selected.index + step) % all.length]);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final ring = theme.colorScheme.onSurface;
+    return Focus(
+      onKeyEvent: _onKey,
+      child: Builder(
+        builder: (context) {
+          final focused = Focus.of(context).hasFocus;
+          return Semantics(
+            label: 'Accent: ${selected.label}',
+            hint: 'Arrow keys change it',
+            child: Container(
+              padding: const EdgeInsets.all(Insets.xs),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.md),
+                border: Border.all(
+                  color: focused
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                ),
+              ),
+              child: Wrap(
+                spacing: Insets.sm,
+                children: [
+                  for (final accent in AppAccent.values)
+                    Tooltip(
+                      message: accent.label,
+                      child: InkResponse(
+                        onTap: () => onSelected(accent),
+                        canRequestFocus: false,
+                        radius: 16,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: accent.forBrightness(brightness),
+                            border: accent == selected
+                                ? Border.all(color: ring, width: 2)
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

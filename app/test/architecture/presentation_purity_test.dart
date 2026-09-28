@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'presentation_purity_allowlist.dart';
 

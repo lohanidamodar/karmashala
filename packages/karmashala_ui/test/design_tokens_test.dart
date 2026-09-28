@@ -111,13 +111,18 @@ void main() {
   test('MonoStyles and the UI sans follow the running platform', () {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     try {
-      expect(MonoStyles.body.fontFamily, 'Cascadia Mono');
-      expect(MonoStyles.body.fontFamilyFallback, ['Consolas', 'monospace']);
+      expect(MonoStyles.body.fontFamily, kBundledMonoFamily);
+      expect(MonoStyles.body.fontFamilyFallback, [
+        'Cascadia Mono',
+        'Consolas',
+        'monospace',
+      ]);
       expect(MonoStyles.body.fontSize, 12);
       expect(AppTheme.light().textTheme.bodyMedium?.fontFamilyFallback, isNull);
 
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      expect(kMonoFamily, 'DejaVu Sans Mono');
+      expect(kMonoFamily, kBundledMonoFamily);
+      expect(kMonoFallback.first, 'DejaVu Sans Mono');
       expect(AppTheme.light().textTheme.bodyMedium?.fontFamilyFallback, [
         'Inter',
         'Cantarell',

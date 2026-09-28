@@ -246,7 +246,9 @@ Future<List<MatrixFinding>> _focusFindings(
   final firstKey = _stopKey(first);
   final visited = <FocusNode>[first];
   final rects = <Rect?>[_rectOf(first)];
-  const cap = 60;
+  // A bound on the walk, not a rule about pages: a long settings page (the
+  // Appearance page with its side-panel checklist) passed 60 stops honestly.
+  const cap = 120;
   var closed = false;
   for (var i = 0; i < cap; i++) {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);

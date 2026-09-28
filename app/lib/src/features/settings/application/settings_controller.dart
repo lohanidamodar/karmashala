@@ -1,3 +1,4 @@
+import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
@@ -236,6 +237,16 @@ class SettingsController extends Notifier<Settings> {
 
   void setCompactDensity(bool value) {
     state = state.copyWith(compactDensity: value);
+    _save();
+  }
+
+  void setAccent(AppAccent accent) {
+    state = state.copyWith(accent: accent);
+    _save();
+  }
+
+  void setSeparation(SurfaceSeparation separation) {
+    state = state.copyWith(separation: separation);
     _save();
   }
 
