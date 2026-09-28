@@ -12,9 +12,7 @@ import 'native_menus.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
-import 'shell_state.dart';
 import 'side_panel_state.dart';
-import 'workbench_tabs.dart';
 
 /// The window's one chrome row: the menus, the command field and the pane
 /// toggles. Built as the tab strip's row, because it is chrome, not a heading.
@@ -54,16 +52,16 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tones = SurfaceTones.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
     // No app icon or name: the OS title bar already carries those.
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: tones.strip,
       child: Container(
         height: height,
         padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+          border: Border(bottom: BorderSide(color: tones.line)),
         ),
         // Its own width, not the window's: the row is what has to fit.
         child: LayoutBuilder(
@@ -76,17 +74,16 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
               textScaler,
               compactToolbar: compactToolbar,
             );
+            // The strip carries the areas and Settings now (UI overhaul spec
+            // §4); the menus stay while the row has room for their titles.
             return Row(
               children: [
-                const _ExplorerToggle(),
-                const SizedBox(width: Insets.xs),
                 // In the system menu bar on macOS (NativeShellMenus).
                 if (!useNativeMenus) ...[
                   folded ? const ShellOverflowMenu() : const ShellMenuBar(),
                   const SizedBox(width: Insets.sm),
                 ],
-                // Expanded, not Flexible-then-Spacer: the field takes its own
-                // width and the toggles are pushed to the far edge by the rest.
+                // The field in the middle, the accounts' usage at the right.
                 const Expanded(child: _QuickOpenSlot()),
                 // The terminal's own verbs, on the pane the keyboard is in. Not
                 // per group: seven in every strip made a split narrower than
@@ -96,7 +93,6 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 const _BackgroundSessionsBadge(),
                 const _FocusModeToggle(),
                 const _SidePanelToggle(),
-                const _SettingsToggle(),
               ],
             );
           },
@@ -106,8 +102,8 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// The command field, then every agent account's usage in the room left —
-/// or nothing once the row leaves no room.
+/// The command field in the middle of the row, then every agent account's
+/// usage at its right — or only the field once the row leaves no room.
 class _QuickOpenSlot extends StatelessWidget {
   const _QuickOpenSlot();
 
@@ -115,8 +111,11 @@ class _QuickOpenSlot extends StatelessWidget {
   /// convenience — `Ctrl+K` is the same.
   static const _minWidth = 64.0;
 
-  /// The field's own cap (`QuickOpenButton`); it keeps that much first.
-  static const _fieldWidth = 280.0;
+  /// The field's own cap; it keeps that much first.
+  static const _fieldWidth = 480.0;
+
+  /// The most the account chips take; the rest centres the field.
+  static const _usageWidth = 520.0;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -124,36 +123,24 @@ class _QuickOpenSlot extends StatelessWidget {
       final width = constraints.maxWidth;
       if (width < _minWidth) return const SizedBox.shrink();
       final field = width < _fieldWidth ? width : _fieldWidth;
-      final rest = width - field - Insets.sm;
+      final left = width - field - Insets.sm;
+      final usage = left < _usageWidth ? left : _usageWidth;
       return Row(
         children: [
-          SizedBox(width: field, child: const QuickOpenButton()),
+          Expanded(
+            child: Align(
+              child: SizedBox(width: field, child: const QuickOpenButton()),
+            ),
+          ),
           // Usage is per account, not per session, so it lives here rather
-          // than under a pane — in whatever the field leaves.
-          if (rest > 0) ...[
+          // than under a pane.
+          if (usage > 0) ...[
             const SizedBox(width: Insets.sm),
-            const Expanded(child: ToolbarUsageStrip()),
+            SizedBox(width: usage, child: const ToolbarUsageStrip()),
           ],
         ],
       );
     },
-  );
-}
-
-class _ExplorerToggle extends ConsumerWidget {
-  const _ExplorerToggle();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => _ChromeToggle(
-    icon: AppIcons.treeStructure,
-    label: 'Show or hide the Explorer',
-    chord: shellChordLabel<ToggleExplorerPaneIntent>(),
-    note: 'Ctrl+B does it too, outside a terminal pane',
-    selected: ref.watch(
-      shellControllerProvider.select((s) => s.explorerPaneVisible),
-    ),
-    onPressed: () =>
-        ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
   );
 }
 
@@ -184,17 +171,6 @@ class _SidePanelToggle extends ConsumerWidget {
       visibleSidePanelProvider.select((panel) => panel != null),
     ),
     onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
-  );
-}
-
-class _SettingsToggle extends ConsumerWidget {
-  const _SettingsToggle();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => _ChromeToggle(
-    icon: AppIcons.gearSix,
-    label: 'Settings',
-    onPressed: () => openSettingsTab(ref),
   );
 }
 

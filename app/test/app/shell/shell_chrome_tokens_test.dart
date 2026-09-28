@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
-import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -50,11 +49,7 @@ void main() {
     await pumpApp(tester);
 
     expect(tester.getSize(find.byType(QuickOpenButton)).height, Chrome.control);
-    final settings = find.descendant(
-      of: find.byType(ShellTitleBar),
-      matching: find.bySemanticsLabel('Settings'),
-    );
-    expect(tester.getSize(settings), const Size.square(Chrome.control));
+    // Settings moved to the foot of the activity strip (UI overhaul §4).
     expect(tester.getSize(find.text('Workspace')).height, lessThan(30));
   });
 

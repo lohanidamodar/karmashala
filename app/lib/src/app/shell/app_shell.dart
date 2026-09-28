@@ -26,7 +26,6 @@ import '../../features/environments/presentation/environment_health_dialog.dart'
 import '../../features/terminal/application/client_intents.dart';
 import '../../features/terminal/application/client_presence.dart';
 import '../../features/notes/application/note_tabs.dart';
-import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -34,6 +33,8 @@ import '../../features/sessions/application/session_launch_refusal.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
+import 'activity_strip.dart';
+import 'shell_sidebar.dart';
 import 'shell_state.dart';
 import 'shell_title_bar.dart';
 
@@ -201,6 +202,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final width = ShellWidth.of(constraints.maxWidth);
+              // The strip is always there outside focus mode; what is left
+              // is what the sidebar, workbench and panel share.
+              final available =
+                  constraints.maxWidth - (zen ? 0 : kActivityStripWidth);
               // At compact widths the Explorer and the workbench take turns
               // in the same column.
               final showExplorer = width.isCompact
@@ -209,12 +214,12 @@ class _AppShellState extends ConsumerState<AppShell> {
               // Measured as if focus mode were off: it hides the rail too, and
               // leaving it must not find the selection dropped.
               final panelFits = ShellLayout.panelFits(
-                available: constraints.maxWidth,
+                available: available,
                 explorerColumn: showExplorer && !width.isCompact,
               );
               _reportPanelRoom(panelFits);
               final layout = ShellLayout.allocate(
-                available: constraints.maxWidth,
+                available: available,
                 explorerColumn: !zen && showExplorer && !width.isCompact,
                 panelOpen: !zen && SidePanel.openSurface(ref) != null,
                 explorerWidth: _explorerDrag ?? explorerWidth,
@@ -226,9 +231,10 @@ class _AppShellState extends ConsumerState<AppShell> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (!zen) const ShellActivityStrip(),
                         if (!zen && showExplorer)
                           width.isCompact
-                              ? const Expanded(child: ExplorerPanel())
+                              ? const Expanded(child: ShellSidebar())
                               : ResizableColumn(
                                   width: layout.explorerWidth!,
                                   semanticLabel: 'Resize Explorer width',
@@ -238,7 +244,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                     ),
                                   ),
                                   onResizeEnd: _saveExplorerWidth,
-                                  child: const ExplorerPanel(),
+                                  child: const ShellSidebar(),
                                 ),
                         if (!width.isCompact || !showExplorer)
                           const Expanded(child: WorkbenchView()),

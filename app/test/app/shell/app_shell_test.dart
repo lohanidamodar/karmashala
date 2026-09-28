@@ -123,8 +123,14 @@ void main() {
     await pumpApp(tester, size: const Size(1440, 900));
 
     for (final surface in SidePanelSurface.values) {
+      // The rail's own glyphs: the activity strip names areas too.
       final tooltips = tester
-          .widgetList<Tooltip>(find.byType(Tooltip))
+          .widgetList<Tooltip>(
+            find.descendant(
+              of: find.byType(SidePanel),
+              matching: find.byType(Tooltip),
+            ),
+          )
           .map((t) => t.message ?? '')
           .where((m) => m.startsWith(surface.label));
       expect(
