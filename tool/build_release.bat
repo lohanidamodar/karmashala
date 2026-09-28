@@ -89,12 +89,26 @@ rem nothing, so a failed download means an SSH host gets an *older* host, not
 rem none. Say which failure it was - "no bundles on the release" was printed
 rem on a machine that had no gh at all.
 echo === SESSION HOST (linux, from the release) === >> "%LOG%"
+rem Windows' gh, or else WSL's: gh signed in inside WSL downloads straight
+rem into the Release folder through its /mnt path.
+set GH=
 where gh >nul 2>nul
-if errorlevel 1 (
-  echo     gh is not installed - linux host bundles NOT fetched; SSH hosts get whatever older bundle is already in %RELEASE%
-  echo gh is not installed - linux host bundles not fetched >> "%LOG%"
+if not errorlevel 1 set GH=windows
+if not defined GH (
+  wsl.exe -e sh -c "command -v gh" >nul 2>nul
+  if not errorlevel 1 set GH=wsl
+)
+if not defined GH (
+  echo     gh is not installed on Windows or in WSL - linux host bundles NOT fetched; SSH hosts get whatever older bundle is already in %RELEASE%
+  echo gh is not installed on Windows or in WSL - linux host bundles not fetched >> "%LOG%"
 ) else (
-  gh release download v!APPVERSHORT! -p "karmashala_host-*-linux-*" -D "%RELEASE%" >> "%LOG%" 2>&1
+  if "!GH!"=="windows" (
+    gh release download v!APPVERSHORT! -p "karmashala_host-*-linux-*" -D "%RELEASE%" >> "%LOG%" 2>&1
+  ) else (
+    for /f "delims=" %%w in ('wsl.exe wslpath -a "%CD%\%RELEASE%"') do set WSLRELEASE=%%w
+    echo downloading through WSL's gh into !WSLRELEASE! >> "%LOG%"
+    wsl.exe -e gh release download v!APPVERSHORT! -R lohanidamodar/karmashala-app -p "karmashala_host-*-linux-*" -D "!WSLRELEASE!" >> "%LOG%" 2>&1
+  )
   if errorlevel 1 (
     echo     could not download linux host bundles from release v!APPVERSHORT! - SSH hosts get whatever older bundle is already in %RELEASE%
     echo could not download linux host bundles from release v!APPVERSHORT! >> "%LOG%"
