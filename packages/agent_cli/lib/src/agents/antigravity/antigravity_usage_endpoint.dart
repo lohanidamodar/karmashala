@@ -1,11 +1,14 @@
 import '../adapter/agent_usage_endpoint.dart';
 import '../data/usage_credentials.dart';
 import '../data/usage_exception.dart';
+import '../data/usage_throttle.dart'
+    show kUsageFiveHourWindow, kUsageSevenDayWindow;
 import '../domain/agent_usage.dart';
 
-/// Antigravity's usage: Gemini Code Assist's `loadCodeAssist`, authorised with
-/// the OAuth token `agy` keeps in its store. Names tiers, measures nothing —
-/// see [parseAntigravityUsage].
+/// Antigravity's usage, authorised with the OAuth token `agy` keeps in its
+/// store: the quota buckets `retrieveUserQuotaSummary` / `retrieveUserQuota`
+/// report ([parseAntigravityQuota]), and only when neither answers the tiers
+/// `loadCodeAssist` names, which measure nothing ([parseAntigravityUsage]).
 class AntigravityUsageEndpoint implements AgentUsageEndpoint {
   const AntigravityUsageEndpoint();
 
@@ -63,18 +66,141 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
       }
     }
 
-    final json = await context.http.postJson(_codeAssistUrl, {
+    final headers = {
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
-    }, const {});
+    };
+    final now = context.clock.nowUtc();
 
+    // The quota itself, as `agy` and the Antigravity app read it: the summary
+    // (5-hour and weekly buckets) and then the per-model buckets, each from
+    // the daily host first — the production one pins every meter at 100%.
+    for (final url in _quotaUrls) {
+      try {
+        final json = await context.http.postJson(url, headers, const {});
+        final usage = parseAntigravityQuota(
+          json,
+          now,
+          email: email,
+          tokenExpiry: tokenExpiry,
+        );
+        if (usage != null) return usage;
+      } on UsageException {
+        // Any refusal moves on to the next source: the tier read below is the
+        // one that has always answered, and a refused sign-in is said there.
+      }
+    }
+
+    // Last: the tiers the account may use, which name a plan and count nothing.
+    final json = await context.http.postJson(_codeAssistUrl, headers, const {});
     return parseAntigravityUsage(
       json,
-      context.clock.nowUtc(),
+      now,
       email: email,
       tokenExpiry: tokenExpiry,
     );
   }
+
+  static final _quotaUrls = [
+    for (final method in ['retrieveUserQuotaSummary', 'retrieveUserQuota'])
+      for (final host in [
+        'daily-cloudcode-pa.googleapis.com',
+        'cloudcode-pa.googleapis.com',
+      ])
+        Uri.parse('https://$host/v1internal:$method'),
+  ];
+}
+
+/// **Antigravity's quota**, from either reply the service gives: the summary's
+/// `groups[].buckets[]` (named windows — `Gemini Session`, `Gemini Weekly`,
+/// `Claude + GPT Session` …) or `retrieveUserQuota`'s per-model `buckets[]`.
+/// A bucket reports what is *left*; a window says what is *used*. Null when
+/// the reply holds no bucket at all, so the caller asks the next source.
+AgentUsage? parseAntigravityQuota(
+  Map<String, dynamic> json,
+  DateTime now, {
+  String? email,
+  DateTime? tokenExpiry,
+}) {
+  final windows = <UsageWindow>[];
+  final summary = json['response'] is Map<String, dynamic>
+      ? json['response'] as Map<String, dynamic>
+      : json;
+  final groups = summary['groups'];
+  if (groups is List) {
+    for (final group in groups.whereType<Map<String, dynamic>>()) {
+      final buckets = group['buckets'];
+      if (buckets is! List) continue;
+      for (final bucket in buckets.whereType<Map<String, dynamic>>()) {
+        final remaining = bucket['remaining'];
+        final label =
+            bucket['displayName'] as String? ??
+            bucket['bucketId'] as String? ??
+            group['displayName'] as String? ??
+            _antigravityTier;
+        windows.add(
+          _quotaWindow(
+            label,
+            remaining is Map<String, dynamic>
+                ? remaining['remainingFraction']
+                : bucket['remainingFraction'],
+            bucket['resetTime'] ??
+                (remaining is Map<String, dynamic>
+                    ? remaining['resetTime']
+                    : null),
+            span: _spanOf(label),
+          ),
+        );
+      }
+    }
+  }
+  final buckets = json['buckets'];
+  if (windows.isEmpty && buckets is List) {
+    for (final bucket in buckets.whereType<Map<String, dynamic>>()) {
+      windows.add(
+        _quotaWindow(
+          bucket['modelId'] as String? ?? _antigravityTier,
+          bucket['remainingFraction'],
+          bucket['resetTime'],
+        ),
+      );
+    }
+  }
+  if (windows.isEmpty) return null;
+  return AgentUsage(
+    windows: windows,
+    fetchedAt: now,
+    email: email,
+    tokenExpiresAt: tokenExpiry,
+  );
+}
+
+UsageWindow _quotaWindow(
+  String label,
+  Object? remainingFraction,
+  Object? resetTime, {
+  Duration? span,
+}) {
+  final left = remainingFraction is num ? remainingFraction.toDouble() : null;
+  return UsageWindow(
+    label: label,
+    percent: left == null ? null : ((1 - left) * 100).clamp(0, 100).toDouble(),
+    resetsAt: resetTime is String
+        ? DateTime.tryParse(resetTime)?.toUtc()
+        : null,
+    span: span,
+  );
+}
+
+/// A bucket's period, read off its name: a session is the 5-hour window, a
+/// week the 7-day one. Anything else is a model-scoped limit with no period.
+Duration? _spanOf(String label) {
+  final name = label.toLowerCase();
+  if (name.contains('session') || name.contains('5-hour')) {
+    return kUsageFiveHourWindow;
+  }
+  if (name.contains('week')) return kUsageSevenDayWindow;
+  return null;
 }
 
 /// Parses Antigravity / Gemini Code Assist's `loadCodeAssist` response.
