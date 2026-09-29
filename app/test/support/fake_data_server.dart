@@ -398,8 +398,8 @@ class FakeDataServer {
         case GitChange():
           // Nothing kept: it says what to read again.
           break;
-        case FilesChange():
-          // A watch's news is one link's: [FakeFilesWork.changed] tells it.
+        case FilesChange() || TranscriptChanged():
+          // A watch's news is one link's.
           break;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
@@ -711,6 +711,9 @@ class FakeDataServer {
       EnvVaultRequest() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
+      SessionTranscriptRequest() => throw const DataRefused.unavailable(
+        'this fake reads no transcripts',
+      ),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

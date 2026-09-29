@@ -18,6 +18,11 @@ class SealedHostConnection implements HostConnection {
   LinkTrust get trust => LinkTrust.remote(
     admin: _link.capabilities.has(Capability.serverAdmin),
     sshPrompts: _link.capabilities.has(Capability.sshPrompts),
+    // A desktop client already reads any file through `files.*`, so its
+    // grant covers transcripts; `readTranscript` is the phone's word for it.
+    transcripts:
+        _link.capabilities.has(Capability.readTranscript) ||
+        _link.capabilities.has(Capability.desktopClient),
     label: _link.deviceName,
   );
 

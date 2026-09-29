@@ -66,6 +66,39 @@ class ToolActivity {
     return s == null || s.isEmpty ? name : '$name($s)';
   }
 
+  /// The wire form a server's transcript page carries. Absent fields are
+  /// null or false; [imagePath] is spelled as the server's machine spells it.
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'subject': ?subject,
+    'imagePath': ?imagePath,
+    'output': ?output,
+    if (outputTruncated) 'outputTruncated': true,
+    if (isError) 'isError': true,
+    'plan': ?plan?.toJson(),
+  };
+
+  /// Throws [FormatException] when `name` is not a string; any other field
+  /// out of shape reads as absent.
+  static ToolActivity fromJson(Map<String, Object?> json) {
+    final name = json['name'];
+    if (name is! String) throw const FormatException('tool: no name');
+    final plan = json['plan'];
+    return ToolActivity(
+      name: name,
+      subject: _stringOrNull(json['subject']),
+      imagePath: _stringOrNull(json['imagePath']),
+      output: _stringOrNull(json['output']),
+      outputTruncated: json['outputTruncated'] == true,
+      isError: json['isError'] == true,
+      plan: plan is Map
+          ? AgentPlan.fromJson(plan.cast<String, Object?>())
+          : null,
+    );
+  }
+
+  static String? _stringOrNull(Object? value) => value is String ? value : null;
+
   /// This call with the answer it eventually got.
   ToolActivity withResult({
     String? output,

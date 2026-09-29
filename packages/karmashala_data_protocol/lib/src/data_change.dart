@@ -68,6 +68,7 @@ part 'changes/terminals_changes.dart';
 part 'changes/env_changes.dart';
 part 'changes/attention_changes.dart';
 part 'changes/intents_changes.dart';
+part 'changes/transcripts_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -608,7 +609,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _terminalsChangeFromJson(name, json) ??
     _envChangeFromJson(name, json) ??
     _attentionChangeFromJson(name, json) ??
-    _intentsChangeFromJson(name, json);
+    _intentsChangeFromJson(name, json) ??
+    _transcriptsChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();
