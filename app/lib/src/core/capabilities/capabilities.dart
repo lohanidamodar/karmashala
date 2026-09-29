@@ -210,6 +210,10 @@ final class Capabilities {
   /// [readsServerDisk].
   bool get mediaViaServer => serverOffers('sessions.media');
 
+  /// An approval names the prompt it answers, and the server refuses it when
+  /// another is open by the time it lands (Stage 2 step 1).
+  bool get answersCarryAsk => serverOffers('prompt.answer.ask');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

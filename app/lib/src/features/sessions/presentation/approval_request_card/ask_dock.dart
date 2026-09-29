@@ -68,6 +68,7 @@ class _AskDock extends ConsumerWidget {
     ) => _ToolAskAnswers(
       key: const ValueKey('dock-tool-ask'),
       sessionId: sessionId,
+      report: report,
       agentName: agentName,
       rules: rules,
       menus: menus,
@@ -112,6 +113,7 @@ class _AskDock extends ConsumerWidget {
             quoted,
             _DockAnswers(
               sessionId: sessionId,
+              report: report,
               rules: rules,
               agentName: agentName,
             ),
@@ -319,11 +321,15 @@ class _DockBox extends StatelessWidget {
 class _DockAnswers extends ConsumerWidget {
   const _DockAnswers({
     required this.sessionId,
+    required this.report,
     required this.rules,
     required this.agentName,
   });
 
   final String sessionId;
+
+  /// The status the buttons were drawn from: the prompt they answer.
+  final AgentStatusReport report;
   final AgentApprovalRules rules;
   final String agentName;
 
@@ -376,19 +382,17 @@ class _DockAnswers extends ConsumerWidget {
       await ref
           .read(sessionPromptAnswersProvider)
           .answer(
-            ApprovalAnswerRequest(sessionId: sessionId, approve: approve),
+            ApprovalAnswerRequest(
+              sessionId: sessionId,
+              approve: approve,
+              ask: PromptAsk.drawnFrom(report),
+            ),
           );
     } on SessionPromptRefusal catch (refusal) {
       // Only reported when it did not land: the agent's own screen is the
       // acknowledgement of one that did.
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal.noTerminal || refusal.notFound
-                ? 'That session is no longer running, so the key was not sent.'
-                : 'Nothing was sent: ${refusal.message}.',
-          ),
-        ),
+        SnackBar(content: Text(_approvalRefusalText(refusal))),
       );
     }
   }

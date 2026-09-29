@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
 import '../domain/approval_answer.dart';
+import '../domain/prompt_answer_request.dart' show kPromptChangedRefusal;
 import '../domain/prompt_refusal.dart';
 import 'menu_answerer.dart';
 
@@ -58,10 +59,12 @@ class SessionApprovalAnswerer {
   recordMenuAnswer;
 
   /// Answers [sessionId]'s prompt. Throws [SessionPromptRefusal] with nothing
-  /// chosen — at worst a highlight moved and left there.
+  /// chosen — at worst a highlight moved and left there. With [menuId], the
+  /// menu on screen must be that one: the answer was given to it.
   Future<SessionApprovalAnswer> answer(
     String sessionId, {
     required bool approve,
+    String? menuId,
     String decidedBy = 'the user',
     String? decidedBySessionId,
   }) async {
@@ -71,6 +74,9 @@ class SessionApprovalAnswerer {
     final support = menus.supportFor(sessionId);
     var menu = menus.onScreen(sessionId);
     if (menu != null && hasOpenQuestion(sessionId)) menu = null;
+    if (menuId != null && menu?.id != menuId) {
+      throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
+    }
 
     if (menu != null &&
         support != null &&

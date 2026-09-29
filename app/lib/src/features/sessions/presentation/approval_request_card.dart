@@ -115,6 +115,7 @@ class ApprovalRequestCard extends ConsumerWidget {
         if (waiting == AgentWaitKind.approval)
           _Answers(
             sessionId: sessionId,
+            report: report,
             rules: rules,
             agentName: agentName,
             canAnswer: canAnswer,
@@ -495,12 +496,16 @@ class _NothingToAnswer extends ConsumerWidget {
 class _Answers extends ConsumerWidget {
   const _Answers({
     required this.sessionId,
+    required this.report,
     required this.rules,
     required this.agentName,
     required this.canAnswer,
   });
 
   final String sessionId;
+
+  /// The status the buttons were drawn from: the prompt they answer.
+  final AgentStatusReport report;
   final AgentApprovalRules rules;
   final String agentName;
   final bool canAnswer;
@@ -581,23 +586,26 @@ class _Answers extends ConsumerWidget {
             ApprovalAnswerRequest(
               sessionId: sessionId,
               approve: identical(answer, rules.approve),
+              ask: PromptAsk.drawnFrom(report),
             ),
           );
     } on SessionPromptRefusal catch (refusal) {
       // Only reported when it did not land: a successful keypress needs no
       // announcement — the agent's own screen is the acknowledgement.
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal.noTerminal || refusal.notFound
-                ? 'That session is no longer running, so the key was not sent.'
-                : 'Nothing was sent: ${refusal.message}.',
-          ),
-        ),
+        SnackBar(content: Text(_approvalRefusalText(refusal))),
       );
     }
   }
 }
+
+/// A refused approve or deny, for a snack bar.
+String _approvalRefusalText(SessionPromptRefusal refusal) =>
+    refusal.unconfirmed
+    ? '${refusal.message}.'
+    : refusal.noTerminal || refusal.notFound
+    ? 'That session is no longer running, so the key was not sent.'
+    : 'Nothing was sent: ${refusal.message}.';
 
 /// Reveals the pane so the user can answer anything we could not represent.
 /// Shared by both halves of the card: the terminal is the complete answer.

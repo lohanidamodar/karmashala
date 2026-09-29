@@ -23,6 +23,7 @@ class OffScreenAsk {
     required this.detail,
     required this.canAnswer,
     this.project,
+    this.prompt,
   });
 
   final String openId;
@@ -41,6 +42,9 @@ class OffScreenAsk {
   /// right-hand label (board N1).
   final String? project;
 
+  /// The prompt the toast was raised for, which its Yes and No answer.
+  final PromptAsk? prompt;
+
   @override
   bool operator ==(Object other) =>
       other is OffScreenAsk &&
@@ -49,11 +53,12 @@ class OffScreenAsk {
       other.imported == imported &&
       other.detail == detail &&
       other.canAnswer == canAnswer &&
-      other.project == project;
+      other.project == project &&
+      other.prompt == prompt;
 
   @override
   int get hashCode =>
-      Object.hash(openId, label, imported, detail, canAnswer, project);
+      Object.hash(openId, label, imported, detail, canAnswer, project, prompt);
 }
 
 /// The asks to raise toasts for (spec §5): every session waiting on an
@@ -76,6 +81,7 @@ final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
             imported: source.imported,
             detail: report.evidence.isEmpty ? null : report.evidence.last,
             project: projectOf(openId),
+            prompt: PromptAsk.drawnFrom(report),
             canAnswer:
                 answerable(openId) &&
                 agents.byId(report.agentId)?.approval.approve != null &&
@@ -145,11 +151,21 @@ class _ShellAskToastsState extends ConsumerState<ShellAskToasts> {
       await ref
           .read(sessionPromptAnswersProvider)
           .answer(
-            ApprovalAnswerRequest(sessionId: ask.openId, approve: approve),
+            ApprovalAnswerRequest(
+              sessionId: ask.openId,
+              approve: approve,
+              ask: ask.prompt,
+            ),
           );
     } on SessionPromptRefusal catch (refusal) {
       messenger?.showSnackBar(
-        SnackBar(content: Text('Nothing was sent: ${refusal.message}.')),
+        SnackBar(
+          content: Text(
+            refusal.unconfirmed
+                ? '${refusal.message}.'
+                : 'Nothing was sent: ${refusal.message}.',
+          ),
+        ),
       );
     }
   }

@@ -53,8 +53,22 @@ class ServerLifecycleSource implements HostLifecycleSource {
           status: HostedAgentStatus.fromJson(message.status),
         ),
       ),
-      answerPrompt: (request) async =>
-          _answerOf(await watch.answerPrompt(request.toJson())),
+      answerPrompt: (request) async {
+        final wire.PromptAnsweredMessage reply;
+        try {
+          reply = await watch.answerPrompt(request.toJson());
+        } on wire.HostLifecycleWatchRefused catch (error) {
+          // Sent, and no reply: the frame may still land, so this cannot say
+          // nothing was pressed. The prompt on screen says whether it was.
+          throw SessionPromptRefusal(
+            error.timedOut
+                ? 'Not confirmed — check the session'
+                : 'Not confirmed — check the session (${error.message})',
+            unconfirmed: true,
+          );
+        }
+        return _answerOf(reply);
+      },
     );
   }
 
@@ -70,6 +84,9 @@ class ServerLifecycleSource implements HostLifecycleSource {
       reply.message ?? 'the session host did not answer it',
       notFound: reply.refusal == wire.PromptRefusalKind.notFound,
       noTerminal: reply.refusal == wire.PromptRefusalKind.noTerminal,
+      // Known by its words: a refusal kind of its own would be one an older
+      // client could not read.
+      stale: reply.message == kPromptChangedRefusal,
     );
   }
 

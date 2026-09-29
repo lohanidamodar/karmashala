@@ -37,4 +37,7 @@ const Set<String> kServerFeatures = <String>{
   // `files.upload.abort`: a cancelled upload's staged part is deleted at
   // once, not when the link closes.
   'files.upload.abort',
+  // An approval may carry `ask`, the prompt it answers, and is refused when
+  // the prompt open now is another (Stage 2 step 1).
+  'prompt.answer.ask',
 };
