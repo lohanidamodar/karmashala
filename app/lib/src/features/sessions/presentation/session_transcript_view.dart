@@ -30,6 +30,7 @@ import 'package:agent_cli/process.dart';
 import '../../file_explorer/application/file_explorer_providers.dart';
 import '../../files/data/files_client.dart';
 import '../../files/data/pick_server.dart';
+import '../../files/presentation/take_photo.dart';
 import 'package:karmashala_ui/picking.dart' show PickServer;
 import 'package:karmashala_files/values.dart' show FileStat;
 import '../../notes/application/composer_draft.dart';
@@ -667,6 +668,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       snippets: _snippets,
       // Read per paste or attach, like the snippets: never watched.
       server: _pickServer,
+      camera: () => photoTakerFor(context, ref),
       enabled: !prompted,
       hintText: prompted
           ? 'Answer the prompt above first'

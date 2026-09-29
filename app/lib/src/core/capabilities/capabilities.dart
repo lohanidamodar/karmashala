@@ -28,6 +28,7 @@ final class ClientCapabilities {
     required this.multicastLock,
     required this.mediaPlayback,
     required this.deviceName,
+    required this.camera,
   });
 
   /// This process's platform, read once. [deviceModel] names a client that is
@@ -47,6 +48,7 @@ final class ClientCapabilities {
       multicastLock: !kIsWeb && Platform.isAndroid,
       mediaPlayback: desktop,
       deviceName: desktop ? _hostname() : _named(deviceModel),
+      camera: !kIsWeb && (Platform.isAndroid || Platform.isIOS),
     );
   }
 
@@ -101,6 +103,9 @@ final class ClientCapabilities {
 
   /// What this client is called at a server.
   final String deviceName;
+
+  /// A photo can be taken here (`image_picker`'s camera source).
+  final bool camera;
 }
 
 /// What the attached server offers this client.
@@ -227,6 +232,13 @@ final class Capabilities {
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.
   bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;
+
+  /// Attach offers "Take a photo": a camera here, a server elsewhere to
+  /// upload it to, and the attachment grant (`send_attachment`).
+  bool get takesPhotos =>
+      client.camera &&
+      uploads &&
+      server.granted(Capability.sendAttachment);
 
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
