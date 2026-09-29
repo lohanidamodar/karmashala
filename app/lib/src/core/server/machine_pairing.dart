@@ -176,10 +176,10 @@ Future<CompanionPairing> pairWithMachine({
                 'can use.'
           // The confirm carries no server version, so both causes are named.
           : 'That code pairs the old phone companion, not this app. On the '
-                'server, pair again: `karmashala_host pair` (its default now '
-                'includes the app), or `--grants phone`. If the server does '
-                'not know `phone`, it is older than this app: update it '
-                'first.',
+                'server, pair again with `karmashala_host pair`: its default, '
+                'the phone grants, now includes the app. If `pair --grants '
+                'phone` is refused there, that server is older than this '
+                'app: update it first.',
     );
   }
   if (direct != null) {
@@ -263,8 +263,7 @@ bool _isSharp(CompanionPairingException error) =>
 typedef _Raced = ({CompanionPairing record, _Leg leg, String? at});
 
 Future<_Raced> _raceLegs({
-  required Future<CompanionPairing> Function(RemoteTransport transport)
-  attempt,
+  required Future<CompanionPairing> Function(RemoteTransport transport) attempt,
   required (String, int)? direct,
   required Uri? relay,
   required RendezvousId rendezvous,
@@ -276,11 +275,7 @@ Future<_Raced> _raceLegs({
   final ownScout = scout == null;
   final lan =
       scout ??
-      LanPathScout(
-        lock: lanLock,
-        dialer: lanDialer,
-        onLog: _pairingLog.info,
-      );
+      LanPathScout(lock: lanLock, dialer: lanDialer, onLog: _pairingLog.info);
   if (ownScout) await lan.start();
 
   final outcome = Completer<_Raced>();

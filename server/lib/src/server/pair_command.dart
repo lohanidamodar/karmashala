@@ -203,46 +203,55 @@ Future<int> runPair(
   }
 }
 
-/// Short names for the grants a client is paired with: `phone` for the
-/// Karmashala app on a phone (in `all` already; the alias is for lists and
-/// `grant --add=phone`), `desktop` for another machine's app (slice 5e),
-/// plus `admin` and `ssh` when a desktop should administer this server or
-/// answer its SSH questions.
-const Map<String, Capability> kGrantAliases = {
-  'phone': Capability.phoneClient,
-  'desktop': Capability.desktopClient,
-  'admin': Capability.serverAdmin,
-  'ssh': Capability.sshPrompts,
+/// Short names for the grants a client is paired with. `phone` is the phone
+/// preset: `phone_client` plus every other non-privileged bit, the set the
+/// desktop's Phone preset grants. So `--grants phone` is `all`, and
+/// `grant --add=phone` gives an existing phone everything the app uses.
+/// `desktop` is another machine's app (slice 5e) alone; `admin` and `ssh`
+/// let a desktop administer this server or answer its SSH questions.
+final Map<String, CapabilitySet> kGrantAliases = {
+  'phone': CapabilitySet.all,
+  'desktop': CapabilitySet.of([Capability.desktopClient]),
+  'admin': CapabilitySet.of([Capability.serverAdmin]),
+  'ssh': CapabilitySet.of([Capability.sshPrompts]),
 };
 
 /// `all` (every phone capability), or a comma-separated list of capability
 /// names (`view_sessions,approve,…`) and [kGrantAliases], mixed with `all`
-/// if wanted. Throws [FormatException] naming the unknown one and the known
-/// ones.
-CapabilitySet parseCapabilities(String text) {
+/// if wanted. With [removing] (`grant --remove=…`), `phone` names the app
+/// alone, `phone_client`: taking the app away keeps the companion's bits.
+/// Throws [FormatException] naming the unknown one and the known ones.
+CapabilitySet parseCapabilities(String text, {bool removing = false}) {
   final trimmed = text.trim();
   if (trimmed == 'all') return CapabilitySet.all;
-  final chosen = <Capability>[];
+  var chosen = CapabilitySet.none;
+  var named = false;
   for (final part in trimmed.split(',')) {
     final name = part.trim();
     if (name.isEmpty) continue;
     if (name == 'all') {
-      chosen.addAll(CapabilitySet.all.granted);
+      chosen = chosen | CapabilitySet.all;
+      named = true;
       continue;
     }
-    final capability = kGrantAliases[name] ?? Capability.tryParse(name);
-    if (capability == null) {
+    final capability = Capability.tryParse(name);
+    final grants = removing && name == 'phone'
+        ? CapabilitySet.of([Capability.phoneClient])
+        : kGrantAliases[name] ??
+              (capability == null ? null : CapabilitySet.of([capability]));
+    if (grants == null) {
       throw FormatException(
         'unknown capability "$name" — use "all" or a comma-separated list of '
         '${[...kGrantAliases.keys, ...Capability.values.map((c) => c.wire)].join(', ')}',
       );
     }
-    chosen.add(capability);
+    chosen = chosen | grants;
+    named = true;
   }
-  if (chosen.isEmpty) {
+  if (!named) {
     throw const FormatException('name at least one capability, or "all"');
   }
-  return CapabilitySet.of(chosen);
+  return chosen;
 }
 
 /// "everything", or the names granted.

@@ -121,7 +121,7 @@ Future<int> runGrant(
     add = adding == null ? CapabilitySet.none : parseCapabilities(adding);
     remove = removing == null
         ? CapabilitySet.none
-        : parseCapabilities(removing);
+        : parseCapabilities(removing, removing: true);
   } on FormatException catch (error) {
     errSink.writeln('karmashala_host grant: ${error.message}');
     return Future.value(2);
@@ -260,9 +260,7 @@ List<Map<String, Object?>> _devices(Map<String, Object?> answer) {
 /// The wire names a device holds — `phone_client` among them or not is what
 /// `grant --add=phone` is checked by.
 String _grants(Object? wires) {
-  final held = [
-    for (final wire in wires is List ? wires : const []) '$wire',
-  ];
+  final held = [for (final wire in wires is List ? wires : const []) '$wire'];
   final named = CapabilitySet.of([
     for (final wire in held) ?Capability.tryParse(wire),
   ]);
