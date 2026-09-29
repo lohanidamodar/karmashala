@@ -241,8 +241,9 @@ class WorkspaceMenu extends StatelessWidget {
         // `globe` is the Browser surface; scanning the CLI stores for sessions
         // is a search, not the web.
         icon: AppIcons.listMagnifyingGlass,
-        // No chord: this is the scan you run a handful of times in a
+        // Shipped unbound: this is the scan you run a handful of times in a
         // workspace's life, and every chord left is one a shell can use.
+        shortcut: shellCommandLabel('workspace.detectCliSessions'),
         onPressed: actions.detectCliSessions,
       ),
       ShellMenuItem(
@@ -431,6 +432,7 @@ List<List<ViewMenuEntry>> viewMenuSections(
           ViewMenuCommand(
             label: 'Commands run here…',
             icon: AppIcons.clockCounterClockwise,
+            command: 'terminal.commandsRun',
             onPressed: withTerminal(actions.commandsRun),
           ),
         ],
@@ -499,8 +501,9 @@ class ToolsMenu extends StatelessWidget {
       ShellMenuItem(
         label: 'About Karmashala',
         icon: AppIcons.info,
-        // No chord: a dialog you open once, to copy a build line into a bug
-        // report.
+        // Shipped unbound: a dialog you open once, to copy a build line into a
+        // bug report.
+        shortcut: shellCommandLabel('app.about'),
         onPressed: actions.about,
       ),
     ],

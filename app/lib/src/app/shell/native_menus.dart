@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'keymap_controller.dart';
 import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
 
@@ -26,6 +27,8 @@ class NativeShellMenus extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!useNativeMenus) return child;
+    // Every key equivalent below is the keymap's: rebuilt when it moves.
+    ref.watch(keymapProvider.select((k) => k.revision));
     final actions = ShellMenuActions(context, ref);
     return PlatformMenuBar(
       menus: [
@@ -61,6 +64,7 @@ class NativeShellMenus extends ConsumerWidget {
         members: [
           PlatformMenuItem(
             label: 'About Karmashala',
+            shortcut: shellCommandActivator('app.about'),
             onSelected: actions.about,
           ),
         ],
@@ -69,10 +73,7 @@ class NativeShellMenus extends ConsumerWidget {
         members: [
           PlatformMenuItem(
             label: 'Settings…',
-            shortcut: const SingleActivator(
-              LogicalKeyboardKey.comma,
-              meta: true,
-            ),
+            shortcut: shellCommandActivator('settings.open'),
             onSelected: actions.openSettings,
           ),
         ],
@@ -119,19 +120,12 @@ class NativeShellMenus extends ConsumerWidget {
         members: [
           PlatformMenuItem(
             label: 'New project',
-            shortcut: const SingleActivator(
-              LogicalKeyboardKey.keyN,
-              meta: true,
-              shift: true,
-            ),
+            shortcut: shellCommandActivator('project.new'),
             onSelected: actions.newProject,
           ),
           PlatformMenuItem(
             label: 'New session',
-            shortcut: const SingleActivator(
-              LogicalKeyboardKey.keyN,
-              meta: true,
-            ),
+            shortcut: shellCommandActivator('session.new'),
             onSelected: actions.newSession,
           ),
         ],
@@ -140,10 +134,7 @@ class NativeShellMenus extends ConsumerWidget {
         members: [
           PlatformMenuItem(
             label: 'Go to…',
-            shortcut: const SingleActivator(
-              LogicalKeyboardKey.keyK,
-              meta: true,
-            ),
+            shortcut: shellCommandActivator('quickOpen.show'),
             onSelected: actions.goTo,
           ),
         ],
@@ -152,6 +143,7 @@ class NativeShellMenus extends ConsumerWidget {
         members: [
           PlatformMenuItem(
             label: 'Detect CLI sessions',
+            shortcut: shellCommandActivator('workspace.detectCliSessions'),
             onSelected: actions.detectCliSessions,
           ),
           PlatformMenuItem(

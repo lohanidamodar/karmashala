@@ -210,6 +210,7 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
       saved = saved.withText(typedMeanwhile);
     }
     if (_stillWanted(hostPath)) state = {...state, hostPath: saved};
+    ref.read(documentSavesProvider.notifier).saved(hostPath);
     return const SaveOutcome(SaveResult.saved);
   }
 
@@ -364,6 +365,21 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
 final openDocumentsProvider =
     NotifierProvider<OpenDocuments, Map<String, SourceDocument>>(
       OpenDocuments.new,
+    );
+
+/// The last file the editor wrote, and how many writes there have been — for
+/// whatever reads its own file again when the editor saves it (the keymap).
+class DocumentSaves extends Notifier<({String? hostPath, int count})> {
+  @override
+  ({String? hostPath, int count}) build() => (hostPath: null, count: 0);
+
+  void saved(String hostPath) =>
+      state = (hostPath: hostPath, count: state.count + 1);
+}
+
+final documentSavesProvider =
+    NotifierProvider<DocumentSaves, ({String? hostPath, int count})>(
+      DocumentSaves.new,
     );
 
 /// One buffer, or null while it is still being read.

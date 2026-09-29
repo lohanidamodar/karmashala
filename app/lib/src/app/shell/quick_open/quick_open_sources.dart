@@ -9,6 +9,7 @@ import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
+import '../../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/automations/application/scheduled_resume_providers.dart';
 import '../../../features/automations/presentation/resume_on_reset_dialog.dart';
@@ -46,6 +47,7 @@ import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala_ui/icons.dart';
+import '../karmashala_about_dialog.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
 import '../side_panel_state.dart';
@@ -283,8 +285,35 @@ class QuickOpenSources {
         'Switch terminal tab…',
         subtitle: 'Every open tab, by name, session or directory',
         icon: AppIcons.listMagnifyingGlass,
+        shortcut: shellCommandLabel('terminal.switchTab'),
         keywords: const ['tabs', 'terminal', 'switch', 'window'],
         onSelect: () => TabPicker.show(context, terminalTabEntries),
+      ),
+      // Shipped without keys (`unboundShellCommands`): quick open is their
+      // way in, and a keymap may bind them.
+      if (ref.read(terminalSessionsControllerProvider).tabs.isNotEmpty)
+        _command(
+          'Commands run here…',
+          subtitle: 'What this terminal ran, to jump back to or run again',
+          icon: AppIcons.clockCounterClockwise,
+          shortcut: shellCommandLabel('terminal.commandsRun'),
+          keywords: const ['history', 'commands', 'ran', 'terminal'],
+          onSelect: () => TerminalActions(ref).showCommands(context),
+        ),
+      _command(
+        'Detect CLI sessions',
+        subtitle: 'Scan the Claude Code and Codex stores for sessions',
+        icon: AppIcons.listMagnifyingGlass,
+        shortcut: shellCommandLabel('workspace.detectCliSessions'),
+        keywords: const ['cli', 'import', 'scan', 'claude', 'codex'],
+        onSelect: () => DetectedProjectsView.show(context),
+      ),
+      _command(
+        'About Karmashala',
+        icon: AppIcons.info,
+        shortcut: shellCommandLabel('app.about'),
+        keywords: const ['version', 'build', 'about'],
+        onSelect: () => KarmashalaAboutDialog.show(context),
       ),
       ..._restoredSessionCommands(),
       // The drag-only layout verbs, without a mouse. Listed only when they
@@ -325,6 +354,7 @@ class QuickOpenSources {
             ? 'MCP bridge, WSL interop, Android tooling, disk, environments'
             : 'MCP bridge, Android tooling, disk, environments',
         icon: AppIcons.checkCircle,
+        shortcut: shellCommandLabel('system.checkHealth'),
         keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),
@@ -350,12 +380,14 @@ class QuickOpenSources {
         'Browse files',
         subtitle: 'This machine, a distribution or a host — side by side',
         icon: AppIcons.folderOpen,
+        shortcut: shellCommandLabel('files.browse'),
         keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
         onSelect: () => openFilesTabHere(ref),
       ),
       _command(
         'Open Settings',
         icon: AppIcons.gearSix,
+        shortcut: shellCommandLabel('settings.open'),
         keywords: const ['preferences', 'options'],
         onSelect: () => openSettingsTab(ref),
       ),

@@ -7,10 +7,15 @@ import 'package:karmashala_core/logging.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/paths/app_support_directory.dart';
+import '../../features/editor/application/open_documents.dart'
+    show documentSavesProvider;
+import '../../features/notifications/application/notification_providers.dart'
+    show windowFocusedProvider;
 import 'keymap.dart';
 import 'shell_shortcuts.dart';
 
-/// The user's keymap file, `keymap.json` in the app's data folder. Null under
+/// The user's keymap file, `keymap.json` in the app's data folder — which
+/// `KARMASHALA_DATA_DIR` moves, so a probe reads its own. Null under
 /// `flutter test`: a test must not read the owner's keys; one that wants a
 /// file overrides this.
 final keymapFileProvider = FutureProvider<File?>((ref) async {
@@ -40,21 +45,31 @@ class KeymapStatus {
   final int revision;
 }
 
-/// Reads the keymap file when the app starts and again whenever it changes.
-/// A reading with any problem is not applied: the last good map stays, and
-/// [KeymapStatus.problems] says what to fix.
+/// Reads the keymap file when the app starts, when the window gets focus back
+/// (an edit made in another editor) and when the app's own editor saves it —
+/// read again rather than watched. A reading with any problem is not applied:
+/// the last good map stays, and [KeymapStatus.problems] says what to fix.
 class KeymapController extends Notifier<KeymapStatus> {
   static final _log = AppLogger.named('shell.keymap');
 
-  StreamSubscription<FileSystemEvent>? _watch;
-  Timer? _settle;
   File? _file;
+
+  /// The text last applied or refused, so a focus that finds the file as it
+  /// was costs nothing and says nothing again.
+  String? _lastText;
 
   @override
   KeymapStatus build() {
-    ref.onDispose(() {
-      _settle?.cancel();
-      unawaited(_watch?.cancel());
+    ref.listen(windowFocusedProvider, (was, now) {
+      if (now && was == false) unawaited(reload());
+    });
+    ref.listen(documentSavesProvider, (_, saved) {
+      final file = _file;
+      final path = saved.hostPath;
+      if (file == null || path == null) return;
+      if (p.equals(p.normalize(path), p.normalize(file.path))) {
+        unawaited(reload(force: true));
+      }
     });
     unawaited(_start());
     return const KeymapStatus();
@@ -69,28 +84,15 @@ class KeymapController extends Notifier<KeymapStatus> {
       return;
     }
     if (found == null || !ref.mounted) return;
-    final file = found;
-    _file = file;
-    state = KeymapStatus(path: file.path);
+    _file = found;
+    state = KeymapStatus(path: found.path);
     await reload();
-    try {
-      // The folder, not the file: an editor saving by rename replaces the
-      // file, and a watch on the old one would hear nothing more.
-      _watch = file.parent
-          .watch()
-          .where((e) => p.basename(e.path) == p.basename(file.path))
-          .listen((_) {
-            _settle?.cancel();
-            _settle = Timer(const Duration(milliseconds: 150), reload);
-          });
-    } on FileSystemException catch (e) {
-      _log.warning('the keymap file cannot be watched: $e');
-    }
   }
 
   /// Reads the file again and applies it when it is usable. A missing file is
-  /// an empty keymap: the app's own keys.
-  Future<void> reload() async {
+  /// an empty keymap: the app's own keys. Unchanged text is skipped unless
+  /// [force].
+  Future<void> reload({bool force = false}) async {
     final file = _file;
     if (file == null) return;
     String text;
@@ -102,24 +104,27 @@ class KeymapController extends Notifier<KeymapStatus> {
       return;
     }
     if (!ref.mounted) return;
+    if (!force && text == _lastText) return;
     apply(text);
   }
 
   /// Applies the keymap [text] says, or keeps the one in force and says why
   /// not. Public so a test can hand it text without a file.
   void apply(String text) {
+    _lastText = text;
     final defaults = defaultShellChords;
     final reading = parseKeymap(text, commands: keymapCommands(defaults));
-    if (!reading.isUsable) {
-      _log.warning('keymap not applied: ${reading.problems.join(' ')}');
-      state = _with(problems: reading.problems);
+    final problems = reading.isUsable
+        ? resolveKeymap(defaults, reading.entries).problems
+        : reading.problems;
+    if (problems.isNotEmpty) {
+      _log.warning('keymap not applied: ${problems.join(' ')}');
+      state = _with(problems: problems);
       return;
     }
-    final resolved = resolveKeymap(defaults, reading.entries);
     applyKeymapEntries(reading.entries);
     state = KeymapStatus(
       path: state.path,
-      problems: resolved.problems,
       entries: reading.entries.length,
       revision: state.revision + 1,
     );
