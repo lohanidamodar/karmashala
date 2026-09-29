@@ -339,7 +339,9 @@ Future<XFile?> pickOneFile({
   try {
     final file = await show(
       acceptedTypeGroups: acceptedTypeGroups,
-      initialDirectory: start,
+      // A phone's document picker has no folder to be pointed at, and the
+      // `/` fallback means nothing to it.
+      initialDirectory: Platform.isAndroid || Platform.isIOS ? null : start,
     );
     _remember(file == null ? null : _parentOf(file.path));
     _report('file', what, file?.path, elapsed);
