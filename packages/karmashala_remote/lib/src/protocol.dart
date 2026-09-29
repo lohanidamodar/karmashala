@@ -376,6 +376,17 @@ enum FrameType {
     capability: Capability.desktopClient,
   ),
 
+  /// Takes back a switched link whose socket dropped (Stage 0 step 16):
+  /// `p.lastReceived`, the last host sequence this end took in order, and
+  /// `p.skip`, its earlier resume frames that may not have landed. Valid only
+  /// as the first sealed frame on a new socket, after a `LinkHello` with
+  /// `resume`, while the server holds the link suspended. Answered with a
+  /// `result` of the same `id` — `{resumed: true, lastReceived, skip}` for the
+  /// server's side — then the server sends again whatever came after
+  /// `p.lastReceived`. Refused with an `error`, and the link ends. No
+  /// capability: `host.attach` already required [Capability.desktopClient].
+  linkResume('link.resume', origin: FrameOrigin.companion),
+
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),

@@ -7,4 +7,7 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.transcript` pages, `.watch`/`.unwatch` and the
   // `transcriptChanged` notice (Stage 0 step 5).
   'sessions.transcript',
+  // A switched companion link whose socket dropped is kept for
+  // `kHostLinkResumeGrace` and taken back by a `link.resume` (Stage 0 step 16).
+  'link.resume',
 };

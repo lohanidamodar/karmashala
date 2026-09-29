@@ -18,6 +18,12 @@ import 'package:karmashala_remote/host.dart';
 /// beyond the window means a restored backup — re-pair.
 const int kHostRelayListenWindow = 3;
 
+/// How many desktop links one server keeps suspended for a `link.resume` at
+/// once. Each holds its retain window (at most `kHostLinkRetainBytes`) and its
+/// client's write tokens for up to the grace; past the cap a drop is today's
+/// teardown.
+const int kMaxSuspendedHostLinks = 8;
+
 /// Builds the relay listener for one rendezvous — a seam tests point at an
 /// in-process relay.
 typedef RelayTransportFactory =
@@ -40,6 +46,7 @@ class RemoteHostService {
     this.newStreamFlow = StreamFlow.new,
     this.watchLease = kWatchLease,
     this.linkDeadAfter = kHostLinkDeadAfter,
+    this.linkResumeGrace = kHostLinkResumeGrace,
     DateTime Function()? now,
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -114,6 +121,15 @@ class RemoteHostService {
 
   /// Silence after which a phone that pings is dropped — see [LinkLiveness].
   final Duration linkDeadAfter;
+
+  /// How long a desktop client's switched link outlives its socket, waiting
+  /// for a `link.resume` (Stage 0 step 16).
+  final Duration linkResumeGrace;
+
+  /// Desktop links held for a resume right now, across every device.
+  int get _suspendedHostLinks => _runtimes.values
+      .where((runtime) => runtime._active?.host?.suspended ?? false)
+      .length;
 
   final DateTime Function() _now;
   final RelayTransportFactory _relayFactory;
@@ -897,10 +913,15 @@ class _DeviceRuntime {
   Future<void> _retireGeneration(int generation) async {
     if (_closed) return;
     // Something already moved the link on; this frame is simply late.
-    if (_active?.generation != generation) return;
+    final retiring = _active;
+    if (retiring?.generation != generation) return;
     _retired.add(generation);
-    _active?.liveness?.stop();
+    retiring?.liveness?.stop();
     _active = null;
+    // A switched link cannot outlive its generation, suspended or not: its
+    // client in the host server is released now, not at the next socket.
+    retiring?.resumeGrace?.cancel();
+    retiring?.host?.close('its generation was retired');
     peerLive = false;
     await _liveWatch?.cancel();
     _liveWatch = null;
@@ -938,19 +959,37 @@ class _DeviceRuntime {
     final current = service.devices.getById(device.id);
     if (current == null || current.revoked) return;
 
-    if (LinkHello.tryDecode(frame) != null) {
+    final hello = LinkHello.tryDecode(frame);
+    if (hello != null) {
       final current = _active;
       if (current != null &&
           current.generation == generation &&
           current.host != null) {
-        // A desktop client dialled again inside a generation its byte stream
-        // already used: that stream cannot resume, so the generation goes
-        // and the client probes forward to a fresh one.
+        // A client coming back for its link: the next sealed frame on this
+        // socket must be its `link.resume`. A live link is suspended first —
+        // the client has left the socket it was on, even if this end has not
+        // heard it close.
+        if (hello.resume &&
+            _suspend(current, 'the client came back on a new socket')) {
+          current.resumingOn = transport;
+          service.onLog?.call('a desktop client is resuming its link');
+          return;
+        }
+        // A plain hello — an older client, or one starting over — inside a
+        // generation its byte stream already used: that stream cannot go on,
+        // so the generation goes and the client probes forward to a fresh one.
         current.host!.close('the client connected again');
         return;
       }
       await _activate(generation, transport, announce: true);
       peerLive = true;
+      return;
+    }
+    final suspended = _active;
+    if (suspended != null &&
+        suspended.generation == generation &&
+        (suspended.host?.suspended ?? false)) {
+      await _onSuspendedFrame(suspended, transport, frame);
       return;
     }
     final active = _active?.generation == generation
@@ -1055,11 +1094,23 @@ class _DeviceRuntime {
     });
     final link = SealedHostLink(
       channel: active.channel,
-      sendSealed: (sealed) => active.transport.send(sealed),
+      sendSealed: (sealed) {
+        try {
+          active.transport.send(sealed);
+        } on TransportException catch (error) {
+          // The frame is in the retain window: the drop that closed this
+          // transport suspends the link, and a resume sends it again.
+          service.onLog?.call(
+            'a desktop link frame found its transport closed: '
+            '${error.message}',
+          );
+        }
+      },
       nextReceiveSequence: sequence + 1,
       deviceId: device.id,
       deviceName: device.name,
       capabilities: device.capabilities,
+      retainForResume: true,
     );
     active.host = link;
     // Host-protocol bytes cannot carry a `link.ping`; see SETTLED.md.
@@ -1077,6 +1128,7 @@ class _DeviceRuntime {
   /// another, so it is retired and the socket under it closed — the client
   /// dials the next one.
   Future<void> _hostEnded(_ActiveLink active) async {
+    active.resumeGrace?.cancel();
     if (_closed || !identical(_active, active)) return;
     final transport = active.transport;
     await _retireGeneration(active.generation);
@@ -1087,6 +1139,185 @@ class _DeviceRuntime {
     }
   }
 
+  /// Holds [active]'s switched link for a `link.resume` instead of ending it
+  /// (Stage 0 step 16): its host-server client — id, write tokens, uploads —
+  /// is untouched, and what it sends waits in the link's retain window. False
+  /// when it cannot be held, and the caller ends it as before.
+  bool _suspend(_ActiveLink active, String why) {
+    final host = active.host;
+    if (host == null || host.isClosed) return false;
+    if (host.suspended) return true;
+    if (!host.retainForResume) return false;
+    if (service._suspendedHostLinks >= kMaxSuspendedHostLinks) {
+      service.onLog?.call(
+        'a desktop client\'s link dropped ($why) with '
+        '$kMaxSuspendedHostLinks links already suspended; ending it',
+      );
+      return false;
+    }
+    host.suspend();
+    peerLive = false;
+    // Frames the transport queued while down are kept in the window too; a
+    // stale flush ahead of the resume answer would read as a gap.
+    final transport = active.transport;
+    if (transport is ReconnectingTransport) transport.discardQueued();
+    active.resumeGrace?.cancel();
+    active.resumeGrace = Timer(service.linkResumeGrace, () {
+      _chain = _chain.then((_) => _resumeGraceOver(active));
+    });
+    service.onLog?.call(
+      'a desktop client\'s link is suspended ($why); kept '
+      '${service.linkResumeGrace.inSeconds}s for a resume '
+      '(${host.retainedFrames} frames, ${host.retainedBytes} bytes kept)',
+    );
+    return true;
+  }
+
+  /// The grace ran out with nobody back: today's teardown.
+  void _resumeGraceOver(_ActiveLink active) {
+    if (_closed || !identical(_active, active)) return;
+    final host = active.host;
+    if (host == null || !host.suspended) return;
+    service.onLog?.call(
+      'a suspended desktop link was retired after '
+      '${service.linkResumeGrace.inSeconds}s without a resume',
+    );
+    // Its `done` runs [_hostEnded]: the generation retires, the socket closes.
+    host.close('not resumed within the grace');
+  }
+
+  /// A frame for [active]'s generation while its switched link is suspended.
+  /// Only a `link.resume`, as the first sealed frame on a socket that said
+  /// hello with `resume`, takes it back; any other frame that opens ends it.
+  Future<void> _onSuspendedFrame(
+    _ActiveLink active,
+    RemoteTransport transport,
+    Uint8List frame,
+  ) async {
+    final host = active.host!;
+    final resuming = identical(active.resumingOn, transport);
+    active.resumingOn = null;
+    final SealedFrame opened;
+    try {
+      opened = await active.channel.unseal(frame);
+    } on SealedFrameException catch (error) {
+      // Junk proves nothing and ends nothing: keep waiting for the real one.
+      service.onLog?.call('refused a frame: $error');
+      if (resuming) active.resumingOn = transport;
+      return;
+    } on SealedChannelException catch (error) {
+      // A replayed resume, or anything else the window rejects: as for any
+      // sealed frame, the generation cannot be trusted to go on.
+      service.onLog?.call('retiring generation ${active.generation}: $error');
+      await _retireGeneration(active.generation);
+      return;
+    }
+    Envelope? envelope;
+    try {
+      envelope = Envelope.fromBytes(opened.plaintext, accept: VersionRange.any);
+    } on Object {
+      envelope = null;
+    }
+    if (!resuming ||
+        envelope == null ||
+        envelope.type != FrameType.linkResume.wire) {
+      service.onLog?.call(
+        'a suspended desktop link heard something other than a resume; '
+        'ending it',
+      );
+      _adopt(active, transport);
+      host.close('a suspended link heard something other than a resume');
+      return;
+    }
+    final id = envelope.id;
+    final last = envelope.payload['lastReceived'];
+    final skipped = envelope.payload['skip'];
+    final peerSkip = <int>[
+      if (skipped is List)
+        for (final s in skipped.take(kHostLinkMaxResumeFrames))
+          if (s is int) s,
+    ];
+    var refusal = last is! int
+        ? 'the resume names no lastReceived'
+        : host.resumeRefusal(
+            peerLastReceived: last,
+            peerResumeSequence: opened.sequence,
+          );
+    if (refusal == null) {
+      final previous = active.transport;
+      _adopt(active, transport);
+      final resumed = await host.resume(
+        peerLastReceived: last as int,
+        peerResumeSequence: opened.sequence,
+        peerSkip: peerSkip,
+        answer: (sequence, lastReceived, skip) => Envelope.of(
+          FrameType.result,
+          seq: sequence,
+          id: id,
+          payload: {
+            'resumed': true,
+            'lastReceived': lastReceived,
+            'skip': skip,
+          },
+        ).toBytes(),
+      );
+      if (resumed && identical(_active, active)) {
+        active.resumeGrace?.cancel();
+        active.resumeGrace = null;
+        peerLive = true;
+        service.devices.updateLastSeen(device.id, service._now().toUtc());
+        service.onLog?.call(
+          'a desktop client resumed its link on generation '
+          '${active.generation} (${host.retainedFrames} frames sent again)',
+        );
+        // An accepted LAN socket the client left; a relay listener stays,
+        // since it is the rendezvous itself.
+        if (!identical(previous, transport) && !_isRelayListener(previous)) {
+          unawaited(previous.close().catchError((Object _) {}));
+        }
+        return;
+      }
+      refusal = host.closeReason ?? 'the link ended during the resume';
+    }
+    service.onLog?.call('refused a link.resume: $refusal');
+    await _refuseResume(active, transport, id, refusal);
+  }
+
+  /// Answers a `link.resume` that cannot be taken, then ends the link as the
+  /// grace would: the client falls back to a fresh one.
+  Future<void> _refuseResume(
+    _ActiveLink active,
+    RemoteTransport transport,
+    String? id,
+    String reason,
+  ) async {
+    _adopt(active, transport);
+    // No await between reading the sequence and sealing: the two must agree.
+    final envelope = Envelope.of(
+      FrameType.error,
+      seq: active.channel.nextSendSequence,
+      id: id,
+      payload: {'code': ErrorCode.notFound.wire, 'message': reason},
+    );
+    final sealed = await active.channel.seal(envelope.toBytes());
+    try {
+      transport.send(sealed);
+    } on TransportException {
+      // The close says it just as well.
+    }
+    active.host?.close('a resume was refused: $reason');
+  }
+
+  /// Puts [active] on [transport] and watches that one for the next drop.
+  void _adopt(_ActiveLink active, RemoteTransport transport) {
+    active.transport = transport;
+    _watchLiveness(transport);
+  }
+
+  bool _isRelayListener(RemoteTransport transport) => _listeners.values.any(
+    (byUrl) => byUrl.values.any((listener) => identical(listener, transport)),
+  );
+
   /// Tracks whether the transport carrying the active link is up. Only a
   /// frame proves the *phone* is there; a drop proves it may not be.
   void _watchLiveness(RemoteTransport transport) {
@@ -1096,11 +1327,16 @@ class _DeviceRuntime {
     _liveWatch = transport.states.listen((state) {
       if (state == TransportState.connected) return;
       peerLive = false;
-      // A byte stream cannot resume on another socket: frames queued while
-      // this one was down would arrive with a gap.
       final active = _active;
       if (active != null && identical(active.transport, transport)) {
-        active.host?.close('the connection dropped');
+        final host = active.host;
+        // A switched link is held for a `link.resume` (step 16). One that
+        // cannot be held ends: a byte stream cannot go on over another socket
+        // without one, since frames queued while this one was down would
+        // arrive with a gap.
+        if (host != null && !_suspend(active, 'the connection dropped')) {
+          host.close('the connection dropped');
+        }
       }
     });
   }
@@ -1151,6 +1387,11 @@ class _DeviceRuntime {
         service.newStreamFlow(),
       );
       active?.liveness?.stop();
+      // A client on a new generation has given up the old one's switched
+      // link — an older client after a drop, or a newer one starting over —
+      // so a suspended one is retired now, not at the end of its grace.
+      active?.resumeGrace?.cancel();
+      active?.host?.close('the client connected on a new generation');
       _active = created;
       active = created;
       _watchLiveness(transport);
@@ -1251,6 +1492,7 @@ class _DeviceRuntime {
   Future<void> close() async {
     _closed = true;
     peerLive = false;
+    _active?.resumeGrace?.cancel();
     _active?.host?.close('the device runtime closed');
     // Staged attachment bytes belong to this link. Nothing outside it can name
     // the upload, so a `.part` that outlives it is bytes nobody will quote.
@@ -1300,6 +1542,13 @@ class _ActiveLink {
 
   /// Set once a desktop client switched this link to the host protocol.
   SealedHostLink? host;
+
+  /// Runs out the suspension of [host] (`host.suspended`), when it is held.
+  Timer? resumeGrace;
+
+  /// The socket that said hello with `resume` for a suspended [host]: its
+  /// next sealed frame must be the `link.resume`.
+  RemoteTransport? resumingOn;
 
   /// The silence deadline, once the phone has pinged on this link.
   LinkLiveness? liveness;
