@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
 import '../../features/notes/presentation/notes_view.dart';
 import '../../features/remote/presentation/machines_section.dart';
@@ -11,6 +13,7 @@ import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
 import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
+import 'phone_shell.dart' show PhoneTabsScope;
 
 /// The phone's More tab: what the desktop's strip keeps below its areas.
 /// Each opens as a full page inside the tab, so the bottom bar stays.
@@ -18,12 +21,8 @@ class PhoneMoreList extends StatelessWidget {
   const PhoneMoreList({super.key});
 
   static final _entries = <(String, IconData, WidgetBuilder)>[
-    // The page's app bar names these, so their own headers drop the name.
-    (
-      'Usage',
-      AppIcons.chartBar,
-      (_) => const PaneTitleOverride(child: UsageTabView()),
-    ),
+    ('Usage', AppIcons.chartBar, _usage),
+    // The page's app bar names it, so its own header drops the name.
     (
       'Notes',
       AppIcons.note,
@@ -52,16 +51,36 @@ class PhoneMoreList extends StatelessWidget {
             leading: Icon(icon),
             title: Text(label),
             trailing: const Icon(AppIcons.caretRight),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (context) =>
-                    _MorePage(title: label, child: page(context)),
-              ),
-            ),
+            onTap: () => Navigator.of(context).push(_route(label, page)),
           ),
       ],
     ),
   );
+
+  // Under the page's app bar, which names it: its own header drops the name.
+  static Widget _usage(BuildContext _) =>
+      const PaneTitleOverride(child: UsageTabView());
+
+  static Route<void> _route(String title, WidgetBuilder page) =>
+      MaterialPageRoute<void>(
+        builder: (context) => _MorePage(title: title, child: page(context)),
+      );
+}
+
+/// More's Usage page, for a link inside the phone's tabs (Settings' "Usage"
+/// links); null anywhere else, where the link opens the workbench tab. Read
+/// before any await: the link may be gone when it resolves.
+void Function({String? accountId})? phoneUsagePageOpener(
+  BuildContext context,
+  WidgetRef ref,
+) {
+  if (!PhoneTabsScope.contains(context)) return null;
+  final navigator = Navigator.of(context);
+  final selection = ref.read(usageTabSelectionProvider.notifier);
+  return ({String? accountId}) {
+    if (accountId != null) selection.selectAccount(accountId);
+    navigator.push(PhoneMoreList._route('Usage', PhoneMoreList._usage));
+  };
 }
 
 /// A More entry's page: a back arrow and its name over the view the desktop
