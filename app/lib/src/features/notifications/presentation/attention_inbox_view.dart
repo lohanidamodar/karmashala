@@ -6,9 +6,13 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show ApprovalAnswerRequest, PromptAsk, SessionPromptRefusal;
 import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_handoff_service.dart';
+import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart' show AgentWaitKind;
 import 'package:karmashala_session/resume.dart';
@@ -184,6 +188,14 @@ class _InboxRow extends ConsumerWidget {
     final wait = item.kind == InboxItemKind.needsApproval
         ? ref.read(sessionStatusLookupProvider)(item.session.openId)?.waiting
         : null;
+    // The phone answers a plain approval from here (Stage 2 answer 7); the
+    // desktop has its ask toasts, and its rows stay as they were.
+    final answers =
+        item.kind == InboxItemKind.needsApproval &&
+            !item.session.imported &&
+            PhoneTabsScope.contains(context)
+        ? _InboxAnswers(sessionId: item.session.openId)
+        : null;
 
     return RowContextMenu(
       menuLabel: 'Actions for “${item.label}”',
@@ -226,6 +238,7 @@ class _InboxRow extends ConsumerWidget {
             wait: wait,
             canContinue: canContinue,
             onDismiss: onDismiss,
+            answers: answers,
           ),
         ),
       ),
@@ -241,6 +254,7 @@ class _InboxRowContent extends StatefulWidget {
     required this.canContinue,
     required this.onDismiss,
     this.wait,
+    this.answers,
   });
 
   final InboxItem item;
@@ -250,6 +264,9 @@ class _InboxRowContent extends StatefulWidget {
   final AgentWaitKind? wait;
   final bool canContinue;
   final VoidCallback onDismiss;
+
+  /// The phone's *Allow* and *Deny*, under the row's words; null elsewhere.
+  final Widget? answers;
 
   @override
   State<_InboxRowContent> createState() => _InboxRowContentState();
@@ -368,6 +385,7 @@ class _InboxRowContentState extends State<_InboxRowContent> {
                         ),
                       ),
                     ),
+                  ?widget.answers,
                 ],
               ),
             ),
@@ -388,6 +406,127 @@ class _InboxRowContentState extends State<_InboxRowContent> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// *Allow* and *Deny* on a phone's ask row, for a plain approval only: a
+/// question, or a menu this phone can read, is answered in the session, which
+/// the row's tap opens. Each answer names the prompt it was drawn from, so a
+/// late one is refused rather than landing on the next prompt.
+class _InboxAnswers extends ConsumerStatefulWidget {
+  const _InboxAnswers({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  ConsumerState<_InboxAnswers> createState() => _InboxAnswersState();
+}
+
+class _InboxAnswersState extends ConsumerState<_InboxAnswers> {
+  bool _busy = false;
+
+  Future<void> _answer(PromptAsk ask, {required bool approve}) async {
+    if (_busy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(sessionPromptAnswersProvider)
+          .answer(
+            ApprovalAnswerRequest(
+              sessionId: widget.sessionId,
+              approve: approve,
+              ask: ask,
+            ),
+          );
+      messenger.showSnackBar(
+        SnackBar(content: Text(approve ? 'Allowed.' : 'Denied.')),
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            refusal.stale
+                ? 'That prompt changed before your answer arrived — nothing '
+                      'was pressed.'
+                : refusal.unconfirmed
+                ? '${refusal.message}.'
+                : 'Nothing was sent: ${refusal.message}.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionId = widget.sessionId;
+    final report =
+        ref.watch(agentSessionStatusProvider(sessionId)).asData?.value ??
+        ref.read(sessionStatusLookupProvider)(sessionId);
+    if (report == null || !report.hasOpenPrompt) {
+      return const SizedBox.shrink();
+    }
+    final rules = ref
+        .read(agentRegistryProvider)
+        .byId(report.agentId)
+        ?.approval;
+    if (rules?.approve == null || rules?.deny == null) {
+      return const SizedBox.shrink();
+    }
+    if (!ref.read(sessionAnswerableProvider)(sessionId)) {
+      return const SizedBox.shrink();
+    }
+    // A menu the session's page would draw as its own options, unless it is
+    // the prompt a call raised: yes and no are then honestly its answers.
+    if (report.toolAsk == null &&
+        ref.read(sessionPromptAnswersProvider).menuOnScreen(sessionId) !=
+            null) {
+      return const SizedBox.shrink();
+    }
+    final ask = PromptAsk.drawnFrom(report);
+    final scheme = Theme.of(context).colorScheme;
+    final attention = SemanticColors.of(context).attention;
+    // Ink on amber, as the dock's primary answer is drawn.
+    final ink = Color.alphaBlend(
+      Colors.black.withValues(alpha: 0.88),
+      attention,
+    );
+    final idle = !_busy;
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.sm, right: Insets.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton(
+              key: ValueKey('inbox-allow:$sessionId'),
+              style: FilledButton.styleFrom(
+                backgroundColor: attention,
+                foregroundColor: ink,
+                minimumSize: const Size.fromHeight(Touch.target),
+              ),
+              onPressed: idle ? () => _answer(ask, approve: true) : null,
+              child: const Text('Allow'),
+            ),
+          ),
+          const SizedBox(width: Touch.gap),
+          Expanded(
+            child: FilledButton(
+              key: ValueKey('inbox-deny:$sessionId'),
+              style: FilledButton.styleFrom(
+                backgroundColor: SurfaceTones.of(context).selected,
+                foregroundColor: scheme.onSurface,
+                minimumSize: const Size.fromHeight(Touch.target),
+              ),
+              onPressed: idle ? () => _answer(ask, approve: false) : null,
+              child: const Text('Deny'),
+            ),
+          ),
+        ],
       ),
     );
   }

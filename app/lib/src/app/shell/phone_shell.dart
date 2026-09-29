@@ -15,6 +15,7 @@ import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/terminal/presentation/session_host_banner.dart'
     show RemoteResumingStrip;
 import 'activity_strip.dart' show ActivityStrip;
+import 'phone_ask_banner.dart';
 import 'phone_more_page.dart';
 import 'phone_top_bar.dart';
 import 'shell_area.dart';
@@ -334,6 +335,7 @@ class _PhoneWorkbench extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           RemoteResumingStrip(),
+          PhoneAskBanner(),
           Expanded(child: CompactWorkbenchScope(child: WorkbenchView())),
         ],
       ),

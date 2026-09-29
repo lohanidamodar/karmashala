@@ -293,25 +293,61 @@ class _DockBox extends StatelessWidget {
       at = end;
     }
     if (at < text.length) spans.add(TextSpan(text: text.substring(at)));
-    return Container(
+    Widget rows({double? maxHeight}) => ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
+      child: SingleChildScrollView(
+        primary: false,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: danger.isEmpty
+              ? SelectableText(text, style: style)
+              : SelectableText.rich(TextSpan(style: style, children: spans)),
+        ),
+      ),
+    );
+    final box = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Insets.sm),
       decoration: BoxDecoration(
         color: SurfaceTones.of(context).term,
         borderRadius: BorderRadius.circular(_dockInnerRadius),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: _maxHeight),
-        child: SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: danger.isEmpty
-                ? SelectableText(text, style: style)
-                : SelectableText.rich(TextSpan(style: style, children: spans)),
+      child: rows(maxHeight: _maxHeight),
+    );
+    // A scroll inside a scroll is a poor thing to drag with a thumb, so a
+    // phone reads a long prompt whole in a sheet, as the companion did.
+    if (!_Docked.touchOf(context) ||
+        '\n'.allMatches(text).length < _touchRowsBeforeShowAll) {
+      return box;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        box,
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton(
+            key: const ValueKey('dock-show-all'),
+            style: TextButton.styleFrom(
+              minimumSize: const Size(Touch.target, Touch.target),
+            ),
+            onPressed: () => showAdaptiveModal<void>(
+              context: context,
+              title: 'The whole prompt',
+              builder: (_) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
+                child: rows(),
+              ),
+            ),
+            child: const Text('Show all'),
           ),
         ),
-      ),
+      ],
     );
   }
+
+  /// Rows a phone shows in place before it offers the whole prompt in a sheet.
+  static const _touchRowsBeforeShowAll = 8;
 }
 
 /// The keys the agent named, as the board's buttons: yes filled amber with
@@ -378,6 +414,7 @@ class _DockAnswers extends ConsumerWidget {
     required bool approve,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
+    final said = _AnswerSaid.of(context);
     try {
       await ref
           .read(sessionPromptAnswersProvider)
@@ -392,9 +429,13 @@ class _DockAnswers extends ConsumerWidget {
       // Only reported when it did not land: the agent's own screen is the
       // acknowledgement of one that did.
       messenger.showSnackBar(
-        SnackBar(content: Text(_approvalRefusalText(refusal))),
+        SnackBar(
+          content: Text(_approvalRefusalText(refusal, touch: said != null)),
+        ),
       );
+      return;
     }
+    said?.say(approve ? 'Allowed.' : 'Denied.');
   }
 }
 

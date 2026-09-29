@@ -13,6 +13,7 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../../app/widgets/adaptive_modal.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
@@ -33,6 +34,7 @@ class ApprovalRequestCard extends ConsumerWidget {
   const ApprovalRequestCard({
     required this.sessionId,
     this.docked = false,
+    this.touch = false,
     super.key,
   });
 
@@ -41,6 +43,10 @@ class ApprovalRequestCard extends ConsumerWidget {
   /// Docked above the terminal pane's status line (spec §5, the ask dock):
   /// the same card, without the way to a terminal it is already under.
   final bool docked;
+
+  /// The phone's session page (Stage 2 step 5): the dock's answers stacked at
+  /// [Touch.target], no key caps, and a reason typed in a sheet.
+  final bool touch;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,15 +79,26 @@ class ApprovalRequestCard extends ConsumerWidget {
     final canAnswer = ref.read(sessionAnswerableProvider)(sessionId);
 
     if (docked) {
+      final dock = _AskDock(
+        sessionId: sessionId,
+        report: report,
+        agentName: agentName,
+        rules: rules,
+        menus: descriptor?.menus,
+        canAnswer: canAnswer,
+      );
       return _Docked(
-        child: _AskDock(
-          sessionId: sessionId,
-          report: report,
-          agentName: agentName,
-          rules: rules,
-          menus: descriptor?.menus,
-          canAnswer: canAnswer,
-        ),
+        touch: touch,
+        child: !touch
+            ? dock
+            // Stacked 48dp answers can outgrow a phone held sideways; the
+            // chat keeps the rest of the page.
+            : ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * _touchDockShare,
+                ),
+                child: SingleChildScrollView(primary: false, child: dock),
+              ),
       );
     }
 
@@ -232,6 +249,7 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
       ref.read(sessionPromptAnswersProvider).menuOnScreen(widget.sessionId);
 
   Future<void> _choose(AgentScreenMenu menu, int option) async {
+    final said = _AnswerSaid.of(context);
     try {
       await ref
           .read(sessionPromptAnswersProvider)
@@ -244,8 +262,11 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
           );
     } on SessionPromptRefusal catch (refusal) {
       // Worded for the card's own snack bar, which reads a gateway refusal.
-      throw GatewayException(refusal.message);
+      throw GatewayException(
+        said == null ? refusal.message : _approvalRefusalText(refusal, touch: true),
+      );
     }
+    said?.say('Chosen.');
     if (mounted) setState(() => _menu = _read());
   }
 
@@ -324,6 +345,7 @@ class _QuestionOr extends ConsumerWidget {
           agentName: agentName,
           question: question,
           onAnswer: (answers, {decline = false}) async {
+            final said = _AnswerSaid.of(context);
             try {
               await ref.read(chatQuestionAnswerProvider)(
                 RemoteQuestionAnswerRequest(
@@ -336,6 +358,7 @@ class _QuestionOr extends ConsumerWidget {
             } on RemoteApiRefusal catch (refusal) {
               throw GatewayException(refusal.message);
             }
+            said?.say(decline ? 'Declined.' : 'Answered.');
           },
         ),
         _TerminalLink(sessionId: sessionId),
@@ -366,13 +389,43 @@ class _TerminalLink extends ConsumerWidget {
 
 /// Marks a card docked under its terminal (see [ApprovalRequestCard.docked]).
 class _Docked extends InheritedWidget {
-  const _Docked({required super.child});
+  const _Docked({required super.child, this.touch = false});
+
+  /// See [ApprovalRequestCard.touch].
+  final bool touch;
 
   static bool of(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_Docked>() != null;
 
+  static bool touchOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_Docked>()?.touch ?? false;
+
   @override
-  bool updateShouldNotify(_Docked oldWidget) => false;
+  bool updateShouldNotify(_Docked oldWidget) => touch != oldWidget.touch;
+}
+
+/// The most of the page's height the dock takes on a phone before it scrolls.
+const double _touchDockShare = 0.55;
+
+/// On the phone, a word that an answer landed — the companion's "Approved." —
+/// because a dock that simply vanishes reads as a dropped tap. Null elsewhere,
+/// where the agent's own screen is the acknowledgement. Read before the await.
+class _AnswerSaid {
+  const _AnswerSaid(this._messenger);
+
+  final ScaffoldMessengerState _messenger;
+
+  static _AnswerSaid? of(BuildContext context) {
+    if (!_Docked.touchOf(context)) return null;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return messenger == null ? null : _AnswerSaid(messenger);
+  }
+
+  void say(String words) => _messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(content: Text(words), duration: const Duration(seconds: 2)),
+    );
 }
 
 /// What the agent said, quoted, or an admission that we do not know.
@@ -599,9 +652,14 @@ class _Answers extends ConsumerWidget {
   }
 }
 
-/// A refused approve or deny, for a snack bar.
-String _approvalRefusalText(SessionPromptRefusal refusal) =>
-    refusal.unconfirmed
+/// A refused approve or deny, for a snack bar. On the phone a stale answer is
+/// said plainly: the user was not looking at the screen it would have landed on.
+String _approvalRefusalText(
+  SessionPromptRefusal refusal, {
+  bool touch = false,
+}) => touch && refusal.stale
+    ? 'That prompt changed before your answer arrived — nothing was pressed.'
+    : refusal.unconfirmed
     ? '${refusal.message}.'
     : refusal.noTerminal || refusal.notFound
     ? 'That session is no longer running, so the key was not sent.'
