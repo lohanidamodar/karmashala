@@ -65,7 +65,8 @@ class HostedSessionWait {
       if (!completer.isCompleted) completer.complete(outcome);
     }
 
-    final running = status.runningSessionOf(sessionId);
+    // An SSH box session is waited on too: a send types into it.
+    final running = status.liveScreenOf(sessionId);
     if (running == null) {
       return ended(sessionId, status.statusOf(sessionId)?.report, inputSent);
     }
@@ -86,7 +87,7 @@ class HostedSessionWait {
           transcriptMoved = true;
         }
       }
-      if (status.runningSessionOf(sessionId) == null) {
+      if (status.liveScreenOf(sessionId) == null) {
         settle(ended(sessionId, report, inputSent, changed: changed));
         return;
       }
