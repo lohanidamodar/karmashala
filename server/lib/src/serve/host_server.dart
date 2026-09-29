@@ -21,6 +21,7 @@ import '../status/daemon_prompt_answers.dart';
 import '../transport/link_trust.dart';
 import '../transport/transport.dart';
 import 'lifecycle_feed.dart';
+import 'server_features.dart';
 
 /// The most one ref's output may run ahead of what its client acknowledged
 /// (slice 5e); past it the pump stops, and resumes from the ring — or from
@@ -718,6 +719,7 @@ class _ClientSession implements BoxRelayPeer {
         startedAt: _server.startedAt,
         observedAt: _server.now(),
         build: _server.build,
+        features: kServerFeatures,
       ),
     );
   }

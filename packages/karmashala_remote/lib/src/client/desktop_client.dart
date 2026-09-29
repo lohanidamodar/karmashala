@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_host_protocol/host_access.dart' show RemoteChannel;
 
+import '../domain/remote_payloads.dart' show RemoteHostStatus;
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
 import '../transport/key_schedule.dart';
@@ -36,7 +37,8 @@ class DesktopConnectException implements Exception {
 
 /// Opens one sealed host link over [transport] at [generation]: the link
 /// hello, the server's `host.status`, then `host.attach`. The transport is
-/// closed with the link, and a transport that drops ends the link.
+/// closed with the link, and a transport that drops ends the link. The link's
+/// `capabilities` are what that status granted, as of this link only.
 Future<SealedHostLink> connectDesktopLink({
   required CompanionPairing pairing,
   required RemoteTransport transport,
@@ -50,6 +52,8 @@ Future<SealedHostLink> connectDesktopLink({
     generation: generation,
   );
   SealedHostLink? link;
+  // An older server's status carries no grants: the pairing's stand in.
+  var granted = pairing.capabilities;
   final greeted = Completer<void>();
   final attached = Completer<void>();
   var chain = Future<void>.value();
@@ -80,12 +84,21 @@ Future<SealedHostLink> connectDesktopLink({
       }
       switch (envelope.knownType) {
         case FrameType.hostStatus when !greeted.isCompleted:
+          try {
+            final caps = RemoteHostStatus.fromJson(
+              envelope.payload,
+            ).capabilities;
+            if (caps != null) granted = caps;
+          } on Object {
+            // A status this build cannot read still greets.
+          }
           greeted.complete();
         case FrameType.result when envelope.id == _attachId:
           link = SealedHostLink(
             channel: channel,
             sendSealed: transport.send,
             nextReceiveSequence: opened.sequence + 1,
+            capabilities: granted,
           );
           if (!attached.isCompleted) attached.complete();
         case FrameType.error when envelope.id == _attachId:

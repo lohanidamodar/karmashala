@@ -39,6 +39,9 @@ class SealedHostLink {
   /// Who is at the other end, on the host's side of a link.
   final String? deviceId;
   final String? deviceName;
+
+  /// On the host's side, what the peer may do; on a desktop's, what the
+  /// server's `host.status` granted it for this link.
   final CapabilitySet capabilities;
 
   final _incoming = StreamController<Uint8List>();
