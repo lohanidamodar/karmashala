@@ -8,9 +8,10 @@ import 'package:test/test.dart';
 /// **What each CLI publishes as its own plan, pinned to a real transcript.**
 ///
 /// The reason this file exists rather than a comment: Claude Code's transcript
-/// format is internal and changes between versions (BACKLOG 52), and the
-/// failure mode of a format change here is an *empty* plan drawn beside a
-/// running agent — silent, and read as "no work planned". So every claim in
+/// format is internal and changes between versions (SETTLED.md, "The
+/// transcript format is internal and we parse it"), and the failure mode of
+/// a format change here is an *empty* plan drawn beside a running agent —
+/// silent, and read as "no work planned". So every claim in
 /// `agent_plan.dart` is asserted against the payload it was read off, and a
 /// future version that renames a key fails here first.
 ///
