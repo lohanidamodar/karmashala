@@ -22,7 +22,15 @@ Future<String?> readDeviceModel() async {
           ? model
           : '$maker $model';
     }
-    if (Platform.isIOS) return (await info.iosInfo).name.trim();
+    if (Platform.isIOS) {
+      // `name` is the generic "iPhone" from iOS 16 without an entitlement.
+      // The plugin's model table answers "Unknown device" past its newest.
+      final ios = await info.iosInfo;
+      final model = ios.modelName.trim();
+      return model.isEmpty || model == 'Unknown device'
+          ? ios.name.trim()
+          : model;
+    }
     if (Platform.isMacOS) return (await info.macOsInfo).computerName.trim();
     if (Platform.isWindows) return (await info.windowsInfo).computerName.trim();
     if (Platform.isLinux) return (await info.linuxInfo).prettyName.trim();
