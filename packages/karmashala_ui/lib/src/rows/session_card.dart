@@ -39,6 +39,7 @@ class SessionCard extends StatelessWidget {
     this.agentColor,
     this.agentMark,
     this.agentName,
+    this.environment,
     this.badge,
     this.age,
     this.ageTooltip,
@@ -101,6 +102,10 @@ class SessionCard extends StatelessWidget {
 
   /// The agent's name, for [agentMark]'s tooltip and screen reader.
   final String? agentName;
+
+  /// Where the session runs — "Windows", a WSL distribution, an SSH host —
+  /// said only on the title's hover.
+  final String? environment;
 
   /// Live agent status, when the session has one.
   final Widget? badge;
@@ -381,13 +386,16 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  /// What a pointer row no longer draws, said on the title's hover: one clause
+  /// What a pointer row no longer draws, said on the title's hover: the whole
+  /// title first (the row ellipsises it) and where it runs, then one clause
   /// per line, in the words the card's second and third lines used.
   String get pointerDetails {
     final unmeasured = statPending && branch == null;
     final stat = this.stat;
     final link = this.link;
     return [
+      title,
+      ?environment,
       [
         ?scheduled,
         agentLabel,

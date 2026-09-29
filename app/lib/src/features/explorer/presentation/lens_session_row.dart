@@ -13,6 +13,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/data/agents_data.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -103,6 +104,24 @@ class LensSessionRow extends ConsumerWidget {
                   .read(agentInstallationsDataProvider)
                   .getById(native.agentInstallationId)
                   ?.agentId);
+
+    // The hover says what the row clips: the whole title, the agent, where it
+    // runs and where it lives.
+    final environmentId = entry.directory?.environmentId;
+    final hoverText = [
+      entry.title,
+      [
+        if (agentId != null) AgentRegistry.builtIn.displayNameFor(agentId),
+        if (environmentId != null)
+          ref.watch(environmentLabelForIdProvider(environmentId)),
+      ].join('  ·  '),
+      clauses.join('  ·  '),
+    ].where((line) => line.isNotEmpty).join('\n');
+    Widget hover(Widget child) => Tooltip(
+      message: hoverText,
+      waitDuration: const Duration(milliseconds: 400),
+      child: child,
+    );
 
     final waiting = state == AgentState.needsYou;
     // What it waits on, in one word (board N1): "approve" or "question" when
@@ -253,22 +272,26 @@ class LensSessionRow extends ConsumerWidget {
                 ],
                 Flexible(
                   flex: 3,
-                  child: Text(
-                    entry.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.rowTitle(theme, strong: waiting),
+                  child: hover(
+                    Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: density.rowTitle(theme, strong: waiting),
+                    ),
                   ),
                 ),
                 if (clauses.isNotEmpty) ...[
                   const SizedBox(width: Insets.sm),
                   Flexible(
                     flex: 2,
-                    child: Text(
-                      clauses.join('  ·  '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
+                    child: hover(
+                      Text(
+                        clauses.join('  ·  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: muted,
+                      ),
                     ),
                   ),
                 ],

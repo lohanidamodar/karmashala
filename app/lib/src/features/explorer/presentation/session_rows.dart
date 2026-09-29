@@ -9,6 +9,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../sessions/application/session_actions.dart';
@@ -96,6 +97,12 @@ class NativeSessionRow extends ConsumerWidget {
     // The corner still dates a session we hold no reading for, from the one
     // fact we own — and the tooltip says which of the two it is looking at.
     final since = lastActive.at ?? session.createdAt;
+    // Where it runs, for the title's hover only.
+    final environmentId =
+        (session.workingDirectory ?? session.worktree)?.environmentId;
+    final environment = environmentId == null
+        ? null
+        : ref.watch(environmentLabelForIdProvider(environmentId));
     final agentId = ref
         .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
@@ -136,6 +143,7 @@ class NativeSessionRow extends ConsumerWidget {
       agentName: agentId == null
           ? null
           : AgentRegistry.builtIn.displayNameFor(agentId),
+      environment: environment,
       statusLabel: _capitalised(lifecycle),
       agentLabel: [
         agentId == null
@@ -341,6 +349,9 @@ class ImportedSessionRow extends ConsumerWidget {
       agentLabel: [cliLabel, 'imported'].join('  ·  '),
       agentMark: AgentLogo(agentId: session.cli, size: ExplorerRow.glyphSize),
       agentName: cliLabel,
+      environment: ref.watch(
+        environmentLabelForIdProvider(session.environmentId),
+      ),
       statusLabel: session.isSubagent
           ? 'Imported subagent conversation'
           : 'Imported conversation',
