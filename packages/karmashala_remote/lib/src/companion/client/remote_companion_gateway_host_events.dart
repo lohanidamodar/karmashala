@@ -29,6 +29,10 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
         onLog?.call('the host revoked this pairing; the link is over');
         _link.value = CompanionLinkState.disconnected;
         _declareDead();
+      case LinkSilentEvent():
+        // The client said so once; the drop is the ordinary one, re-dialling
+        // every path.
+        _declareDead();
       case HostStatusEvent(:final status):
         _lastHostStatus = status;
         // The greeting that opens a connection arrives while the client is

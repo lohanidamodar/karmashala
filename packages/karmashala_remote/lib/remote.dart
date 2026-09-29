@@ -15,6 +15,7 @@ export 'src/protocol.dart';
 export 'src/transport/key_schedule.dart';
 export 'src/transport/lan_beacon.dart';
 export 'src/transport/lan_transport.dart';
+export 'src/transport/link_liveness.dart';
 export 'src/transport/relay_transport.dart';
 export 'src/transport/remote_transport.dart';
 export 'src/transport/sealed_channel.dart';
