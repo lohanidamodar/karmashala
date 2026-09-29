@@ -6,6 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
+import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_handoff_service.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -26,6 +27,7 @@ class AttentionInboxView extends ConsumerWidget {
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.watch(clockProvider).nowUtc();
+    final showWorkbench = phoneWorkbenchOpener(context, ref);
 
     // Two groups (spec §4): what waits on an answer, then everything else.
     final asks = [
@@ -43,14 +45,14 @@ class AttentionInboxView extends ConsumerWidget {
           color: SemanticColors.of(context).attention,
           count: '${asks.length}',
         ),
-      for (final item in asks) row(item, controller, now),
+      for (final item in asks) row(item, controller, now, showWorkbench),
       if (updates.isNotEmpty)
         SidebarGroupLabel(
           label: 'Updates',
           count: '${updates.length}',
           spaceAbove: asks.isNotEmpty,
         ),
-      for (final item in updates) row(item, controller, now),
+      for (final item in updates) row(item, controller, now, showWorkbench),
     ];
 
     return Column(
@@ -88,11 +90,15 @@ class AttentionInboxView extends ConsumerWidget {
     InboxItem item,
     AttentionInboxController controller,
     DateTime now,
+    VoidCallback? showWorkbench,
   ) => _InboxRow(
     key: ValueKey(item.id),
     item: item,
     now: now,
-    onOpen: () => controller.open(item),
+    onOpen: () {
+      controller.open(item);
+      showWorkbench?.call();
+    },
     onDismiss: () => controller.dismiss(item.id),
   );
 }

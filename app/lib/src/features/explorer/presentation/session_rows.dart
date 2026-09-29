@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
@@ -79,9 +80,11 @@ class NativeSessionRow extends ConsumerWidget {
     // conversation resumes in its own worktree, a refusal is said in words.
     Future<void> open() async {
       final messenger = ScaffoldMessenger.of(context);
+      final showWorkbench = phoneWorkbenchOpener(context, ref);
       final result = await ref
           .read(explorerActionsProvider)
           .openNative(session.id);
+      if (!result.isFailure) showWorkbench?.call();
       final message = result.message;
       if (message == null) return;
       messenger.showSnackBar(SnackBar(content: Text(message)));
