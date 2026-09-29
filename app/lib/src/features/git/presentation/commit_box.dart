@@ -9,6 +9,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_git/git.dart' show GitPresence;
 
 import '../application/changes_providers.dart';
 import '../application/commit_drafts.dart';
@@ -101,6 +102,15 @@ class _CommitBoxState extends ConsumerState<CommitBox> {
       ),
     );
     if (checkout == null) return const SizedBox.shrink();
+    // Nothing here can act on a folder git does not know: no branch to show,
+    // nothing to pull, push or commit.
+    if (ref.watch(checkoutGitPresenceProvider(checkout)).asData?.value ==
+        GitPresence.notARepository) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(Insets.sm, 0, Insets.sm, Insets.xs),
+        child: _Saying(text: 'Not a git repository'),
+      );
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.sm, 0),
@@ -224,6 +234,12 @@ class _BranchRow extends ConsumerWidget {
     // Null upstream and null counts are different answers: no upstream at all
     // versus one git could not compare against. Only the first offers Publish.
     final unpublished = status != null && status.upstream == null;
+    void act(String value) => switch (value) {
+      'fetch' => copy.fetch(),
+      'pull_rebase' => copy.pull(rebase: true),
+      'pull_merge' => copy.pull(merge: true),
+      _ => _openPullRequest(context, ref, branch),
+    };
 
     return Row(
       children: [
@@ -276,48 +292,54 @@ class _BranchRow extends ConsumerWidget {
         ],
         RowContextMenu(
           menuLabel: 'Git actions',
-          itemBuilder: () => [
-            DesktopMenuItem(
-              value: 'fetch',
-              label: 'Fetch',
-              icon: AppIcons.arrowsClockwise,
-            ),
-            DesktopMenuItem(
-              value: 'pull_rebase',
-              label: 'Pull (rebase)',
-              icon: AppIcons.arrowDown,
-            ),
-            DesktopMenuItem(
-              value: 'pull_merge',
-              label: 'Pull (merge)',
-              icon: AppIcons.gitMerge,
-            ),
-            const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: 'pr',
-              label: 'Open a pull request…',
-              icon: AppIcons.arrowSquareOut,
-            ),
-          ],
-          onSelected: (value) => switch (value) {
-            'fetch' => copy.fetch(),
-            'pull_rebase' => copy.pull(rebase: true),
-            'pull_merge' => copy.pull(merge: true),
-            _ => _openPullRequest(context, ref, branch),
-          },
-          builder: (context) => IconButton(
+          itemBuilder: _gitActions,
+          onSelected: act,
+          builder: (anchor) => IconButton(
             tooltip: 'Git actions',
             visualDensity: VisualDensity.compact,
             icon: const Icon(
               AppIcons.dotsThreeVertical,
               size: Chrome.iconSmall,
             ),
-            onPressed: busy ? null : null,
+            // The same menu the right-click opens, under the button.
+            onPressed: busy
+                ? null
+                : () async {
+                    final picked = await showDesktopMenuUnder(
+                      anchor,
+                      _gitActions(),
+                    );
+                    if (picked != null) act(picked);
+                  },
           ),
         ),
       ],
     );
   }
+
+  static List<PopupMenuEntry<String>> _gitActions() => [
+    DesktopMenuItem(
+      value: 'fetch',
+      label: 'Fetch',
+      icon: AppIcons.arrowsClockwise,
+    ),
+    DesktopMenuItem(
+      value: 'pull_rebase',
+      label: 'Pull (rebase)',
+      icon: AppIcons.arrowDown,
+    ),
+    DesktopMenuItem(
+      value: 'pull_merge',
+      label: 'Pull (merge)',
+      icon: AppIcons.gitMerge,
+    ),
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'pr',
+      label: 'Open a pull request…',
+      icon: AppIcons.arrowSquareOut,
+    ),
+  ];
 }
 
 /// Asks for a title and a body, opens the request, and offers the URL it comes
