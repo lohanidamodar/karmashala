@@ -65,9 +65,11 @@ rem (karmashala.iss recurses subdirectories), and LocalHostExecutable looks
 rem there first.
 echo === SESSION HOST (this machine) === >> "%LOG%"
 if exist "%RELEASE%\host" rmdir /s /q "%RELEASE%\host"
-"%DARTEXE%" build cli -t server\bin\karmashala_host.dart -o build\host-windows >> "%LOG%" 2>&1
+rem Into server\build (git-ignored there), not a root build\: the repo root is
+rem a pub workspace with no build of its own since the move into app\.
+"%DARTEXE%" build cli -t server\bin\karmashala_host.dart -o server\build\host-windows >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
-xcopy /e /i /y "build\host-windows\bundle" "%RELEASE%\host" >> "%LOG%" 2>&1
+xcopy /e /i /y "server\build\host-windows\bundle" "%RELEASE%\host" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 rem The hosts that get deployed to other machines are NOT built here.
