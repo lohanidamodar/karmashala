@@ -17,6 +17,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/lineage.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
+import '../../sessions/presentation/end_session_action.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
@@ -178,6 +179,22 @@ class NativeSessionRow extends ConsumerWidget {
       ticked: ticked,
       tickEnabled: tickEnabled,
       tickDisabledTooltip: SelectionKind.projects.holdsLabel,
+      // The Sessions list's ×, beside the ⋮, while something runs it: the
+      // same row in two lists offers the same verbs. Watched, so it leaves
+      // the moment the process exits.
+      action: !selecting && sessionHasLiveProcess(ref, session.id)
+          ? ExplorerRowAction(
+              key: ValueKey('session-end:${session.id}'),
+              tooltip: 'End session',
+              icon: AppIcons.x,
+              onPressed: () => endSessionFromRow(
+                context,
+                ref,
+                session.id,
+                title: session.title,
+              ),
+            )
+          : null,
       // In selection mode a plain click ticks — the whole trade the mode makes,
       // which is why leaving it is one click away in two places. Cmd/Ctrl and
       // Shift select from outside it.

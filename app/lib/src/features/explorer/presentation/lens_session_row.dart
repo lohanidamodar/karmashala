@@ -15,6 +15,7 @@ import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/end_session_action.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
 import '../application/explorer_actions.dart';
@@ -103,6 +104,22 @@ class LensSessionRow extends ConsumerWidget {
     // Read when the menu opens; the row draws no pin of its own.
     bool isPinned() =>
         ref.read(settingsControllerProvider).pinnedSessionIds.contains(id);
+    // A Karmashala session something runs now offers the × (End session);
+    // one already ended, and an imported conversation, have nothing to end.
+    // Watched, so the × leaves the row the moment the process exits.
+    final endable =
+        entry.native != null && !selecting && sessionHasLiveProcess(ref, id);
+    final Widget? tail = waiting
+        ? Text(
+            needsYouWord(waitKind),
+            style: muted?.copyWith(
+              color: SemanticColors.of(context).attention,
+              fontWeight: FontWeight.w600,
+            ),
+          )
+        : dated
+        ? Text(compactAge(now.difference(entry.activityAt)), style: muted)
+        : null;
     final order = SelectionOrderScope.maybeOf(context);
     void tap() {
       if (!handleSelectableClick(
@@ -227,18 +244,27 @@ class LensSessionRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (waiting) ...[
+          if (endable) ...[
             const SizedBox(width: Insets.xs),
-            Text(
-              needsYouWord(waitKind),
-              style: muted?.copyWith(
-                color: SemanticColors.of(context).attention,
-                fontWeight: FontWeight.w600,
+            // The age or the ask at rest, the × in its place while the pointer
+            // or the keyboard is on the row — the tree's `+` / `⋮` swap. A
+            // fixed column, so the title does not move when it swaps.
+            SizedBox(
+              width: ExplorerRow.trailingWidthOf(context),
+              child: ExplorerRowTrailing(
+                meta: tail,
+                menu: ExplorerRowAction(
+                  key: ValueKey('session-end:$id'),
+                  tooltip: 'End session',
+                  icon: AppIcons.x,
+                  onPressed: () =>
+                      endSessionFromRow(context, ref, id, title: entry.title),
+                ),
               ),
             ),
-          ] else if (dated) ...[
+          ] else if (tail != null) ...[
             const SizedBox(width: Insets.xs),
-            Text(compactAge(now.difference(entry.activityAt)), style: muted),
+            tail,
           ],
         ],
       ),

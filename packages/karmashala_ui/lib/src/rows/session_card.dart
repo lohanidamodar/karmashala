@@ -54,6 +54,7 @@ class SessionCard extends StatelessWidget {
     this.parentTitle,
     this.lineageBroken = false,
     this.showMenu = true,
+    this.action,
     this.selecting = false,
     this.ticked = false,
     this.statusLabel,
@@ -156,6 +157,10 @@ class SessionCard extends StatelessWidget {
   /// Whether the row has an overflow menu at all. The companion has no verbs
   /// to put in one, and an empty menu button is a target that does nothing.
   final bool showMenu;
+
+  /// A row-level verb in the slot left of the menu, shown with it on hover or
+  /// focus — the session rows' × (End session). Pointer rows only.
+  final Widget? action;
 
   /// Whether the Explorer is asking which rows to act on: draws the tick box
   /// and makes [onTap] mean *tick*. The card is told, never decides.
@@ -340,6 +345,7 @@ class SessionCard extends StatelessWidget {
       ),
       trailing: ExplorerRowTrailing(
         meta: ageText,
+        action: action,
         menu: showMenu
             ? RowMenuButton(
                 tooltip: 'Session actions',

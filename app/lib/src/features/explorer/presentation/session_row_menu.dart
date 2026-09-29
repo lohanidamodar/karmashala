@@ -15,6 +15,7 @@ import '../../github/application/pull_request_context_service.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
+import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/export_session_action.dart';
 import '../../sessions/presentation/session_changed_files_dialog.dart';
 import '../../sessions/presentation/session_recap_card.dart';
@@ -92,6 +93,11 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
   _renameItem(),
   selectRowMenuItem(),
   const DesktopMenuDivider(),
+  // Only while something runs it: an ended session has nothing to end. Not
+  // red — ending stops the process and keeps the conversation, which a click
+  // on the row resumes; Delete, under it, is the act that loses something.
+  if (sessionRunsNow(ref, session.id))
+    DesktopMenuItem(value: 'end', label: 'End session', icon: AppIcons.power),
   DesktopMenuItem(
     value: 'delete',
     label: 'Delete',
@@ -149,6 +155,8 @@ Future<void> runNativeSessionMenuAction(
       await exportSession(context, ref, session.id);
     case 'rename':
       unawaited(renameNativeSession(context, ref, session));
+    case 'end':
+      await endSessionFromRow(context, ref, session.id, title: session.title);
     case 'delete':
       unawaited(_deleteNative(context, actions, session));
   }
