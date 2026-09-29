@@ -9,6 +9,7 @@ import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_git/git.dart'
     show WorktreeSetup, WorktreeSetupReport;
 import 'package:karmashala_core/util.dart' as core show Clock;
+import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
@@ -253,13 +254,14 @@ class DataService {
   /// [admin] it may not rename, grant or revoke devices; without
   /// [sshPrompts] it is neither told nor may answer an SSH question; without
   /// [transcripts] it may not read a session's transcript. A [phone] is also
-  /// refused what [phoneRefusal] names.
+  /// refused what [phoneRefusal] names, by its [grants].
   DataSession open(
     void Function(DataChanges changes) deliver, {
     bool admin = true,
     bool sshPrompts = true,
     bool transcripts = true,
     bool phone = false,
+    CapabilitySet? grants,
     String? device,
   }) {
     final link = DataSession._(
@@ -269,6 +271,7 @@ class DataService {
       sshPrompts: sshPrompts,
       transcripts: transcripts,
       phone: phone,
+      grants: grants,
       device: device,
     );
     _links.add(link);
@@ -643,6 +646,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     required this.sshPrompts,
     required this.transcripts,
     required this.phone,
+    this.grants,
     this.device,
   });
 
@@ -659,9 +663,12 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
   /// The app on a phone (Stage 1): refused what [phoneRefusal] names.
   final bool phone;
 
+  /// A [phone]'s pairing grants; null grants it every bit.
+  final CapabilitySet? grants;
+
   void _refuseForPhone(DataRequest<Object?> request) {
     if (!phone) return;
-    final refusal = phoneRefusal(request);
+    final refusal = phoneRefusal(request, grants: grants);
     if (refusal != null) throw DataRefused.denied(refusal);
   }
   final void Function(DataChanges changes) _deliver;
@@ -938,18 +945,47 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// transcripts, terminals, files (uploads, write, delete, move, mkdir),
 /// projects, notes, todos, snippets, preferences, git, checks, Flutter and
 /// the browser. Admin and SSH prompts are refused by `LinkTrust`, not here.
-String? phoneRefusal(DataRequest<Object?> request) => switch (request) {
-  EnvSet() || EnvRemove() =>
-    'a phone may not change this server\'s environment variables or '
-        'secrets; use a desktop paired with it',
-  SshHostPut() || SshHostDelete() || KnownHostTrust() || KnownHostForget() =>
-    'a phone may not change this server\'s SSH hosts or trusted host keys; '
-        'use a desktop paired with it',
-  ClaudeAccountDelete() || CodexAccountDelete() =>
-    'a phone may not delete this server\'s agent accounts; use a desktop '
-        'paired with it',
-  _ => null,
-};
+///
+/// Then by the pairing's [grants] (Stage 3 step 3), in the companion's words:
+/// `send_prompt` — [SessionSend], [SessionInterrupt]; `start_session` —
+/// [SessionStart], [SessionResume], [SessionFork], [SessionForkFromCheckpoint],
+/// [SessionHandoff]; `send_attachment` — [FilesUploadBegin]; `add_project` —
+/// [ProjectCreate], [ProjectFoldersCreate], [ImportsAdd]; `view_usage` —
+/// [UsageCurrent], [UsageRefresh], [UsageHistory]. `approve` is the host
+/// protocol's prompt answer, and `read_transcript` is `LinkTrust.transcripts`.
+/// The terminal is never refused: the bits guard against a slip, not a thief.
+String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
+  final denied = switch (request) {
+    EnvSet() || EnvRemove() =>
+      'a phone may not change this server\'s environment variables or '
+          'secrets; use a desktop paired with it',
+    SshHostPut() || SshHostDelete() || KnownHostTrust() || KnownHostForget() =>
+      'a phone may not change this server\'s SSH hosts or trusted host keys; '
+          'use a desktop paired with it',
+    ClaudeAccountDelete() || CodexAccountDelete() =>
+      'a phone may not delete this server\'s agent accounts; use a desktop '
+          'paired with it',
+    _ => null,
+  };
+  if (denied != null || grants == null) return denied;
+  final needed = switch (request) {
+    SessionSend() || SessionInterrupt() => Capability.sendPrompt,
+    SessionStart() ||
+    SessionResume() ||
+    SessionFork() ||
+    SessionForkFromCheckpoint() ||
+    SessionHandoff() => Capability.startSession,
+    FilesUploadBegin() => Capability.sendAttachment,
+    ProjectCreate() ||
+    ProjectFoldersCreate() ||
+    ImportsAdd() => Capability.addProject,
+    UsageCurrent() || UsageRefresh() || UsageHistory() => Capability.viewUsage,
+    _ => null,
+  };
+  return needed == null || grants.has(needed)
+      ? null
+      : 'this device was not granted ${needed.wire}';
+}
 
 /// [DataService]'s clock, as the conversation index asks for one.
 final class _Clock implements core.Clock {

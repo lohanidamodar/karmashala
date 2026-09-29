@@ -164,8 +164,13 @@ class MessageComposer extends StatefulWidget {
     this.controller,
     this.snippets,
     this.server,
+    this.attaches = true,
     super.key,
   });
+
+  /// Whether files may be attached at all: false hides Attach and ignores a
+  /// pasted or keyboard-inserted image (a phone not granted `send_attachment`).
+  final bool attaches;
 
   /// Sends the composed message (text + appended image paths). Awaited so the
   /// composer can show a busy state.
@@ -260,7 +265,7 @@ class _MessageComposerState extends State<MessageComposer> {
     final keys = HardwareKeyboard.instance;
     if (event.logicalKey == LogicalKeyboardKey.keyV &&
         (keys.isControlPressed || keys.isMetaPressed)) {
-      _pasteImageIfAny();
+      if (widget.attaches) _pasteImageIfAny();
       return KeyEventResult.ignored;
     }
     final isEnter =
@@ -722,7 +727,7 @@ class _MessageComposerState extends State<MessageComposer> {
                 textInputAction: TextInputAction.newline,
                 // Android keyboards insert images through the field, not a
                 // clipboard the app can read.
-                contentInsertionConfiguration: touch
+                contentInsertionConfiguration: touch && widget.attaches
                     ? ContentInsertionConfiguration(
                         allowedMimeTypes: _insertableImages.keys.toList(),
                         onContentInserted: _onKeyboardContent,
@@ -769,6 +774,7 @@ class _MessageComposerState extends State<MessageComposer> {
               child: _ComposerToolbar(
                 chips: widget.chips,
                 touch: touch,
+                attaches: widget.attaches,
                 onAttach: canType ? (touch ? _attachAnyFile : _attach) : null,
                 snippets: snippets == null
                     ? null
@@ -1198,6 +1204,7 @@ class _TouchAttachmentRow extends StatelessWidget {
 class _ComposerToolbar extends StatelessWidget {
   const _ComposerToolbar({
     required this.chips,
+    required this.attaches,
     required this.onAttach,
     required this.snippets,
     required this.send,
@@ -1207,6 +1214,9 @@ class _ComposerToolbar extends StatelessWidget {
   static const rowMinWidth = 380.0;
 
   final List<Widget> chips;
+
+  /// False hides Attach altogether.
+  final bool attaches;
 
   /// Null while the composer cannot take input.
   final VoidCallback? onAttach;
@@ -1222,14 +1232,15 @@ class _ComposerToolbar extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final tools = [
-        _ToolbarIconButton(
-          tooltip: touch
-              ? 'Attach a file'
-              : 'Attach image (or paste with Ctrl+V)',
-          icon: touch ? AppIcons.plus : AppIcons.image,
-          touch: touch,
-          onPressed: onAttach,
-        ),
+        if (attaches)
+          _ToolbarIconButton(
+            tooltip: touch
+                ? 'Attach a file'
+                : 'Attach image (or paste with Ctrl+V)',
+            icon: touch ? AppIcons.plus : AppIcons.image,
+            touch: touch,
+            onPressed: onAttach,
+          ),
         ?snippets,
       ];
 

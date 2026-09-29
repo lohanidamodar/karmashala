@@ -10,6 +10,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../../app/widgets/full_screen_form.dart';
+import '../../../core/capabilities/capabilities.dart'
+    show capabilitiesProvider, kAddProjectNotGranted;
 import '../../sessions/presentation/new_dialog_section.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 
@@ -36,14 +38,25 @@ class NewProjectDialog extends ConsumerStatefulWidget {
 
   final String? initialEnvironmentId;
 
+  /// A phone not granted `add_project` is told so instead: every way in
+  /// comes through here.
   static Future<bool?> show(
     BuildContext context, {
     String? initialEnvironmentId,
-  }) => showFormDialog<bool>(
-    context: context,
-    builder: (_) =>
-        NewProjectDialog(initialEnvironmentId: initialEnvironmentId),
-  );
+  }) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (!container.read(capabilitiesProvider).mayAddProject) {
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text(kAddProjectNotGranted)));
+      return Future.value(false);
+    }
+    return showFormDialog<bool>(
+      context: context,
+      builder: (_) =>
+          NewProjectDialog(initialEnvironmentId: initialEnvironmentId),
+    );
+  }
 
   @override
   ConsumerState<NewProjectDialog> createState() => _NewProjectDialogState();

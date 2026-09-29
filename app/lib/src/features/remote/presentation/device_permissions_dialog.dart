@@ -97,6 +97,17 @@ class _DevicePermissionsDialogState extends State<DevicePermissionsDialog> {
                   ),
               ],
             ),
+            // The terminal is always in the phone grant (Stage 3 step 3).
+            if (_preset == GrantPreset.phone) ...[
+              const SizedBox(height: Insets.sm),
+              Text(
+                'A phone with the terminal can still type into a session\'s '
+                'terminal.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),

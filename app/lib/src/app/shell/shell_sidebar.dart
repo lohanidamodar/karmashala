@@ -33,11 +33,13 @@ class ShellSidebar extends ConsumerWidget {
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
+    final mayStart = ref.watch(capabilitiesProvider.select((c) => c.mayStart));
     final list = switch (area) {
       ShellArea.sessions => _Area(
         title: 'Sessions',
         newLabel: 'New session',
         newIntent: const NewSessionIntent(),
+        offersNew: mayStart,
         actions: [
           IconButton(
             tooltip: selecting ? 'Done selecting' : 'Select several',
@@ -91,6 +93,7 @@ class _Area extends StatelessWidget {
     required this.newIntent,
     required this.child,
     this.actions = const [],
+    this.offersNew = true,
   });
 
   final String title;
@@ -101,6 +104,9 @@ class _Area extends StatelessWidget {
   final Intent newIntent;
   final Widget child;
 
+  /// False hides the +: a phone not granted what it makes.
+  final bool offersNew;
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,7 +115,7 @@ class _Area extends StatelessWidget {
         title: title,
         actions: actions,
         newLabel: newLabel,
-        onNew: () => Actions.maybeInvoke(context, newIntent),
+        onNew: offersNew ? () => Actions.maybeInvoke(context, newIntent) : null,
       ),
       Expanded(child: child),
     ],

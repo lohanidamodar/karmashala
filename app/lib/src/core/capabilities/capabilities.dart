@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
+import 'package:karmashala_remote/remote.dart'
+    show AttachTier, Capability, CapabilitySet;
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show SharedHostLinks;
 import 'package:karmashala_ui/tokens.dart' show UiDensity;
@@ -129,7 +130,28 @@ final class ServerOffer {
   final Set<String> features;
 
   bool granted(Capability capability) => grants?.has(capability) ?? true;
+
+  /// Whether a phone's pairing grants [capability] (Stage 3 step 3). Only a
+  /// phone-tier link is narrowed: a desktop client's pairing names none of
+  /// these bits, and may do all a desktop does.
+  bool phoneGranted(Capability capability) {
+    final grants = this.grants;
+    return grants == null ||
+        grants.attachTier != AttachTier.phone ||
+        grants.has(capability);
+  }
 }
+
+/// The companion's words for a phone refused by its grants.
+const kPromptNotGranted = 'This phone was not granted prompt rights.';
+const kApprovalNotGranted =
+    'This phone was not granted approval rights, so it cannot answer. '
+    'Answer in its terminal.';
+const kStartNotGranted =
+    'This phone was not granted permission to start sessions.';
+const kAddProjectNotGranted =
+    'This phone was not granted permission to add projects.';
+const kUsageNotGranted = 'Usage was not granted to this phone.';
 
 /// **The one question a surface asks** before it shows itself (spec §3.2):
 /// never `Platform`, `serverOnThisMachine` or width. Each getter is named for
@@ -189,6 +211,15 @@ final class Capabilities {
 
   /// Administer the server: its config, devices, agents and pairings.
   bool get serverAdmin => server.granted(Capability.serverAdmin);
+
+  /// A phone's grants, mirrored so it never offers what the server refuses.
+  /// The terminal is never gated: these guard against a slip, not a thief.
+  bool get mayApprove => server.phoneGranted(Capability.approve);
+  bool get maySend => server.phoneGranted(Capability.sendPrompt);
+  bool get mayStart => server.phoneGranted(Capability.startSession);
+  bool get mayAttach => server.phoneGranted(Capability.sendAttachment);
+  bool get mayAddProject => server.phoneGranted(Capability.addProject);
+  bool get mayViewUsage => server.phoneGranted(Capability.viewUsage);
 
   /// A session's chat, an imported session's history and a subagent's turns
   /// are read by the server (`sessions.transcript`), on this machine or any
