@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'ask_toasts.dart';
 import 'narrow_overlay.dart';
+import 'phone_shell.dart';
 import 'zen_bar.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
@@ -46,9 +47,9 @@ export 'shell_title_bar.dart' show ShellTitleBar;
 /// branching on width, never platform, is what keeps "responsive" a property.
 /// The breakpoints are the UI overhaul spec's (§5, "Narrow and Zen").
 enum ShellWidth {
-  /// Under 600: one column. The strip folds into a menu in the title bar,
-  /// which trades its menus, quick panel and usage for a tab switcher; an area
-  /// or the context panel opens full width over the workbench. Asks still dock.
+  /// Under 600: the phone shell ([PhoneShell]), with a bottom bar and a host
+  /// switcher on top. Inside the desktop layout (a safe area can take it
+  /// under 600), an area or the context panel opens full width.
   compact,
 
   /// 600–839: the strip stays, but the sidebar and the context panel open
@@ -296,6 +297,13 @@ class _AppShellState extends ConsumerState<AppShell> {
         namedWindow: request.namedWindow,
       );
     });
+    // A phone-width window gets the phone shell (Stage 1 step 7). Everything
+    // above stays watched, and the shortcuts keep their state, across a
+    // rotation between the two.
+    if (ShellWidth.of(MediaQuery.sizeOf(context).width).isCompact) {
+      _trackWidthClass(ShellWidth.compact);
+      return const ShellShortcuts(child: PhoneShell());
+    }
     // The macOS menu bar is mounted above this, in `KarmashalaApp`.
     return ShellShortcuts(
       child: Scaffold(
@@ -303,15 +311,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         // 125%+), and `preferredSize` cannot read a context.
         // Zen is only the pane (spec §5): the title bar goes with the rest,
         // and a small bar floats in at the top edge instead.
-        // Under 600 px it is the compact top bar (board N4), which is taller.
-        appBar: zen
-            ? null
-            : ShellTitleBar(
-                height:
-                    ShellWidth.of(MediaQuery.sizeOf(context).width).isCompact
-                    ? Chrome.compactTopBarOf(context)
-                    : Chrome.titleBarOf(context),
-              ),
+        appBar: zen ? null : ShellTitleBar(height: Chrome.titleBarOf(context)),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
