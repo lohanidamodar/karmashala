@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart' show HostPresence;
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/adaptive_modal.dart';
 import '../application/terminal_sessions_controller.dart';
+
+part 'terminal_presence_touch.dart';
 
 /// Several clients on one session (slice 5e), as the pane shows it: while
 /// someone else is typing, "Typing: *client* — Take over" over the top (a
@@ -26,6 +31,9 @@ class TerminalPresence extends ConsumerWidget {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(paneId);
     if (instance is! HostTerminalInstance) return child;
+    if (UiDensity.of(context).isTouch) {
+      return _TouchPresence(instance: instance, child: child);
+    }
     return ValueListenableBuilder<HostPresence?>(
       valueListenable: instance.presence,
       builder: (context, presence, _) {

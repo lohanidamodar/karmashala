@@ -90,6 +90,7 @@ class HostPaneLink {
   final _output = StreamController<Uint8List>();
   final _notices = StreamController<String>.broadcast();
   final _presence = StreamController<HostPresence>.broadcast();
+  final _refused = StreamController<void>.broadcast();
   final _exit = Completer<HostSessionEnd>();
 
   StreamSubscription<HostMessage>? _frames;
@@ -119,6 +120,10 @@ class HostPaneLink {
   /// Who drives the session and who watches, each time that changes.
   Stream<HostPresence> get presence => _presence.stream;
   HostPresence? get lastPresence => _lastPresence;
+
+  /// A keystroke refused because someone else is typing: the presence cover
+  /// says so, rather than a line per key in the screen.
+  Stream<void> get refusedWrites => _refused.stream;
 
   /// Completes when the session ends. A missing code stays missing.
   Future<HostSessionEnd> get ended => _exit.future;
@@ -323,6 +328,7 @@ class HostPaneLink {
     if (!_output.isClosed) unawaited(_output.close());
     await _notices.close();
     await _presence.close();
+    await _refused.close();
   }
 
   void _onFrame(HostMessage message) {
@@ -359,6 +365,7 @@ class HostPaneLink {
         // into the screen once per key.
         if (code == ProtocolErrorCode.writeRefused &&
             _lastPresence?.heldElsewhere == true) {
+          if (!_refused.isClosed) _refused.add(null);
           break;
         }
         if (!_notices.isClosed) _notices.add(message);
@@ -395,6 +402,7 @@ class HostPaneLink {
     if (!_output.isClosed) _output.close();
     if (!_notices.isClosed) _notices.close();
     if (!_presence.isClosed) _presence.close();
+    if (!_refused.isClosed) _refused.close();
   }
 }
 
