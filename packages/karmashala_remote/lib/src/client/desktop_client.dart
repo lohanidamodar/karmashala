@@ -20,11 +20,10 @@ import '../transport/relay_transport.dart';
 import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
 import '../transport/sealed_host_link.dart';
-import 'companion_client.dart'
-    show RelayTransportFactoryFn, kCompanionProbeWindow;
 import 'companion_store.dart';
 import 'lan_path.dart' show LanDialerFn, LanPathScout;
 import 'relay_candidates.dart';
+import 'relay_dial.dart';
 import 'route_pin.dart';
 
 part 'desktop_client/link_keeper.dart';

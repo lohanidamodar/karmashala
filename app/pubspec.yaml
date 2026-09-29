@@ -196,7 +196,7 @@ dependencies:
   # that never touch a widget import this instead, so they stay out of
   # Flutter's import closure and can run under plain `dart test`.
   riverpod: ^3.3.2
-  # Companion mode only: the pairing record (device key) at rest in the
+  # A phone's pairing record (device key) at rest in the
   # platform keystore — design §2 forbids plain preferences.
   flutter_secure_storage: ^11.0.0
   hotkey_manager: ^0.2.3
@@ -223,7 +223,7 @@ dependencies:
   media_kit_libs_windows_video: ^1.0.11
   media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_linux: ^1.2.1
-  # Companion mode only: the pairing screen's QR scanner.
+  # The pairing QR scanner on a phone (and the companion build's).
   mobile_scanner: ^7.0.0
   media_kit_video: ^2.0.1
   pasteboard: ^0.5.0

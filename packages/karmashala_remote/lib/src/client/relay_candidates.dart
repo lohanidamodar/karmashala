@@ -5,6 +5,10 @@
 /// identity, key derivation or trust.
 library;
 
+/// The relay a typed pairing code falls back to when the phone has configured
+/// none. Pinned equal to the desktop's `kDefaultRelayUrl` by test.
+const String kDefaultCompanionRelayUrl = 'wss://relay.popupbits.com';
+
 /// Guards against a runaway list. The HEAD is kept, because every list here is
 /// already in priority order, so a truncation drops the least useful tail.
 const int kMaxRelayCandidates = 6;

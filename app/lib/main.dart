@@ -11,7 +11,7 @@ import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/server_session_root.dart';
 import 'src/app/companion/companion_bootstrap.dart';
-import 'src/app/companion/companion_device_name.dart';
+import 'src/core/capabilities/device_name.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
@@ -29,7 +29,7 @@ import 'src/core/probe/probe_mode.dart';
 import 'src/core/server/companion_migration.dart';
 import 'src/core/server/machines.dart';
 import 'src/core/server/network_changes.dart';
-import 'src/features/companion/client/secure_companion_store.dart';
+import 'src/core/server/secure_machine_store.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show SharedHostLinks;
 import 'src/features/settings/application/settings_controller.dart';

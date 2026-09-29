@@ -5,10 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
-import 'package:karmashala_companion/widgets.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show remoteMenuOf;
-import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/client.dart' show GatewayException;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -25,6 +24,8 @@ import '../application/session_input.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
+import 'prompt_cards/menu_prompt_card.dart';
+import 'prompt_cards/question_prompt_card.dart';
 
 part 'approval_request_card/ask_dock.dart';
 part 'approval_request_card/dock_buttons.dart';
@@ -321,7 +322,7 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        CompanionMenuCard(
+        MenuPromptCard(
           agentName: widget.agentName,
           menu: remoteMenuOf(menu),
           onChoose: (option) => _choose(menu, option),
@@ -353,7 +354,7 @@ class _QuestionOr extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        CompanionQuestionCard(
+        QuestionPromptCard(
           agentName: agentName,
           question: question,
           onAnswer: (answers, {decline = false}) async {

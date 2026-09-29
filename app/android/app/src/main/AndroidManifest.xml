@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The companion talks to the desktop host over the relay or the LAN. -->
+    <!-- The phone talks to its server over the relay or the LAN. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- The pairing screen's QR scanner. Declared, it also makes the system
          camera intent behind "Take a photo" need a run-time grant, which

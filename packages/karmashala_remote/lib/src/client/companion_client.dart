@@ -22,10 +22,9 @@ import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
 import '../transport/stream_flow.dart';
 import 'companion_store.dart';
+import 'relay_dial.dart';
 
-/// How many generations forward the companion probes when its counter and the
-/// host's have drifted. Must stay within the host's own listen window.
-const int kCompanionProbeWindow = 3;
+export 'relay_dial.dart';
 
 /// Request ids of `link.ping`, disjoint from [CompanionClient]'s `q` ids.
 const String _kPingIdPrefix = 'lp';
@@ -847,7 +846,3 @@ class CompanionClient {
     await _events.close();
   }
 }
-
-/// Builds the relay transport for one rendezvous — a seam for tests.
-typedef RelayTransportFactoryFn =
-    RemoteTransport Function(Uri relay, RendezvousId rendezvous);

@@ -10,22 +10,15 @@ import '../../domain/remote_payloads.dart';
 import '../../domain/remote_session_options.dart';
 import '../../domain/remote_notes.dart';
 import '../../domain/remote_usage.dart';
+import '../../client/gateway_exception.dart';
 import '../../client/route_pin.dart';
 import '../../pairing/host_pairing_invite.dart' show HostRoute;
 import '../../protocol.dart';
 
+export '../../client/gateway_exception.dart';
+export '../../client/relay_candidates.dart' show kDefaultCompanionRelayUrl;
 export '../../client/route_pin.dart';
 export '../../pairing/host_pairing_invite.dart' show HostRoute;
-
-/// A refused or failed gateway call. Carries a sentence fit to show the user.
-class GatewayException implements Exception {
-  const GatewayException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'GatewayException: $message';
-}
 
 /// Pairing failed: a bad or expired QR payload, a short code the host did not
 /// recognise, or a host that could not be reached to complete the handshake.
@@ -35,10 +28,6 @@ class PairingException extends GatewayException {
   @override
   String toString() => 'PairingException: $message';
 }
-
-/// The relay a typed pairing code falls back to when the phone has configured
-/// none. Pinned equal to the desktop's `kDefaultRelayUrl` by test.
-const String kDefaultCompanionRelayUrl = 'wss://relay.popupbits.com';
 
 /// Whether the phone can currently talk to the host it is paired with.
 enum CompanionLinkState { disconnected, connecting, connected }

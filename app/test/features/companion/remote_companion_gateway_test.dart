@@ -8,7 +8,7 @@ library;
 import 'dart:io';
 
 import 'package:karmashala_remote/companion.dart';
-import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/core/server/secure_machine_store.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';

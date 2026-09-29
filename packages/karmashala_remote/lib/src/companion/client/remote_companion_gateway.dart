@@ -468,12 +468,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionPairingProgress> get pairingProgress => _progress.stream;
 
-  /// Where the typed code's relay setting lives in the phone's store.
-  static const String kPairingRelayStoreKey = 'karmashala.companion.relay';
+  static const String kPairingRelayStoreKey = stored.kPairingRelayStoreKey;
 
-  /// Where this phone's own identity lives — beside the pairing records
-  /// rather than inside one, because it must outlive unpairing every host.
-  static const String kDeviceIdStoreKey = 'karmashala.remote.device_id';
+  static const String kDeviceIdStoreKey = stored.kDeviceIdStoreKey;
 
   /// This phone's device id: minted once, then used by every pairing it makes.
   /// A fresh id per pairing is what made the desktop list the same phone again
