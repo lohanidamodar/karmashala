@@ -26,6 +26,7 @@ class AgentStatusBadge extends ConsumerWidget {
     required this.sessionId,
     this.showLabel = false,
     this.size = Chrome.iconSmall,
+    this.askShield = false,
     super.key,
   });
 
@@ -37,6 +38,11 @@ class AgentStatusBadge extends ConsumerWidget {
   /// Whether to draw the word beside the glyph. Off in a dense list, on where
   /// there is room for it.
   final bool showLabel;
+
+  /// Draws a session waiting on the user with the needs-you mark — the
+  /// breathing shield, or the question mark for a question — where the row
+  /// it heads takes the attention tone (spec §5).
+  final bool askShield;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,7 +64,13 @@ class AgentStatusBadge extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            StatusGlyph(status: status, size: size, color: colour),
+            if (askShield && status == AgentActivityStatus.awaitingApproval)
+              NeedsYouGlyph(
+                size: size,
+                question: report?.waiting == AgentWaitKind.question,
+              )
+            else
+              StatusGlyph(status: status, size: size, color: colour),
             if (showLabel) ...[
               const SizedBox(width: Insets.xs),
               Text(

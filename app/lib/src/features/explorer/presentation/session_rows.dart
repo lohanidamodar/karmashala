@@ -140,7 +140,11 @@ class NativeSessionRow extends ConsumerWidget {
       // One status glyph: what the agent is doing now while the session claims
       // to be live, its recorded lifecycle once it is not.
       badge: status.claimsLive
-          ? AgentStatusBadge(sessionId: session.id, size: ExplorerRow.glyphSize)
+          ? AgentStatusBadge(
+              sessionId: session.id,
+              size: ExplorerRow.glyphSize,
+              askShield: true,
+            )
           : null,
       unread: attention == SessionRowAttention.unread,
       needsYou: attention == SessionRowAttention.needsYou,

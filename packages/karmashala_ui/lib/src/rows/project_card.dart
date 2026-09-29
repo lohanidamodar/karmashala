@@ -914,7 +914,7 @@ class ProjectStateBadge extends StatelessWidget {
               color: color,
             )
           else
-            Icon(AppIcons.warningCircle, size: density.iconSmall, color: color),
+            AskGlyph(size: density.iconSmall),
           SizedBox(width: running ? ProjectRunningMark.gap : Insets.hair),
           Text(words ?? '$count', maxLines: 1, softWrap: false, style: style),
         ],

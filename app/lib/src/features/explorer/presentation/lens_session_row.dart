@@ -296,15 +296,12 @@ class _StateGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const size = ExplorerRow.glyphSize;
-    // Board N1: an approval breathes a shield, a question wears its mark.
-    if (state == AgentState.needsYou && wait == AgentWaitKind.approval) {
-      return AskGlyph(size: size, semanticLabel: state.label);
-    }
-    if (state == AgentState.needsYou && wait == AgentWaitKind.question) {
-      return Icon(
-        AppIcons.question,
+    // Board N1: an approval breathes a shield, a question wears its mark; an
+    // ask of a kind nobody could tell is still an ask, so the shield.
+    if (state == AgentState.needsYou) {
+      return NeedsYouGlyph(
         size: size,
-        color: SemanticColors.of(context).attention,
+        question: wait == AgentWaitKind.question,
         semanticLabel: state.label,
       );
     }

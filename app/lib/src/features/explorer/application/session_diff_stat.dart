@@ -5,9 +5,9 @@ import 'package:agent_cli/process.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../notifications/application/attention_inbox.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/rows.dart';
+import 'agent_state_providers.dart';
 import 'project_working.dart';
 
 /// The branch and change count of one checkout, keyed by the *checkout*: twenty
@@ -77,15 +77,17 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
   });
 });
 
-/// Unseen attention items grouped by project. Headers select their own integer
-/// out of this, so one notification leaves unrelated headers asleep.
+/// The sessions waiting on the user, grouped by project — the same set the
+/// Sessions badge counts, so a project's shield and "2 need you" never count
+/// a finished turn. Headers select their own integer out of this, so one ask
+/// leaves unrelated headers asleep.
 final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
+  final waiting = ref.watch(needsYouProvider);
+  if (waiting.isEmpty) return const {};
   final projectIds = ref.watch(sessionProjectIdsProvider);
   final counts = <String, int>{};
-  final countedSessions = <String>{};
-  for (final item in ref.watch(attentionInboxProvider).pending) {
-    if (!countedSessions.add(item.session.openId)) continue;
-    final projectId = projectIds[item.session.openId];
+  for (final openId in waiting.keys) {
+    final projectId = projectIds[openId];
     if (projectId != null) counts[projectId] = (counts[projectId] ?? 0) + 1;
   }
   return Map.unmodifiable(counts);

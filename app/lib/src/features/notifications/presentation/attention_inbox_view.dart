@@ -8,6 +8,8 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_handoff_service.dart';
+import '../../sessions/application/session_status_providers.dart';
+import 'package:agent_cli/descriptors.dart' show AgentWaitKind;
 import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../explorer/presentation/sidebar_chrome.dart';
@@ -125,7 +127,7 @@ class _ContinueAction extends StatelessWidget {
   SemanticColors semantic,
 ) => switch (kind) {
   InboxItemKind.needsApproval => (
-    icon: AppIcons.question,
+    icon: AppIcons.shield,
     color: semantic.attention,
   ),
   InboxItemKind.failed => (
@@ -171,6 +173,11 @@ class _InboxRow extends ConsumerWidget {
     final canContinue =
         item.kind == InboxItemKind.followUp &&
         ref.watch(sessionContinuationProvider(item.session.openId)).isPossible;
+    // What an ask waits on, as the Sessions area reads it: read, not watched —
+    // the inbox rebuilds this row when the item itself changes.
+    final wait = item.kind == InboxItemKind.needsApproval
+        ? ref.read(sessionStatusLookupProvider)(item.session.openId)?.waiting
+        : null;
 
     return RowContextMenu(
       menuLabel: 'Actions for “${item.label}”',
@@ -210,6 +217,7 @@ class _InboxRow extends ConsumerWidget {
           child: _InboxRowContent(
             item: item,
             now: now,
+            wait: wait,
             canContinue: canContinue,
             onDismiss: onDismiss,
           ),
@@ -226,10 +234,14 @@ class _InboxRowContent extends StatefulWidget {
     required this.now,
     required this.canContinue,
     required this.onDismiss,
+    this.wait,
   });
 
   final InboxItem item;
   final DateTime now;
+
+  /// What an ask waits on, when its status source could tell.
+  final AgentWaitKind? wait;
   final bool canContinue;
   final VoidCallback onDismiss;
 
@@ -274,11 +286,18 @@ class _InboxRowContentState extends State<_InboxRowContent> {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                look.icon,
-                size: Chrome.icon,
-                color: muted ? scheme.onSurfaceVariant : look.color,
-              ),
+              // An ask wears the needs-you mark every other surface does, seen
+              // or not: reading it did not answer it.
+              child: item.kind == InboxItemKind.needsApproval
+                  ? NeedsYouGlyph(
+                      size: Chrome.icon,
+                      question: widget.wait == AgentWaitKind.question,
+                    )
+                  : Icon(
+                      look.icon,
+                      size: Chrome.icon,
+                      color: muted ? scheme.onSurfaceVariant : look.color,
+                    ),
             ),
             const SizedBox(width: Insets.sm),
             Expanded(

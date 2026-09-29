@@ -126,6 +126,39 @@ class AskGlyph extends StatelessWidget {
   }
 }
 
+/// **The mark of a needs-you row** (spec §5): the breathing [AskGlyph] shield,
+/// or — where the source could tell the agent asked a question rather than
+/// for an approval — the question mark in the same colour (board N1). One
+/// widget so the Sessions area, the project tree and the Inbox cannot drift.
+class NeedsYouGlyph extends StatelessWidget {
+  const NeedsYouGlyph({
+    required this.size,
+    this.question = false,
+    this.semanticLabel,
+    super.key,
+  });
+
+  final double size;
+
+  /// The agent asked a question; false for an approval or an ask of unknown
+  /// kind, which wear the shield.
+  final bool question;
+
+  /// As [Icon.semanticLabel].
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!question) return AskGlyph(size: size, semanticLabel: semanticLabel);
+    return Icon(
+      AppIcons.question,
+      size: size,
+      color: SemanticColors.of(context).attention,
+      semanticLabel: semanticLabel,
+    );
+  }
+}
+
 /// **The ask's breath**, for anything that says an ask is waiting — the
 /// [AskGlyph] shield, the strip's needs-you badges — so every one of them
 /// breathes together, on one clock, and all stand still under reduced motion.
