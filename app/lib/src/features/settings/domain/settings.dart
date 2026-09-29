@@ -54,6 +54,20 @@ class AgentPermissions {
 /// width already saved stays theirs.
 const double kDefaultSidebarWidth = 264;
 
+/// The old default width, which every settings file saved whether or not
+/// anyone dragged. Read back as "never set", so those files get the new
+/// default; any other saved width is a person's and stays.
+const double _kLegacyUnsetSidebarWidth = 304;
+
+/// [saved] as the sidebar's width: absent, not a number, or the old default
+/// all mean [kDefaultSidebarWidth]. A read-time rule — the file is not
+/// rewritten.
+double sidebarWidthFrom(Object? saved) {
+  if (saved is! num) return kDefaultSidebarWidth;
+  final width = saved.toDouble();
+  return width == _kLegacyUnsetSidebarWidth ? kDefaultSidebarWidth : width;
+}
+
 /// User settings: the default agent and per-agent permission preferences.
 class Settings {
   const Settings({
@@ -544,7 +558,10 @@ class Settings {
     'androidSlimmingEnabled': androidSlimmingEnabled,
     'androidEmulatorGpu': androidEmulatorGpu,
     if (androidSdkPath.isNotEmpty) kAndroidSdkPathSetting: androidSdkPath,
-    'explorerPaneWidth': explorerPaneWidth,
+    // Only a width someone chose: saving the default pins it, and a later
+    // default would then never reach this file (how 304 got everywhere).
+    if (explorerPaneWidth != kDefaultSidebarWidth)
+      'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
     'accent': accent.name,
@@ -677,8 +694,7 @@ class Settings {
           ? json['androidEmulatorGpu'] as String
           : 'auto',
       androidSdkPath: androidSdkPathIn(json) ?? '',
-      explorerPaneWidth:
-          toDouble(json['explorerPaneWidth']) ?? kDefaultSidebarWidth,
+      explorerPaneWidth: sidebarWidthFrom(json['explorerPaneWidth']),
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
       collapsedExplorerNodes: json['collapsedExplorerNodes'] is List
           ? (json['collapsedExplorerNodes'] as List)
