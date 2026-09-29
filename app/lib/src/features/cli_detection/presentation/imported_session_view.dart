@@ -1,5 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_session/transcript.dart'
+    show ChatViewEvidence, SessionChatView;
+
+import '../../../core/capabilities/capabilities.dart';
+import '../../sessions/data/server_transcripts.dart';
 
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -61,6 +68,23 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
 
     final transcript = ref.watch(importedTranscriptProvider(widget.sessionId));
     final terminals = ref.watch(availableSystemTerminalsProvider);
+    // Read by the server (Stage 0 step 6): what it holds beyond these rows,
+    // and why it has none.
+    final caps = ref.watch(capabilitiesProvider);
+    final transcripts = ref.read(serverTranscriptsProvider);
+    final window = caps.chatViaServer
+        ? transcripts.windowFor(widget.sessionId, transcript.asData?.value)
+        : null;
+    final earlier = window != null && window.hasOlder ? window.from : 0;
+    final absence = window?.absence;
+    final emptyHint = !caps.chatViaServer && !caps.readsServerDisk
+        ? 'This server is older than the app. Update it to see the '
+              'conversation here.'
+        : absence != null && absence != ChatViewEvidence.notLocated
+        ? 'No readable history — '
+              '${SessionChatView.read(absence, prior: false).reason} '
+              'Send a message to continue it.'
+        : 'No readable history — send a message to continue it.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -117,6 +141,11 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                 for (final m in messages)
                   ChatMessage(role: m.role, text: m.text, tool: m.tool),
               ],
+              earlier: earlier,
+              onLoadEarlier: earlier > 0
+                  ? () => unawaited(transcripts.loadOlder(widget.sessionId))
+                  : null,
+              firstOrdinal: window?.from ?? 0,
               // An imported session records paths in the environment it ran in;
               // an image read in WSL needs its host form before `dart:io` can.
               resolveHostPath: (path) => ref
@@ -127,7 +156,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                       path: path,
                     ),
                   ),
-              emptyHint: 'No readable history — send a message to continue it.',
+              emptyHint: emptyHint,
               footer: MessageComposer(
                 hintText: 'Continue this session — type a message',
                 // Attachments go where the session's agent runs.

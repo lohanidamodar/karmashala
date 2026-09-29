@@ -19,10 +19,16 @@ class SubagentTurnsTile extends ConsumerStatefulWidget {
     required this.reference,
     this.resolveHostPath,
     this.nesting = 0,
+    this.sessionId,
     super.key,
   });
 
   final SubagentRef reference;
+
+  /// The session whose transcript names this delegate: the server reads its
+  /// turns only for one of that session's own subagents. Null reads the path
+  /// off this client's disk.
+  final String? sessionId;
 
   /// Passed straight through to the delegate's own tool rows: a screenshot it
   /// took is on the same machine as one the parent took.
@@ -52,7 +58,12 @@ class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final turns = _read
-        ? ref.watch(subagentTurnsProvider(widget.reference.filePath))
+        ? ref.watch(
+            subagentTurnsProvider((
+              sessionId: widget.sessionId,
+              filePath: widget.reference.filePath,
+            )),
+          )
         : const AsyncValue<List<TranscriptMessage>>.loading();
 
     return Padding(
@@ -98,6 +109,7 @@ class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
                                   message: message,
                                   resolveHostPath: widget.resolveHostPath,
                                   nesting: widget.nesting,
+                                  sessionId: widget.sessionId,
                                 ),
                             ],
                           ),
@@ -208,10 +220,12 @@ class _SubagentTurn extends StatelessWidget {
     required this.message,
     required this.nesting,
     this.resolveHostPath,
+    this.sessionId,
   });
 
   final TranscriptMessage message;
   final int nesting;
+  final String? sessionId;
   final String? Function(String path)? resolveHostPath;
 
   @override
@@ -269,6 +283,7 @@ class _SubagentTurn extends StatelessWidget {
                     reference: reference,
                     resolveHostPath: resolveHostPath,
                     nesting: nesting + 1,
+                    sessionId: sessionId,
                   ),
               ],
             ),

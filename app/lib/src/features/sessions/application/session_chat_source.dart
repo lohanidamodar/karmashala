@@ -2,12 +2,14 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../data/server_transcripts.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 
@@ -106,6 +108,25 @@ final sessionTranscriptLocatorProvider = Provider<SessionTranscriptLocator>(
   (ref) => SessionTranscriptLocator(ref),
 );
 
+/// Session [sessionId]'s transcript as the server reads it
+/// (`capabilities.chatViaServer`). Watched while [visible] says so — the
+/// chat's own gate, [chatTranscriptPollingProvider] — or always without one.
+Stream<List<TranscriptMessage>> serverTranscriptMessages(
+  Ref ref,
+  String sessionId, {
+  Provider<bool>? visible,
+}) {
+  final lease = ref.read(serverTranscriptsProvider).open(sessionId);
+  ref.onDispose(lease.close);
+  if (visible == null) {
+    lease.watching = true;
+  } else {
+    lease.watching = ref.read(visible);
+    ref.listen<bool>(visible, (_, shown) => lease.watching = shown);
+  }
+  return lease.windows.map((window) => window.messages);
+}
+
 /// The chat rendering of a PTY-hosted session, polled while it is on screen.
 /// An empty list — never an error — for a store or file we cannot read yet.
 final sessionChatTranscriptProvider = StreamProvider.autoDispose
@@ -118,10 +139,23 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
       Duration interval() =>
           alive ? ref.read(chatTranscriptPollIntervalProvider) : Duration.zero;
 
+      // The server reads the record where the agent wrote it; this client's
+      // disk is read only for a server too old to (Stage 0 step 6).
+      final viaServer = ref.watch(
+        capabilitiesProvider.select((caps) => caps.chatViaServer),
+      );
       final session = ref.read(sessionsDataProvider).getById(sessionId);
       final externalId = session?.externalSessionId;
       if (session == null || externalId == null || externalId.isEmpty) {
         yield const [];
+        return;
+      }
+      if (viaServer) {
+        yield* serverTranscriptMessages(
+          ref,
+          sessionId,
+          visible: chatTranscriptPollingProvider,
+        );
         return;
       }
       final agentId = ref

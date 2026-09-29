@@ -758,6 +758,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       switch (asked) {
         case final SessionTranscriptRead read:
           return DataReply(await work.page(read) as R, _service._revision);
+        case final SessionTranscriptSubagent read:
+          return DataReply(await work.subagent(read) as R, _service._revision);
         case SessionTranscriptWatch(:final sessionId):
           await work.watch(this, sessionId);
         case SessionTranscriptUnwatch(:final sessionId):

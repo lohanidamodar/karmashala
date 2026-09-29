@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
+import '../data/server_transcripts.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/transcript.dart';
@@ -87,6 +89,19 @@ final sessionChatViewProbeProvider = FutureProvider.autoDispose
     .family<SessionChatView, String>((ref, sessionId) async {
       final screen = screenSessionChatView(ref, sessionId);
       if (screen.isMeasured || screen.prior) return screen;
+      // The server looked where the agent wrote it: its page's `absence` is
+      // the answer, and none means a record is there (Stage 0 step 6).
+      if (ref.read(capabilitiesProvider).chatViaServer) {
+        final page = await ref
+            .read(serverTranscriptsProvider)
+            .peek(sessionId);
+        return SessionChatView.read(
+          page.absence ?? ChatViewEvidence.transcriptOnDisk,
+          prior: screen.prior,
+          path: page.path,
+          checkedAt: ref.read(clockProvider).nowUtc(),
+        );
+      }
       final row = ref.read(sessionsDataProvider).getById(sessionId)!;
       final agentId = ref
           .read(agentInstallationsDataProvider)

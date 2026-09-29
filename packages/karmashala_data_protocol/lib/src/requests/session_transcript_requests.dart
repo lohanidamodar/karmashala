@@ -28,6 +28,12 @@ DataRequest<Object?>? _sessionTranscriptRequestFromJson(
   SessionTranscriptUnwatch.name => SessionTranscriptUnwatch(
     args.string('sessionId'),
   ),
+  SessionTranscriptSubagent.name => SessionTranscriptSubagent(
+    args.string('sessionId'),
+    args.string('path'),
+    after: args.optionalInt('after'),
+    limit: args.optionalInt('limit'),
+  ),
   _ => null,
 };
 
@@ -111,6 +117,51 @@ final class SessionTranscriptWatch extends SessionTranscriptRequest<DataAck> {
 
   @override
   DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// One page of a subagent's turns (Stage 0 step 6): the delegate a `Task` row
+/// of session [sessionId] spawned, whose transcript is at [path] on the
+/// server's machine (`SubagentRef.filePath`). Read whole each time, for the
+/// row a person expanded; [after] (default 0) and [limit] page forward, so a
+/// client asks again while the page `hasNewer`.
+///
+/// Refused `invalid` for a [path] that is not one of [sessionId]'s
+/// subagents: the request reads no other file. An older server refuses the
+/// kind as `invalid` too; a client then reads its own disk, as before.
+final class SessionTranscriptSubagent
+    extends SessionTranscriptRequest<TranscriptPage> {
+  const SessionTranscriptSubagent(
+    this.sessionId,
+    this.path, {
+    this.after,
+    this.limit,
+  });
+
+  static const String name = 'sessions.transcript.subagent';
+
+  @override
+  final String sessionId;
+  final String path;
+  final int? after;
+  final int? limit;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'path': path,
+    'after': ?after,
+    'limit': ?limit,
+  };
+
+  @override
+  Object? resultToJson(TranscriptPage result) => result.toJson();
+
+  @override
+  TranscriptPage resultFromJson(Object? json) =>
+      _decode(kind, () => TranscriptPage.fromJson(_object(json, kind)));
 }
 
 /// Stops [SessionTranscriptWatch] for [sessionId] on this link.

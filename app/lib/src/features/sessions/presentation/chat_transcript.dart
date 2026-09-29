@@ -106,10 +106,23 @@ class ChatTranscriptView extends StatefulWidget {
     this.onPathTap,
     this.detailBuilder,
     this.turn = TranscriptTurn.unknown,
+    this.earlier = 0,
+    this.onLoadEarlier,
+    this.firstOrdinal = 0,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// Messages before [messages] that are not held here but can be asked
+  /// for with [onLoadEarlier] — a server-read transcript arrives a page at a
+  /// time. Offered once every held message is shown.
+  final int earlier;
+  final VoidCallback? onLoadEarlier;
+
+  /// The first message's place in the whole conversation, so a row keeps its
+  /// key (and its open state) when [onLoadEarlier] puts older ones above it.
+  final int firstOrdinal;
   final Widget? footer;
   final String emptyHint;
 
@@ -177,10 +190,16 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
     _stickToBottom = pos.pixels >= pos.maxScrollExtent - 24;
-    if (pos.pixels <= 80 && _shown < widget.messages.length) {
+    if (pos.pixels > 80) return;
+    if (_shown < widget.messages.length) {
       setState(() => _shown = math.min(_shown + _page, widget.messages.length));
+    } else if (_canLoadEarlier) {
+      widget.onLoadEarlier!();
     }
   }
+
+  bool get _canLoadEarlier =>
+      widget.earlier > 0 && widget.onLoadEarlier != null;
 
   void _jumpToBottom() {
     if (_scroll.hasClients) {
@@ -196,19 +215,20 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     // Only the loaded window: the window is a suffix, so its trailing run is
     // the transcript's, and a tick costs the window rather than the whole list.
     final rows = transcriptRows(visible, turn: widget.turn);
-    final lead = start > 0 ? 1 : 0;
+    final lead = start > 0 || _canLoadEarlier ? 1 : 0;
     // Rows are keyed by their ordinal in the whole transcript, so loading an
     // older page shifts indices without handing one row's element to another.
     // A live run has its own key, so its open state never outlives the turn.
+    final base = widget.firstOrdinal + start;
     Key keyOf(TranscriptRow row) => row.live
-        ? ValueKey<String>('${start + row.from}:live')
-        : ValueKey<int>(start + row.from);
+        ? ValueKey<String>('${base + row.from}:live')
+        : ValueKey<int>(base + row.from);
     final indexOfKey = <Key, int>{
       for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
     };
 
     Widget rowAt(int offset) => _MessageRow(
-      key: ValueKey<int>(start + offset),
+      key: ValueKey<int>(base + offset),
       message: visible[offset],
       ordinal: start + offset,
       onSaveNote: widget.onSaveNote,
@@ -256,19 +276,26 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                       indexOfKey[key],
                                   itemBuilder: (context, index) {
                                     if (lead == 1 && index == 0) {
+                                      // Held here first; then, from the
+                                      // server, the ones before those.
+                                      final more = start > 0
+                                          ? start
+                                          : widget.earlier;
                                       return SelectionContainer.disabled(
                                         child: Center(
                                           child: TextButton.icon(
-                                            onPressed: () => setState(
-                                              () => _shown = math.min(
-                                                _shown + _page,
-                                                total,
-                                              ),
-                                            ),
+                                            onPressed: start > 0
+                                                ? () => setState(
+                                                    () => _shown = math.min(
+                                                      _shown + _page,
+                                                      total,
+                                                    ),
+                                                  )
+                                                : widget.onLoadEarlier,
                                             icon: const Icon(AppIcons.caretUp),
                                             label: Text(
-                                              'Load $start earlier message'
-                                              '${start == 1 ? '' : 's'}',
+                                              'Load $more earlier message'
+                                              '${more == 1 ? '' : 's'}',
                                             ),
                                           ),
                                         ),

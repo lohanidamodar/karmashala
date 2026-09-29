@@ -222,10 +222,18 @@ as the running server reads it for a client (sessions.transcript).
   --limit=<n>             at most n rows (default 300)
   --generation=<g>        the generation a previous page answered
   --revision=<r>          the revision a previous page answered
+  --subagent=<path>       a subagent's turns instead (with --after, --limit)
   --json                  the page as the wire carries it
   --watch                 then print each change until interrupted
 ''',
-    valueFlags: {'after', 'before', 'limit', 'generation', 'revision'},
+    valueFlags: {
+      'after',
+      'before',
+      'limit',
+      'generation',
+      'revision',
+      'subagent',
+    },
     switches: {'json', 'watch'},
     positional: 1,
     run: (args, out, err, env) =>

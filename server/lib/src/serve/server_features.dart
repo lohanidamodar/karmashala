@@ -10,4 +10,6 @@ const Set<String> kServerFeatures = <String>{
   // A switched companion link whose socket dropped is kept for
   // `kHostLinkResumeGrace` and taken back by a `link.resume` (Stage 0 step 16).
   'link.resume',
+  // `sessions.transcript.subagent`: a delegate's turns (Stage 0 step 6).
+  'sessions.transcript.subagent',
 };
