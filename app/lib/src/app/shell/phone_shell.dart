@@ -221,10 +221,10 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Under the app bar, not above it where the status bar covers it.
-            // The stale list's own strip says "Not connected" on Sessions.
-            RemoteResumingStrip(
-              whenDown: tab != PhoneTab.sessions || !staleShown,
-            ),
+            // On Sessions the stale list's own strip says "Reconnecting…" or
+            // "Not connected", with its *Use Auto*: one strip, not two.
+            if (tab != PhoneTab.sessions || !staleShown)
+              const RemoteResumingStrip(),
             Expanded(child: _tabStack(tab, workbench)),
           ],
         ),

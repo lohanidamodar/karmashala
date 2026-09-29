@@ -145,13 +145,11 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
 /// "Reconnecting to *server*…" while a remote server's link is held for a
 /// resume (Stage 0 step 17), for a phone page to draw under its own app bar.
 /// Once the dials give up it stays as "Not connected", with the reason, *Use
-/// Auto* while the route is pinned, and *Try again* — unless [whenDown] is
-/// false, where the page already says so (the stale session list).
-/// Nothing on a local link.
+/// Auto* while the route is pinned, and *Try again*. Not mounted where the
+/// page's own strip says so (the stale session list), and the pages' own
+/// `DataConnectionNotice` stays quiet under it. Nothing on a local link.
 class RemoteResumingStrip extends ConsumerWidget {
-  const RemoteResumingStrip({this.whenDown = true, super.key});
-
-  final bool whenDown;
+  const RemoteResumingStrip({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
@@ -159,7 +157,7 @@ class RemoteResumingStrip extends ConsumerWidget {
         final RemoteServerAccess access => _ResumingStrip(
           access: access,
           linkActions: true,
-          whenDown: whenDown,
+          whenDown: true,
         ),
         _ => const SizedBox.shrink(),
       };
