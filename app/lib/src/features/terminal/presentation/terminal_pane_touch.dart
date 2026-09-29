@@ -57,29 +57,40 @@ extension _TouchPane on _TerminalPaneViewState {
                   )
                 : _touchGrid(fontSize, atSessionGrid: false),
           );
-    return Listener(
-      onPointerDown: _onTouchDown,
-      onPointerMove: _onTouchMove,
-      onPointerUp: _onTouchUp,
-      onPointerCancel: _onTouchCancel,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          body,
-          Positioned(
-            top: Insets.xs,
-            left: Insets.xs,
-            right: Insets.xs,
-            child: _TouchSelectionBar(
-              controller: widget.instance.controller,
-              onCopy: _copySelection,
-              onPaste: _pasteFromBar,
-              onSelectAll: _selectAll,
-              onMore: widget.onSecondaryTapDown,
+    return Column(
+      children: [
+        Expanded(
+          child: Listener(
+            onPointerDown: _onTouchDown,
+            onPointerMove: _onTouchMove,
+            onPointerUp: _onTouchUp,
+            onPointerCancel: _onTouchCancel,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                body,
+                Positioned(
+                  top: Insets.xs,
+                  left: Insets.xs,
+                  right: Insets.xs,
+                  child: _TouchSelectionBar(
+                    controller: widget.instance.controller,
+                    onCopy: _copySelection,
+                    onPaste: _pasteFromBar,
+                    onSelectAll: _selectAll,
+                    onMore: widget.onSecondaryTapDown,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        // Under the grid, so it rides above the soft keyboard with the pane.
+        TerminalKeyBar(
+          terminal: widget.instance.terminal,
+          focusNode: widget.instance.focusNode,
+        ),
+      ],
     );
   }
 
