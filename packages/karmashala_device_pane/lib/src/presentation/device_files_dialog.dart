@@ -147,7 +147,8 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     if (driver == null) return;
     // A directory to save into, not a save dialog: `file_selector`'s save
     // sheet is the one piece of this not dependable on every desktop.
-    final directory = await pickOneDirectory(
+    // adb runs on this device, so the copy lands in this device's folders.
+    final directory = await pickDeviceDirectory(
       context: context,
       // Nothing here knows a folder on this computer worth suggesting; the
       // fallback chain picks one that exists rather than the shell's own MRU.
@@ -180,7 +181,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final driver = _driver;
     final path = _path;
     if (driver == null || path == null) return;
-    final file = await pickOneFile(
+    final file = await pickDeviceFile(
       context: context,
       startNear: null,
       what: 'a file to copy to the device',

@@ -31,7 +31,9 @@ Future<void> exportSession(
 
   final folder =
       await (chooseFolder?.call() ??
-          pickOneDirectory(
+          // This device's folders, whatever server the window uses: the zip
+          // is written here, below.
+          pickDeviceDirectory(
             what: 'Where to save the export',
             context: context,
             // Nothing here knows a folder on this computer worth suggesting —

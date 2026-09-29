@@ -74,6 +74,18 @@ class FilePickerChoice {
       return platformDefault;
     }
   }
+
+  /// Whether the server's disk is this device's, installed by the app. While
+  /// it is, a device pick is today's pick, unchanged: there is one disk.
+  static bool Function()? serverOnThisDevice;
+
+  static bool get deviceIsServer {
+    try {
+      return serverOnThisDevice?.call() ?? false;
+    } on Object {
+      return false;
+    }
+  }
 }
 
 /// The host's open-file dialog. A seam, so a test can stand where the platform
@@ -342,28 +354,53 @@ Future<XFile?> pickOneFile({
 
 /// Asks for one file on **this device**, even when every other "Browse…" is
 /// pointed at a server elsewhere: the in-app browser over this computer only,
-/// or the host's dialog, as [FilePickerChoice.deviceInApp] says.
+/// or the host's dialog, as [FilePickerChoice.deviceInApp] says. While
+/// [FilePickerChoice.deviceIsServer], exactly [pickOneFile].
 Future<XFile?> pickDeviceFile({
   required String what,
   BuildContext? context,
   String? startNear,
   List<XTypeGroup> acceptedTypeGroups = const [],
-}) => pickOneFile(
-  what: what,
-  context: context,
-  startNear: startNear,
-  acceptedTypeGroups: acceptedTypeGroups,
-  sources: const [],
-  inApp: FilePickerChoice.deviceInApp,
-);
+}) {
+  final elsewhere = !FilePickerChoice.deviceIsServer;
+  return pickOneFile(
+    what: what,
+    context: context,
+    startNear: startNear,
+    acceptedTypeGroups: acceptedTypeGroups,
+    sources: elsewhere ? const [] : null,
+    inApp: elsewhere ? FilePickerChoice.deviceInApp : null,
+  );
+}
 
-/// Asks the host for one directory, announcing it first.
+/// [pickDeviceFile] for a directory: somewhere on **this device** to write
+/// to, whatever server the other "Browse…"es point at.
+Future<String?> pickDeviceDirectory({
+  required String what,
+  BuildContext? context,
+  String? startNear,
+  String? confirmButtonText,
+}) {
+  final elsewhere = !FilePickerChoice.deviceIsServer;
+  return pickOneDirectory(
+    what: what,
+    context: context,
+    startNear: startNear,
+    confirmButtonText: confirmButtonText,
+    sources: elsewhere ? const [] : null,
+    inApp: elsewhere ? FilePickerChoice.deviceInApp : null,
+  );
+}
+
+/// Asks the host for one directory, announcing it first. [sources] narrows
+/// the in-app browser's places, as for [pickOneFile].
 Future<String?> pickOneDirectory({
   required String what,
   BuildContext? context,
   String? environmentId,
   String? startNear,
   String? confirmButtonText,
+  List<BrowseSource>? sources,
   @visibleForTesting ShowDirectoryDialog show = getDirectoryPath,
   @visibleForTesting ForgetLastVisited forget = forgetLastVisitedFolder,
   @visibleForTesting Diagnostics? diagnostics,
@@ -389,6 +426,7 @@ Future<String?> pickOneDirectory({
         environmentId: environmentId,
         startAt: _startFor(environmentId, start, startNear),
         confirmButtonText: confirmButtonText,
+        sources: sources,
       );
       _remember(chosen);
       _report('directory', what, chosen, clock);

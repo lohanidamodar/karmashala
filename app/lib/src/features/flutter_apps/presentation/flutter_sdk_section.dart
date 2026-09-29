@@ -5,8 +5,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../files/data/pick_server.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/application/settings_controller.dart';
@@ -78,10 +78,14 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
 
   /// Browse is the convenience; the field is the way out, and the only order
   /// that works here — a WSL or SSH path is spelled for *that* machine.
+  /// The server runs Flutter, so a server elsewhere is browsed in this row's
+  /// own environment, from its files only.
   Future<void> _browse() async {
-    final file = await pickOneFile(
-      context: context,
+    final file = await pickServerFile(
+      context,
+      ref,
       what: 'the flutter executable',
+      environmentId: widget.environment.id,
       startNear: _path.text,
     );
     if (file == null) return;
@@ -142,12 +146,16 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
             builder: (context, constraints) {
               final field = TextField(
                 controller: _path,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isDense: true,
                   labelText: 'Flutter executable',
                   // Named rather than implied: on Windows the extensionless
                   // file beside it is a POSIX script — the §17 disaster.
-                  hintText: r'e.g. C:\src\flutter\bin\flutter.bat',
+                  // Anywhere else, that script is the one to name.
+                  hintText:
+                      widget.environment.kind == EnvironmentKind.windowsNative
+                      ? r'e.g. C:\src\flutter\bin\flutter.bat'
+                      : 'e.g. /home/you/flutter/bin/flutter',
                 ),
                 onSubmitted: _save,
               );

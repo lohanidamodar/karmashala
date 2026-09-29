@@ -9,6 +9,9 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../files/data/pick_server.dart';
+import '../../../core/capabilities/capabilities.dart';
+import 'package:agent_cli/process.dart' show EnvironmentKind;
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'path_field_row.dart';
@@ -96,15 +99,31 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
   }
 
   /// Browse is the convenience; the field is the way out — a WSL or SSH path
-  /// is spelled for *that* machine, and the dialog only opens local folders.
+  /// is spelled for *that* machine. The server runs the agent, so a server
+  /// elsewhere is browsed in the installation's own environment, and only
+  /// Windows is told to look for `.exe`.
   Future<void> _browse() async {
-    final file = await pickOneFile(
-      context: context,
+    final install = widget.installation;
+    final windows =
+        ref.read(capabilitiesProvider).readsServerDisk ||
+        ref
+            .read(environmentsControllerProvider)
+            .any(
+              (e) =>
+                  e.id == install.environmentId &&
+                  e.kind == EnvironmentKind.windowsNative,
+            );
+    final file = await pickServerFile(
+      context,
+      ref,
       what: 'an agent executable',
+      environmentId: install.environmentId,
       startNear: _path.text,
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Executables', extensions: ['exe']),
-      ],
+      acceptedTypeGroups: windows
+          ? const [
+              XTypeGroup(label: 'Executables', extensions: ['exe']),
+            ]
+          : const [],
     );
     if (file == null) return;
     _path.text = file.path;
