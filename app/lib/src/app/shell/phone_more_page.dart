@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
@@ -17,8 +18,17 @@ class PhoneMoreList extends StatelessWidget {
   const PhoneMoreList({super.key});
 
   static final _entries = <(String, IconData, WidgetBuilder)>[
-    ('Usage', AppIcons.chartBar, (_) => const UsageTabView()),
-    ('Notes', AppIcons.note, (_) => const NotesView()),
+    // The page's app bar names these, so their own headers drop the name.
+    (
+      'Usage',
+      AppIcons.chartBar,
+      (_) => const PaneTitleOverride(child: UsageTabView()),
+    ),
+    (
+      'Notes',
+      AppIcons.note,
+      (_) => const PaneTitleOverride(child: NotesView()),
+    ),
     ('Settings', AppIcons.gearSix, (_) => const SettingsTabView()),
     (
       'Machines',
