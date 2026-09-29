@@ -256,6 +256,9 @@ class FakeFilesWork {
         );
         uploaded.add(target);
         return target;
+      case FilesUploadAbort(:final uploadId):
+        _uploads.remove(uploadId);
+        return const DataAck();
     }
   }
 

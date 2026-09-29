@@ -271,6 +271,11 @@ class TranscriptStores {
     return null;
   }
 
+  // The client's `SessionTranscriptLocator` rule: the same homes and files
+  // (Claude `projects/*/<id>.jsonl`; Codex `sessions/**/rollout-…-<id>.jsonl`,
+  // walked, never its app-server), the id from the name, which Codex writes as
+  // the `session_meta` id the client reads. Unlike it, a record with no cwd
+  // yet is kept, so a first turn is found sooner.
   Future<Map<String, String>> _walk() async {
     walks++;
     final found = <String, String>{};
