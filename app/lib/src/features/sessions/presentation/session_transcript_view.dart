@@ -13,7 +13,12 @@ import '../../snippets/application/snippet_providers.dart';
 import '../application/session_activity_providers.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
+import '../../../app/shell/workbench.dart' show CompactWorkbenchScope;
+import '../../../app/widgets/adaptive_modal.dart';
+import '../../editor/application/editor_tab_actions.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
@@ -84,6 +89,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// The most of the conversation's height the recap may take.
   static const _recapShare = 0.3;
+
+  /// The same on the phone's page, where 30% of a 640dp screen crowds out
+  /// the conversation.
+  static const _recapShareCompact = 0.18;
 
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
@@ -239,6 +248,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// What a click on a file path does: **it reveals; it does not open**. Also
   /// the only place the feature touches a disk — detection is by shape.
   Future<void> _openPath(String token) async {
+    // The phone's page has no file panel beside it: a file opens as a tab.
+    final compact = CompactWorkbenchScope.of(context);
     final parsed = tokenForMatch(token);
     final base = _workingDirectory();
     if (base == null) {
@@ -278,6 +289,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     }
     final isDirectory = stat.isDirectory;
 
+    if (compact) {
+      if (isDirectory) {
+        _say('$resolved is a folder.');
+      } else {
+        ref.read(editorTabActionsProvider).openAt(path);
+      }
+      return;
+    }
+
     // Inside the checkout the panel is rooted at: show it there, where the
     // reader already is.
     final root = ref.read(fileTreeRootProvider);
@@ -306,6 +326,36 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (!outcome.ok) _say(outcome.error!);
   }
 
+  /// A link the agent wrote, tapped on a touch screen: asked about first, since
+  /// a stray tap while scrolling must not leave the app.
+  Future<void> _openLink(String href) async {
+    final uri = Uri.tryParse(href);
+    if (uri != null && !uri.hasScheme) {
+      await _openPath(href);
+      return;
+    }
+    if (uri == null ||
+        !(uri.isScheme('http') ||
+            uri.isScheme('https') ||
+            uri.isScheme('mailto'))) {
+      _say('Only web links open from here: $href');
+      return;
+    }
+    final go = await showAdaptiveModal<bool>(
+      context: context,
+      title: 'Open in the browser?',
+      builder: (context) => _OpenLinkBody(uri: uri),
+    );
+    if (go != true || !mounted) return;
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        _say('Nothing on this device could open $href.');
+      }
+    } on Exception {
+      _say('Nothing on this device could open $href.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Only this session's row. The transcript of one conversation says nothing
@@ -327,6 +377,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     final footer = _footerFor(active);
+    final recapShare = CompactWorkbenchScope.of(context)
+        ? _recapShareCompact
+        : _recapShare;
+    // Links stay inert under a pointer, as they were; on touch they ask.
+    final onLinkTap = UiDensity.of(context).isTouch ? _openLink : null;
 
     // **No header** (board N2, owner 2026-09-28): the conversation starts right
     // under the tab strip. The tab already names the session and shows its
@@ -347,7 +402,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // have to scroll back to is of a conversation already re-read.
                   ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxHeight: box.maxHeight * _recapShare,
+                      maxHeight: box.maxHeight * recapShare,
                     ),
                     child: SessionRecapCard(sessionId: widget.sessionId),
                   ),
@@ -445,6 +500,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           hasTerminal:
                               sessionTerminalPane(ref, widget.sessionId) !=
                               null,
+                          onLinkTap: onLinkTap,
                           footer: footer,
                         );
                       },
@@ -472,6 +528,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required int earlier,
     required int firstOrdinal,
     required bool hasTerminal,
+    required ValueChanged<String>? onLinkTap,
     required Widget footer,
   }) {
     return transcript.when(
@@ -492,6 +549,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         // Paths in the conversation are clickable, and a click reveals
         // rather than opens — see [_openPath].
         onPathTap: _openPath,
+        onLinkTap: onLinkTap,
         // What the parent's `Task(…)` row never showed. Collapsed and
         // unread until opened — one session's turns came to 1,485 MiB.
         detailBuilder: _detailBuilder,
@@ -888,6 +946,48 @@ class OpenSessionInSystemTerminalButton extends ConsumerWidget {
               ],
             ),
       orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// The link in full, so the reader sees where it goes, and the two answers.
+class _OpenLinkBody extends StatelessWidget {
+  const _OpenLinkBody({required this.uri});
+
+  final Uri uri;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SelectableText(
+            '$uri',
+            style: MonoStyles.body.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Insets.lg),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: Touch.gap),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Open'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

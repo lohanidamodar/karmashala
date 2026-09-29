@@ -284,55 +284,60 @@ class _ImageViewerDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Dialog(
-      insetPadding: const EdgeInsets.all(Insets.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.md,
-              Insets.sm,
-              Insets.xs,
-              Insets.sm,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: MonoStyles.small.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Close',
-                  icon: const Icon(AppIcons.x, size: Chrome.icon),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
+    // A phone gives the picture the whole screen to pinch in.
+    final fullScreen = WidthClass.of(
+      MediaQuery.sizeOf(context).width,
+    ).isCompact;
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Insets.md,
+            Insets.sm,
+            Insets.xs,
+            Insets.sm,
           ),
-          const Divider(height: 1),
-          Flexible(
-            child: InteractiveViewer(
-              maxScale: 8,
-              child: Image.file(
-                file,
-                fit: BoxFit.contain,
-                errorBuilder: (context, _, _) => const Padding(
-                  padding: EdgeInsets.all(Insets.lg),
-                  child: _Note(text: 'That image could not be displayed.'),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: MonoStyles.small.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                icon: const Icon(AppIcons.x, size: Chrome.icon),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Flexible(
+          child: InteractiveViewer(
+            maxScale: 8,
+            child: Image.file(
+              file,
+              fit: BoxFit.contain,
+              errorBuilder: (context, _, _) => const Padding(
+                padding: EdgeInsets.all(Insets.lg),
+                child: _Note(text: 'That image could not be displayed.'),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
+    if (fullScreen) {
+      return Dialog.fullscreen(child: SafeArea(child: body));
+    }
+    return Dialog(insetPadding: const EdgeInsets.all(Insets.xl), child: body);
   }
 }

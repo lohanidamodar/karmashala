@@ -161,21 +161,32 @@ class _StopPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // A phone has no Esc to name, and a thumb needs the touch floor.
+    final touch = UiDensity.of(context).isTouch;
     return Semantics(
       // Its own node: merged into the strip's, the strip would read as a
       // button and its label would gain this one.
       container: true,
       button: true,
-      label: 'Stop the running turn (Esc)',
+      label: touch ? 'Stop the running turn' : 'Stop the running turn (Esc)',
       excludeSemantics: true,
       child: Tooltip(
-        message: 'Stop the running turn — types Esc into its terminal',
+        message: touch
+            ? 'Stop the running turn'
+            : 'Stop the running turn — types Esc into its terminal',
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(Radii.sm),
           child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
+            constraints: touch
+                ? const BoxConstraints(
+                    minHeight: Touch.target,
+                    minWidth: Touch.target,
+                  )
+                : null,
+            alignment: touch ? Alignment.center : null,
+            padding: EdgeInsets.symmetric(
+              horizontal: touch ? Insets.md : Insets.sm,
               vertical: Insets.hair * 2,
             ),
             decoration: BoxDecoration(
@@ -183,11 +194,13 @@ class _StopPill extends StatelessWidget {
               border: Border.all(color: scheme.outlineVariant),
             ),
             child: Text(
-              'Stop · Esc',
+              touch ? 'Stop' : 'Stop · Esc',
               maxLines: 1,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style:
+                  (touch
+                          ? theme.textTheme.labelLarge
+                          : theme.textTheme.labelSmall)
+                      ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
         ),

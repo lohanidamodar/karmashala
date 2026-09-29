@@ -104,6 +104,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.onSaveNote,
     this.resolveHostPath,
     this.onPathTap,
+    this.onLinkTap,
     this.detailBuilder,
     this.turn = TranscriptTurn.unknown,
     this.earlier = 0,
@@ -134,6 +135,9 @@ class ChatTranscriptView extends StatefulWidget {
   /// Null leaves every path as plain text.
   final PathLinkCallback? onPathTap;
 
+  /// Where a link the agent or the user wrote goes. Null leaves links inert.
+  final ValueChanged<String>? onLinkTap;
+
   /// Keeps a message as a note. Null hides the affordance entirely — the view
   /// knows nothing about the Notes feature, only where it may send one.
   final SaveNoteCallback? onSaveNote;
@@ -161,6 +165,14 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   int _lastLen = 0;
   bool _stickToBottom = true;
 
+  /// Touch only: the turn whose actions a tap has shown.
+  final _tappedTurn = ValueNotifier<Object?>(null);
+
+  /// Touch only: whether *Jump to latest* is offered, as the companion's was.
+  /// [_touch] is kept from the last build for [_onScroll], which has no context.
+  bool _touch = false;
+  bool _awayFromLatest = false;
+
   @override
   void initState() {
     super.initState();
@@ -183,6 +195,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   @override
   void dispose() {
     _scroll.dispose();
+    _tappedTurn.dispose();
     super.dispose();
   }
 
@@ -190,6 +203,9 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
     _stickToBottom = pos.pixels >= pos.maxScrollExtent - 24;
+    if (_touch && _awayFromLatest == _stickToBottom) {
+      setState(() => _awayFromLatest = !_stickToBottom);
+    }
     if (pos.pixels > 80) return;
     if (_shown < widget.messages.length) {
       setState(() => _shown = math.min(_shown + _page, widget.messages.length));
@@ -207,8 +223,17 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     }
   }
 
+  /// A lazy list only estimates its end until the rows there are built, so
+  /// the jump is made again once they are.
+  void _toLatest() {
+    _stickToBottom = true;
+    _jumpToBottom();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+  }
+
   @override
   Widget build(BuildContext context) {
+    _touch = UiDensity.of(context).isTouch;
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
@@ -227,14 +252,19 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
     };
 
-    Widget rowAt(int offset) => _MessageRow(
+    // Keyed at the top: the list finds a row by its item's own key.
+    Widget rowAt(int offset) => _TappedTurn(
       key: ValueKey<int>(base + offset),
-      message: visible[offset],
-      ordinal: start + offset,
-      onSaveNote: widget.onSaveNote,
-      resolveHostPath: widget.resolveHostPath,
-      onPathTap: widget.onPathTap,
-      detailBuilder: widget.detailBuilder,
+      notifier: _tappedTurn,
+      child: _MessageRow(
+        message: visible[offset],
+        ordinal: start + offset,
+        onSaveNote: widget.onSaveNote,
+        resolveHostPath: widget.resolveHostPath,
+        onPathTap: widget.onPathTap,
+        onLinkTap: widget.onLinkTap,
+        detailBuilder: widget.detailBuilder,
+      ),
     );
 
     // The conversation sits on the terminal's tone (board N2), so switching a
@@ -317,6 +347,22 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                         ),
                 ),
               ),
+              // Above the footer rather than over the list, so it can never
+              // cover the newest turn (the companion's placement).
+              if (_touch && _awayFromLatest && total > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                  child: Center(
+                    child: FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, Touch.target),
+                      ),
+                      onPressed: _toLatest,
+                      icon: const Icon(AppIcons.arrowDown),
+                      label: const Text('Jump to latest', maxLines: 1),
+                    ),
+                  ),
+                ),
               if (widget.footer != null)
                 ConstrainedBox(
                   constraints: BoxConstraints(
@@ -344,6 +390,21 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       ),
     );
   }
+}
+
+/// Touch only: which turn's actions a tap has shown. One at a time, so a
+/// tap on another turn moves them there.
+class _TappedTurn extends InheritedWidget {
+  const _TappedTurn({required this.notifier, required super.child, super.key});
+
+  final ValueNotifier<Object?> notifier;
+
+  static ValueNotifier<Object?>? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_TappedTurn>()?.notifier;
+
+  @override
+  bool updateShouldNotify(_TappedTurn oldWidget) =>
+      oldWidget.notifier != notifier;
 }
 
 /// The side gutter of the chat column at [width]: the board's 24px where the
