@@ -37,6 +37,8 @@ class SessionCard extends StatelessWidget {
     required this.menuItemsBuilder,
     required this.onMenu,
     this.agentColor,
+    this.agentMark,
+    this.agentName,
     this.badge,
     this.age,
     this.ageTooltip,
@@ -91,6 +93,14 @@ class SessionCard extends StatelessWidget {
   final IconData agentIcon;
   final String agentLabel;
   final Color? agentColor;
+
+  /// The agent's own mark (its logo), drawn just before the title under a
+  /// pointer so a one-line row still says whose session it is — the lead glyph
+  /// there is the status, not the agent. Decorative: [agentName] is its words.
+  final Widget? agentMark;
+
+  /// The agent's name, for [agentMark]'s tooltip and screen reader.
+  final String? agentName;
 
   /// Live agent status, when the session has one.
   final Widget? badge;
@@ -319,10 +329,24 @@ class SessionCard extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: density.rowTitle(theme, strong: unread || needsYou),
     );
+    final agentMark = this.agentMark;
     return ExplorerRowLine(
       lead: lead,
       title: Row(
         children: [
+          if (agentMark != null) ...[
+            Tooltip(
+              message: agentName ?? '',
+              child: Semantics(
+                label: agentName,
+                child: SizedBox.square(
+                  dimension: ExplorerRow.glyphSize,
+                  child: Center(child: agentMark),
+                ),
+              ),
+            ),
+            SizedBox(width: density.glyphGap),
+          ],
           Flexible(
             child: details.isEmpty
                 ? titleText

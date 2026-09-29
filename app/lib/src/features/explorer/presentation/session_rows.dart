@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/agent_logo.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../sessions/application/session_actions.dart';
@@ -129,6 +130,12 @@ class NativeSessionRow extends ConsumerWidget {
       pinned: pinned,
       agentIcon: statusIcon,
       agentColor: statusColor,
+      agentMark: agentId == null
+          ? null
+          : AgentLogo(agentId: agentId, size: ExplorerRow.glyphSize),
+      agentName: agentId == null
+          ? null
+          : AgentRegistry.builtIn.displayNameFor(agentId),
       statusLabel: _capitalised(lifecycle),
       agentLabel: [
         agentId == null
@@ -332,6 +339,8 @@ class ImportedSessionRow extends ConsumerWidget {
           ? AppIcons.arrowBendDownRight
           : AppIcons.clockCounterClockwise,
       agentLabel: [cliLabel, 'imported'].join('  ·  '),
+      agentMark: AgentLogo(agentId: session.cli, size: ExplorerRow.glyphSize),
+      agentName: cliLabel,
       statusLabel: session.isSubagent
           ? 'Imported subagent conversation'
           : 'Imported conversation',

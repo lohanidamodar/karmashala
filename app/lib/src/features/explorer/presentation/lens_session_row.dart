@@ -11,6 +11,8 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../agents/data/agents_data.dart';
+import '../../agents/presentation/agent_logo.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -90,6 +92,17 @@ class LensSessionRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
+    // Whose session it is: the lead glyph is the state, so the agent's own
+    // mark sits before the title.
+    final native = entry.native;
+    final agentId =
+        entry.imported?.cli ??
+        (native == null
+            ? null
+            : ref
+                  .read(agentInstallationsDataProvider)
+                  .getById(native.agentInstallationId)
+                  ?.agentId);
 
     final waiting = state == AgentState.needsYou;
     // What it waits on, in one word (board N1): "approve" or "question" when
@@ -220,6 +233,24 @@ class LensSessionRow extends ConsumerWidget {
           Expanded(
             child: Row(
               children: [
+                if (agentId != null) ...[
+                  Tooltip(
+                    message: AgentRegistry.builtIn.displayNameFor(agentId),
+                    child: Semantics(
+                      label: AgentRegistry.builtIn.displayNameFor(agentId),
+                      child: SizedBox.square(
+                        dimension: ExplorerRow.glyphSize,
+                        child: Center(
+                          child: AgentLogo(
+                            agentId: agentId,
+                            size: ExplorerRow.glyphSize,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: density.glyphGap),
+                ],
                 Flexible(
                   flex: 3,
                   child: Text(
