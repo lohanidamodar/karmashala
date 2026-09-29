@@ -5,6 +5,7 @@ import 'package:re_highlight/languages/all.dart';
 
 import '../design_tokens.dart';
 import '../desktop_menu.dart';
+import 'code_editor_keys.dart';
 import 'code_editor_menu.dart';
 import 'code_find_bar.dart';
 import 'code_find_controller.dart';
@@ -98,6 +99,11 @@ class AppCodeEditorState extends State<AppCodeEditor> {
     _find = AppCodeFindController(widget.controller)
       ..readOnly = widget.readOnly;
     _revealAfterFrame(widget.revealLine);
+    CodeEditorKeys.revision.addListener(_onKeysMoved);
+  }
+
+  void _onKeysMoved() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -115,6 +121,7 @@ class AppCodeEditorState extends State<AppCodeEditor> {
 
   @override
   void dispose() {
+    CodeEditorKeys.revision.removeListener(_onKeysMoved);
     _paragraphs?.removeListener(_onParagraphs);
     _find.dispose();
     _ownFocus?.dispose();
@@ -304,35 +311,28 @@ class AppCodeEditorState extends State<AppCodeEditor> {
     if (mounted) _focus.requestFocus();
   }
 
+  /// The editor's own table, read from [CodeEditorKeys] so a keymap moves it.
   Map<ShortcutActivator, VoidCallback> get _chords {
-    final mac = kIsMacOS;
     final onSave = widget.onSave;
+    Map<ShortcutActivator, VoidCallback> on(String id, VoidCallback run) => {
+      for (final keys in CodeEditorKeys.keysFor(id)) keys: run,
+    };
     return {
-      const SingleActivator(LogicalKeyboardKey.f3): _findNext,
-      const SingleActivator(LogicalKeyboardKey.f3, shift: true): _findPrevious,
-      if (mac) ...{
-        const SingleActivator(LogicalKeyboardKey.keyG, meta: true): _findNext,
-        const SingleActivator(LogicalKeyboardKey.keyG, meta: true, shift: true):
-            _findPrevious,
-      },
-      const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
+      ...on('editor.findNext', _findNext),
+      ...on('editor.findPrevious', _findPrevious),
+      ...on('editor.goToLine', goToLine),
       // Case and regex are re_editor's own chords inside the buffer; these
       // reach them from the find strip too, and whole word is ours throughout.
-      for (final (key, toggle) in [
-        (LogicalKeyboardKey.keyC, _find.toggleCaseSensitive),
-        (LogicalKeyboardKey.keyW, _find.toggleWholeWord),
-        (LogicalKeyboardKey.keyR, _find.toggleRegex),
+      for (final (id, toggle) in [
+        ('editor.toggleMatchCase', _find.toggleCaseSensitive),
+        ('editor.toggleWholeWord', _find.toggleWholeWord),
+        ('editor.toggleRegex', _find.toggleRegex),
       ])
-        SingleActivator(key, alt: true, control: !mac, meta: mac): () {
+        ...on(id, () {
           if (_find.isOpen) toggle();
-        },
-      const SingleActivator(LogicalKeyboardKey.f10, shift: true):
-          openMenuAtCaret,
-      const SingleActivator(LogicalKeyboardKey.contextMenu): openMenuAtCaret,
-      if (onSave != null) ...{
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true): onSave,
-        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): onSave,
-      },
+        }),
+      ...on('editor.contextMenu', openMenuAtCaret),
+      if (onSave != null) ...on('editor.save', onSave),
     };
   }
 
@@ -353,7 +353,9 @@ class AppCodeEditorState extends State<AppCodeEditor> {
         rowHeight: CodeFindBar.rowHeightOf(context),
       ),
       toolbarController: _ContextMenuToolbar(this),
-      shortcutsActivatorsBuilder: const AppCodeShortcutsActivatorsBuilder(),
+      shortcutsActivatorsBuilder: AppCodeShortcutsActivatorsBuilder(
+        CodeEditorKeys.revision.value,
+      ),
       commentFormatter: prefix == null
           ? null
           : DefaultCodeCommentFormatter(singleLinePrefix: prefix),
