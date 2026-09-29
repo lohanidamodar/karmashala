@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 
+import '../../explorer/application/agent_state_providers.dart';
 import '../application/session_engine_provider.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/session_launcher.dart';
@@ -60,32 +61,49 @@ bool sessionRunsNow(WidgetRef ref, String sessionId) {
       launcher.heldByHostOnly(sessionId);
 }
 
-/// Whether ending [sessionId] now would cut a turn short: the agent is
-/// working, or stopped on a question or an approval. Ending an agent idle at
-/// its prompt loses nothing — the conversation stays resumable — so only
-/// these ask first.
-bool sessionIsMidTurn(WidgetRef ref, String sessionId) {
+/// Why ending [sessionId] now would lose something, in words for the confirm
+/// dialog; null when it would not. An agent known to be idle at its prompt,
+/// or already failed, loses nothing — the conversation stays resumable — so
+/// only that ends without asking. Waiting on the user (from the agent's own
+/// status or the attention feed), working, and a status nothing could read
+/// all ask first.
+String? endSessionWarning(WidgetRef ref, String sessionId) {
+  const resumable =
+      'The conversation itself stays: open the session again to resume it.';
   final status = ref.read(sessionActivityLookupProvider)(sessionId);
-  return status == AgentActivityStatus.working ||
-      status == AgentActivityStatus.awaitingApproval;
+  if (status == AgentActivityStatus.awaitingApproval ||
+      ref.read(needsYouProvider).containsKey(sessionId)) {
+    return 'Its agent is waiting for you — a question or an approval. Ending '
+        'stops the process now, and what it asked is dropped. $resumable';
+  }
+  return switch (status) {
+    AgentActivityStatus.working =>
+      'Its agent is in the middle of a turn. Ending stops the process now, '
+          'and the turn in flight is lost. $resumable',
+    AgentActivityStatus.unknown =>
+      'Karmashala cannot tell whether its agent is busy. Ending stops the '
+          'process now, and any turn in flight is lost. $resumable',
+    AgentActivityStatus.idle ||
+    AgentActivityStatus.failed ||
+    AgentActivityStatus.awaitingApproval => null,
+  };
 }
 
-/// "End session" from a session row — its menu or its ×. Asks first only when
-/// the agent is mid-turn; says a refusal or a failure in words.
+/// "End session" from a session row — its menu or its ×. Asks first unless
+/// the agent is known to be idle ([endSessionWarning]); says a refusal or a
+/// failure in words.
 Future<void> endSessionFromRow(
   BuildContext context,
   WidgetRef ref,
   String sessionId, {
   required String title,
 }) async {
-  if (sessionIsMidTurn(ref, sessionId)) {
+  final warning = endSessionWarning(ref, sessionId);
+  if (warning != null) {
     final confirmed = await showConfirmDialog(
       context,
       title: 'End "$title"?',
-      message:
-          'Its agent is in the middle of a turn. Ending stops the process '
-          'now, and the turn in flight is lost. The conversation itself stays: '
-          'open the session again to resume it.',
+      message: warning,
       confirmLabel: 'End session',
     );
     if (!confirmed || !context.mounted) return;
