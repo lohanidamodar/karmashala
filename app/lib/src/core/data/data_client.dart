@@ -103,14 +103,19 @@ class DataClient {
 
   /// A client with no server to reach — [reason] says why. Reads find
   /// nothing and writes are refused at once. What a container gets that
-  /// `main` did not connect.
-  factory DataClient.unavailable(String reason, {AppLogger? logger}) =>
-      DataClient._(
-        null,
-        DataConnection(DataLinkState.unavailable, reason),
-        Duration.zero,
-        logger: logger,
-      );
+  /// `main` did not connect. False [serverOnThisMachine] on a client that
+  /// cannot host one, so a missing server is never taken for a local one.
+  factory DataClient.unavailable(
+    String reason, {
+    AppLogger? logger,
+    bool serverOnThisMachine = true,
+  }) => DataClient._(
+    null,
+    DataConnection(DataLinkState.unavailable, reason),
+    Duration.zero,
+    logger: logger,
+    serverOnThisMachine: serverOnThisMachine,
+  );
 
   /// Dials the server with [dial] and, when it answers, primes every copy
   /// before returning. When it does not, the client comes back

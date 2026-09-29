@@ -81,15 +81,20 @@ class ServerSession {
   ///
   /// What it built is released again if a later part throws. [overrides] are
   /// the process's objects every session's container is handed — the
-  /// switcher that replaces it (plan step 14).
+  /// switcher that replaces it (plan step 14). A [client] that cannot host a
+  /// server has no session of its own: a null [remote] throws there.
   static Future<ServerSession> open({
     required CompanionPairing? remote,
     required Machines machines,
     required ProbeMode probe,
     required Directory support,
     required AppLogger logger,
+    required ClientCapabilities client,
     List<Override> overrides = const [],
   }) async {
+    if (remote == null && !client.hostsServer) {
+      throw StateError('This device runs no Karmashala server; pair a machine.');
+    }
     TerminalLayoutStore? layoutStore;
     RemoteServerAccess? remoteAccess;
     DataClient? data;
@@ -122,10 +127,15 @@ class ServerSession {
               store: machines.store,
             );
       data = remoteAccess == null
-          ? await connectLocalServerData(access: hostAccess, logger: logger)
+          ? await connectLocalServerData(
+              access: hostAccess,
+              hostsServer: client.hostsServer,
+              logger: logger,
+            )
           : await connectRemoteServerData(access: remoteAccess, logger: logger);
       container = ProviderContainer(
         overrides: [
+          clientCapabilitiesProvider.overrideWithValue(client),
           terminalLayoutStoreProvider.overrideWithValue(layoutStore),
           dataClientProvider.overrideWithValue(data),
           localHostSessionAccessProvider.overrideWithValue(hostAccess),

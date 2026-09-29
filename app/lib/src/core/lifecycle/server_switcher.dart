@@ -33,6 +33,13 @@ final class SwitchingServer extends ServerRoot {
   final String name;
 }
 
+/// No server session, and none to open: a client that cannot host a server
+/// and has no machine chosen. The root shows pairing; a pairing's
+/// [ServerSwitcher.switchTo] opens the first session.
+final class NoServer extends ServerRoot {
+  const NoServer();
+}
+
 /// Opening [target] threw. No session is open; the screen offers
 /// [previous] — the server in use before — again, another try, or Quit.
 final class ServerOpenFailed extends ServerRoot {
@@ -106,8 +113,13 @@ class ServerSwitcher {
     required this._quit,
     this._relaunch,
     this._onOpened,
+    this.hostsServer = true,
     AppLogger? logger,
   }) : _log = logger ?? AppLogger.named('server_switch');
+
+  /// Whether this client has a server of its own to open. Without one, a
+  /// switch to null ends in [NoServer], never a local session.
+  final bool hostsServer;
 
   final Future<ServerSession> Function(CompanionPairing? remote) _open;
   final Machines _machines;
@@ -140,8 +152,18 @@ class ServerSwitcher {
     _root = ValueNotifier<ServerRoot>(ServingServer(session));
   }
 
+  /// Starts with no session: [NoServer], until a pairing switches to one.
+  void startWithoutServer({required AppLifecycle lifecycle}) {
+    _lifecycle = lifecycle;
+    _active = null;
+    _root = ValueNotifier<ServerRoot>(const NoServer());
+  }
+
   /// What the window's root shows.
   ValueListenable<ServerRoot> get root => _root;
+
+  /// The paired machines, for the pairing [NoServer] shows.
+  Machines get machines => _machines;
 
   /// The server in use, or null for this computer's own.
   CompanionPairing? get active => _active;
@@ -160,6 +182,14 @@ class ServerSwitcher {
     if (_root.value is ServingServer &&
         next?.hostId.value == _active?.hostId.value) {
       return Future.value(ServerSwitchOutcome.unchanged);
+    }
+    // No session to leave: straight to opening.
+    if (_root.value is NoServer) {
+      if (next == null) return Future.value(ServerSwitchOutcome.unchanged);
+      return _run(() async {
+        await _choose(next);
+        return _openInto(next, previous: null);
+      });
     }
     return _run(() => _switch(next));
   }
@@ -193,7 +223,9 @@ class ServerSwitcher {
   Future<ServerSwitchOutcome> _switch(CompanionPairing? next) async {
     final previous = _active;
     final from = serverNameForSwitch(previous);
-    final to = serverNameForSwitch(next);
+    final to = next != null || hostsServer
+        ? serverNameForSwitch(next)
+        : 'the pairing screen';
     _log.info('switch: $from → $to requested.');
     if (!await _lifecycle.prepareToLeave()) {
       _log.info('switch: kept $from — a before-quit guard said no.');
@@ -245,6 +277,12 @@ class ServerSwitcher {
     CompanionPairing? target, {
     required CompanionPairing? previous,
   }) async {
+    if (target == null && !hostsServer) {
+      _active = null;
+      _root.value = const NoServer();
+      _log.info('switch: no machine in use; showing pairing.');
+      return ServerSwitchOutcome.switched;
+    }
     final name = serverNameForSwitch(target);
     _root.value = SwitchingServer(name);
     final ServerSession session;
