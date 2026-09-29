@@ -8,6 +8,9 @@
     <!-- Hearing the desktop's LAN discovery beacon needs the multicast lock
          MainActivity holds over its MethodChannel. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- MainActivity reports the default network changing, so a link on a
+         dead socket resumes at once. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="Karmashala"
         android:name="${applicationName}"

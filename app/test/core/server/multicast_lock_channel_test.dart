@@ -1,4 +1,4 @@
-import 'package:karmashala/src/app/companion/multicast_lock_channel.dart';
+import 'package:karmashala/src/core/server/multicast_lock_channel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,8 +34,13 @@ void main() {
     final lock = ChannelMulticastLock(onLog: log.add);
 
     await lock.acquire();
+    // The count is the process's: let go, so the next test starts at zero.
+    await lock.release();
 
-    expect(log.single, 'multicast lock acquire failed: wifi-off');
+    expect(log, [
+      'multicast lock acquire failed: wifi-off',
+      'multicast lock release failed: wifi-off',
+    ]);
   });
 
   test('a missing channel (desktop, tests) is quietly skipped', () async {
