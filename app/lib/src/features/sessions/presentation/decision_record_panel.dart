@@ -9,17 +9,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
 import '../application/decision_recorder.dart';
 import '../application/session_decision_providers.dart';
-import '../application/session_ui_providers.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-
-/// Which session's decision record the panel is describing: the session **on
-/// screen**, not the one last clicked in the Explorer.
-final decisionsPanelSessionIdProvider = Provider<String?>(
-  (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
-      ref.watch(selectedSessionIdProvider),
-);
 
 /// **What this session has settled**, in the words it was settled in. Empty is
 /// "not recorded", never "nothing was decided"; a reversal is a new row.
@@ -28,7 +19,7 @@ class DecisionRecordPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = ref.watch(decisionsPanelSessionIdProvider);
+    final sessionId = ref.watch(panelSessionIdProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

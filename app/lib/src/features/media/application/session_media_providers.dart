@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import '../../agents/application/agent_providers.dart';
 import '../../editor/application/code_editor_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -33,14 +32,6 @@ final sessionMediaCacheRootProvider = FutureProvider<Directory>((ref) async {
   await root.create(recursive: true);
   return root;
 });
-
-/// Which session the media panel is describing: the session on screen, not the
-/// last one clicked in the Explorer, which is only the fallback.
-final mediaPanelSessionIdProvider = Provider<String?>(
-  (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
-      ref.watch(selectedSessionIdProvider),
-);
 
 /// Where a session's record is, and how to read the paths inside it.
 class SessionMediaSource {

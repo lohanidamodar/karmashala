@@ -281,7 +281,7 @@ const _digits = [
 
 List<ShellChord> _buildChords() => [
   ShellChord(
-    // J for jump: A, B, K and N already open context panel surfaces.
+    // J for jump: Ctrl+Shift+N was taken by New project.
     activator: commandActivator(LogicalKeyboardKey.keyJ, shift: true),
     intent: OpenNextWaitingIntent(),
     command: 'attention.nextWaiting',

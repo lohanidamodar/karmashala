@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
@@ -69,7 +70,7 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         await server.override(),
-        checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
+        panelSessionIdProvider.overrideWithValue('s1'),
         clockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );

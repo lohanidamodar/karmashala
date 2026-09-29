@@ -1,5 +1,6 @@
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_core/util.dart';
+import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -44,7 +45,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          planPanelSessionIdProvider.overrideWithValue('s1'),
+          panelSessionIdProvider.overrideWithValue('s1'),
           sessionAgentPlanProvider.overrideWith((ref, id) => reading),
           chatTranscriptPollingProvider.overrideWithValue(polling),
           clockProvider.overrideWithValue(
@@ -241,7 +242,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          planPanelSessionIdProvider.overrideWithValue(null),
+          panelSessionIdProvider.overrideWithValue(null),
           clockProvider.overrideWithValue(_FixedClock(wroteAt)),
         ],
         child: MaterialApp(

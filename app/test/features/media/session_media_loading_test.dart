@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 import 'package:karmashala/src/features/media/presentation/session_media_panel.dart';
@@ -13,7 +14,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          mediaPanelSessionIdProvider.overrideWithValue('s1'),
+          panelSessionIdProvider.overrideWithValue('s1'),
           sessionMediaProvider.overrideWith(
             (ref, id) => const Stream<List<SessionMediaItem>>.empty(),
           ),

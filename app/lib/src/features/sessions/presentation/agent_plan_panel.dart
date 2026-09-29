@@ -9,16 +9,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../explorer/application/session_context.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_plan_providers.dart';
-import '../application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-
-/// Which session's plan the panel describes: the one **on screen**. One
-/// session, not four — every pane at once is four transcript parses per tick.
-final planPanelSessionIdProvider = Provider<String?>(
-  (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
-      ref.watch(selectedSessionIdProvider),
-);
 
 /// **The agent's own plan, beside its pane** — not the user's todo list, which
 /// is [TodosView]. The reading can be old, so every state says how old.
@@ -27,7 +18,7 @@ class AgentPlanPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = ref.watch(planPanelSessionIdProvider);
+    final sessionId = ref.watch(panelSessionIdProvider);
     if (sessionId == null) {
       return const PanePlaceholder(
         message: 'Open a session to see the plan its agent is working to.',

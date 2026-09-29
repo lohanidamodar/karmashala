@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
@@ -71,7 +72,7 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
-        checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
+        panelSessionIdProvider.overrideWithValue('s1'),
         // Two hours after the capture, so the age on each row is the test's
         // own arithmetic rather than the wall clock's.
         clockProvider.overrideWithValue(

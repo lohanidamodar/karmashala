@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
@@ -88,7 +89,7 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         dataClientProvider.overrideWithValue(client),
         sessionRecordsProvider.overrideWithValue(records),
-        decisionsPanelSessionIdProvider.overrideWithValue('s1'),
+        panelSessionIdProvider.overrideWithValue('s1'),
         // Two hours after the writing, so the age on each row is the test's own
         // arithmetic rather than the wall clock's.
         clockProvider.overrideWithValue(

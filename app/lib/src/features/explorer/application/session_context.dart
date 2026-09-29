@@ -32,6 +32,14 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   return sessionInTab(ref, tab);
 });
 
+/// The session a context-panel surface describes: the one **on screen**, and
+/// the one last clicked in the Explorer only when no pane holds one.
+final panelSessionIdProvider = Provider<String?>(
+  (ref) =>
+      ref.watch(activePaneSessionIdProvider) ??
+      ref.watch(selectedSessionIdProvider),
+);
+
 /// The session workspace group [groupId] is showing — the per-group form of
 /// [activePaneSessionIdProvider]. "The focused session" would make every group
 /// describe the same one. Null for the empty room a split cleared.

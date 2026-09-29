@@ -5,6 +5,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../explorer/application/session_context.dart';
 import '../application/session_media_providers.dart';
 import 'session_media_list.dart';
 
@@ -15,7 +16,7 @@ class SessionMediaPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = ref.watch(mediaPanelSessionIdProvider);
+    final sessionId = ref.watch(panelSessionIdProvider);
     if (sessionId == null) {
       return const PanePlaceholder(
         message: 'Open a session to see the pictures it has been shown.',

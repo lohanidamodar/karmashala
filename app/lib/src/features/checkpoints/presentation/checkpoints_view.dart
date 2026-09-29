@@ -12,20 +12,11 @@ import '../../explorer/application/session_context.dart';
 import '../../git/presentation/diff_line_tile.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
-import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/agent_rewind_points.dart';
 import '../application/checkpoint_providers.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../data/checkpoints_data.dart';
-
-/// Which session's checkpoints the panel is describing — the session **on
-/// screen**, not the one last clicked in the Explorer.
-final checkpointsPanelSessionIdProvider = Provider<String?>(
-  (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
-      ref.watch(selectedSessionIdProvider),
-);
 
 /// The checkpoints of a session, and the way back to one. Nothing polls, and
 /// every row carries the age of its capture (§19).
@@ -43,7 +34,7 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
 
   @override
   Widget build(BuildContext context) {
-    final sessionId = ref.watch(checkpointsPanelSessionIdProvider);
+    final sessionId = ref.watch(panelSessionIdProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

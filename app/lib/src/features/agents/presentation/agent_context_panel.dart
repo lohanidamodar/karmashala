@@ -9,24 +9,15 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
 import '../application/agent_context_readings.dart';
 import '../application/agent_providers.dart';
 import 'package:agent_cli/context.dart';
 
-/// Which session the panel describes: the one **on screen**, the same rule
-/// `planPanelSessionIdProvider` follows.
-final agentContextSessionIdProvider = Provider<String?>(
-  (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
-      ref.watch(selectedSessionIdProvider),
-);
-
 /// The agent, environment and directory a reading needs, or null when the
 /// session on screen does not name all three.
 final agentContextTargetProvider = Provider<AgentContextTarget?>((ref) {
-  final sessionId = ref.watch(agentContextSessionIdProvider);
+  final sessionId = ref.watch(panelSessionIdProvider);
   if (sessionId == null) return null;
   final session = ref.watch(sessionsDataProvider).getById(sessionId);
   if (session == null) return null;
