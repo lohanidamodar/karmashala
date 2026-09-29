@@ -12,6 +12,7 @@ import '../../../features/git/application/changes_providers.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../phone_routes.dart';
 import '../shell_shortcuts.dart';
 import 'conversation_hits.dart';
 import 'quick_open_cache.dart';
@@ -210,6 +211,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         navigator.pop();
         action();
       },
+      phone: ref.read(phoneShellRouterProvider).current,
     );
   }
 
@@ -501,6 +503,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         say: (message) =>
             messenger?.showSnackBar(SnackBar(content: Text(message))),
       ).run(action);
+      // A terminal opened, or a session's ask, is drawn on the session page.
+      if (action is OpenTerminalCommand || action is AnswerCommand) {
+        sources.phone?.showWorkbench();
+      }
     });
   }
 

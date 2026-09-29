@@ -14,6 +14,7 @@ import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/settings/application/settings_tab.dart';
 import '../../features/settings/presentation/settings_nav.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import 'phone_routes.dart';
 
 /// Brings [tabId] to the front and makes sure the terminal is what the workbench
 /// is showing: picking a tab from a strip or a list is a request to *see* it.
@@ -63,6 +64,12 @@ void openSettingsTab(
   } else if (section != null) {
     ref.read(settingsTabSectionProvider.notifier).select(section);
   }
+  // The phone shows no workbench tabs: its More tab has the same page.
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.settings);
+    return;
+  }
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
       .openSettingsTab();
@@ -76,6 +83,11 @@ void openSettingsTab(
 void openUsageTab(WidgetRef ref, {String? accountId}) {
   if (accountId != null) {
     ref.read(usageTabSelectionProvider.notifier).selectAccount(accountId);
+  }
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.usage);
+    return;
   }
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)

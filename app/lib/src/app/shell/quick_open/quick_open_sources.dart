@@ -50,7 +50,9 @@ import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart' show WidthClass;
+import '../context_sheet.dart';
 import '../karmashala_about_dialog.dart';
+import '../phone_routes.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
 import '../side_panel_state.dart';
@@ -114,6 +116,7 @@ class QuickOpenSources {
     required this.ref,
     required this.context,
     required this.dismiss,
+    this.phone,
   });
 
   final WidgetRef ref;
@@ -122,6 +125,46 @@ class QuickOpenSources {
   /// Closes the surface before acting, so a dialog opened from here is not
   /// stacked underneath it.
   final void Function(VoidCallback action) dismiss;
+
+  /// The phone shell, when it is the one on screen: what lands in the
+  /// workbench or the side panel is then brought up where the phone shows it,
+  /// and what has no place on a phone is not listed.
+  final PhoneShellRoutes? phone;
+
+  bool get _onPhone => phone != null;
+
+  /// [action], then the phone's session page: a workbench tab is otherwise
+  /// opened out of sight.
+  VoidCallback _seen(VoidCallback action) {
+    final phone = this.phone;
+    if (phone == null) return action;
+    return () {
+      action();
+      phone.showWorkbench();
+    };
+  }
+
+  /// [action], then the phone's Projects tab, which draws what it picked.
+  VoidCallback _inProjects(VoidCallback action) {
+    final phone = this.phone;
+    if (phone == null) return action;
+    return () {
+      action();
+      phone.showProjects();
+    };
+  }
+
+  /// A side-panel surface on the phone: the session page's context sheet on
+  /// [surface]. Resolved now, since it runs after the palette has closed.
+  VoidCallback _inContextSheet(SidePanelSurface surface) {
+    final phone = this.phone!;
+    final sheet = ref.read(contextSheetSurfaceProvider.notifier);
+    return () {
+      phone.showWorkbench();
+      sheet.show(surface);
+      showContextSheet(context);
+    };
+  }
 
   List<QuickOpenItem> build({
     List<IndexedFile> files = const [],
@@ -248,10 +291,12 @@ class QuickOpenSources {
             'save for later',
             'scratchpad',
           ],
-          onSelect: () {
-            panel.show(SidePanelSurface.notes);
-            writeNewNote(ref);
-          },
+          onSelect: _onPhone
+              ? _seen(() => writeNewNote(ref))
+              : () {
+                  panel.show(SidePanelSurface.notes);
+                  writeNewNote(ref);
+                },
         ),
       _command(
         'New todo',
@@ -266,10 +311,15 @@ class QuickOpenSources {
           'checklist',
           'remind',
         ],
-        onSelect: () {
-          panel.show(SidePanelSurface.todos);
-          ref.read(todoComposerFocusProvider.notifier).request();
-        },
+        onSelect: _onPhone
+            ? () {
+                ref.read(todoComposerFocusProvider.notifier).request();
+                _inContextSheet(SidePanelSurface.todos)();
+              }
+            : () {
+                panel.show(SidePanelSurface.todos);
+                ref.read(todoComposerFocusProvider.notifier).request();
+              },
       ),
       _command(
         'Terminal view',
@@ -278,23 +328,29 @@ class QuickOpenSources {
         shortcut: shellCommandLabel('view.toggleTerminal'),
         // The focused group: a command that names no tab means the group the
         // keyboard is in.
-        onSelect: () => ref
-            .read(terminalSessionsControllerProvider.notifier)
-            .showTerminalHere(),
+        onSelect: _seen(
+          () => ref
+              .read(terminalSessionsControllerProvider.notifier)
+              .showTerminalHere(),
+        ),
       ),
       // [_openTabs] lists only the tabs that are *nothing but* tabs; this is
       // the other question — "show me my tabs" — and opens the strip's picker.
-      _command(
-        'Switch terminal tab…',
-        subtitle: 'Every open tab, by name, session or directory',
-        icon: AppIcons.listMagnifyingGlass,
-        shortcut: shellCommandLabel('terminal.switchTab'),
-        keywords: const ['tabs', 'terminal', 'switch', 'window'],
-        onSelect: () => TabPicker.show(context, terminalTabEntries),
-      ),
+      // The phone's Terminals tab is that list.
+      if (!_onPhone)
+        _command(
+          'Switch terminal tab…',
+          subtitle: 'Every open tab, by name, session or directory',
+          icon: AppIcons.listMagnifyingGlass,
+          shortcut: shellCommandLabel('terminal.switchTab'),
+          keywords: const ['tabs', 'terminal', 'switch', 'window'],
+          onSelect: () => TabPicker.show(context, terminalTabEntries),
+        ),
       // Shipped without keys (`unboundShellCommands`): quick open is their
-      // way in, and a keymap may bind them.
-      if (ref.read(terminalSessionsControllerProvider).tabs.isNotEmpty)
+      // way in, and a keymap may bind them. Its jumps land in a terminal the
+      // phone does not show under the dialog.
+      if (!_onPhone &&
+          ref.read(terminalSessionsControllerProvider).tabs.isNotEmpty)
         _command(
           'Commands run here…',
           subtitle: 'What this terminal ran, to jump back to or run again',
@@ -322,18 +378,22 @@ class QuickOpenSources {
       // The drag-only layout verbs, without a mouse. Listed only when they
       // have somewhere to act: always offered and usually inert is noise.
       ..._splitCommands(),
-      _command(
-        'Toggle sidebar',
-        icon: AppIcons.treeStructure,
-        shortcut: shellCommandLabel('view.toggleExplorer'),
-        onSelect: shell.toggleExplorerPane,
-      ),
-      _command(
-        'Toggle context panel',
-        icon: AppIcons.sidebarSimple,
-        shortcut: shellCommandLabel('view.toggleSidePanel'),
-        onSelect: panel.toggle,
-      ),
+      // A phone has neither: its tabs are the sidebar, and the session
+      // page's ⋮ opens the context.
+      if (!_onPhone) ...[
+        _command(
+          'Toggle sidebar',
+          icon: AppIcons.treeStructure,
+          shortcut: shellCommandLabel('view.toggleExplorer'),
+          onSelect: shell.toggleExplorerPane,
+        ),
+        _command(
+          'Toggle context panel',
+          icon: AppIcons.sidebarSimple,
+          shortcut: shellCommandLabel('view.toggleSidePanel'),
+          onSelect: panel.toggle,
+        ),
+      ],
       for (final surface in SidePanelSurface.offered(
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
@@ -344,15 +404,19 @@ class QuickOpenSources {
           surface.label,
           subtitle: 'Context panel',
           icon: SidePanel.iconFor(surface),
-          onSelect: () => panel.show(surface),
+          onSelect: _onPhone
+              ? _inContextSheet(surface)
+              : () => panel.show(surface),
         ),
-      _command(
-        'Zen',
-        subtitle: 'Only the pane — everything else steps aside',
-        icon: AppIcons.arrowsOutSimple,
-        shortcut: shellCommandLabel('view.toggleFocusMode'),
-        onSelect: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
-      ),
+      // The phone's session page is already only the pane.
+      if (!_onPhone)
+        _command(
+          'Zen',
+          subtitle: 'Only the pane — everything else steps aside',
+          icon: AppIcons.arrowsOutSimple,
+          shortcut: shellCommandLabel('view.toggleFocusMode'),
+          onSelect: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
+        ),
       _command(
         'Check system health',
         subtitle: Platform.isWindows
@@ -363,23 +427,25 @@ class QuickOpenSources {
         keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),
-      _command(
-        kQuickStartCommandLabel,
-        subtitle:
-            'First steps, where things are, the keys, and what this machine '
-            'has — in the sidebar',
-        icon: AppIcons.rocketLaunch,
-        keywords: const [
-          'onboarding',
-          'getting started',
-          'welcome',
-          'tour',
-          'help',
-          'preflight',
-          'setup',
-        ],
-        onSelect: () => showQuickStart(ref),
-      ),
+      // A card in the desktop's sidebar, which a phone does not have.
+      if (!_onPhone)
+        _command(
+          kQuickStartCommandLabel,
+          subtitle:
+              'First steps, where things are, the keys, and what this machine '
+              'has — in the sidebar',
+          icon: AppIcons.rocketLaunch,
+          keywords: const [
+            'onboarding',
+            'getting started',
+            'welcome',
+            'tour',
+            'help',
+            'preflight',
+            'setup',
+          ],
+          onSelect: () => showQuickStart(ref),
+        ),
       // About the workspace rather than the machine: rows whose agent has no
       // record of the conversation they name.
       _command(
@@ -404,7 +470,7 @@ class QuickOpenSources {
         icon: AppIcons.folderOpen,
         shortcut: shellCommandLabel('files.browse'),
         keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
-        onSelect: () => openFilesTabHere(ref),
+        onSelect: _seen(() => openFilesTabHere(ref)),
       ),
       _command(
         'Open Settings',
@@ -563,7 +629,7 @@ class QuickOpenSources {
       icon: icon,
       keywords: const ['context', 'filter'],
       weight: _contextWeight,
-      onSelect: () => dismiss(() => scopes.select(target)),
+      onSelect: () => dismiss(_inProjects(() => scopes.select(target))),
     );
 
     return [
@@ -614,8 +680,11 @@ class QuickOpenSources {
           keywords: [project.root.path],
           weight: _workspaceWeight,
           onSelect: () => dismiss(
-            () =>
-                ref.read(selectedProjectIdProvider.notifier).select(project.id),
+            _inProjects(
+              () => ref
+                  .read(selectedProjectIdProvider.notifier)
+                  .select(project.id),
+            ),
           ),
         ),
       );
@@ -629,12 +698,14 @@ class QuickOpenSources {
             icon: AppIcons.gitBranch,
             keywords: [repository.path.path],
             weight: _workspaceWeight,
-            onSelect: () => dismiss(() {
-              ref.read(selectedProjectIdProvider.notifier).select(project.id);
-              ref
-                  .read(selectedRepositoryIdProvider.notifier)
-                  .select(repository.id);
-            }),
+            onSelect: () => dismiss(
+              _inProjects(() {
+                ref.read(selectedProjectIdProvider.notifier).select(project.id);
+                ref
+                    .read(selectedRepositoryIdProvider.notifier)
+                    .select(repository.id);
+              }),
+            ),
           ),
         );
       }
@@ -768,6 +839,8 @@ class QuickOpenSources {
       imported: imported,
     );
     ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
+    // Picking the session already selected moves nothing the shell hears.
+    phone?.showWorkbench();
 
     // And actually open it: picking a session by name is a request to be *in*
     // it. `openNative` decides between reattach, resume and select.
@@ -868,14 +941,16 @@ class QuickOpenSources {
           icon: AppIcons.terminalWindow,
           keywords: const ['preset', 'layout', 'terminal', 'workspace'],
           weight: _presetWeight,
-          onSelect: () => dismiss(() {
-            final opening = presets.open(preset);
-            shell.focusPane(ShellPane.detail);
-            final said = presetOpenedMessage(preset, opening);
-            if (said != null) {
-              messenger?.showSnackBar(SnackBar(content: Text(said)));
-            }
-          }),
+          onSelect: () => dismiss(
+            _seen(() {
+              final opening = presets.open(preset);
+              shell.focusPane(ShellPane.detail);
+              final said = presetOpenedMessage(preset, opening);
+              if (said != null) {
+                messenger?.showSnackBar(SnackBar(content: Text(said)));
+              }
+            }),
+          ),
         ),
     ];
   }
@@ -915,13 +990,15 @@ class QuickOpenSources {
             icon: documentIconFor(tab) ?? AppIcons.terminal,
             keywords: const ['terminal', 'tab'],
             weight: _tabWeight,
-            onSelect: () => dismiss(() {
-              sessions.activateTab(tab.id);
-              // The group that holds the tab, which activating it has just
-              // focused — not whichever group was in front before.
-              sessions.showTerminalForTab(tab.id);
-              shell.focusPane(ShellPane.detail);
-            }),
+            onSelect: () => dismiss(
+              _seen(() {
+                sessions.activateTab(tab.id);
+                // The group that holds the tab, which activating it has just
+                // focused — not whichever group was in front before.
+                sessions.showTerminalForTab(tab.id);
+                shell.focusPane(ShellPane.detail);
+              }),
+            ),
           ),
     ];
   }
@@ -942,9 +1019,11 @@ class QuickOpenSources {
         icon: AppIcons.article,
         weight: changedPaths.contains(file.relativePath) ? 6 : 0,
         onSelect: () => dismiss(
-          () => _openFile(
-            file,
-            changed: changedPaths.contains(file.relativePath),
+          _seen(
+            () => _openFile(
+              file,
+              changed: changedPaths.contains(file.relativePath),
+            ),
           ),
         ),
       ),
@@ -972,6 +1051,9 @@ class QuickOpenSources {
         .read(quickOpenCacheProvider.notifier)
         .factsFor(repositoryId);
     final panel = ref.read(sidePanelProvider.notifier);
+    final showRepository = _onPhone
+        ? _inContextSheet(SidePanelSurface.repository)
+        : () => panel.show(SidePanelSurface.repository);
     return [
       for (final branch in facts.branches)
         QuickOpenItem(
@@ -983,8 +1065,7 @@ class QuickOpenSources {
               : 'Worktree branch',
           icon: AppIcons.gitBranch,
           weight: _branchWeight,
-          onSelect: () =>
-              dismiss(() => panel.show(SidePanelSurface.repository)),
+          onSelect: () => dismiss(showRepository),
         ),
       for (final pr in facts.pullRequests)
         QuickOpenItem(
@@ -997,8 +1078,7 @@ class QuickOpenSources {
           icon: AppIcons.gitMerge,
           keywords: ['#${pr.number}', 'pull request'],
           weight: _githubWeight,
-          onSelect: () =>
-              dismiss(() => panel.show(SidePanelSurface.repository)),
+          onSelect: () => dismiss(showRepository),
         ),
       for (final issue in facts.issues)
         QuickOpenItem(
@@ -1010,8 +1090,7 @@ class QuickOpenSources {
           icon: AppIcons.warningCircle,
           keywords: ['#${issue.number}', 'issue'],
           weight: _githubWeight,
-          onSelect: () =>
-              dismiss(() => panel.show(SidePanelSurface.repository)),
+          onSelect: () => dismiss(showRepository),
         ),
     ];
   }
@@ -1068,7 +1147,12 @@ class QuickOpenSources {
             if (snippet.submit) 'run',
           ],
           weight: _snippetWeight,
-          onSelect: () => dismiss(() => _insert(snippet, target)),
+          // Typed into the pane, which the phone then shows.
+          onSelect: () => dismiss(
+            target == null
+                ? () => _insert(snippet, target)
+                : _seen(() => _insert(snippet, target)),
+          ),
         ),
       // Filtering is right; silence about it is not — a library that fits no
       // pane produced an empty palette, which reads as "my snippet is gone".

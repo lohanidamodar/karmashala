@@ -8,6 +8,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/widgets/full_screen_form.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart' show EnvironmentPath;
@@ -547,30 +548,38 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// In the app or in a terminal of its own, and in the checkout, a new
   /// worktree, or one that exists (spec §5). Worktrees are offered for both
   /// surfaces: they exist before the agent starts, so its window is moot.
-  Widget _whereItWorks(bool worktreeOffered, Repository? checkout) => Column(
+  /// Without [externalOffered], only the place: a phone opens no terminal
+  /// window.
+  Widget _whereItWorks(
+    bool worktreeOffered,
+    Repository? checkout, {
+    required bool externalOffered,
+  }) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      SegmentedButton<bool>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(
-            value: false,
-            icon: Icon(AppIcons.chat, size: Chrome.iconAction),
-            label: Text('In-app'),
-          ),
-          ButtonSegment(
-            value: true,
-            icon: Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
-            label: Text('External terminal'),
-          ),
-        ],
-        selected: {_external},
-        onSelectionChanged: (s) => setState(() => _external = s.first),
-      ),
-      if (_external) _terminalPicker(),
+      if (externalOffered) ...[
+        SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: false,
+              icon: Icon(AppIcons.chat, size: Chrome.iconAction),
+              label: Text('In-app'),
+            ),
+            ButtonSegment(
+              value: true,
+              icon: Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
+              label: Text('External terminal'),
+            ),
+          ],
+          selected: {_external},
+          onSelectionChanged: (s) => setState(() => _external = s.first),
+        ),
+        if (_external) _terminalPicker(),
+      ],
       if (worktreeOffered) ...[
-        const SizedBox(height: Insets.xs),
+        if (externalOffered) const SizedBox(height: Insets.xs),
         _placeChoice(checkout),
       ],
     ],
@@ -751,6 +760,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     // take one from. Only a positive [GitPresence.notARepository] withdraws it.
     final worktreeOffered =
         checkout != null && _presence != GitPresence.notARepository;
+    final externalOffered = ref.watch(
+      capabilitiesProvider.select((c) => c.externalTerminalSessions),
+    );
 
     final canStart = !_busy && checkout != null && installation != null;
     void start() => _create(
@@ -823,10 +835,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                       },
                     ),
                   ),
-                  NewDialogSection(
-                    label: 'Where it works',
-                    child: _whereItWorks(worktreeOffered, checkout),
-                  ),
+                  if (externalOffered || worktreeOffered)
+                    NewDialogSection(
+                      label: 'Where it works',
+                      child: _whereItWorks(
+                        worktreeOffered,
+                        checkout,
+                        externalOffered: externalOffered,
+                      ),
+                    ),
                   NewDialogSection(
                     label: 'First prompt',
                     child: Column(

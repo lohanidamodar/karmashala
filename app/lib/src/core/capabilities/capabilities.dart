@@ -180,6 +180,10 @@ final class Capabilities {
   /// "This computer" is a machine to choose: this client can run the server.
   bool get hostsServer => client.hostsServer;
 
+  /// New session offers "External terminal": a terminal window this client
+  /// opens, which a phone has none of.
+  bool get externalTerminalSessions => client.externalApps;
+
   /// A pane takes files dropped from the OS.
   bool get fileDrop => client.fileDrop;
 
