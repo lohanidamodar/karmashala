@@ -6,6 +6,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefusalCode, DataRefused;
 import 'package:karmashala_session/events.dart';
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show HostTerminalInstance;
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -100,6 +102,26 @@ final promptPaneScreenProvider =
         return terminalTailLines(instance.terminal, lines: kMenuScreenRows);
       };
     });
+
+/// Whether [String] session's menu, as this client reads it, is drawn at the
+/// grid its answerer reads: a pane of this app's own, or a hosted pane on
+/// this machine's server that the session is sized for. A menu's id hashes
+/// its rows, and a pane at another grid wraps them differently — so only
+/// then may an approval name the menu it was drawn from.
+final promptMenuAtSessionGridProvider = Provider<bool Function(String)>(
+  (ref) => (sessionId) {
+    if (!ref.read(capabilitiesProvider).readsServerDisk) return false;
+    final paneId = ref.read(sessionLauncherProvider).livePaneFor(sessionId);
+    if (paneId == null) return false;
+    final instance = ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    if (instance == null) return false;
+    if (instance is! HostTerminalInstance) return true;
+    final presence = instance.presence.value;
+    return presence != null && presence.sizedFor == presence.me;
+  },
+);
 
 /// Presses keys into [String] session's live pane, recording nothing; false
 /// without one.

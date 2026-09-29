@@ -140,7 +140,15 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     if (mounted) setState(() => _busy = false);
   }
 
-  PromptAsk get _ask => PromptAsk.drawnFrom(widget.report, menu: widget.menu);
+  /// The menu is named only where it was read at the session's own grid: a
+  /// pane at another grid hashes different rows, and a right answer would be
+  /// refused. Elsewhere the wait and the call name the prompt.
+  PromptAsk get _ask => PromptAsk.drawnFrom(
+    widget.report,
+    menu: ref.read(promptMenuAtSessionGridProvider)(widget.sessionId)
+        ? widget.menu
+        : null,
+  );
 
   static String _refused(SessionPromptRefusal refusal) =>
       _approvalRefusalText(refusal);
