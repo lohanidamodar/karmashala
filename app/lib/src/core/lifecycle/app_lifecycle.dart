@@ -11,17 +11,16 @@ import '../../features/agents/application/agent_path_repair_providers.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/remote/application/remote_access_controller.dart';
-import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/local_host_startup.dart';
-import '../../features/terminal/application/terminal_layout_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../data/data_providers.dart';
 import '../data/metadata_keys.dart';
 import '../logging/memory_census_source.dart';
 import '../probe/probe_mode.dart';
 import 'package:karmashala_core/logging.dart';
+import 'server_session.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless. The sum of the per-step caps: one hang cannot starve the rest.
@@ -62,17 +61,30 @@ const kShutdownStepBudgets = <String, Duration>{
 class AppLifecycle {
   /// [stopwatch] is the seam the budget is measured through, so a test spends it
   /// on a clock it controls rather than on a busy machine's wall clock.
+  ///
+  /// [session] is the server session [_container] belongs to, whose `close()`
+  /// is the container's part of the shutdown. Without one (a test's bare
+  /// container) the container is wrapped in a session that owns only it.
   AppLifecycle(
     this._container, {
+    ServerSession? session,
     AppLogger? logger,
     Duration? shutdownBudget,
     Stopwatch? stopwatch,
-  }) : _logger = logger ?? AppLogger.named('lifecycle'),
+  }) : assert(session == null || identical(session.container, _container)),
+       _logger = logger ?? AppLogger.named('lifecycle'),
+       _session =
+           session ??
+           ServerSession.ofContainer(
+             _container,
+             logger: logger ?? AppLogger.named('lifecycle'),
+           ),
        _shutdownBudget = shutdownBudget ?? kShutdownBudget,
        // ignore: prefer_initializing_formals — named for the doc above.
        _stopwatch = stopwatch;
 
   final ProviderContainer _container;
+  final ServerSession _session;
   final AppLogger _logger;
   final Duration _shutdownBudget;
   final Stopwatch? _stopwatch;
@@ -360,9 +372,10 @@ class AppLifecycle {
       }
     });
 
-    // Remote access has nothing to close: the phone listener, the beacon,
-    // the LAN relay and every device channel are the server's, and outlive
-    // the app.
+    // Remote access has nothing to close here: the phone listener, the
+    // beacon, the LAN relay and every device channel are the server's, and
+    // outlive the app. This client's own link and scout close with the server
+    // session, step 6.
 
     // 4. The OS integration: hotkeys, tray, listeners.
     await _step(
@@ -384,32 +397,24 @@ class AppLifecycle {
       cap: _kTerminalStepBudget,
     );
 
-    // 6. The container. `dispose()` is synchronous and runs unconditionally; what
-    //    it *starts* is not, so those begin here, where the wait is budgeted.
-    final pending = _startContainerTeardowns();
-    final layoutStore = _container.exists(terminalLayoutStoreProvider)
-        ? _container.read(terminalLayoutStoreProvider)
-        : null;
-    try {
-      _container.dispose();
-    } on Object catch (error, stack) {
-      _logger.warning('Disposing the provider container failed.', error, stack);
-    }
-    await _step(
-      'provider teardown',
-      watch,
-      () => Future.wait(pending),
-      cap: _kContainerStepBudget,
-    );
-
-    // 7. The layout store, the app's only database, last. Not a `_step`:
-    //    `close()` is one synchronous call, and `exit(0)` leaves a
-    //    `-wal`/`-shm` for the next launch to recover.
-    try {
-      layoutStore?.close();
-    } on Object catch (error) {
+    // 6-7. The server session: the container's teardowns started, the
+    //    container disposed, those awaited within this step's slice together
+    //    with the shared link and the scout — then the layout store, the app's
+    //    only database, last and whatever the wait did. See ServerSession.close.
+    final left = _shutdownBudget - watch.elapsed;
+    final cap = _kContainerStepBudget < left ? _kContainerStepBudget : left;
+    const step = 'provider teardown';
+    final finished = await _session.close(teardownBudget: cap);
+    if (cap <= Duration.zero) {
+      skippedSteps.add(step);
       _logger.warning(
-        'lifecycle: closing the layout store failed reason=$error',
+        'lifecycle: skipped $step — the shutdown budget is spent',
+      );
+    } else if (!finished) {
+      abandonedSteps.add(step);
+      _logger.warning(
+        'lifecycle: $step did not finish within '
+        '${cap.inMilliseconds} ms; closing anyway',
       );
     }
 
@@ -428,31 +433,6 @@ class AppLifecycle {
       // A sink that cannot be written must not hold the app open. Nothing is
       // logged about it: there is nowhere left for that line to go.
     }
-  }
-
-  /// Starts the teardowns that container disposal would otherwise fire and
-  /// forget. Read and started before `dispose()`, so its own hooks are no-ops.
-  List<Future<void>> _startContainerTeardowns() {
-    final pending = <Future<void>>[];
-    for (final start in <Future<void> Function()>[
-      () => _container.exists(sessionEngineProvider)
-          ? _container.read(sessionEngineProvider).dispose()
-          : Future<void>.value(),
-      () => _container.exists(dataClientProvider)
-          ? _container.read(dataClientProvider).close()
-          : Future<void>.value(),
-    ]) {
-      try {
-        pending.add(start());
-      } on Object catch (error, stack) {
-        _logger.warning(
-          'lifecycle: a container teardown failed.',
-          error,
-          stack,
-        );
-      }
-    }
-    return pending;
   }
 
   /// One shutdown step, bounded by its own slice and by the overall deadline.

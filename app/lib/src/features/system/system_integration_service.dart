@@ -129,7 +129,13 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// `MethodChannel` cannot even be handed a handler without a Flutter binding.
   final OsQuitRegistrar _registerOsQuit;
 
-  final ProviderContainer _container;
+  /// The current server session's container; [rebind] moves it to the next
+  /// one, so the tray and hotkeys outlive a change of server.
+  ProviderContainer _container;
+
+  /// What [_listenToContainer] listens with, closed on [rebind].
+  final List<ProviderSubscription<Object?>> _subscriptions = [];
+
   final NativeAdapters _native;
   final TerminalViewGate _terminalViews;
   final AppLogger _logger;
@@ -245,26 +251,58 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     await apply(_settings);
 
-    _container.listen<Settings>(
-      settingsControllerProvider,
-      (_, next) => unawaited(apply(next)),
+    _listenToContainer();
+  }
+
+  /// Moves this service onto [next], the container of a newly opened server
+  /// session: the old container's listeners end, the new one's settings are
+  /// applied and followed. The tray, the window listeners, the hotkey and the
+  /// OS quit stay registered — they are the process's, not the server's.
+  /// Nothing calls this until servers switch without relaunching (step 14).
+  Future<void> rebind(ProviderContainer next) async {
+    if (_disposed || identical(next, _container)) return;
+    for (final subscription in _subscriptions) {
+      subscription.close();
+    }
+    _subscriptions.clear();
+    _container = next;
+    _appliedToolTip = null;
+    _pending = const [];
+    _container.read(systemIntegrationProvider.notifier).adopt(this);
+    if (!isSupported) return;
+    await apply(_settings);
+    _listenToContainer();
+  }
+
+  void _listenToContainer() {
+    _subscriptions.add(
+      _container.listen<Settings>(
+        settingsControllerProvider,
+        (_, next) => unawaited(apply(next)),
+      ),
     );
 
     // Agent status → tray. The icon and menu are ambient state, so they follow
     // what needs the user regardless of focus; the interrupting half (toasts)
     // is the dispatcher's job, behind the policy.
-    _container.listen<AttentionInbox>(
-      attentionInboxProvider,
-      (_, next) => unawaited(_applyAttention(next)),
+    _subscriptions.add(
+      _container.listen<AttentionInbox>(
+        attentionInboxProvider,
+        (_, next) => unawaited(_applyAttention(next)),
+      ),
     );
-    _container.listen<NotificationSettings>(
-      notificationSettingsControllerProvider,
-      (_, _) => unawaited(_refreshMenu(_settings)),
+    _subscriptions.add(
+      _container.listen<NotificationSettings>(
+        notificationSettingsControllerProvider,
+        (_, _) => unawaited(_refreshMenu(_settings)),
+      ),
     );
     // A clicked toast asks for the window, from outside the widget tree.
-    _container.listen<int>(
-      windowRaiseRequestProvider,
-      (_, _) => unawaited(_raiseWindow()),
+    _subscriptions.add(
+      _container.listen<int>(
+        windowRaiseRequestProvider,
+        (_, _) => unawaited(_raiseWindow()),
+      ),
     );
 
     _container.read(attentionPresenterProvider).start();
