@@ -362,6 +362,11 @@ enum FrameType {
   /// bit would exclude every phone already paired. Never answered.
   streamAck('stream.ack', origin: FrameOrigin.companion),
 
+  /// Proof of life on an idle link: answered with an empty `result`. A host
+  /// that predates it answers `unknown_type`, which is proof enough, and the
+  /// host starts its own silence deadline only once a phone has pinged.
+  linkPing('link.ping', origin: FrameOrigin.companion),
+
   /// Switch this sealed channel to the host protocol (slice 5e): once
   /// answered, every sealed frame either way carries host-protocol bytes, and
   /// the server serves this link as a desktop client.

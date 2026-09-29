@@ -39,6 +39,7 @@ class RemoteHostService {
     this.transcriptPollInterval = const Duration(seconds: 2),
     this.newStreamFlow = StreamFlow.new,
     this.watchLease = kWatchLease,
+    this.linkDeadAfter = kHostLinkDeadAfter,
     DateTime Function()? now,
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -110,6 +111,9 @@ class RemoteHostService {
 
   /// How long a phone's "watching" holds without renewal.
   final Duration watchLease;
+
+  /// Silence after which a phone that pings is dropped — see [LinkLiveness].
+  final Duration linkDeadAfter;
 
   final DateTime Function() _now;
   final RelayTransportFactory _relayFactory;
@@ -895,6 +899,7 @@ class _DeviceRuntime {
     // Something already moved the link on; this frame is simply late.
     if (_active?.generation != generation) return;
     _retired.add(generation);
+    _active?.liveness?.stop();
     _active = null;
     peerLive = false;
     await _liveWatch?.cancel();
@@ -966,6 +971,7 @@ class _DeviceRuntime {
       await _retireGeneration(generation);
       return;
     }
+    active.liveness?.heard();
     final host = active.host;
     if (host != null) {
       peerLive = true;
@@ -985,7 +991,37 @@ class _DeviceRuntime {
       await _attachHost(active, envelope, opened.sequence);
       return;
     }
+    if (envelope.type == FrameType.linkPing.wire) _armLiveness(active);
     await active.api.handleEnvelope(envelope);
+  }
+
+  /// Armed by the phone's first `link.ping`, so only a phone that pings is
+  /// held to the deadline — never an older one, nor a desktop client.
+  void _armLiveness(_ActiveLink active) {
+    (active.liveness ??= LinkLiveness(
+      deadAfter: service.linkDeadAfter,
+      onDead: (silence) => _linkSilent(active, silence),
+    )).start();
+  }
+
+  /// The drop a dead socket would have caused, caused on purpose: the relay
+  /// listener redials its rendezvous, an accepted LAN link closes.
+  void _linkSilent(_ActiveLink active, Duration silence) {
+    // Already down by the ordinary route: nothing to add.
+    if (_closed || !identical(_active, active) || !peerLive) return;
+    service.onLog?.call(
+      'a device sent nothing for ${silence.inSeconds}s; dropping its link',
+    );
+    peerLive = false;
+    final transport = active.transport;
+    if (transport is ReconnectingTransport) {
+      // Not awaited, for the reason [_closeRelayListener] gives.
+      unawaited(
+        transport.abort().catchError((Object error) {
+          service.onLog?.call('dropping a silent link failed: $error');
+        }),
+      );
+    }
   }
 
   /// Switches [active] to the host protocol for a desktop client (slice 5e):
@@ -1026,6 +1062,9 @@ class _DeviceRuntime {
       capabilities: device.capabilities,
     );
     active.host = link;
+    // Host-protocol bytes cannot carry a `link.ping`; see SETTLED.md.
+    active.liveness?.stop();
+    active.liveness = null;
     unawaited(
       link.done.then((_) {
         _chain = _chain.then((_) => _hostEnded(active));
@@ -1111,6 +1150,7 @@ class _DeviceRuntime {
         transport,
         service.newStreamFlow(),
       );
+      active?.liveness?.stop();
       _active = created;
       active = created;
       _watchLiveness(transport);
@@ -1226,6 +1266,7 @@ class _DeviceRuntime {
       _closeGeneration(generation);
     }
     _listenerUrls = const [];
+    _active?.liveness?.stop();
     _active = null;
   }
 }
@@ -1259,6 +1300,9 @@ class _ActiveLink {
 
   /// Set once a desktop client switched this link to the host protocol.
   SealedHostLink? host;
+
+  /// The silence deadline, once the phone has pinged on this link.
+  LinkLiveness? liveness;
 
   /// What the phone last said about looking, or null when it never has.
   bool? watchingSaid;

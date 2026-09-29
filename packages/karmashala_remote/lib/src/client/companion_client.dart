@@ -16,6 +16,7 @@ import '../domain/remote_usage.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
 import '../transport/key_schedule.dart';
+import '../transport/link_liveness.dart';
 import '../transport/relay_transport.dart';
 import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
@@ -25,6 +26,9 @@ import 'companion_store.dart';
 /// How many generations forward the companion probes when its counter and the
 /// host's have drifted. Must stay within the host's own listen window.
 const int kCompanionProbeWindow = 3;
+
+/// Request ids of `link.ping`, disjoint from [CompanionClient]'s `q` ids.
+const String _kPingIdPrefix = 'lp';
 
 /// The host refused a request, or never answered.
 class RemoteApiException implements Exception {
@@ -98,6 +102,13 @@ class PairingRevokedEvent extends CompanionEvent {
   const PairingRevokedEvent();
 }
 
+/// Nothing arrived from the host for [silence], pings included: the link is
+/// dead even though no socket said so.
+class LinkSilentEvent extends CompanionEvent {
+  const LinkSilentEvent(this.silence);
+  final Duration silence;
+}
+
 /// One connection to the paired host.
 class CompanionClient {
   CompanionClient({
@@ -108,6 +119,8 @@ class CompanionClient {
     this.storeTimeout = const Duration(seconds: 5),
     this.onLog,
     this.watching,
+    this.linkPingAfter = kLinkPingAfter,
+    this.linkDeadAfter = kLinkDeadAfter,
     // ignore: prefer_initializing_formals — mutable field, named for callers.
   }) : _pairing = pairing,
        _relayFactory = relayFactory ?? _defaultRelayFactory;
@@ -129,6 +142,13 @@ class CompanionClient {
   /// Whether the owner is looking at the app: true, false, or null for
   /// nothing said. Read at every ack, so it is never stale on the wire.
   final bool? Function()? watching;
+
+  /// Inbound silence before a `link.ping`, and before the link is dead.
+  final Duration linkPingAfter;
+  final Duration linkDeadAfter;
+
+  LinkLiveness? _liveness;
+  int _nextPingId = 0;
 
   CompanionPairing _pairing;
 
@@ -274,6 +294,8 @@ class CompanionClient {
   }
 
   Future<void> _detach() async {
+    _liveness?.stop();
+    _liveness = null;
     _resetAcks();
     await _subscription?.cancel();
     _subscription = null;
@@ -305,6 +327,7 @@ class CompanionClient {
       onLog?.call('refused a frame: $error');
       return;
     }
+    _liveness?.heard();
     final Envelope envelope;
     try {
       envelope = Envelope.fromBytes(opened.plaintext, accept: VersionRange.any);
@@ -319,6 +342,9 @@ class CompanionClient {
   }
 
   void _dispatch(Envelope envelope) {
+    // A ping's answer — `result`, or an older host's `unknown_type` — has
+    // already done its job by arriving.
+    if (envelope.id?.startsWith(_kPingIdPrefix) ?? false) return;
     switch (envelope.knownType) {
       case FrameType.result:
         _pending.remove(envelope.id)?.complete(envelope.payload);
@@ -359,6 +385,7 @@ class CompanionClient {
           if (_statusArrived?.isCompleted == false) {
             _statusArrived!.complete(status);
           }
+          _startLiveness();
           _emit(HostStatusEvent(status));
         } on ProtocolException {
           return;
@@ -424,6 +451,43 @@ class CompanionClient {
     } else {
       _ackTimer ??= Timer(kStreamAckDelay, _flushAck);
     }
+  }
+
+  /// Keyed on inbound silence, not outbound: acks and lease renewals go out
+  /// unanswered, so a watching phone is never silent outbound on a dead link.
+  void _startLiveness() {
+    if (_closed || _channel == null) return;
+    (_liveness ??= LinkLiveness(
+      pingAfter: linkPingAfter,
+      deadAfter: linkDeadAfter,
+      onPing: _sendPing,
+      onDead: (silence) {
+        onLog?.call(
+          'nothing from the host in ${silence.inSeconds}s; the link is dead',
+        );
+        _emit(LinkSilentEvent(silence));
+      },
+    )).start();
+  }
+
+  void _sendPing() {
+    final channel = _channel;
+    final transport = _transport;
+    if (channel == null || transport == null) return;
+    final id = '$_kPingIdPrefix${_nextPingId++}';
+    _sendChain = _sendChain
+        .then((_) async {
+          final envelope = Envelope.of(
+            FrameType.linkPing,
+            seq: channel.nextSendSequence,
+            id: id,
+          );
+          transport.send(await channel.seal(envelope.toBytes()));
+        })
+        .catchError((Object error) {
+          // The deadline, not this send, decides whether the link is dead.
+          onLog?.call('a ping did not go out: $error');
+        });
   }
 
   /// Says at once that the owner started or stopped looking, rather than at

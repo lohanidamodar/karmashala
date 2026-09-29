@@ -579,6 +579,8 @@ class HostSessionApi {
           if (seq is int && seq >= 0) {
             onStreamAck?.call(seq, watching is bool ? watching : null);
           }
+        case FrameType.linkPing:
+          await _result(envelope.id, const {});
         case FrameType.hostAttach:
           // The device runtime switches the link before this is reached.
           await _error(
