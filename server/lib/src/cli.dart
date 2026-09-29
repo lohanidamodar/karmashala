@@ -223,6 +223,8 @@ as the running server reads it for a client (sessions.transcript).
   --generation=<g>        the generation a previous page answered
   --revision=<r>          the revision a previous page answered
   --subagent=<path>       a subagent's turns instead (with --after, --limit)
+  --read=<reader>         rewindPoints, changedFiles or openQuestion instead,
+                          as JSON
   --json                  the page as the wire carries it
   --watch                 then print each change until interrupted
 ''',
@@ -233,6 +235,7 @@ as the running server reads it for a client (sessions.transcript).
       'generation',
       'revision',
       'subagent',
+      'read',
     },
     switches: {'json', 'watch'},
     positional: 1,

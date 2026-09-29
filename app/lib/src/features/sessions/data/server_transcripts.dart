@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:agent_cli/descriptors.dart'
+    show AgentQuestionSet, AgentRewindPoints;
 import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -169,6 +171,18 @@ class ServerTranscripts {
       if (!page.hasNewer || page.messages.isEmpty) return out;
     }
   }
+
+  /// The readers of session [sessionId]'s raw record lines, run on the
+  /// server (Stage 0 step 7). Each throws [DataRefused]; an older server
+  /// refuses the kind as `invalid`.
+  Future<AgentRewindPoints?> rewindPoints(String sessionId) async =>
+      (await _client.send(SessionRewindPointsRead(sessionId))).value;
+
+  Future<AgentFileChangesReading> changedFiles(String sessionId) async =>
+      (await _client.send(SessionChangedFilesRead(sessionId))).value;
+
+  Future<AgentQuestionSet?> openQuestion(String sessionId) async =>
+      (await _client.send(SessionOpenQuestionRead(sessionId))).value;
 
   Future<void> dispose() async {
     await _notices.cancel();

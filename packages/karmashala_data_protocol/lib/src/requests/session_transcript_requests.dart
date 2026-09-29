@@ -34,6 +34,15 @@ DataRequest<Object?>? _sessionTranscriptRequestFromJson(
     after: args.optionalInt('after'),
     limit: args.optionalInt('limit'),
   ),
+  SessionRewindPointsRead.name => SessionRewindPointsRead(
+    args.string('sessionId'),
+  ),
+  SessionChangedFilesRead.name => SessionChangedFilesRead(
+    args.string('sessionId'),
+  ),
+  SessionOpenQuestionRead.name => SessionOpenQuestionRead(
+    args.string('sessionId'),
+  ),
   _ => null,
 };
 
@@ -162,6 +171,90 @@ final class SessionTranscriptSubagent
   @override
   TranscriptPage resultFromJson(Object? json) =>
       _decode(kind, () => TranscriptPage.fromJson(_object(json, kind)));
+}
+
+// The readers of raw record lines (Stage 0 step 7): each runs the agent
+// adapter's own code where the record is, and answers its result. An older
+// server refuses each kind as `invalid`; a client then reads its own disk.
+
+/// The agent's own rewind points for session [sessionId]
+/// (`OwnRewindPoints.parse`), or null when its agent keeps none or its
+/// record could not be read.
+final class SessionRewindPointsRead
+    extends SessionTranscriptRequest<AgentRewindPoints?> {
+  const SessionRewindPointsRead(this.sessionId);
+
+  static const String name = 'sessions.rewindPoints';
+
+  @override
+  final String sessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(AgentRewindPoints? result) => result?.toJson();
+
+  @override
+  AgentRewindPoints? resultFromJson(Object? json) => json == null
+      ? null
+      : _decode(kind, () => AgentRewindPoints.fromJson(_object(json, kind)));
+}
+
+/// The files session [sessionId]'s agent recorded changing: its transcript's
+/// edits (`TranscriptFileEdits`) or its store server's answer.
+final class SessionChangedFilesRead
+    extends SessionTranscriptRequest<AgentFileChangesReading> {
+  const SessionChangedFilesRead(this.sessionId);
+
+  static const String name = 'sessions.changedFiles';
+
+  @override
+  final String sessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(AgentFileChangesReading result) => result.toJson();
+
+  @override
+  AgentFileChangesReading resultFromJson(Object? json) => _decode(
+    kind,
+    () => AgentFileChangesReading.fromJson(_object(json, kind)),
+  );
+}
+
+/// The question session [sessionId]'s agent has open in the tail of its
+/// record (`openQuestionIn`), or null.
+final class SessionOpenQuestionRead
+    extends SessionTranscriptRequest<AgentQuestionSet?> {
+  const SessionOpenQuestionRead(this.sessionId);
+
+  static const String name = 'sessions.openQuestion';
+
+  @override
+  final String sessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(AgentQuestionSet? result) =>
+      result == null ? null : questionToJson(result);
+
+  @override
+  AgentQuestionSet? resultFromJson(Object? json) =>
+      json == null ? null : _decode(kind, () => questionFromJson(json));
 }
 
 /// Stops [SessionTranscriptWatch] for [sessionId] on this link.

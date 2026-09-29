@@ -13,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
@@ -139,6 +140,10 @@ class DataService {
   /// Sessions' transcripts read here for any client (`sessions.transcript`),
   /// set by `serve`; without them that work is refused `unavailable`.
   SessionTranscripts? sessionTranscripts;
+
+  /// Rewind points, changed files and the open question, read off the same
+  /// records (Stage 0 step 7); refused `unavailable` without them.
+  SessionRecordReadings? sessionRecordReadings;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -750,22 +755,34 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
           'this client may not read transcripts: its pairing does not grant it',
         );
       }
-      final work =
+      SessionTranscripts work() =>
           _service.sessionTranscripts ??
           (throw const DataRefused.unavailable(
             'this server reads no transcripts',
           ));
-      switch (asked) {
-        case final SessionTranscriptRead read:
-          return DataReply(await work.page(read) as R, _service._revision);
-        case final SessionTranscriptSubagent read:
-          return DataReply(await work.subagent(read) as R, _service._revision);
-        case SessionTranscriptWatch(:final sessionId):
-          await work.watch(this, sessionId);
-        case SessionTranscriptUnwatch(:final sessionId):
-          work.unwatch(this, sessionId);
-      }
-      return DataReply(const DataAck() as R, _service._revision);
+      SessionRecordReadings readings() =>
+          _service.sessionRecordReadings ??
+          (throw const DataRefused.unavailable(
+            'this server reads no session records',
+          ));
+      final Object? result = switch (asked) {
+        final SessionTranscriptRead read => await work().page(read),
+        final SessionTranscriptSubagent read => await work().subagent(read),
+        SessionTranscriptWatch(:final sessionId) => await work()
+            .watch(this, sessionId)
+            .then((_) => const DataAck()),
+        SessionTranscriptUnwatch(:final sessionId) => () {
+          work().unwatch(this, sessionId);
+          return const DataAck();
+        }(),
+        SessionRewindPointsRead(:final sessionId) => await readings()
+            .rewindPoints(sessionId),
+        SessionChangedFilesRead(:final sessionId) => await readings()
+            .changedFiles(sessionId),
+        SessionOpenQuestionRead(:final sessionId) => await readings()
+            .openQuestion(sessionId),
+      };
+      return DataReply(result as R, _service._revision);
     }
     if (request case final EnvVaultRequest<Object?> asked) {
       final work =

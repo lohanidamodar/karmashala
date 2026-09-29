@@ -3,12 +3,16 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused;
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../data/server_transcripts.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'decision_recorder.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
@@ -95,6 +99,18 @@ final transcriptOpenQuestionProvider =
             .byId(agentId)
             ?.questions;
         if (support == null) return null;
+        // Read where the record is when the server offers it: the registry's
+        // path is spelled for the server's disk. An older server refuses the
+        // kind `invalid`, and this disk is read as before.
+        if (ref.read(capabilitiesProvider).openQuestionViaServer) {
+          try {
+            return await ref
+                .read(serverTranscriptsProvider)
+                .openQuestion(sessionId);
+          } on DataRefused catch (refusal) {
+            if (refusal.code != DataRefusalCode.invalid) return null;
+          }
+        }
         // The registry's path when it has one — the file the status came
         // from. It resolves one only for a session it has to probe, and one
         // fresh from a hook or the screen is not, so the store is asked too.

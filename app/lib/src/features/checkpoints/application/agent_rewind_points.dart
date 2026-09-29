@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused;
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../sessions/data/server_transcripts.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 
@@ -42,6 +46,17 @@ final agentRewindPointsProvider = FutureProvider.autoDispose
           .adapterFor(agentId)
           ?.rewind;
       if (rewind is! OwnRewindPoints) return null;
+      // Read where the record is when the server offers it; an older server
+      // refuses the kind `invalid`, and this disk is read as before.
+      if (ref.read(capabilitiesProvider).rewindPointsViaServer) {
+        try {
+          return await ref
+              .read(serverTranscriptsProvider)
+              .rewindPoints(sessionId);
+        } on DataRefused catch (refusal) {
+          if (refusal.code != DataRefusalCode.invalid) return null;
+        }
+      }
       final path = await ref
           .read(sessionTranscriptLocatorProvider)
           .locate(agentId: agentId, externalSessionId: externalId);

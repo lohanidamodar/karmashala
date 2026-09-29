@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AgentFileChangesReading, DataRefusalCode, DataRefused;
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -15,6 +18,7 @@ import '../../environments/application/environment_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
+import '../data/server_transcripts.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
@@ -105,6 +109,10 @@ class SessionChangedFilesService {
     final record = agentId == null
         ? null
         : _ref.read(agentRegistryProvider).adapterFor(agentId)?.fileChanges;
+    if (record != null && _ref.read(capabilitiesProvider).changedFilesViaServer) {
+      final fromServer = await _fromServer(session.id, environment);
+      if (fromServer != null) return fromServer;
+    }
     return switch (record) {
       StoreServerFileChanges() => _fromStoreServer(
         session,
@@ -119,6 +127,38 @@ class SessionChangedFilesService {
       ),
       null => (null, SessionRecordGap.agentKeepsNoRecord, ''),
     };
+  }
+
+  /// The server's reading of the agent's record, where the record is (Stage 0
+  /// step 7), or null for a server that does not know the request.
+  Future<(List<SessionChangedFile>?, SessionRecordGap, String)?> _fromServer(
+    String sessionId,
+    ExecutionEnvironment? environment,
+  ) async {
+    final AgentFileChangesReading reading;
+    try {
+      reading = await _ref
+          .read(serverTranscriptsProvider)
+          .changedFiles(sessionId);
+    } on DataRefused catch (refusal) {
+      if (refusal.code == DataRefusalCode.invalid) return null;
+      return (null, SessionRecordGap.recordUnreadable, refusal.message);
+    } on Object catch (error) {
+      return (null, SessionRecordGap.recordUnreadable, '$error');
+    }
+    final changes = reading.changes;
+    if (changes == null) return (null, reading.gap, reading.detail);
+    final byPath = <String, SessionChangedFile>{};
+    for (final change in changes) {
+      _record(
+        byPath,
+        environment,
+        path: change.path,
+        movedTo: change.movedTo,
+        kind: change.kind,
+      );
+    }
+    return (byPath.values.toList(growable: false), SessionRecordGap.none, '');
   }
 
   /// The agent's store server, asked for the conversation's file changes.

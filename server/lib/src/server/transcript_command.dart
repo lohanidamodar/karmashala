@@ -79,6 +79,21 @@ Future<int> runTranscript(
     return 5;
   }
   try {
+    // `--read=rewindPoints|changedFiles|openQuestion`: a raw-line reader's
+    // answer (Stage 0 step 7), as the wire carries it.
+    final reader = text('read');
+    if (reader != null) {
+      Future<Object?> read<R>(DataRequest<R> ask) async =>
+          ask.resultToJson((await client!.data(ask)).value);
+      final answer = await switch (reader) {
+        'rewindPoints' => read(SessionRewindPointsRead(sessionId)),
+        'changedFiles' => read(SessionChangedFilesRead(sessionId)),
+        'openQuestion' => read(SessionOpenQuestionRead(sessionId)),
+        _ => throw DataRefused.invalid('no reader named $reader'),
+      };
+      sink.writeln(const JsonEncoder.withIndent('  ').convert(answer));
+      return 0;
+    }
     final page = (await client.data(request)).value;
     if (args.contains('--json')) {
       sink.writeln(const JsonEncoder.withIndent('  ').convert(page.toJson()));
