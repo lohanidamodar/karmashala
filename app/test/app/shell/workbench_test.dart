@@ -877,8 +877,16 @@ void main() {
         expect(inTheBar(label), findsNothing, reason: '$label is not next');
       }
       await openShip(tester);
+      // The menu says who does a prompt action; the Changes panel's own
+      // Commit and Push run git themselves.
+      const asked = {
+        'Push': 'Ask agent to push',
+        'Open PR': 'Ask agent to open PR',
+        'Run tests': 'Ask agent to run tests',
+      };
       for (final label in actions.where((label) => label != 'Commit')) {
-        expect(find.text(label), findsOneWidget, reason: '$label is missing');
+        final shown = asked[label] ?? label;
+        expect(find.text(shown), findsOneWidget, reason: '$shown is missing');
       }
     });
 

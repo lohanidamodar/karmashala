@@ -301,7 +301,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
           if (!identical(offered, primary))
             _ShipEntry(
               icon: _actionIcon(offered.action),
-              label: offered.action.label,
+              label: offered.action.askLabel,
               onPressed: _busy || !offered.isEnabled
                   ? null
                   : () => _press(offered, delivery),
@@ -834,7 +834,9 @@ String _actionTooltip(OfferedAction offered) {
   final reason = offered.disabledReason;
   if (reason != null) return reason;
   final prompt = offered.prompt;
-  return prompt == null ? _appActionTooltip(offered.action) : 'Sends “$prompt”';
+  return prompt == null
+      ? _appActionTooltip(offered.action)
+      : 'Asks the agent: “$prompt”';
 }
 
 String _appActionTooltip(DeliveryAction action) => switch (action) {

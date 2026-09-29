@@ -220,7 +220,8 @@ class WorkspaceToolSet extends ServerToolSet {
           for (final offered in actions)
             <String, Object?>{
               'action': offered.action.name,
-              'label': offered.action.label,
+              // The Ship menu's words: a prompt action says it asks the agent.
+              'label': offered.action.askLabel,
               'primary': offered.isPrimary,
               'available': offered.disabledReason == null,
               'unavailableBecause': offered.disabledReason,

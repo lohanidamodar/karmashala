@@ -70,6 +70,13 @@ enum DeliveryAction {
   final String? prompt;
 
   bool get isPrompt => prompt != null;
+
+  /// [label] where there is room to say who does the work: a prompt action is
+  /// "Ask agent to commit", so it is not mistaken for the Changes panel's own
+  /// Commit, which runs git itself. The app's own actions keep [label].
+  String get askLabel => isPrompt
+      ? 'Ask agent to ${label[0].toLowerCase()}${label.substring(1)}'
+      : label;
 }
 
 /// One action as the strip should draw it.
