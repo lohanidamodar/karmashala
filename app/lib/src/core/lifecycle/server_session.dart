@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
@@ -49,8 +50,8 @@ ServerSession? _current;
 /// One [open], one [close]; what outlives a server — the window, the tray,
 /// logging, the machines store — is the process's, and is not in here.
 ///
-/// A server switch still relaunches the app (step 14 switches in process), so
-/// today the only caller of [close] is the quit sequence.
+/// A switch of server closes one and opens the next in the same process
+/// (`ServerSwitcher`, plan step 14); a quit closes the last.
 class ServerSession {
   ServerSession._({
     required this.container,
@@ -78,13 +79,16 @@ class ServerSession {
   /// the data connection, the container, then the per-server start-up acts
   /// that must run before the first frame. Becomes [currentServerSession].
   ///
-  /// What it built is released again if a later part throws.
+  /// What it built is released again if a later part throws. [overrides] are
+  /// the process's objects every session's container is handed — the
+  /// switcher that replaces it (plan step 14).
   static Future<ServerSession> open({
     required CompanionPairing? remote,
     required Machines machines,
     required ProbeMode probe,
     required Directory support,
     required AppLogger logger,
+    List<Override> overrides = const [],
   }) async {
     TerminalLayoutStore? layoutStore;
     RemoteServerAccess? remoteAccess;
@@ -134,6 +138,7 @@ class ServerSession {
           // SSH-aware runner factory, where it keeps data, its settings and
           // its shell.
           ...deviceBindings,
+          ...overrides,
         ],
       );
 

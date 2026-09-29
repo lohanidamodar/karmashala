@@ -153,6 +153,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
   bool _trayIconApplied = false;
   bool _disposed = false;
 
+  /// Between a server switch's [detach] and its [rebind]: [_container] is
+  /// closed, so every tray, hotkey and window event that would read it is
+  /// dropped (plan step 14); showing the window and Quit still act.
+  bool _detached = false;
+
+  /// Whether [_container] may be read: neither disposed nor between servers.
+  bool get _bound => !_disposed && !_detached;
+
   /// What the window events last said; either one suspends [_terminalViews].
   bool _minimized = false;
   bool _hiddenToTray = false;
@@ -193,7 +201,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// A probe registers nothing machine-wide: launch-at-login is one registry
   /// value named `Karmashala`, shared with the real app, and so is the chord.
-  bool get _probe => _container.read(probeModeProvider).enabled;
+  /// Read once: a probe is the process's, whichever server it is a client
+  /// of, and the container may be closed when it is next asked.
+  late final bool _probe = _container.read(probeModeProvider).enabled;
 
   String get _appLabel => _probe ? 'Karmashala PROBE' : 'Karmashala';
 
@@ -258,20 +268,46 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// session: the old container's listeners end, the new one's settings are
   /// applied and followed. The tray, the window listeners, the hotkey and the
   /// OS quit stay registered — they are the process's, not the server's.
-  /// Nothing calls this until servers switch without relaunching (step 14).
+  /// A switch of server calls it once the next session is open, [detach]
+  /// having let go of the old one.
   Future<void> rebind(ProviderContainer next) async {
-    if (_disposed || identical(next, _container)) return;
-    for (final subscription in _subscriptions) {
-      subscription.close();
-    }
-    _subscriptions.clear();
+    if (_disposed) return;
+    if (identical(next, _container) && !_detached) return;
+    _closeSubscriptions();
     _container = next;
+    _detached = false;
     _appliedToolTip = null;
     _pending = const [];
     _container.read(systemIntegrationProvider.notifier).adopt(this);
     if (!isSupported) return;
+    // The new container starts out believing the window is focused; say what
+    // it is, so a toast's "only when unfocused" gate is right from the start.
+    try {
+      final focused = await _native.window.isFocused();
+      if (_bound) _container.read(windowFocusedProvider.notifier).set(focused);
+    } on Object catch (error) {
+      _logger.warning('system: reading the window focus failed reason=$error');
+    }
     await apply(_settings);
     _listenToContainer();
+  }
+
+  /// Lets go of the current container before its server session closes (a
+  /// switch of server, plan step 14): its listeners end, and until [rebind]
+  /// no event reads it. The tray, the hotkey, the window listeners and the OS
+  /// quit stay registered.
+  void detach() {
+    if (!_bound) return;
+    _detached = true;
+    _closeSubscriptions();
+    _pending = const [];
+  }
+
+  void _closeSubscriptions() {
+    for (final subscription in _subscriptions) {
+      subscription.close();
+    }
+    _subscriptions.clear();
   }
 
   void _listenToContainer() {
@@ -311,7 +347,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Applies [settings] to the OS. Prevent-close is the one value here that is
   /// **not** a setting: without it `WM_CLOSE` never reaches Dart at all.
   Future<void> apply(Settings settings) async {
-    if (_disposed) return;
+    if (!_bound) return;
     _closeToTray = settings.closeToTray;
     _want(NativeSetting.keepAwake, settings.keepAwake, _desiredKeepAwake);
     _desiredKeepAwake = settings.keepAwake;
@@ -381,7 +417,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Retries whatever the OS has not confirmed yet. Window focus is the cheap,
   /// well-timed signal: the conditions that fail these change in the background.
   Future<void> retryOutstanding() async {
-    if (_disposed || !isSupported) return;
+    if (!_bound || !isSupported) return;
     await _reconcile(_settings);
   }
 
@@ -423,7 +459,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Publishes one setting's native state. A call still in flight at shutdown
   /// would otherwise land on a disposed container.
   void _record(NativeSetting setting, NativeSettingStatus status) {
-    if (_disposed) return;
+    if (!_bound) return;
     try {
       _container
           .read(nativeIntegrationStatusProvider.notifier)
@@ -463,7 +499,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
       _logger.warning('system: window state unreadable reason=$error');
     }
     await _showWindow();
-    _container.read(quickOpenRequestProvider.notifier).bump();
+    if (_bound) _container.read(quickOpenRequestProvider.notifier).bump();
   }
 
   Future<void> _applyAutoStart(bool enabled) async {
@@ -492,7 +528,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Reflects the current attention set in the tray: a badged icon, a tooltip
   /// that says how many, and the menu section that lists them.
   Future<void> _applyAttention(AttentionInbox inbox) async {
-    if (_disposed) return;
+    if (!_bound) return;
     _pending = inbox.pending;
     // "Need you" is the asks alone, seen or not, as the strip's Inbox badge
     // counts them (inboxAskCountProvider); an unseen finished turn is news,
@@ -533,7 +569,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   Future<void> _refreshMenu(Settings settings) async {
-    if (_disposed) return;
+    if (!_bound) return;
     final notifications = _container.read(
       notificationSettingsControllerProvider,
     );
@@ -599,7 +635,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Brings the app forward on the session behind tray item [index].
   void _openAttention(int index) {
-    if (index < 0 || index >= _pending.length) return;
+    if (!_bound || index < 0 || index >= _pending.length) return;
     // Through the inbox, so opening from the tray marks the item seen and the
     // tray badge and the activity strip's badges all drop by one together.
     _container.read(attentionInboxProvider.notifier).open(_pending[index]);
@@ -689,6 +725,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   BeforeQuitHooks? _beforeQuitHooks() {
+    // Between servers: the old session's guards went with it.
+    if (!_bound) return null;
     try {
       return _container.read(beforeQuitHooksProvider);
     } on Object catch (error) {
@@ -712,6 +750,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Snapshots the terminal layout on the way out: first, synchronously, before
   /// anything can fail. Guarded so quitting never *creates* the controller.
   void _saveTerminalLayout() {
+    // Between servers: the switch saved the old server's layout on its way.
+    if (!_bound) return;
     try {
       if (!_container.exists(terminalSessionsControllerProvider)) return;
       // persistLayout, not persistStructure: this is the last write before
@@ -780,6 +820,11 @@ class SystemIntegrationService with TrayListener, WindowListener {
         unawaited(_showWindow());
       case _kMenuHide:
         unawaited(_native.window.hide());
+      case _kMenuQuit:
+        unawaited(_quit());
+      // The rest are the server's settings: nothing to change between servers.
+      case _ when !_bound:
+        return;
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
       case _kMenuNotifications:
@@ -798,8 +843,6 @@ class SystemIntegrationService with TrayListener, WindowListener {
               .read(notificationSettingsControllerProvider)
               .onlyWhenUnfocused,
         );
-      case _kMenuQuit:
-        unawaited(_quit());
     }
   }
 
@@ -853,6 +896,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   @override
   void onWindowFocus() {
+    if (!_bound) return;
     _container.read(windowFocusedProvider.notifier).set(true);
     // The retry tick. See [retryOutstanding].
     unawaited(retryOutstanding());
@@ -862,6 +906,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   void onWindowBlur() {
     // Notifications only fire while the window is unfocused, so this is the
     // signal that opens that gate.
+    if (!_bound) return;
     _container.read(windowFocusedProvider.notifier).set(false);
   }
 
@@ -871,7 +916,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> _saveWindowSize() async {
     try {
       final size = await _native.window.getSize();
-      if (size.width < 200 || size.height < 200) return;
+      if (!_bound || size.width < 200 || size.height < 200) return;
       _controller.setWindowSize(size.width, size.height);
     } on Object catch (error) {
       _logger.warning('system: reading the window size failed reason=$error');

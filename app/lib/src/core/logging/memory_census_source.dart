@@ -11,10 +11,13 @@ import 'diagnostics_providers.dart';
 /// Every provider is reached through `exists`: creating the terminal controller
 /// would restore a whole layout, so a census must never be the thing that
 /// builds what it counts. A subsystem that has not been started this run reads
-/// as zero, which is what it is holding.
-MemoryCensus takeMemoryCensus(ProviderContainer container) {
+/// as zero, which is what it is holding. So does every one while no server
+/// session is open (a null [container], mid-switch): only the process's own
+/// figures are read then.
+MemoryCensus takeMemoryCensus(ProviderContainer? container) {
   final resident = readProcessResident();
-  final panes = container.exists(terminalSessionsControllerProvider)
+  final panes = container != null &&
+          container.exists(terminalSessionsControllerProvider)
       ? container
             .read(terminalSessionsControllerProvider.notifier)
             .paneFootprint
@@ -27,9 +30,12 @@ MemoryCensus takeMemoryCensus(ProviderContainer container) {
     unparsedPanes: panes.unparsedPanes,
     scrollbackRows: panes.rows,
     heldScrollbackChars: panes.heldChars,
-    watchedSessions: container.exists(sessionStatusRegistryProvider)
+    watchedSessions:
+        container != null && container.exists(sessionStatusRegistryProvider)
         ? container.read(sessionStatusRegistryProvider).trackedCount
         : 0,
-    logLinesHeld: container.read(diagnosticsProvider).buffer.length,
+    logLinesHeld: (container?.read(diagnosticsProvider) ?? Diagnostics.instance)
+        .buffer
+        .length,
   );
 }

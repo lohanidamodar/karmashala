@@ -6,6 +6,7 @@ import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/lifecycle/relaunch.dart';
+import '../../../core/lifecycle/server_switcher.dart';
 import '../../../core/server/machine_pairing.dart';
 import '../../../core/util/failure_words.dart';
 import '../../settings/presentation/settings_row.dart';
@@ -16,7 +17,8 @@ import '../application/machines_providers.dart';
 /// Settings → Machines (slice 5e): the Karmashala server this window is a
 /// client of — this computer's own, or one on another machine reached like
 /// a phone reaches it — the list to choose from, and "Add a machine". A
-/// switch starts the window again, as a client of the one chosen.
+/// switch makes this window a client of the one chosen, in process
+/// ([ServerSwitcher]).
 class MachinesSection extends ConsumerWidget {
   const MachinesSection({super.key});
 
@@ -89,8 +91,8 @@ class MachinesSection extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: Text('Use $name?'),
         content: const Text(
-          'Karmashala starts again as a client of that server. Nothing '
-          'running on either server stops.',
+          'This window becomes a client of that server: its panes, sessions '
+          'and notes replace these. Nothing running on either server stops.',
         ),
         actions: [
           TextButton(
@@ -104,11 +106,25 @@ class MachinesSection extends ConsumerWidget {
         ],
       ),
     );
-    if (go != true) return;
-    await machines.use(to?.hostId.value);
-    await relaunchAfterExit();
-    final system = ref.read(systemIntegrationProvider);
-    if (system != null) unawaited(system.quit());
+    if (go != true || !context.mounted) return;
+    // In process (plan step 14): this section's tree goes with the old
+    // server, so nothing below reads `ref` once the switch has begun.
+    final switcher = ref.read(serverSwitcherProvider);
+    if (switcher == null) {
+      // No switcher in this process: start afresh, as before step 14.
+      await machines.use(to?.hostId.value);
+      await relaunchAfterExit();
+      final system = ref.read(systemIntegrationProvider);
+      if (system != null) unawaited(system.quit());
+      return;
+    }
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final outcome = await switcher.switchTo(to);
+    if (outcome == ServerSwitchOutcome.busy) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('A switch is already under way.')),
+      );
+    }
   }
 
   static Future<void> _forget(

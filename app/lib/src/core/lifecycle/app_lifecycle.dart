@@ -15,11 +15,13 @@ import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/local_host_startup.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../capabilities/capabilities.dart';
 import '../data/data_providers.dart';
 import '../data/metadata_keys.dart';
 import '../logging/memory_census_source.dart';
 import '../probe/probe_mode.dart';
 import 'package:karmashala_core/logging.dart';
+import 'before_quit.dart';
 import 'server_session.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
@@ -45,6 +47,15 @@ const _kContainerStepBudget = Duration(milliseconds: 250);
 /// **not** part of [kShutdownBudget] — see [AppLifecycle.flushLog].
 const kLogFlushBudget = Duration(seconds: 1);
 
+/// What a switch of server gives the session it leaves to close — its data
+/// link, shared host link and scout — before it falls back to a relaunch
+/// (plan step 14). Longer than quit's slice: a switch has a window to keep.
+const kSwitchCloseBudget = Duration(seconds: 10);
+
+/// What a switch gives a hook rewrite in flight, and the endpoint retirement.
+/// Longer than quit's: nothing is racing a process exit.
+const _kSwitchHookBudget = Duration(seconds: 2);
+
 /// Every step's slice, in order — the arithmetic behind [kShutdownBudget],
 /// written down so a change to one of them cannot silently widen the deadline.
 const kShutdownStepBudgets = <String, Duration>{
@@ -62,29 +73,42 @@ class AppLifecycle {
   /// [stopwatch] is the seam the budget is measured through, so a test spends it
   /// on a clock it controls rather than on a busy machine's wall clock.
   ///
-  /// [session] is the server session [_container] belongs to, whose `close()`
+  /// [session] is the server session [container] belongs to, whose `close()`
   /// is the container's part of the shutdown. Without one (a test's bare
   /// container) the container is wrapped in a session that owns only it.
   AppLifecycle(
-    this._container, {
+    ProviderContainer container, {
     ServerSession? session,
     AppLogger? logger,
     Duration? shutdownBudget,
     Stopwatch? stopwatch,
-  }) : assert(session == null || identical(session.container, _container)),
+  }) : assert(session == null || identical(session.container, container)),
        _logger = logger ?? AppLogger.named('lifecycle'),
        _session =
            session ??
            ServerSession.ofContainer(
-             _container,
+             container,
              logger: logger ?? AppLogger.named('lifecycle'),
            ),
        _shutdownBudget = shutdownBudget ?? kShutdownBudget,
        // ignore: prefer_initializing_formals — named for the doc above.
        _stopwatch = stopwatch;
 
-  final ProviderContainer _container;
-  final ServerSession _session;
+  /// The server session every step acts on. Null between a switch's
+  /// [leaveSession] and its [adoptSession] (plan step 14).
+  ServerSession? _session;
+
+  /// The open session's container. Only read while one is open: every path
+  /// that can run between sessions checks [_session] first.
+  ProviderContainer get _container {
+    final session = _session;
+    if (session == null) throw StateError('No server session is open.');
+    return session.container;
+  }
+
+  /// The [leaveSession] in progress, if any.
+  Future<bool>? _leaving;
+
   final AppLogger _logger;
   final Duration _shutdownBudget;
   final Stopwatch? _stopwatch;
@@ -109,7 +133,12 @@ class AppLifecycle {
   SystemIntegrationService? get systemIntegration => _systemIntegration;
 
   /// Whether this instance is a probe, which leaves every global store alone.
-  bool get isProbe => _container.read(probeModeProvider).enabled;
+  /// Read once: a probe is the process's, whichever server it is a client of.
+  bool get isProbe => _isProbe ??= _container.read(probeModeProvider).enabled;
+  bool? _isProbe;
+
+  /// The server session open now; null mid-switch.
+  ServerSession? get session => _session;
 
   /// Whether [shutdown] has been started. Nothing new should be adopted after.
   bool get isShuttingDown => _shutdown != null;
@@ -263,10 +292,16 @@ class AppLifecycle {
   /// Begins logging what the app is holding. A release build has no VM service
   /// and so no heap snapshot; without this nothing in the process reports its
   /// own footprint and growth can only be guessed at from outside.
+  ///
+  /// The process's, not a server's: it keeps running across a switch of
+  /// server, reading whichever session is open — none, mid-switch — so a
+  /// climb from one switch to the next shows in the same log.
   void startMemoryCensus({MemoryCensusLogger? census}) {
     _memoryCensus ??=
         (census ??
-              MemoryCensusLogger(count: () => takeMemoryCensus(_container)))
+              MemoryCensusLogger(
+                count: () => takeMemoryCensus(_session?.container),
+              ))
           ..start();
   }
 
@@ -326,6 +361,121 @@ class AppLifecycle {
     if (hookInstallation != null) _hookInstallation = hookInstallation;
   }
 
+  /// Before a switch of server, what a quit does before its shutdown: the
+  /// before-quit guards asked (unsaved edits, running sessions — they still
+  /// say "quit", as they did when a switch was a relaunch), their flushes
+  /// run, and the terminal layout saved. False when a guard keeps the session.
+  Future<bool> prepareToLeave() async {
+    final session = _session;
+    if (session == null || isShuttingDown) return false;
+    final container = session.container;
+    final hooks = container.read(beforeQuitHooksProvider);
+    if (!await hooks.confirm()) return false;
+    await hooks.flush();
+    try {
+      if (container.exists(terminalSessionsControllerProvider)) {
+        container
+            .read(terminalSessionsControllerProvider.notifier)
+            .persistLayout();
+      }
+    } on Object catch (error) {
+      _logger.warning('lifecycle: switch: saving the layout failed: $error');
+    }
+    return true;
+  }
+
+  /// **What a switch of server does with the session it leaves** (plan step
+  /// 14): the quit steps that belong to the server, not the ones that belong
+  /// to the process. In order:
+  ///
+  /// 0. a skill sweep still running is abandoned;
+  /// 1. a hook rewrite in flight is awaited (bounded), since half of another
+  ///    application's config is worse than none;
+  /// 1b. the hook endpoints are retired as at quit — only when the session
+  ///    set up this machine, since a client of a server elsewhere wrote none;
+  /// 2. the attention presenter is disposed;
+  /// 4. system integration is **detached**, not disposed: the tray, hotkey
+  ///    and window listeners stay, and read no container until [adoptSession];
+  /// 5. the panes' process trees are reaped (host-backed panes detach);
+  /// 6. the session is closed, its link and scout within [closeBudget].
+  ///
+  /// The memory census keeps running and reads no session meanwhile. Returns
+  /// false when the close ran out of time or threw, which the caller answers
+  /// with a relaunch. Idempotent while it runs.
+  Future<bool> leaveSession({Duration closeBudget = kSwitchCloseBudget}) =>
+      _leaving ??= _leave(closeBudget).whenComplete(() => _leaving = null);
+
+  Future<bool> _leave(Duration closeBudget) async {
+    final session = _session;
+    if (session == null) return true;
+    // From here nothing reads the session through [_container]: the census,
+    // a quit and the statics all see "none open".
+    _session = null;
+    final container = session.container;
+    final hookInstallation = _hookInstallation;
+    // Each is once per session: the next one runs them again.
+    _hookInstallation = null;
+    _cliSessionImport = null;
+    _pathRepair = null;
+
+    _abandonSkillSweep(container);
+    await _bounded(
+      'agent hook installation',
+      () => hookInstallation ?? Future<void>.value(),
+      _kSwitchHookBudget,
+    );
+    var setsUpThisMachine = false;
+    try {
+      setsUpThisMachine = container
+          .read(capabilitiesProvider)
+          .setsUpThisMachine;
+    } on Object catch (error) {
+      _logger.warning('lifecycle: reading the capabilities failed: $error');
+    }
+    if (setsUpThisMachine) {
+      await _bounded(
+        'agent hook endpoint retirement',
+        () => _retireHookEndpoints(container),
+        _kSwitchHookBudget,
+      );
+    }
+    await _bounded(
+      'background watchers',
+      () async => _stopWatchers(container),
+      _kStepBudget,
+    );
+    _systemIntegration?.detach();
+    await _bounded(
+      'terminal processes',
+      () => _reapPanes(container),
+      _kTerminalStepBudget,
+    );
+    try {
+      // close() bounds its own wait; the outer bound is for a close that
+      // hangs before it gets there.
+      return await session
+          .close(teardownBudget: closeBudget)
+          .timeout(closeBudget + const Duration(seconds: 1));
+    } on Object catch (error, stack) {
+      _logger.warning('lifecycle: closing the server session failed.', error,
+          stack);
+      return false;
+    }
+  }
+
+  /// Points every step at [next], the session a switch opened: the next quit
+  /// closes it, the census counts it, and system integration follows its
+  /// container. A lifecycle already shutting down adopts nothing.
+  Future<void> adoptSession(ServerSession next) async {
+    if (isShuttingDown) return;
+    _session = next;
+    final system = _systemIntegration;
+    if (system == null) return;
+    // As at start-up: mounted beside the OS integration, in the new container.
+    next.container.read(remoteAccessControllerProvider);
+    await system.rebind(next.container);
+  }
+
   /// Tears the application down in order, within [kShutdownBudget]. Idempotent:
   /// tray Quit, window close and a restart all land here and await one sequence.
   Future<void> shutdown() => _shutdown ??= _runShutdown();
@@ -337,11 +487,14 @@ class AppLifecycle {
     // budget — and a census tick during teardown would count a half-torn app.
     _memoryCensus?.dispose();
 
+    // Mid-switch there is no session: the switch's own leave is doing the
+    // server's steps, and step 6 waits for it.
+    final session = _session;
+    final container = session?.container;
+
     // 0. Give up on any skill sweep still running. Not a step: it sets a flag and
     //    returns, so it needs no slice of the budget and cannot be abandoned.
-    if (_container.exists(agentSkillInstallationServiceProvider)) {
-      _container.read(agentSkillInstallationServiceProvider).abandon();
-    }
+    if (container != null) _abandonSkillSweep(container);
 
     // 1. A hook rewrite in flight gets a short grace period; it writes another
     //    application's config file, and half of one is worse than none.
@@ -354,22 +507,18 @@ class AppLifecycle {
 
     // 1b. Retire the callback endpoint: delete the generated per-agent endpoint
     //     files, leaving the config entries — removing those raced the installer.
-    await _step('agent hook endpoint retirement', watch, () async {
-      // A probe wrote no endpoint, so the files there are the real app's.
-      if (isProbe) return;
-      // Hooks posting to the session host keep going to it with the app shut.
-      await _container
-          .read(agentHookInstallationServiceProvider)
-          .retireEndpoints(
-            keepLocal: _container.read(agentHooksAtHostProvider),
-          );
-    }, cap: _kHookStepBudget);
+    await _step(
+      'agent hook endpoint retirement',
+      watch,
+      () => container == null
+          ? Future<void>.value()
+          : _retireHookEndpoints(container),
+      cap: _kHookStepBudget,
+    );
 
     // 2. Watchers, so nothing new arrives while the rest closes.
     await _step('background watchers', watch, () async {
-      if (_container.exists(attentionPresenterProvider)) {
-        _container.read(attentionPresenterProvider).dispose();
-      }
+      if (container != null) _stopWatchers(container);
     });
 
     // Remote access has nothing to close here: the phone listener, the
@@ -389,11 +538,7 @@ class AppLifecycle {
     await _step(
       'terminal processes',
       watch,
-      () => _container.exists(terminalSessionsControllerProvider)
-          ? _container
-                .read(terminalSessionsControllerProvider.notifier)
-                .shutdownProcesses()
-          : Future<void>.value(),
+      () => container == null ? Future<void>.value() : _reapPanes(container),
       cap: _kTerminalStepBudget,
     );
 
@@ -401,10 +546,13 @@ class AppLifecycle {
     //    container disposed, those awaited within this step's slice together
     //    with the shared link and the scout — then the layout store, the app's
     //    only database, last and whatever the wait did. See ServerSession.close.
+    //    Mid-switch, the leave in progress is what is waited for instead.
     final left = _shutdownBudget - watch.elapsed;
     final cap = _kContainerStepBudget < left ? _kContainerStepBudget : left;
     const step = 'provider teardown';
-    final finished = await _session.close(teardownBudget: cap);
+    final finished = session != null
+        ? await session.close(teardownBudget: cap)
+        : await _awaitLeaving(cap);
     if (cap <= Duration.zero) {
       skippedSteps.add(step);
       _logger.warning(
@@ -432,6 +580,69 @@ class AppLifecycle {
     } on Object {
       // A sink that cannot be written must not hold the app open. Nothing is
       // logged about it: there is nowhere left for that line to go.
+    }
+  }
+
+  /// Quit step 0 / switch step 0: a flag, so it needs no bound.
+  void _abandonSkillSweep(ProviderContainer container) {
+    if (container.exists(agentSkillInstallationServiceProvider)) {
+      container.read(agentSkillInstallationServiceProvider).abandon();
+    }
+  }
+
+  /// Step 1b: the generated per-agent endpoint files, not the config entries.
+  Future<void> _retireHookEndpoints(ProviderContainer container) async {
+    // A probe wrote no endpoint, so the files there are the real app's.
+    if (_isProbe ??= container.read(probeModeProvider).enabled) return;
+    // Hooks posting to the session host keep going to it with the app shut.
+    await container
+        .read(agentHookInstallationServiceProvider)
+        .retireEndpoints(keepLocal: container.read(agentHooksAtHostProvider));
+  }
+
+  /// Step 2: nothing new arrives while the rest closes.
+  void _stopWatchers(ProviderContainer container) {
+    if (container.exists(attentionPresenterProvider)) {
+      container.read(attentionPresenterProvider).dispose();
+    }
+  }
+
+  /// Step 5: the panes' process trees; never creates the controller.
+  Future<void> _reapPanes(ProviderContainer container) =>
+      container.exists(terminalSessionsControllerProvider)
+      ? container
+            .read(terminalSessionsControllerProvider.notifier)
+            .shutdownProcesses()
+      : Future<void>.value();
+
+  /// Quit's step 6 while a switch is between sessions: the leave in progress,
+  /// within [cap]. True when there is none.
+  Future<bool> _awaitLeaving(Duration cap) async {
+    final leaving = _leaving;
+    if (leaving == null) return true;
+    if (cap <= Duration.zero) return false;
+    try {
+      return await leaving.timeout(cap);
+    } on TimeoutException {
+      return false;
+    }
+  }
+
+  /// One switch step, bounded by [cap]; one that throws or hangs is logged.
+  Future<void> _bounded(
+    String name,
+    Future<void> Function() action,
+    Duration cap,
+  ) async {
+    try {
+      await action().timeout(cap);
+    } on TimeoutException {
+      _logger.warning(
+        'lifecycle: switch: $name did not finish within '
+        '${cap.inMilliseconds} ms; going on',
+      );
+    } on Object catch (error, stack) {
+      _logger.warning('lifecycle: switch: $name failed.', error, stack);
     }
   }
 

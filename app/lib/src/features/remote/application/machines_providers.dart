@@ -8,8 +8,9 @@ import '../../../core/server/machines.dart';
 /// a probe with no folder).
 final machinesProvider = Provider<Machines?>((ref) => null);
 
-/// The machine this window was started as a client of: null for this
-/// computer's own server. Fixed for the process — a switch starts it again.
+/// The machine this window is a client of: null for this computer's own
+/// server. Fixed for a server session's container — a switch of server opens
+/// a new one (plan step 14).
 final activeMachineProvider = Provider<CompanionPairing?>((ref) => null);
 
 /// What the Machines section lists: every paired server elsewhere.
