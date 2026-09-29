@@ -112,6 +112,9 @@ class BoxScreen implements RemoteSession {
   /// A client resized the session at the box; this copy follows.
   void resized(int columns, int rows) => _screen.resize(columns, rows);
 
+  /// The grid the session is drawn at, as this copy last followed it.
+  (int, int) get grid => (_screen.viewWidth, _screen.viewHeight);
+
   /// Ends the copy without the box saying so — the session was closed from
   /// here and its link dropped before the exit came.
   void endedWithoutWord(String reason) =>

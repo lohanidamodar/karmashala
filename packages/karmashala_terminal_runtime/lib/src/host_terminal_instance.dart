@@ -252,9 +252,8 @@ class HostTerminalInstance
     link.resize(columns, rows);
   }
 
-  /// Draws at the session's [columns]×[rows], and tells the server that grid
-  /// as this client's wish, so a keystroke that takes the input from here
-  /// resizes nothing.
+  /// Draws at the session's [columns]×[rows]. An unclaimed attach leaves the
+  /// server no wish, so only one told by [fitToView] is overwritten here.
   void _followSessionGrid(
     HostPaneLink link,
     int columns,
@@ -265,7 +264,10 @@ class HostTerminalInstance
     if (terminal.viewWidth != columns || terminal.viewHeight != rows) {
       terminal.resize(columns, rows);
     }
-    if (!holds && _toldGrid != (columns, rows)) _tell(link, columns, rows);
+    final told = _toldGrid;
+    if (!holds && told != null && told != (columns, rows)) {
+      _tell(link, columns, rows);
+    }
   }
 
   /// "Fit to this phone": the session takes this view's grid, and this client
@@ -747,6 +749,7 @@ class HostTerminalInstance
         // the program's relative redraws replayed onto an empty one stack up.
         // A session started just now has written next to nothing, and its
         // bytes go under the restored history rather than resetting it.
+        // Unclaimed, the server draws it at the session's grid instead.
         screenGrid: sinceOffset == 0 && !fresh ? (width, height) : null,
       );
       _resumed = !fresh;

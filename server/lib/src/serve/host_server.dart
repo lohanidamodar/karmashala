@@ -813,8 +813,11 @@ class _ClientSession implements BoxRelayPeer {
     // A pane asking for the screen gets it at its own grid: the session is
     // taken there first, so the snapshot is drawn at the width the pane will
     // show it at, and the program's redraw for that size follows as output.
+    // Only a claiming pane: an unclaimed one (a phone) must never resize by
+    // looking, even from a client still holding the input.
     final grid = message.screenGrid;
     if (grid != null &&
+        message.claimWrite &&
         session.token.isHeldBy(_clientId) &&
         (grid.$1 != session.columns || grid.$2 != session.rows)) {
       session.resize(_clientId, grid.$1, grid.$2, now);
@@ -845,7 +848,9 @@ class _ClientSession implements BoxRelayPeer {
       _send(ScreenMessage(ref, screen.$2, utf8.encode(screen.$1)));
     }
 
-    final flow = _Flow(session, from)..wantedGrid = grid;
+    // No wish for an unclaimed pane: its keystroke leaves the grid alone.
+    final flow = _Flow(session, from)
+      ..wantedGrid = message.claimWrite ? grid : null;
     _flows[ref] = flow;
     _server._attached(session, this, ref);
     _pump(ref, flow, from);
