@@ -6,6 +6,12 @@ import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kProtocolVersion;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart' show CapabilitySet;
+import 'package:karmashala_terminal_runtime/host_link.dart'
+    show SharedHostLinks;
+
+/// The `welcome.features` entry a server announces when it keeps a dropped
+/// desktop link for a resume (`server/lib/src/serve/server_features.dart`).
+const String kLinkResumeFeature = 'link.resume';
 
 /// A Karmashala server on another machine (slice 5e), reached the way the
 /// phone reaches one — its LAN listener, a beacon sighting, its announced LAN
@@ -51,6 +57,12 @@ class RemoteServerAccess implements HostSessionAccess {
   /// only when the link is next dialled.
   ValueListenable<CapabilitySet?> get grants => _grants;
 
+  final ValueNotifier<bool> _resuming = ValueNotifier(false);
+
+  /// True while the link's socket is down and it is held for a resume
+  /// (Stage 0 step 17): what was open stays open, and nothing has ended yet.
+  ValueListenable<bool> get resuming => _resuming;
+
   static final AppLogger _dialLog = AppLogger.named('remote_dial');
   static void _defaultLog(String message) => _dialLog.info(message);
 
@@ -77,7 +89,18 @@ class RemoteServerAccess implements HostSessionAccess {
       throw HostLinkException('$hostName is no longer paired with this app.');
     }
     try {
-      final link = await _dialer.dial(record);
+      final link = await _dialer.dial(
+        record,
+        // Stage 0 step 17: a dropped socket is resumed, not redialled, when
+        // this link's server said `link.resume` in its welcome — asked at the
+        // drop, since the welcome comes after the dial.
+        resumeOffered: () =>
+            SharedHostLinks.current(
+              this,
+            )?.welcome.features.contains(kLinkResumeFeature) ??
+            false,
+        onHeld: (held) => _resuming.value = held,
+      );
       _grants.value = link.capabilities;
       _log.info(
         'Linked to $hostName; grants=['

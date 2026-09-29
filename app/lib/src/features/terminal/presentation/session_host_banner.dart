@@ -5,6 +5,7 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 
+import '../../../core/server/remote_server_access.dart';
 import '../../settings/presentation/session_host_status_line.dart'
     show sessionHostRestartLabel, sessionHostStatusText;
 import '../application/local_host_providers.dart';
@@ -41,8 +42,10 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
     // One tree whether or not the strip shows: the shell under it keeps its
     // element, so it is never rebuilt from scratch — which also re-created
     // everything above its content, the macOS menu bar among it.
+    final access = ref.watch(serverAccessProvider);
     return Column(
       children: [
+        if (access is RemoteServerAccess) _ResumingStrip(access: access),
         if (shown) _strip(context, supervision),
         Expanded(
           key: const ValueKey('session_host_banner_child'),
@@ -130,6 +133,53 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+/// "Reconnecting to *server*…" while a remote server's link is held for a
+/// resume (Stage 0 step 17). Nothing to press: it either comes back, or the
+/// link ends and its owners redial as they always did.
+class _ResumingStrip extends StatelessWidget {
+  const _ResumingStrip({required this.access});
+
+  final RemoteServerAccess access;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: access.resuming,
+    builder: (context, resuming, _) {
+      if (!resuming) return const SizedBox.shrink();
+      final scheme = Theme.of(context).colorScheme;
+      return Material(
+        key: const ValueKey('remote_resuming_banner'),
+        color: scheme.secondaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.onSecondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reconnecting to ${access.hostName}…',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: scheme.onSecondaryContainer,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// Whether [supervision] needs the person: it gave up, or an older host holds
