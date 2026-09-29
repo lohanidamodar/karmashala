@@ -122,6 +122,15 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // The Files panel's rows drag inside the app, which no OS drop sees.
+    final inApp = DragTarget<HostPathDrag>(
+      onAcceptWithDetails: (details) => _drop(details.data.paths),
+      builder: (context, candidates, _) =>
+          _overlaid(theme, over: _over || candidates.isNotEmpty),
+    );
+    if (!ref.watch(capabilitiesProvider.select((c) => c.fileDrop))) {
+      return inApp;
+    }
     return DropTarget(
       onDragEntered: (_) => setState(() => _over = true),
       onDragExited: (_) => setState(() => _over = false),
@@ -134,12 +143,7 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
           unawaited(_upload(paths));
         }
       },
-      // The Files panel's rows drag inside the app, which no OS drop sees.
-      child: DragTarget<HostPathDrag>(
-        onAcceptWithDetails: (details) => _drop(details.data.paths),
-        builder: (context, candidates, _) =>
-            _overlaid(theme, over: _over || candidates.isNotEmpty),
-      ),
+      child: inApp,
     );
   }
 

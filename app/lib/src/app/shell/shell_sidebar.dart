@@ -5,6 +5,7 @@ import 'package:karmashala_device_pane/pane.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/explorer_tree_provider.dart';
 import '../../features/explorer/application/session_selection.dart';
 import '../../features/explorer/presentation/agents_lens.dart';
@@ -26,6 +27,9 @@ class ShellSidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final area = ref.watch(shellAreaProvider);
+    final devicesArea = ref.watch(
+      capabilitiesProvider.select((c) => c.devicesArea),
+    );
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
@@ -70,7 +74,7 @@ class ShellSidebar extends ConsumerWidget {
                   // Beside the list, above the dock: never over the terminal,
                   // and never more than half the sidebar.
                   QuickStartCard(maxHeight: constraints.maxHeight * 0.5),
-                  const ShellDevicesDock(),
+                  if (devicesArea) const ShellDevicesDock(),
                 ],
               ),
             ),

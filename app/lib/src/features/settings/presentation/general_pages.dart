@@ -98,12 +98,19 @@ class ThemeTextSection extends ConsumerWidget {
               on ? SurfaceSeparation.borders : SurfaceSeparation.tones,
             ),
           ),
-          SettingsSwitchRow(
-            label: 'Compact density',
-            help: 'Denser lists and controls. Turn off for a roomier layout.',
-            value: settings.compactDensity,
-            onChanged: controller.setCompactDensity,
-          ),
+          // A pointer-only choice: a touch device's density is its own.
+          if (UiDensity.of(context).isTouch)
+            const SettingsRow(
+              label: 'Density',
+              control: Text('Touch (set by this device)'),
+            )
+          else
+            SettingsSwitchRow(
+              label: 'Compact density',
+              help: 'Denser lists and controls. Turn off for a roomier layout.',
+              value: settings.compactDensity,
+              onChanged: controller.setCompactDensity,
+            ),
         ],
       ),
     );

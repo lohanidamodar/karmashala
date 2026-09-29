@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/app_shell.dart';
+import '../../../core/capabilities/capabilities.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
@@ -12,7 +14,7 @@ import 'settings_page_body.dart';
 /// Settings as a master-detail page, drilling down to one section at compact
 /// widths. Mounted as a workbench tab ([SettingsTabView]), never pushed: a
 /// route would cover the menu bar, the tab strip and the panes it configures.
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({
     this.initialSection,
     this.initialAnchor,
@@ -36,10 +38,10 @@ class SettingsScreen extends StatefulWidget {
   static const navWidth = 224.0;
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late SettingsSectionId _selected =
       widget.initialAnchor?.page ??
       widget.initialSection ??
@@ -130,6 +132,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
+    // A link to a page this client hides (Keyboard, on a phone) lands on the
+    // first page it shows.
+    final caps = ref.watch(capabilitiesProvider);
+    final selected = _selected.shownWith(caps)
+        ? _selected
+        : SettingsSectionId.values.firstWhere(
+            (page) => page.shownWith(caps),
+            orElse: () => _selected,
+          );
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = ShellWidth.of(constraints.maxWidth).isCompact;
@@ -150,11 +161,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             SettingsCategoryPicker(
-                              selected: _selected,
+                              selected: selected,
                               onSelect: _select,
                               onSearch: _backToList,
                             ),
-                            Expanded(child: _page()),
+                            Expanded(child: _page(selected)),
                           ],
                         )
                       : SettingsNav(
@@ -175,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         width: SettingsScreen.navWidth,
                         child: FocusTraversalGroup(
                           child: SettingsNav(
-                            selected: _selected,
+                            selected: selected,
                             onSelect: _select,
                             onOpen: _go,
                           ),
@@ -183,7 +194,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     Container(width: 1, color: tones.line),
-                    Expanded(child: FocusTraversalGroup(child: _page())),
+                    Expanded(
+                      child: FocusTraversalGroup(child: _page(selected)),
+                    ),
                   ],
                 ),
         );
@@ -191,16 +204,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _page() => NotificationListener<UserScrollNotification>(
-    onNotification: (_) {
-      _pendingReveal = null;
-      return false;
-    },
-    child: SettingsAnchorScope(
-      keys: _anchorKeys,
-      child: _SectionContent(section: _selected),
-    ),
-  );
+  Widget _page(SettingsSectionId section) =>
+      NotificationListener<UserScrollNotification>(
+        onNotification: (_) {
+          _pendingReveal = null;
+          return false;
+        },
+        child: SettingsAnchorScope(
+          keys: _anchorKeys,
+          child: _SectionContent(section: section),
+        ),
+      );
 }
 
 /// The selected section's page, held to a readable width — a wide window adds
@@ -251,7 +265,7 @@ class _SectionContent extends StatelessWidget {
 /// and the page (semibold) with a caret, opening every page by group; and a
 /// square Search button beside it, which opens the full list with its search
 /// field.
-class SettingsCategoryPicker extends StatelessWidget {
+class SettingsCategoryPicker extends ConsumerWidget {
   const SettingsCategoryPicker({
     required this.selected,
     required this.onSelect,
@@ -267,7 +281,7 @@ class SettingsCategoryPicker extends StatelessWidget {
   static const buttonHeight = Chrome.control + Insets.sm;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
     final radius = BorderRadius.circular(Radii.sm + 2);
@@ -289,11 +303,15 @@ class SettingsCategoryPicker extends StatelessWidget {
                     borderRadius: radius,
                     hoverColor: tones.hover,
                     onTap: () async {
+                      final caps = ref.read(capabilitiesProvider);
+                      final groups = [
+                        for (final group in SettingsGroup.values)
+                          if (group.pages.any((p) => p.shownWith(caps))) group,
+                      ];
                       final picked = await showDesktopMenuUnder<String>(
                         anchor,
                         [
-                          for (final (index, group)
-                              in SettingsGroup.values.indexed) ...[
+                          for (final (index, group) in groups.indexed) ...[
                             if (index > 0) const DesktopMenuDivider(),
                             PopupMenuItem<String>(
                               enabled: false,
@@ -306,12 +324,13 @@ class SettingsCategoryPicker extends StatelessWidget {
                               ),
                             ),
                             for (final page in group.pages)
-                              DesktopMenuItem(
-                                value: page.name,
-                                label: page.label,
-                                icon: page.icon,
-                                selected: page == selected,
-                              ),
+                              if (page.shownWith(caps))
+                                DesktopMenuItem(
+                                  value: page.name,
+                                  label: page.label,
+                                  icon: page.icon,
+                                  selected: page == selected,
+                                ),
                           ],
                         ],
                       );

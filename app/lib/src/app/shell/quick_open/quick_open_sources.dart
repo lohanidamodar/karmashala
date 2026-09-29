@@ -337,6 +337,7 @@ class QuickOpenSources {
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
         readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
+        devicesArea: ref.read(capabilitiesProvider).devicesArea,
       ))
         _command(
           surface.label,

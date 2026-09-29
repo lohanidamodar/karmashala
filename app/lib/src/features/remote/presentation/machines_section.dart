@@ -28,18 +28,24 @@ class MachinesSection extends ConsumerWidget {
     final machines = ref.watch(machinesProvider);
     final active = ref.watch(activeMachineProvider);
     final paired = ref.watch(pairedMachinesProvider).value ?? const [];
+    final hostsServer = ref.watch(
+      capabilitiesProvider.select((c) => c.hostsServer),
+    );
     // Board rows: a row per server, then adding one as the list's last row.
     return SettingsSection(
       title: 'MACHINES',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _MachineRow(
-            name: 'This computer',
-            detail: 'Its own Karmashala server, started and kept up here.',
-            inUse: active == null,
-            onUse: machines == null ? null : () => _switch(context, ref, null),
-          ),
+          if (hostsServer)
+            _MachineRow(
+              name: 'This computer',
+              detail: 'Its own Karmashala server, started and kept up here.',
+              inUse: active == null,
+              onUse: machines == null
+                  ? null
+                  : () => _switch(context, ref, null),
+            ),
           for (final machine in paired)
             _MachineRow(
               name: machine.hostName.isEmpty ? 'Server' : machine.hostName,

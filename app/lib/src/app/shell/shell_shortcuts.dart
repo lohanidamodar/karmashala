@@ -338,6 +338,8 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ),
           ShowShellAreaIntent: CallbackAction<ShowShellAreaIntent>(
             onInvoke: (intent) {
+              // Ctrl+4 on a client with no Devices area does nothing.
+              if (!shellAreaShown(ref, intent.area)) return null;
               final shell = ref.read(shellControllerProvider);
               final showing =
                   shell.explorerPaneVisible &&

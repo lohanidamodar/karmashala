@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/capabilities/capabilities.dart';
 import '../core/probe/probe_mode.dart';
 import '../features/settings/application/settings_controller.dart';
 import 'probe_banner.dart';
@@ -10,7 +11,8 @@ import '../features/terminal/presentation/session_host_banner.dart';
 import 'shell/app_shell.dart';
 import 'shell/native_menus.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_ui/tokens.dart' show AppearanceOptions;
+import 'package:karmashala_ui/tokens.dart'
+    show AppearanceOptions, UiDensityScope;
 
 /// Root application widget: theming and the desktop shell. The `ProviderScope`
 /// is installed in `main.dart`, with the database override.
@@ -25,7 +27,12 @@ class KarmashalaApp extends ConsumerWidget {
     final compact = ref.watch(
       settingsControllerProvider.select((s) => s.compactDensity),
     );
-    final density = compact ? VisualDensity.compact : VisualDensity.standard;
+    // Touch comes from the device, not the width: a tablet in the desktop
+    // layout still gets 48dp targets, whatever Compact density says.
+    final ui = ref.watch(clientCapabilitiesProvider).density;
+    final density = compact && !ui.isTouch
+        ? VisualDensity.compact
+        : VisualDensity.standard;
     final uiTextScale = ref.watch(
       settingsControllerProvider.select((s) => s.uiTextScale),
     );
@@ -42,14 +49,18 @@ class KarmashalaApp extends ConsumerWidget {
       // just the routes. The probe banner is outside it so no route covers it.
       builder: (context, child) => ProbeBanner(
         probe: probe,
-        child: UiTextScale(scale: uiTextScale, child: child!),
+        child: UiDensityScope(
+          density: ui,
+          child: UiTextScale(scale: uiTextScale, child: child!),
+        ),
       ),
-      theme: AppTheme.light(
-        options: appearance,
-      ).copyWith(visualDensity: density),
-      darkTheme: AppTheme.dark(
-        options: appearance,
-      ).copyWith(visualDensity: density),
+      // themeFor is identity for pointer, so the desktop's theme is as before.
+      theme: ui.themeFor(
+        AppTheme.light(options: appearance).copyWith(visualDensity: density),
+      ),
+      darkTheme: ui.themeFor(
+        AppTheme.dark(options: appearance).copyWith(visualDensity: density),
+      ),
       themeMode: switch (themeMode) {
         AppThemeMode.system => ThemeMode.system,
         AppThemeMode.light => ThemeMode.light,

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase, LocalHostSupervisor;
+import '../../../core/capabilities/capabilities.dart';
 import '../../ssh/presentation/host_sessions_dialog.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../../terminal/presentation/session_status.dart';
@@ -31,7 +32,9 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
     super.initState();
     // When the panel opens, and never on a timer.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(localHostStatusProvider.notifier).refresh();
+      if (mounted && ref.read(capabilitiesProvider).serverSettings) {
+        ref.read(localHostStatusProvider.notifier).refresh();
+      }
     });
   }
 
@@ -39,7 +42,10 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
   Widget build(BuildContext context) {
     final reading = ref.watch(localHostStatusProvider);
     final supervision = ref.watch(localHostSupervisionProvider).value;
-    final available = ref.watch(localHostSessionAccessProvider) != null;
+    // Start, Stop and Restart act on this machine's server.
+    final available =
+        ref.watch(capabilitiesProvider.select((c) => c.serverSettings)) &&
+        ref.watch(localHostSessionAccessProvider) != null;
     if (!available) return const SizedBox.shrink();
 
     final check = TextButton(

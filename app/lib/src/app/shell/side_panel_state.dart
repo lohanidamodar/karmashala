@@ -79,7 +79,7 @@ enum SidePanelSurface {
   /// The Flutter app the developer is running: its debug console, hot reload
   /// and a widget picker.
   flutterApp('Flutter app'),
-  device('Device'),
+  device('Device', requiresLocalDevices: true),
 
   /// **What a session started here would be given** — the MCP servers and
   /// skills the agent's own configuration names, read off files with their
@@ -100,6 +100,7 @@ enum SidePanelSurface {
     this.requiresDebugMode = false,
     this.requiresNotes = false,
     this.requiresSameMachine = false,
+    this.requiresLocalDevices = false,
   });
 
   final String label;
@@ -122,6 +123,10 @@ enum SidePanelSurface {
   /// hidden on a server elsewhere (`Capabilities.readsServerDisk`).
   final bool requiresSameMachine;
 
+  /// Whether the surface runs adb and simctl here, so it is hidden on a client
+  /// with no Devices area (`Capabilities.devicesArea`).
+  final bool requiresLocalDevices;
+
   /// Whether this surface exists for the settings given. The one answer, so the
   /// panel, the menus and [SidePanel]'s own check cannot disagree. The Inbox
   /// is never offered here: it is an area of the activity strip now.
@@ -129,11 +134,13 @@ enum SidePanelSurface {
     required bool debugMode,
     bool notesEnabled = true,
     bool readsServerDisk = true,
+    bool devicesArea = true,
   }) =>
       this != SidePanelSurface.inbox &&
       (debugMode || !requiresDebugMode) &&
       (notesEnabled || !requiresNotes) &&
-      (readsServerDisk || !requiresSameMachine);
+      (readsServerDisk || !requiresSameMachine) &&
+      (devicesArea || !requiresLocalDevices);
 
   /// The surface stored under [id], or null for one this build does not have.
   static SidePanelSurface? fromId(String id) {
@@ -151,12 +158,14 @@ enum SidePanelSurface {
     required bool debugMode,
     bool notesEnabled = true,
     bool readsServerDisk = true,
+    bool devicesArea = true,
   }) => [
     for (final surface in values)
       if (surface.isOffered(
         debugMode: debugMode,
         notesEnabled: notesEnabled,
         readsServerDisk: readsServerDisk,
+        devicesArea: devicesArea,
       ))
         surface,
   ];
