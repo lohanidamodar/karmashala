@@ -14,6 +14,7 @@ import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/remote/presentation/machines_section.dart'
     show AddMachineDialog;
+import '../../features/remote/presentation/pair_machine_page.dart';
 import '../widgets/adaptive_modal.dart';
 import 'phone_shell.dart';
 import 'quick_open/quick_open.dart';
@@ -123,10 +124,27 @@ class PhoneHostSwitcher extends ConsumerWidget {
       case _UseMachine(:final machine):
         await _use(context, ref, machine);
       case _AddMachine():
-        await AddMachineDialog.show(context);
+        await _add(context, ref);
       case null:
         break;
     }
+  }
+
+  /// The desktop's dialog where this client hosts a server; elsewhere the
+  /// phone's pairing page (scan, paste, address), as Settings › Machines.
+  static Future<void> _add(BuildContext context, WidgetRef ref) {
+    final client = ref.read(clientCapabilitiesProvider);
+    final machines = ref.read(machinesProvider);
+    if (client.hostsServer || machines == null) {
+      return AddMachineDialog.show(context);
+    }
+    return PairMachinePage.push(
+      context,
+      machines: machines,
+      client: client,
+      switcher: ref.read(serverSwitcherProvider),
+      onListChanged: () => ref.invalidate(pairedMachinesProvider),
+    );
   }
 
   static Future<void> _use(

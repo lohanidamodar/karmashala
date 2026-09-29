@@ -71,10 +71,43 @@ class DesktopServerDialer {
     }();
   }
 
+  /// Beacon listening stops and the multicast lock is let go, until
+  /// [restartScouting]: a phone in the background.
+  Future<void> pauseScouting() async {
+    final scout = this.scout;
+    final starting = _scoutStarting;
+    if (scout == null || _closed || starting == null) return;
+    await starting;
+    await scout.pause();
+  }
+
+  /// Listens afresh, on the interfaces there are now — after [pauseScouting]
+  /// or a network change — and the next dial waits for a first sighting
+  /// again, since the old ones were heard on another network.
+  Future<void> restartScouting() async {
+    final scout = this.scout;
+    if (scout == null || _closed) return;
+    final starting = _scoutStarting;
+    if (starting == null) return startScouting();
+    await starting;
+    _scoutStartedAt = _now();
+    await scout.restart();
+  }
+
+  final StreamController<void> _proofs = StreamController<void>.broadcast();
+
+  /// Every live link this dialer opened proves itself now rather than at its
+  /// next keepalive, and a held one tries its routes now rather than after
+  /// its backoff: the app came back, or the network under it changed.
+  void proveLinks() {
+    if (!_closed && !_proofs.isClosed) _proofs.add(null);
+  }
+
   /// Stops beacon listening for good: this machine is no longer in use.
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    await _proofs.close();
     final starting = _scoutStarting;
     if (starting == null) return;
     await starting;
@@ -113,6 +146,7 @@ class DesktopServerDialer {
             hostName: name,
             onLog: onLog,
             onHeld: onHeld,
+            proofs: _proofs.stream,
             promoteOffered: promoteOffered,
             keepaliveOffered: keepaliveOffered,
             lanRoutes: promoteOffered == null
@@ -411,7 +445,13 @@ class DesktopServerDialer {
         await _settle(pairing, generation, status, relay: relay);
         return link;
       } on DesktopConnectException catch (error) {
-        if (error.refused) rethrow;
+        if (error.refused) {
+          // The server spent this generation on the hello: a record left
+          // behind it would drift one further on every refused retry, past
+          // the probe window, and never reach the server once granted.
+          await _settleRefused(pairing, generation, status);
+          rethrow;
+        }
         notes.add('$label: ${error.message}');
         onLog?.call('$path attempt at $label failed: ${error.message}');
         if (!socketOpened) break;
@@ -483,6 +523,9 @@ class DesktopServerDialer {
             candidates: candidates,
             lanHint: status?.lanHint,
             relay: relay,
+            // A grant added on the server since pairing (a companion's
+            // pairing given the app) is the record's from now on.
+            capabilities: status?.capabilities,
           ),
         );
         return all;
@@ -490,6 +533,30 @@ class DesktopServerDialer {
     } on Object catch (error) {
       // A counter that did not stick costs a probe forward next time.
       onLog?.call('saving the link to ${pairing.hostName} failed: $error');
+    }
+  }
+
+  /// After a refused attach: the counter moves on as after a link, and the
+  /// record holds what the server says it is granted, nothing else.
+  Future<void> _settleRefused(
+    CompanionPairing pairing,
+    int used,
+    RemoteHostStatus? status,
+  ) async {
+    try {
+      await CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(pairing.hostId.value);
+        if (saved == null) return all;
+        all.upsert(
+          saved.copyWith(
+            generation: used + 1 > saved.generation ? used + 1 : null,
+            capabilities: status?.capabilities,
+          ),
+        );
+        return all;
+      });
+    } on Object catch (error) {
+      onLog?.call('saving the refusal by ${pairing.hostName} failed: $error');
     }
   }
 

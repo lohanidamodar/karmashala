@@ -86,9 +86,20 @@ class LanPathScout {
 
   bool get isListening => _discovery != null;
 
+  /// Start, pause, restart and stop run one at a time, in order: a pause
+  /// racing a start must not leave a group joined or a lock held.
+  Future<void> _queue = Future<void>.value();
+
+  Future<void> _serial(Future<void> Function() step) =>
+      _queue = _queue.then((_) => step()).catchError((Object error) {
+        onLog?.call('lan scout step failed: $error');
+      });
+
   /// Joins the beacon group. Never throws: a network that refuses multicast
   /// leaves the scout inert and the relay untouched.
-  Future<void> start() async {
+  Future<void> start() => _serial(_start);
+
+  Future<void> _start() async {
     if (_started) return;
     _started = true;
     try {
@@ -157,8 +168,31 @@ class LanPathScout {
     );
   }
 
-  Future<void> stop() async {
+  /// Leaves the beacon group and lets go of the multicast lock, keeping
+  /// [sightings] open for [restart]: a phone in the background holds no lock.
+  Future<void> pause() => _serial(_pause);
+
+  /// Listens afresh: after [pause], or after a network change, when the
+  /// group was joined on interfaces that are gone. No-op after [stop].
+  Future<void> restart() => _serial(() async {
+    if (_sightings.isClosed) return;
+    await _pause();
+    await _start();
+  });
+
+  Future<void> stop() => _serial(() async {
     _started = false;
+    await _leave();
+    if (!_sightings.isClosed) await _sightings.close();
+  });
+
+  Future<void> _pause() async {
+    if (!_started) return;
+    _started = false;
+    await _leave();
+  }
+
+  Future<void> _leave() async {
     await _adverts?.cancel();
     _adverts = null;
     final discovery = _discovery;
@@ -175,6 +209,5 @@ class LanPathScout {
     } on Object catch (error) {
       onLog?.call('multicast lock release failed: $error');
     }
-    if (!_sightings.isClosed) await _sightings.close();
   }
 }

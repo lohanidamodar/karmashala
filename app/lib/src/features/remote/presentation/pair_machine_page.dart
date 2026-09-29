@@ -9,6 +9,7 @@ import '../../../core/capabilities/capabilities.dart';
 import '../../../core/lifecycle/server_switcher.dart';
 import '../../../core/server/machine_pairing.dart';
 import '../../../core/server/machines.dart';
+import '../../../core/server/multicast_lock_channel.dart';
 import '../../../core/util/failure_words.dart';
 import 'pair_machine_forms.dart';
 import 'pair_machine_scan.dart';
@@ -39,6 +40,8 @@ class MachinePairer {
         address: address,
         deviceName: client.deviceName,
         hostsServer: client.hostsServer,
+        // A phone also listens for the server's beacon while it pairs.
+        lanLock: client.multicastLock ? ChannelMulticastLock() : null,
       );
     } on CompanionPairingException catch (error) {
       return error.message;

@@ -81,6 +81,10 @@ class Machines {
     return (await CompanionConnections.load(store)).byHost(chosen);
   }
 
+  /// Whether a choice was ever written here — false on a phone build's first
+  /// start over a companion install.
+  Future<bool> hasChoice() async => await store.read(_activeKey) != null;
+
   /// Chooses [hostId]'s server, or this machine's own with null.
   Future<void> use(String? hostId) => store.write(_activeKey, hostId ?? _local);
 

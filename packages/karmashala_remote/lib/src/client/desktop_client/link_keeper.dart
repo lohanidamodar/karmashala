@@ -42,6 +42,16 @@ class _DesktopLinkKeeper {
   /// Inbound silence on the link, with `link.keepalive`.
   LinkLiveness? _liveness;
 
+  StreamSubscription<void>? _proofs;
+  Timer? _proofWindow;
+
+  /// Frames taken off the current socket, counted so a proof can tell
+  /// whether anything arrived after its ping.
+  var _heard = 0;
+
+  /// Cuts the heal loop's wait between passes short.
+  Completer<void>? _healWake;
+
   /// Frames before the link exists: the switch's envelopes.
   final void Function(Envelope envelope, SealedFrame opened) onEnvelope;
 
@@ -133,6 +143,11 @@ class _DesktopLinkKeeper {
     _heal?.cancel();
     _recheck?.cancel();
     _liveness?.stop();
+    _proofWindow?.cancel();
+    final proofs = _proofs;
+    _proofs = null;
+    await proofs?.cancel();
+    _wakeHeal();
     final chances = _chances;
     _chances = null;
     await chances?.cancel();
@@ -177,6 +192,7 @@ class _DesktopLinkKeeper {
       return;
     }
     _liveness?.heard();
+    _heard++;
     if (attempt != null) {
       await _onResumeAnswer(attempt, transport, opened);
       return;
@@ -289,8 +305,53 @@ class _DesktopLinkKeeper {
               ? pass
               : kDesktopResumeDelays.length - 1];
       pass++;
-      await Future.any<void>([Future<void>.delayed(wait), current.done]);
+      final woken = _healWake = Completer<void>();
+      await Future.any<void>([
+        Future<void>.delayed(wait),
+        current.done,
+        woken.future,
+      ]);
+      if (identical(_healWake, woken)) _healWake = null;
     }
+  }
+
+  void _wakeHeal() {
+    final woken = _healWake;
+    _healWake = null;
+    if (woken != null && !woken.isCompleted) woken.complete();
+  }
+
+  /// The app came back, or the network changed (see
+  /// [DesktopLinkResume.proofs]): a held link walks its routes now; a live
+  /// one looks for the LAN and pings, and one that hears nothing back within
+  /// [kDesktopProofWindow] is taken for dropped, so a resume runs over the
+  /// routes there are now rather than after [kLinkDeadAfter].
+  void _prove() {
+    final resume = this.resume;
+    final current = link;
+    if (resume == null || current == null || current.isClosed || _released) {
+      return;
+    }
+    if (current.suspended) {
+      _wakeHeal();
+      return;
+    }
+    if (_attempt != null || _promoting || _transport == null) return;
+    _maybePromote();
+    if (_promoting || !_asks(resume.keepaliveOffered)) return;
+    if (_proofWindow?.isActive ?? false) return;
+    final before = _heard;
+    current.ping();
+    _proofWindow = Timer(kDesktopProofWindow, () {
+      if (_heard != before || _released || current.isClosed) return;
+      if (current.suspended || _attempt != null || _promoting) return;
+      resume.onLog?.call(
+        'link to ${resume.hostName} did not answer within '
+        '${kDesktopProofWindow.inSeconds}s of a network change or a return '
+        'to the app; taking its connection for dropped',
+      );
+      _dropped();
+    });
   }
 
   /// Says this suspension's outcome, once, and that the link is no longer
@@ -397,7 +458,9 @@ class _DesktopLinkKeeper {
   void started() {
     _armLiveness();
     final resume = this.resume;
-    if (resume == null || resume.lanRoutes == null || _released) return;
+    if (resume == null || _released) return;
+    _proofs = resume.proofs?.listen((_) => _prove());
+    if (resume.lanRoutes == null) return;
     _chances = resume.lanChances?.listen((_) => _maybePromote());
     _recheck = Timer.periodic(kDesktopPromotionRecheck, (_) => _maybePromote());
   }

@@ -19,7 +19,7 @@ import 'package:karmashala_companion/notifications.dart';
 import 'package:karmashala_companion/screens.dart';
 import 'companion_app.dart';
 import 'companion_lifecycle.dart';
-import 'multicast_lock_channel.dart';
+import '../../core/server/multicast_lock_channel.dart';
 
 /// Boots the companion build. Deliberately none of the desktop bootstrap: no
 /// database, no PTYs, no environment discovery, no control server, no tray,
