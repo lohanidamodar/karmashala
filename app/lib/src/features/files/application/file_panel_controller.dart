@@ -65,7 +65,14 @@ class FilePanelState {
 /// renamed on screen.
 class FilePanelController extends ValueNotifier<FilePanelState> {
   FilePanelController(this.files, this.environmentId)
-    : super(const FilePanelState());
+    : super(const FilePanelState()) {
+    _touched = files.listingsTouched.listen((folder) {
+      final directory = value.directory;
+      if (directory != null && pathKey(folder) == pathKey(directory)) {
+        unawaited(relist());
+      }
+    });
+  }
 
   final FilesClient files;
   final String environmentId;
@@ -83,8 +90,8 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
       final resolved = (await files.resolve(target)).path;
       final entries = await files.list(resolved);
       if (serial != _serial) return;
+      _listedAt = DateTime.now();
       value = FilePanelState(directory: resolved, entries: entries);
-      _follow(resolved);
     } on Object catch (error) {
       if (serial != _serial) return;
       value = value.copyWith(busy: false, error: _sentence(error));
@@ -95,40 +102,59 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
   /// user asked.
   Future<void> refresh() => open(value.directory);
 
-  /// The server's watch on the folder on screen: a file something else makes
-  /// there — a build's output, an agent's edit — shows without Refresh.
-  FileWatch? _watch;
+  // No folder is watched: the listing refreshes on focus, on Refresh, when
+  // the link comes back, and after this app's own operations touch it.
+  late final StreamSubscription<EnvironmentPath> _touched;
+  DateTime? _listedAt;
   var _disposed = false;
+  var _relisting = false;
+  var _again = false;
 
-  void _follow(EnvironmentPath directory) {
-    if (_disposed || _watch?.path == directory) return;
-    _watch?.cancel();
-    _watch = files.watch(directory, (_) => unawaited(_relist(directory)));
+  /// The window came back to the front: lists again unless it just did.
+  void refreshOnFocus() {
+    final at = _listedAt;
+    if (at != null && DateTime.now().difference(at) < kListingRefocusFloor) {
+      return;
+    }
+    unawaited(relist());
   }
 
-  /// Lists [directory] again in place, keeping whatever of the selection is
-  /// still there. An operation in flight lists it itself.
-  Future<void> _relist(EnvironmentPath directory) async {
-    if (_disposed || value.busy || value.directory != directory) return;
-    final serial = ++_serial;
+  /// Lists the folder on screen again in place, keeping whatever of the
+  /// selection is still there. An open or operation in flight lists it
+  /// itself; a second ask during a relist runs once after it.
+  Future<void> relist() async {
+    if (_disposed || value.busy || value.directory == null) return;
+    if (_relisting) {
+      _again = true;
+      return;
+    }
+    _relisting = true;
     try {
-      final entries = await files.list(directory);
-      if (_disposed || serial != _serial) return;
-      final there = {for (final entry in entries) entry.path.path};
-      value = value.copyWith(
-        entries: entries,
-        selected: value.selected.where(there.contains).toSet(),
-      );
+      do {
+        _again = false;
+        final directory = value.directory;
+        if (directory == null) return;
+        final serial = ++_serial;
+        final entries = await files.list(directory);
+        if (_disposed || serial != _serial) return;
+        _listedAt = DateTime.now();
+        final there = {for (final entry in entries) entry.path.path};
+        value = value.copyWith(
+          entries: entries,
+          selected: value.selected.where(there.contains).toSet(),
+        );
+      } while (_again && !_disposed);
     } on Object {
-      // The next change, or Refresh, lists it again.
+      // Refresh, focus or the next operation lists it again.
+    } finally {
+      _relisting = false;
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _watch?.cancel();
-    _watch = null;
+    unawaited(_touched.cancel());
     super.dispose();
   }
 
@@ -181,10 +207,9 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
         return null;
       });
 
-  /// Lists again after a delete done elsewhere (the shared confirm-and-delete),
-  /// showing whatever did not go.
+  /// Shows whatever a delete done elsewhere (the shared confirm-and-delete)
+  /// could not remove. What did go re-lists the folder by itself.
   Future<void> showDeleted(List<String> failures) async {
-    await refresh();
     if (_disposed || failures.isEmpty) return;
     value = value.copyWith(error: failures.join('\n'), selected: const {});
   }

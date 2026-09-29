@@ -7,6 +7,8 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import '../../../core/data/data_client.dart' show DataLinkState;
 import '../../../core/data/data_providers.dart';
 import '../../editor/domain/document_id.dart';
+import '../../explorer/application/project_head.dart'
+    show windowRefocusCountProvider;
 import '../../files/data/files_client.dart';
 import '../../git/application/changes_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -22,7 +24,6 @@ final fileTreeRootProvider = Provider<EnvironmentPath?>((ref) {
 });
 
 /// Ticks when the person asks for the listings again — the Refresh button.
-/// Everything else is told: the server watches every folder on screen.
 class FileListingRefreshController extends Notifier<int> {
   @override
   int build() => 0;
@@ -35,15 +36,19 @@ final fileListingRefreshProvider =
       FileListingRefreshController.new,
     );
 
-/// The entries of [directory], listed by the server, and listed again when
-/// its watch says the folder changed (slice 3c) — an agent's new file shows
-/// without a poll — or when Refresh is pressed.
+/// The entries of [directory], listed by the server when the folder is first
+/// shown, and again on Refresh, when the window comes back to the front, when
+/// the link to the server comes back, and after this app's own operation
+/// changed it. Never watched: a watcher over the WSL share or SSH costs more
+/// than a listing.
 final directoryListingProvider = FutureProvider.autoDispose
     .family<List<FileEntry>, EnvironmentPath>((ref, directory) async {
       ref.watch(fileListingRefreshProvider);
-      // Back from a lost link, the server's new watch starts from what is
-      // there now: a file made while nobody could be told (a build's output)
-      // would never be told at all, so the folder is listed again.
+      final listedAt = DateTime.now();
+      ref.listen(windowRefocusCountProvider, (_, _) {
+        if (DateTime.now().difference(listedAt) < kListingRefocusFloor) return;
+        ref.invalidateSelf();
+      });
       ref.listen(dataConnectionProvider, (previous, next) {
         final was = previous?.value?.state;
         if (next.value?.state != DataLinkState.connected) return;
@@ -51,8 +56,11 @@ final directoryListingProvider = FutureProvider.autoDispose
         ref.invalidateSelf();
       });
       final files = ref.read(filesClientProvider);
-      final watch = files.watch(directory, (_) => ref.invalidateSelf());
-      ref.onDispose(watch.cancel);
+      final key = pathKey(directory);
+      final touched = files.listingsTouched.listen((folder) {
+        if (pathKey(folder) == key) ref.invalidateSelf();
+      });
+      ref.onDispose(touched.cancel);
       return files.list(directory);
     });
 
@@ -105,21 +113,9 @@ final fileRevealTargetProvider =
       FileRevealController.new,
     );
 
-/// The part of a path two spellings of it agree on: separators made `/`,
-/// case folded (Windows and macOS; on Linux that can pick the neighbour of a
-/// case pair), no trailing slash.
-String _normal(String path) {
-  var normalized = path.replaceAll(r'\', '/').toLowerCase();
-  while (normalized.length > 1 && normalized.endsWith('/')) {
-    normalized = normalized.substring(0, normalized.length - 1);
-  }
-  return normalized;
-}
-
 /// One path in the form two of them can be compared in, its environment
 /// included: `/home/me/app` in WSL and on a host are not one folder.
-String fileTreeKey(EnvironmentPath path) =>
-    '${path.environmentId}␟${_normal(path.path)}';
+String fileTreeKey(EnvironmentPath path) => pathKey(path);
 
 /// Whether [path] is [root] or lives under it.
 bool isUnderFileTreeRoot(EnvironmentPath root, EnvironmentPath path) {

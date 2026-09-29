@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +12,11 @@ import 'package:karmashala_ui/tokens.dart';
 
 import 'package:karmashala_files/values.dart';
 
+import '../../../core/data/data_client.dart' show DataLinkState;
+import '../../../core/data/data_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../explorer/application/project_head.dart'
+    show windowRefocusCountProvider;
 import '../application/file_panel_controller.dart';
 import '../application/file_space_providers.dart';
 import '../data/files_client.dart';
@@ -73,6 +79,19 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
     }
     _left.point(ref, machines);
     _right.point(ref, machines);
+    // Refreshed, never watched: on coming back to the front, and once when
+    // the link to the server returns.
+    ref.listen(windowRefocusCountProvider, (_, _) {
+      _left.controller?.refreshOnFocus();
+      _right.controller?.refreshOnFocus();
+    });
+    ref.listen(dataConnectionProvider, (previous, next) {
+      final was = previous?.value?.state;
+      if (next.value?.state != DataLinkState.connected) return;
+      if (was == null || was == DataLinkState.connected) return;
+      unawaited(_left.controller?.relist());
+      unawaited(_right.controller?.relist());
+    });
 
     return Column(
       children: [
@@ -196,8 +215,8 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
       }
     }
     if (!mounted) return;
+    // Each copy re-lists the destination itself (FilesClient.listingsTouched).
     setState(() => _moving = null);
-    await to.controller?.refresh();
   }
 }
 

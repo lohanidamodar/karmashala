@@ -592,15 +592,9 @@ class _FileEntryActions {
   /// uses too. Only what is inside the tree's own folder, never the folder.
   Future<void> _delete() async {
     final root = ref.read(fileTreeRootProvider);
-    final parent = parentOf(path);
     final messenger = ScaffoldMessenger.of(context);
-    // The container outlives this row, which goes when its folder re-lists.
-    final container = ProviderScope.containerOf(context, listen: false);
+    // The folder re-lists itself: FilesClient.listingsTouched.
     final outcome = await confirmAndDeleteFiles(context, [entry], within: root);
-    if (outcome.deleted.isNotEmpty && parent != null) {
-      // The server's watch tells the folder; asking again shows it at once.
-      container.invalidate(directoryListingProvider(parent));
-    }
     for (final failure in outcome.failures) {
       messenger.showSnackBar(SnackBar(content: Text(failure)));
     }
@@ -637,9 +631,8 @@ Future<void> createInFileTree(
     }
     return;
   }
-  // The listing hears of it from the server's watch; asking again as well
-  // costs one listing and shows it at once.
-  ref.invalidate(directoryListingProvider(parentDir));
+  // The listing re-lists itself (FilesClient.listingsTouched), and the held
+  // reveal target waits for it.
   ref
       .read(fileRevealTargetProvider.notifier)
       .reveal(FileRevealTarget(path: created, isDirectory: folder));

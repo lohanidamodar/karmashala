@@ -62,6 +62,17 @@ class FilesClient {
   /// Who is watching each path, by the handle each was given.
   final _watches = <EnvironmentPath, Set<FileWatch>>{};
 
+  final _touched = StreamController<EnvironmentPath>.broadcast();
+
+  /// A folder whose listing one of this app's own operations just changed —
+  /// a create, rename, delete, copy, upload or save. The Files browsers
+  /// re-list it; they watch no folder.
+  Stream<EnvironmentPath> get listingsTouched => _touched.stream;
+
+  void _touch(EnvironmentPath? folder) {
+    if (folder != null && !_touched.isClosed) _touched.add(folder);
+  }
+
   /// Whether the server runs on this machine: then a file it reaches with
   /// `dart:io` opens here too, by the path [localPathOf] answers.
   bool get serverOnThisMachine => _client.serverOnThisMachine;
@@ -69,6 +80,7 @@ class FilesClient {
   Future<void> dispose() async {
     await _changes.cancel();
     await _connection.cancel();
+    await _touched.close();
     _watches.clear();
   }
 
@@ -135,7 +147,9 @@ class FilesClient {
     required WriteExpectation expect,
   }) async {
     try {
-      return await _send(FilesWrite(path, bytes, expect: expect));
+      final stamp = await _send(FilesWrite(path, bytes, expect: expect));
+      _touch(parentOf(path));
+      return stamp;
     } on FilesStaleException {
       FileStamp? current;
       try {
@@ -150,16 +164,31 @@ class FilesClient {
   Future<EnvironmentPath> createDirectory(
     EnvironmentPath parent,
     String name,
-  ) => _send(FilesMkdir(parent, name));
+  ) async {
+    final made = await _send(FilesMkdir(parent, name));
+    _touch(parent);
+    return made;
+  }
 
-  Future<EnvironmentPath> createFile(EnvironmentPath parent, String name) =>
-      _send(FilesTouch(parent, name));
+  Future<EnvironmentPath> createFile(
+    EnvironmentPath parent,
+    String name,
+  ) async {
+    final made = await _send(FilesTouch(parent, name));
+    _touch(parent);
+    return made;
+  }
 
-  Future<EnvironmentPath> rename(EnvironmentPath path, String name) =>
-      _send(FilesRename(path, name));
+  Future<EnvironmentPath> rename(EnvironmentPath path, String name) async {
+    final renamed = await _send(FilesRename(path, name));
+    _touch(parentOf(path));
+    return renamed;
+  }
 
-  Future<void> delete(EnvironmentPath path, {bool recursive = false}) =>
-      _send(FilesDelete(path, recursive: recursive));
+  Future<void> delete(EnvironmentPath path, {bool recursive = false}) async {
+    await _send(FilesDelete(path, recursive: recursive));
+    _touch(parentOf(path));
+  }
 
   /// Moves [path], with anything in it, to its machine's recycle bin. Asked
   /// only where [canTrash] says there is one; an older server refuses the
@@ -167,6 +196,7 @@ class FilesClient {
   Future<void> trash(EnvironmentPath path) async {
     try {
       await _send(FilesTrash(path));
+      _touch(parentOf(path));
     } on FilesException catch (error) {
       if (!error.message.contains('no data request is called')) rethrow;
       throw const FilesException(
@@ -193,7 +223,11 @@ class FilesClient {
     EnvironmentPath source,
     EnvironmentPath toDirectory, {
     String? name,
-  }) => _send(FilesCopy(source, toDirectory, fileName: name));
+  }) async {
+    final landed = await _send(FilesCopy(source, toDirectory, fileName: name));
+    _touch(toDirectory);
+    return landed;
+  }
 
   /// Puts [size] bytes of this machine's, named [name], on the server's disk
   /// (slice 5e: a drop on a client whose server is elsewhere) — in
@@ -239,7 +273,9 @@ class FilesClient {
       }
     }
     if (pending.isNotEmpty) await flush();
-    return _send(FilesUploadCommit(environmentId, id));
+    final landed = await _send(FilesUploadCommit(environmentId, id));
+    _touch(parentOf(landed));
+    return landed;
   }
 
   /// Every file under the checkout [root], from the server's index.
@@ -266,7 +302,8 @@ class FilesClient {
 
   /// Tells [onChange] each time [path] changes on disk until the handle is
   /// cancelled. One watch per path is asked of the server however many
-  /// handles hold it.
+  /// handles hold it. For an open editor's file; a folder listing refreshes
+  /// instead (focus, Refresh, [listingsTouched]).
   FileWatch watch(EnvironmentPath path, void Function(FileChanged) onChange) {
     final handle = FileWatch._(this, path, onChange);
     final holders = _watches.putIfAbsent(path, () => {});
@@ -320,6 +357,20 @@ EnvironmentPath? parentOf(EnvironmentPath path) {
 /// How [path] separates itself.
 p.Context pathContextOf(String path) =>
     RegExp(r'^[A-Za-z]:|\\').hasMatch(path) ? p.windows : p.posix;
+
+/// The shortest gap between two focus-driven listings of one folder, so a
+/// window flicking in and out of focus does not re-list over 9p or SSH.
+const kListingRefocusFloor = Duration(seconds: 2);
+
+/// [path] in the form two spellings of it agree on: separators made `/`, case
+/// folded, no trailing slash, its environment included.
+String pathKey(EnvironmentPath path) {
+  var normalized = path.path.replaceAll(r'\', '/').toLowerCase();
+  while (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.substring(0, normalized.length - 1);
+  }
+  return '${path.environmentId}␟$normalized';
+}
 
 final filesClientProvider = Provider<FilesClient>((ref) {
   final files = FilesClient(ref.watch(dataClientProvider));
