@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_files/values.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
+import '../../../core/data/data_client.dart' show DataLinkState;
+import '../../../core/data/data_providers.dart';
 import '../../editor/domain/document_id.dart';
 import '../../files/data/files_client.dart';
 import '../../git/application/changes_providers.dart';
@@ -39,6 +41,15 @@ final fileListingRefreshProvider =
 final directoryListingProvider = FutureProvider.autoDispose
     .family<List<FileEntry>, EnvironmentPath>((ref, directory) async {
       ref.watch(fileListingRefreshProvider);
+      // Back from a lost link, the server's new watch starts from what is
+      // there now: a file made while nobody could be told (a build's output)
+      // would never be told at all, so the folder is listed again.
+      ref.listen(dataConnectionProvider, (previous, next) {
+        final was = previous?.value?.state;
+        if (next.value?.state != DataLinkState.connected) return;
+        if (was == null || was == DataLinkState.connected) return;
+        ref.invalidateSelf();
+      });
       final files = ref.read(filesClientProvider);
       final watch = files.watch(directory, (_) => ref.invalidateSelf());
       ref.onDispose(watch.cancel);

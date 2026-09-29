@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -6,6 +7,7 @@ import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../settings/application/settings_controller.dart';
 import '../application/file_panel_controller.dart';
 import 'package:karmashala_files/values.dart';
 import 'file_name_dialog.dart';
@@ -13,7 +15,7 @@ import 'file_name_dialog.dart';
 /// One side of the file browser: where it is looking, what is there, and the
 /// operations that act on the selection. It knows nothing about the other
 /// side — the tab owns the copy between them.
-class FilePanelView extends StatelessWidget {
+class FilePanelView extends ConsumerWidget {
   const FilePanelView({
     required this.controller,
     required this.machines,
@@ -47,8 +49,11 @@ class FilePanelView extends StatelessWidget {
   final void Function(FileEntry entry)? onOpenFile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // Watched so the Hidden chip — on either side, or in Settings — redraws
+    // both panels: the chip only records the choice.
+    ref.watch(settingsControllerProvider.select((s) => s.showHiddenFiles));
     return ValueListenableBuilder<FilePanelState>(
       valueListenable: controller,
       builder: (context, state, _) {
@@ -184,6 +189,7 @@ class _MachineBar extends StatelessWidget {
             ),
           ),
         ),
+        // The chip writes the setting; FilePanelView watches it and redraws.
         HiddenFilesChip(hiddenCount: hiddenCount, onChanged: (_) {}),
         const SizedBox(width: Insets.xs),
         IconButton(

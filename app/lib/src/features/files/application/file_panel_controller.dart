@@ -4,6 +4,8 @@
 /// dies with the tab, and nothing else has any business reading it.
 library;
 
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:flutter/foundation.dart';
 import 'package:karmashala_files/values.dart';
@@ -82,6 +84,7 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
       final entries = await files.list(resolved);
       if (serial != _serial) return;
       value = FilePanelState(directory: resolved, entries: entries);
+      _follow(resolved);
     } on Object catch (error) {
       if (serial != _serial) return;
       value = value.copyWith(busy: false, error: _sentence(error));
@@ -91,6 +94,43 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
   /// Lists the current directory again — after an operation, or because the
   /// user asked.
   Future<void> refresh() => open(value.directory);
+
+  /// The server's watch on the folder on screen: a file something else makes
+  /// there — a build's output, an agent's edit — shows without Refresh.
+  FileWatch? _watch;
+  var _disposed = false;
+
+  void _follow(EnvironmentPath directory) {
+    if (_disposed || _watch?.path == directory) return;
+    _watch?.cancel();
+    _watch = files.watch(directory, (_) => unawaited(_relist(directory)));
+  }
+
+  /// Lists [directory] again in place, keeping whatever of the selection is
+  /// still there. An operation in flight lists it itself.
+  Future<void> _relist(EnvironmentPath directory) async {
+    if (_disposed || value.busy || value.directory != directory) return;
+    final serial = ++_serial;
+    try {
+      final entries = await files.list(directory);
+      if (_disposed || serial != _serial) return;
+      final there = {for (final entry in entries) entry.path.path};
+      value = value.copyWith(
+        entries: entries,
+        selected: value.selected.where(there.contains).toSet(),
+      );
+    } on Object {
+      // The next change, or Refresh, lists it again.
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _watch?.cancel();
+    _watch = null;
+    super.dispose();
+  }
 
   /// Goes to the folder above, if there is one.
   Future<void> goUp() async {
