@@ -14,6 +14,7 @@ import '../application/remote_providers.dart';
 import '../application/ssh_relays.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'device_permissions_dialog.dart';
+import 'grant_presets.dart';
 import 'pairing_dialog.dart';
 import 'rename_device_dialog.dart';
 import 'ssh_relays_panel.dart';
@@ -469,6 +470,20 @@ class _DeviceRow extends ConsumerWidget {
         .updateCapabilities(device, granted);
   }
 
+  /// A phone paired before `phone_client` existed: it keeps the companion's
+  /// grants, and gains the app only when the owner says so here.
+  bool get _lacksApp =>
+      !device.revoked &&
+      device.capabilities.attachTier == null &&
+      GrantPreset.of(device.capabilities) == GrantPreset.phone;
+
+  Future<void> _grantApp(WidgetRef ref) => ref
+      .read(remoteAccessControllerProvider)
+      .updateCapabilities(
+        device,
+        device.capabilities | CapabilitySet.of([Capability.phoneClient]),
+      );
+
   /// How much of what this build can grant the device holds — the row says
   /// where a phone stands without opening the dialog.
   static String _grantSummary(CapabilitySet granted) {
@@ -523,6 +538,24 @@ class _DeviceRow extends ConsumerWidget {
                         : scheme.onSurfaceVariant,
                   ),
                 ),
+                if (_lacksApp)
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: Insets.xs,
+                    children: [
+                      Text(
+                        'This phone cannot use the Karmashala app until it '
+                        'is granted.',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _grantApp(ref),
+                        child: const Text('Grant'),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
