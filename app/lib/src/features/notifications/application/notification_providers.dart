@@ -287,11 +287,7 @@ final attentionPresenterProvider = Provider<AttentionPresenter>((ref) {
 /// selection stays, but nothing of it is on screen.
 Set<String> visibleAgentSessionIds(ProviderContainer container) {
   final read = container.read;
-  if (!read(clientCapabilitiesProvider).systemIntegration &&
-      read(phoneShellRouterProvider).current != null &&
-      !read(phoneWorkbenchProvider)) {
-    return const {};
-  }
+  if (phoneSessionPageDown(container)) return const {};
   final ids = <String>{};
   final nativeId = read(selectedSessionIdProvider);
   if (nativeId != null) {
@@ -307,6 +303,17 @@ Set<String> visibleAgentSessionIds(ProviderContainer container) {
     if (imported != null) ids.add(imported.externalId);
   }
   return ids;
+}
+
+/// Whether this is a phone's shell with its session page down: the selection
+/// stays under the tabs, but no session is on screen. Always false on a
+/// desktop. What a notification is held for and what the Inbox marks seen
+/// both ask this, so "on screen" and "seen" agree.
+bool phoneSessionPageDown(ProviderContainer container) {
+  final read = container.read;
+  return !read(clientCapabilitiesProvider).systemIntegration &&
+      read(phoneShellRouterProvider).current != null &&
+      !read(phoneWorkbenchProvider);
 }
 
 /// Selects a session so the app shows it, walking up to its repository and

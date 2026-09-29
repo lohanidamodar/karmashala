@@ -5,6 +5,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
 import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_providers.dart';
@@ -61,6 +62,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     ref.listen(foregroundTerminalPaneIdsProvider, (_, _) => _syncViewed());
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
+    // A phone's session page coming up or going down; never moves on a desktop.
+    ref.listen(phoneWorkbenchProvider, (_, _) => _syncViewed());
     // What this window already shows is said at once: nothing about it is
     // news, here or at the server.
     final looking = _lookingAt();
@@ -123,10 +126,13 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
   }
 
   /// What this window is looking at: the selected sessions and the
-  /// foreground panes' rows while it has focus, nothing while not.
+  /// foreground panes' rows while it has focus, nothing while not. On a
+  /// phone, nothing while its session page is down either: the rule
+  /// [visibleAgentSessionIds] holds a notification by.
   Set<String> _lookingAt() {
     final looking = <String>{};
     if (!ref.read(windowFocusedProvider)) return looking;
+    if (phoneSessionPageDown(ref.container)) return looking;
     final native = ref.read(selectedSessionIdProvider);
     if (native != null) looking.add(native);
     final imported = ref.read(selectedImportedSessionIdProvider);

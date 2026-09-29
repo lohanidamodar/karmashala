@@ -71,6 +71,23 @@ class NotificationDispatcher {
     );
   }
 
+  /// Forgets [openId]'s pending ask: answered before its window closed, it
+  /// must not go up after the withdrawal that meant to take it down.
+  void dropAsk(String openId) {
+    _pending.removeWhere(
+      (event) =>
+          event.session.openId == openId &&
+          event.reason == NotificationReason.needsInput,
+    );
+    if (_pending.isNotEmpty) return;
+    _timer?.cancel();
+    _timer = null;
+    _due = null;
+    _waiting
+      ..stop()
+      ..reset();
+  }
+
   /// Delivers whatever has accumulated as one notification. Public so a caller
   /// — or a test — can close the window early.
   Future<void> flush() async {

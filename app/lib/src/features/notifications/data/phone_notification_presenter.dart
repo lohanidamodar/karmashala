@@ -46,8 +46,16 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   Future<bool>? _ready;
   bool _disposed = false;
 
+  /// Per process, like the notifications: the server session a switch opens
+  /// withdraws the asks the last one showed that its inbox does not hold.
+  static final _asking = <String>{};
+
+  /// Withdrawals per session, so a [show] that was waiting when one came
+  /// goes no further.
+  final _withdrawals = <String, int>{};
+
   /// The sessions whose notification up now is an ask.
-  final _asking = <String>{};
+  Set<String> get shownAsks => Set.unmodifiable(_asking);
 
   @override
   bool get isSupported => isSupportedHere;
@@ -100,8 +108,17 @@ class PhoneNotificationPresenter implements NotificationPresenter {
 
   @override
   Future<void> show(NotificationRequest request) async {
-    if (_disposed || !await initialize()) return;
     final payload = NotificationPayload.decode(request.payload);
+    final withdrawnBefore = payload == null
+        ? 0
+        : _withdrawals[payload.openId] ?? 0;
+    if (_disposed || !await initialize() || _disposed) return;
+    // Answered while the plugin started: the ask is gone, and so is this.
+    if (payload != null &&
+        request.asks &&
+        (_withdrawals[payload.openId] ?? 0) != withdrawnBefore) {
+      return;
+    }
     if (payload != null) {
       request.asks
           ? _asking.add(payload.openId)
@@ -135,6 +152,7 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   /// showed: a finished or failed one that replaced it stays until tapped or
   /// cleared.
   Future<void> withdraw(String openId) async {
+    _withdrawals.update(openId, (count) => count + 1, ifAbsent: () => 1);
     if (!_asking.remove(openId) || !await initialize()) return;
     try {
       await _plugin.cancel(id: notificationIdFor(openId));
@@ -211,7 +229,8 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   }
 
   /// Notifications already shown stay: they outlive a switch of server, and
-  /// a tap then opens the app on whichever server is in use.
+  /// a tap then opens the app on whichever server is in use. The next
+  /// session's first inbox withdraws the asks it does not hold.
   @override
   void dispose() => _disposed = true;
 }
