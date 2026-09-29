@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show immutable, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:agent_cli/process.dart';
+import '../../core/capabilities/capabilities.dart';
 import '../../core/process/command_runner_providers.dart';
 import '../../features/environments/application/environment_providers.dart';
 
@@ -48,7 +49,12 @@ class RevealInFileManager {
     required this.translator,
     required this.environmentFor,
     this.fileManagerOverride,
+    this.readsServerDisk = true,
   });
+
+  /// `Capabilities.readsServerDisk`: false for a server elsewhere, whose paths
+  /// name nothing on this machine.
+  final bool readsServerDisk;
 
   final CommandRunner host;
   final PathTranslator translator;
@@ -69,6 +75,7 @@ class RevealInFileManager {
   /// [path] spelled the way the host's file manager must be given it, or null
   /// when the host has no way to reach it.
   String? hostPathFor(EnvironmentPath path) {
+    if (!readsServerDisk) return null;
     final owner = environmentFor(path.environmentId);
     if (owner == null) return null;
     if (owner.kind == EnvironmentKind.ssh) return null;
@@ -186,5 +193,8 @@ final revealInFileManagerProvider = Provider<RevealInFileManager>(
     host: ref.watch(hostCommandRunnerProvider),
     translator: ref.watch(pathTranslatorProvider),
     environmentFor: (id) => ref.read(environmentsDataProvider).getById(id),
+    readsServerDisk: ref.watch(
+      capabilitiesProvider.select((c) => c.readsServerDisk),
+    ),
   ),
 );

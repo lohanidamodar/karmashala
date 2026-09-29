@@ -1,3 +1,4 @@
+import '../../core/capabilities/capabilities.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -341,6 +342,9 @@ List<List<ViewMenuEntry>> viewMenuSections(
         settingsControllerProvider.select((s) => s.debugMode),
       ),
       notesEnabled: ref.watch(notesEnabledProvider),
+      readsServerDisk: ref.watch(
+        capabilitiesProvider.select((c) => c.readsServerDisk),
+      ),
     ))
       if (ContextTab.of(surface) == ContextTab.more) surface,
   ];

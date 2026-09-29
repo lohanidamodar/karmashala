@@ -1,3 +1,4 @@
+import '../../core/capabilities/capabilities.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -61,6 +62,9 @@ class SidePanel extends ConsumerWidget {
         settingsControllerProvider.select((s) => s.debugMode),
       ),
       notesEnabled: ref.watch(notesEnabledProvider),
+      readsServerDisk: ref.watch(
+        capabilitiesProvider.select((c) => c.readsServerDisk),
+      ),
     );
     return offered ? selected : null;
   }
@@ -202,6 +206,7 @@ class ContextTabs extends ConsumerWidget {
       for (final surface in SidePanelSurface.offered(
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
+        readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
       ))
         if (ContextTab.of(surface) == ContextTab.more &&
             (!hidden.contains(surface) || surface == open))

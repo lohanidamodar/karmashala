@@ -84,7 +84,7 @@ enum SidePanelSurface {
   /// **What a session started here would be given** — the MCP servers and
   /// skills the agent's own configuration names, read off files with their
   /// age. Never what a running session bound; the CLI owns that (§19).
-  agentContext('Agent context'),
+  agentContext('Agent context', requiresSameMachine: true),
 
   /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
   /// a tool, and an entry nobody needs is in the way of the daily ones.
@@ -99,6 +99,7 @@ enum SidePanelSurface {
     this.scopedToRepository = false,
     this.requiresDebugMode = false,
     this.requiresNotes = false,
+    this.requiresSameMachine = false,
   });
 
   final String label;
@@ -117,13 +118,22 @@ enum SidePanelSurface {
   /// Whether the surface only exists while the Notes feature is on.
   final bool requiresNotes;
 
+  /// Whether the surface reads this machine's disk as the server's, so it is
+  /// hidden on a server elsewhere (`Capabilities.readsServerDisk`).
+  final bool requiresSameMachine;
+
   /// Whether this surface exists for the settings given. The one answer, so the
   /// panel, the menus and [SidePanel]'s own check cannot disagree. The Inbox
   /// is never offered here: it is an area of the activity strip now.
-  bool isOffered({required bool debugMode, bool notesEnabled = true}) =>
+  bool isOffered({
+    required bool debugMode,
+    bool notesEnabled = true,
+    bool readsServerDisk = true,
+  }) =>
       this != SidePanelSurface.inbox &&
       (debugMode || !requiresDebugMode) &&
-      (notesEnabled || !requiresNotes);
+      (notesEnabled || !requiresNotes) &&
+      (readsServerDisk || !requiresSameMachine);
 
   /// The surface stored under [id], or null for one this build does not have.
   static SidePanelSurface? fromId(String id) {
@@ -140,9 +150,14 @@ enum SidePanelSurface {
   static List<SidePanelSurface> offered({
     required bool debugMode,
     bool notesEnabled = true,
+    bool readsServerDisk = true,
   }) => [
     for (final surface in values)
-      if (surface.isOffered(debugMode: debugMode, notesEnabled: notesEnabled))
+      if (surface.isOffered(
+        debugMode: debugMode,
+        notesEnabled: notesEnabled,
+        readsServerDisk: readsServerDisk,
+      ))
         surface,
   ];
 }

@@ -1,3 +1,4 @@
+import '../../../core/capabilities/capabilities.dart';
 import '../../../features/workspaces/data/workspace_data.dart';
 import 'dart:io';
 
@@ -335,6 +336,7 @@ class QuickOpenSources {
       for (final surface in SidePanelSurface.offered(
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
+        readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
       ))
         _command(
           surface.label,

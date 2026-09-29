@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -535,7 +533,7 @@ class _ScreenshotTile extends ConsumerStatefulWidget {
 
 class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
   /// Asked once per tile, not per build: the pane rebuilds on every scroll.
-  late Future<bool> _present;
+  late Future<ImageProvider?> _image;
 
   String get _path =>
       p.join(widget.run.artifactDirectory, widget.artifact.relativePath);
@@ -543,7 +541,7 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
   @override
   void initState() {
     super.initState();
-    _present = ref.read(verificationEvidenceReaderProvider).exists(_path);
+    _image = ref.read(verificationEvidenceReaderProvider).image(_path);
   }
 
   @override
@@ -551,7 +549,7 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
     super.didUpdateWidget(old);
     if (old.run.artifactDirectory != widget.run.artifactDirectory ||
         old.artifact.relativePath != widget.artifact.relativePath) {
-      _present = ref.read(verificationEvidenceReaderProvider).exists(_path);
+      _image = ref.read(verificationEvidenceReaderProvider).image(_path);
     }
   }
 
@@ -559,7 +557,6 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final artifact = widget.artifact;
-    final file = File(_path);
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.md),
       child: Column(
@@ -574,16 +571,20 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
           const SizedBox(height: Insets.xs),
           ClipRRect(
             borderRadius: BorderRadius.circular(Radii.sm),
-            child: FutureBuilder<bool>(
-              future: _present,
+            child: FutureBuilder<ImageProvider?>(
+              future: _image,
               builder: (context, snapshot) {
                 // A tile that guessed "missing" would flash over real evidence.
-                if (!snapshot.hasData) return const SizedBox.shrink();
-                if (!snapshot.data!) {
+                if (snapshot.connectionState != ConnectionState.done ||
+                    snapshot.hasError) {
+                  return const SizedBox.shrink();
+                }
+                final image = snapshot.data;
+                if (image == null) {
                   return _MissingFile(path: artifact.relativePath);
                 }
-                return Image.file(
-                  file,
+                return Image(
+                  image: image,
                   fit: BoxFit.contain,
                   // A half-written PNG shows as a note, not a red box.
                   errorBuilder: (context, _, _) =>

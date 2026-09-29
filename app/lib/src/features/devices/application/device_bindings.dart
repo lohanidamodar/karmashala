@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DeviceClaimsChanged, DeviceHold;
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';
@@ -108,8 +109,10 @@ class _ShellPathRevealer implements DevicePathRevealer {
 /// server runs on this machine, whose devices the pane shows. A server
 /// elsewhere drives its own machine's devices, not these.
 Map<String, DeviceClaim> serverDeviceHolders(Ref ref) {
+  if (!ref.watch(capabilitiesProvider.select((c) => c.sharesDevices))) {
+    return const {};
+  }
   final client = ref.watch(dataClientProvider);
-  if (!client.serverOnThisMachine) return const {};
   final changes = client.runsChanges.listen((change) {
     if (change is DeviceClaimsChanged) ref.invalidateSelf();
   });

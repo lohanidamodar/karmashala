@@ -382,6 +382,7 @@ class WelcomeMessage extends HostMessage {
     required this.startedAt,
     required this.observedAt,
     this.build,
+    this.features = const {},
   });
 
   final int requestId;
@@ -392,6 +393,10 @@ class WelcomeMessage extends HostMessage {
   /// an older app stops reading before it, and an older host sends none, which
   /// reads as null — a host from before builds were told apart.
   final String? build;
+
+  /// What the server offers beyond the protocol number, trailing after
+  /// [build] on the same terms: an older server sends none, read as empty.
+  final Set<String> features;
   final String operatingSystem;
   final String architecture;
 
@@ -417,7 +422,8 @@ class WelcomeMessage extends HostMessage {
       ..u32(pid)
       ..u64(startedAt.microsecondsSinceEpoch)
       ..u64(observedAt.microsecondsSinceEpoch)
-      ..str(build ?? '');
+      ..str(build ?? '')
+      ..strings(features.toList());
     return Frame(MessageType.welcome, 0, w.take());
   }
 
@@ -436,6 +442,7 @@ class WelcomeMessage extends HostMessage {
       isUtc: true,
     );
     final build = r.remaining > 0 ? r.str() : '';
+    final features = r.remaining >= 4 ? r.strings().toSet() : const <String>{};
     return WelcomeMessage(
       requestId: requestId,
       protocolVersion: protocolVersion,
@@ -447,6 +454,7 @@ class WelcomeMessage extends HostMessage {
       startedAt: startedAt,
       observedAt: observedAt,
       build: build.isEmpty ? null : build,
+      features: features,
     );
   }
 }

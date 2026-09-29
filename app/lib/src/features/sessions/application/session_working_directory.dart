@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
@@ -29,6 +30,8 @@ EnvironmentPath? sessionWorkingDirectoryOf(Ref ref, Session session) {
 final sessionDirectoryPresentProvider =
     Provider<bool Function(EnvironmentPath directory)>((ref) {
       return (directory) {
+        // This disk is not the server's: nothing here can tell.
+        if (!ref.read(capabilitiesProvider).readsServerDisk) return true;
         try {
           final environments = ref.read(environmentsDataProvider);
           final env = environments.getById(directory.environmentId);

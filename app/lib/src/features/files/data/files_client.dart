@@ -7,6 +7,7 @@ import 'package:karmashala_files/values.dart';
 import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
 
@@ -45,7 +46,11 @@ class FilesStaleException extends FilesException {
 /// environment spells it, both ways; the one spelling for this machine the
 /// server ever hands over is [localPathOf]'s, and only when it runs here.
 class FilesClient {
-  FilesClient(this._client) {
+  /// [readsServerDisk] is `capabilitiesProvider`'s answer, asked per call;
+  /// without one, the data client's own.
+  FilesClient(this._client, {bool Function()? readsServerDisk})
+    : _readsServerDisk =
+          readsServerDisk ?? (() => _client.serverOnThisMachine) {
     _changes = _client.fileChanges.listen(_changed);
     _connection = _client.connectionChanges.listen((connection) {
       // A new link watches nothing: ask again for everything still wanted.
@@ -73,9 +78,9 @@ class FilesClient {
     if (folder != null && !_touched.isClosed) _touched.add(folder);
   }
 
-  /// Whether the server runs on this machine: then a file it reaches with
+  /// Whether the server's disk is this machine's: then a file it reaches with
   /// `dart:io` opens here too, by the path [localPathOf] answers.
-  bool get serverOnThisMachine => _client.serverOnThisMachine;
+  final bool Function() _readsServerDisk;
 
   Future<void> dispose() async {
     await _changes.cancel();
@@ -285,7 +290,7 @@ class FilesClient {
   /// server is here and the file is not on an SSH host. Cheap: a menu asks
   /// it while it builds.
   bool canOpenHere(EnvironmentPath path) {
-    if (!serverOnThisMachine) return false;
+    if (!_readsServerDisk()) return false;
     final environment = _client.environments.view[path.environmentId];
     return environment == null
         ? path.environmentId == localHostEnvironmentId
@@ -373,7 +378,10 @@ String pathKey(EnvironmentPath path) {
 }
 
 final filesClientProvider = Provider<FilesClient>((ref) {
-  final files = FilesClient(ref.watch(dataClientProvider));
+  final files = FilesClient(
+    ref.watch(dataClientProvider),
+    readsServerDisk: () => ref.read(capabilitiesProvider).readsServerDisk,
+  );
   ref.onDispose(files.dispose);
   return files;
 });

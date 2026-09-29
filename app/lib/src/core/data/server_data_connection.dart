@@ -38,7 +38,7 @@ Future<DataClient> connectLocalServerData({
     notUp = 'it did not start ($error)';
   }
   final client = await DataClient.connect(
-    () => dialServerData(access),
+    () => dialServerData(access, logger: log),
     unavailableReason: notUp,
     logger: log,
   );
@@ -90,7 +90,7 @@ Future<DataClient> connectRemoteServerData({
 }) async {
   final log = logger ?? AppLogger.named('data');
   final client = await DataClient.connect(
-    () => dialServerData(access),
+    () => dialServerData(access, logger: log),
     logger: log,
     serverOnThisMachine: false,
   );
@@ -107,9 +107,18 @@ Future<DataClient> connectRemoteServerData({
 
 /// The data API on the client's one link to [access]'s server; null when
 /// nothing answers there.
-Future<HostDataLink?> dialServerData(HostSessionAccess access) async {
+Future<HostDataLink?> dialServerData(
+  HostSessionAccess access, {
+  AppLogger? logger,
+}) async {
   try {
-    return HostDataLink.onLink(await SharedHostLinks.linkTo(access));
+    final link = await SharedHostLinks.linkTo(access);
+    final welcome = link.welcome;
+    logger?.info(
+      'welcome: ${access.address} host=${welcome.hostVersion} '
+      'os=${welcome.operatingSystem} features=${welcome.features.toList()}',
+    );
+    return HostDataLink.onLink(link);
   } on SocketException {
     return null;
   }
