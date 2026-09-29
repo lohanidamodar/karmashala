@@ -137,7 +137,9 @@ class AppTheme {
       fontFamily: kBundledSansFamily,
       fontFamilyFallback: sansFallback,
       extensions: [
-        SemanticColors.forBrightness(brightness),
+        SemanticColors.forBrightness(
+          brightness,
+        ).withAccent(scheme.primary, brightness),
         tones,
       ],
       // A neutral chrome has no business tinting elevated surfaces towards the

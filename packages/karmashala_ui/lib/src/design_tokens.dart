@@ -54,7 +54,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.unread,
   });
 
-  /// An agent is mid-turn.
+  /// An agent is mid-turn: the accent, drawn as a spinner (spec §2.3). The
+  /// theme sets it from the chosen accent through [withAccent]; the default is
+  /// the default accent.
   final Color working;
 
   /// An agent finished and is waiting for input; also plain "healthy".
@@ -85,16 +87,22 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   /// The edge a status surface is drawn with, over its own hue.
   static const surfaceEdgeAlpha = 0.4;
 
-  static const _lightAttention = Color(0xFF9A5B00);
-  static const _lightFailure = Color(0xFFB3261E);
-  static const _lightWorking = Color(0xFF0E6E90);
-  static const _darkAttention = Color(0xFFE8B44A);
-  static const _darkFailure = Color(0xFFFF8A82);
-  static const _darkWorking = Color(0xFF56C0E8);
+  // Spec §3: warn E0A340 / B7791F, err E5534B / C9362E, ok 5FB37C / 2F8A4C.
+  // The light warn and ok keep the spec's hue, darkened — as the spec darkens
+  // the light accent — until words in them keep 4.5:1 on the sidebar: the
+  // spec's own B7791F and 2F8A4C read 3.3:1 and 3.9:1 there.
+  static const _lightAttention = Color(0xFF966319);
+  static const _lightFailure = Color(0xFFC9362E);
+  static const _lightIdle = Color(0xFF2A7C44);
+  static const _lightWorking = AppColors.accentLight;
+  static const _darkAttention = Color(0xFFE0A340);
+  static const _darkFailure = Color(0xFFE5534B);
+  static const _darkIdle = Color(0xFF5FB37C);
+  static const _darkWorking = AppColors.accentDark;
 
   static final _light = SemanticColors(
     working: _lightWorking,
-    idle: const Color(0xFF1F7A3D),
+    idle: _lightIdle,
     attention: _lightAttention,
     failure: _lightFailure,
     diffAdded: const Color(0xFF1A7F37),
@@ -102,13 +110,13 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     neutral: const Color(0xFF7C7C86),
     attentionSurface: _lightAttention.withValues(alpha: 0.08),
     failureSurface: _lightFailure.withValues(alpha: 0.08),
-    workingSurface: _lightWorking.withValues(alpha: 0.08),
-    unread: const Color(0xFF1F7A3D),
+    workingSurface: _lightWorking.withValues(alpha: _lightWash),
+    unread: _lightIdle,
   );
 
   static final _dark = SemanticColors(
     working: _darkWorking,
-    idle: const Color(0xFF6BCF87),
+    idle: _darkIdle,
     attention: _darkAttention,
     failure: _darkFailure,
     diffAdded: const Color(0xFF57C97A),
@@ -116,8 +124,20 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     neutral: const Color(0xFF8E8E99),
     attentionSurface: _darkAttention.withValues(alpha: 0.16),
     failureSurface: _darkFailure.withValues(alpha: 0.16),
-    workingSurface: _darkWorking.withValues(alpha: 0.14),
-    unread: const Color(0xFF6BCF87),
+    workingSurface: _darkWorking.withValues(alpha: _darkWorkingWash),
+    unread: _darkIdle,
+  );
+
+  static const _lightWash = 0.08;
+  static const _darkWorkingWash = 0.14;
+
+  /// These colours with "working" in [accent] — the theme's chosen accent, so
+  /// the spinner is the accent spinner. The other statuses never follow it.
+  SemanticColors withAccent(Color accent, Brightness brightness) => copyWith(
+    working: accent,
+    workingSurface: accent.withValues(
+      alpha: brightness == Brightness.dark ? _darkWorkingWash : _lightWash,
+    ),
   );
 
   static SemanticColors of(BuildContext context) =>
@@ -180,10 +200,11 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 
 /// A colour a user gives a context so its header and chip are told apart at a
 /// glance. Identity, never state: every hue keeps 20° from the hues
-/// [SemanticColors] mean something by — no red, amber, green or cyan — so a
-/// coloured context never reads as failing, waiting or working, and the hues
-/// keep 24° from each other so they can be told apart. The accent's blue is
-/// not reserved: a solid dot and a 12% wash are not confused. Stored by
+/// [SemanticColors] mean something by — no red, amber or green — so a
+/// coloured context never reads as failing, waiting or done, and the hues
+/// keep 24° from each other so they can be told apart. The accent is not
+/// reserved — nor "working", which is the accent's spinner: a solid dot and
+/// a turning ring are not confused. Stored by
 /// [name]; the two variants each keep 3:1 against the band and the pane
 /// surface of their theme (`context_hue_test`).
 enum ContextHue {

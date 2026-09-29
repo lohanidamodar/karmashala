@@ -63,8 +63,9 @@ void main() {
 
     test('${brightness.name}: no hue is within 20° of a status colour', () {
       final semantic = SemanticColors.forBrightness(brightness);
+      // Not "working": that is the accent's spinner (spec §2.3), and the
+      // accent is not reserved.
       final reserved = {
-        'working': semantic.working,
         'idle': semantic.idle,
         'attention': semantic.attention,
         'failure': semantic.failure,
