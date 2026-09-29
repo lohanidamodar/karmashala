@@ -137,6 +137,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (old.sessionId != widget.sessionId) {
       _footer = null;
       _resolver = null;
+      _sendKey = null;
+      _keyedText = null;
     }
   }
 
@@ -617,6 +619,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       unawaited(_interruptViaServer());
       return;
     }
+    _interruptInPane();
+  }
+
+  void _interruptInPane() {
     final paneId = sessionTerminalPane(ref, widget.sessionId);
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final live =
@@ -632,8 +638,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   Future<void> _interruptViaServer() async {
     try {
-      if (!await ref.read(sessionInputProvider).interrupt(widget.sessionId)) {
-        _say('Nothing is running this session, so there is nothing to stop.');
+      // One the server does not run may still run in a pane here.
+      if (!await ref.read(sessionInputProvider).interrupt(widget.sessionId) &&
+          mounted) {
+        _interruptInPane();
       }
     } on SessionPromptRefusal catch (refusal) {
       _say('Could not stop it: ${refusal.message}');

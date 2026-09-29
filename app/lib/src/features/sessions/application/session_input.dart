@@ -23,13 +23,12 @@ class SessionInput {
   bool get viaServer => _ref.read(capabilitiesProvider).sendViaServer;
 
   /// Types [text] into [sessionId] and presses Return until it is taken.
-  /// False when nothing runs the session: the caller resumes it. Throws
+  /// False when neither the server nor a pane here runs the session. Throws
   /// [SessionPromptRefusal] in the server's words otherwise. [requestId] is
   /// the send's key, kept by the caller for a retry of the same message.
   Future<bool> send(String sessionId, String text, {String? requestId}) async {
-    if (!viaServer) {
-      return _ref.read(sessionMessageTypistProvider).send(sessionId, text);
-    }
+    final local = _ref.read(sessionMessageTypistProvider);
+    if (!viaServer) return local.send(sessionId, text);
     try {
       final reply = await _ref
           .read(dataClientProvider)
@@ -43,14 +42,19 @@ class SessionInput {
       _log.info('Sent to $sessionId through the server: ${reply.value.via}');
       return reply.value.sent;
     } on DataRefused catch (refusal) {
-      if (refusal.code == DataRefusalCode.notFound) return false;
-      throw SessionPromptRefusal(refusal.message);
+      if (refusal.code != DataRefusalCode.notFound) {
+        throw SessionPromptRefusal(refusal.message);
+      }
     }
+    // A session the server cannot type into — a box whose link is down, a
+    // pane this app runs itself — is typed into a pane here, as before step 2.
+    _log.info('The server does not run $sessionId: typing into a pane here');
+    return local.send(sessionId, text);
   }
 
   /// Presses the agent's interrupt key in [sessionId] through the server.
-  /// False when the server does not run it. Throws [SessionPromptRefusal]
-  /// in the server's words otherwise.
+  /// False when the server does not run it: the caller presses it in a pane
+  /// here. Throws [SessionPromptRefusal] in the server's words otherwise.
   Future<bool> interrupt(String sessionId) async {
     try {
       await _ref

@@ -26,6 +26,8 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
+import 'host_lifecycle/host_agent_statuses.dart';
+import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_chat_source.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
@@ -418,6 +420,15 @@ class SessionActions {
 
     var resumed = false;
     if (!engine.isActive(sessionId)) {
+      // Resuming an agent still live elsewhere would start a second one on
+      // the same conversation.
+      if (_liveOutsideEngine(sessionId)) {
+        throw StateError(
+          'This session is still running, but its terminal could not be '
+          'typed into from here, so nothing was sent. It was not started a '
+          'second time. Try again, or send from its terminal.',
+        );
+      }
       final session = _ref.read(sessionsDataProvider).getById(sessionId);
       if (session == null) {
         throw StateError('This session no longer exists.');
@@ -465,6 +476,13 @@ class SessionActions {
     _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
   }
+
+  /// Whether [sessionId]'s agent runs outside this app's engine: the server
+  /// runs it or keeps its status (a box session), or a pane here shows it.
+  bool _liveOutsideEngine(String sessionId) =>
+      _ref.read(sessionRunningOnHostProvider)(sessionId) ||
+      _ref.read(hostAgentStatusesProvider).of(sessionId) != null ||
+      _ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null;
 
   /// Copies the imported session's prior transcript into the resumed session's
   /// event log, so a resume continues rather than starts blank. Best-effort.
