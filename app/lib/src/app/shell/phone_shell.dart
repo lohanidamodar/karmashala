@@ -72,6 +72,27 @@ final phoneWorkbenchProvider = NotifierProvider<PhoneWorkbenchController, bool>(
 void openPhoneWorkbench(WidgetRef ref) =>
     ref.read(phoneWorkbenchProvider.notifier).open();
 
+/// Marks the phone shell's tabs, so a row the phone shares with the desktop
+/// knows its tap should also bring the workbench up.
+class PhoneTabsScope extends InheritedWidget {
+  const PhoneTabsScope({required super.child, super.key});
+
+  static bool contains(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<PhoneTabsScope>() != null;
+
+  @override
+  bool updateShouldNotify(PhoneTabsScope oldWidget) => false;
+}
+
+/// The workbench's opener for a row in the phone's tabs, or null anywhere
+/// else, so a desktop row changes nothing. Called directly from the tap, since
+/// re-tapping the selected session moves no selection for the shell to hear.
+/// Read before any await: the row may be gone when the open resolves.
+VoidCallback? phoneWorkbenchOpener(BuildContext context, WidgetRef ref) =>
+    PhoneTabsScope.contains(context)
+    ? ref.read(phoneWorkbenchProvider.notifier).open
+    : null;
+
 /// **The compact shell** (Stage 1 step 7): the host switcher on top, the tabs
 /// in a bottom bar, and the workbench over them when a session opens.
 /// `AppShell` picks it by width, never platform.
@@ -163,19 +184,21 @@ class _PhoneShellState extends ConsumerState<PhoneShell> {
         child: NavigatorPopHandler(
           enabled: tab == PhoneTab.more && !workbench,
           onPopWithResult: (_) => _moreNavigator.currentState?.maybePop(),
-          child: IndexedStack(
-            index: tab.index,
-            children: [
-              for (final each in PhoneTab.values)
-                KeyedSubtree(
-                  key: _tabKeys[each],
-                  child: KeyedSubtree(
-                    // Scroll offsets are kept by it across a rotation.
-                    key: PageStorageKey<String>('phone-tab-${each.name}'),
-                    child: _body(each),
+          child: PhoneTabsScope(
+            child: IndexedStack(
+              index: tab.index,
+              children: [
+                for (final each in PhoneTab.values)
+                  KeyedSubtree(
+                    key: _tabKeys[each],
+                    child: KeyedSubtree(
+                      // Scroll offsets are kept by it across a rotation.
+                      key: PageStorageKey<String>('phone-tab-${each.name}'),
+                      child: _body(each),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

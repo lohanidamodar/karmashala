@@ -9,6 +9,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
+import '../../../app/shell/phone_shell.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import '../../github/application/pull_request_context_service.dart';
@@ -244,7 +245,9 @@ Future<void> openImportedSession(
   ImportedSession session,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
   final result = await ref.read(explorerActionsProvider).openImported(session);
+  if (!result.isFailure) showWorkbench?.call();
   final message = result.message;
   if (message != null) {
     messenger.showSnackBar(SnackBar(content: Text(message)));

@@ -10,6 +10,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/data/agents_data.dart';
 import '../../agents/presentation/agent_logo.dart';
@@ -328,6 +329,7 @@ class LensSessionRow extends ConsumerWidget {
   Future<void> _open(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final actions = ref.read(explorerActionsProvider);
+    final showWorkbench = phoneWorkbenchOpener(context, ref);
     final native = entry.native;
     final imported = entry.imported;
     final ExplorerResult? result;
@@ -341,6 +343,7 @@ class LensSessionRow extends ConsumerWidget {
       focusWatchedSession(ref.container, openId: entry.id, imported: false);
       result = null;
     }
+    if (!(result?.isFailure ?? false)) showWorkbench?.call();
     final message = result?.message;
     if (message != null) {
       messenger?.showSnackBar(SnackBar(content: Text(message)));

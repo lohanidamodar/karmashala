@@ -8,6 +8,7 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
@@ -90,7 +91,10 @@ class ExplorerPanel extends ConsumerWidget {
           title: 'Projects',
           actions: const [ExplorerHeaderActions()],
           newLabel: 'New project',
-          onNew: () => newProject(context),
+          // Adding a project waits for the phone's own flow (Stage 2).
+          onNew: PhoneTabsScope.contains(context)
+              ? null
+              : () => newProject(context),
         ),
         Expanded(
           child: ExplorerLensBody(

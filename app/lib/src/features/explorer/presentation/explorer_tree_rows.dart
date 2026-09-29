@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/data/ssh_hosts_data.dart';
@@ -244,19 +245,21 @@ class ExplorerTerminalRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => TerminalRow(
     depth: node.depth,
     terminal: node.terminal,
-    onOpen: () => _open(ref),
+    onOpen: () => _open(context, ref),
     onEnd: node.terminal.isHosted ? () => _end(context, ref) : null,
   );
 
   /// Focuses a pane already open here, or adopts a session the host is still
-  /// holding into a new pane.
-  void _open(WidgetRef ref) {
+  /// holding into a new pane. On a phone, the workbench comes up to show it.
+  void _open(BuildContext context, WidgetRef ref) {
     final controller = ref.read(terminalSessionsControllerProvider.notifier);
+    final showWorkbench = phoneWorkbenchOpener(context, ref);
     final paneId = node.terminal.paneId;
     if (!node.terminal.isHosted) {
       if (paneId != null) {
         controller.focusPane(paneId);
         controller.showTerminalHere();
+        showWorkbench?.call();
       }
       return;
     }
@@ -273,6 +276,7 @@ class ExplorerTerminalRow extends ConsumerWidget {
       adoptPaneId: paneId,
     );
     controller.showTerminalHere();
+    showWorkbench?.call();
   }
 
   Future<void> _end(BuildContext context, WidgetRef ref) async {

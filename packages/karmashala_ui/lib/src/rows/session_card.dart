@@ -222,6 +222,9 @@ class SessionCard extends StatelessWidget {
               agentIcon: agentIcon,
               agentLabel: agentLabel,
               agentColor: agentColor,
+              agentMark: agentMark,
+              agentName: agentName,
+              statusLabel: statusLabel,
               badge: badge,
               age: age,
               ageTooltip: ageTooltip,
@@ -231,6 +234,7 @@ class SessionCard extends StatelessWidget {
             SizedBox(height: density.lineGap),
             _SessionCardTitleLine(
               title: title,
+              details: pointerDetails,
               link: link,
               parentTitle: parentTitle,
               lineageBroken: lineageBroken,
@@ -441,6 +445,9 @@ class _SessionCardHeaderLine extends StatelessWidget {
     required this.agentIcon,
     required this.agentLabel,
     required this.agentColor,
+    required this.agentMark,
+    required this.agentName,
+    required this.statusLabel,
     required this.badge,
     required this.age,
     required this.ageTooltip,
@@ -451,6 +458,12 @@ class _SessionCardHeaderLine extends StatelessWidget {
   final IconData agentIcon;
   final String agentLabel;
   final Color? agentColor;
+
+  /// With a mark, the agent is its logo and never its name in text; the
+  /// words are the logo's tooltip and the title's long-press.
+  final Widget? agentMark;
+  final String? agentName;
+  final String? statusLabel;
   final Widget? badge;
   final String? age;
   final String? ageTooltip;
@@ -463,11 +476,11 @@ class _SessionCardHeaderLine extends StatelessWidget {
     final gap = density.glyphGap;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Everything but the agent's glyph may go to the right-hand facts.
-        final budget = math.max(
-          0.0,
-          constraints.maxWidth - density.icon - gap * 2,
-        );
+        // Everything but the agent's glyphs may go to the right-hand facts.
+        final glyphs = agentMark == null
+            ? density.icon
+            : density.icon * 2 + gap;
+        final budget = math.max(0.0, constraints.maxWidth - glyphs - gap * 2);
         final badge = this.badge;
         final age = this.age;
         Widget? ageText;
@@ -499,20 +512,43 @@ class _SessionCardHeaderLine extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    agentIcon,
-                    size: density.icon,
-                    color: agentColor ?? scheme.onSurfaceVariant,
-                  ),
-                  SizedBox(width: gap),
-                  Flexible(
-                    child: Text(
-                      agentLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
+                  if (statusLabel case final status?)
+                    Tooltip(
+                      message: status,
+                      child: Icon(
+                        agentIcon,
+                        size: density.icon,
+                        color: agentColor ?? scheme.onSurfaceVariant,
+                        semanticLabel: status,
+                      ),
+                    )
+                  else
+                    Icon(
+                      agentIcon,
+                      size: density.icon,
+                      color: agentColor ?? scheme.onSurfaceVariant,
                     ),
-                  ),
+                  SizedBox(width: gap),
+                  if (agentMark case final mark?)
+                    Tooltip(
+                      message: agentName ?? '',
+                      child: Semantics(
+                        label: agentName,
+                        child: SizedBox.square(
+                          dimension: density.icon,
+                          child: Center(child: mark),
+                        ),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: Text(
+                        agentLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: muted,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -549,6 +585,7 @@ class _SessionCardHeaderLine extends StatelessWidget {
 class _SessionCardTitleLine extends StatelessWidget {
   const _SessionCardTitleLine({
     required this.title,
+    required this.details,
     required this.link,
     required this.parentTitle,
     required this.lineageBroken,
@@ -560,6 +597,10 @@ class _SessionCardTitleLine extends StatelessWidget {
   });
 
   final String title;
+
+  /// [SessionCard.pointerDetails]: the whole title, the agent and where it
+  /// runs, on a long-press (or a hover) of the title.
+  final String details;
   final SessionLink? link;
   final String? parentTitle;
   final bool lineageBroken;
@@ -573,6 +614,14 @@ class _SessionCardTitleLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final link = this.link;
+    final titleText = Text(
+      title,
+      // A phone gives a long title a second line rather than ellipsising
+      // the only thing that identifies the session; a dense pane cannot.
+      maxLines: density.isTouch ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      style: density.title(theme),
+    );
     return Row(
       children: [
         if (lineageBroken) ...[
@@ -610,14 +659,9 @@ class _SessionCardTitleLine extends StatelessWidget {
           SizedBox(width: density.glyphGap),
         ],
         Expanded(
-          child: Text(
-            title,
-            // A phone gives a long title a second line rather than ellipsising
-            // the only thing that identifies the session; a dense pane cannot.
-            maxLines: density.isTouch ? 2 : 1,
-            overflow: TextOverflow.ellipsis,
-            style: density.title(theme),
-          ),
+          child: details.isEmpty
+              ? titleText
+              : Tooltip(message: details, child: titleText),
         ),
         if (showMenu)
           RowMenuButton(
