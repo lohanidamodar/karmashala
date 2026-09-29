@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io' show ProcessException;
 
-import 'package:path/path.dart' as p;
-
 import 'package:agent_cli/process.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
@@ -15,181 +13,15 @@ import '../domain/worktree_creation.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
 import 'secret_scan.dart';
+import 'checkpoint_git_dirs.dart';
+import 'git_command_outcomes.dart';
+import 'git_environment.dart';
+import 'git_ref_parsing.dart';
 
-/// Raised when a `git` invocation fails (non-zero exit), carrying git's stderr.
-class GitException implements Exception {
-  GitException(this.message);
-  final String message;
-  @override
-  String toString() => 'GitException: $message';
-}
-
-/// A streamed git command was stopped because it was cancelled.
-class GitCancelled implements Exception {
-  GitCancelled(this.outputTail);
-  final List<String> outputTail;
-  @override
-  String toString() => 'GitCancelled';
-}
-
-/// How a streamed git command ended.
-class GitStreamResult {
-  const GitStreamResult({
-    required this.exitCode,
-    required this.outputTail,
-    this.stalled = false,
-  });
-
-  final int exitCode;
-
-  /// The last lines it printed, ANSI-stripped, progress folded.
-  final List<String> outputTail;
-
-  /// It printed nothing for the idle bound and was killed.
-  final bool stalled;
-
-  bool get ok => exitCode == 0 && !stalled;
-}
-
-/// Parses `git worktree list --porcelain` into [GitWorktree]s bound to [environmentId].
-List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
-  final worktrees = <GitWorktree>[];
-  String? path;
-  String? head;
-  String? branch;
-  var bare = false;
-
-  void flush() {
-    if (path != null) {
-      worktrees.add(
-        GitWorktree(
-          path: EnvironmentPath(environmentId: environmentId, path: path!),
-          head: head,
-          branch: branch,
-          isBare: bare,
-        ),
-      );
-    }
-    path = null;
-    head = null;
-    branch = null;
-    bare = false;
-  }
-
-  for (final raw in porcelain.split(RegExp(r'[\r\n]'))) {
-    final line = raw.trim();
-    if (line.isEmpty) {
-      flush();
-      continue;
-    }
-    if (line.startsWith('worktree ')) {
-      flush();
-      path = line.substring('worktree '.length);
-    } else if (line.startsWith('HEAD ')) {
-      head = line.substring('HEAD '.length);
-    } else if (line.startsWith('branch ')) {
-      branch = line.substring('branch '.length).replaceFirst('refs/heads/', '');
-    } else if (line == 'bare') {
-      bare = true;
-    }
-  }
-  flush();
-  return worktrees;
-}
-
-/// What [GitService.listBranches] asks `for-each-ref` to print per ref, tab
-/// separated: a ref name can hold no control character, so a tab never splits
-/// one.
-const String kBranchRefFormat =
-    '%(refname)%09%(HEAD)%09%(upstream:short)';
-
-/// Parses `git for-each-ref --format=<kBranchRefFormat>` over `refs/heads` and
-/// `refs/remotes`. A remote's symbolic `HEAD` (`origin/HEAD`) is not a branch
-/// anyone can pick, so it is left out.
-List<GitBranchRef> parseBranchRefs(String output) {
-  final refs = <GitBranchRef>[];
-  for (final raw in output.split(RegExp(r'[\r\n]'))) {
-    if (raw.trim().isEmpty) continue;
-    final fields = raw.split('\t');
-    final refname = fields[0].trim();
-    final current = fields.length > 1 && fields[1].trim() == '*';
-    final upstream = fields.length > 2 && fields[2].trim().isNotEmpty
-        ? fields[2].trim()
-        : null;
-    if (refname.startsWith('refs/heads/')) {
-      refs.add(
-        GitBranchRef(
-          name: refname.substring('refs/heads/'.length),
-          isCurrent: current,
-          upstream: upstream,
-        ),
-      );
-    } else if (refname.startsWith('refs/remotes/')) {
-      final short = refname.substring('refs/remotes/'.length);
-      final slash = short.indexOf('/');
-      if (slash <= 0 || short.endsWith('/HEAD')) continue;
-      refs.add(GitBranchRef(name: short, remote: short.substring(0, slash)));
-    }
-  }
-  return refs;
-}
-
-/// The directory for a session worktree of [repo]: a sibling
-/// `.karmashala-worktrees/` so it never nests, joined with [kind]'s separators.
-EnvironmentPath worktreePathFor(
-  EnvironmentKind kind,
-  EnvironmentPath repo,
-  String worktreeName,
-) {
-  final ctx = usesWindowsPaths(kind) ? p.windows : p.posix;
-  final parent = ctx.dirname(repo.path);
-  final base = ctx.basename(repo.path);
-  final dir = ctx.join(parent, '.karmashala-worktrees', '$base-$worktreeName');
-  return EnvironmentPath(environmentId: repo.environmentId, path: dir);
-}
-
-/// Set on every git this app runs. Nobody can see a prompt a background git
-/// raises, so it would only hold the command until its bound; and a lock this
-/// app's own status reads take can fail an agent's commit in the same checkout.
-const Map<String, String> kGitChildEnvironment = {
-  'GIT_TERMINAL_PROMPT': '0',
-  'GCM_INTERACTIVE': 'never',
-  'GIT_OPTIONAL_LOCKS': '0',
-};
-
-/// [kGitChildEnvironment] plus `core.hooksPath=/dev/null`, through git's own
-/// `GIT_CONFIG_*` variables (2.31+) so no argument list changes: what every git
-/// this app runs gets, except [kGitHookedVerbs].
-///
-/// A hook is code in `.git`, and an agent may write there from inside its own
-/// sandbox; a git this app runs is outside that sandbox. So a merge, a
-/// checkout or a worktree the app makes on an agent's behalf never runs one.
-const Map<String, String> kGitUnhookedEnvironment = {
-  ...kGitChildEnvironment,
-  'GIT_CONFIG_COUNT': '1',
-  'GIT_CONFIG_KEY_0': 'core.hooksPath',
-  'GIT_CONFIG_VALUE_0': '/dev/null',
-};
-
-/// The verbs whose hooks do run: a commit and a push are only ever the user's
-/// own click here, and their hooks are the gates (pre-commit, commit-msg,
-/// pre-push) a person expects that click to go through.
-const Set<String> kGitHookedVerbs = {'commit', 'push'};
-
-/// The environment for `git [args]`.
-Map<String, String> gitEnvironmentFor(List<String> args) =>
-    kGitHookedVerbs.contains(args.firstOrNull)
-    ? kGitChildEnvironment
-    : kGitUnhookedEnvironment;
-
-/// Never inherited by a git this app runs: set in the environment this app was
-/// started from, they would point every `git -C` at somebody else's repository.
-const Set<String> kGitRemovedEnvironment = {
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_COMMON_DIR',
-  'GIT_INDEX_FILE',
-};
+export 'checkpoint_git_dirs.dart';
+export 'git_command_outcomes.dart';
+export 'git_environment.dart';
+export 'git_ref_parsing.dart';
 
 /// Git operations for one environment, executed through a [CommandRunner] that
 /// must target the same environment as the paths passed in (ADR 0004).
@@ -1228,26 +1060,4 @@ class GitService {
       throw GitException('git apply failed: ${result.stderr.trim()}');
     }
   }
-}
-
-/// The branch name in the shadow git directory's `HEAD`. It never exists.
-const kCheckpointHeadBranch = 'karmashala-checkpoints';
-
-/// Who checkpoint commits are attributed to — a label, since they are never pushed.
-const kCheckpointAuthorName = 'Karmashala';
-const kCheckpointAuthorEmail = 'checkpoints@karmashala.local';
-
-/// Where the private checkpoint index and its scratch patch live.
-class CheckpointGitDirs {
-  const CheckpointGitDirs({required this.gitDir, required this.commonDir});
-
-  /// This working tree's own git directory. For a linked worktree that is
-  /// `<repo>/.git/worktrees/<name>`, not `<repo>/.git`.
-  final String gitDir;
-
-  /// The git directory the objects and refs live in, shared by every worktree.
-  final String commonDir;
-
-  String get shadowGitDir => '$gitDir/karmashala';
-  String get patchFile => '$shadowGitDir/apply.patch';
 }
