@@ -324,6 +324,125 @@ class SealedHostLink {
     return result.future;
   }
 
+  /// The resuming end's half, 1 (Stage 0 step 17): seals this end's
+  /// `link.resume` on this link's own chain, after every host frame sealed so
+  /// far, and counts it among the resume frames the peer must step over.
+  /// [frame] is given its sequence, this end's [lastReceived] and this end's
+  /// earlier resume frames that may not have landed. Null when the link
+  /// ended first or is not suspended — or, with the link closed, when the
+  /// peer would have more resume frames to step over than it reads.
+  Future<Uint8List?> sealResume(
+    List<int> Function(int sequence, int lastReceived, List<int> skip) frame,
+  ) {
+    final result = Completer<Uint8List?>();
+    _chain = _chain.then((_) async {
+      if (isClosed || !_suspended || !retainForResume) {
+        result.complete(null);
+        return;
+      }
+      // Every resume frame takes a sequence the peer must be told to step
+      // over, and the peer reads at most this many: past it, give up.
+      if (_sentResumeFrames.length >= kHostLinkMaxResumeFrames - 1) {
+        result.complete(null);
+        close('too many resumes in a row');
+        return;
+      }
+      final sequence = _channel.nextSendSequence;
+      final sealed = await _channel.seal(
+        frame(sequence, lastReceived, List.unmodifiable(_sentResumeFrames)),
+      );
+      if (isClosed) {
+        result.complete(null);
+        return;
+      }
+      _sentResumeFrames.add(sequence);
+      result.complete(sealed);
+    });
+    return result.future;
+  }
+
+  /// The resuming end's half, 2: the peer answered this end's `link.resume`
+  /// at [peerAnswerSequence], having taken this end's frames through
+  /// [peerLastReceived]; [peerSkip] lists its earlier answers that may not
+  /// have landed. Call it before the next frame is opened, since the frames
+  /// the dropped socket lost follow the answer. On this link's own chain:
+  ///
+  /// 1. the answer and [peerSkip] are stepped over, and the peer's frames
+  ///    lost before the answer are reopened past the replay window;
+  /// 2. every kept frame after [peerLastReceived] is sent again, as sealed;
+  /// 3. sending continues.
+  ///
+  /// Completes false — and the link is closed — when the answer cannot be
+  /// taken: the peer names a sequence this end never sent, or one no longer
+  /// kept.
+  Future<bool> completeResume({
+    required int peerLastReceived,
+    required int peerAnswerSequence,
+    Iterable<int> peerSkip = const [],
+  }) {
+    final result = Completer<bool>();
+    _chain = _chain.then((_) async {
+      String? refusal;
+      if (isClosed) {
+        refusal = 'the link is over';
+      } else if (!_suspended) {
+        refusal = 'the link is not suspended';
+      } else if (peerLastReceived < _firstSend - 1 ||
+          peerLastReceived >= _channel.nextSendSequence) {
+        refusal = 'the peer reports a sequence this link never sent';
+      } else if (peerLastReceived < _evictedThrough) {
+        refusal = 'what the peer missed is no longer kept';
+      } else {
+        final lost = peerAnswerSequence - _expected;
+        if (lost < 0 ||
+            lost > kHostLinkRetainFrames + kHostLinkMaxResumeFrames) {
+          refusal = 'the resume answer is out of range';
+        }
+      }
+      if (refusal != null) {
+        result.complete(false);
+        close('the resume could not be taken: $refusal');
+        return;
+      }
+      // Inbound: step over the peer's answers, reopen what it lost.
+      final skips = <int>{
+        peerAnswerSequence,
+        for (final s in peerSkip.take(kHostLinkMaxResumeFrames))
+          if (s >= _expected && s < peerAnswerSequence) s,
+      };
+      _skipInbound
+        ..removeWhere((s) => s < _expected)
+        ..addAll(skips);
+      try {
+        _channel.readmit(_expected, peerAnswerSequence, except: _skipInbound);
+      } on ArgumentError catch (error) {
+        result.complete(false);
+        close('the resume could not be taken: $error');
+        return;
+      }
+      _stepOverSkips();
+      // Outbound: forget what the peer has, send the rest again.
+      while (_retained.isNotEmpty &&
+          _retained.first.sequence <= peerLastReceived) {
+        _retainedBytes -= _retained.removeFirst().sealed.length;
+      }
+      _sentResumeFrames.removeWhere((s) => s <= peerLastReceived);
+      try {
+        for (final frame in _retained.toList()) {
+          _sendSealed(frame.sealed);
+        }
+      } on Object catch (error) {
+        result.complete(false);
+        close('the transport refused a resumed frame: $error');
+        return;
+      }
+      _suspended = false;
+      _withheldFrom = null;
+      result.complete(true);
+    });
+    return result.future;
+  }
+
   /// Ends the link; [reason] is kept for whoever asks why.
   void close([String reason = 'closed']) {
     if (isClosed) return;
