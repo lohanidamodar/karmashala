@@ -26,12 +26,24 @@ Map<String, Object?>? _decodeMap(List<int> frame) {
 /// therefore which sealed channel — this link belongs to. Required on the LAN
 /// path, where a TCP listener has no URL.
 class LinkHello {
-  const LinkHello(this.rendezvous);
+  const LinkHello(this.rendezvous, {this.resume = false});
 
   final RendezvousId rendezvous;
 
+  /// This socket comes back for a suspended host link: its first sealed frame
+  /// is a `link.resume` (Stage 0 step 16). A routing hint only — the sealed
+  /// frame is the proof. Omitted when false, so a plain hello's bytes are
+  /// exactly as before; a server that predates it reads a plain hello.
+  final bool resume;
+
   Uint8List encode() => Uint8List.fromList(
-    utf8.encode(jsonEncode({'karmashala': 'link', 'r': rendezvous.value})),
+    utf8.encode(
+      jsonEncode({
+        'karmashala': 'link',
+        'r': rendezvous.value,
+        if (resume) 'resume': true,
+      }),
+    ),
   );
 
   static LinkHello? tryDecode(List<int> frame) {
@@ -39,7 +51,7 @@ class LinkHello {
     if (json == null || json['karmashala'] != 'link') return null;
     final r = json['r'];
     if (r is! String || !RendezvousId.pattern.hasMatch(r)) return null;
-    return LinkHello(RendezvousId.parse(r));
+    return LinkHello(RendezvousId.parse(r), resume: json['resume'] == true);
   }
 }
 

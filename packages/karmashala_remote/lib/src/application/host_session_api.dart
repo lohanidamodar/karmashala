@@ -588,6 +588,14 @@ class HostSessionApi {
             ErrorCode.internal,
             'this server takes no desktop clients',
           );
+        case FrameType.linkResume:
+          // A suspended host link takes it before any api sees it; here there
+          // is none, so the client falls back to a fresh link.
+          await _error(
+            envelope.id,
+            ErrorCode.notFound,
+            'no suspended link to resume',
+          );
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:

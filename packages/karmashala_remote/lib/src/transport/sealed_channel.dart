@@ -207,8 +207,39 @@ class SealedChannel {
     );
   }
 
+  /// Sequences [readmit] reopened: each may be opened once more, even when it
+  /// is older than the replay window.
+  final Set<int> _readmitted = <int>{};
+
+  /// Lets every sequence in `[from, to)` that is at or below the highest
+  /// opened so far be opened **once**, however far behind the replay window
+  /// it is — except those in [except].
+  ///
+  /// For a resumed host link (`link.resume`): the peer's resume frame is
+  /// sealed after the frames the dropped socket lost, and those follow it.
+  /// The caller vouches that none of them was opened before — a host link
+  /// takes its frames strictly in order, so everything from its next expected
+  /// sequence on never arrived. Bounded by the caller; [maxForwardGap] caps it
+  /// here too.
+  void readmit(int from, int to, {Set<int> except = const {}}) {
+    if (to - from > maxForwardGap) {
+      throw ArgumentError.value(to - from, 'to - from', 'is over the gap cap');
+    }
+    for (var sequence = from; sequence < to; sequence++) {
+      if (sequence < 0 || sequence > _highestReceived) continue;
+      if (except.contains(sequence) || _received.contains(sequence)) continue;
+      _readmitted.add(sequence);
+    }
+  }
+
   /// Applies the anti-replay policy, or throws.
   void _admit(int sequence) {
+    if (sequence <= _highestReceived && _readmitted.remove(sequence)) {
+      // Once only: inside the window the ordinary check now catches a second
+      // copy; outside it the window already does.
+      if (_highestReceived - sequence < replayWindow) _received.add(sequence);
+      return;
+    }
     if (sequence > _highestReceived) {
       final gap = sequence - _highestReceived - 1;
       if (_highestReceived >= 0 && gap > maxForwardGap) {

@@ -288,6 +288,16 @@ abstract class ReconnectingTransport implements RemoteTransport {
     }
   }
 
+  /// Drops every frame queued while disconnected, answering how many. For an
+  /// owner that keeps its own copies — a suspended host link resends from its
+  /// retain window, and a stale flush ahead of the resume answer is a gap.
+  int discardQueued() {
+    final count = _queue.length;
+    _queue.clear();
+    _queuedBytes = 0;
+    return count;
+  }
+
   /// Called by a subclass for each frame that arrives.
   void onFrame(Uint8List frame) {
     if (!_frames.isClosed) _frames.add(frame);
