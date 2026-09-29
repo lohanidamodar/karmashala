@@ -165,6 +165,61 @@ class LensSessionRow extends ConsumerWidget {
       }
     }
 
+    // The project tree's session menu, headed by Open; an imported
+    // conversation's "Resume" is that same Open, so it is not offered twice.
+    List<PopupMenuEntry<String>> menuItems() =>
+        selectionRowMenu(ref, context, id) ??
+        [
+          DesktopMenuItem(value: 'open', label: 'Open', icon: AppIcons.play),
+          ...switch ((entry.native, entry.imported)) {
+            (final Session native, _) => nativeSessionMenuItems(
+              ref,
+              native,
+              pinned: isPinned(),
+              hasSections: hasSections,
+              terminals: terminals,
+            ),
+            (_, ImportedSession()) => importedSessionMenuItems(
+              pinned: isPinned(),
+              hasSections: hasSections,
+              terminals: terminals,
+              resume: false,
+            ),
+            _ => [selectRowMenuItem()],
+          },
+        ];
+    Future<void> onMenu(String action) async {
+      if (runSelectionRowAction(
+        ref,
+        context,
+        action,
+        id: id,
+        kind: SelectionKind.sessions,
+      )) {
+        return;
+      }
+      if (action == 'open') return _open(context, ref);
+      final native = entry.native;
+      final imported = entry.imported;
+      if (native != null) {
+        await runNativeSessionMenuAction(
+          context,
+          ref,
+          native,
+          action,
+          terminals: terminals,
+        );
+      } else if (imported != null) {
+        await runImportedSessionMenuAction(
+          context,
+          ref,
+          imported,
+          action,
+          terminals: terminals,
+        );
+      }
+    }
+
     return ExplorerRow(
       kind: ExplorerRowKind.session,
       minHeight: Sidebar.rowHeight,
@@ -173,60 +228,8 @@ class LensSessionRow extends ConsumerWidget {
       needsYou: waiting,
       settled: state == AgentState.ended,
       onTap: tap,
-      // The project tree's session menu, headed by Open; an imported
-      // conversation's "Resume" is that same Open, so it is not offered twice.
-      menuItemsBuilder: () =>
-          selectionRowMenu(ref, context, id) ??
-          [
-            DesktopMenuItem(value: 'open', label: 'Open', icon: AppIcons.play),
-            ...switch ((entry.native, entry.imported)) {
-              (final Session native, _) => nativeSessionMenuItems(
-                ref,
-                native,
-                pinned: isPinned(),
-                hasSections: hasSections,
-                terminals: terminals,
-              ),
-              (_, ImportedSession()) => importedSessionMenuItems(
-                pinned: isPinned(),
-                hasSections: hasSections,
-                terminals: terminals,
-                resume: false,
-              ),
-              _ => [selectRowMenuItem()],
-            },
-          ],
-      onMenu: (action) async {
-        if (runSelectionRowAction(
-          ref,
-          context,
-          action,
-          id: id,
-          kind: SelectionKind.sessions,
-        )) {
-          return;
-        }
-        if (action == 'open') return _open(context, ref);
-        final native = entry.native;
-        final imported = entry.imported;
-        if (native != null) {
-          await runNativeSessionMenuAction(
-            context,
-            ref,
-            native,
-            action,
-            terminals: terminals,
-          );
-        } else if (imported != null) {
-          await runImportedSessionMenuAction(
-            context,
-            ref,
-            imported,
-            action,
-            terminals: terminals,
-          );
-        }
-      },
+      menuItemsBuilder: menuItems,
+      onMenu: onMenu,
       builder: (context) => Row(
         children: [
           if (selecting)
@@ -321,6 +324,13 @@ class LensSessionRow extends ConsumerWidget {
             const SizedBox(width: Insets.xs),
             tail,
           ],
+          // A thumb has no right-click: the menu is on the ⋮ (owner).
+          if (density.isTouch)
+            RowMenuButton(
+              tooltip: ExplorerRowKind.session.menuLabel,
+              itemBuilder: menuItems,
+              onSelected: onMenu,
+            ),
         ],
       ),
     );

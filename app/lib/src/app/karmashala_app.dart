@@ -10,6 +10,8 @@ import '../features/ssh/presentation/ssh_prompt_host.dart';
 import '../features/terminal/presentation/session_host_banner.dart';
 import 'shell/app_shell.dart';
 import 'shell/native_menus.dart';
+import 'widgets/row_menu_sheet.dart';
+import 'package:karmashala_ui/menus.dart' show RowMenuSheetScope;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart'
     show AppearanceOptions, UiDensityScope;
@@ -51,7 +53,11 @@ class KarmashalaApp extends ConsumerWidget {
         probe: probe,
         child: UiDensityScope(
           density: ui,
-          child: UiTextScale(scale: uiTextScale, child: child!),
+          // Read only at touch density: a pointer's row menus stay popups.
+          child: RowMenuSheetScope(
+            present: showRowMenuSheet,
+            child: UiTextScale(scale: uiTextScale, child: child!),
+          ),
         ),
       ),
       // themeFor is identity for pointer, so the desktop's theme is as before.

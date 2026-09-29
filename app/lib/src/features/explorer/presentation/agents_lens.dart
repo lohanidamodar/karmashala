@@ -6,6 +6,8 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart';
+import '../../sessions/presentation/new_session_dialog.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
 import '../application/explorer_view_mode.dart';
@@ -113,6 +115,9 @@ class AgentsPage extends ConsumerStatefulWidget {
 }
 
 class _AgentsPageState extends ConsumerState<AgentsPage> {
+  /// An extended FAB (56) and its 16 margin, with a gap above it.
+  static const _fabClearance = 88.0;
+
   /// The groups the user opened. Ephemeral: the page starts as specified.
   final _opened = <AgentState>{};
 
@@ -124,6 +129,23 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
   /// answers, the last one saved is drawn stale in its place (decision 9).
   @override
   Widget build(BuildContext context) {
+    final page = _page(context);
+    // The phone draws no sidebar header, so New session is the tab's own
+    // (owner); a FAB leaves the rows' ⋮ clear.
+    if (!PhoneTabsScope.contains(context)) return page;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: page,
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
+        onPressed: () => NewSessionDialog.show(context),
+        icon: const Icon(AppIcons.plus),
+        label: const Text('New session'),
+      ),
+    );
+  }
+
+  Widget _page(BuildContext context) {
     if (ref.watch(sessionListSnapshotStoreProvider) == null) {
       return _live(context);
     }
@@ -204,7 +226,12 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
             if (selecting) const SessionSelectionBar(),
             Expanded(
               child: ListView.builder(
-                padding: Sidebar.listPadding,
+                // Room under the last row for the phone's FAB.
+                padding: PhoneTabsScope.contains(context)
+                    ? Sidebar.listPadding.copyWith(
+                        bottom: Sidebar.listPadding.bottom + _fabClearance,
+                      )
+                    : Sidebar.listPadding,
                 itemCount: items.length,
                 itemBuilder: (context, index) => items[index],
               ),

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
 
+import '../../../app/widgets/full_screen_form.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart' show EnvironmentPath;
@@ -61,7 +62,7 @@ class NewSessionDialog extends ConsumerStatefulWidget {
   /// Opens the session flow, optionally placing an in-app session in an empty
   /// split instead of creating another workbench tab.
   static Future<void> show(BuildContext context, {String? targetPaneId}) =>
-      showDialog<void>(
+      showFormDialog<void>(
         context: context,
         builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
       );
@@ -395,10 +396,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     // read the listing would otherwise be refused by git, less clearly.
     final pick = place != _WorkPlace.existing
         ? null
-        : _existingChoices(_destination?.checkout)
-              .where((e) => e.value == _existingPick)
-              .firstOrNull
-              ?.value;
+        : _existingChoices(
+            _destination?.checkout,
+          ).where((e) => e.value == _existingPick).firstOrNull?.value;
     final existing = pick == null || !pick.startsWith(_pickWorktree)
         ? null
         : _joinable(_destination?.checkout)
@@ -583,6 +583,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final choices = _existingChoices(checkout);
     final own = _ownBranch(checkout);
     final listed = _worktrees != null && _branchesRead;
+    final touch = UiDensity.of(context).isTouch;
     return RadioGroup<_WorkPlace>(
       groupValue: _place,
       onChanged: (v) {
@@ -599,7 +600,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           RadioListTile<_WorkPlace>(
             key: const ValueKey('new-session-place:checkout'),
             value: _WorkPlace.checkout,
-            dense: true,
+            dense: !touch,
             contentPadding: EdgeInsets.zero,
             title: const Text('The project checkout'),
             subtitle: Text(
@@ -611,7 +612,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           RadioListTile<_WorkPlace>(
             key: const ValueKey('new-session-place:worktree'),
             value: _WorkPlace.newWorktree,
-            dense: true,
+            dense: !touch,
             contentPadding: EdgeInsets.zero,
             title: const Text('A new worktree'),
             subtitle: const Text(
@@ -623,7 +624,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           RadioListTile<_WorkPlace>(
             key: const ValueKey('new-session-place:existing'),
             value: _WorkPlace.existing,
-            dense: true,
+            dense: !touch,
             contentPadding: EdgeInsets.zero,
             enabled: choices.isNotEmpty,
             title: const Text('An existing branch or worktree'),
@@ -756,6 +757,124 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       installation,
       place: worktreeOffered ? _place : _WorkPlace.checkout,
     );
+    // While a worktree is being made, Cancel stops that — and cleans up —
+    // rather than closing a dialog whose launch would carry on unseen.
+    final VoidCallback? cancel = !_busy
+        ? () => Navigator.of(context).pop()
+        : (_creation?.canCancel ?? false)
+        ? () {
+            _creation!.cancel();
+            setState(() {});
+          }
+        : null;
+    final fullScreen = opensFullScreen(context);
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // One dialog, two tabs (spec §5): Project swaps this dialog for
+        // the new-project one in the same place. In the body, not the
+        // title, so it scrolls into view with the rest.
+        NewKindSwitch(
+          current: NewKind.session,
+          onChanged: (_) {
+            final navigator = Navigator.of(context);
+            final host = navigator.context;
+            navigator.pop();
+            NewProjectDialog.show(host);
+          },
+        ),
+        // Four labelled parts in the order the choice is made (spec
+        // §5): who runs, on what, where the work lands, what it is told.
+        destination == null
+            ? _noProjects()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  NewDialogSection(
+                    label: 'Agent',
+                    first: true,
+                    child: installations.isEmpty
+                        ? _noAgents(checkout)
+                        : NewSessionAgentCards(
+                            installations: installations,
+                            selected: installation,
+                            enabled: !_busy,
+                            onSelected: (v) =>
+                                setState(() => _installation = v),
+                          ),
+                  ),
+                  NewDialogSection(
+                    label: 'Project & machine',
+                    child: SessionDestinationPicker(
+                      destination: destination,
+                      enabled: !_busy,
+                      onChanged: (picked) {
+                        setState(() {
+                          _error = null;
+                          _destination = picked;
+                          // The agent belongs to the environment we are
+                          // leaving. Cleared so `_agentFor` re-resolves
+                          // the default.
+                          _installation = null;
+                        });
+                        _afterDestinationChanged();
+                      },
+                    ),
+                  ),
+                  NewDialogSection(
+                    label: 'Where it works',
+                    child: _whereItWorks(worktreeOffered, checkout),
+                  ),
+                  NewDialogSection(
+                    label: 'First prompt',
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(labelText: 'Title'),
+                        ),
+                        const SizedBox(height: Insets.md),
+                        TextField(
+                          controller: _promptController,
+                          minLines: 2,
+                          maxLines: 6,
+                          decoration: const InputDecoration(
+                            labelText: 'First message (optional)',
+                            hintText: 'What should the agent start on?',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_creation != null) ...[
+                    const SizedBox(height: Insets.md),
+                    WorktreeCreationLiveView(tracker: _creation!),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: Insets.md),
+                    DesktopErrorBanner(_error!),
+                  ],
+                ],
+              ),
+      ],
+    );
+    if (fullScreen) {
+      return FullScreenForm(
+        title: 'New session',
+        body: body,
+        onClose: cancel,
+        primary: FilledButton(
+          onPressed: canStart ? start : null,
+          child: _busy
+              ? const InlineSpinner(size: InlineSpinnerSize.medium)
+              : const Text('Start'),
+        ),
+      );
+    }
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
@@ -775,119 +894,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         // resize as they load; it still gives way to a narrower window.
         // AlertDialog sizes its body by intrinsics, so nothing in it may be
         // a LayoutBuilder.
-        content: SizedBox(
-          width: DialogWidth.narrow,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // One dialog, two tabs (spec §5): Project swaps this dialog for
-              // the new-project one in the same place. In the body, not the
-              // title, so it scrolls into view with the rest.
-              NewKindSwitch(
-                current: NewKind.session,
-                onChanged: (_) {
-                  final navigator = Navigator.of(context);
-                  final host = navigator.context;
-                  navigator.pop();
-                  NewProjectDialog.show(host);
-                },
-              ),
-              // Four labelled parts in the order the choice is made (spec
-              // §5): who runs, on what, where the work lands, what it is told.
-              destination == null
-                  ? _noProjects()
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        NewDialogSection(
-                          label: 'Agent',
-                          first: true,
-                          child: installations.isEmpty
-                              ? _noAgents(checkout)
-                              : NewSessionAgentCards(
-                                  installations: installations,
-                                  selected: installation,
-                                  enabled: !_busy,
-                                  onSelected: (v) =>
-                                      setState(() => _installation = v),
-                                ),
-                        ),
-                        NewDialogSection(
-                          label: 'Project & machine',
-                          child: SessionDestinationPicker(
-                            destination: destination,
-                            enabled: !_busy,
-                            onChanged: (picked) {
-                              setState(() {
-                                _error = null;
-                                _destination = picked;
-                                // The agent belongs to the environment we are
-                                // leaving. Cleared so `_agentFor` re-resolves
-                                // the default.
-                                _installation = null;
-                              });
-                              _afterDestinationChanged();
-                            },
-                          ),
-                        ),
-                        NewDialogSection(
-                          label: 'Where it works',
-                          child: _whereItWorks(worktreeOffered, checkout),
-                        ),
-                        NewDialogSection(
-                          label: 'First prompt',
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              TextField(
-                                controller: _titleController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Title',
-                                ),
-                              ),
-                              const SizedBox(height: Insets.md),
-                              TextField(
-                                controller: _promptController,
-                                minLines: 2,
-                                maxLines: 6,
-                                decoration: const InputDecoration(
-                                  labelText: 'First message (optional)',
-                                  hintText: 'What should the agent start on?',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_creation != null) ...[
-                          const SizedBox(height: Insets.md),
-                          WorktreeCreationLiveView(tracker: _creation!),
-                        ],
-                        if (_error != null) ...[
-                          const SizedBox(height: Insets.md),
-                          DesktopErrorBanner(_error!),
-                        ],
-                      ],
-                    ),
-            ],
-          ),
-        ),
+        content: SizedBox(width: DialogWidth.narrow, child: body),
         actions: [
-          TextButton(
-            // While a worktree is being made, Cancel stops that — and cleans up —
-            // rather than closing a dialog whose launch would carry on unseen.
-            onPressed: !_busy
-                ? () => Navigator.of(context).pop()
-                : (_creation?.canCancel ?? false)
-                ? () {
-                    _creation!.cancel();
-                    setState(() {});
-                  }
-                : null,
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: cancel, child: const Text('Cancel')),
           Tooltip(
             message: 'Start the session (Ctrl+Enter)',
             child: FilledButton(
