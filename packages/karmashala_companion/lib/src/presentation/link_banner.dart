@@ -62,7 +62,9 @@ class LinkBanner extends ConsumerWidget {
     return Material(
       // The word carries the meaning and the tint only supports it, so the text
       // keeps full on-surface contrast.
-      color: connecting ? semantic.workingSurface : semantic.attentionSurface,
+      color: connecting
+          ? semantic.workingSurface
+          : SurfaceTones.of(context).attentionSurface,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           density.padX,

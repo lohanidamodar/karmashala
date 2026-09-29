@@ -48,7 +48,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.diffAdded,
     required this.diffRemoved,
     required this.neutral,
-    required this.attentionSurface,
     required this.failureSurface,
     required this.workingSurface,
     required this.unread,
@@ -76,8 +75,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color neutral;
 
   /// Washes of the status hues, for a card or bar that carries that status.
-  /// Translucent, so they sit on whichever surface holds them.
-  final Color attentionSurface;
+  /// Translucent, so they sit on whichever surface holds them. The amber one
+  /// is not here: an ask's rest is the spec's opaque
+  /// `SurfaceTones.attentionSurface`, one source for every needs-you fill.
   final Color failureSurface;
   final Color workingSurface;
 
@@ -108,7 +108,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     diffAdded: const Color(0xFF1A7F37),
     diffRemoved: const Color(0xFFB92534),
     neutral: const Color(0xFF7C7C86),
-    attentionSurface: _lightAttention.withValues(alpha: 0.08),
     failureSurface: _lightFailure.withValues(alpha: 0.08),
     workingSurface: _lightWorking.withValues(alpha: _lightWash),
     unread: _lightIdle,
@@ -122,7 +121,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     diffAdded: const Color(0xFF57C97A),
     diffRemoved: const Color(0xFFF07C86),
     neutral: const Color(0xFF8E8E99),
-    attentionSurface: _darkAttention.withValues(alpha: 0.16),
     failureSurface: _darkFailure.withValues(alpha: 0.16),
     workingSurface: _darkWorking.withValues(alpha: _darkWorkingWash),
     unread: _darkIdle,
@@ -155,7 +153,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? diffAdded,
     Color? diffRemoved,
     Color? neutral,
-    Color? attentionSurface,
     Color? failureSurface,
     Color? workingSurface,
     Color? unread,
@@ -168,7 +165,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       diffAdded: diffAdded ?? this.diffAdded,
       diffRemoved: diffRemoved ?? this.diffRemoved,
       neutral: neutral ?? this.neutral,
-      attentionSurface: attentionSurface ?? this.attentionSurface,
       failureSurface: failureSurface ?? this.failureSurface,
       workingSurface: workingSurface ?? this.workingSurface,
       unread: unread ?? this.unread,
@@ -186,11 +182,6 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       diffAdded: Color.lerp(diffAdded, other.diffAdded, t)!,
       diffRemoved: Color.lerp(diffRemoved, other.diffRemoved, t)!,
       neutral: Color.lerp(neutral, other.neutral, t)!,
-      attentionSurface: Color.lerp(
-        attentionSurface,
-        other.attentionSurface,
-        t,
-      )!,
       failureSurface: Color.lerp(failureSurface, other.failureSurface, t)!,
       workingSurface: Color.lerp(workingSurface, other.workingSurface, t)!,
       unread: Color.lerp(unread, other.unread, t)!,

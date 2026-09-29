@@ -17,13 +17,20 @@ void main() {
 
   test('status surfaces wash their hue: 8% light, 14-16% dark', () {
     final light = SemanticColors.forBrightness(Brightness.light);
-    expect(light.attentionSurface, light.attention.withValues(alpha: 0.08));
+    // One amber rest for every needs-you fill: the spec's opaque tone.
+    expect(
+      SurfaceTones.forBrightness(Brightness.light).attentionSurface,
+      const Color(0xFFFBF1DD),
+    );
+    expect(
+      SurfaceTones.forBrightness(Brightness.dark).attentionSurface,
+      const Color(0xFF221B10),
+    );
     expect(light.failureSurface, light.failure.withValues(alpha: 0.08));
     expect(light.workingSurface, light.working.withValues(alpha: 0.08));
     expect(light.unread, const Color(0xFF1F7A3D));
 
     final dark = SemanticColors.forBrightness(Brightness.dark);
-    expect(dark.attentionSurface, dark.attention.withValues(alpha: 0.16));
     expect(dark.failureSurface, dark.failure.withValues(alpha: 0.16));
     expect(dark.workingSurface, dark.working.withValues(alpha: 0.14));
     expect(dark.unread, const Color(0xFF6BCF87));

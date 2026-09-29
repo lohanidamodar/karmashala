@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
+import 'appearance.dart';
 import 'design_tokens.dart';
 
 /// How much a [PaneNoticeBar] asks of the reader.
@@ -65,8 +66,9 @@ class PaneNoticeBar extends StatelessWidget {
         scheme.onSurfaceVariant,
         scheme.onSurfaceVariant,
       ),
+      // The one amber rest every needs-you surface draws (spec #221B10).
       NoticeTone.attention => (
-        Color.alphaBlend(semantic.attentionSurface, scheme.surfaceContainerLow),
+        SurfaceTones.of(context).attentionSurface,
         semantic.attention,
         scheme.onSurface,
       ),
