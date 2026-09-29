@@ -25,6 +25,7 @@ import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/paths/app_support_directory.dart';
 import 'src/core/paths/server_data_directory.dart';
 import 'src/core/probe/probe_mode.dart';
+import 'src/core/server/companion_migration.dart';
 import 'src/core/server/machines.dart';
 import 'src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -105,6 +106,10 @@ Future<void> _bootstrap(AppLogger logger) async {
         ? MachinesFileStore.inDirectory(support.path)
         : SecureCompanionStore(onLog: logger.info),
   );
+  // A phone build installed over the companion opens the companion's machine.
+  if (!client.hostsServer) {
+    await adoptCompanionPairing(machines, logger: logger);
+  }
   final remote = await machines.active();
   SharedHostLinks.clientName = client.deviceName;
 
