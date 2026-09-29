@@ -32,9 +32,15 @@ final hostedRunPaneFactoryProvider = Provider<HostedRunPaneFactory>(
       ).id,
       access: access,
       sessionId: hostedRunSessionId(id),
+      drawsAtSessionGrid: _drawsAtSessionGrid(ref),
     );
   },
 );
+
+/// A touch client draws a hosted pane at the session's own grid and pans, so
+/// looking from a phone never resizes the desktop's session (Stage 2 step 9).
+bool _drawsAtSessionGrid(Ref ref) =>
+    ref.read(clientCapabilitiesProvider).density.isTouch;
 
 /// A restored pane put back on the server session its pane id names,
 /// **attaching only** (slice 5a): a session still running is re-attached, an
@@ -164,6 +170,7 @@ TerminalInstance _serverPane(
         attachOnly &&
         (ref.read(dataClientProvider).terminals[sessionId]?.shellIntegration ??
             false),
+    drawsAtSessionGrid: _drawsAtSessionGrid(ref),
     closer: () => terminals.close(sessionId),
     opener: attachOnly
         ? null

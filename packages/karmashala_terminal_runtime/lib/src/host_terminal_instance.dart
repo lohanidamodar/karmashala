@@ -82,9 +82,11 @@ class HostTerminalInstance
     TerminalIngestBudget? ingestBudget,
     AppLogger? logger,
     bool shellIntegration = false,
+    bool drawsAtSessionGrid = false,
     this.redialDelays = kHostRedialDelays,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
-       _cwd = WorkingDirectoryTracker(workingDirectory) {
+       _cwd = WorkingDirectoryTracker(workingDirectory),
+       _atSessionGrid = ValueNotifier(drawsAtSessionGrid) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler()
       ..onPrivateOSC = _osc.dispatch
@@ -118,7 +120,10 @@ class HostTerminalInstance
     terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       if (_disposed) return;
       _recorder?.addResize(width, height);
-      _link?.resize(width, height);
+      // At the session's grid this size is the session's, never a wish.
+      if (drawsAtSessionGrid) return;
+      final link = _link;
+      if (link != null) _tell(link, width, height);
     };
 
     unawaited(_start());
@@ -223,6 +228,77 @@ class HostTerminalInstance
 
   /// Takes the session from whoever is typing in it: "Take over".
   Future<void> takeOver() async => _link?.takeOver();
+
+  final ValueNotifier<bool> _atSessionGrid;
+
+  /// Whether this pane draws at the session's grid and pans, rather than
+  /// asking the session for its own (Stage 2 step 9). Such a pane attaches
+  /// without claiming, so looking never resizes the session, and a keystroke
+  /// that takes the input leaves the grid as it is.
+  ValueListenable<bool> get atSessionGrid => _atSessionGrid;
+
+  bool get drawsAtSessionGrid => _atSessionGrid.value;
+
+  /// The grid this device's view would hold, as the pane last measured it:
+  /// what [fitToView] asks for, and what a terminal this pane starts opens at.
+  (int, int)? viewGrid;
+
+  /// The grid this pane last told the server, which keeps it as this
+  /// client's wish until it types.
+  (int, int)? _toldGrid;
+
+  void _tell(HostPaneLink link, int columns, int rows) {
+    _toldGrid = (columns, rows);
+    link.resize(columns, rows);
+  }
+
+  /// Draws at the session's [columns]×[rows], and tells the server that grid
+  /// as this client's wish, so a keystroke that takes the input from here
+  /// resizes nothing.
+  void _followSessionGrid(
+    HostPaneLink link,
+    int columns,
+    int rows, {
+    required bool holds,
+  }) {
+    if (columns <= 0 || rows <= 0) return;
+    if (terminal.viewWidth != columns || terminal.viewHeight != rows) {
+      terminal.resize(columns, rows);
+    }
+    if (!holds && _toldGrid != (columns, rows)) _tell(link, columns, rows);
+  }
+
+  /// "Fit to this phone": the session takes this view's grid, and this client
+  /// the input. The one way a pane at the session's grid resizes it.
+  Future<void> fitToView() async {
+    if (!drawsAtSessionGrid) return;
+    _atSessionGrid.value = false;
+    final grid = viewGrid;
+    if (grid != null) terminal.resize(grid.$1, grid.$2);
+    final link = _link;
+    if (link == null) return;
+    // Said again in case the resize above changed nothing locally.
+    _tell(link, terminal.viewWidth, terminal.viewHeight);
+    await link.takeOver();
+  }
+
+  /// Back to the session's grid after [fitToView]. The session stays at the
+  /// size it was fitted to until whoever drives it next resizes it.
+  void drawAtSessionGrid() {
+    if (drawsAtSessionGrid) return;
+    _atSessionGrid.value = true;
+    final told = _presence.value;
+    final link = _link;
+    if (told == null || link == null) return;
+    _followSessionGrid(link, told.columns, told.rows, holds: told.mine);
+  }
+
+  final ValueNotifier<DateTime?> _refusedAt = ValueNotifier(null);
+
+  /// When a keystroke from here was last refused because someone else typed
+  /// within the idle window.
+  ValueListenable<DateTime?> get keystrokeRefusedAt => _refusedAt;
+  StreamSubscription<void>? _refusals;
   CastRecorder? _recorder;
   Completer<void>? _reap;
   var _disposed = false;
@@ -503,9 +579,14 @@ class HostTerminalInstance
     HostDeployment deployment, {
     bool redialing = false,
   }) async {
-    final width = terminal.viewWidth > 0 ? terminal.viewWidth : 80;
-    final height = terminal.viewHeight > 0 ? terminal.viewHeight : 24;
+    // A terminal started from a pane at the session's grid starts at the view's.
+    final fit = drawsAtSessionGrid ? viewGrid : null;
+    final width = fit?.$1 ?? (terminal.viewWidth > 0 ? terminal.viewWidth : 80);
+    final height =
+        fit?.$2 ?? (terminal.viewHeight > 0 ? terminal.viewHeight : 24);
     final resumeFrom = _lastOffset;
+    // A new flow at the server keeps no wish of this pane's.
+    _toldGrid = null;
     HostPaneLink? link;
     try {
       // One link per server, every pane a ref on it (slice 5e).
@@ -542,8 +623,19 @@ class HostTerminalInstance
       if (skip) {
         _discardRemaining = attachment.totalBytes - attachment.replayFromOffset;
       }
-      // Read now, not from `width`: the layout can land while the attach is out.
-      link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
+      if (drawsAtSessionGrid) {
+        // Before a byte is ingested: the screen that follows is drawn at it.
+        _followSessionGrid(
+          link,
+          attachment.columns,
+          attachment.rows,
+          holds: attachment.holdsWriteToken,
+        );
+      } else {
+        // Read now, not from `width`: the layout can land while the attach is
+        // out.
+        link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
+      }
       if (attachment.screenFollows) {
         // The screen resets the terminal before drawing, stored copy and all.
         _hasStoredHistory = false;
@@ -584,8 +676,15 @@ class HostTerminalInstance
       _notices = link.notices.listen(
         (n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'),
       );
-      _presenceSubscription = link.presence.listen(
-        (told) => _presence.value = told,
+      final live = link;
+      _presenceSubscription = live.presence.listen((told) {
+        _presence.value = told;
+        if (drawsAtSessionGrid) {
+          _followSessionGrid(live, told.columns, told.rows, holds: told.mine);
+        }
+      });
+      _refusals = link.refusedWrites.listen(
+        (_) => _refusedAt.value = DateTime.now(),
       );
       unawaited(link.ended.then(_onSessionEnded));
       // What is on screen now belongs to the live session: a later redial
@@ -641,6 +740,9 @@ class HostTerminalInstance
       final attachment = await link.attachSession(
         sessionId: sessionId,
         sinceOffset: sinceOffset,
+        // A claim at attach takes the session to this pane's grid; a pane at
+        // the session's takes the input only by typing.
+        claimWrite: !drawsAtSessionGrid,
         // A pane with nothing of a running session yet asks for its screen:
         // the program's relative redraws replayed onto an empty one stack up.
         // A session started just now has written next to nothing, and its
@@ -754,7 +856,10 @@ class HostTerminalInstance
     unawaited(_output?.cancel());
     unawaited(_notices?.cancel());
     unawaited(_presenceSubscription?.cancel());
+    unawaited(_refusals?.cancel());
     _presence.dispose();
+    _atSessionGrid.dispose();
+    _refusedAt.dispose();
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();

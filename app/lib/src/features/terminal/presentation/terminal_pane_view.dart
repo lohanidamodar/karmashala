@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
@@ -8,16 +12,22 @@ import 'package:xterm2/xterm.dart';
 import 'terminal_copy_text.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../media/application/session_media_providers.dart';
 import '../../media/domain/session_image_reference.dart';
 import '../../media/presentation/session_image_dialog.dart';
+import '../application/device_terminal_font.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart' show HostPresence;
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/grid.dart';
+
+part 'terminal_pane_touch.dart';
 
 /// One pane's terminal grid, plus the Ctrl+click (Cmd on macOS) affordance over
 /// URLs, paths, `path:12:7` and `[Image #6]`. Nothing is detected until the
@@ -143,10 +153,47 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   /// per-session, so a plain tab can never resolve a `[Image #6]`.
   String? get _sessionId => widget.instance.agentLaunch?.sessionId;
 
+  // At touch density only (Stage 2 step 9): pan, pinch and tap state.
+  final _panController = ScrollController();
+  final _pinching = ValueNotifier(false);
+  final Map<int, Offset> _touches = {};
+  final Map<int, Offset> _touchDowns = {};
+  double? _pinchSpread;
+  double _pinchFont = 0;
+  bool _twoFingerMoved = false;
+  DateTime? _twoFingerDownAt;
+  DateTime? _lastTwoFingerTap;
+  DateTime? _pressedTime;
+  bool _selectedAtDown = false;
+  bool _multiTouch = false;
+  (double, Size)? _cellSize;
+  double _viewWidth = 0;
+  bool _keyboardUp = false;
+  bool _revealQueued = false;
+  bool _followingCursor = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final touch = UiDensity.of(context).isTouch;
+    if (touch == _followingCursor) return;
+    _followingCursor = touch;
+    if (touch) {
+      widget.instance.terminal.addListener(_onTerminalChanged);
+    } else {
+      widget.instance.terminal.removeListener(_onTerminalChanged);
+    }
+  }
+
   @override
   void dispose() {
     _stopListening();
     _highlight?.dispose();
+    if (_followingCursor) {
+      widget.instance.terminal.removeListener(_onTerminalChanged);
+    }
+    _panController.dispose();
+    _pinching.dispose();
     super.dispose();
   }
 
@@ -476,10 +523,10 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     _open(link);
   }
 
-  Future<void> _open(TerminalLink link) async {
+  Future<void> _open(TerminalLink link, [_Resolved? found]) async {
     final target = link.target;
     if (target is UrlTarget) return widget.linkActions.openUrl(target.url);
-    final resolved = _resolved;
+    final resolved = found ?? _resolved;
     if (resolved == null) return;
     final error = await widget.linkActions.open(
       resolved.hostPath,
@@ -516,9 +563,56 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     );
   }
 
+  /// While the soft keyboard is up, keeps the cursor in the pan's view: typing
+  /// at the session's grid otherwise runs off the right edge.
+  void _onTerminalChanged() {
+    if (!_keyboardUp || _revealQueued) return;
+    if (!widget.instance.focusNode.hasFocus) return;
+    _revealQueued = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _revealQueued = false;
+      if (mounted) _revealCursor();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final view = Actions(
+    if (UiDensity.of(context).isTouch) return _buildTouch(context);
+    final view = _terminalView(fontSize: widget.fontSize);
+
+    final hint = _hint;
+    return MouseRegion(
+      // No cursor of its own: `TerminalView`'s own `MouseRegion` is nearer the
+      // pointer and wins, so the cursor is set through its `mouseCursor`.
+      onEnter: _onEnter,
+      onHover: _onHover,
+      onExit: _onExit,
+      child: Listener(
+        // `TerminalView.onTapUp` is dead upstream — the package never calls it
+        // — and a modified click must stay out of the gesture arena, or it
+        // competes with the pane's own selection recognisers.
+        onPointerDown: _onPointerDown,
+        onPointerUp: _onPointerUp,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            view,
+            if (hint != null) _LinkHint(verb: hint.$1, target: hint.$2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The grid itself. At touch density the soft keyboard types a command as
+  /// written (no autocorrect) and its backspace is detected; a pane drawn at
+  /// the session's grid sizes nothing itself.
+  Widget _terminalView({
+    required double fontSize,
+    bool autoResize = true,
+    bool touch = false,
+  }) {
+    return Actions(
       // The app's own paste, above xterm's text-only one: `TerminalPasteIntent`
       // is a type xterm has no entry for, so an ancestor gets the chord.
       actions: {
@@ -537,10 +631,12 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         focusNode: widget.instance.focusNode,
         scrollController: widget.instance.scrollController,
         theme: widget.terminalTheme,
-        textStyle: TerminalStyle(
-          fontSize: widget.fontSize,
-          fontFamily: kMonoFamily,
-        ),
+        textStyle: TerminalStyle(fontSize: fontSize, fontFamily: kMonoFamily),
+        autoResize: autoResize,
+        keyboardType: touch
+            ? TextInputType.visiblePassword
+            : TextInputType.emailAddress,
+        deleteDetection: touch,
         // The grid's size is its own setting; the app-wide UI text scale must
         // not compound onto it.
         textScaler: TextScaler.noScaling,
@@ -561,29 +657,6 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         // Right-click → copy selection / paste / end the session.
         onSecondaryTapDown: (details, _) =>
             widget.onSecondaryTapDown(details.globalPosition),
-      ),
-    );
-
-    final hint = _hint;
-    return MouseRegion(
-      // No cursor of its own: `TerminalView`'s own `MouseRegion` is nearer the
-      // pointer and wins, so the cursor is set through `mouseCursor` above.
-      onEnter: _onEnter,
-      onHover: _onHover,
-      onExit: _onExit,
-      child: Listener(
-        // `TerminalView.onTapUp` is dead upstream — the package never calls it
-        // — and a modified click must stay out of the gesture arena, or it
-        // competes with the pane's own selection recognisers.
-        onPointerDown: _onPointerDown,
-        onPointerUp: _onPointerUp,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            view,
-            if (hint != null) _LinkHint(verb: hint.$1, target: hint.$2),
-          ],
-        ),
       ),
     );
   }

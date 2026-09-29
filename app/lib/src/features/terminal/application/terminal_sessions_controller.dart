@@ -9,6 +9,8 @@ import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/primitives.dart';
+import '../../../core/capabilities/capabilities.dart'
+    show clientCapabilitiesProvider;
 import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -202,7 +204,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // After the snapshot, never inside `build`: asking the host is a socket
     // round-trip, and a pane that reattaches publishes.
     unawaited(_hostSurvivors = _reattachHostSurvivors());
-    _autosave.start();
+    // A client that cannot run the server keeps no scrollback of its own: the
+    // server holds it, and a reattach replays it.
+    if (ref.read(clientCapabilitiesProvider).hostsServer) _autosave.start();
     return _snapshot();
   }
 
