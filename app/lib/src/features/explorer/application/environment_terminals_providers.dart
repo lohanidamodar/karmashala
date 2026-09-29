@@ -6,12 +6,15 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show paneIdOfTerminalSession;
+    show TerminalRecord, paneIdOfTerminalSession;
 
+import '../../../core/capabilities/capabilities.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/failure_words.dart';
 import '../../ssh/data/ssh_client.dart';
 import '../../ssh/data/ssh_hosts_data.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/data/terminals_client.dart';
 import 'environment_terminals.dart';
 
 /// Which machine a pane is running on, from its profile id alone.
@@ -93,6 +96,47 @@ final panesByEnvironmentProvider =
       return byEnvironment;
     });
 
+/// The terminals the server runs, as its data link keeps them: greeted whole
+/// on subscribe, then kept by each change.
+final serverTerminalRecordsProvider = Provider<List<TerminalRecord>>((ref) {
+  final client = ref.watch(dataClientProvider);
+  final changes = client.terminalChanges.listen((_) => ref.invalidateSelf());
+  ref.onDispose(changes.cancel);
+  return List.unmodifiable(client.terminals.values);
+});
+
+/// Live shells on [environmentId] that no pane here shows. Not an agent's
+/// terminal (its session opens it) nor a box's (the box host lists it).
+List<EnvironmentTerminal> _serverShellsOn(
+  Ref ref,
+  String environmentId,
+  List<EnvironmentTerminal> panesHere,
+) {
+  final open = {for (final pane in panesHere) pane.paneId};
+  final localId = ref.watch(localEnvironmentProvider)?.id;
+  return [
+    for (final record in ref.watch(serverTerminalRecordsProvider))
+      if (paneIdOfTerminalSession(record.sessionId) case final paneId?)
+        if (record.isLive &&
+            !open.contains(paneId) &&
+            (record.environmentId ??
+                    environmentIdOfProfile(
+                      record.profileId,
+                      localId: localId,
+                    ) ??
+                    localId) ==
+                environmentId)
+          EnvironmentTerminal(
+            id: record.sessionId,
+            label: record.title,
+            running: true,
+            paneId: paneId,
+            hostSessionId: record.sessionId,
+            profileId: record.profileId,
+          ),
+  ];
+}
+
 /// **What one machine is holding.**
 ///
 /// Local and WSL read panes already in memory, so the answer is current by
@@ -112,9 +156,12 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
   @override
   EnvironmentTerminals build() {
     if (_hostId != null) return EnvironmentTerminals.unasked;
+    final panes =
+        ref.watch(panesByEnvironmentProvider)[_environmentId] ?? const [];
     return EnvironmentTerminals(
-      terminals:
-          ref.watch(panesByEnvironmentProvider)[_environmentId] ?? const [],
+      terminals: ref.watch(capabilitiesProvider).serverTerminalsArea
+          ? [...panes, ..._serverShellsOn(ref, _environmentId, panes)]
+          : panes,
       readAt: ref.read(clockProvider).nowUtc(),
     );
   }
@@ -172,10 +219,14 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
     }
   }
 
-  /// Ends a hosted session for good, then re-reads.
+  /// Ends a hosted session for good, then re-reads. One the server runs on
+  /// its own machine leaves the list when the server says it has gone.
   Future<void> end(String hostSessionId) async {
     final hostId = _hostId;
-    if (hostId == null) return;
+    if (hostId == null) {
+      await ref.read(terminalsClientProvider).close(hostSessionId);
+      return;
+    }
     final host = ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) return;
     await ref.read(sshClientProvider).endHostSession(host.id, hostSessionId);

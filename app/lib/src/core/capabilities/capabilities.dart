@@ -220,6 +220,10 @@ final class Capabilities {
   bool get sendViaServer =>
       serverOffers('sessions.send') && serverOffers('sessions.interrupt');
 
+  /// Terminals lists every shell the server runs and opens the server's own
+  /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.
+  bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }
