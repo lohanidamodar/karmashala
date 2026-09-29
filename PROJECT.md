@@ -499,6 +499,25 @@ When preparing an Android release, check:
 Never expose, print, rewrite, or commit private signing credentials unless the
 user explicitly requests a credential-related change and understands the risk.
 
+**How Karmashala ships to Play.** `.github/workflows/android-release.yml`, run
+by hand (`workflow_dispatch`, track `internal` / `beta` / `production`). It is
+the shared `popupbits/.github` Play workflow inlined, because this private
+`lohanidamodar` repository cannot call another owner's reusable workflow. It
+writes `app/android/key.properties` and the upload keystore, builds the AAB with
+`--dart-define=KARMASHALA_VERSION=<pubspec version>`, and runs the fastlane lane
+in `app/android` with `SKIP_FLUTTER_BUILD=1` so fastlane only uploads.
+
+Signing: `app/android/app/build.gradle.kts` signs release with
+`key.properties` when it exists and falls back to the debug key when it does
+not, so local release builds keep working. A debug-signed AAB is refused by
+the play_publisher plugin before upload.
+
+Repository secrets, set per repository (org secrets do not reach private
+repositories on the free plan): `PLAY_STORE_JSON_KEY_DATA` (shared across
+PopupBits apps), `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. The package name,
+`com.popupbits.karmashala`, is set in the workflow, not a secret.
+
 ---
 
 ## 14. Code Review Checklist

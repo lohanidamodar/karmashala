@@ -1,0 +1,133 @@
+# Builds the Android App Bundle and uploads it to Google Play through fastlane.
+#
+# Inline rather than calling popupbits/.github's publish-to-play-store.yml:
+# this repo is private under lohanidamodar, and a private repository may call
+# only its own owner's reusable workflows. The steps follow that workflow;
+# keep the two in step.
+#
+# Differences from it:
+#   - the Flutter project is app/, inside a pub workspace resolved at the root;
+#   - the AAB is built here with --dart-define=KARMASHALA_VERSION, which the
+#     play_publisher plugin cannot forward, and fastlane reuses it
+#     (SKIP_FLUTTER_BUILD=1) for the upload only;
+#   - no `flutter test` step: this repository's gate is `flutter analyze`.
+#
+# Secrets, set per repository (org secrets do not reach private repos on the
+# free plan): PLAY_STORE_JSON_KEY_DATA, ANDROID_KEYSTORE_BASE64,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Google Play track"
+        type: choice
+        default: internal
+        options: [internal, beta, production]
+      release_status:
+        description: "Release status: completed, draft, halted, inProgress. Use 'draft' for a first-ever release on a draft app."
+        type: choice
+        default: completed
+        options: [completed, draft, halted, inProgress]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and upload to Play (${{ inputs.track }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      # Consumed by the fastlane Appfile and the play_publisher plugin.
+      APP_IDENTIFIER: com.popupbits.karmashala
+      PLAY_STORE_JSON_KEY_DATA: ${{ secrets.PLAY_STORE_JSON_KEY_DATA }}
+      SUPPLY_RELEASE_STATUS: ${{ inputs.release_status }}
+      # Written into app/android/key.properties below.
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Keep in lockstep with the local toolchain.
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: app/android
+
+      - name: Decode release keystore
+        working-directory: app
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p android/app/keystore
+          KS="$PWD/android/app/keystore/upload-keystore.jks"
+          # `tr -d '\r\n'` defends against CRLF / wrapped secrets, which GNU
+          # base64 folds into a keystore the JDK's ASN.1 parser then rejects.
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > "$KS"
+          if [ "$(stat -c%s "$KS")" -lt 1000 ]; then
+            echo "Decoded keystore is implausibly small — check ANDROID_KEYSTORE_BASE64." >&2
+            exit 1
+          fi
+          # Absolute storeFile, so it reads the same whatever Gradle resolves against.
+          printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n" \
+            "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_PASSWORD" "$ANDROID_KEY_ALIAS" \
+            "$KS" > android/key.properties
+
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
+      - name: Install Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build release AAB
+        working-directory: app
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')
+          if [ -z "$version" ]; then
+            echo "Could not read version from app/pubspec.yaml." >&2
+            exit 1
+          fi
+          echo "Building $version"
+          flutter build appbundle --release --dart-define=KARMASHALA_VERSION="$version"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: karmashala-aab
+          path: app/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      # The Fastfile's lane for the production track is `release`.
+      - name: Upload to Play (${{ inputs.track }})
+        working-directory: app/android
+        env:
+          SKIP_FLUTTER_BUILD: "1"
+          TRACK: ${{ inputs.track }}
+        run: |
+          case "$TRACK" in
+            production) lane=release ;;
+            *) lane="$TRACK" ;;
+          esac
+          bundle exec fastlane "$lane"
