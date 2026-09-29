@@ -30,7 +30,11 @@ import 'dart:async';
 /// same [SessionPromptAnswers] over this app's panes. The phone's bindings,
 /// the desktop card and `session_answer` all come through here.
 class AppPromptAnswers implements PromptAnswering {
-  AppPromptAnswers({required this.local, required this.hostAnswers});
+  AppPromptAnswers({
+    required this.local,
+    required this.hostAnswers,
+    required this.hostChecksAsk,
+  });
 
   /// This app's own panes.
   final SessionPromptAnswers local;
@@ -40,10 +44,30 @@ class AppPromptAnswers implements PromptAnswering {
   Function(String sessionId)
   hostAnswers;
 
+  /// Whether the host refuses an approval whose prompt has gone
+  /// (`Capabilities.answersCarryAsk`). This app's own panes always do.
+  final bool Function() hostChecksAsk;
+
   @override
-  Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) {
+  Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) async {
     final host = hostAnswers(request.sessionId);
-    return host == null ? local.answer(request) : host(request);
+    if (host == null) return local.answer(request);
+    final checked = hostChecksAsk();
+    try {
+      // An older host is sent what it has always read.
+      return await host(
+        request is ApprovalAnswerRequest && !checked
+            ? request.withoutAsk()
+            : request,
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      if (!refusal.unconfirmed || checked) rethrow;
+      throw SessionPromptRefusal(
+        '${refusal.message}. This server does not check which prompt an '
+        'answer was for, so a late one can still land',
+        unconfirmed: true,
+      );
+    }
   }
 
   /// Read here for either: the status is the host's for a session it holds
@@ -218,6 +242,7 @@ final sessionPromptAnswersProvider = Provider<PromptAnswering>(
       if (subscriber == null || !subscriber.isRunning(sessionId)) return null;
       return subscriber.answerPrompt;
     },
+    hostChecksAsk: () => ref.read(capabilitiesProvider).answersCarryAsk,
   ),
 );
 

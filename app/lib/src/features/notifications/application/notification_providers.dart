@@ -1,5 +1,5 @@
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
-    show ApprovalAnswerRequest, SessionPromptRefusal;
+    show ApprovalAnswerRequest, PromptAsk, SessionPromptRefusal;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show InboxChanged;
@@ -132,6 +132,9 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
       ref.read(probeModeProvider).enabled) {
     return const NoopNotificationPresenter();
   }
+  // The prompt each toast's Allow once / Deny was raised for, as the status
+  // stood when it was shown: a click that lands later answers only that one.
+  final raisedFor = <String, PromptAsk>{};
   final presenter = DesktopNotificationPresenter(
     onActivated: (payload) {
       focusWatchedSession(
@@ -154,6 +157,7 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
               ApprovalAnswerRequest(
                 sessionId: payload.openId,
                 approve: action == 0,
+                ask: raisedFor[payload.openId],
               ),
             );
       } on SessionPromptRefusal catch (refusal) {
@@ -165,8 +169,40 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
     },
   );
   ref.onDispose(presenter.dispose);
-  return presenter;
+  return _PromptRecordingPresenter(presenter, (request) {
+    if (request.actions.isEmpty) return;
+    final payload = NotificationPayload.decode(request.payload);
+    if (payload == null) return;
+    final report = ref
+        .read(sessionStatusRegistryProvider)
+        .reportForOpenId(payload.openId);
+    if (report == null) {
+      raisedFor.remove(payload.openId);
+    } else {
+      raisedFor[payload.openId] = PromptAsk.drawnFrom(report);
+    }
+  });
 });
+
+/// [inner], telling [shown] of each toast before it goes up.
+class _PromptRecordingPresenter implements NotificationPresenter {
+  _PromptRecordingPresenter(this._inner, this._shown);
+
+  final NotificationPresenter _inner;
+  final void Function(NotificationRequest request) _shown;
+
+  @override
+  bool get isSupported => _inner.isSupported;
+
+  @override
+  Future<void> show(NotificationRequest request) {
+    _shown(request);
+    return _inner.show(request);
+  }
+
+  @override
+  void dispose() => _inner.dispose();
+}
 
 final notificationDispatcherProvider = Provider<NotificationDispatcher>((ref) {
   final dispatcher = NotificationDispatcher(

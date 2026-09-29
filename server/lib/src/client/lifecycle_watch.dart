@@ -57,9 +57,12 @@ class HostLifecycleWatch {
 
   /// Asks the host to answer a prompt the agent in a session it holds has
   /// open — `PromptAnswerRequest.toJson` — and completes with how it ended.
+  /// Bounded by [kPromptAnswerWithin], so a card does not wait out a resumed
+  /// link's grace; a timeout is [HostLifecycleWatchRefused.timedOut].
   Future<PromptAnsweredMessage> answerPrompt(Map<String, Object?> request) =>
       _ask<PromptAnsweredMessage>(
         (id) => PromptAnswerMessage(requestId: id, request: request),
+        kPromptAnswerWithin,
       );
 
   /// Asks the server one administrative question (`ServerMethod`) and
@@ -110,7 +113,7 @@ class HostLifecycleWatch {
     try {
       return await _link.request<T>(build, within);
     } on HostLinkException catch (error) {
-      throw HostLifecycleWatchRefused(error.message);
+      throw HostLifecycleWatchRefused(error.message, timedOut: error.timedOut);
     }
   }
 
@@ -230,9 +233,17 @@ class HostLifecycleWatch {
   }
 }
 
+/// How long a prompt answer waits for the host's reply, as a data request
+/// does. A reply later than this is the host's to refuse: the answer names
+/// its prompt (`prompt.answer.ask`).
+const Duration kPromptAnswerWithin = Duration(seconds: 20);
+
 class HostLifecycleWatchRefused implements Exception {
-  const HostLifecycleWatchRefused(this.message);
+  const HostLifecycleWatchRefused(this.message, {this.timedOut = false});
   final String message;
+
+  /// The bound ran out: what was asked may still have been done.
+  final bool timedOut;
   @override
   String toString() => 'HostLifecycleWatchRefused: $message';
 }

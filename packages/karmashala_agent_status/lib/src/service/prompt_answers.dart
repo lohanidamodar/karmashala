@@ -115,11 +115,28 @@ class SessionPromptAnswers implements PromptAnswering {
         'this session has no prompt open to answer',
       );
     }
-    return _approvals.answer(
+    final ask = request.ask;
+    final open = terminals.statusOf(sessionId);
+    if (ask != null && !ask.matches(open)) {
+      throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
+    }
+    final answer = await _approvals.answer(
       sessionId,
       approve: request.approve,
+      menuId: ask?.menuId,
       decidedBy: request.decidedBy,
       decidedBySessionId: request.decidedBySessionId,
+    );
+    // An ask with nothing this status could check it against answered the
+    // prompt open now, as an answer without one does: said, not hidden.
+    if (ask == null || ask.menuId != null || ask.comparable(open)) {
+      return answer;
+    }
+    return SessionApprovalAnswer(
+      answered: answer.answered,
+      effect:
+          '${answer.effect} The status named no prompt to check this '
+          'answer against, so it answered the one open now.',
     );
   }
 

@@ -15,6 +15,7 @@ const Duration _promptClosePatience = Duration(milliseconds: 1500);
 class _ToolAskAnswers extends ConsumerStatefulWidget {
   const _ToolAskAnswers({
     required this.sessionId,
+    required this.report,
     required this.agentName,
     required this.rules,
     required this.menus,
@@ -25,6 +26,10 @@ class _ToolAskAnswers extends ConsumerStatefulWidget {
   });
 
   final String sessionId;
+
+  /// The status the answers were drawn from: with [menu], the prompt they
+  /// answer.
+  final AgentStatusReport report;
   final String agentName;
   final AgentApprovalRules rules;
   final AgentMenuSupport? menus;
@@ -61,7 +66,11 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     setState(() => _busy = true);
     try {
       await answers.answer(
-        ApprovalAnswerRequest(sessionId: widget.sessionId, approve: approve),
+        ApprovalAnswerRequest(
+          sessionId: widget.sessionId,
+          approve: approve,
+          ask: _ask,
+        ),
       );
     } on SessionPromptRefusal catch (refusal) {
       // Only a refusal is reported: the agent's own screen is the
@@ -100,7 +109,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     setState(() => _busy = true);
     try {
       await answers.answer(
-        ApprovalAnswerRequest(sessionId: sessionId, approve: false),
+        ApprovalAnswerRequest(sessionId: sessionId, approve: false, ask: _ask),
       );
     } on SessionPromptRefusal catch (refusal) {
       messenger.showSnackBar(SnackBar(content: Text(_refused(refusal))));
@@ -131,10 +140,10 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     if (mounted) setState(() => _busy = false);
   }
 
+  PromptAsk get _ask => PromptAsk.drawnFrom(widget.report, menu: widget.menu);
+
   static String _refused(SessionPromptRefusal refusal) =>
-      refusal.noTerminal || refusal.notFound
-      ? 'That session is no longer running, so the key was not sent.'
-      : 'Nothing was sent: ${refusal.message}.';
+      _approvalRefusalText(refusal);
 
   @override
   Widget build(BuildContext context) {
