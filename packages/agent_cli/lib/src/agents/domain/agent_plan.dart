@@ -31,6 +31,23 @@ class AgentPlanItem {
 
   @override
   String toString() => 'AgentPlanItem(${state.name}: $text)';
+
+  /// The wire form a server's transcript page carries: `{text, state}`, the
+  /// state by name. A state this build does not know reads as `unrecorded`.
+  Map<String, Object?> toJson() => {'text': text, 'state': state.name};
+
+  /// Throws [FormatException] when `text` is not a string.
+  static AgentPlanItem fromJson(Map<String, Object?> json) {
+    final text = json['text'];
+    if (text is! String) throw const FormatException('plan item: no text');
+    final state = json['state'];
+    return AgentPlanItem(
+      text: text,
+      state:
+          AgentPlanItemState.values.asNameMap()[state] ??
+          AgentPlanItemState.unrecorded,
+    );
+  }
 }
 
 /// **One snapshot of the plan an agent keeps for itself.**
@@ -100,6 +117,29 @@ class AgentPlan {
 
   @override
   String toString() => 'AgentPlan($doneCount/$total)';
+
+  /// The wire form: `{items: [...], note?}`, an empty [note] left out.
+  Map<String, Object?> toJson() => {
+    'items': [for (final item in items) item.toJson()],
+    if (note.isNotEmpty) 'note': note,
+  };
+
+  /// Throws [FormatException] on items out of shape.
+  static AgentPlan fromJson(Map<String, Object?> json) {
+    final items = json['items'];
+    final note = json['note'];
+    return AgentPlan(
+      items: [
+        if (items is List)
+          for (final item in items)
+            if (item is Map)
+              AgentPlanItem.fromJson(item.cast<String, Object?>())
+            else
+              throw const FormatException('plan item: not an object'),
+      ],
+      note: note is String ? note : '',
+    );
+  }
 }
 
 /// The most of a plan item that fits on one row beside the tool's name.

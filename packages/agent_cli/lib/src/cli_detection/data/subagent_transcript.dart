@@ -47,6 +47,36 @@ class SubagentRef {
   /// The model it ran on, when the meta carried one. Some do not.
   final String? model;
 
+  /// The wire form. [filePath] is the server machine's path: a client asks
+  /// the server for the turns, never opens it.
+  Map<String, Object?> toJson() => {
+    'toolUseId': toolUseId,
+    'filePath': filePath,
+    'agentType': agentType,
+    'description': description,
+    'spawnDepth': spawnDepth,
+    'model': ?model,
+  };
+
+  /// Throws [FormatException] without the join or the path.
+  static SubagentRef fromJson(Map<String, Object?> json) {
+    final toolUseId = json['toolUseId'];
+    final filePath = json['filePath'];
+    if (toolUseId is! String || filePath is! String) {
+      throw const FormatException('subagent: no toolUseId or filePath');
+    }
+    final depth = json['spawnDepth'];
+    final model = json['model'];
+    return SubagentRef(
+      toolUseId: toolUseId,
+      filePath: filePath,
+      agentType: _string(json['agentType']),
+      description: _string(json['description']),
+      spawnDepth: depth is int && depth > 0 ? depth : 1,
+      model: model is String && model.isNotEmpty ? model : null,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       other is SubagentRef && other.filePath == filePath;

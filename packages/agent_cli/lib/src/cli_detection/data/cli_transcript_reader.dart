@@ -45,6 +45,13 @@ class CompactionBoundary {
   /// record did not say. Never inferred from anything else.
   final String? trigger;
 
+  Map<String, Object?> toJson() => {'trigger': ?trigger};
+
+  static CompactionBoundary fromJson(Map<String, Object?> json) {
+    final trigger = json['trigger'];
+    return CompactionBoundary(trigger: trigger is String ? trigger : null);
+  }
+
   @override
   String toString() => 'CompactionBoundary(${trigger ?? 'unrecorded'})';
 }
@@ -124,6 +131,58 @@ class TranscriptMessage {
   /// summary the CLI wrote of everything before it. Null everywhere else. See
   /// [CompactionBoundary].
   final CompactionBoundary? compaction;
+
+  /// **The wire form a server's transcript page carries** (`sessions.transcript`),
+  /// lossless for every field above: lowerCamel names, a null field left out,
+  /// [at] as ISO-8601 UTC. A field added to this class is added here too.
+  Map<String, Object?> toJson() => {
+    'role': role,
+    'text': text,
+    'thinking': ?thinking,
+    'tool': ?tool?.toJson(),
+    'subagent': ?subagent?.toJson(),
+    'at': ?at?.toUtc().toIso8601String(),
+    'pendingToolUseId': ?pendingToolUseId,
+    'pendingBackgroundAgentId': ?pendingBackgroundAgentId,
+    'compaction': ?compaction?.toJson(),
+  };
+
+  /// Reads [toJson]'s form. An unknown field is ignored and a missing or
+  /// malformed optional one is null; throws [FormatException] only without
+  /// `role` and `text`.
+  static TranscriptMessage fromJson(Map<String, Object?> json) {
+    final role = json['role'];
+    final text = json['text'];
+    if (role is! String || text is! String) {
+      throw const FormatException('transcript message: no role or text');
+    }
+    final tool = json['tool'];
+    final subagent = json['subagent'];
+    final at = json['at'];
+    final compaction = json['compaction'];
+    String? string(String key) {
+      final value = json[key];
+      return value is String ? value : null;
+    }
+
+    return TranscriptMessage(
+      role: role,
+      text: text,
+      thinking: string('thinking'),
+      tool: tool is Map
+          ? ToolActivity.fromJson(tool.cast<String, Object?>())
+          : null,
+      subagent: subagent is Map
+          ? SubagentRef.fromJson(subagent.cast<String, Object?>())
+          : null,
+      at: at is String ? DateTime.tryParse(at)?.toUtc() : null,
+      pendingToolUseId: string('pendingToolUseId'),
+      pendingBackgroundAgentId: string('pendingBackgroundAgentId'),
+      compaction: compaction is Map
+          ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
+          : null,
+    );
+  }
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex / Antigravity
