@@ -128,21 +128,28 @@ Future<String?> showFileBrowser(
   @visibleForTesting Map<String, String>? environment,
 }) {
   final places = sources ?? (lister == null ? BrowseSources.all : const []);
-  return showDialog<String>(
-    context: context,
-    builder: (_) => FileBrowserDialog(
-      what: what,
-      directories: directories,
-      startAt: startAt,
-      acceptedTypeGroups: acceptedTypeGroups,
-      confirmButtonText: confirmButtonText,
-      sources: places,
-      environmentId: environmentId,
-      lister: lister ?? listDirectory,
-      exists: exists ?? _directoryExists,
-      environment: environment ?? Platform.environment,
-    ),
+  // A phone's width has no room for a 760x560 dialog: a whole page instead.
+  final fullScreen = WidthClass.of(MediaQuery.sizeOf(context).width).isCompact;
+  FileBrowserDialog browser(BuildContext _) => FileBrowserDialog(
+    what: what,
+    directories: directories,
+    startAt: startAt,
+    acceptedTypeGroups: acceptedTypeGroups,
+    confirmButtonText: confirmButtonText,
+    sources: places,
+    environmentId: environmentId,
+    lister: lister ?? listDirectory,
+    exists: exists ?? _directoryExists,
+    environment: environment ?? Platform.environment,
+    fullScreen: fullScreen,
   );
+  if (fullScreen) {
+    return Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<String>(MaterialPageRoute(fullscreenDialog: true, builder: browser));
+  }
+  return showDialog<String>(context: context, builder: browser);
 }
 
 /// The default [DirectoryLister]. Entries that cannot be classified are kept as
@@ -183,8 +190,13 @@ class FileBrowserDialog extends StatefulWidget {
     this.startAt,
     this.acceptedTypeGroups = const [],
     this.confirmButtonText,
+    this.fullScreen = false,
     super.key,
   });
+
+  /// Drawn as a page with its own app bar, with touch-sized rows, rather than
+  /// a dialog: what a compact window gets.
+  final bool fullScreen;
 
   final String what;
   final bool directories;
@@ -452,11 +464,10 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.fullScreen) return _page(context);
     final media = MediaQuery.sizeOf(context);
     final width = media.width * 0.92 < 760.0 ? media.width * 0.92 : 760.0;
     final height = media.height * 0.86 < 560.0 ? media.height * 0.86 : 560.0;
-    // The shortcuts are the first thing to go: the listing is the dialog.
-    final roomForPlaces = width >= 560;
 
     return AlertDialog(
       contentPadding: const EdgeInsets.fromLTRB(
@@ -479,65 +490,9 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
                         'are standing in.'
                   : 'Type a path if you already know it.',
             ),
-            if (widget.sources.length > 1) ...[
-              const SizedBox(height: Insets.md),
-              _SourceBar(
-                sources: widget.sources,
-                current: _source,
-                onChanged: _busySwitching ? null : _switchTo,
-              ),
-            ],
-            const SizedBox(height: Insets.md),
-            _PathBar(
-              controller: _path,
-              onBack: _canGoBack ? _back : null,
-              onForward: _canGoForward ? _forward : null,
-              onUp: _parentOf(_directory) == null ? null : _up,
-              onRefresh: () => _open(_directory, record: false),
-              onSubmitted: (value) {
-                final trimmed = value.trim();
-                if (trimmed.isNotEmpty) _open(trimmed);
-              },
-            ),
-            const SizedBox(height: Insets.sm),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (roomForPlaces) ...[
-                    SizedBox(
-                      width: 168,
-                      child: _Places(
-                        places: _places,
-                        current: _directory,
-                        onTap: _open,
-                      ),
-                    ),
-                    const SizedBox(width: Insets.sm),
-                  ],
-                  Expanded(child: _listing(context)),
-                ],
-              ),
-            ),
-            const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: _FilterField(
-                    controller: _filter,
-                    onChanged: (_) => setState(() {}),
-                    hint: widget.directories
-                        ? 'Filter folders'
-                        : 'Filter this folder',
-                  ),
-                ),
-                const SizedBox(width: Insets.sm),
-                HiddenFilesChip(
-                  hiddenCount: _hiddenCount,
-                  onChanged: (_) => setState(() {}),
-                ),
-              ],
-            ),
+            // The shortcuts are the first thing to go: the listing is the
+            // dialog.
+            ..._browsing(context, roomForPlaces: width >= 560),
           ],
         ),
       ),
@@ -554,6 +509,125 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
         ),
       ],
     );
+  }
+
+  /// The browser as a page of its own: close and Choose in the app bar, and
+  /// the listing given the whole height with no Places column.
+  Widget _page(BuildContext context) {
+    final answer = _answer;
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: Touch.appBarOf(context),
+        leading: IconButton(
+          tooltip: 'Cancel',
+          icon: const Icon(AppIcons.x),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Choose ${widget.what}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: Insets.sm),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, Touch.target),
+              ),
+              onPressed: answer == null
+                  ? null
+                  : () => Navigator.of(context).pop(answer),
+              child: Text(widget.confirmButtonText ?? 'Choose'),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Insets.md,
+            0,
+            Insets.md,
+            Insets.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _browsing(context, roomForPlaces: false),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Everything under the title: the source, the path, the listing and the
+  /// filter.
+  List<Widget> _browsing(BuildContext context, {required bool roomForPlaces}) {
+    final page = widget.fullScreen;
+    return [
+      if (widget.sources.length > 1) ...[
+        const SizedBox(height: Insets.md),
+        _SourceBar(
+          sources: widget.sources,
+          current: _source,
+          onChanged: _busySwitching ? null : _switchTo,
+        ),
+      ],
+      const SizedBox(height: Insets.md),
+      _PathBar(
+        controller: _path,
+        onBack: _canGoBack ? _back : null,
+        onForward: _canGoForward ? _forward : null,
+        onUp: _parentOf(_directory) == null ? null : _up,
+        onRefresh: () => _open(_directory, record: false),
+        onSubmitted: (value) {
+          final trimmed = value.trim();
+          if (trimmed.isNotEmpty) _open(trimmed);
+        },
+      ),
+      const SizedBox(height: Insets.sm),
+      Expanded(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (roomForPlaces) ...[
+              SizedBox(
+                width: 168,
+                child: _Places(
+                  places: _places,
+                  current: _directory,
+                  onTap: _open,
+                ),
+              ),
+              const SizedBox(width: Insets.sm),
+            ],
+            Expanded(child: _listing(context)),
+          ],
+        ),
+      ),
+      const SizedBox(height: Insets.sm),
+      Row(
+        children: [
+          Expanded(
+            child: _FilterField(
+              controller: _filter,
+              onChanged: (_) => setState(() {}),
+              hint: widget.directories
+                  ? 'Filter folders'
+                  : 'Filter this folder',
+              // On a page the keyboard would cover the listing on arrival.
+              autofocus: !page,
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          HiddenFilesChip(
+            hiddenCount: _hiddenCount,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+    ];
   }
 
   Widget _listing(BuildContext context) {
@@ -590,6 +664,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
               final entry = rows[index];
               return _EntryRow(
                 entry: entry,
+                touch: widget.fullScreen,
                 selected: _selected?.path == entry.path,
                 onTap: () => _tapped(entry),
               );
@@ -716,16 +791,18 @@ class _FilterField extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.hint,
+    required this.autofocus,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final String hint;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) => TextField(
     controller: controller,
-    autofocus: true,
+    autofocus: autofocus,
     decoration: InputDecoration(
       isDense: true,
       prefixIcon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
@@ -740,11 +817,15 @@ class _EntryRow extends StatelessWidget {
     required this.entry,
     required this.selected,
     required this.onTap,
+    required this.touch,
   });
 
   final BrowsedEntry entry;
   final bool selected;
   final VoidCallback onTap;
+
+  /// A thumb's row: [Touch.target] tall.
+  final bool touch;
 
   // No double-tap-to-open: a double-tap recognizer makes every *single* tap
   // wait out its timeout before it resolves, so selecting a file would lag by
@@ -753,7 +834,8 @@ class _EntryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
-      dense: true,
+      dense: !touch,
+      minTileHeight: touch ? Touch.target : null,
       selected: selected,
       selectedTileColor: StateLayers.selected(scheme),
       leading: Icon(
