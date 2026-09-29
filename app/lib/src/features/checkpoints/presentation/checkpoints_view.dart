@@ -76,10 +76,26 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
       );
     }
 
-    final checkpoints =
-        ref.watch(sessionCheckpointsProvider(sessionId)).value ?? const [];
+    final asked = ref.watch(sessionCheckpointsProvider(sessionId));
+    final checkpoints = asked.value ?? const [];
     final skipped = ref.watch(checkpointSkipReasonProvider(sessionId));
     final native = _AgentRewindNote(sessionId: sessionId);
+    // Not read yet, or unreadable, is not "none yet": that answer would send
+    // the user looking for a checkpoint the list simply has not shown.
+    if (!asked.hasValue && !asked.hasError) {
+      return const Center(
+        child: InlineSpinner(
+          size: InlineSpinnerSize.medium,
+          semanticsLabel: 'Reading checkpoints',
+        ),
+      );
+    }
+    if (!asked.hasValue && asked.hasError) {
+      return PanePlaceholder(
+        message: 'Could not read the checkpoints: ${asked.error}',
+        icon: AppIcons.warningCircle,
+      );
+    }
     if (checkpoints.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

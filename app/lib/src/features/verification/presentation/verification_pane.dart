@@ -67,7 +67,11 @@ class _RunList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final runs = ref.watch(verificationRunsProvider).value ?? const [];
+    final asked = ref.watch(verificationRunsProvider);
+    final runs = asked.value ?? const [];
+    // Not read yet, or unreadable, is not "nothing verified yet".
+    final loading = !asked.hasValue && !asked.hasError;
+    final failed = !asked.hasValue && asked.hasError;
     // The server records every run; the newest still open is the one it is
     // recording (each row also says "still recording").
     final active = runs.isNotEmpty && runs.first.isOpen;
@@ -76,7 +80,11 @@ class _RunList extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PaneSubToolbar(
-          title: runs.isEmpty
+          title: loading
+              ? 'Reading runs…'
+              : failed
+              ? 'Runs unavailable'
+              : runs.isEmpty
               ? 'No runs'
               : '${runs.length} run${runs.length == 1 ? '' : 's'}',
           trailing: !active
@@ -95,7 +103,23 @@ class _RunList extends ConsumerWidget {
                   ],
                 ),
         ),
-        if (runs.isEmpty)
+        if (loading)
+          const Expanded(
+            child: Center(
+              child: InlineSpinner(
+                size: InlineSpinnerSize.medium,
+                semanticsLabel: 'Reading verification runs',
+              ),
+            ),
+          )
+        else if (failed)
+          Expanded(
+            child: PanePlaceholder(
+              message: 'Could not read the verification runs: ${asked.error}',
+              icon: AppIcons.warningCircle,
+            ),
+          )
+        else if (runs.isEmpty)
           const Expanded(
             child: PanePlaceholder(
               message:
