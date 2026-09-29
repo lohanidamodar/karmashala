@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/presentation/pair_phone_entry.dart';
@@ -82,7 +83,13 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   ) {
     if (value.startsWith(_terminal)) {
       final environment = choice?.environment;
-      if (environment != null) openTerminalOn(ref, environment);
+      if (environment != null) {
+        openTerminalOn(
+          ref,
+          environment,
+          showWorkbench: phoneWorkbenchOpener(context, ref),
+        );
+      }
       return;
     }
     if (value.startsWith(_pairPhone)) {

@@ -10,6 +10,7 @@ class EnvironmentTerminal {
     required this.running,
     this.paneId,
     this.hostSessionId,
+    this.profileId,
   });
 
   final String id;
@@ -26,6 +27,11 @@ class EnvironmentTerminal {
   /// The host's own id, when a host answered rather than a pane being read.
   /// A row with one can be attached to and ended.
   final String? hostSessionId;
+
+  /// The shell it was opened as, when the server said: what a pane adopting
+  /// it here is labelled. Null for an SSH box's, which is always its login
+  /// shell.
+  final String? profileId;
 
   bool get isHosted => hostSessionId != null;
 }

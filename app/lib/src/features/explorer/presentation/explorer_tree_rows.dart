@@ -8,10 +8,13 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/data/ssh_hosts_data.dart';
+import '../../terminal/application/terminal_profiles.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/data/terminals_client.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../application/environment_terminals_providers.dart';
 import '../application/explorer_tree_nodes.dart';
@@ -155,7 +158,11 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
           ? ExplorerRowAction(
               tooltip: 'Open a terminal on ${node.environmentLabel}',
               icon: AppIcons.plus,
-              onPressed: () => openTerminalOn(ref, node.environment!),
+              onPressed: () => openTerminalOn(
+                ref,
+                node.environment!,
+                showWorkbench: phoneWorkbenchOpener(context, ref),
+              ),
             )
           : null,
       menuLabel: 'Terminal actions',
@@ -178,7 +185,11 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
       onMenu: (action) {
         switch (action) {
           case _open:
-            openTerminalOn(ref, node.environment!);
+            openTerminalOn(
+              ref,
+              node.environment!,
+              showWorkbench: phoneWorkbenchOpener(context, ref),
+            );
           case _refresh:
             ref
                 .read(environmentTerminalsProvider(node.environmentId).notifier)
@@ -189,8 +200,13 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
   }
 }
 
-/// Opens a shell on [environment], in the terminal pane.
-void openTerminalOn(WidgetRef ref, ExecutionEnvironment environment) {
+/// Opens a shell on [environment], in the terminal pane. [showWorkbench] is
+/// the phone's ([phoneWorkbenchOpener]): the new tab is brought up to be seen.
+void openTerminalOn(
+  WidgetRef ref,
+  ExecutionEnvironment environment, {
+  VoidCallback? showWorkbench,
+}) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
   final distro = environment.wslDistribution ?? environment.name;
   controller.openTab(switch (environment.kind) {
@@ -202,9 +218,38 @@ void openTerminalOn(WidgetRef ref, ExecutionEnvironment environment) {
       shell: TerminalShell.wsl,
       wslDistribution: distro,
     ),
-    _ => TerminalProfile.powerShell,
+    _ => _machineShell(ref),
   });
   controller.showTerminalHere();
+  showWorkbench?.call();
+}
+
+/// On a phone, a shell the server offers: this client's PowerShell names a
+/// program the server may not have. A desktop keeps PowerShell.
+TerminalProfile _machineShell(WidgetRef ref) {
+  if (!ref.read(capabilitiesProvider).serverTerminalsArea) {
+    return TerminalProfile.powerShell;
+  }
+  for (final profile in ref.read(terminalServerProfilesProvider)) {
+    if (profile.shell != TerminalShell.wsl &&
+        profile.shell != TerminalShell.ssh) {
+      return profile;
+    }
+  }
+  // Not offered yet: the pane then asks for none, and the server opens its own.
+  return TerminalProfile.powerShell;
+}
+
+/// The profile a server terminal adopted here is labelled with: the one it
+/// was opened as, else the server's shell.
+TerminalProfile _adoptedShell(WidgetRef ref, String? profileId) {
+  if (profileId != null) {
+    for (final profile in ref.read(terminalProfilesProvider)) {
+      if (profile.id == profileId) return profile;
+    }
+    if (terminalProfileFromId(profileId) case final profile?) return profile;
+  }
+  return _machineShell(ref);
 }
 
 /// A native session. Draws the session as it is *now*, selected out of its
@@ -267,9 +312,18 @@ class ExplorerTerminalRow extends ConsumerWidget {
         .read(environmentsDataProvider)
         .getById(node.environmentId)
         ?.sshHostId;
-    final host = hostId == null
-        ? null
-        : ref.read(sshHostsDataProvider).getById(hostId);
+    if (hostId == null) {
+      // The server's machine or its WSL: a pane under the same id attaches.
+      if (paneId == null) return;
+      controller.openTab(
+        _adoptedShell(ref, node.terminal.profileId),
+        adoptPaneId: paneId,
+      );
+      controller.showTerminalHere();
+      showWorkbench?.call();
+      return;
+    }
+    final host = ref.read(sshHostsDataProvider).getById(hostId);
     if (host == null) return;
     controller.openTab(
       TerminalProfile.ssh(host.id, hostName: host.name),
