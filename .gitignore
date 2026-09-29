@@ -57,6 +57,8 @@ app/windows/installer/output/
 app/android/key.properties
 app/android/app/**/*.jks
 app/android/app/**/*.keystore
+# The release upload keystore; backed up in popupbits/publishing_backups.
+app/android/keystore/
 app/android/vendor/bundle
 app/android/.bundle/
 app/ios/vendor/bundle
