@@ -69,6 +69,15 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     confirm: args.boolean('confirm', orElse: false),
     preview: args.boolean('preview', orElse: false),
   ),
+  SessionSend.name => SessionSend(
+    sessionId: args.string('sessionId'),
+    text: args.string('text'),
+    requestId: args.optionalString('requestId'),
+  ),
+  SessionInterrupt.name => SessionInterrupt(
+    args.string('sessionId'),
+    requestId: args.optionalString('requestId'),
+  ),
   _ => null,
 };
 
@@ -354,4 +363,103 @@ final class SessionForkFromCheckpoint
   @override
   Map<String, Object?> resultFromJson(Object? json) =>
       _decode(kind, () => _object(json, kind));
+}
+
+// A person's message and Stop, typed by the server as host keys (Stage 2
+// step 2): past the write token, so a client never takes the session's input
+// or resizes its terminal to send. A resend with the same `requestId` answers
+// what the first answered and types nothing. An older server refuses both as
+// `invalid`; a client reads `sessions.send` in `welcome.features` first.
+//
+// Refusals: `notFound` for a session this server does not run ("not running
+// here"), `failed` for words typed that the agent did not take.
+
+/// Keys typed into a session the server runs; answered once typed.
+sealed class SessionInputRequest<R> extends DataRequest<R> {
+  const SessionInputRequest();
+
+  /// Minted by the client once per act and kept for its retry.
+  String? get requestId;
+}
+
+/// Types [text] into session [sessionId]'s composer and presses Return until
+/// the agent takes it.
+final class SessionSend extends SessionInputRequest<SessionSent> {
+  const SessionSend({
+    required this.sessionId,
+    required this.text,
+    this.requestId,
+  });
+
+  static const String name = 'sessions.send';
+
+  final String sessionId;
+  final String text;
+
+  @override
+  final String? requestId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'text': text,
+    'requestId': ?requestId,
+  };
+
+  @override
+  Object? resultToJson(SessionSent result) => result.toJson();
+
+  @override
+  SessionSent resultFromJson(Object? json) =>
+      _decode(kind, () => SessionSent.fromJson(_object(json, kind)));
+}
+
+/// Presses the agent's interrupt key (Esc) in session [sessionId].
+final class SessionInterrupt extends SessionInputRequest<DataAck> {
+  const SessionInterrupt(this.sessionId, {this.requestId});
+
+  static const String name = 'sessions.interrupt';
+
+  final String sessionId;
+
+  @override
+  final String? requestId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'requestId': ?requestId,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// What `sessions.send` answers. [via] is [readBack] when the Return was read
+/// back off the server's screen, [unverified] when the agent's composer could
+/// not be read and Return was pressed once.
+final class SessionSent {
+  const SessionSent({required this.sent, required this.via});
+
+  factory SessionSent.fromJson(Map<String, Object?> json) => SessionSent(
+    sent: json['sent'] == true,
+    via: json['via'] is String ? json['via']! as String : unverified,
+  );
+
+  static const String readBack = 'readBack';
+  static const String unverified = 'unverified';
+
+  final bool sent;
+  final String via;
+
+  Map<String, Object?> toJson() => {'sent': sent, 'via': via};
 }

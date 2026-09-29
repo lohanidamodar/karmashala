@@ -210,6 +210,12 @@ final class Capabilities {
   /// [readsServerDisk].
   bool get mediaViaServer => serverOffers('sessions.media');
 
+  /// Chat sends, Stop and a deny's reason are typed by the server as host
+  /// keys (Stage 2 step 2), so this client never takes the session's input
+  /// or resizes its terminal to send.
+  bool get sendViaServer =>
+      serverOffers('sessions.send') && serverOffers('sessions.interrupt');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

@@ -37,4 +37,8 @@ const Set<String> kServerFeatures = <String>{
   // `files.upload.abort`: a cancelled upload's staged part is deleted at
   // once, not when the link closes.
   'files.upload.abort',
+  // `sessions.send` and `sessions.interrupt`: a client's chat sends and Stop,
+  // typed here as host keys, once per `requestId` (Stage 2 step 2).
+  'sessions.send',
+  'sessions.interrupt',
 };

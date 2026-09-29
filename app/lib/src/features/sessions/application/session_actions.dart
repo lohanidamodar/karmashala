@@ -29,7 +29,7 @@ import 'package:karmashala_session/resume.dart';
 import 'session_chat_source.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
-import 'session_message_typist.dart';
+import 'session_input.dart';
 import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
@@ -394,7 +394,12 @@ class SessionActions {
 
   /// Sends [text] to a native session, relaunching its agent first if the
   /// session has ended. Throws if the repository or agent is gone.
-  Future<void> continueSession(String sessionId, String text) async {
+  /// [requestId] keys a send the server types, kept by a caller that retries.
+  Future<void> continueSession(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
@@ -403,9 +408,9 @@ class SessionActions {
     // typist reads the Return back off the screen — a composer that folded it
     // into a newline is pressed again rather than left holding the message.
     if (await _ref
-        .read(sessionMessageTypistProvider)
-        .send(sessionId, trimmed)) {
-      _log.info('Continued $sessionId: typed into its pane');
+        .read(sessionInputProvider)
+        .send(sessionId, trimmed, requestId: requestId)) {
+      _log.info('Continued $sessionId: typed into it');
       return;
     }
 

@@ -13,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
@@ -149,6 +150,10 @@ class DataService {
   /// Sessions' pictures, extracted here (Stage 0 step 10); refused
   /// `unavailable` without it.
   SessionMedia? sessionMedia;
+
+  /// A client's chat sends and Stop, typed as host keys (Stage 2 step 2);
+  /// refused `unavailable` without it.
+  SessionInput? sessionInput;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -255,6 +260,7 @@ class DataService {
     bool sshPrompts = true,
     bool transcripts = true,
     bool phone = false,
+    String? device,
   }) {
     final link = DataSession._(
       this,
@@ -263,6 +269,7 @@ class DataService {
       sshPrompts: sshPrompts,
       transcripts: transcripts,
       phone: phone,
+      device: device,
     );
     _links.add(link);
     return link;
@@ -490,6 +497,7 @@ class DataService {
         ChecksWorkRequest() ||
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
+        SessionInputRequest() ||
         EnvVaultRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
@@ -635,9 +643,13 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     required this.sshPrompts,
     required this.transcripts,
     required this.phone,
+    this.device,
   });
 
   final DataService _service;
+
+  /// The paired device's id, which outlives this link; null on this machine.
+  final String? device;
 
   /// What this link's pairing grants (slice 5e); all true on this machine.
   final bool admin;
@@ -686,6 +698,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is ChecksWorkRequest ||
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
+      request is SessionInputRequest ||
       request is EnvVaultRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
@@ -810,6 +823,15 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
                   )))
               .list(read),
       };
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final SessionInputRequest<Object?> asked) {
+      final work =
+          _service.sessionInput ??
+          (throw const DataRefused.unavailable(
+            'this server types into no sessions',
+          ));
+      final result = await work.handle(asked, device);
       return DataReply(result as R, _service._revision);
     }
     if (request case final EnvVaultRequest<Object?> asked) {

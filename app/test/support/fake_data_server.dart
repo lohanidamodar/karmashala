@@ -714,6 +714,9 @@ class FakeDataServer {
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
       ),
+      SessionInputRequest() => throw const DataRefused.unavailable(
+        'this fake types into no sessions',
+      ),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

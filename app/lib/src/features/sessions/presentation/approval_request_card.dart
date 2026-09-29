@@ -18,7 +18,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
-import '../application/session_message_typist.dart';
+import '../application/session_input.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';

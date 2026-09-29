@@ -95,7 +95,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     if (_busy || why.isEmpty) return;
     final sessionId = widget.sessionId;
     final answers = ref.read(sessionPromptAnswersProvider);
-    final typist = ref.read(sessionMessageTypistProvider);
+    final typist = ref.read(sessionInputProvider);
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
@@ -113,7 +113,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     try {
-      if (!await typist.send(sessionId, why)) {
+      if (!await typist.send(sessionId, why, requestId: newSessionInputId())) {
         messenger.showSnackBar(
           const SnackBar(
             content: Text(

@@ -379,7 +379,11 @@ class _RecordingActions extends SessionActions {
   final List<String> _sent;
 
   @override
-  Future<void> continueSession(String sessionId, String text) async =>
+  Future<void> continueSession(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async =>
       _sent.add(text);
 }
 

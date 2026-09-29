@@ -19,7 +19,11 @@ class _RecordingActions extends SessionActions {
   final sent = <String>[];
 
   @override
-  Future<void> continueSession(String sessionId, String text) async {
+  Future<void> continueSession(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
     if (fail) throw StateError('the pane is gone');
     sent.add(text);
   }
