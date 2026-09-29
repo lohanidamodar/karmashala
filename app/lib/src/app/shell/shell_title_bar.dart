@@ -19,10 +19,12 @@ import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_state.dart';
 
-/// **The title bar** (UI overhaul spec §4, board A2): the `>_` mark and the
-/// app's name, one menu glyph for Workspace / View / Tools, the quick panel
-/// field, each account's usage, then New and the window's toggles. The
-/// terminal's own verbs moved to View ▸ Terminal and their chords.
+/// **The title bar** (UI overhaul spec §4, board A2): one menu glyph for
+/// Workspace / View / Tools, the quick panel field, each account's usage, then
+/// New and the window's toggles. No mark or name of its own: the window's
+/// title bar above it already says Karmashala on every platform (owner,
+/// 2026-09-29). The terminal's own verbs moved to View ▸ Terminal and their
+/// chords.
 /// Under 600 px (§5, Compact) the strip is a glyph too, and a tab switcher
 /// stands where the field and the usage were.
 class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
@@ -35,30 +37,9 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size.fromHeight(height);
 
-  /// The mark, the name and the gap after them at 1x text: the only part of
-  /// the row, besides the field, that grows with the text scale.
-  static const _brandWidth = 112.0;
-
-  /// Everything else in the row, which does not grow: padding, gaps, the menu
-  /// glyph, New, the two toggles and room for both session badges.
-  static const _glyphsWidth = 232.0;
-
-  /// The least the quick panel field is left before the name gives way to it:
-  /// a field with room for its placeholder is worth more than the name.
-  static const _fieldFloor = 160.0;
-
-  /// Whether a row [width] wide still has room for the app's name beside the
-  /// mark. The mark itself always stays; only the word folds.
-  static bool showsName(double width, TextScaler textScaler) =>
-      width >=
-      WidthClass.scaleBreakpoint(_brandWidth, textScaler) +
-          _glyphsWidth +
-          _fieldFloor;
-
   @override
   Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
-    final textScaler = MediaQuery.textScalerOf(context);
     // The window's class, not the row's: the row is a few pixels narrower,
     // and the bar must agree with the body below it about whether the strip
     // is still there.
@@ -110,17 +91,13 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
               );
             }
-            // Board A2: the mark and the name, the menus behind one glyph,
+            // Board A2 without its mark and name: the menus behind one glyph,
             // the field, then the accounts' usage at the right. On macOS the
             // menus live in the system menu bar (NativeShellMenus) and the
             // traffic lights keep the corner, so neither is drawn here.
             return Row(
               children: [
                 if (!useNativeMenus) ...[
-                  _Brand(
-                    showName: showsName(constraints.maxWidth, textScaler),
-                  ),
-                  const SizedBox(width: Insets.xs),
                   const ShellMenuButton(),
                   const SizedBox(width: Insets.sm),
                 ],
@@ -135,49 +112,6 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-/// **The mark and the name** (board A2): the accent `>_` glyph and
-/// "Karmashala" at 13/600. The name folds away on a row too narrow for it;
-/// the mark stays, so the corner never reads as empty.
-class _Brand extends StatelessWidget {
-  const _Brand({required this.showName});
-
-  final bool showName;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      header: true,
-      label: 'Karmashala',
-      excludeSemantics: true,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            AppIcons.terminal,
-            size: Chrome.icon,
-            color: theme.colorScheme.primary,
-          ),
-          if (showName) ...[
-            const SizedBox(width: Insets.sm),
-            Text(
-              'Karmashala',
-              maxLines: 1,
-              softWrap: false,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-          ],
-          const SizedBox(width: Insets.xs),
-        ],
       ),
     );
   }
