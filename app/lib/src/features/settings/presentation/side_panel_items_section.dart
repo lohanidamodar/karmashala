@@ -13,7 +13,8 @@ import 'settings_section.dart';
 
 /// Settings → Appearance → Sidebar & context panel: which tools the context
 /// panel's **More** menu lists, and how much a project row in the sidebar
-/// says. The same list as Tools in More.
+/// says. This is the one place to choose them: the View menu's copy, Tools in
+/// More, went on 2026-09-29 (one place per control).
 ///
 /// Only More's own tools are listed: Changes, Repo and History are tabs, and
 /// taking one out of More never touched them, so a box for them would do

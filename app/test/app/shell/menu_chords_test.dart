@@ -145,25 +145,6 @@ void main() {
     }
   });
 
-  testWidgets('the View menu shows the inbox chord it always had', (
-    tester,
-  ) async {
-    // Ctrl+Shift+A has opened the inbox since it was bound; the menu just
-    // never drew it, so the only way to learn it was to read the source. This
-    // labels a key that already works rather than claiming a new one — and the
-    // other side-panel surfaces stay bare, which is the whole point.
-    await pumpShell(tester);
-    final view = await chordsIn(tester, 'View');
-    final inbox = view.where((e) => e.$1 == 'Inbox').single.$2;
-    expect(inbox.trigger, LogicalKeyboardKey.keyA);
-    expect(inbox.shift, isTrue);
-    expect(
-      view.where((e) => e.$1 == 'Changes' || e.$1 == 'Todos'),
-      isEmpty,
-      reason: 'only the surface with a chord should advertise one',
-    );
-  });
-
   testWidgets('Ctrl+N is offered back to the shell, Ctrl+Shift+N is not', (
     tester,
   ) async {

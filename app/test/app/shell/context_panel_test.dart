@@ -223,6 +223,8 @@ void main() {
 
       await tester.tap(find.text('View'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('More'));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.ancestor(
           of: find.text('Media'),
@@ -248,52 +250,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(visibleSidePanelProvider), SidePanelSurface.media);
-    });
-  });
-
-  group('the View menu', () {
-    Future<void> openSubmenu(WidgetTester tester) async {
-      await tester.tap(find.text('View'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Side panel items'));
-      await tester.pumpAndSettle();
-    }
-
-    CheckboxMenuButton item(WidgetTester tester, String label) =>
-        tester.widget<CheckboxMenuButton>(
-          find.ancestor(
-            of: find.text(label),
-            matching: find.byType(CheckboxMenuButton),
-          ),
-        );
-
-    testWidgets('lists every surface with a check, and toggles one', (
-      tester,
-    ) async {
-      await pumpApp(tester, hidden: ['plan']);
-      await openSubmenu(tester);
-      expect(item(tester, 'Plan').value, isFalse);
-      expect(item(tester, 'Media').value, isTrue);
-
-      await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Media'));
-      await tester.pumpAndSettle();
-      expect(stored(), ['media', 'plan']);
-
-      await openSubmenu(tester);
-      await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Plan'));
-      await tester.pumpAndSettle();
-      expect(stored(), ['media']);
-    });
-
-    testWidgets('Show all is there, and disabled when nothing is hidden', (
-      tester,
-    ) async {
-      await pumpApp(tester);
-      await openSubmenu(tester);
-      final showAll = tester.widget<MenuItemButton>(
-        find.widgetWithText(MenuItemButton, 'Show all'),
-      );
-      expect(showAll.onPressed, isNull);
     });
   });
 }

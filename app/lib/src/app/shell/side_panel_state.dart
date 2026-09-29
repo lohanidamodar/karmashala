@@ -143,9 +143,9 @@ enum SidePanelSurface {
   ];
 }
 
-/// The surfaces the user took out of the More menu. Only More and the lists
-/// that toggle it read this; the View menu, quick open and every chord still
-/// open a hidden surface.
+/// The surfaces the user took out of the More menu. Only More and the Settings
+/// list that toggles it read this; the View menu, quick open and every chord
+/// still open a hidden surface.
 final hiddenSidePanelSurfacesProvider = Provider<Set<SidePanelSurface>>(
   (ref) => {
     for (final id in ref.watch(

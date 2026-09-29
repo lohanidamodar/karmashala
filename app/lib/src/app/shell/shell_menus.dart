@@ -22,7 +22,6 @@ import 'shell_menu_items.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 import 'side_panel.dart';
-import 'shell_area.dart';
 import 'side_panel_state.dart';
 import 'workbench_tabs.dart';
 
@@ -52,21 +51,19 @@ class ShellMenuActions {
     if (system != null) unawaited(system.quit());
   }
 
-  void toggleExplorer() =>
+  void toggleSidebar() =>
       _ref.read(shellControllerProvider.notifier).toggleExplorerPane();
 
   void toggleSidePanel() => _ref.read(sidePanelProvider.notifier).toggle();
 
+  /// What pressing one of the context panel's tabs does: opens it, never
+  /// closes it.
+  void showContextTab(ContextTab tab) =>
+      _ref.read(sidePanelProvider.notifier).showTab(tab);
+
+  /// What picking a surface from the panel's More menu does.
   void showSurface(SidePanelSurface surface) =>
-      _ref.read(sidePanelProvider.notifier).select(surface);
-
-  void setSurfaceHidden(SidePanelSurface surface, {required bool hidden}) =>
-      _ref
-          .read(settingsControllerProvider.notifier)
-          .setSidePanelSurfaceHidden(surface.name, hidden: hidden);
-
-  void showAllSurfaces() =>
-      _ref.read(settingsControllerProvider.notifier).showAllSidePanelSurfaces();
+      _ref.read(sidePanelProvider.notifier).show(surface);
 
   void toggleFocusMode() =>
       _ref.read(terminalMaximizedProvider.notifier).toggle();
@@ -268,154 +265,216 @@ class WorkspaceMenu extends StatelessWidget {
   );
 }
 
-/// What the window shows: the sidebar, the context panel and its surfaces, the
-/// terminal's verbs, and Zen.
+/// One row of the View menu. Both menu bars draw the same list — the window's
+/// own ([ViewMenu]) and the macOS one (`NativeShellMenus`) — from
+/// [viewMenuSections], so the two cannot drift.
+sealed class ViewMenuEntry {
+  const ViewMenuEntry();
+}
+
+class ViewMenuCommand extends ViewMenuEntry {
+  const ViewMenuCommand({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.command,
+    this.checked,
+    this.nativeLabel,
+  });
+
+  final String label;
+  final IconData icon;
+
+  /// Null while there is nothing for it to act on.
+  final VoidCallback? onPressed;
+
+  /// The shell command whose chord the row names — read from the keymap, so a
+  /// rebound key is the one shown.
+  final String? command;
+
+  /// A toggle's state, drawn as a check in the window's menu.
+  final bool? checked;
+
+  /// What the macOS menu bar says instead: it draws no check mark, so a toggle
+  /// there names what it will do.
+  final String? nativeLabel;
+}
+
+class ViewMenuSubmenu extends ViewMenuEntry {
+  const ViewMenuSubmenu({
+    required this.label,
+    required this.icon,
+    required this.entries,
+  });
+
+  final String label;
+  final IconData icon;
+  final List<ViewMenuEntry> entries;
+}
+
+/// **The View menu**, as groups between dividers: what the window shows.
+///
+/// One row per control. The strip's areas are not here — the strip is their
+/// one place and its tooltips name Ctrl 1…5 — and neither is which tools More
+/// lists, a preference that lives in Settings › Appearance › Sidebar & context
+/// panel. The context panel is listed the way it is drawn: its toggle, its
+/// three tabs, and More.
+List<List<ViewMenuEntry>> viewMenuSections(
+  WidgetRef ref,
+  ShellMenuActions actions,
+) {
+  final sidebar = ref.watch(
+    shellControllerProvider.select((s) => s.explorerPaneVisible),
+  );
+  final zen = ref.watch(terminalMaximizedProvider);
+  final hasRoom = ref.watch(sidePanelRoomProvider);
+  final panel = ref.watch(
+    visibleSidePanelProvider.select((panel) => panel != null),
+  );
+  final hasTerminal = ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
+  );
+  final more = [
+    for (final surface in SidePanelSurface.offered(
+      debugMode: ref.watch(
+        settingsControllerProvider.select((s) => s.debugMode),
+      ),
+      notesEnabled: ref.watch(notesEnabledProvider),
+    ))
+      if (ContextTab.of(surface) == ContextTab.more) surface,
+  ];
+  VoidCallback? withRoom(VoidCallback verb) => hasRoom ? verb : null;
+  VoidCallback? withTerminal(VoidCallback verb) => hasTerminal ? verb : null;
+
+  return [
+    [
+      ViewMenuCommand(
+        label: 'Sidebar',
+        nativeLabel: sidebar ? 'Hide sidebar' : 'Show sidebar',
+        icon: AppIcons.treeStructure,
+        checked: sidebar,
+        // The chord that works everywhere — Ctrl+Shift+B, not the Ctrl+B that
+        // belongs to tmux inside a pane (the skip-shell chord wins the label).
+        command: 'view.toggleExplorer',
+        onPressed: actions.toggleSidebar,
+      ),
+      ViewMenuCommand(
+        label: 'Zen',
+        nativeLabel: zen ? 'Leave Zen' : 'Enter Zen',
+        icon: AppIcons.arrowsOutSimple,
+        checked: zen,
+        // Zen's own chord (spec §5): the older Ctrl+\ still works, but a shell
+        // reads it as SIGQUIT.
+        command: 'view.toggleFocusMode',
+        onPressed: actions.toggleFocusMode,
+      ),
+    ],
+    [
+      ViewMenuCommand(
+        label: hasRoom
+            ? 'Context panel'
+            : 'Context panel  ·  $kSidePanelNoRoom',
+        nativeLabel: hasRoom
+            ? (panel ? 'Hide context panel' : 'Show context panel')
+            : null,
+        icon: AppIcons.sidebarSimple,
+        checked: panel,
+        // Ctrl+Alt+B. The macOS bar used to draw ⌘3 here, which is the third
+        // strip area, Terminals.
+        command: 'view.toggleSidePanel',
+        onPressed: withRoom(actions.toggleSidePanel),
+      ),
+      for (final tab in [
+        ContextTab.changes,
+        ContextTab.repo,
+        ContextTab.history,
+      ])
+        ViewMenuCommand(
+          label: tab.label,
+          icon: SidePanel.iconFor(tab.surface!),
+          onPressed: withRoom(() => actions.showContextTab(tab)),
+        ),
+      // Every tool More can show, hidden from its menu or not: taking one out
+      // of More is not switching it off.
+      ViewMenuSubmenu(
+        label: ContextTab.more.label,
+        icon: AppIcons.dotsThree,
+        entries: [
+          for (final surface in more)
+            ViewMenuCommand(
+              label: surface.label,
+              icon: SidePanel.iconFor(surface),
+              onPressed: withRoom(() => actions.showSurface(surface)),
+            ),
+        ],
+      ),
+    ],
+    [
+      // The focused terminal's own verbs. They left the title bar (spec §4:
+      // find, usage and nothing else); each keeps its chord, and here its name.
+      ViewMenuSubmenu(
+        label: 'Terminal',
+        icon: AppIcons.terminal,
+        entries: [
+          ViewMenuCommand(
+            label: 'Find in scrollback',
+            icon: AppIcons.magnifyingGlass,
+            command: 'terminal.find',
+            onPressed: withTerminal(actions.findInScrollback),
+          ),
+          ViewMenuCommand(
+            label: 'Command snippets',
+            icon: AppIcons.bookBookmark,
+            command: 'quickOpen.snippets',
+            onPressed: withTerminal(actions.commandSnippets),
+          ),
+          ViewMenuCommand(
+            label: 'Commands run here…',
+            icon: AppIcons.clockCounterClockwise,
+            onPressed: withTerminal(actions.commandsRun),
+          ),
+        ],
+      ),
+    ],
+  ];
+}
+
+/// The View menu in the window's own menu bar.
 class ViewMenu extends ConsumerWidget {
   const ViewMenu(this.actions, {super.key});
 
   final ShellMenuActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasRoom = ref.watch(sidePanelRoomProvider);
-    final surfaces = SidePanelSurface.offered(
-      debugMode: ref.watch(
-        settingsControllerProvider.select((s) => s.debugMode),
-      ),
-      notesEnabled: ref.watch(notesEnabledProvider),
-    );
-    return ShellSubmenu(
-      label: 'View',
-      icon: AppIcons.eye,
-      menuChildren: [
-        _ExplorerCheckItem(actions),
-        _SidePanelCheckItem(actions),
-        _FocusModeCheckItem(actions),
-        const ShellMenuDivider(),
-        // The Inbox is an area of the activity strip; the menu names the chord
-        // that reaches it, which it has had since it was bound.
-        ShellMenuItem(
-          label: 'Inbox',
-          icon: AppIcons.tray,
-          shortcut: shellCommandLabel('attention.toggleInbox'),
-          onPressed: () => showShellArea(ref, ShellArea.inbox),
-        ),
-        // The terminal's verbs left the title bar (spec §4: find, usage and
-        // nothing else); each keeps its chord, and here its name.
-        _TerminalSubmenu(actions),
-        const ShellMenuDivider(),
-        // The surfaces the context panel can show, so every tool is reachable
-        // from the menu. They stay bare: more chords is more keys taken.
-        const ShellMenuHeader('Context panel'),
-        for (final surface in surfaces)
-          ShellMenuItem(
-            label: surface.label,
-            icon: SidePanel.iconFor(surface),
-            onPressed: hasRoom ? () => actions.showSurface(surface) : null,
-          ),
-        _SidePanelItemsSubmenu(actions),
+  Widget build(BuildContext context, WidgetRef ref) => ShellSubmenu(
+    label: 'View',
+    icon: AppIcons.eye,
+    menuChildren: [
+      for (final (index, section) in viewMenuSections(
+        ref,
+        actions,
+      ).indexed) ...[
+        if (index > 0) const ShellMenuDivider(),
+        for (final entry in section) _viewMenuRow(entry),
       ],
-    );
-  }
-}
-
-class _ExplorerCheckItem extends ConsumerWidget {
-  const _ExplorerCheckItem(this.actions);
-
-  final ShellMenuActions actions;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => ShellMenuItem(
-    label: 'Sidebar',
-    icon: AppIcons.treeStructure,
-    checked: ref.watch(
-      shellControllerProvider.select((s) => s.explorerPaneVisible),
-    ),
-    // The chord that works everywhere — Ctrl+Shift+B, not the Ctrl+B that
-    // belongs to tmux inside a pane (the skip-shell chord wins the label).
-    shortcut: shellCommandLabel('view.toggleExplorer'),
-    onPressed: actions.toggleExplorer,
+    ],
   );
 }
 
-class _SidePanelCheckItem extends ConsumerWidget {
-  const _SidePanelCheckItem(this.actions);
-
-  final ShellMenuActions actions;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasRoom = ref.watch(sidePanelRoomProvider);
-    return ShellMenuItem(
-      label: hasRoom ? 'Context panel' : 'Context panel  ·  $kSidePanelNoRoom',
-      icon: AppIcons.sidebarSimple,
-      checked: ref.watch(
-        visibleSidePanelProvider.select((panel) => panel != null),
-      ),
-      // The chord the title bar's side-panel toggle names. The menu used to
-      // draw Ctrl+3, which is the third activity-strip area, not this.
-      shortcut: shellCommandLabel('view.toggleSidePanel'),
-      onPressed: hasRoom ? actions.toggleSidePanel : null,
-    );
-  }
-}
-
-/// Which tools the context panel's More tab lists — the same list as Settings
-/// › Appearance › Sidebar & context panel. Hiding changes a preference, not
-/// the panel, so it needs no room.
-class _SidePanelItemsSubmenu extends ConsumerWidget {
-  const _SidePanelItemsSubmenu(this.actions);
-
-  final ShellMenuActions actions;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
-    final surfaces = SidePanelSurface.offered(
-      debugMode: ref.watch(
-        settingsControllerProvider.select((s) => s.debugMode),
-      ),
-      notesEnabled: ref.watch(notesEnabledProvider),
-    );
-    return ShellSubmenu(
-      label: 'Tools in More',
-      icon: AppIcons.dotsThree,
-      menuChildren: [
-        for (final surface in surfaces)
-          ShellMenuCheckItem(
-            label: surface.label,
-            icon: SidePanel.iconFor(surface),
-            checked: !hidden.contains(surface),
-            onChanged: (visible) =>
-                actions.setSurfaceHidden(surface, hidden: !visible),
-          ),
-        const ShellMenuDivider(),
-        ShellMenuItem(
-          label: 'Show all',
-          icon: AppIcons.arrowCounterClockwise,
-          onPressed: hidden.isEmpty ? null : actions.showAllSurfaces,
-        ),
-      ],
-    );
-  }
-}
-
-class _FocusModeCheckItem extends ConsumerWidget {
-  const _FocusModeCheckItem(this.actions);
-
-  final ShellMenuActions actions;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => ShellMenuItem(
-    label: 'Zen',
-    icon: AppIcons.arrowsOutSimple,
-    checked: ref.watch(terminalMaximizedProvider),
-    // Zen's own chord (spec §5), as the title bar's toggle names it: the
-    // older Ctrl+\ still works, but a shell reads it as SIGQUIT.
-    shortcut: shellCommandLabel('view.toggleFocusMode'),
-    onPressed: actions.toggleFocusMode,
-  );
-}
+Widget _viewMenuRow(ViewMenuEntry entry) => switch (entry) {
+  ViewMenuCommand() => ShellMenuItem(
+    label: entry.label,
+    icon: entry.icon,
+    checked: entry.checked,
+    shortcut: entry.command == null ? null : shellCommandLabel(entry.command!),
+    onPressed: entry.onPressed,
+  ),
+  ViewMenuSubmenu() => ShellSubmenu(
+    label: entry.label,
+    icon: entry.icon,
+    menuChildren: [for (final child in entry.entries) _viewMenuRow(child)],
+  ),
+};
 
 /// Settings and About.
 class ToolsMenu extends StatelessWidget {
@@ -446,43 +505,4 @@ class ToolsMenu extends StatelessWidget {
       ),
     ],
   );
-}
-
-/// The focused terminal's own verbs: find in its scrollback, the snippets, and
-/// the commands it has run. Takes the host's [actions]: its own context lives
-/// in the menu, and is gone by the time a dialog needs it.
-class _TerminalSubmenu extends ConsumerWidget {
-  const _TerminalSubmenu(this.actions);
-
-  final ShellMenuActions actions;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasTabs = ref.watch(
-      terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
-    );
-    return ShellSubmenu(
-      label: 'Terminal',
-      icon: AppIcons.terminal,
-      menuChildren: [
-        ShellMenuItem(
-          label: 'Find in scrollback',
-          icon: AppIcons.magnifyingGlass,
-          shortcut: shellCommandLabel('terminal.find'),
-          onPressed: hasTabs ? actions.findInScrollback : null,
-        ),
-        ShellMenuItem(
-          label: 'Command snippets',
-          icon: AppIcons.bookBookmark,
-          shortcut: shellCommandLabel('quickOpen.snippets'),
-          onPressed: hasTabs ? actions.commandSnippets : null,
-        ),
-        ShellMenuItem(
-          label: 'Commands run here…',
-          icon: AppIcons.clockCounterClockwise,
-          onPressed: hasTabs ? actions.commandsRun : null,
-        ),
-      ],
-    );
-  }
 }

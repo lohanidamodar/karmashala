@@ -748,13 +748,20 @@ String? shellChordLabel<T extends Intent>({bool Function(T intent)? where}) {
 /// How the keys that run [command] are written, after the user's keymap; null
 /// when nothing is bound to it. Where there are two, the one that survives a
 /// focused pane wins, as in [shellChordLabel].
-String? shellCommandLabel(String command) {
+String? shellCommandLabel(String command) => _commandChord(command)?.label;
+
+/// The keys that run [command], after the user's keymap — what the macOS menu
+/// bar is handed, so it shows the chord the in-window menu names.
+SingleActivator? shellCommandActivator(String command) =>
+    _commandChord(command)?.activator;
+
+ShellChord? _commandChord(String command) {
   ShellChord? best;
   for (final chord in shellChords) {
     if (chord.command != command) continue;
     if (best == null || (!best.skipsShell && chord.skipsShell)) best = chord;
   }
-  return best?.label;
+  return best;
 }
 
 /// The app chord [event] is, when a focused terminal pane must not consume it.

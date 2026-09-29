@@ -91,7 +91,8 @@ void main() {
 
     expect(
       [for (final menu in captured.menus) (menu as PlatformMenu).label],
-      ['Karmashala', 'Workspace', 'View', 'Tools', 'Window'],
+      // No Tools: Settings and About are the app menu's on a Mac.
+      ['Karmashala', 'Workspace', 'View', 'Window'],
     );
     expect(find.text('Workspace'), findsNothing, reason: 'no in-window bar');
     final labels = [for (final item in _all(captured.menus)) item.label];
@@ -116,14 +117,35 @@ void main() {
         _all(captured.menus).firstWhere((i) => i.label == label);
 
     expect(container.read(shellControllerProvider).explorerPaneVisible, isTrue);
-    item('Hide Explorer').onSelected!();
+    item('Hide sidebar').onSelected!();
     await tester.pumpAndSettle();
 
     expect(
       container.read(shellControllerProvider).explorerPaneVisible,
       isFalse,
     );
-    expect(_all(captured.menus).map((i) => i.label), contains('Show Explorer'));
+    expect(_all(captured.menus).map((i) => i.label), contains('Show sidebar'));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+  testWidgets('View lists each control once, with the keymap\'s chords', (
+    tester,
+  ) async {
+    await pumpMac(tester);
+    final view = captured.menus.whereType<PlatformMenu>().firstWhere(
+      (m) => m.label == 'View',
+    );
+    final labels = [for (final item in _all(view.menus)) item.label];
+    for (final label in ['Inbox', 'Tools in More', 'Show Explorer']) {
+      expect(labels, isNot(contains(label)));
+    }
+    expect(labels.where((l) => l == 'Media'), hasLength(1));
+
+    final panel = _all(
+      view.menus,
+    ).firstWhere((i) => i.label.endsWith('context panel'));
+    final chord = panel.shortcut! as SingleActivator;
+    expect(chord.trigger, LogicalKeyboardKey.keyB, reason: 'not ⌘3, Terminals');
+    expect(chord.alt, isTrue);
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('elsewhere the window keeps its own menu bar', (tester) async {
