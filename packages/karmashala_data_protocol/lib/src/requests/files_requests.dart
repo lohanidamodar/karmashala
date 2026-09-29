@@ -75,6 +75,10 @@ DataRequest<Object?>? _filesRequestFromJson(String kind, _Arguments args) =>
         args.string('environmentId'),
         args.string('uploadId'),
       ),
+      FilesUploadAbort.name => FilesUploadAbort(
+        args.string('environmentId'),
+        args.string('uploadId'),
+      ),
       _ => null,
     };
 
@@ -543,6 +547,29 @@ final class FilesUploadCommit extends FilesWorkRequest<EnvironmentPath>
   const FilesUploadCommit(this.environmentId, this.uploadId);
 
   static const String name = 'files.upload.commit';
+
+  @override
+  final String environmentId;
+  final String uploadId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'uploadId': uploadId,
+  };
+}
+
+/// Upload [uploadId] will not be finished: its staged part is deleted now,
+/// not when the link closes. An unknown id is not an error. Announced as the
+/// `files.upload.abort` feature; an older server refuses it `invalid`.
+final class FilesUploadAbort extends FilesWorkRequest<DataAck>
+    with _AnswersAck {
+  const FilesUploadAbort(this.environmentId, this.uploadId);
+
+  static const String name = 'files.upload.abort';
 
   @override
   final String environmentId;

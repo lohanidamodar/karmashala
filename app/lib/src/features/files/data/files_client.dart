@@ -48,9 +48,13 @@ class FilesStaleException extends FilesException {
 class FilesClient {
   /// [readsServerDisk] is `capabilitiesProvider`'s answer, asked per call;
   /// without one, the data client's own.
-  FilesClient(this._client, {bool Function()? readsServerDisk})
-    : _readsServerDisk =
-          readsServerDisk ?? (() => _client.serverOnThisMachine) {
+  FilesClient(
+    this._client, {
+    bool Function()? readsServerDisk,
+    bool Function()? abortsUploads,
+  }) : _readsServerDisk =
+           readsServerDisk ?? (() => _client.serverOnThisMachine),
+       _abortsUploads = abortsUploads ?? (() => false) {
     _changes = _client.fileChanges.listen(_changed);
     _connection = _client.connectionChanges.listen((connection) {
       // A new link watches nothing: ask again for everything still wanted.
@@ -81,6 +85,9 @@ class FilesClient {
   /// Whether the server's disk is this machine's: then a file it reaches with
   /// `dart:io` opens here too, by the path [localPathOf] answers.
   final bool Function() _readsServerDisk;
+
+  /// Whether the server offers `files.upload.abort`.
+  final bool Function() _abortsUploads;
 
   Future<void> dispose() async {
     await _changes.cancel();
@@ -261,23 +268,37 @@ class FilesClient {
       sent += bytes.length;
     }
 
-    await for (final piece in content) {
-      pending.add(piece);
-      while (pending.length >= kFileChunkBytes) {
-        final all = pending.takeBytes();
-        pending.add(Uint8List.sublistView(all, kFileChunkBytes));
-        await _send(
-          FilesUploadChunk(
-            environmentId,
-            id,
-            offset: sent,
-            bytes: Uint8List.sublistView(all, 0, kFileChunkBytes),
+    try {
+      await for (final piece in content) {
+        pending.add(piece);
+        while (pending.length >= kFileChunkBytes) {
+          final all = pending.takeBytes();
+          pending.add(Uint8List.sublistView(all, kFileChunkBytes));
+          await _send(
+            FilesUploadChunk(
+              environmentId,
+              id,
+              offset: sent,
+              bytes: Uint8List.sublistView(all, 0, kFileChunkBytes),
+            ),
+          );
+          sent += kFileChunkBytes;
+        }
+      }
+      if (pending.isNotEmpty) await flush();
+    } catch (_) {
+      // A cancel or a failed read: an older server keeps the staged part
+      // until the link closes.
+      if (_abortsUploads()) {
+        unawaited(
+          _send(FilesUploadAbort(environmentId, id)).then<void>(
+            (_) {},
+            onError: (Object _) {},
           ),
         );
-        sent += kFileChunkBytes;
       }
+      rethrow;
     }
-    if (pending.isNotEmpty) await flush();
     final landed = await _send(FilesUploadCommit(environmentId, id));
     _touch(parentOf(landed));
     return landed;
@@ -381,6 +402,8 @@ final filesClientProvider = Provider<FilesClient>((ref) {
   final files = FilesClient(
     ref.watch(dataClientProvider),
     readsServerDisk: () => ref.read(capabilitiesProvider).readsServerDisk,
+    abortsUploads: () =>
+        ref.read(capabilitiesProvider).serverOffers('files.upload.abort'),
   );
   ref.onDispose(files.dispose);
   return files;

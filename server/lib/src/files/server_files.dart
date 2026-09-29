@@ -273,6 +273,13 @@ class ServerFiles implements FilesWork {
         } finally {
           await upload.discard();
         }
+      case FilesUploadAbort(:final uploadId):
+        final upload = _uploads[uploadId];
+        if (upload != null && identical(upload.link, link)) {
+          _uploads.remove(uploadId);
+          await upload.discard();
+        }
+        return const DataAck();
     }
   }
 

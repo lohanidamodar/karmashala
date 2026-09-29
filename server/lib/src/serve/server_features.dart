@@ -34,4 +34,7 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.media`: a session's pictures, extracted here; their bytes come
   // through `files.read` (Stage 0 step 10).
   'sessions.media',
+  // `files.upload.abort`: a cancelled upload's staged part is deleted at
+  // once, not when the link closes.
+  'files.upload.abort',
 };
