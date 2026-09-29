@@ -18,6 +18,7 @@ import 'activity_strip.dart' show ActivityStrip;
 import 'context_sheet.dart';
 import 'phone_ask_banner.dart';
 import 'phone_more_page.dart';
+import 'phone_routes.dart';
 import 'phone_top_bar.dart';
 import 'shell_area.dart';
 import 'shell_compact_bar.dart' show ShellTabSwitcher;
@@ -108,9 +109,45 @@ class PhoneShell extends ConsumerStatefulWidget {
   ConsumerState<PhoneShell> createState() => _PhoneShellState();
 }
 
-class _PhoneShellState extends ConsumerState<PhoneShell> {
+class _PhoneShellState extends ConsumerState<PhoneShell>
+    implements PhoneShellRoutes {
   final _tabKeys = {for (final tab in PhoneTab.values) tab: GlobalKey()};
   final _moreNavigator = GlobalKey<NavigatorState>();
+
+  /// Held from [initState]: `ref` is not readable in [dispose].
+  late final PhoneShellRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = ref.read(phoneShellRouterProvider)..attach(this);
+  }
+
+  @override
+  void dispose() {
+    _router.detach(this);
+    super.dispose();
+  }
+
+  @override
+  void showWorkbench() => openPhoneWorkbench(ref);
+
+  @override
+  void showProjects() {
+    ref.read(phoneWorkbenchProvider.notifier).close();
+    ref.read(phoneTabProvider.notifier).select(PhoneTab.projects);
+  }
+
+  @override
+  void showMore(PhoneMoreEntry entry) {
+    ref.read(phoneWorkbenchProvider.notifier).close();
+    ref.read(phoneTabProvider.notifier).select(PhoneTab.more);
+    final navigator = _moreNavigator.currentState;
+    if (navigator == null) return;
+    navigator
+      ..popUntil((route) => route.isFirst)
+      ..push(PhoneMoreList.routeFor(entry));
+  }
 
   void _pick(PhoneTab tab) {
     if (ref.read(phoneTabProvider) == tab) {

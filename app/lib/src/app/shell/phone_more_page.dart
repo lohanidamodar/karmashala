@@ -13,6 +13,8 @@ import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
 import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
+import 'phone_log_page.dart';
+import 'phone_routes.dart';
 import 'phone_shell.dart' show PhoneTabsScope;
 
 /// The phone's More tab: what the desktop's strip keeps below its areas.
@@ -20,42 +22,62 @@ import 'phone_shell.dart' show PhoneTabsScope;
 class PhoneMoreList extends StatelessWidget {
   const PhoneMoreList({super.key});
 
-  static final _entries = <(String, IconData, WidgetBuilder)>[
-    ('Usage', AppIcons.chartBar, _usage),
-    // The page's app bar names it, so its own header drops the name.
-    (
-      'Notes',
-      AppIcons.note,
-      (_) => const PaneTitleOverride(child: NotesView()),
-    ),
-    ('Settings', AppIcons.gearSix, (_) => const SettingsTabView()),
-    (
-      'Machines',
-      AppIcons.wifiHigh,
-      (_) => const _SettingsSectionPage(child: MachinesSection()),
-    ),
-    (
-      'About',
-      AppIcons.info,
-      (_) => const _SettingsSectionPage(child: AboutSection()),
-    ),
-  ];
+  static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
+      switch (entry) {
+        PhoneMoreEntry.usage => ('Usage', AppIcons.chartBar, _usage),
+        // The page's app bar names it, so its own header drops the name.
+        PhoneMoreEntry.notes => (
+          'Notes',
+          AppIcons.note,
+          (_) => const PaneTitleOverride(child: NotesView()),
+        ),
+        PhoneMoreEntry.settings => (
+          'Settings',
+          AppIcons.gearSix,
+          (_) => const SettingsTabView(),
+        ),
+        PhoneMoreEntry.machines => (
+          'Machines',
+          AppIcons.wifiHigh,
+          (_) => const _SettingsSectionPage(child: MachinesSection()),
+        ),
+        PhoneMoreEntry.log => (
+          'Log',
+          AppIcons.article,
+          (_) => const PhoneLogPage(),
+        ),
+        PhoneMoreEntry.about => (
+          'About',
+          AppIcons.info,
+          (_) => const _SettingsSectionPage(child: AboutSection()),
+        ),
+      };
+
+  /// [entry]'s page, as its row pushes it.
+  static Route<void> routeFor(PhoneMoreEntry entry) {
+    final (label, _, page) = _entry(entry);
+    return _route(label, page);
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(automaticallyImplyLeading: false, title: const Text('More')),
     body: ListView(
       children: [
-        for (final (label, icon, page) in _entries)
-          ListTile(
-            leading: Icon(icon),
-            title: Text(label),
-            trailing: const Icon(AppIcons.caretRight),
-            onTap: () => Navigator.of(context).push(_route(label, page)),
-          ),
+        for (final entry in PhoneMoreEntry.values) _tile(context, entry),
       ],
     ),
   );
+
+  static Widget _tile(BuildContext context, PhoneMoreEntry entry) {
+    final (label, icon, page) = _entry(entry);
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      trailing: const Icon(AppIcons.caretRight),
+      onTap: () => Navigator.of(context).push(_route(label, page)),
+    );
+  }
 
   // Under the page's app bar, which names it: its own header drops the name.
   static Widget _usage(BuildContext _) =>
