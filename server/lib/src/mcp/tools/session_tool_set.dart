@@ -74,11 +74,18 @@ class SessionToolSet extends ServerToolSet {
     } on ArgumentError catch (error) {
       return Future.error(error);
     }
-    final held = _runsHere(sessionId);
+    // Held: one of the server's own PTYs, or its copy of an SSH box session.
+    // A held session is never resumed — its agent is still live.
+    final held = prompts.status.holds(sessionId);
+    final runsHere = _runsHere(sessionId);
     switch (tool) {
       case 'session_answer':
         // A prompt is answered off the screen of the server that runs it.
         return runTool(() {
+          if (held && !runsHere) {
+            _session(sessionId);
+            throw StateError(_onBoxRefusal('answer its prompt'));
+          }
           if (!held) {
             _session(sessionId);
             throw StateError(
@@ -119,14 +126,24 @@ class SessionToolSet extends ServerToolSet {
           () => _rename(sessionId, (arguments['title'] as String?) ?? ''),
         );
       case 'session_end':
-        return runTool(() => _end(sessionId, held: held));
+        return runTool(() {
+          if (held && !runsHere) {
+            _session(sessionId);
+            throw StateError(_onBoxRefusal('end it'));
+          }
+          return _end(sessionId, held: runsHere);
+        });
     }
     return null;
   }
 
-  /// Whether this server runs the session [sessionId] right now.
+  /// Whether this server runs the session [sessionId] in its own PTY.
   bool _runsHere(String sessionId) =>
       prompts.status.runningSessionOf(sessionId) != null;
+
+  static String _onBoxRefusal(String act) =>
+      'That session is still running on an SSH box, and this tool cannot '
+      '$act there. Nothing was done. Do it from its pane.';
 
   Session _session(String id) {
     final session = _sessions.getById(id);
@@ -332,7 +349,7 @@ class SessionToolSet extends ServerToolSet {
         ? events.sublist(events.length - capped)
         : events;
     final screen = held
-        ? prompts.status.runningSessionOf(sessionId)?.tailText(capped)
+        ? prompts.status.liveScreenOf(sessionId)?.tailText(capped)
         : null;
     final relayed = _context.write(RelaysTo(sessionId, capped));
     return <String, Object?>{
