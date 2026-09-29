@@ -12,6 +12,8 @@ import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
+import '../../features/terminal/presentation/session_host_banner.dart'
+    show RemoteResumingStrip;
 import 'activity_strip.dart' show ActivityStrip;
 import 'phone_more_page.dart';
 import 'phone_top_bar.dart';
@@ -182,25 +184,13 @@ class _PhoneShellState extends ConsumerState<PhoneShell> {
       appBar: const PhoneTopBar(),
       body: ColoredBox(
         color: SurfaceTones.of(context).side,
-        child: NavigatorPopHandler(
-          enabled: tab == PhoneTab.more && !workbench,
-          onPopWithResult: (_) => _moreNavigator.currentState?.maybePop(),
-          child: PhoneTabsScope(
-            child: IndexedStack(
-              index: tab.index,
-              children: [
-                for (final each in PhoneTab.values)
-                  KeyedSubtree(
-                    key: _tabKeys[each],
-                    child: KeyedSubtree(
-                      // Scroll offsets are kept by it across a rotation.
-                      key: PageStorageKey<String>('phone-tab-${each.name}'),
-                      child: _body(each),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Under the app bar, not above it where the status bar covers it.
+            const RemoteResumingStrip(),
+            Expanded(child: _tabStack(tab, workbench)),
+          ],
         ),
       ),
       bottomNavigationBar: _PhoneBottomBar(tab: tab, onPick: _pick),
@@ -226,6 +216,27 @@ class _PhoneShellState extends ConsumerState<PhoneShell> {
       ),
     );
   }
+
+  Widget _tabStack(PhoneTab tab, bool workbench) => NavigatorPopHandler(
+    enabled: tab == PhoneTab.more && !workbench,
+    onPopWithResult: (_) => _moreNavigator.currentState?.maybePop(),
+    child: PhoneTabsScope(
+      child: IndexedStack(
+        index: tab.index,
+        children: [
+          for (final each in PhoneTab.values)
+            KeyedSubtree(
+              key: _tabKeys[each],
+              child: KeyedSubtree(
+                // Scroll offsets are kept by it across a rotation.
+                key: PageStorageKey<String>('phone-tab-${each.name}'),
+                child: _body(each),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Sessions and Inbox carry what waits on the user, as the strip does.
@@ -290,8 +301,9 @@ class _PhoneBottomBar extends ConsumerWidget {
   }
 }
 
-/// The desktop's workbench at phone width (owner's answer 5): untuned until
-/// Stage 2. Back returns to the tabs; the workbench keeps what it shows.
+/// The session page: the desktop's workbench tuned at compact (owner's answer
+/// 5, Stage 2 step 3). Back returns to the tabs; the workbench keeps what it
+/// shows.
 class _PhoneWorkbench extends ConsumerWidget {
   const _PhoneWorkbench();
 
@@ -303,10 +315,28 @@ class _PhoneWorkbench extends ConsumerWidget {
       ),
       titleSpacing: 0,
       title: const Padding(
-        padding: EdgeInsetsDirectional.only(end: Insets.md),
+        padding: EdgeInsetsDirectional.only(end: Insets.sm),
         child: ShellTabSwitcher(),
       ),
+      actions: const [
+        WorkbenchFaceToggle(),
+        // The context panel's sheet lands here in Stage 2 step 8.
+        IconButton(
+          tooltip: 'Session context',
+          onPressed: null,
+          icon: Icon(AppIcons.dotsThreeVertical),
+        ),
+      ],
     ),
-    body: const SafeArea(top: false, child: WorkbenchView()),
+    body: const SafeArea(
+      top: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          RemoteResumingStrip(),
+          Expanded(child: CompactWorkbenchScope(child: WorkbenchView())),
+        ],
+      ),
+    ),
   );
 }
