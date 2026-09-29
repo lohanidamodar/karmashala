@@ -8,8 +8,10 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/lifecycle/relaunch.dart';
 import '../../../core/lifecycle/server_switcher.dart';
+import '../../../core/paths/app_support_directory.dart';
 import '../../../core/server/machine_pairing.dart';
 import '../../../core/util/failure_words.dart';
+import '../../explorer/application/session_list_snapshot.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../system/system_integration_service.dart';
@@ -153,7 +155,22 @@ class MachinesSection extends ConsumerWidget {
   ) async {
     final machines = ref.read(machinesProvider);
     if (machines == null) return;
-    await machines.forget(machine.hostId.value);
+    final hostId = machine.hostId.value;
+    // Its last session list goes with it, and the open one stops saving.
+    final snapshots = ref.read(activeMachineProvider)?.hostId.value == hostId
+        ? ref.read(sessionListSnapshotStoreProvider)
+        : null;
+    await machines.forget(hostId);
+    await snapshots?.discard();
+    try {
+      await SessionListSnapshotStore.deleteFor(
+        await appSupportDirectory(),
+        hostId,
+      );
+    } on Object {
+      // No folder to look in: nothing was saved.
+    }
+    if (!context.mounted) return;
     ref.invalidate(pairedMachinesProvider);
   }
 }

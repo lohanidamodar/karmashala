@@ -10,6 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../core/capabilities/capabilities.dart';
 import '../../core/lifecycle/server_switcher.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
+import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/remote/presentation/machines_section.dart'
     show AddMachineDialog;
@@ -258,15 +259,22 @@ class _NeedsYouCount extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(needsYouCountProvider);
+    // Before the server answers, the last list's count, drawn stale.
+    final stale = ref.watch(staleNeedsYouCountProvider);
+    final int count = stale ?? ref.watch(needsYouCountProvider);
     if (count == 0) return const SizedBox.shrink();
-    final attention = SemanticColors.of(context).attention;
+    final attention = stale != null
+        ? Theme.of(context).colorScheme.outline
+        : SemanticColors.of(context).attention;
     final ink = SurfaceTones.of(context).background;
+    final words = stale != null
+        ? '$count needed you when last seen'
+        : '$count need you';
     return Tooltip(
-      message: '$count need you',
+      message: words,
       child: Semantics(
         button: true,
-        label: '$count sessions need you. Show them',
+        label: '$words. Show them',
         excludeSemantics: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(Radii.pill),

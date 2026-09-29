@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/explorer_tree_provider.dart';
+import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/explorer/presentation/agents_lens.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
@@ -236,7 +237,9 @@ class _PhoneBottomBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final needsYou = ref.watch(needsYouCountProvider);
+    // Before the server answers, the count is the last list's, drawn stale.
+    final staleNeedsYou = ref.watch(staleNeedsYouCountProvider);
+    final int needsYou = staleNeedsYou ?? ref.watch(needsYouCountProvider);
     final asks = ref.watch(inboxAskCountProvider);
     final news = ref.watch(inboxHasUnseenUpdateProvider);
     final attention = SemanticColors.of(context).attention;
@@ -246,7 +249,7 @@ class _PhoneBottomBar extends ConsumerWidget {
       return switch (each) {
         PhoneTab.sessions when needsYou > 0 => Badge.count(
           count: needsYou,
-          backgroundColor: attention,
+          backgroundColor: staleNeedsYou != null ? scheme.outline : attention,
           child: glyph,
         ),
         PhoneTab.inbox when asks > 0 => Badge.count(
@@ -264,6 +267,8 @@ class _PhoneBottomBar extends ConsumerWidget {
     }
 
     String label(PhoneTab each) => switch (each) {
+      PhoneTab.sessions when needsYou > 0 && staleNeedsYou != null =>
+        'Sessions, $needsYou needed you when last seen',
       PhoneTab.sessions when needsYou > 0 => 'Sessions, $needsYou need you',
       PhoneTab.inbox when asks > 0 => 'Inbox, $asks to answer',
       PhoneTab.inbox when news => 'Inbox, new updates',
