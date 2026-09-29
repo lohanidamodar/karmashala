@@ -31,11 +31,31 @@ class ServerTranscriptWindow {
     required this.messages,
     this.absence,
     this.path,
+    this.older,
   });
 
   final int from;
   final int total;
   final List<TranscriptMessage> messages;
+
+  /// The plan and open calls in the rows before [from], as the server last
+  /// answered them; null from a server that does not (Stage 0 step 8).
+  final TranscriptDigest? older;
+
+  /// The newest plan row before [from], when [older] says.
+  TranscriptMessage? get olderPlan {
+    final row = older?.plan;
+    return row != null && row.index < from ? row.message : null;
+  }
+
+  /// The rows before [from] still open, when [older] says; oldest first.
+  List<TranscriptMessage> get olderPending => [
+    for (final row in older?.pending ?? const <TranscriptUpdate>[])
+      if (row.index < from) row.message,
+  ];
+
+  /// Whether rows before [from] may hold something [older] cannot say.
+  bool get olderUnknown => from > 0 && older == null;
 
   /// Why the server has no record to read (`TranscriptPage.absence`).
   final ChatViewEvidence? absence;
@@ -45,6 +65,24 @@ class ServerTranscriptWindow {
 
   /// Rows before [from] the server holds and this client has not asked for.
   bool get hasOlder => from > 0 && absence == null;
+}
+
+/// The tail of a record's turns, text only: [turns] are the last of [total],
+/// starting at index [from].
+class ServerTurns {
+  const ServerTurns(
+    this.turns, {
+    required this.total,
+    this.from = 0,
+    this.absence,
+  });
+
+  final List<TranscriptMessage> turns;
+  final int total;
+  final int from;
+
+  /// Why the server has no record to read.
+  final ChatViewEvidence? absence;
 }
 
 /// **Sessions' transcripts, read by the server** (`sessions.transcript`,
@@ -110,7 +148,9 @@ class ServerTranscripts {
   /// a call while one is out is dropped.
   Future<void> loadOlder(String sessionId) {
     final feed = _feeds[sessionId];
-    if (feed == null || feed.loadingOlder || !(feed.window?.hasOlder ?? false)) {
+    if (feed == null ||
+        feed.loadingOlder ||
+        !(feed.window?.hasOlder ?? false)) {
       return Future.value();
     }
     feed.loadingOlder = true;
@@ -124,6 +164,7 @@ class ServerTranscripts {
             before: feed.from,
             generation: generation,
             revision: feed.revision,
+            digest: 0,
           ),
         );
         if (page.reset || page.absence != null) {
@@ -136,7 +177,8 @@ class ServerTranscripts {
           feed
             ..messages = [...page.messages, ...feed.messages.skip(overlap)]
             ..from = page.from
-            ..total = page.total;
+            ..total = page.total
+            ..digest = page.digest ?? feed.digest;
           // The revision stays: it names what the held rows are current to,
           // and these older ones are newer still.
         }
@@ -169,6 +211,52 @@ class ServerTranscripts {
       out.addAll(page.messages);
       after = page.from + page.messages.length;
       if (!page.hasNewer || page.messages.isEmpty) return out;
+    }
+  }
+
+  /// The tail of session [sessionId]'s turns, text only
+  /// (`sessions.transcript.turns`): paged back until [enough] says the rows
+  /// held, oldest first, suffice or the record begins. [progress] is told
+  /// the rows held of the total after each page. Throws [DataRefused].
+  Future<ServerTurns> turns(
+    String sessionId, {
+    bool spoken = false,
+    required bool Function(List<TranscriptMessage> held) enough,
+    void Function(int held, int total)? progress,
+  }) async {
+    // A record replaced mid-read starts over; twice more at most.
+    for (var attempt = 0; ; attempt++) {
+      final tail = (await _client.send(
+        SessionTranscriptTurns(sessionId, spoken: spoken),
+      )).value;
+      if (tail.absence != null) {
+        return ServerTurns(const [], total: 0, absence: tail.absence);
+      }
+      var rows = tail.messages;
+      var from = tail.from;
+      progress?.call(rows.length, tail.total);
+      var replaced = false;
+      while (from > 0 && !enough(rows)) {
+        final page = (await _client.send(
+          SessionTranscriptTurns(
+            sessionId,
+            spoken: spoken,
+            before: from,
+            generation: tail.generation,
+          ),
+        )).value;
+        if (page.reset || page.generation != tail.generation) {
+          replaced = true;
+          break;
+        }
+        if (page.messages.isEmpty) break;
+        rows = [...page.messages, ...rows];
+        from = page.from;
+        progress?.call(rows.length, tail.total);
+      }
+      if (!replaced || attempt >= 2) {
+        return ServerTurns(rows, total: tail.total, from: from);
+      }
     }
   }
 
@@ -272,8 +360,9 @@ class ServerTranscripts {
                   after: feed.from + feed.messages.length,
                   generation: generation,
                   revision: feed.revision,
+                  digest: feed.from,
                 )
-              : SessionTranscriptRead(feed.sessionId),
+              : SessionTranscriptRead(feed.sessionId, digest: 0),
         );
         if (!holding || page.reset || page.absence != null) {
           _replace(feed, page);
@@ -310,7 +399,8 @@ class ServerTranscripts {
       ..total = page.total
       ..messages = page.messages
       ..absence = page.absence
-      ..path = page.path;
+      ..path = page.path
+      ..digest = page.digest;
   }
 
   /// False when [page] does not continue the rows held.
@@ -329,7 +419,8 @@ class ServerTranscripts {
       ..revision = page.revision
       ..total = page.total
       ..absence = null
-      ..path = page.path ?? feed.path;
+      ..path = page.path ?? feed.path
+      ..digest = page.digest ?? feed.digest;
     return true;
   }
 
@@ -340,6 +431,7 @@ class ServerTranscripts {
       messages: List.unmodifiable(feed.messages),
       absence: feed.absence,
       path: feed.path,
+      older: feed.digest,
     );
     feed.window = window;
     for (final lease in [...feed.leases]) {
@@ -415,6 +507,7 @@ class _Feed {
   List<TranscriptMessage> messages = const [];
   ChatViewEvidence? absence;
   String? path;
+  TranscriptDigest? digest;
   ServerTranscriptWindow? window;
 
   Future<void> lock = Future.value();

@@ -112,6 +112,53 @@ class SessionTranscripts {
     );
   }
 
+  /// One page of [SessionTranscriptTurns.sessionId]'s turns, text only: what
+  /// an export or a recap quotes (Stage 0 step 8).
+  Future<TranscriptPage> turns(SessionTranscriptTurns request) async {
+    final held = _hold(request.sessionId);
+    await _refresh(held);
+    if (held.generation.isEmpty) {
+      return TranscriptPage(
+        sessionId: held.sessionId,
+        generation: '',
+        revision: held.revision,
+        total: 0,
+        from: 0,
+        messages: const [],
+        absence: held.absence ?? ChatViewEvidence.notLocated,
+      );
+    }
+    final rows = [
+      for (final message in held.messages)
+        if (!request.spoken ||
+            ((message.role == 'user' || message.role == 'agent') &&
+                message.text.trim().isNotEmpty))
+          TranscriptMessage(
+            role: message.role,
+            text: message.text,
+            at: message.at,
+          ),
+    ];
+    final total = rows.length;
+    final limit = (request.limit ?? kTranscriptPageMaxMessages).clamp(
+      1,
+      kTranscriptPageMaxMessages,
+    );
+    final known = request.generation == held.generation;
+    final end = known ? (request.before ?? total).clamp(0, total) : total;
+    final start = _startBefore(rows, end, limit, _kPageChars);
+    return TranscriptPage(
+      sessionId: held.sessionId,
+      generation: held.generation,
+      revision: held.revision,
+      total: total,
+      from: start,
+      messages: rows.sublist(start, end),
+      reset: request.generation != null && !known,
+      path: held.file,
+    );
+  }
+
   /// [link] is told of every revision of [sessionId]'s transcript from now
   /// on. Answers once it has been read as it stands.
   Future<void> watch(TranscriptWatchLink link, String sessionId) async {
@@ -299,11 +346,14 @@ class SessionTranscripts {
   }
 
   TranscriptPage _pageOf(_Held held, SessionTranscriptRead request) {
+    // The client holds from `request.digest` on once an `after` page is
+    // merged; from the page's first row after any other.
     TranscriptPage answer(
       int from,
       int end, {
       List<TranscriptUpdate> updates = const [],
       bool reset = false,
+      int? digestEnd,
     }) => TranscriptPage(
       sessionId: held.sessionId,
       generation: held.generation,
@@ -315,6 +365,9 @@ class SessionTranscripts {
       reset: reset,
       absence: held.absence,
       path: held.file,
+      digest: request.digest == null
+          ? null
+          : TranscriptDigest.of(held.messages, digestEnd ?? from),
     );
 
     if (held.generation.isEmpty) {
@@ -356,7 +409,12 @@ class SessionTranscripts {
       }
       if (updates.length <= limit && spent <= _kPageChars) {
         final end = _endAfter(messages, after, limit, _kPageChars - spent);
-        return answer(after, end, updates: updates);
+        return answer(
+          after,
+          end,
+          updates: updates,
+          digestEnd: request.digest?.clamp(0, after),
+        );
       }
     }
     final reset = request.generation != null || after != null || before != null;

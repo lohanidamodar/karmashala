@@ -768,6 +768,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       final Object? result = switch (asked) {
         final SessionTranscriptRead read => await work().page(read),
         final SessionTranscriptSubagent read => await work().subagent(read),
+        final SessionTranscriptTurns read => await work().turns(read),
         SessionTranscriptWatch(:final sessionId) => await work()
             .watch(this, sessionId)
             .then((_) => const DataAck()),

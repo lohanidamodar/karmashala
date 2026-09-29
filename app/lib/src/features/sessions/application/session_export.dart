@@ -70,7 +70,12 @@ class SessionExporter {
   static final _log = AppLogger.named('sessions.export');
 
   /// Builds the export for [sessionId]. Throws only when the session is gone.
-  Future<SessionExport> build(String sessionId) async {
+  /// [progress] is told the turns read of the total, a page at a time, when
+  /// the server reads them.
+  Future<SessionExport> build(
+    String sessionId, {
+    void Function(int read, int total)? progress,
+  }) async {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
 
@@ -87,7 +92,7 @@ class SessionExporter {
         .repository(session.repositoryId);
     final directory = sessionWorkingDirectory(_ref, sessionId);
 
-    final transcript = await _transcript(session, agentId);
+    final transcript = await _transcript(session, agentId, progress: progress);
     final decisions = _decisions(sessionId);
     final checkpoints = await _checkpoints(sessionId);
 
@@ -174,7 +179,11 @@ class SessionExporter {
   }
 
   /// The conversation, or why there is none.
-  Future<_Transcript> _transcript(Session session, String? agentId) async {
+  Future<_Transcript> _transcript(
+    Session session,
+    String? agentId, {
+    void Function(int read, int total)? progress,
+  }) async {
     final externalId = session.externalSessionId;
     if (agentId == null) {
       return const _Transcript(
@@ -188,6 +197,29 @@ class SessionExporter {
       return const _Transcript();
     }
     try {
+      // Read where the record is, the spoken turns only and the tail first;
+      // this disk is read for a server that does not offer it.
+      final served = await serverSessionTurns(
+        _ref,
+        session.id,
+        spoken: true,
+        enough: (held) => held.length >= kExportTurnLimit,
+        progress: progress,
+      );
+      if (served != null) {
+        if (served.absence != null) {
+          return _Transcript(
+            refusal:
+                'the server found no readable record of the conversation '
+                '`$externalId` (${served.absence!.name})',
+          );
+        }
+        final turns = served.turns;
+        final kept = turns.length <= kExportTurnLimit
+            ? turns
+            : turns.sublist(turns.length - kExportTurnLimit);
+        return _Transcript(turns: kept, omitted: served.total - kept.length);
+      }
       final path = await _ref
           .read(sessionTranscriptLocatorProvider)
           .locate(agentId: agentId, externalSessionId: externalId);

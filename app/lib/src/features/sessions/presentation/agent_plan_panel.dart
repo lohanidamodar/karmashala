@@ -214,7 +214,9 @@ class _Absence extends ConsumerWidget {
             ? 'This agent does not publish a plan.'
             : 'This agent does not publish a plan.\n\n${reading.refusal}',
       AgentPlanAbsence.noneYet =>
-        'This agent has not written a plan in this conversation yet.',
+        reading.refusal.isEmpty
+            ? 'This agent has not written a plan in this conversation yet.'
+            : reading.refusal,
       // Why, in the reading's own words: a store nothing here opens is a
       // different sentence from a transcript file not on this disk.
       AgentPlanAbsence.noRecord =>

@@ -26,6 +26,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
+import 'session_chat_source.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
 import 'session_message_typist.dart';
@@ -464,9 +465,17 @@ class SessionActions {
   /// event log, so a resume continues rather than starts blank. Best-effort.
   Future<void> _seedHistory(String sessionId, ImportedSession session) async {
     try {
-      final messages = await readCliTranscript(session.filePath, session.cli);
-      if (messages.isEmpty) return;
       const cap = 500;
+      // Read where it was recorded, the tail only, when the server offers it.
+      final served = await serverSessionTurns(
+        _ref,
+        session.id,
+        enough: (held) => held.length >= cap,
+      );
+      final messages =
+          served?.turns ??
+          await readCliTranscript(session.filePath, session.cli);
+      if (messages.isEmpty) return;
       final recent = messages.length > cap
           ? messages.sublist(messages.length - cap)
           : messages;

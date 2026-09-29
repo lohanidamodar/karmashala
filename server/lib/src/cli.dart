@@ -225,7 +225,10 @@ as the running server reads it for a client (sessions.transcript).
   --subagent=<path>       a subagent's turns instead (with --after, --limit)
   --read=<reader>         rewindPoints, changedFiles or openQuestion instead,
                           as JSON
-  --json                  the page as the wire carries it
+  --digest=<n>            also the plan and open calls before row n
+  --turns                 text-only turns instead (with --before, --limit,
+                          --generation); --spoken keeps user and agent turns
+  --json                 the page as the wire carries it
   --watch                 then print each change until interrupted
 ''',
     valueFlags: {
@@ -236,8 +239,9 @@ as the running server reads it for a client (sessions.transcript).
       'revision',
       'subagent',
       'read',
+      'digest',
     },
-    switches: {'json', 'watch'},
+    switches: {'json', 'watch', 'turns', 'spoken'},
     positional: 1,
     run: (args, out, err, env) =>
         runTranscript(args, out: out, err: err, environment: env),

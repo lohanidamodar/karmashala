@@ -21,12 +21,28 @@ Future<void> exportSession(
   Future<void> Function(String path, List<ZipEntry> entries)? write,
 }) async {
   final SessionExport export;
+  // A long record read from its server comes a page at a time: say so while
+  // more are coming, and take it down once the export is built.
+  var reading = false;
+  void progress(int read, int total) {
+    if (read >= total || read >= kExportTurnLimit) return;
+    reading = true;
+    _say(
+      ref,
+      sessionId,
+      'Reading the conversation from its server: $read of $total turns…',
+    );
+  }
+
   try {
-    export = await ref.read(sessionExporterProvider).build(sessionId);
+    export = await ref
+        .read(sessionExporterProvider)
+        .build(sessionId, progress: progress);
   } on Object catch (error) {
     _say(ref, sessionId, 'The export could not be built: $error', bad: true);
     return;
   }
+  if (reading) ref.read(sessionNoticesProvider.notifier).dismiss(sessionId);
   if (!context.mounted) return;
 
   final folder =

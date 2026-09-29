@@ -136,6 +136,10 @@ final class Capabilities {
   bool get changedFilesViaServer => serverOffers('sessions.changedFiles');
   bool get openQuestionViaServer => serverOffers('sessions.openQuestion');
 
+  /// An export, a recap and an imported session's seeded history quote the
+  /// record's turns as the server reads them, text only (Stage 0 step 8).
+  bool get turnsViaServer => serverOffers('sessions.transcript.turns');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

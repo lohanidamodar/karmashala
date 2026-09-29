@@ -68,11 +68,11 @@ class SessionRecapService {
       throw SessionRecapRefusal('There is nothing to recap. ${reading.reason}');
     }
 
-    final turns = await _turnsOf(session.id, installation.agentId);
+    final (turns, earlier) = await _turnsOf(session.id, installation.agentId);
     if (turns.isEmpty) {
       throw SessionRecapRefusal('There is nothing to recap. ${reading.reason}');
     }
-    final blob = _blob(turns);
+    final blob = _blob(turns, earlier: earlier);
 
     final environment = _ref
         .read(environmentsDataProvider)
@@ -139,7 +139,7 @@ class SessionRecapService {
       model: modelArguments.isEmpty ? null : model,
       // What the conversation held when it was read — the number "the session
       // has moved since" is counted against.
-      turnCount: turns.length,
+      turnCount: earlier + turns.length,
       writtenAt: _ref.read(clockProvider).nowUtc(),
     );
     _ref.read(sessionRecordsProvider).writeRecap(written);
@@ -147,32 +147,52 @@ class SessionRecapService {
     return written;
   }
 
-  /// The session's visible turns, oldest first, read from the agent's own
-  /// transcript — the same file the conversation on screen is drawn from.
-  Future<List<TranscriptMessage>> _turnsOf(
+  /// The session's turns, oldest first, read from the agent's own transcript
+  /// — the same record the conversation on screen is drawn from — and how
+  /// many earlier ones were not read. The server reads only the tail the
+  /// recap has room for.
+  Future<(List<TranscriptMessage>, int)> _turnsOf(
     String sessionId,
     String agentId,
   ) async {
     final row = _ref.read(sessionsDataProvider).getById(sessionId);
     final externalId = row?.externalSessionId;
-    if (externalId == null || externalId.isEmpty) return const [];
+    const none = (<TranscriptMessage>[], 0);
+    if (externalId == null || externalId.isEmpty) return none;
+    final served = await serverSessionTurns(
+      _ref,
+      sessionId,
+      enough: (held) {
+        var bytes = 0;
+        for (final turn in held) {
+          bytes += _line(turn).length + 1;
+          if (bytes > kMaxTranscriptTextBytes) return true;
+        }
+        return false;
+      },
+    );
+    if (served != null) return (served.turns, served.from);
     final path = await _ref
         .read(sessionTranscriptLocatorProvider)
         .locate(agentId: agentId, externalSessionId: externalId);
-    if (path == null) return const [];
-    return readCliTranscript(path, agentId);
+    if (path == null) return none;
+    return (await readCliTranscript(path, agentId), 0);
   }
+
+  static String _line(TranscriptMessage turn) =>
+      '${turn.role}: ${turn.text.trim()}';
 
   /// The conversation as one document, newest-first-fitted and bounded; when
   /// anything is left out the document says so in its own first line.
-  String _blob(List<TranscriptMessage> turns) {
+  /// [earlier] turns before [turns] were never read.
+  String _blob(List<TranscriptMessage> turns, {int earlier = 0}) {
     final kept = <String>[];
     var bytes = 0;
     for (var i = turns.length - 1; i >= 0; i--) {
-      final line = '${turns[i].role}: ${turns[i].text.trim()}';
+      final line = _line(turns[i]);
       final cost = line.length + 1;
       if (bytes + cost > kMaxTranscriptTextBytes) {
-        final omitted = i + 1;
+        final omitted = earlier + i + 1;
         kept.insert(
           0,
           '[The earliest $omitted turns of this conversation are not shown '

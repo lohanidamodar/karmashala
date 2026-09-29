@@ -4,6 +4,8 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/launch.dart';
+import '../../../core/capabilities/capabilities.dart';
+import '../data/server_transcripts.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
@@ -170,5 +172,24 @@ final sessionAgentPlanProvider = Provider.autoDispose
       if (messages == null || messages.isEmpty) {
         return const AgentPlanReading.absent(AgentPlanAbsence.notRead);
       }
-      return agentPlanIn(messages);
+      final reading = agentPlanIn(messages);
+      if (reading.hasPlan) return reading;
+      // From a server, [messages] are the tail: an older plan is in the
+      // window's digest of the rows before it (Stage 0 step 8).
+      final window = ref.read(capabilitiesProvider).chatViaServer
+          ? ref.read(serverTranscriptsProvider).windowFor(sessionId, messages)
+          : null;
+      if (window == null) return reading;
+      final older = window.olderPlan;
+      if (older != null) return agentPlanIn([older]);
+      if (window.olderUnknown) {
+        return const AgentPlanReading.absent(
+          AgentPlanAbsence.noneYet,
+          refusal:
+              'Only the latest part of this conversation is loaded from its '
+              'server, and it holds no plan. Scroll back in Chat to look '
+              'further.',
+        );
+      }
+      return reading;
     });
