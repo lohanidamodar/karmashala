@@ -39,19 +39,30 @@ void startPhoneNotifications(
 /// Takes down a session's ask notification once the server's inbox no longer
 /// holds its needs-you item: answered here, on the desktop, or anywhere else
 /// (Stage 3 step 4). Heard only while the link is up, as the asks are.
+///
+/// An ask still in the dispatcher's window is dropped with it, so it never
+/// goes up answered. The first inbox this session hears also withdraws the
+/// asks a previous server session showed that it does not hold: after a
+/// switch of server nothing else would.
 final answeredAskWithdrawalProvider = Provider<void>((ref) {
   final presenter = ref.watch(notificationPresenterProvider);
   if (presenter is! PhoneNotificationPresenter) return;
   final client = ref.watch(dataClientProvider);
+  final dispatcher = ref.watch(notificationDispatcherProvider);
   Set<String> asking(AttentionInbox inbox) => {
     for (final item in inbox.items)
       if (item.kind == InboxItemKind.needsApproval) item.session.openId,
   };
   var before = asking(client.attention.inbox);
+  var first = true;
   final changes = client.attentionChanges.listen((change) {
     if (change is! InboxChanged) return;
     final now = asking(change.snapshot.inbox);
-    for (final openId in before.difference(now)) {
+    final gone = before.difference(now);
+    if (first) gone.addAll(presenter.shownAsks.difference(now));
+    first = false;
+    for (final openId in gone) {
+      dispatcher.dropAsk(openId);
       unawaited(presenter.withdraw(openId));
     }
     before = now;
