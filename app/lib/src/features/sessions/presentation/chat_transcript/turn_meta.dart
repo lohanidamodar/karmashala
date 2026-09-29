@@ -70,15 +70,21 @@ class _TurnMeta extends StatelessWidget {
     required this.shown,
     required this.at,
     required this.actions,
+    this.touch = false,
   });
 
   final bool shown;
   final DateTime? at;
   final List<Widget> actions;
 
+  /// At touch density the meta takes no room until shown: laid out hidden,
+  /// its 48dp buttons would put a blank band under every turn.
+  final bool touch;
+
   @override
   Widget build(BuildContext context) {
     final at = this.at;
+    if (touch && !shown) return const SizedBox.shrink();
     return SelectionContainer.disabled(
       child: AnimatedOpacity(
         opacity: shown ? 1 : 0,
@@ -139,8 +145,39 @@ class _TurnWithMetaState extends State<_TurnWithMeta> {
     });
   }
 
+  /// Touch: a tap shows this turn's meta until another turn is tapped, or
+  /// this one again. Long-press stays the selection area's.
+  Widget _buildTouch(ValueNotifier<Object?> tapped) {
+    final end = widget.alignEnd;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => tapped.value = identical(tapped.value, this) ? null : this,
+      child: Column(
+        crossAxisAlignment: end
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          widget.body,
+          ValueListenableBuilder<Object?>(
+            valueListenable: tapped,
+            builder: (context, value, _) => _TurnMeta(
+              shown: identical(value, this),
+              at: widget.at,
+              actions: widget.actions,
+              touch: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tapped = _TappedTurn.of(context);
+    if (tapped != null && UiDensity.of(context).isTouch) {
+      return _buildTouch(tapped);
+    }
     final meta = _TurnMeta(
       shown: _hovered || _focused,
       at: widget.at,
@@ -267,11 +304,13 @@ class _ConfirmingIconButtonState extends State<_ConfirmingIconButton> {
   @override
   Widget build(BuildContext context) {
     final confirmed = _confirmed;
+    final touch = UiDensity.of(context).isTouch;
+    final floor = touch ? Touch.target : 24.0;
     return IconButton(
       tooltip: confirmed ? widget.confirmedTooltip : widget.tooltip,
-      visualDensity: VisualDensity.compact,
-      iconSize: Chrome.iconSmall,
-      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      visualDensity: touch ? VisualDensity.standard : VisualDensity.compact,
+      iconSize: touch ? Touch.icon : Chrome.iconSmall,
+      constraints: BoxConstraints(minWidth: floor, minHeight: floor),
       padding: EdgeInsets.zero,
       color: confirmed
           ? SemanticColors.of(context).idle

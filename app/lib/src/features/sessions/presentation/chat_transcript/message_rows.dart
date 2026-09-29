@@ -11,8 +11,8 @@ class _MessageRow extends StatefulWidget {
     required this.onSaveNote,
     required this.resolveHostPath,
     required this.onPathTap,
+    required this.onLinkTap,
     required this.detailBuilder,
-    super.key,
   });
 
   final ChatMessage message;
@@ -20,6 +20,7 @@ class _MessageRow extends StatefulWidget {
   final SaveNoteCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
   final PathLinkCallback? onPathTap;
+  final ValueChanged<String>? onLinkTap;
   final MessageDetailBuilder? detailBuilder;
 
   @override
@@ -37,6 +38,7 @@ class _MessageRowState extends State<_MessageRow> {
         old.onSaveNote != widget.onSaveNote ||
         old.resolveHostPath != widget.resolveHostPath ||
         old.onPathTap != widget.onPathTap ||
+        old.onLinkTap != widget.onLinkTap ||
         old.detailBuilder != widget.detailBuilder) {
       _tile = null;
     }
@@ -51,6 +53,7 @@ class _MessageRowState extends State<_MessageRow> {
       message: message,
       resolveHostPath: widget.resolveHostPath,
       onPathTap: widget.onPathTap,
+      onLinkTap: widget.onLinkTap,
       detail: widget.detailBuilder?.call(message, ordinal),
       onSaveNote: save == null ? null : () => save(message, ordinal),
     );
@@ -63,12 +66,14 @@ class _ChatMessageTile extends StatelessWidget {
     this.onSaveNote,
     this.resolveHostPath,
     this.onPathTap,
+    this.onLinkTap,
     this.detail,
   });
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
   final PathLinkCallback? onPathTap;
+  final ValueChanged<String>? onLinkTap;
 
   /// Hung under the body, indented with it: the subagent this row spawned.
   final Widget? detail;
@@ -96,11 +101,13 @@ class _ChatMessageTile extends StatelessWidget {
             message: message,
             onSaveNote: onSaveNote,
             onPathTap: onPathTap,
+            onLinkTap: onLinkTap,
           ),
           'agent' => _AgentMessageBlock(
             message: message,
             onSaveNote: onSaveNote,
             onPathTap: onPathTap,
+            onLinkTap: onLinkTap,
             detail: detail,
           ),
           'error' => _ErrorMessageCard(message: message),
@@ -122,11 +129,13 @@ class _UserMessageCard extends StatelessWidget {
     required this.message,
     required this.onSaveNote,
     required this.onPathTap,
+    required this.onLinkTap,
   });
 
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final PathLinkCallback? onPathTap;
+  final ValueChanged<String>? onLinkTap;
 
   /// The accent's share of the bubble's fill. Board N2 draws `#1c2230` on the
   /// `#0c0c0e` terminal tone with a `#7aa2f7` accent: 15% of the accent, in
@@ -172,6 +181,7 @@ class _UserMessageCard extends StatelessWidget {
               child: MarkdownMessage(
                 message.text,
                 onPathTap: onPathTap,
+                onLinkTap: onLinkTap,
                 selectable: false,
               ),
             ),
@@ -187,12 +197,14 @@ class _AgentMessageBlock extends StatelessWidget {
     required this.message,
     required this.onSaveNote,
     required this.onPathTap,
+    required this.onLinkTap,
     required this.detail,
   });
 
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final PathLinkCallback? onPathTap;
+  final ValueChanged<String>? onLinkTap;
   final Widget? detail;
 
   @override
@@ -213,7 +225,12 @@ class _AgentMessageBlock extends StatelessWidget {
             ThinkingAccordion(thinking: thinking),
             const SizedBox(height: Insets.xs),
           ],
-          MarkdownMessage(cleanText, onPathTap: onPathTap, selectable: false),
+          MarkdownMessage(
+            cleanText,
+            onPathTap: onPathTap,
+            onLinkTap: onLinkTap,
+            selectable: false,
+          ),
           ?detail,
         ],
       ),

@@ -29,6 +29,7 @@ class MarkdownMessage extends StatelessWidget {
   const MarkdownMessage(
     this.data, {
     this.onPathTap,
+    this.onLinkTap,
     this.selectable = true,
     super.key,
   });
@@ -38,6 +39,10 @@ class MarkdownMessage extends StatelessWidget {
   /// Where a clicked path goes. Null renders the paths as plain prose — a link
   /// nobody can follow is worse than no link.
   final PathLinkCallback? onPathTap;
+
+  /// Where a tapped link the author wrote goes, with its href. Null leaves it
+  /// inert, as the desktop has it.
+  final ValueChanged<String>? onLinkTap;
 
   /// Whether each block selects on its own. False under a [SelectionArea],
   /// which selects across blocks and would otherwise be shut out of each one;
@@ -80,7 +85,12 @@ class MarkdownMessage extends StatelessWidget {
       styleSheet: sheet,
       inlineSyntaxes: onPathTap == null ? null : kPathLinkSyntaxes,
       onTapLink: (text, href, title) {
-        if (title == kPathLinkTitle && href != null) onPathTap?.call(href);
+        if (href == null) return;
+        if (title == kPathLinkTitle) {
+          onPathTap?.call(href);
+        } else {
+          onLinkTap?.call(href);
+        }
       },
       syntaxHighlighter: _HighlightAdapter(
         codeHighlightTheme(dark ? Brightness.dark : Brightness.light),

@@ -76,8 +76,9 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
                 hoverColor: tones.hover,
                 borderRadius: BorderRadius.circular(Radii.sm),
                 child: ConstrainedBox(
-                  // Board N2: one 26px line, however many calls it stands for.
-                  constraints: const BoxConstraints(minHeight: Chrome.row),
+                  // Board N2: one 26px line, however many calls it stands for;
+                  // a thumb's 48 at touch density, where the caret is the sign.
+                  constraints: BoxConstraints(minHeight: _lineHeight(context)),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
                     child: Row(
@@ -284,7 +285,7 @@ class _ToolCallLineState extends State<_ToolCallLine> {
               hoverColor: SurfaceTones.of(context).hover,
               borderRadius: BorderRadius.circular(Radii.sm),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: Chrome.row),
+                constraints: BoxConstraints(minHeight: _lineHeight(context)),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
                   child: Row(
@@ -329,6 +330,10 @@ class _ToolCallLineState extends State<_ToolCallLine> {
     );
   }
 }
+
+/// A fold or call line's height: the board's row, or the touch floor.
+double _lineHeight(BuildContext context) =>
+    UiDensity.of(context).isTouch ? Touch.target : Chrome.row;
 
 /// The glyph for what a call did, by the same kinds the fold line counts.
 IconData _kindIcon(ToolKind kind) => switch (kind) {
