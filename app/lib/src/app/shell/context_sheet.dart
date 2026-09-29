@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_terminal_core/geometry.dart' show isDocumentPane;
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -55,13 +56,15 @@ class ContextSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // A file or diff opened from here opens as a workbench tab: the sheet is
-    // done, and the page shows that tab.
+    // done. Only a document: a background reattach brings up a session's pane.
     ref.listen(
       terminalSessionsControllerProvider.select(
         (s) => (s.activeTab?.id, s.activeTab?.focusedPaneId),
       ),
       (was, now) {
         if (was == now) return;
+        final pane = now.$2;
+        if (pane == null || !isDocumentPane(pane)) return;
         if (ModalRoute.of(context)?.isCurrent ?? false) {
           Navigator.of(context).pop();
         }
