@@ -2,18 +2,22 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:karmashala_remote/client.dart' show CompanionPairing;
+
 import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
+import 'src/app/server_session_root.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
+import 'src/core/lifecycle/relaunch.dart';
 import 'src/core/lifecycle/server_session.dart';
+import 'src/core/lifecycle/server_switcher.dart';
 import 'src/core/lifecycle/uncaught_errors.dart';
 import 'package:karmashala_core/logging.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
@@ -71,8 +75,8 @@ Future<Directory?> _logDirectoryOrNull() async {
 
 /// The process's part of start-up — MediaKit, logging, the machines store,
 /// the window and the OS integration — around the one per-server part,
-/// [ServerSession.open]. A server switch relaunches the process (step 14
-/// will switch in process), so the session opened here lasts until quit.
+/// [ServerSession.open]. A switch of server closes that session and opens
+/// the next in this process ([ServerSwitcher], plan step 14).
 Future<void> _bootstrap(AppLogger logger) async {
   // Loads libmpv, which decodes the device pane's H.264 live view.
   MediaKit.ensureInitialized();
@@ -110,21 +114,62 @@ Future<void> _bootstrap(AppLogger logger) async {
   } catch (error, stack) {
     logger.warning('Verification artifact root unavailable.', error, stack);
   }
-  // Everything that belongs to that server: the layout store, the access, the
-  // data connection, the container and the start-up acts that need them.
-  final session = await ServerSession.open(
-    remote: remote,
+  // The agents' status hooks and the rest run **after the first frame**
+  // rather than before the window. The gate's timeout is load-bearing: a tray
+  // launch may never paint. A switch of server waits on the same gate for the
+  // old tree to go.
+  Future<void> afterFirstFrame() => WidgetsBinding.instance.endOfFrame.timeout(
+    const Duration(seconds: 2),
+    onTimeout: () {},
+  );
+
+  // Switching servers closes one session and opens the next in this process
+  // (plan step 14); every session's container is handed the switcher.
+  late final AppLifecycle lifecycle;
+  late final ServerSwitcher switcher;
+  Future<ServerSession> openSession(CompanionPairing? remote) =>
+      ServerSession.open(
+        remote: remote,
+        machines: machines,
+        probe: probe,
+        support: support,
+        logger: logger,
+        overrides: [serverSwitcherProvider.overrideWithValue(switcher)],
+      );
+  Future<void> quit() async {
+    final system = lifecycle.systemIntegration;
+    if (system != null) return system.quit();
+    await lifecycle.shutdown();
+    exit(0);
+  }
+
+  switcher = ServerSwitcher(
+    open: openSession,
     machines: machines,
-    probe: probe,
-    support: support,
+    nextFrame: afterFirstFrame,
+    quit: quit,
+    // The fallback when the old session will not close: start afresh, as
+    // every switch did before. Only where the app can restart itself.
+    relaunch: ClientCapabilities.measure().relaunch
+        ? () async {
+            await relaunchAfterExit();
+            await quit();
+          }
+        : null,
+    onOpened: (remote) => unawaited(_retitleWindow(probe, remote, logger)),
     logger: logger,
   );
+
+  // Everything that belongs to that server: the layout store, the access, the
+  // data connection, the container and the start-up acts that need them.
+  final session = await openSession(remote);
   final container = session.container;
   final capabilities = container.read(capabilitiesProvider);
 
   // One owner for everything below, so quitting is an ordered teardown rather
   // than a process that happens to end. See `AppLifecycle`.
-  final lifecycle = AppLifecycle(container, session: session, logger: logger);
+  lifecycle = AppLifecycle(container, session: session, logger: logger);
+  switcher.start(session, remote: remote, lifecycle: lifecycle);
 
   // A release build has no VM service, so the log is the only place this app
   // can say what it is holding. Started here rather than after the first frame:
@@ -144,7 +189,7 @@ Future<void> _bootstrap(AppLogger logger) async {
         size: restoredSize,
         minimumSize: const Size(720, 560),
         center: true,
-        title: probe.enabled ? 'Karmashala — PROBE' : 'Karmashala',
+        title: _windowTitle(probe, remote),
       );
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
@@ -156,25 +201,33 @@ Future<void> _bootstrap(AppLogger logger) async {
     await lifecycle.startSystemIntegration();
   }
 
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const KarmashalaApp(),
-    ),
-  );
+  // The root holds the open session's container, and swaps it on a switch.
+  runApp(ServerSessionRoot(switcher: switcher, app: const KarmashalaApp()));
 
-  // The agents' status hooks and the rest run **after the first frame**
-  // rather than before the window. The gate's timeout is load-bearing: a tray
-  // launch may never paint.
-  Future<void> afterFirstFrame() => WidgetsBinding.instance.endOfFrame.timeout(
-    const Duration(seconds: 2),
-    onTimeout: () {},
-  );
   session.startAfterRunApp(lifecycle, afterFirstFrame: afterFirstFrame);
 
   // The statics `karmashala_ui` reads — Browse's sources, which dialog opens,
   // hidden files — installed once, each reading the current session per call.
   installServerSessionStatics();
+}
+
+/// The window's title: the app, a probe said so, and a server elsewhere named.
+String _windowTitle(ProbeMode probe, CompanionPairing? remote) {
+  final app = probe.enabled ? 'Karmashala — PROBE' : 'Karmashala';
+  return remote == null ? app : '$app — ${serverNameForSwitch(remote)}';
+}
+
+/// Names the server a switch opened in the title bar.
+Future<void> _retitleWindow(
+  ProbeMode probe,
+  CompanionPairing? remote,
+  AppLogger logger,
+) async {
+  try {
+    await windowManager.setTitle(_windowTitle(probe, remote));
+  } on Object catch (error) {
+    logger.warning('Setting the window title failed: $error');
+  }
 }
 
 /// What this client is called at a server: the machine's name.
