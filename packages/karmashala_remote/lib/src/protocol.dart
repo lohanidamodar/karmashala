@@ -130,7 +130,14 @@ enum Capability {
   /// As a desktop client, be asked — and answer — the server's SSH questions
   /// (host keys, passwords, passphrases). Off unless granted: a secret typed
   /// on another machine crosses the network, if sealed.
-  sshPrompts('ssh_prompts', 1 << 12);
+  sshPrompts('ssh_prompts', 1 << 12),
+
+  /// Use the Karmashala app on a phone (Stage 1): switch the sealed channel to
+  /// the host protocol as a desktop client does, served at the phone tier —
+  /// never admin, never SSH prompts, and none of the server's secrets, SSH
+  /// hosts or agent accounts. Not privileged, so "all" includes it; a pairing
+  /// made before it existed gains it only when granted.
+  phoneClient('phone_client', 1 << 13);
 
   const Capability(this.wire, this.bit);
 
@@ -169,9 +176,19 @@ class CapabilitySet {
 
   bool has(Capability capability) => bits & capability.bit != 0;
 
+  /// The tier a `host.attach` is served at, or null when this set may not
+  /// attach. [AttachTier.desktop] wins when both bits are held, so a phone
+  /// grant never narrows a desktop's.
+  AttachTier? get attachTier => has(Capability.desktopClient)
+      ? AttachTier.desktop
+      : has(Capability.phoneClient)
+      ? AttachTier.phone
+      : null;
+
   /// Whether a frame of [type] is allowed. Types with no capability (events and
   /// errors from the host) are always allowed.
   bool allows(FrameType type) {
+    if (type == FrameType.hostAttach) return attachTier != null;
     final needed = type.capability;
     return needed == null || has(needed);
   }
@@ -206,6 +223,10 @@ class CapabilitySet {
   @override
   String toString() => 'CapabilitySet(${granted.map((c) => c.wire).join(',')})';
 }
+
+/// What a switched link is served as: a desktop client, or the app on a
+/// phone ([Capability.phoneClient]).
+enum AttachTier { desktop, phone }
 
 /// Which end is allowed to send a frame type.
 enum FrameOrigin { companion, host, either }
@@ -369,7 +390,8 @@ enum FrameType {
 
   /// Switch this sealed channel to the host protocol (slice 5e): once
   /// answered, every sealed frame either way carries host-protocol bytes, and
-  /// the server serves this link as a desktop client.
+  /// the server serves this link as a desktop client. [Capability.phoneClient]
+  /// attaches too (`CapabilitySet.allows`), at the phone tier.
   hostAttach(
     'host.attach',
     origin: FrameOrigin.companion,
@@ -384,7 +406,7 @@ enum FrameType {
   /// `result` of the same `id` — `{resumed: true, lastReceived, skip}` for the
   /// server's side — then the server sends again whatever came after
   /// `p.lastReceived`. Refused with an `error`, and the link ends. No
-  /// capability: `host.attach` already required [Capability.desktopClient].
+  /// capability: `host.attach` already required an attach tier.
   linkResume('link.resume', origin: FrameOrigin.companion),
 
   sessionChanged('session.changed', origin: FrameOrigin.host),

@@ -24,6 +24,7 @@ karmashala_host $kHostVersion — Karmashala's session host.
   karmashala_host pair          open a pairing window and print its code and QR
   karmashala_host devices       the phones paired with this server
   karmashala_host revoke <id>   revoke one (see `devices` for ids)
+  karmashala_host grant <id>    change what one may do (--add, --remove)
   karmashala_host agents        the agent CLIs this server found
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding
@@ -174,9 +175,11 @@ karmashala_host pair — open a pairing window at the running server and print
 its code and QR, then wait until a device pairs or the window closes.
 
   --grants=<list|all>         what the device may do (default all: a phone's
-                              grants). Another machine's desktop app:
-                              --grants=desktop (add ,admin to let it administer
-                              this server, ,ssh to answer its SSH questions)
+                              grants, the app on a phone included — `phone`
+                              names that one alone). Another machine's
+                              desktop app: --grants=desktop (add ,admin to let
+                              it administer this server, ,ssh to answer its
+                              SSH questions)
   --capabilities=<list|all>   the same, by its older name
   --relay=<url>               meet the phone at this relay, for this window
   --name=<label>              the name the paired device gets
@@ -203,6 +206,21 @@ only it has (see `devices`), and drop its live links.
     positional: 1,
     run: (args, out, err, env) =>
         runRevoke(args, out: out, err: err, environment: env),
+  ),
+  'grant': _Command(
+    usage: '''
+karmashala_host grant <id> — change what one paired device may do, by its id or
+a prefix only it has (see `devices`). A link it has open reattaches with the
+new grant.
+
+  --add=<list>            grants to add: capability names or aliases
+                          (`phone` gives an existing phone the app)
+  --remove=<list>         grants to take away, the same names
+''',
+    positional: 1,
+    valueFlags: {'add', 'remove'},
+    run: (args, out, err, env) =>
+        runGrant(args, out: out, err: err, environment: env),
   ),
   'agents': _Command(
     usage: '''

@@ -17,6 +17,8 @@ String capabilityLabel(Capability capability) => switch (capability) {
   Capability.desktopClient => 'Use as a desktop client',
   Capability.serverAdmin => 'Administer this server',
   Capability.sshPrompts => 'Answer SSH questions',
+  Capability.phoneClient =>
+    'Use the Karmashala app on a phone (sessions, terminals, files)',
 };
 
 /// The bits this build knows how to show. Anything outside it — a grant made

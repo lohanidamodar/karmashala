@@ -203,10 +203,13 @@ Future<int> runPair(
   }
 }
 
-/// Short names for the grants a desktop client is paired with (slice 5e):
-/// `pair --grants desktop` for another machine's app, plus `admin` and `ssh`
-/// when it should administer this server or answer its SSH questions.
+/// Short names for the grants a client is paired with: `phone` for the
+/// Karmashala app on a phone (in `all` already; the alias is for lists and
+/// `grant --add=phone`), `desktop` for another machine's app (slice 5e),
+/// plus `admin` and `ssh` when a desktop should administer this server or
+/// answer its SSH questions.
 const Map<String, Capability> kGrantAliases = {
+  'phone': Capability.phoneClient,
   'desktop': Capability.desktopClient,
   'admin': Capability.serverAdmin,
   'ssh': Capability.sshPrompts,

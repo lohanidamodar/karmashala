@@ -80,8 +80,30 @@ class _DeviceRuntime {
   /// runtime carries, the api that judges its frames, and a `host.status` so
   /// the phone shows what it may do now. Queued like every other task, so it
   /// cannot land between a frame and its answer.
+  ///
+  /// A switched link took its trust at attach and a resume would keep it, so
+  /// a changed grant **retires** it instead: the client reattaches afresh and
+  /// reads the new grant from `host.status`.
   Future<void> applyGrant(PairedDevice updated) {
+    final changed = updated.capabilities.bits != device.capabilities.bits;
     device = updated;
+    final switched = _active;
+    if (changed && switched != null && switched.host != null) {
+      final retired = _chain.then((_) async {
+        if (_closed || !identical(_active, switched)) return;
+        service.onLog?.call(
+          'a device\'s grant changed; its switched link is retired',
+        );
+        await _hostEnded(switched);
+      });
+      _chain = retired.then(
+        (_) {},
+        onError: (Object e) {
+          service.onLog?.call('retiring a regranted link failed: $e');
+        },
+      );
+      return retired;
+    }
     return run((api) async {
       api.device = updated;
       await api.sendHostStatus();
@@ -456,7 +478,7 @@ class _DeviceRuntime {
 
   /// Switches [active] to the host protocol for a desktop client (slice 5e):
   /// answered once in the envelope, then every frame is host bytes. A pairing
-  /// without [Capability.desktopClient] is refused in words.
+  /// with no attach tier (desktop or phone client) is refused in words.
   Future<void> _attachHost(
     _ActiveLink active,
     Envelope envelope,
@@ -465,10 +487,10 @@ class _DeviceRuntime {
     final serve = service.onHostLink;
     String? refusal;
     var code = ErrorCode.notPermitted;
-    if (!device.capabilities.has(Capability.desktopClient)) {
+    if (device.capabilities.attachTier == null) {
       refusal =
-          'this pairing is not a desktop client\'s: pair again with the '
-          'desktop grant';
+          'this pairing is neither a desktop client\'s nor the app\'s on a '
+          'phone: pair again, or grant this device the app';
     } else if (serve == null) {
       refusal = 'this server takes no desktop clients';
       code = ErrorCode.internal;

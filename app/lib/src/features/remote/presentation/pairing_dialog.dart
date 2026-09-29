@@ -13,6 +13,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import '../pairing/pairing_relay_endpoints.dart';
 import 'capability_labels.dart';
+import 'grant_presets.dart';
 
 /// The pairing dialog: what the phone may do, then the QR code, then the
 /// confirmation that a phone proved the key and was stored.
@@ -27,10 +28,13 @@ class PairingDialog extends ConsumerStatefulWidget {
 }
 
 class _PairingDialogState extends ConsumerState<PairingDialog> {
-  /// Granted at pairing time: a phone's grants by default, and every one of
-  /// them untickable before the code is generated. The desktop grants
-  /// (another machine's app, slice 5e) are ticked only on purpose.
-  final Set<Capability> _granted = {...CapabilitySet.all.granted};
+  /// Opens on Phone: "Pair a device" is almost always a phone.
+  GrantPreset _preset = GrantPreset.phone;
+
+  /// Granted at pairing time: the preset's grants, and every one of them
+  /// untickable before the code is generated. The desktop grants (another
+  /// machine's app, slice 5e) are ticked only on purpose.
+  final Set<Capability> _granted = {...GrantPreset.phone.grants.granted};
 
   /// Saved in [initState]: `ref` is unusable inside [dispose].
   late final RemoteAccessController _access;
@@ -130,6 +134,17 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     _begin();
   }
 
+  void _selectPreset(GrantPreset preset) {
+    if (preset == _preset) return;
+    setState(() {
+      _preset = preset;
+      _granted
+        ..clear()
+        ..addAll(preset.grants.granted);
+    });
+    _begin();
+  }
+
   void _selectEndpoint(int index) {
     setState(() => _endpoint = index);
     // The shown code names the old relay; root a fresh one here.
@@ -178,11 +193,16 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                 ),
               ),
               const SizedBox(height: Insets.sm),
+              GrantPresetPicker(
+                selected: _preset,
+                onSelected: _selectPreset,
+              ),
+              const SizedBox(height: Insets.sm),
               Wrap(
                 spacing: Insets.xs,
                 runSpacing: Insets.xs,
                 children: [
-                  for (final capability in Capability.values)
+                  for (final capability in _preset.chips)
                     FilterChip(
                       label: Text(capabilityLabel(capability)),
                       selected: _granted.contains(capability),

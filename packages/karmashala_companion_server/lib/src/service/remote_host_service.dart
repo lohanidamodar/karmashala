@@ -415,7 +415,8 @@ class RemoteHostService {
   /// Changes what [deviceId] may do, **without touching its key or its link**:
   /// the row is written, the live runtime is told, and the phone hears its new
   /// grant on a fresh `host.status`. Enforcement is per frame, so the next one
-  /// is already judged by this set.
+  /// is already judged by this set. A switched link (a desktop or phone
+  /// client) is retired instead, and reattaches with the new grant.
   Future<void> updateCapabilities(
     String deviceId,
     CapabilitySet capabilities,

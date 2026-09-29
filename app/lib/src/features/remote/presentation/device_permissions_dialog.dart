@@ -5,6 +5,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'capability_labels.dart';
+import 'grant_presets.dart';
 
 /// Edits what an already-paired phone may do. **No re-pairing**: widening a
 /// grant used to mean a fresh code, which threw away the phone's key, its
@@ -44,6 +45,18 @@ class _DevicePermissionsDialogState extends State<DevicePermissionsDialog> {
       if (widget.granted.has(capability)) capability,
   };
 
+  late GrantPreset _preset = GrantPreset.of(widget.granted);
+
+  void _selectPreset(GrantPreset preset) {
+    if (preset == _preset) return;
+    setState(() {
+      _preset = preset;
+      _granted
+        ..clear()
+        ..addAll(preset.grants.granted);
+    });
+  }
+
   bool get _changed =>
       capabilitiesWith(widget.granted, _granted).bits != widget.granted.bits;
 
@@ -66,11 +79,13 @@ class _DevicePermissionsDialogState extends State<DevicePermissionsDialog> {
               ),
             ),
             const SizedBox(height: Insets.sm),
+            GrantPresetPicker(selected: _preset, onSelected: _selectPreset),
+            const SizedBox(height: Insets.sm),
             Wrap(
               spacing: Insets.xs,
               runSpacing: Insets.xs,
               children: [
-                for (final capability in Capability.values)
+                for (final capability in _preset.chips)
                   FilterChip(
                     label: Text(capabilityLabel(capability)),
                     selected: _granted.contains(capability),
