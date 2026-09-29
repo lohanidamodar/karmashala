@@ -22,7 +22,8 @@ String compactAge(Duration age) {
   return hours == 0 ? '${age.inDays}d' : '${age.inDays}d ${hours}h';
 }
 
-/// A session, drawn as a three-line card: who and when, what, where. Every
+/// A session. Under a pointer, one line (spec §2.4); under a thumb, a
+/// three-line card: who and when, what, where. Every
 /// line's right-hand slot holds exactly one fact, so the eye can read down the
 /// right edge for age and then for progress.
 class SessionCard extends StatelessWidget {
@@ -260,9 +261,10 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  /// Under a pointer (design-direction S2): status glyph, title and age; then
-  /// agent · branch · whereabouts with the stat; a third line only for a
-  /// sub-path or a lineage that cannot be walked.
+  /// Under a pointer, one line (spec §2.4, 28 px): status glyph, title, pin,
+  /// age and the menu. What the card's other lines said under a thumb —
+  /// agent, branch, whereabouts, what the checkout has produced, where it
+  /// works, what it came from — is the title's hover, in those words.
   Widget _pointerBody(
     BuildContext context,
     UiDensity density,
@@ -305,17 +307,25 @@ class SessionCard extends StatelessWidget {
       glyph: glyph,
       tick: selecting ? _tickBox(density) : null,
     );
-    final line1 = ExplorerRowLine(
+    final details = pointerDetails;
+    final titleText = Text(
+      title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: density.rowTitle(theme, strong: unread || needsYou),
+    );
+    return ExplorerRowLine(
       lead: lead,
       title: Row(
         children: [
           Flexible(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: density.rowTitle(theme, strong: unread || needsYou),
-            ),
+            child: details.isEmpty
+                ? titleText
+                : Tooltip(
+                    message: details,
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: titleText,
+                  ),
           ),
           if (pinned) ...[
             SizedBox(width: density.glyphGap),
@@ -339,69 +349,35 @@ class SessionCard extends StatelessWidget {
             : null,
       ),
     );
+  }
 
-    final third = [
-      ?subPath,
-      if (lineageBroken) 'lineage cannot be established',
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        line1,
-        Padding(
-          padding: EdgeInsets.only(left: lead.width),
-          child: _PointerMetaLine(
-            agentLabel: agentLabel,
-            branch: branch,
-            statPending: statPending,
-            whereabouts: whereabouts,
-            whereaboutsTooltip: whereaboutsTooltip,
-            scheduled: scheduled,
-            scheduledTooltip: scheduledTooltip,
-            worktree: worktree,
-            stat: stat,
-            link: link,
-            parentTitle: parentTitle,
-            muted: muted,
-            density: density,
-          ),
-        ),
-        if (third.isNotEmpty) ...[
-          SizedBox(height: density.lineGap),
-          Padding(
-            padding: EdgeInsets.only(left: lead.width),
-            child: Row(
-              children: [
-                Icon(
-                  lineageBroken ? AppIcons.question : AppIcons.folder,
-                  size: density.iconSmall,
-                  color: scheme.onSurfaceVariant,
-                ),
-                SizedBox(width: density.glyphGap),
-                Expanded(
-                  child: Tooltip(
-                    message: lineageBroken
-                        ? 'Lineage cannot be established — this session names '
-                              'a parent whose chain does not terminate, so it '
-                              'is drawn on its own rather than under a tree we '
-                              'cannot vouch for.'
-                        : subPath!,
-                    child: Text(
-                      third.join('  ·  '),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
+  /// What a pointer row no longer draws, said on the title's hover: one clause
+  /// per line, in the words the card's second and third lines used.
+  String get pointerDetails {
+    final unmeasured = statPending && branch == null;
+    final stat = this.stat;
+    final link = this.link;
+    return [
+      [
+        ?scheduled,
+        agentLabel,
+        ?branch,
+        ?whereabouts,
+      ].where((clause) => clause.isNotEmpty).join('  ·  '),
+      if (stat != null && !stat.isEmpty) diffStatWords(stat),
+      if (worktree) 'Runs in its own worktree',
+      if (subPath case final subPath?) 'In $subPath',
+      if (lineageBroken)
+        'Lineage cannot be established — this session names a parent whose '
+            'chain does not terminate, so it is drawn on its own.'
+      else if (link != null)
+        parentTitle == null
+            ? '${link.phrase} a session that is not on this row'
+            : '${link.phrase} "$parentTitle"',
+      if (unmeasured) 'Branch and change counts have not been measured yet.',
+      ?whereaboutsTooltip,
+      ?scheduledTooltip,
+    ].where((line) => line.isNotEmpty).join('\n');
   }
 
   /// The tick, sized by density rather than by [ExplorerRow.slotOf]: a checkbox
@@ -742,147 +718,19 @@ class _SessionCardWhereLine extends StatelessWidget {
   }
 }
 
-/// A pointer row's second line: agent · branch · whereabouts, then the
-/// worktree mark and the diff stat on the right. The words give way first.
-class _PointerMetaLine extends StatelessWidget {
-  const _PointerMetaLine({
-    required this.agentLabel,
-    required this.branch,
-    required this.statPending,
-    required this.whereabouts,
-    required this.whereaboutsTooltip,
-    required this.scheduled,
-    required this.scheduledTooltip,
-    required this.worktree,
-    required this.stat,
-    required this.link,
-    required this.parentTitle,
-    required this.muted,
-    required this.density,
-  });
-
-  final String agentLabel;
-  final String? branch;
-  final bool statPending;
-  final String? whereabouts;
-  final String? whereaboutsTooltip;
-  final String? scheduled;
-  final String? scheduledTooltip;
-  final bool worktree;
-  final SessionDiffStat? stat;
-  final SessionLink? link;
-  final String? parentTitle;
-  final TextStyle? muted;
-  final UiDensity density;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final unmeasured = statPending && branch == null;
-    final separator = TextSpan(
-      text: '  ·  ',
-      style: TextStyle(
-        color: scheme.onSurfaceVariant.withValues(
-          alpha: ExplorerRow.separatorAlpha,
-        ),
-      ),
-    );
-    final clauses = [
-      ?scheduled,
-      agentLabel,
-      ?branch,
-      if (unmeasured) '…',
-      ?whereabouts,
-    ].where((clause) => clause.isNotEmpty).toList();
-    final tooltip = [
-      clauses.join('  ·  '),
-      if (unmeasured) 'Branch and change counts have not been measured yet.',
-      ?whereaboutsTooltip,
-      ?scheduledTooltip,
-    ].join('\n');
-    final stat = this.stat;
-    final showStat = stat != null && !stat.isEmpty;
-    final link = this.link;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final fixed =
-            (link != null ? density.iconSmall + density.glyphGap : 0) +
-            (worktree ? density.glyphGap + density.iconSmall : 0) +
-            (showStat ? Insets.sm : 0);
-        final free = math.max(0.0, constraints.maxWidth - fixed);
-        return Row(
-          children: [
-            if (link != null) ...[
-              Tooltip(
-                message: parentTitle == null
-                    ? '${link.phrase} a session that is not on this row'
-                    : '${link.phrase} "$parentTitle"',
-                child: Icon(
-                  SessionCard.linkIcon(link),
-                  size: density.iconSmall,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              SizedBox(width: density.glyphGap),
-            ],
-            Expanded(
-              child: Tooltip(
-                message: tooltip,
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      if (scheduled != null)
-                        WidgetSpan(
-                          alignment: PlaceholderAlignment.middle,
-                          child: Padding(
-                            padding: EdgeInsets.only(right: density.glyphGap),
-                            child: Icon(
-                              AppIcons.clock,
-                              size: density.iconSmall,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      for (var i = 0; i < clauses.length; i++) ...[
-                        if (i > 0) separator,
-                        TextSpan(text: clauses[i]),
-                      ],
-                    ],
-                  ),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
-                ),
-              ),
-            ),
-            if (worktree) ...[
-              SizedBox(width: density.glyphGap),
-              Tooltip(
-                message: 'Runs in its own worktree',
-                child: Icon(
-                  AppIcons.treeStructure,
-                  size: density.iconSmall,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            if (showStat) ...[
-              const SizedBox(width: Insets.sm),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: free * 0.6),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: DiffStatLabel(stat: stat),
-                ),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
+/// [DiffStatLabel]'s facts in words, for a hover: `↑2  +949 −10`.
+String diffStatWords(SessionDiffStat stat) {
+  final ahead = stat.commitsAhead;
+  return [
+    if (ahead != null && ahead > 0) '↑$ahead',
+    if (stat.hasLineCounts)
+      [
+        if (stat.added != null) '+${stat.added}',
+        if (stat.removed != null) '−${stat.removed}',
+      ].join(' ')
+    else if ((stat.changedFiles ?? 0) > 0)
+      '${stat.changedFiles} changed',
+  ].join('  ');
 }
 
 /// The progress indicator, in MonoCode's terms: `+949 −10` when line counts

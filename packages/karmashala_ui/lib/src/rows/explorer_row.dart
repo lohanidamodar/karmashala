@@ -76,8 +76,7 @@ class ExplorerRow extends StatelessWidget {
 
   /// The row's floor under a pointer, its own vertical padding included —
   /// the sidebar's 28px line (board A2). Null keeps the kind's default:
-  /// [Chrome.row], or no floor at all for a session, whose second line sets
-  /// its height. A floor, never a fixed height: the row still grows with its
+  /// [Chrome.row], or [sessionLine] for a session. A floor, never a fixed height: the row still grows with its
   /// text. Ignored under a thumb, where [Touch.target] is the floor.
   ///
   /// A parameter rather than a taller [Chrome.row], because that token also
@@ -203,10 +202,14 @@ class ExplorerRow extends StatelessWidget {
   /// the name wins and the count is the bare number.
   static const wordsTitleFloor = 112.0;
 
+  /// A session's one line under a pointer (spec §2.4: 28 px).
+  static const sessionLine = 28.0;
+
   /// A floor, never a fixed height: every row still grows with its text.
   double _minHeight(UiDensity density) {
     if (density.isTouch) return Touch.target;
-    return minHeight ?? (kind == ExplorerRowKind.session ? 0 : Chrome.row);
+    return minHeight ??
+        (kind == ExplorerRowKind.session ? sessionLine : Chrome.row);
   }
 
   @override
@@ -228,9 +231,9 @@ class ExplorerRow extends StatelessWidget {
             )
           : EdgeInsets.fromLTRB(
               edge + density.padX + depth * indent,
-              kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
+              Insets.hair,
               edge + density.padX + scrollbarGutter,
-              kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
+              Insets.hair,
             ),
       child: body,
     );
