@@ -80,8 +80,30 @@ class _DeviceRuntime {
   /// runtime carries, the api that judges its frames, and a `host.status` so
   /// the phone shows what it may do now. Queued like every other task, so it
   /// cannot land between a frame and its answer.
+  ///
+  /// A switched link took its trust at attach and a resume would keep it, so
+  /// a changed grant **retires** it instead: the client reattaches afresh and
+  /// reads the new grant from `host.status`.
   Future<void> applyGrant(PairedDevice updated) {
+    final changed = updated.capabilities.bits != device.capabilities.bits;
     device = updated;
+    final switched = _active;
+    if (changed && switched != null && switched.host != null) {
+      final retired = _chain.then((_) async {
+        if (_closed || !identical(_active, switched)) return;
+        service.onLog?.call(
+          'a device\'s grant changed; its switched link is retired',
+        );
+        await _hostEnded(switched);
+      });
+      _chain = retired.then(
+        (_) {},
+        onError: (Object e) {
+          service.onLog?.call('retiring a regranted link failed: $e');
+        },
+      );
+      return retired;
+    }
     return run((api) async {
       api.device = updated;
       await api.sendHostStatus();

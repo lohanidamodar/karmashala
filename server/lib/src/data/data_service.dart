@@ -247,12 +247,14 @@ class DataService {
   /// A link from another machine passes what its pairing grants: without
   /// [admin] it may not rename, grant or revoke devices; without
   /// [sshPrompts] it is neither told nor may answer an SSH question; without
-  /// [transcripts] it may not read a session's transcript.
+  /// [transcripts] it may not read a session's transcript. A [phone] is also
+  /// refused what [phoneRefusal] names.
   DataSession open(
     void Function(DataChanges changes) deliver, {
     bool admin = true,
     bool sshPrompts = true,
     bool transcripts = true,
+    bool phone = false,
   }) {
     final link = DataSession._(
       this,
@@ -260,6 +262,7 @@ class DataService {
       admin: admin,
       sshPrompts: sshPrompts,
       transcripts: transcripts,
+      phone: phone,
     );
     _links.add(link);
     return link;
@@ -631,6 +634,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     required this.admin,
     required this.sshPrompts,
     required this.transcripts,
+    required this.phone,
   });
 
   final DataService _service;
@@ -639,6 +643,15 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
   final bool admin;
   final bool sshPrompts;
   final bool transcripts;
+
+  /// The app on a phone (Stage 1): refused what [phoneRefusal] names.
+  final bool phone;
+
+  void _refuseForPhone(DataRequest<Object?> request) {
+    if (!phone) return;
+    final refusal = phoneRefusal(request);
+    if (refusal != null) throw DataRefused.denied(refusal);
+  }
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
   var _signOfLife = 0;
@@ -652,8 +665,10 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 
   /// Answers [request] now, or throws [DataRefused]. A request that reads
   /// the disk ([isAnsweredLater]) is refused here: [handleLater] it.
-  DataReply<R> handle<R>(DataRequest<R> request) =>
-      _service._handle(this, request);
+  DataReply<R> handle<R>(DataRequest<R> request) {
+    _refuseForPhone(request);
+    return _service._handle(this, request);
+  }
 
   /// Whether [request] is answered when its work is done rather than at
   /// once — out of order, which only a request that writes nothing a client
@@ -676,6 +691,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
   Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async {
+    _refuseForPhone(request);
     if (request is ConversationsCatchUp) {
       final changed = await _service.conversations.catchUp();
       return DataReply(changed as R, _service._revision);
@@ -892,6 +908,26 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     return const DataAck();
   }
 }
+
+/// Why the app on a phone may not ask [request], or null when it may. The
+/// phone tier is a desktop client's minus what rewrites how this server is
+/// secured: the env vault's writes, SSH hosts and known hosts, and agent
+/// account deletes. Everything else is allowed on purpose — sessions,
+/// transcripts, terminals, files (uploads, write, delete, move, mkdir),
+/// projects, notes, todos, snippets, preferences, git, checks, Flutter and
+/// the browser. Admin and SSH prompts are refused by `LinkTrust`, not here.
+String? phoneRefusal(DataRequest<Object?> request) => switch (request) {
+  EnvSet() || EnvRemove() =>
+    'a phone may not change this server\'s environment variables or '
+        'secrets; use a desktop paired with it',
+  SshHostPut() || SshHostDelete() || KnownHostTrust() || KnownHostForget() =>
+    'a phone may not change this server\'s SSH hosts or trusted host keys; '
+        'use a desktop paired with it',
+  ClaudeAccountDelete() || CodexAccountDelete() =>
+    'a phone may not delete this server\'s agent accounts; use a desktop '
+        'paired with it',
+  _ => null,
+};
 
 /// [DataService]'s clock, as the conversation index asks for one.
 final class _Clock implements core.Clock {
