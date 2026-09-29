@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,36 +41,49 @@ class ShellAreasMenuButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final attention = SemanticColors.of(context).attention;
+    // The strip's counts: the Inbox counts its asks, and an unread update
+    // that is not an ask is only the neutral dot.
+    final sessions = ref.watch(needsYouCountProvider);
+    final asks = ref.watch(inboxAskCountProvider);
+    final news = ref.watch(inboxHasUnseenUpdateProvider);
     final badges = {
-      ShellArea.sessions: ref.watch(needsYouCountProvider),
+      ShellArea.sessions: sessions,
       ShellArea.devices: ref.watch(readyDeviceCountProvider),
-      ShellArea.inbox: ref.watch(attentionCountProvider),
+      ShellArea.inbox: asks,
     };
-    // Only what waits on the user marks the glyph, as on the strip: a
-    // connected device is not a reason to open the menu.
-    final waiting =
-        (badges[ShellArea.sessions] ?? 0) + (badges[ShellArea.inbox] ?? 0);
+    // Only what waits on the user marks the glyph amber, as on the strip: a
+    // connected device is not a reason to open the menu. A waiting session
+    // and its ask in the Inbox are one wait seen twice, so the total is the
+    // larger count, never the sum.
+    final waiting = math.max(sessions, asks);
     final open = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
     final area = ref.watch(shellAreaProvider);
+    final says = waiting > 0
+        ? '$waiting need you'
+        : news
+        ? 'new updates'
+        : null;
     return Builder(
       builder: (anchor) => Tooltip(
-        message: waiting == 0 ? 'Areas' : 'Areas  ·  $waiting need you',
+        message: says == null ? 'Areas' : 'Areas  ·  $says',
         child: Semantics(
           button: true,
-          label: waiting == 0 ? 'Areas' : 'Areas, $waiting need you',
+          label: says == null ? 'Areas' : 'Areas, $says',
           excludeSemantics: true,
           child: InkWell(
             borderRadius: BorderRadius.circular(kCompactButtonRadius),
-            onTap: () => _open(anchor, ref, badges, open ? area : null),
+            onTap: () => _open(anchor, ref, badges, news, open ? area : null),
             child: SizedBox(
               width: kCompactButton,
               height: kCompactButton,
               child: Badge(
-                isLabelVisible: waiting > 0,
+                isLabelVisible: says != null,
                 smallSize: Chrome.dot,
-                backgroundColor: attention,
+                backgroundColor: waiting > 0
+                    ? attention
+                    : scheme.onSurfaceVariant,
                 alignment: AlignmentDirectional.topEnd,
                 child: Center(
                   child: Icon(
@@ -89,6 +104,7 @@ class ShellAreasMenuButton extends ConsumerWidget {
     BuildContext anchor,
     WidgetRef ref,
     Map<ShellArea, int> badges,
+    bool news,
     ShellArea? showing,
   ) async {
     final picked = await showDesktopMenuUnder<Object>(anchor, [
@@ -106,6 +122,7 @@ class ShellAreasMenuButton extends ConsumerWidget {
         DesktopMenuItem(
           value: area,
           label: switch (badges[area] ?? 0) {
+            0 when area == ShellArea.inbox && news => '${area.label}  ·  new',
             0 => area.label,
             final count => '${area.label}  ·  $count',
           },
