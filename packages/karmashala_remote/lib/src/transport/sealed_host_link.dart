@@ -58,6 +58,7 @@ class SealedHostLink {
     this.deviceName,
     this.capabilities = CapabilitySet.none,
     this.retainForResume = false,
+    this.answersPings = false,
   }) : _channel = channel, // ignore: prefer_initializing_formals
        _sendSealed = sendSealed, // ignore: prefer_initializing_formals
        _expected = nextReceiveSequence,
@@ -82,6 +83,13 @@ class SealedHostLink {
   /// Whether sent frames are kept for a resume. Off, this is the link it
   /// always was: nothing kept, and nothing can be resumed.
   final bool retainForResume;
+
+  /// Whether an empty frame from the peer — its [ping] — is answered with
+  /// one (`link.keepalive`, Stage 0 step 18). The server's end only: the
+  /// answer is empty too, and an end that answered both ways would echo for
+  /// ever. An empty frame carries no host bytes, so a peer that does not
+  /// answer simply ignores it.
+  final bool answersPings;
 
   final _incoming = StreamController<Uint8List>();
   final _done = Completer<void>();
@@ -150,22 +158,34 @@ class SealedHostLink {
       final end = at + kHostLinkChunkBytes < bytes.length
           ? at + kHostLinkChunkBytes
           : bytes.length;
-      final piece = Uint8List.sublistView(bytes, at, end);
-      _chain = _chain.then((_) async {
-        if (isClosed) return;
-        // No await between reading the sequence and sealing: they agree.
-        final sequence = _channel.nextSendSequence;
-        final sealed = await _channel.seal(piece);
-        if (isClosed) return;
-        if (retainForResume) _retain(sequence, sealed);
-        if (isClosed || _suspended) return;
-        try {
-          _sendSealed(sealed);
-        } on Object catch (error) {
-          close('the transport refused a frame: $error');
-        }
-      });
+      _sealPiece(Uint8List.sublistView(bytes, at, end));
     }
+  }
+
+  /// Seals an empty frame after everything added so far: proof of life for
+  /// an idle link (`link.keepalive`). It takes a sequence and is kept for a
+  /// resume like any frame, so the byte stream's order is untouched.
+  void ping() {
+    if (isClosed) return;
+    if (_flushScheduled) _seal();
+    _sealPiece(Uint8List(0));
+  }
+
+  void _sealPiece(Uint8List piece) {
+    _chain = _chain.then((_) async {
+      if (isClosed) return;
+      // No await between reading the sequence and sealing: they agree.
+      final sequence = _channel.nextSendSequence;
+      final sealed = await _channel.seal(piece);
+      if (isClosed) return;
+      if (retainForResume) _retain(sequence, sealed);
+      if (isClosed || _suspended) return;
+      try {
+        _sendSealed(sealed);
+      } on Object catch (error) {
+        close('the transport refused a frame: $error');
+      }
+    });
   }
 
   void _retain(int sequence, Uint8List sealed) {
@@ -186,19 +206,23 @@ class SealedHostLink {
     }
   }
 
-  /// Takes one frame the owner opened. Anything out of sequence ends it.
+  /// Takes one frame the owner opened. A copy of one already taken is
+  /// dropped; anything else out of sequence ends it.
   void receive(SealedFrame opened) {
     if (isClosed) return;
+    // A link that moved sockets (Stage 0 step 18) can meet what was in
+    // flight on the old one a second time: the copy is not news.
+    if (opened.sequence < _expected) return;
     if (opened.sequence != _expected) {
-      close(
-        'a frame was lost (expected $_expected, got ${opened.sequence})',
-      );
+      close('a frame was lost (expected $_expected, got ${opened.sequence})');
       return;
     }
     _expected++;
     _stepOverSkips();
     if (opened.plaintext.isNotEmpty) {
       _incoming.add(Uint8List.fromList(opened.plaintext));
+    } else if (answersPings) {
+      ping();
     }
   }
 
@@ -239,8 +263,7 @@ class SealedHostLink {
       return 'what the peer missed is no longer kept';
     }
     final lost = peerResumeSequence - _expected;
-    if (lost < 0 ||
-        lost > kHostLinkRetainFrames + kHostLinkMaxResumeFrames) {
+    if (lost < 0 || lost > kHostLinkRetainFrames + kHostLinkMaxResumeFrames) {
       return 'the resume frame is out of range';
     }
     if (_sentResumeFrames.length >= kHostLinkMaxResumeFrames) {

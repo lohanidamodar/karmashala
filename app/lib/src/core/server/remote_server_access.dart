@@ -13,6 +13,15 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
 /// desktop link for a resume (`server/lib/src/serve/server_features.dart`).
 const String kLinkResumeFeature = 'link.resume';
 
+/// Announced when the server takes a resume onto a second socket while the
+/// first still carries the link, so a desktop on a relay can move to the LAN
+/// make-before-break (Stage 0 step 18).
+const String kLinkPromoteFeature = 'link.promote';
+
+/// Announced when the server answers an empty frame on a switched link, so an
+/// idle desktop can find a half-open socket (Stage 0 step 18).
+const String kLinkKeepaliveFeature = 'link.keepalive';
+
 /// A Karmashala server on another machine (slice 5e), reached the way the
 /// phone reaches one — its LAN listener, a beacon sighting, its announced LAN
 /// address or a relay, the sealed channel — and switched to the host
@@ -100,6 +109,10 @@ class RemoteServerAccess implements HostSessionAccess {
             )?.welcome.features.contains(kLinkResumeFeature) ??
             false,
         onHeld: (held) => _resuming.value = held,
+        // Stage 0 step 18: relay→LAN promotion over a resume, and pings on
+        // an idle link — each only where the server announced it.
+        promoteOffered: () => _offers(kLinkPromoteFeature),
+        keepaliveOffered: () => _offers(kLinkKeepaliveFeature),
       );
       _grants.value = link.capabilities;
       _log.info(
@@ -111,6 +124,11 @@ class RemoteServerAccess implements HostSessionAccess {
       throw HostLinkException(error.message);
     }
   }
+
+  /// Whether this server's welcome, on the shared link, names [feature].
+  bool _offers(String feature) =>
+      SharedHostLinks.current(this)?.welcome.features.contains(feature) ??
+      false;
 
   /// This machine is no longer in use: beacon listening stops. Links already
   /// open are their owners' to close. Today a switch relaunches the app, so
