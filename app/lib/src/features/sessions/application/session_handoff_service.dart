@@ -124,6 +124,18 @@ class SessionHandoffService {
     );
   }
 
+  /// The session's own title and the checkout it works in, so the dialog can
+  /// name them rather than say "this session". Nulls when either is gone.
+  ({String? title, String? checkout}) describe(String sessionId) {
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (session == null) return (title: null, checkout: null);
+    final repo = _ref
+        .read(workspaceDataProvider)
+        .repository(session.repositoryId);
+    final title = session.title.trim();
+    return (title: title.isEmpty ? null : title, checkout: repo?.name);
+  }
+
   /// The packet [sessionId] would be handed over with, as the server builds
   /// it, to read before starting anything.
   Future<String> previewPacket({
@@ -223,10 +235,21 @@ final sessionHandoffServiceProvider = Provider<SessionHandoffService>(
 /// Everything the composer needs to decide whether — and how — a session can be
 /// continued elsewhere, out of one read of the same three rows.
 class SessionContinuation {
-  const SessionContinuation({required this.targets, required this.plan});
+  const SessionContinuation({
+    required this.targets,
+    required this.plan,
+    this.sessionTitle,
+    this.checkoutName,
+  });
 
   final List<HandoffTarget> targets;
   final SessionForkPlan plan;
+
+  /// The session's title, or null when it has none — for naming it.
+  final String? sessionTitle;
+
+  /// The checkout the session works in, or null when it is gone.
+  final String? checkoutName;
 
   /// Whether there is anywhere at all for this session to go.
   bool get isPossible =>
@@ -239,8 +262,11 @@ final sessionContinuationProvider = Provider.autoDispose
     .family<SessionContinuation, String>((ref, sessionId) {
       ref.watchSession(sessionId);
       final service = ref.watch(sessionHandoffServiceProvider);
+      final described = service.describe(sessionId);
       return SessionContinuation(
         targets: service.targetsFor(sessionId),
         plan: service.forkPlanFor(sessionId),
+        sessionTitle: described.title,
+        checkoutName: described.checkout,
       );
     });

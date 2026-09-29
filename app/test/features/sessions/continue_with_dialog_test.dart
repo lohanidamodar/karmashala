@@ -224,6 +224,13 @@ final _askRow = find.widgetWithText(
   'Ask Prompting CLI to write the brief first',
 );
 
+/// The brief and the open tasks are folded under "More options" until set.
+Future<void> _openMoreOptions(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('More options'));
+  await tester.tap(find.text('More options'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   // Null until the dialog reads the provider, which is itself the answer to
   // "was anything launched": a test may ask before that has happened.
@@ -533,10 +540,10 @@ void main() {
 
   testWidgets('defaults to continuing in the same worktree', (tester) async {
     await pump(tester, continuation: continuation());
-    final checkbox = tester.widget<CheckboxListTile>(
-      find.widgetWithText(CheckboxListTile, 'Start in a new worktree'),
+    final place = tester.widget<RadioGroup<bool>>(
+      find.byType(RadioGroup<bool>),
     );
-    expect(checkbox.value, isFalse);
+    expect(place.groupValue, isFalse);
     expect(
       find.textContaining('same directory and on the same branch'),
       findsOneWidget,
@@ -547,6 +554,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, continuation: continuation());
+    await _openMoreOptions(tester);
     // Named, because it is that agent's quota being spent.
     expect(
       find.text('Ask Prompting CLI to write the brief first'),
@@ -567,6 +575,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, continuation: continuation());
+    await _openMoreOptions(tester);
     await tester.ensureVisible(_askRow);
     await tester.tap(_askRow);
     await tester.enterText(find.byType(TextField).first, 'Finish it.');
@@ -593,6 +602,7 @@ void main() {
         'it had not answered when this stopped waiting.',
       ),
     );
+    await _openMoreOptions(tester);
     await tester.ensureVisible(_askRow);
     await tester.tap(_askRow);
     await tester.enterText(find.byType(TextField).first, 'Finish it.');
