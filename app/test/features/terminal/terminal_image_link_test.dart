@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
-import 'package:karmashala/src/features/media/domain/session_media_item.dart';
+import 'package:agent_cli/read.dart' show SessionMediaItem, SessionMediaOrigin;
 import 'package:karmashala/src/features/media/presentation/session_image_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_link_actions.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';

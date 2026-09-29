@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/panes.dart';
@@ -5,7 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import '../../sessions/presentation/transcript_image_preview.dart';
-import '../domain/session_media_item.dart';
+import 'package:agent_cli/read.dart' show SessionMediaItem, SessionMediaOrigin;
 
 /// How tall a thumbnail draws in the panel. Not the transcript's 220: in a
 /// 240px column that shows one and a half, where 132 shows four.
@@ -17,6 +19,7 @@ class SessionMediaList extends StatelessWidget {
   const SessionMediaList({
     required this.items,
     this.resolveHostPath,
+    this.fetch,
     this.now,
     super.key,
   });
@@ -27,6 +30,9 @@ class SessionMediaList extends StatelessWidget {
   /// Translates an agent-written path into one this process can open — only for
   /// [SessionMediaItem.fromAgentEnvironment]; the scan's copies are host paths.
   final String? Function(String path)? resolveHostPath;
+
+  /// Brings an item from a server elsewhere; null when this disk has it.
+  final Future<File> Function(SessionMediaItem item)? fetch;
 
   /// The instant ages are measured against. Injected so tests are deterministic.
   final DateTime? now;
@@ -50,6 +56,7 @@ class SessionMediaList extends StatelessWidget {
       itemBuilder: (context, index) => SessionMediaTile(
         item: items[index],
         resolveHostPath: resolveHostPath,
+        fetch: fetch,
         now: now,
       ),
     );
@@ -60,12 +67,14 @@ class SessionMediaTile extends StatelessWidget {
   const SessionMediaTile({
     required this.item,
     this.resolveHostPath,
+    this.fetch,
     this.now,
     super.key,
   });
 
   final SessionMediaItem item;
   final String? Function(String path)? resolveHostPath;
+  final Future<File> Function(SessionMediaItem item)? fetch;
   final DateTime? now;
 
   @override
@@ -73,6 +82,7 @@ class SessionMediaTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final path = item.path;
+    final fetch = this.fetch;
     final at = item.at;
     final age = at == null || now == null
         ? null
@@ -99,6 +109,7 @@ class SessionMediaTile extends StatelessWidget {
                     resolveHostPath: item.fromAgentEnvironment
                         ? resolveHostPath
                         : null,
+                    fetch: fetch == null ? null : (_) => fetch(item),
                   ),
           ),
           const SizedBox(height: Insets.xs),

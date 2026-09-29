@@ -33,8 +33,8 @@ const Map<String, String> kMediaTypeExtensions = {
   'image/bmp': 'bmp',
 };
 
-/// The biggest single picture the panel will move to disk. Mirrors
-/// `kMaxImagePreviewBytes`, kept here so `data/` does not depend on a widget.
+/// The biggest single picture extracted to disk, or brought from a server;
+/// the app's preview refuses anything larger too.
 const int kMaxSessionMediaBytes = 12 * 1024 * 1024;
 
 /// How many pictures the panel keeps: a long session is unbounded and the

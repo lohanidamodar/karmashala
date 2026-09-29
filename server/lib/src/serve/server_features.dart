@@ -28,4 +28,7 @@ const Set<String> kServerFeatures = <String>{
   // record's turns as text only, for export and recap (Stage 0 step 8).
   'sessions.transcript.digest',
   'sessions.transcript.turns',
+  // `sessions.media`: a session's pictures, extracted here; their bytes come
+  // through `files.read` (Stage 0 step 10).
+  'sessions.media',
 };

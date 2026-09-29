@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
-import 'package:karmashala/src/features/media/domain/session_media_item.dart';
+import 'package:agent_cli/read.dart' show SessionMediaItem;
 import 'package:karmashala/src/features/media/presentation/session_media_panel.dart';
 import 'package:karmashala_ui/primitives.dart';
 

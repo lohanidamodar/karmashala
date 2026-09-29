@@ -140,6 +140,11 @@ final class Capabilities {
   /// record's turns as the server reads them, text only (Stage 0 step 8).
   bool get turnsViaServer => serverOffers('sessions.transcript.turns');
 
+  /// A session's pictures are listed by the server, where its record is
+  /// (Stage 0 step 10); their bytes come through `files.read` unless
+  /// [readsServerDisk].
+  bool get mediaViaServer => serverOffers('sessions.media');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

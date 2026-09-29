@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/media/data/session_media_store.dart';
+import 'package:agent_cli/read.dart'
+    show SessionMediaItem, SessionMediaOrigin, SessionMediaStore;
 import 'package:karmashala/src/features/media/domain/session_image_reference.dart';
-import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
 import 'session_media_fixture.dart';
 import '../../support/temp_directory.dart';

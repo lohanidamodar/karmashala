@@ -48,6 +48,7 @@ import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
+import '../sessions/session_media.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_transcripts.dart';
@@ -872,6 +873,12 @@ Future<int> runServe(
     runners: ssh.runners,
   );
   data.sessionRecordReadings = sessionRecordReadings;
+  // Sessions' pictures (Stage 0 step 10), extracted from the same records.
+  data.sessionMedia = SessionMedia(
+    lookUp: sessionTranscripts.lookUp,
+    registry: transcripts.registry,
+    root: p.join(dataDirectory, 'media'),
+  );
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(

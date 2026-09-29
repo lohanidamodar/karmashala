@@ -319,6 +319,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         :final item,
         :final matches,
         :final resolveHostPath,
+        :final fetch,
       ):
         await showDialog<void>(
           context: context,
@@ -327,6 +328,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
             item: item,
             matches: matches,
             resolveHostPath: resolveHostPath,
+            fetch: fetch,
             now: ref.read(clockProvider).nowUtc(),
           ),
         );

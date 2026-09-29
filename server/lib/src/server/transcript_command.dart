@@ -91,7 +91,8 @@ Future<int> runTranscript(
   }
   try {
     // `--read=rewindPoints|changedFiles|openQuestion`: a raw-line reader's
-    // answer (Stage 0 step 7), as the wire carries it.
+    // answer (Stage 0 step 7), as the wire carries it; `--read=media`, the
+    // session's pictures (step 10).
     final reader = text('read');
     if (reader != null) {
       Future<Object?> read<R>(DataRequest<R> ask) async =>
@@ -100,6 +101,7 @@ Future<int> runTranscript(
         'rewindPoints' => read(SessionRewindPointsRead(sessionId)),
         'changedFiles' => read(SessionChangedFilesRead(sessionId)),
         'openQuestion' => read(SessionOpenQuestionRead(sessionId)),
+        'media' => read(SessionMediaRead(sessionId)),
         _ => throw DataRefused.invalid('no reader named $reader'),
       };
       sink.writeln(const JsonEncoder.withIndent('  ').convert(answer));

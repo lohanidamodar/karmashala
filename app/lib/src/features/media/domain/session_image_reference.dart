@@ -3,7 +3,7 @@
 /// never unique. `[Audio #N]` is deliberately not matched.
 library;
 
-import 'session_media_item.dart';
+import 'package:agent_cli/read.dart' show SessionMediaItem;
 
 /// The exact text the CLI writes. Case-sensitive and fully bracketed: `Image #6`
 /// in prose is somebody talking about a picture, not a link.

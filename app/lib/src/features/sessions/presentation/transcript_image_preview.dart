@@ -19,12 +19,37 @@ const double kInlineImageMaxHeight = 220;
 const double kInlineImageMinWidth = 120;
 const double kInlineImageMinHeight = 72;
 
+/// Brings a picture a server elsewhere holds to a file this machine can draw.
+/// Throws an [Exception] whose text is the sentence to show when it cannot.
+typedef TranscriptImageFetch = Future<File> Function(String path);
+
+/// Where the previews below it bring their pictures from: set around a
+/// transcript whose server is not on this machine (Stage 0 step 10). A null
+/// [fetch] reads this disk, as before.
+class TranscriptImageSource extends InheritedWidget {
+  const TranscriptImageSource({
+    required this.fetch,
+    required super.child,
+    super.key,
+  });
+
+  final TranscriptImageFetch? fetch;
+
+  static TranscriptImageFetch? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<TranscriptImageSource>()
+      ?.fetch;
+
+  @override
+  bool updateShouldNotify(TranscriptImageSource old) => fetch != old.fetch;
+}
+
 /// The picture behind a transcript row that read an image, drawn from the path
 /// rather than the transcript's base64 copy. Every failure degrades to a line.
 class TranscriptImagePreview extends StatefulWidget {
   const TranscriptImagePreview({
     required this.path,
     this.resolveHostPath,
+    this.fetch,
     this.maxBytes = kMaxImagePreviewBytes,
     super.key,
   });
@@ -36,6 +61,10 @@ class TranscriptImagePreview extends StatefulWidget {
   /// cannot. Omitted means "already a host path".
   final String? Function(String path)? resolveHostPath;
 
+  /// Brings [path] from the server instead of reading it here; when null, the
+  /// nearest [TranscriptImageSource]'s. [resolveHostPath] is then unused.
+  final TranscriptImageFetch? fetch;
+
   final int maxBytes;
 
   @override
@@ -45,24 +74,72 @@ class TranscriptImagePreview extends StatefulWidget {
 class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   File? _file;
   String? _problem;
+  bool _fetching = false;
+  bool _resolved = false;
+  TranscriptImageFetch? _fetch;
 
+  /// Bumped per resolve, so a fetch that lands after the path moved is dropped.
+  int _asked = 0;
+
+  // A fetch rebuilt for the same path is the same fetch: only a path, or a
+  // switch between this disk and a server's, resolves again.
   @override
-  void initState() {
-    super.initState();
-    _resolve();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final fetch = widget.fetch ?? TranscriptImageSource.of(context);
+    if (!_resolved || (fetch == null) != (_fetch == null)) _resolve(fetch);
   }
 
   @override
   void didUpdateWidget(TranscriptImagePreview old) {
     super.didUpdateWidget(old);
-    if (old.path != widget.path || old.maxBytes != widget.maxBytes) _resolve();
+    final fetch = widget.fetch ?? TranscriptImageSource.of(context);
+    if (old.path != widget.path ||
+        old.maxBytes != widget.maxBytes ||
+        (fetch == null) != (_fetch == null)) {
+      _resolve(fetch);
+    }
+  }
+
+  void _resolve(TranscriptImageFetch? fetch) {
+    _resolved = true;
+    _fetch = fetch;
+    _file = null;
+    _problem = null;
+    _fetching = false;
+    final asked = ++_asked;
+    if (fetch == null) {
+      _resolveHere();
+      return;
+    }
+    if (!looksLikeImagePath(widget.path)) {
+      _problem = 'That file is not an image.';
+      return;
+    }
+    _fetching = true;
+    fetch(widget.path).then(
+      (file) {
+        if (!mounted || asked != _asked) return;
+        setState(() {
+          _fetching = false;
+          _file = file;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted || asked != _asked) return;
+        setState(() {
+          _fetching = false;
+          _problem = error is Exception
+              ? '$error'
+              : 'That image could not be opened.';
+        });
+      },
+    );
   }
 
   /// Stats the file **once per path**, not once per build: the transcript
   /// rebuilds on every poll, and a `\\wsl.localhost\…` stat costs ~1.2 ms.
-  void _resolve() {
-    _file = null;
-    _problem = null;
+  void _resolveHere() {
     final translated = _hostPath();
     if (translated == null) {
       _problem = 'That image is no longer on disk.';
@@ -117,6 +194,7 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   @override
   Widget build(BuildContext context) {
     final file = _file;
+    if (_fetching) return const _Note(text: 'Bringing the image here…');
     if (file == null) return _Note(text: _problem ?? 'No preview.');
 
     final scheme = Theme.of(context).colorScheme;

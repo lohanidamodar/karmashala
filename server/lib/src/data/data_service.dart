@@ -13,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import '../sessions/session_media.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
 import 'agent_work.dart';
@@ -144,6 +145,10 @@ class DataService {
   /// Rewind points, changed files and the open question, read off the same
   /// records (Stage 0 step 7); refused `unavailable` without them.
   SessionRecordReadings? sessionRecordReadings;
+
+  /// Sessions' pictures, extracted here (Stage 0 step 10); refused
+  /// `unavailable` without it.
+  SessionMedia? sessionMedia;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -782,6 +787,11 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
             .changedFiles(sessionId),
         SessionOpenQuestionRead(:final sessionId) => await readings()
             .openQuestion(sessionId),
+        final SessionMediaRead read => await (_service.sessionMedia ??
+                (throw const DataRefused.unavailable(
+                  'this server extracts no session media',
+                )))
+            .list(read),
       };
       return DataReply(result as R, _service._revision);
     }
