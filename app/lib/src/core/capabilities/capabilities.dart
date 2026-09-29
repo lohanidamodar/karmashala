@@ -19,6 +19,7 @@ final class ClientCapabilities {
   const ClientCapabilities({
     required this.systemIntegration,
     required this.osToasts,
+    required this.localNotifications,
     required this.localDevices,
     required this.externalApps,
     required this.fileDrop,
@@ -35,9 +36,11 @@ final class ClientCapabilities {
   factory ClientCapabilities.measure({String? deviceModel}) {
     final desktop =
         !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    final mobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
     return ClientCapabilities(
       systemIntegration: desktop,
       osToasts: desktop,
+      localNotifications: mobile,
       localDevices: desktop,
       externalApps: desktop,
       fileDrop: desktop,
@@ -75,6 +78,10 @@ final class ClientCapabilities {
 
   /// OS notifications (`local_notifier`).
   final bool osToasts;
+
+  /// A phone's notifications (`flutter_local_notifications`), shown while the
+  /// app's process runs; there is no push (Stage 3 step 2).
+  final bool localNotifications;
 
   /// adb and simctl run on this machine.
   final bool localDevices;
@@ -163,6 +170,13 @@ final class Capabilities {
   bool get systemIntegration => client.systemIntegration;
 
   bool get osToasts => client.osToasts;
+
+  /// A phone's notifications, one per session, with settings kept on the
+  /// device rather than at the server.
+  bool get localNotifications => client.localNotifications;
+
+  /// Settings › Notifications, and agent news turned into notifications here.
+  bool get notifiesHere => client.osToasts || client.localNotifications;
 
   /// The Devices area, its dock and its settings: adb and simctl run here.
   bool get devicesArea => client.localDevices;

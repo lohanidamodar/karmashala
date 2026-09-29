@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../notifications/application/phone_notifications.dart';
+import '../../notifications/data/phone_notification_presenter.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -18,6 +23,9 @@ class NotificationsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(capabilitiesProvider).localNotifications) {
+      return const _PhoneNotificationsSection();
+    }
     final settings = ref.watch(notificationSettingsControllerProvider);
     final controller = ref.read(
       notificationSettingsControllerProvider.notifier,
@@ -48,6 +56,76 @@ class NotificationsSection extends ConsumerWidget {
                   value: settings.onlyWhenUnfocused,
                   onChanged: controller.setOnlyWhenUnfocused,
                 ),
+                SettingsSwitchRow(
+                  label: 'When an agent needs you',
+                  help: 'Waiting for an approval, or failed.',
+                  value: settings.notifyWhenAttentionNeeded,
+                  onChanged: controller.setNotifyWhenAttentionNeeded,
+                ),
+                SettingsSwitchRow(
+                  label: 'When an agent finishes',
+                  help: 'A turn ended and the agent stopped working.',
+                  value: settings.notifyWhenFinished,
+                  onChanged: controller.setNotifyWhenFinished,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A phone's page (Stage 3 step 2): its own switches, kept on this phone and
+/// never at the server, so the desktop's toasts are untouched. There is no
+/// "only in the background": a phone notifies in front too, for any session
+/// but the one on screen. It notifies only while the app runs — no push.
+class _PhoneNotificationsSection extends ConsumerWidget {
+  const _PhoneNotificationsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(notificationSettingsControllerProvider);
+    final controller = ref.read(
+      notificationSettingsControllerProvider.notifier,
+    );
+    final blocked =
+        ref.watch(phoneNotificationPermissionProvider).value == false;
+    return SettingsSection(
+      title: 'NOTIFICATIONS',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (blocked)
+            SettingsRow(
+              label: 'Notifications are off for Karmashala',
+              help:
+                  'The phone blocks them, so nothing below is sent. Allow '
+                  'them in the phone’s settings.',
+              control: TextButton(
+                onPressed: () {
+                  final presenter = ref.read(notificationPresenterProvider);
+                  if (presenter is PhoneNotificationPresenter) {
+                    unawaited(presenter.openSystemSettings());
+                  }
+                },
+                child: const Text('Open settings'),
+              ),
+            ),
+          SettingsSwitchRow(
+            label: 'Send notifications on this phone',
+            help:
+                'While Karmashala runs, for any session but the one on '
+                'screen. Kept on this phone; the desktop’s are its own.',
+            value: settings.enabled,
+            onChanged: controller.setEnabled,
+          ),
+          Opacity(
+            opacity: settings.enabled ? 1 : 0.5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 SettingsSwitchRow(
                   label: 'When an agent needs you',
                   help: 'Waiting for an approval, or failed.',

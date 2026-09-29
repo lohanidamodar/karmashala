@@ -22,6 +22,7 @@ import '../../features/environments/application/browse_sources.dart';
 import '../../features/environments/data/environments_data.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/notifications/application/notification_providers.dart';
+import '../../features/notifications/application/phone_notifications.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -388,6 +389,12 @@ class ServerSession {
     required Future<void> Function() afterFirstFrame,
   }) {
     final capabilities = container.read(capabilitiesProvider);
+    // A phone's notifications, for every server it opens. The desktop's are
+    // started by `SystemIntegrationService`, never here as well.
+    if (capabilities.localNotifications && !capabilities.systemIntegration) {
+      startPhoneNotifications(container, logger: _logger);
+    }
+
     // This machine's session host, now rather than on the first host-backed
     // pane: it owns the agents' hook endpoint and the lifecycle feed, so the
     // first session's first turn is heard only if it is already up. Started

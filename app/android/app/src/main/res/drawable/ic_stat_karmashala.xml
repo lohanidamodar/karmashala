@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The status-bar icon for notifications: white on transparent, since
+     Android draws only the alpha of a small icon. A "K". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,4h3v6.4L14.4,4H18l-6,7.1L18.5,20H14.9L10,13.2L9,14.3V20H6z" />
+</vector>

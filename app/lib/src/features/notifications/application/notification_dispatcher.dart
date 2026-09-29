@@ -15,9 +15,15 @@ class NotificationDispatcher {
     this.window = const Duration(seconds: 4),
     this.urgentWindow = kUrgentNotificationWindow,
     this.coalescer = const NotificationCoalescer(),
+    this.perSession = false,
   });
 
   final NotificationPresenter presenter;
+
+  /// One notification per session in each window, rather than one summary
+  /// naming them all: a phone keeps a notification per session, replaced by
+  /// the next for it (Stage 3 step 2).
+  final bool perSession;
 
   /// How long to keep collecting a turn ending before delivering. Trailing, so
   /// a burst is exactly one interruption; nobody is blocked on a finished turn.
@@ -77,6 +83,17 @@ class NotificationDispatcher {
     if (_pending.isEmpty) return;
     final events = List<PendingNotification>.of(_pending);
     _pending.clear();
+    if (perSession) {
+      final bySession = <String, List<PendingNotification>>{};
+      for (final event in events) {
+        (bySession['${event.session.key}'] ??= []).add(event);
+      }
+      for (final group in bySession.values) {
+        final request = coalescer.summarize(group);
+        if (request != null) await presenter.show(request);
+      }
+      return;
+    }
     final request = coalescer.summarize(events);
     if (request != null) await presenter.show(request);
   }

@@ -24,6 +24,8 @@ import 'shell_area.dart';
 import 'shell_compact_bar.dart' show ShellTabSwitcher;
 import 'workbench.dart';
 
+export 'phone_routes.dart' show PhoneWorkbenchController, phoneWorkbenchProvider;
+
 /// The phone shell's tabs (owner's decision 5), in bottom-bar order. Devices
 /// is never one: a phone has no adb of its own.
 enum PhoneTab {
@@ -57,21 +59,6 @@ class PhoneTabController extends Notifier<PhoneTab> {
 
 final phoneTabProvider = NotifierProvider<PhoneTabController, PhoneTab>(
   PhoneTabController.new,
-);
-
-/// Whether the phone shows the desktop's workbench over its tabs — where a
-/// session opens (owner's answer 5), until Stage 2 gives the phone its own.
-class PhoneWorkbenchController extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void open() => state = true;
-
-  void close() => state = false;
-}
-
-final phoneWorkbenchProvider = NotifierProvider<PhoneWorkbenchController, bool>(
-  PhoneWorkbenchController.new,
 );
 
 /// Shows the workbench on a phone. Does nothing a wider window can see.
@@ -131,6 +118,12 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
 
   @override
   void showWorkbench() => openPhoneWorkbench(ref);
+
+  @override
+  void showInbox() {
+    ref.read(phoneWorkbenchProvider.notifier).close();
+    ref.read(phoneTabProvider.notifier).select(PhoneTab.inbox);
+  }
 
   @override
   void showProjects() {
