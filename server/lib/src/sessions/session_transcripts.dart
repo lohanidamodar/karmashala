@@ -293,7 +293,20 @@ class SessionTranscripts {
         ..stamp = null;
       return _absent(held, absence);
     }
-    final stamp = (stat.size, stat.modified);
+    // A subagent's meta or first turn lands in its own directory, not the
+    // parent record; the directory's time tells of it without a listing.
+    DateTime? subagents;
+    try {
+      final directory = await Directory(
+        subagentsDirectoryFor(held.storePath!),
+      ).stat();
+      if (directory.type != FileSystemEntityType.notFound) {
+        subagents = directory.modified;
+      }
+    } on Object {
+      subagents = null;
+    }
+    final stamp = (stat.size, stat.modified, subagents);
     if (held.stamp == stamp) return;
     final clock = Stopwatch()..start();
     final List<TranscriptMessage> next;
@@ -481,7 +494,7 @@ class _Held {
   String? storePath;
   String? file;
   DateTime? lookedAt;
-  (int, DateTime)? stamp;
+  (int, DateTime, DateTime?)? stamp;
 
   /// Empty while nothing has been read, or while [absence] says why not.
   String generation = '';
