@@ -8,8 +8,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../files/data/pick_server.dart';
 import '../../settings/presentation/path_field_row.dart';
 import 'package:agent_cli/process.dart';
 import '../data/ssh_client.dart';
@@ -80,17 +80,21 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
   }
 
   Future<void> _browseForKey() async {
-    final file = await pickOneFile(
-      context: context,
+    // The server dials the host, so the key is one of the server's files
+    // (owner, 2026-09-29): from the server only, in the environment chosen.
+    final file = await pickServerFile(
+      context,
+      ref,
       what: 'an SSH private key',
+      environmentId: _keyEnvironmentId,
       startNear: _keyPath.text,
     );
     if (file == null || !mounted) return;
     setState(() {
       _keyPath.text = file.path;
-      // The picker runs on the Windows host, so what it returns is a Windows
-      // path — recording it under any other environment would be a lie.
-      _keyEnvironmentId = localHostEnvironmentId;
+      // Recorded under the environment the path is spelled for: on the
+      // server's own machine the picker answers in this machine's spelling.
+      _keyEnvironmentId = file.environmentId;
     });
   }
 
@@ -388,7 +392,10 @@ class _AuthFields extends StatelessWidget {
           PathFieldRow.inDialog(
             controller: keyPath,
             label: 'Private key path',
-            hint: keyEnvironment?.kind == EnvironmentKind.wsl
+            // A server on Linux or macOS spells its own keys the POSIX way.
+            hint:
+                keyEnvironment?.kind == EnvironmentKind.wsl ||
+                    keyEnvironment?.kind == EnvironmentKind.localPosix
                 ? '/home/you/.ssh/id_ed25519'
                 : r'C:\Users\you\.ssh\id_ed25519',
             actions: [

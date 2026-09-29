@@ -309,6 +309,14 @@ Future<void> _bootstrap(AppLogger logger) async {
       !container.read(capabilitiesProvider).readsServerDisk ||
       (container.read(settingsControllerProvider).useInAppFilePicker ??
           FilePickerChoice.platformDefault);
+  // A pick from this device's own files (spec decision 11) follows the same
+  // setting, but is never forced to the server; and while the server is here,
+  // it is today's pick exactly.
+  FilePickerChoice.devicePrefersInApp = () =>
+      container.read(settingsControllerProvider).useInAppFilePicker ??
+      FilePickerChoice.platformDefault;
+  FilePickerChoice.serverOnThisDevice = () =>
+      container.read(capabilitiesProvider).readsServerDisk;
   // And one answer about hidden files for every browser, persisted.
   HiddenFilesPreference.read = () =>
       container.read(settingsControllerProvider).showHiddenFiles;

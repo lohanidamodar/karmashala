@@ -5,6 +5,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../files/data/pick_server.dart';
 import 'package:agent_cli/process.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -129,6 +130,9 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
               emptyHint: 'No readable history — send a message to continue it.',
               footer: MessageComposer(
                 hintText: 'Continue this session — type a message',
+                // Attachments go where the session's agent runs.
+                server: () =>
+                    ref.read(pickServerProvider(session.environmentId)),
                 onSend: (text) => ref
                     .read(sessionActionsProvider)
                     .resumeAndSend(session, text),

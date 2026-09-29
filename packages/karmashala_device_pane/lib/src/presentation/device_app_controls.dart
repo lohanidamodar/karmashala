@@ -92,7 +92,8 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
     );
   }
 
-  Future<XFile?> _browse() => pickOneFile(
+  // The pane drives this device's own devices, so the build is this device's.
+  Future<XFile?> _browse() => pickDeviceFile(
     context: context,
     what: 'a build to install',
     startNear: _buildPath.text,

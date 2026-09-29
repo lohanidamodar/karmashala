@@ -32,12 +32,25 @@ int composerLinesThatFit(
   return (height / line).floor().clamp(1, most);
 }
 
-/// A pasted/attached image, kept on disk so its path can be handed to the agent.
+/// A pasted/attached image, somewhere the agent can read it: a client temp
+/// file when the server is on this machine, else a path on the server.
 class _Attachment {
-  _Attachment(this.file, this.bytes);
-  final File file;
-  final Uint8List bytes;
+  _Attachment({required this.path, required this.name, required this.where});
+
+  /// What the agent is sent: a path on the server's disk.
+  final String path;
+  final String name;
+
+  /// Where the file is, for the chip's tooltip.
+  final String where;
 }
+
+const _images = [
+  XTypeGroup(
+    label: 'Images',
+    extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'],
+  ),
+];
 
 /// One entry of the composer's snippets menu: what it is called, and the text
 /// it puts in the box. Plain values, so the composer knows nothing of where
@@ -64,6 +77,7 @@ class MessageComposer extends StatefulWidget {
     this.chips = const [],
     this.controller,
     this.snippets,
+    this.server,
     super.key,
   });
 
@@ -85,6 +99,12 @@ class MessageComposer extends StatefulWidget {
   /// hides the button: a host with no library has nothing to offer.
   final List<ComposerSnippet> Function()? snippets;
 
+  /// The server the agent runs on, read when an image is pasted or attached.
+  /// Null, or one on this machine, keeps today's client temp files. One
+  /// elsewhere (spec decision 11) has pasted images uploaded to it, offers
+  /// "This device" or its own files to attach, and is sent its own paths.
+  final PickServer Function()? server;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
 }
@@ -94,6 +114,9 @@ class _MessageComposerState extends State<MessageComposer> {
 
   late TextEditingController _input;
   final _attachments = <_Attachment>[];
+
+  /// Pasted images still on their way to a server elsewhere. Send waits.
+  int _uploading = 0;
   bool _busy = false;
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKey);
 
@@ -175,12 +198,106 @@ class _MessageComposerState extends State<MessageComposer> {
     return dir;
   }
 
+  /// The server the agent runs on when it is **not** this machine; null when
+  /// its disk is this one's, and the client's temp folder will do.
+  PickServer? _serverElsewhere() {
+    final server = widget.server?.call();
+    return server == null || server.onThisMachine ? null : server;
+  }
+
   Future<void> _addImageBytes(Uint8List bytes, {String ext = 'png'}) async {
-    final dir = await _attachmentsDir();
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    final file = File('${dir.path}/img_$stamp.$ext');
+    final name = 'img_$stamp.$ext';
+    final server = _serverElsewhere();
+    if (server != null) {
+      await _uploadImage(bytes, name, server);
+      return;
+    }
+    final dir = await _attachmentsDir();
+    final file = File('${dir.path}/$name');
     await file.writeAsBytes(bytes);
-    if (mounted) setState(() => _attachments.add(_Attachment(file, bytes)));
+    if (mounted) {
+      setState(
+        () => _attachments.add(
+          _Attachment(
+            path: file.path,
+            name: name,
+            where:
+                'Saved to a temp folder and sent to the agent as a file '
+                'path.',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Straight to [server]'s uploads folder, with no temp file: a path on this
+  /// machine is nothing an agent there can read.
+  Future<void> _uploadImage(
+    Uint8List bytes,
+    String name,
+    PickServer server,
+  ) async {
+    // The clipboard read before this yields; the composer may be gone.
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _uploading++);
+    try {
+      final landed = await uploadToServer(
+        DevicePick(XFile.fromData(bytes, name: name)),
+        server,
+      );
+      if (!mounted) return;
+      setState(
+        () => _attachments.add(
+          _Attachment(
+            path: landed.path,
+            name: name,
+            where: 'Sent to ${server.name}; the agent is given its path there.',
+          ),
+        ),
+      );
+    } on Object catch (error, stack) {
+      _log.warning(
+        'Could not send a pasted image to the server.',
+        error,
+        stack,
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'The image could not be sent to ${server.name}: '
+            '${server.describe(error)}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _uploading--);
+    }
+  }
+
+  /// A server elsewhere: an image from this device (uploaded) or one already
+  /// on the server, whichever the person chooses.
+  Future<void> _attachFrom(PickServer server) async {
+    final landed = await pickFileToServer(
+      context,
+      what: 'an image to attach',
+      server: server,
+      purpose: 'composer attachment',
+      acceptedTypeGroups: _images,
+    );
+    if (landed == null || !mounted) return;
+    final path = landed.path;
+    final cut = path.lastIndexOf(RegExp(r'[\\/]'));
+    setState(
+      () => _attachments.add(
+        _Attachment(
+          path: path,
+          name: cut < 0 ? path : path.substring(cut + 1),
+          where: 'On ${server.name}; the agent is given its path there.',
+        ),
+      ),
+    );
   }
 
   /// The user's pictures, when there is such a folder; the picker falls back
@@ -202,18 +319,15 @@ class _MessageComposerState extends State<MessageComposer> {
       // Otherwise let the user pick an image file. The clipboard read above
       // yields, so the composer may already be gone.
       if (!mounted) return;
+      final server = _serverElsewhere();
+      if (server != null) return await _attachFrom(server);
       final file = await pickOneFile(
         context: context,
         what: 'an image to attach',
         // The composer knows nothing about sessions, so the nearest useful
         // place is the user's own pictures.
         startNear: _pictures(),
-        acceptedTypeGroups: const [
-          XTypeGroup(
-            label: 'Images',
-            extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'],
-          ),
-        ],
+        acceptedTypeGroups: _images,
       );
       if (file == null) return;
       final bytes = await file.readAsBytes();
@@ -229,7 +343,8 @@ class _MessageComposerState extends State<MessageComposer> {
   }
 
   Future<void> _send() async {
-    if (_busy || !widget.enabled) return;
+    // An image still on its way would go missing from the message.
+    if (_busy || !widget.enabled || _uploading > 0) return;
     final text = _input.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
 
@@ -239,7 +354,7 @@ class _MessageComposerState extends State<MessageComposer> {
       buffer.write('Attached image(s):');
       for (final a in _attachments) {
         buffer.write('\n');
-        buffer.write(a.file.path);
+        buffer.write(a.path);
       }
     }
 
@@ -299,9 +414,10 @@ class _MessageComposerState extends State<MessageComposer> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_attachments.isNotEmpty)
+            if (_attachments.isNotEmpty || _uploading > 0)
               _AttachmentStrip(
                 attachments: _attachments,
+                uploading: _uploading,
                 onRemove: (i) => setState(() => _attachments.removeAt(i)),
               ),
             Padding(
@@ -368,7 +484,7 @@ class _MessageComposerState extends State<MessageComposer> {
                   input: _input,
                   attachments: _attachments,
                   busy: _busy,
-                  onSend: canType ? _send : null,
+                  onSend: canType && _uploading == 0 ? _send : null,
                 ),
               ),
             ),
@@ -429,7 +545,7 @@ class _MessageComposerState extends State<MessageComposer> {
         toolbarWidth <= _ComposerToolbar.rowMinWidth) {
       height += Insets.xs + Chrome.control;
     }
-    if (_attachments.isNotEmpty) {
+    if (_attachments.isNotEmpty || _uploading > 0) {
       height += Insets.sm + _AttachmentChip.height;
     }
     return height;
@@ -440,9 +556,16 @@ class _MessageComposerState extends State<MessageComposer> {
 /// glyph, the file's name and a remove button. Where the files go is the
 /// pill's tooltip — a sentence under them, always drawn, cost 31px.
 class _AttachmentStrip extends StatelessWidget {
-  const _AttachmentStrip({required this.attachments, required this.onRemove});
+  const _AttachmentStrip({
+    required this.attachments,
+    required this.uploading,
+    required this.onRemove,
+  });
 
   final List<_Attachment> attachments;
+
+  /// Pasted images still being sent, each drawn as a chip that says so.
+  final int uploading;
   final ValueChanged<int> onRemove;
 
   @override
@@ -454,8 +577,14 @@ class _AttachmentStrip extends StatelessWidget {
       children: [
         for (var i = 0; i < attachments.length; i++)
           _AttachmentChip(
-            name: attachments[i].file.uri.pathSegments.last,
+            name: attachments[i].name,
+            where: attachments[i].where,
             onRemove: () => onRemove(i),
+          ),
+        for (var i = 0; i < uploading; i++)
+          const _AttachmentChip(
+            name: 'Sending image…',
+            where: 'Uploading to the server; Send waits until it is there.',
           ),
       ],
     ),
@@ -463,10 +592,17 @@ class _AttachmentStrip extends StatelessWidget {
 }
 
 class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({required this.name, required this.onRemove});
+  const _AttachmentChip({
+    required this.name,
+    required this.where,
+    this.onRemove,
+  });
 
   final String name;
-  final VoidCallback onRemove;
+  final String where;
+
+  /// Null while the image is still being sent: a spinner stands in its place.
+  final VoidCallback? onRemove;
 
   /// The pill's height, which the composer's sizing counts.
   static const height = Chrome.control;
@@ -476,8 +612,9 @@ class _AttachmentChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = scheme.onSurfaceVariant;
+    final onRemove = this.onRemove;
     return Tooltip(
-      message: 'Saved to a temp folder and sent to the agent as a file path.',
+      message: where,
       child: Container(
         height: height,
         padding: const EdgeInsets.only(left: Insets.sm),
@@ -500,19 +637,25 @@ class _AttachmentChip extends StatelessWidget {
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
             ),
-            IconButton(
-              tooltip: 'Remove',
-              iconSize: Chrome.iconSmall,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(
-                minWidth: height,
-                minHeight: height,
+            if (onRemove == null)
+              const SizedBox.square(
+                dimension: height,
+                child: Center(child: InlineSpinner()),
+              )
+            else
+              IconButton(
+                tooltip: 'Remove',
+                iconSize: Chrome.iconSmall,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(
+                  minWidth: height,
+                  minHeight: height,
+                ),
+                padding: EdgeInsets.zero,
+                color: muted,
+                icon: const Icon(AppIcons.x),
+                onPressed: onRemove,
               ),
-              padding: EdgeInsets.zero,
-              color: muted,
-              icon: const Icon(AppIcons.x),
-              onPressed: onRemove,
-            ),
           ],
         ),
       ),

@@ -131,7 +131,8 @@ class _ExternalAppSectionState extends ConsumerState<ExternalAppSection> {
   }
 
   Future<void> _browse() async {
-    final file = await pickOneFile(
+    // The program runs on this device, so it is picked from this device.
+    final file = await pickDeviceFile(
       context: context,
       what: '${_kind.aProgram} program',
       startNear: _path.text,

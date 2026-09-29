@@ -21,6 +21,8 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../file_explorer/application/file_explorer_providers.dart';
 import '../../files/data/files_client.dart';
+import '../../files/data/pick_server.dart';
+import 'package:karmashala_ui/picking.dart' show PickServer;
 import 'package:karmashala_files/values.dart' show FileStat;
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
@@ -165,6 +167,21 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         .windowsPathFor(
           EnvironmentPath(environmentId: environmentId, path: path),
         );
+  }
+
+  /// The server the agent runs on, for the composer's attachments: browsed in
+  /// the environment the session's agent runs in, a WSL or SSH one included.
+  PickServer _pickServer() {
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
+    final environmentId = session == null
+        ? null
+        : ref
+              .read(agentInstallationsDataProvider)
+              .getById(session.agentInstallationId)
+              ?.environmentId;
+    return ref.read(
+      pickServerProvider(environmentId ?? localHostEnvironmentId),
+    );
   }
 
   MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
@@ -505,6 +522,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               // Read when the menu opens, never watched: the footer is
               // built once, and the library changing must not rebuild it.
               snippets: _snippets,
+              // Read per paste or attach, like the snippets: never watched.
+              server: _pickServer,
               hintText: active
                   // No emoji: the old hint named a 🖼 that is nowhere
                   // in the composer; the attach tooltip does.
