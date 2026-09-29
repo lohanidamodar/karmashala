@@ -40,4 +40,9 @@ const Set<String> kServerFeatures = <String>{
   // An approval may carry `ask`, the prompt it answers, and is refused when
   // the prompt open now is another (Stage 2 step 1).
   'prompt.answer.ask',
+
+  // `sessions.send` and `sessions.interrupt`: a client's chat sends and Stop,
+  // typed here as host keys, once per `requestId` (Stage 2 step 2).
+  'sessions.send',
+  'sessions.interrupt',
 };

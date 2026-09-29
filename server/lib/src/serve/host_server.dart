@@ -583,6 +583,7 @@ class _ClientSession implements BoxRelayPeer {
       sshPrompts: _trust.sshPrompts,
       transcripts: _trust.transcripts,
       phone: _trust.phone,
+      device: _trust.deviceId,
     );
     final answer = session.handleJson(message.envelope);
     if (answer is Future<Map<String, Object?>>) {

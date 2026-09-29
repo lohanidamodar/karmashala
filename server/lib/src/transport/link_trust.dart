@@ -8,7 +8,8 @@ class LinkTrust {
     required this.sshPrompts,
     required this.transcripts,
   }) : phone = false,
-       label = null;
+       label = null,
+       deviceId = null;
 
   /// This machine's own user, over the owner-only socket.
   static const local = LinkTrust._(
@@ -29,6 +30,7 @@ class LinkTrust {
     required this.transcripts,
     this.phone = false,
     this.label,
+    this.deviceId,
   }) : remote = true,
        admin = admin && !phone,
        sshPrompts = sshPrompts && !phone;
@@ -44,6 +46,10 @@ class LinkTrust {
 
   /// The paired device's name, for a client that names itself nothing.
   final String? label;
+
+  /// The paired device's id: what outlives a reconnect, so a resend on a new
+  /// link is still known as that device's (`sessions.send`). Null locally.
+  final String? deviceId;
 
   @override
   String toString() => remote

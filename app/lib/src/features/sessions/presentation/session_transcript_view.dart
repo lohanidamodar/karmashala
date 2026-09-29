@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionPromptRefusal;
 
 import '../../snippets/application/snippet_providers.dart';
 import '../application/session_activity_providers.dart';
@@ -34,6 +36,7 @@ import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
 import '../application/session_engine_provider.dart';
+import '../application/session_input.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart'
@@ -76,6 +79,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
   final _composer = TextEditingController();
+
+  /// The key of the message last sent and not yet taken, kept so a retry of
+  /// the same words is the same request to the server; a new message mints
+  /// its own.
+  String? _sendKey;
+  String? _keyedText;
 
   /// Which delegated agent hangs under which row, by the row's index in the
   /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
@@ -520,10 +529,26 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       .calls
       .isNotEmpty;
 
-  /// Stops the running turn the way its CLI's own terminal would: an Esc
-  /// typed into the agent's pane. Said, not silent, when there is no live
-  /// pane to type it into.
+  Future<void> _send(String text) async {
+    if (text != _keyedText) {
+      _keyedText = text;
+      _sendKey = newSessionInputId();
+    }
+    await ref
+        .read(sessionActionsProvider)
+        .continueSession(widget.sessionId, text, requestId: _sendKey);
+    _keyedText = null;
+    _sendKey = null;
+  }
+
+  /// Stops the running turn the way its CLI's own terminal would: an Esc,
+  /// pressed by the server when it offers it, else typed into the agent's
+  /// pane. Said, not silent, when nothing runs the session.
   void _interruptTurn() {
+    if (ref.read(sessionInputProvider).viaServer) {
+      unawaited(_interruptViaServer());
+      return;
+    }
     final paneId = sessionTerminalPane(ref, widget.sessionId);
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final live =
@@ -535,6 +560,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       return;
     }
     instance.terminal.textInput('\x1b');
+  }
+
+  Future<void> _interruptViaServer() async {
+    try {
+      if (!await ref.read(sessionInputProvider).interrupt(widget.sessionId)) {
+        _say('Nothing is running this session, so there is nothing to stop.');
+      }
+    } on SessionPromptRefusal catch (refusal) {
+      _say('Could not stop it: ${refusal.message}');
+    }
   }
 
   /// The snippet library, as the composer's menu lists it.
@@ -593,9 +628,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // in the composer; the attach tooltip does.
                   ? 'Message the agent…'
                   : 'Type to continue this session…',
-              onSend: (text) => ref
-                  .read(sessionActionsProvider)
-                  .continueSession(widget.sessionId, text),
+              onSend: _send,
             ),
           ),
         ],

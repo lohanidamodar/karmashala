@@ -214,6 +214,12 @@ final class Capabilities {
   /// another is open by the time it lands (Stage 2 step 1).
   bool get answersCarryAsk => serverOffers('prompt.answer.ask');
 
+  /// Chat sends, Stop and a deny's reason are typed by the server as host
+  /// keys (Stage 2 step 2), so this client never takes the session's input
+  /// or resizes its terminal to send.
+  bool get sendViaServer =>
+      serverOffers('sessions.send') && serverOffers('sessions.interrupt');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

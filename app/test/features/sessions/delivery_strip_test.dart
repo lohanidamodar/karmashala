@@ -64,7 +64,11 @@ class _RecordingActions extends SessionActions {
   final _Recorder _recorder;
 
   @override
-  Future<void> continueSession(String sessionId, String text) async {
+  Future<void> continueSession(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
     final failure = _recorder.throwOnSend;
     if (failure != null) throw failure;
     _recorder.sent.add(text);

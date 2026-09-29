@@ -25,6 +25,7 @@ class SealedHostConnection implements HostConnection {
         _link.capabilities.attachTier != null,
     phone: _link.capabilities.attachTier == AttachTier.phone,
     label: _link.deviceName,
+    deviceId: _link.deviceId,
   );
 
   @override

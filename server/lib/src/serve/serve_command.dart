@@ -48,6 +48,7 @@ import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
+import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
@@ -849,6 +850,13 @@ Future<int> runServe(
   data.sessionWork = ServerSessionWork(
     launches: launches,
     continuations: continuations,
+  );
+  // A client's chat sends and Stop (`sessions.send`, `.interrupt`), typed by
+  // the same typist as MCP `session_send`.
+  data.sessionInput = SessionInput(
+    prompts: prompts,
+    typist: typist,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // Sessions' transcripts for any client (`sessions.transcript`): read here,
   // where the agents write them.
