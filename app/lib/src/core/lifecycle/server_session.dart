@@ -154,6 +154,9 @@ class ServerSession {
               firstDialWithin: snapshots?.loaded == null
                   ? null
                   : kStaleListFirstDialWait,
+              redialHoldOff: client.hostsServer
+                  ? null
+                  : grantRedialHoldOff(remoteAccess),
             );
       final openedSnapshots = snapshots;
       container = ProviderContainer(

@@ -33,9 +33,19 @@ class LinkLifecycle with WidgetsBindingObserver {
     if (_binding != null) return;
     _binding = binding ?? WidgetsBinding.instance;
     _binding!.addObserver(this);
+    final state = _binding!.lifecycleState;
+    _background =
+        state == AppLifecycleState.hidden || state == AppLifecycleState.paused;
     _network = _networkChanges.listen((_) {
       if (!_background) _session()?.networkChanged();
     });
+  }
+
+  /// A session opened while the app is in the background — at start, or a
+  /// switch that finished there — rests at once: the event it would have
+  /// heard has already passed.
+  void adopt(ServerSession session) {
+    if (_binding != null && _background) session.appBackgrounded();
   }
 
   void detach() {

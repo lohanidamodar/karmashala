@@ -136,16 +136,25 @@ Future<void> _bootstrap(AppLogger logger) async {
   // (plan step 14); every session's container is handed the switcher.
   late final AppLifecycle lifecycle;
   late final ServerSwitcher switcher;
-  Future<ServerSession> openSession(CompanionPairing? remote) =>
-      ServerSession.open(
-        remote: remote,
-        machines: machines,
-        probe: probe,
-        support: support,
-        logger: logger,
-        client: client,
-        overrides: [serverSwitcherProvider.overrideWithValue(switcher)],
-      );
+  // A phone's link follows the app into the background and back, and across
+  // network changes. A desktop window is never put in the background.
+  final links = client.systemIntegration
+      ? null
+      : LinkLifecycle(networkChanges: networkChanges(onLog: logger.info));
+  Future<ServerSession> openSession(CompanionPairing? remote) async {
+    final session = await ServerSession.open(
+      remote: remote,
+      machines: machines,
+      probe: probe,
+      support: support,
+      logger: logger,
+      client: client,
+      overrides: [serverSwitcherProvider.overrideWithValue(switcher)],
+    );
+    links?.adopt(session);
+    return session;
+  }
+
   Future<void> quit() async {
     final system = lifecycle.systemIntegration;
     if (system != null) return system.quit();
@@ -173,11 +182,7 @@ Future<void> _bootstrap(AppLogger logger) async {
     logger: logger,
   );
 
-  // A phone's link follows the app into the background and back, and across
-  // network changes. A desktop window is never put in the background.
-  if (!client.systemIntegration) {
-    LinkLifecycle(networkChanges: networkChanges(onLog: logger.info)).attach();
-  }
+  links?.attach();
 
   // A client with no server of its own and no machine chosen opens nothing:
   // the root shows pairing, and the pairing's switch opens the first session.

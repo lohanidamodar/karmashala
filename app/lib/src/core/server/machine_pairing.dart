@@ -32,8 +32,11 @@ Future<CompanionPairing> pairWithMachine({
   Duration timeout = const Duration(seconds: 30),
 }) async {
   final text = code.trim();
+  // The pairing lands in [store] only once it is usable: a refused re-pair
+  // must not replace the working record of the machine in use.
+  final staged = InMemoryCompanionStore();
   final client = CompanionPairingClient(
-    store: store,
+    store: staged,
     deviceId: hostsServer
         ? await _deviceId(store)
         : await _phoneDeviceId(store),
@@ -168,10 +171,6 @@ Future<CompanionPairing> pairWithMachine({
       ? record.capabilities.has(Capability.desktopClient)
       : record.capabilities.attachTier != null;
   if (!usable) {
-    await CompanionConnections.mutate(
-      store,
-      (all) => all.remove(record.hostId.value),
-    );
     throw CompanionPairingException(
       hostsServer
           ? 'That code pairs a phone, not a desktop. On the server run '
@@ -187,13 +186,12 @@ Future<CompanionPairing> pairWithMachine({
   }
   if (direct != null) {
     record = record.copyWith(directEndpoint: direct, route: HostRoute.direct);
-    await record.save(store);
   } else if (heardAt != null) {
     // Found by its beacon: where it was heard is the first dial's LAN hint,
     // until its own `host.status` names one.
     record = record.copyWith(lanHint: heardAt);
-    await record.save(store);
   }
+  await record.save(store);
   return record;
 }
 

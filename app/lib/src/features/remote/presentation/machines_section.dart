@@ -156,12 +156,9 @@ class MachinesSection extends ConsumerWidget {
     final machines = ref.read(machinesProvider);
     if (machines == null) return;
     final hostId = machine.hostId.value;
-    // Its last session list goes with it, and the open one stops saving.
-    final snapshots = ref.read(activeMachineProvider)?.hostId.value == hostId
-        ? ref.read(sessionListSnapshotStoreProvider)
-        : null;
     await machines.forget(hostId);
-    await snapshots?.discard();
+    // Its last session list goes with it. Forget is never offered for the
+    // machine in use, so no open list is saving to that folder.
     try {
       await SessionListSnapshotStore.deleteFor(
         await appSupportDirectory(),

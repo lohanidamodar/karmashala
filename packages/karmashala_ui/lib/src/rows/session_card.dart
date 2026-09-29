@@ -470,6 +470,14 @@ class _SessionCardHeaderLine extends StatelessWidget {
   final TextStyle? muted;
   final UiDensity density;
 
+  /// [agentLabel] after its first clause, the agent's name, which the mark
+  /// already says: "imported", or a lifecycle the glyph alone cannot.
+  String? get _wordsAfterMark {
+    final clauses = agentLabel.split('  ·  ');
+    if (clauses.length < 2) return null;
+    return clauses.skip(1).join('  ·  ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -529,7 +537,7 @@ class _SessionCardHeaderLine extends StatelessWidget {
                       color: agentColor ?? scheme.onSurfaceVariant,
                     ),
                   SizedBox(width: gap),
-                  if (agentMark case final mark?)
+                  if (agentMark case final mark?) ...[
                     Tooltip(
                       message: agentName ?? '',
                       child: Semantics(
@@ -539,8 +547,19 @@ class _SessionCardHeaderLine extends StatelessWidget {
                           child: Center(child: mark),
                         ),
                       ),
-                    )
-                  else
+                    ),
+                    if (_wordsAfterMark case final words?) ...[
+                      SizedBox(width: gap),
+                      Flexible(
+                        child: Text(
+                          words,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
+                        ),
+                      ),
+                    ],
+                  ] else
                     Flexible(
                       child: Text(
                         agentLabel,

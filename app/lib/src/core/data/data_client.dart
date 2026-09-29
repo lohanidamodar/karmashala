@@ -99,6 +99,7 @@ class DataClient {
     this._waitForServer, {
     AppLogger? logger,
     this.serverOnThisMachine = true,
+    this._redialHoldOff,
   }) : _log = logger ?? AppLogger.named('data');
 
   /// A client with no server to reach — [reason] says why. Reads find
@@ -123,7 +124,8 @@ class DataClient {
   /// said) and keeps redialling. Writes wait up to [waitForServer] for a
   /// server that is not there, then are refused. With [firstDialWithin], it
   /// returns after that long still [DataLinkState.connecting], and the first
-  /// dial goes on.
+  /// dial goes on. When [redialHoldOff] returns a wait, the next redial waits
+  /// that long instead of the backoff step; [retry] still dials at once.
   static Future<DataClient> connect(
     Future<DataEndpoint?> Function() dial, {
     String? unavailableReason,
@@ -131,6 +133,7 @@ class DataClient {
     AppLogger? logger,
     bool serverOnThisMachine = true,
     Duration? firstDialWithin,
+    Duration? Function()? redialHoldOff,
   }) async {
     final client = DataClient._(
       dial,
@@ -141,6 +144,7 @@ class DataClient {
       waitForServer,
       logger: logger,
       serverOnThisMachine: serverOnThisMachine,
+      redialHoldOff: redialHoldOff,
     );
     client._firstDialing = true;
     final first = client._dialOnce(unavailableReason).then((connected) {
@@ -159,6 +163,7 @@ class DataClient {
   var _firstDialing = false;
 
   final Future<DataEndpoint?> Function()? _dial;
+  final Duration? Function()? _redialHoldOff;
   final AppLogger _log;
 
   /// Whether the server runs on this client's machine, so a path it spells
@@ -1041,7 +1046,10 @@ class DataClient {
     _redialing = true;
     try {
       for (var attempt = 0; !_closed && _endpoint == null; attempt++) {
-        await _sleep(_backoff[math.min(attempt, _backoff.length - 1)]);
+        await _sleep(
+          _redialHoldOff?.call() ??
+              _backoff[math.min(attempt, _backoff.length - 1)],
+        );
         if (_closed || _endpoint != null) return;
         if (await _dialOnce()) {
           _log.info('Connected to the Karmashala server.');

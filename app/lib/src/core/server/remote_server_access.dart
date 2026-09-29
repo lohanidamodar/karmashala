@@ -108,6 +108,10 @@ class RemoteServerAccess implements HostSessionAccess {
     // come back, rather than waking the phone to dial every few seconds.
     final resting = _resting;
     if (resting != null) await resting.future;
+    // A scout still paused has no sightings, and the dial would skip the
+    // beacon: the restart [wake] or [networkChanged] began goes first.
+    final restart = _scoutRestart;
+    if (restart != null) await restart;
     if (_closed) {
       throw HostLinkException('$hostName is no longer the machine in use.');
     }
@@ -190,8 +194,8 @@ class RemoteServerAccess implements HostSessionAccess {
     _restTimer = null;
     final resting = _resting;
     _resting = null;
+    if (wasBackground) _restartScouting();
     if (resting != null && !resting.isCompleted) resting.complete();
-    if (wasBackground) unawaited(_dialer.restartScouting());
     _dialer.proveLinks();
   }
 
@@ -200,8 +204,23 @@ class RemoteServerAccess implements HostSessionAccess {
   /// interfaces that may be gone. Hung up in the background, [wake] does it.
   void networkChanged() {
     if (_closed || _resting != null) return;
-    if (!_background) unawaited(_dialer.restartScouting());
+    if (!_background) _restartScouting();
     _dialer.proveLinks();
+  }
+
+  Future<void>? _scoutRestart;
+
+  void _restartScouting() {
+    late final Future<void> restart;
+    restart = _dialer
+        .restartScouting()
+        .catchError((Object error) {
+          _log.warning('Restarting the beacon listener failed: $error');
+        })
+        .whenComplete(() {
+          if (identical(_scoutRestart, restart)) _scoutRestart = null;
+        });
+    _scoutRestart = restart;
   }
 
   /// This machine is no longer in use: beacon listening stops. Links already
@@ -221,3 +240,12 @@ class RemoteServerAccess implements HostSessionAccess {
 /// How long a phone in the background keeps its link: the server's resume
 /// grace, so a return within it resumes rather than redials.
 const Duration kBackgroundLinkGrace = kHostLinkResumeGrace;
+
+/// How often a phone the server refuses the app redials: each refusal is a
+/// full hello and attach, a store write and a server log line.
+const Duration kNeedsGrantRedialWait = Duration(seconds: 30);
+
+/// The data client's redial wait on a phone: [kNeedsGrantRedialWait] while
+/// [access] needs the grant, else its usual backoff.
+Duration? Function() grantRedialHoldOff(RemoteServerAccess access) =>
+    () => access.needsGrant.value ? kNeedsGrantRedialWait : null;

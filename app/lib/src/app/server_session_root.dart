@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_remote/client.dart' show CompanionPairing;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -41,7 +42,10 @@ class ServerSessionRoot extends StatelessWidget {
         container: session.container,
         child: PhoneGrantGate(child: app),
       ),
+      // Keyed by kind: each screen gets its own Navigator, so a pairing
+      // route pushed on NoServer's cannot stay on top of the switch after it.
       SwitchingServer(:final name) => _BetweenServers(
+        key: const ValueKey('switching'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -52,11 +56,14 @@ class ServerSessionRoot extends StatelessWidget {
         ),
       ),
       ServerOpenFailed() => _BetweenServers(
+        key: const ValueKey('failed'),
         child: _OpenFailed(failure: root, switcher: switcher),
       ),
       NoServer() => _BetweenServers(
+        key: const ValueKey('none'),
         child: PairMachinePage(
           title: 'Pair this phone with a machine',
+          leading: _SavedMachines(switcher: switcher),
           pairer: MachinePairer(
             machines: switcher.machines,
             client: client,
@@ -72,7 +79,7 @@ class ServerSessionRoot extends StatelessWidget {
 /// A bare app for the screens between sessions: no container is open, so
 /// nothing here may read a provider.
 class _BetweenServers extends StatelessWidget {
-  const _BetweenServers({required this.child});
+  const _BetweenServers({super.key, required this.child});
 
   final Widget child;
 
@@ -94,6 +101,69 @@ class _BetweenServers extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The machines already paired, each with Open: after "Pair again instead" or
+/// a failed open, a saved pairing needs no new code. Nothing while none exist.
+class _SavedMachines extends StatefulWidget {
+  const _SavedMachines({required this.switcher});
+
+  final ServerSwitcher switcher;
+
+  @override
+  State<_SavedMachines> createState() => _SavedMachinesState();
+}
+
+class _SavedMachinesState extends State<_SavedMachines> {
+  late final Future<List<CompanionPairing>> _saved = widget.switcher.machines
+      .remote()
+      .catchError((Object _) => const <CompanionPairing>[]);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<CompanionPairing>>(
+      future: _saved,
+      builder: (context, snapshot) {
+        final saved = snapshot.data ?? const <CompanionPairing>[];
+        if (saved.isEmpty) return const SizedBox.shrink();
+        return Column(
+          key: const Key('saved-machines'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Paired machines', style: theme.textTheme.titleSmall),
+            const SizedBox(height: Insets.xs),
+            for (final record in saved)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        serverNameForSwitch(record),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ),
+                    const SizedBox(width: Insets.md),
+                    OutlinedButton(
+                      onPressed: () =>
+                          unawaited(widget.switcher.switchTo(record)),
+                      child: const Text('Open'),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: Insets.lg),
+            Text('Or pair another', style: theme.textTheme.titleSmall),
+            const SizedBox(height: Insets.xs),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// Opening a server failed: what failed, and every way out — back to the
