@@ -293,7 +293,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       if (isDirectory) {
         _say('$resolved is a folder.');
       } else {
-        ref.read(editorTabActionsProvider).openAt(path);
+        ref.read(editorTabActionsProvider).openAt(path, line: parsed.line);
       }
       return;
     }

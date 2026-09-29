@@ -51,13 +51,18 @@ class _RelayClient implements BoxRelayClient {
       );
       return;
     }
+    // The box resizes to any screen grid it is asked for; an unclaimed pane
+    // asks at the session's own grid, or for no screen, never its own.
+    final screenGrid = message.claimWrite || message.screenGrid == null
+        ? message.screenGrid
+        : _boxes.gridOf(box.hostId, box.sessionId);
     final BoxRoute route;
     try {
       route = await _boxes.attach(
         hostId: box.hostId,
         sessionId: box.sessionId,
         sinceOffset: message.sinceOffset,
-        screenGrid: message.screenGrid,
+        screenGrid: screenGrid,
       );
     } on BoxUnavailable catch (e) {
       _peer.send(
@@ -106,8 +111,9 @@ class _RelayClient implements BoxRelayClient {
         screenFollows: answered.screenFollows,
       ),
     );
-    final grid = message.screenGrid;
-    if (grid != null) _boxes.resized(box.hostId, box.sessionId, grid.$1, grid.$2);
+    if (screenGrid case (final columns, final rows)) {
+      _boxes.resized(box.hostId, box.sessionId, columns, rows);
+    }
     late final StreamSubscription<HostMessage> subscription;
     subscription = route.frames.listen(
       (frame) {

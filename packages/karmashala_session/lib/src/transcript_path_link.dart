@@ -75,8 +75,8 @@ class TranscriptPathToken {
   /// [text] without the line suffix: the part that names a file.
   final String path;
 
-  /// The line the token pointed at, when it carried one. Recorded because it is
-  /// free to keep; nothing opens an editor at it yet.
+  /// The line the token pointed at, when it carried one; a phone's editor tab
+  /// opens at it.
   final int? line;
 
   @override

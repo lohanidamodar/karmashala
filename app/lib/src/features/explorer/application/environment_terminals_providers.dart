@@ -6,7 +6,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show TerminalRecord, paneIdOfTerminalSession;
+    show TerminalRecord, kHostedRunPanePrefix, paneIdOfTerminalSession;
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
@@ -106,7 +106,8 @@ final serverTerminalRecordsProvider = Provider<List<TerminalRecord>>((ref) {
 });
 
 /// Live shells on [environmentId] that no pane here shows. Not an agent's
-/// terminal (its session opens it) nor a box's (the box host lists it).
+/// terminal (its session opens it) nor a box's (the box host lists it), nor
+/// a hosted run's, whose session id is a shell's but whose pane is not one.
 List<EnvironmentTerminal> _serverShellsOn(
   Ref ref,
   String environmentId,
@@ -118,6 +119,7 @@ List<EnvironmentTerminal> _serverShellsOn(
     for (final record in ref.watch(serverTerminalRecordsProvider))
       if (paneIdOfTerminalSession(record.sessionId) case final paneId?)
         if (record.isLive &&
+            !paneId.startsWith(kHostedRunPanePrefix) &&
             !open.contains(paneId) &&
             (record.environmentId ??
                     environmentIdOfProfile(

@@ -239,6 +239,22 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // session. Where it is working is a separate question, below.
       next == null ? context.stopFollowing() : context.follow(next);
     });
+    // On a phone a document brought up (a file from the chat or the context
+    // sheet) wins over a selected session with no pane, as a tab picked does.
+    ref.listen(
+      terminalSessionsControllerProvider.select(
+        (s) => (s.activeTab?.id, s.activeTab?.focusedPaneId),
+      ),
+      (was, now) {
+        final (tabId, paneId) = now;
+        if (was == now || tabId == null || paneId == null) return;
+        if (!isDocumentPane(paneId) || !CompactWorkbenchScope.of(context)) {
+          return;
+        }
+        final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+        releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
+      },
+    );
     // Going somewhere yourself releases whatever your last click was holding.
     ref.listen(
       terminalSessionsControllerProvider.select(

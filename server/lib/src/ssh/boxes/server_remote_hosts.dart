@@ -334,6 +334,11 @@ class ServerRemoteHosts implements RemoteSessions {
   void resized(String hostId, String sessionId, int columns, int rows) =>
       _screens[boxSessionRef(hostId, sessionId)]?.resized(columns, rows);
 
+  /// The grid [sessionId] on [hostId] is drawn at, as the server's copy
+  /// follows it; null when the server keeps no copy of it.
+  (int, int)? gridOf(String hostId, String sessionId) =>
+      _screens[boxSessionRef(hostId, sessionId)]?.grid;
+
   /// Ends [sessionId] on [hostId] for good; its exit code, when it had one.
   Future<int?> closeOn(
     String hostId,
