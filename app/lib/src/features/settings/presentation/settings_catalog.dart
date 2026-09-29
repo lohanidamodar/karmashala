@@ -626,7 +626,7 @@ enum SettingsAnchor {
   bool shownWith(Capabilities caps) => switch (this) {
     startup || launcherHotkey => caps.systemIntegration,
     keyboard => caps.keyboardSettings,
-    notifications => caps.osToasts,
+    notifications => caps.notifiesHere,
     androidEmulators || iosSimulators => caps.devicesArea,
     // The server-side half: its device list is refused without admin anyway.
     remoteAccess => caps.pairsHere || caps.serverAdmin,

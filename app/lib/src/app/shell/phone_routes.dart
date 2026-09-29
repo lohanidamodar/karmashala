@@ -16,6 +16,9 @@ abstract interface class PhoneShellRoutes {
   /// Brings the Projects tab to the front.
   void showProjects();
 
+  /// Brings the Inbox tab to the front.
+  void showInbox();
+
   /// Opens [entry] as the only page over More's list.
   void showMore(PhoneMoreEntry entry);
 }
@@ -36,4 +39,21 @@ class PhoneShellRouter {
 
 final phoneShellRouterProvider = Provider<PhoneShellRouter>(
   (ref) => PhoneShellRouter(),
+);
+
+/// Whether the phone shows the desktop's workbench over its tabs — where a
+/// session opens (owner's answer 5). Here rather than in the shell, so the
+/// notifications can ask whether a session is on screen, and open one before
+/// the shell is built.
+class PhoneWorkbenchController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void open() => state = true;
+
+  void close() => state = false;
+}
+
+final phoneWorkbenchProvider = NotifierProvider<PhoneWorkbenchController, bool>(
+  PhoneWorkbenchController.new,
 );
