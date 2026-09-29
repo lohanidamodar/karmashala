@@ -9,9 +9,18 @@ import 'package:agent_cli/process.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../data/session_media_store.dart';
-import '../domain/session_media_item.dart';
+import 'package:agent_cli/read.dart'
+    show SessionMediaItem, SessionMediaScan, SessionMediaStore;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused, SessionMediaRead;
+import '../../../core/capabilities/capabilities.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/paths/app_support_directory.dart';
+import '../../../core/server/remote_server_access.dart';
+import '../../files/data/files_client.dart';
+import '../../terminal/application/local_host_providers.dart'
+    show serverAccessProvider;
+import '../data/server_media_files.dart';
 
 /// How often the media panel looks for new pictures — slower than the chat's
 /// two seconds on purpose, and only while the panel is open (`autoDispose`).
@@ -104,6 +113,69 @@ final sessionMediaHostPathProvider = Provider.autoDispose
       );
     });
 
+/// Pictures brought from a server elsewhere, kept per server beside its
+/// layout (`machines/<hostId>/media`).
+final serverMediaFilesProvider = Provider<ServerMediaFiles>((ref) {
+  final access = ref.watch(serverAccessProvider);
+  final hostId = access is RemoteServerAccess ? access.hostId : 'local';
+  return ServerMediaFiles(ref.watch(filesClientProvider), () async {
+    final support = await appSupportDirectory();
+    final folder = Directory(p.join(support.path, 'machines', hostId, 'media'));
+    await folder.create(recursive: true);
+    return folder;
+  });
+});
+
+/// How a picture an agent of [sessionId] names is brought here, or null when
+/// this disk has it (`readsServerDisk`), so a chat reads it as before.
+final sessionImageFetchProvider = Provider.autoDispose
+    .family<Future<File> Function(String path)?, String>((ref, sessionId) {
+      // Selected, not watched whole: a chat view watches this, and the
+      // source moves with every session's revision.
+      if (ref.watch(capabilitiesProvider.select((c) => c.readsServerDisk))) {
+        return null;
+      }
+      final environmentId = ref.watch(
+        sessionMediaSourceProvider(sessionId).select((s) => s?.environmentId),
+      );
+      if (environmentId == null) return null;
+      final files = ref.watch(serverMediaFilesProvider);
+      return (path) => files.fetch(
+        EnvironmentPath(environmentId: environmentId, path: path),
+      );
+    });
+
+/// How an item the server listed for [sessionId] is brought here, or null
+/// when its paths open on this disk as they are.
+final sessionMediaFetchProvider = Provider.autoDispose
+    .family<Future<File> Function(SessionMediaItem item)?, String>((
+      ref,
+      sessionId,
+    ) {
+      final caps = ref.watch(capabilitiesProvider);
+      if (caps.readsServerDisk || !caps.mediaViaServer) return null;
+      final agentEnvironment = ref.watch(
+        sessionMediaSourceProvider(sessionId).select((s) => s?.environmentId),
+      );
+      final files = ref.watch(serverMediaFilesProvider);
+      return (item) async {
+        final path = item.path;
+        if (path == null) {
+          throw MediaUnavailable(item.problem ?? 'No preview.');
+        }
+        // The server's own copies are on its host; a file the agent read is
+        // spelled in the agent's environment.
+        return files.fetch(
+          EnvironmentPath(
+            environmentId: item.fromAgentEnvironment
+                ? agentEnvironment ?? localHostEnvironmentId
+                : localHostEnvironmentId,
+            path: path,
+          ),
+        );
+      };
+    });
+
 /// Every picture [sessionId] has, newest first. An unchanged transcript costs a
 /// `stat()`, and no readable record is an empty panel, not a red box.
 final sessionMediaProvider = StreamProvider.autoDispose
@@ -116,9 +188,43 @@ final sessionMediaProvider = StreamProvider.autoDispose
         return;
       }
 
+      // Listed by the server, where the record is (Stage 0 step 10), on this
+      // machine too; an older server refuses the kind and this disk is read.
+      if (ref.watch(capabilitiesProvider.select((c) => c.mediaViaServer))) {
+        final data = ref.read(dataClientProvider);
+        var disposed = false;
+        ref.onDispose(() => disposed = true);
+        String? known;
+        var answered = false;
+        var older = false;
+        while (!disposed && !older) {
+          try {
+            final listing = (await data.send(
+              SessionMediaRead(sessionId, known: known),
+            )).value;
+            if (!listing.unchanged) {
+              known = listing.stamp;
+              answered = true;
+              yield listing.items;
+            }
+          } on DataRefused catch (refusal) {
+            older = refusal.code == DataRefusalCode.invalid;
+          } catch (_) {
+            // A dropped link: what is on screen stays; the next poll asks.
+          }
+          if (older) break;
+          if (!answered) {
+            answered = true;
+            yield const [];
+          }
+          await Future<void>.delayed(kSessionMediaPollInterval);
+        }
+        if (!older) return;
+      }
+
       final Directory root;
       try {
-        root = await ref.watch(sessionMediaCacheRootProvider.future);
+        root = await ref.read(sessionMediaCacheRootProvider.future);
       } catch (_) {
         // Nowhere to keep pictures is no panel; say nothing rather than throw.
         yield const [];
@@ -196,7 +302,12 @@ sealed class SessionImageLookup {
 }
 
 class SessionImageFound extends SessionImageLookup {
-  const SessionImageFound(this.item, {this.matches = 1, this.resolveHostPath});
+  const SessionImageFound(
+    this.item, {
+    this.matches = 1,
+    this.resolveHostPath,
+    this.fetch,
+  });
 
   final SessionMediaItem item;
 
@@ -207,6 +318,9 @@ class SessionImageFound extends SessionImageLookup {
   /// Translates a path the *agent* wrote into one this process can open, or
   /// null when there is nothing to translate. Carried rather than applied.
   final String? Function(String path)? resolveHostPath;
+
+  /// Brings the picture from a server elsewhere; null when this disk has it.
+  final Future<File> Function(String path)? fetch;
 }
 
 /// Why there is no picture, in a sentence meant to be shown to the user.
@@ -232,48 +346,76 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
       );
     }
 
-    final Directory root;
-    try {
-      root = await ref.read(sessionMediaCacheRootProvider.future);
-    } catch (_) {
-      return SessionImageUnavailable(
-        'Karmashala has nowhere to keep extracted pictures, so it cannot open '
-        '$label.',
-      );
+    // Oldest first, as a scan holds them.
+    List<SessionMediaItem>? items;
+    if (ref.read(capabilitiesProvider).mediaViaServer) {
+      try {
+        final listing =
+            (await ref
+                    .read(dataClientProvider)
+                    .send(SessionMediaRead(sessionId)))
+                .value;
+        items = listing.items.reversed.toList(growable: false);
+      } on DataRefused catch (refusal) {
+        // `invalid` is a server older than the feature: read this disk.
+        if (refusal.code != DataRefusalCode.invalid) {
+          return SessionImageUnavailable(
+            'The server could not list this session\'s images, so Karmashala '
+            'cannot open $label: ${refusal.message}',
+          );
+        }
+      } catch (_) {
+        return SessionImageUnavailable(
+          'Karmashala could not reach the server, so it cannot open $label.',
+        );
+      }
     }
 
-    var path = source.filePath;
-    final externalId = source.externalSessionId;
-    if (path == null && externalId != null && externalId.isNotEmpty) {
-      // One attempt, not the panel's retry loop: a click asks once, and "not
-      // written yet" is an answer worth giving straight away.
-      path = await ref
-          .read(sessionTranscriptLocatorProvider)
-          .locate(agentId: source.cli, externalSessionId: externalId);
-    }
-    if (path == null) {
-      return SessionImageUnavailable(
-        'Karmashala has not found this session\'s transcript yet, so it cannot '
-        'open $label.',
-      );
-    }
+    if (items == null) {
+      final Directory root;
+      try {
+        root = await ref.read(sessionMediaCacheRootProvider.future);
+      } catch (_) {
+        return SessionImageUnavailable(
+          'Karmashala has nowhere to keep extracted pictures, so it cannot '
+          'open $label.',
+        );
+      }
 
-    final SessionMediaScan scan;
-    try {
-      scan = await SessionMediaStore(
-        root,
-        registry: ref.read(agentRegistryProvider),
-      ).refresh(path, source.cli);
-    } catch (_) {
-      return SessionImageUnavailable(
-        'Karmashala could not read this session\'s transcript, so it cannot '
-        'open $label.',
-      );
+      var path = source.filePath;
+      final externalId = source.externalSessionId;
+      if (path == null && externalId != null && externalId.isNotEmpty) {
+        // One attempt, not the panel's retry loop: a click asks once, and
+        // "not written yet" is an answer worth giving straight away.
+        path = await ref
+            .read(sessionTranscriptLocatorProvider)
+            .locate(agentId: source.cli, externalSessionId: externalId);
+      }
+      if (path == null) {
+        return SessionImageUnavailable(
+          'Karmashala has not found this session\'s transcript yet, so it '
+          'cannot open $label.',
+        );
+      }
+
+      final SessionMediaScan scan;
+      try {
+        scan = await SessionMediaStore(
+          root,
+          registry: ref.read(agentRegistryProvider),
+        ).refresh(path, source.cli);
+      } catch (_) {
+        return SessionImageUnavailable(
+          'Karmashala could not read this session\'s transcript, so it cannot '
+          'open $label.',
+        );
+      }
+      items = scan.items;
     }
 
     SessionMediaItem? match;
     var matches = 0;
-    for (final item in scan.items) {
+    for (final item in items) {
       if (item.pasteId != pasteId) continue;
       match = item;
       matches++;
@@ -290,12 +432,15 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
         match.problem ?? 'There is no picture on disk for $label.',
       );
     }
+    final fetch = ref.read(sessionMediaFetchProvider(sessionId));
+    final found = match;
     return SessionImageFound(
       match,
       matches: matches,
       resolveHostPath: match.fromAgentEnvironment
           ? ref.read(sessionMediaHostPathProvider(sessionId))
           : null,
+      fetch: fetch == null ? null : (_) => fetch(found),
     );
   },
 );

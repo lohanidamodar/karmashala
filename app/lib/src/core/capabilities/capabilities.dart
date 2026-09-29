@@ -144,6 +144,11 @@ final class Capabilities {
   /// server, a list of sessions in one request (Stage 0 step 9).
   bool get statsViaServer => serverOffers('sessions.stats');
 
+  /// A session's pictures are listed by the server, where its record is
+  /// (Stage 0 step 10); their bytes come through `files.read` unless
+  /// [readsServerDisk].
+  bool get mediaViaServer => serverOffers('sessions.media');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

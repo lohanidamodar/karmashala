@@ -31,4 +31,7 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.stats`: sessions' counts in one batched request, and an agent's
   // lifetime totals (Stage 0 step 9).
   'sessions.stats',
+  // `sessions.media`: a session's pictures, extracted here; their bytes come
+  // through `files.read` (Stage 0 step 10).
+  'sessions.media',
 };

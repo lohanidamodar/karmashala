@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:agent_cli/descriptors.dart';
-import '../domain/session_media_item.dart';
+import '../agents/domain/agent_registry.dart';
+import '../agents/adapter/agent_media_reader.dart';
+import '../agents/adapter/transcript_media_block.dart';
+import 'session_media_item.dart';
 
 /// A session's pictures, with base64-only ones written to disk one at a time;
 /// resumable, and bounded by [kMaxSessionMediaBytes] and [kSessionMediaCap].

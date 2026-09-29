@@ -39,6 +39,8 @@ import '../application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport;
 import '../application/session_ui_providers.dart';
+import '../../media/application/session_media_providers.dart'
+    show sessionImageFetchProvider;
 import '../data/server_transcripts.dart';
 import '../../../core/capabilities/capabilities.dart';
 import 'package:karmashala_session/transcript.dart';
@@ -50,6 +52,7 @@ import 'chat_transcript.dart';
 import 'end_session_action.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
+import 'transcript_image_preview.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -310,125 +313,130 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // under the tab strip. The tab already names the session and shows its
     // state, and the pane's status line — the same in both views — holds the
     // session's controls; a second row of them here was two places for one.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, box) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Above the messages and outside their scroll: a digest you
-                // have to scroll back to is of a conversation already re-read.
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: box.maxHeight * _recapShare,
+    // Pictures in its rows come through the server when it is elsewhere.
+    return TranscriptImageSource(
+      fetch: ref.watch(sessionImageFetchProvider(widget.sessionId)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Above the messages and outside their scroll: a digest you
+                  // have to scroll back to is of a conversation already re-read.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: box.maxHeight * _recapShare,
+                    ),
+                    child: SessionRecapCard(sessionId: widget.sessionId),
                   ),
-                  child: SessionRecapCard(sessionId: widget.sessionId),
-                ),
-                // Its own consumer: a poll of the transcript redraws the
-                // conversation, not the header, the recap or the composer.
-                Expanded(
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      final caps = ref.watch(capabilitiesProvider);
-                      final agentRecord = fromPty
-                          ? ref.watch(
-                              sessionChatTranscriptProvider(widget.sessionId),
-                            )
-                          : null;
-                      // What the server holds beyond these rows, and why it
-                      // has none — only when it read them (Stage 0 step 6).
-                      final window = caps.chatViaServer && agentRecord != null
-                          ? ref
-                                .read(serverTranscriptsProvider)
-                                .windowFor(
-                                  widget.sessionId,
-                                  agentRecord.asData?.value,
-                                )
-                          : null;
-                      final transcript = agentRecord != null
-                          ? agentRecord.whenData(
-                              (messages) => _fromTranscript(
-                                messages,
-                                earlier: window?.from ?? 0,
-                              ),
-                            )
-                          : ref
-                                .watch(
-                                  sessionTranscriptProvider(widget.sessionId),
-                                )
-                                .whenData(_toMessages);
-                      // Whether a chat rendering is possible for **this
-                      // session** — a reading, not a registry lookup. The
-                      // server's own reading, when it has one, wins.
-                      var reading = fromPty
-                          ? sessionChatView(ref, widget.sessionId)
-                          : const SessionChatView.unread(prior: true);
-                      final absence = window?.absence;
-                      if (absence != null) {
-                        reading = SessionChatView.read(
-                          absence,
-                          prior: reading.prior,
-                          path: window?.path,
-                        );
-                      }
-                      // Past a compaction the view draws nothing older, so
-                      // there is nothing earlier worth asking for.
-                      final compacted =
-                          transcript.asData?.value.firstOrNull?.role ==
-                          kCompactionNoticeRole;
-                      final earlier =
-                          window != null && window.hasOlder && !compacted
-                          ? window.from
-                          : 0;
-                      return _conversation(
-                        transcript: transcript,
-                        // The badge's reading only while a process is behind
-                        // the session: a killed agent's last status can stay
-                        // "working", which kept its final turn live — and
-                        // unfolded — forever. Nothing running, the turn is over.
-                        turn: sessionHasLiveProcess(ref, widget.sessionId)
+                  // Its own consumer: a poll of the transcript redraws the
+                  // conversation, not the header, the recap or the composer.
+                  Expanded(
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final caps = ref.watch(capabilitiesProvider);
+                        final agentRecord = fromPty
                             ? ref.watch(
-                                agentSessionStatusProvider(
-                                  widget.sessionId,
-                                ).select(
-                                  (s) => transcriptTurnFor(s.asData?.value),
+                                sessionChatTranscriptProvider(widget.sessionId),
+                              )
+                            : null;
+                        // What the server holds beyond these rows, and why it
+                        // has none — only when it read them (Stage 0 step 6).
+                        final window = caps.chatViaServer && agentRecord != null
+                            ? ref
+                                  .read(serverTranscriptsProvider)
+                                  .windowFor(
+                                    widget.sessionId,
+                                    agentRecord.asData?.value,
+                                  )
+                            : null;
+                        final transcript = agentRecord != null
+                            ? agentRecord.whenData(
+                                (messages) => _fromTranscript(
+                                  messages,
+                                  earlier: window?.from ?? 0,
                                 ),
                               )
-                            : TranscriptTurn.idle,
-                        resolveHostPath: _hostPathResolver(),
-                        notesEnabled: notesEnabled,
-                        active:
-                            fromPty ||
-                            ref
-                                .read(sessionEngineProvider)
-                                .isActive(widget.sessionId),
-                        chatAvailable: !fromPty || reading.hasChatView,
-                        reading: reading,
-                        fromPty: fromPty,
-                        // A server elsewhere that cannot read transcripts:
-                        // this machine's disk has none of its sessions.
-                        serverTooOld:
-                            fromPty &&
-                            !caps.chatViaServer &&
-                            !caps.readsServerDisk,
-                        earlier: earlier,
-                        firstOrdinal: window?.from ?? 0,
-                        // Whether there is a terminal to point at: the user
-                        // can switch, so the sentences must be true.
-                        hasTerminal:
-                            sessionTerminalPane(ref, widget.sessionId) != null,
-                        footer: footer,
-                      );
-                    },
+                            : ref
+                                  .watch(
+                                    sessionTranscriptProvider(widget.sessionId),
+                                  )
+                                  .whenData(_toMessages);
+                        // Whether a chat rendering is possible for **this
+                        // session** — a reading, not a registry lookup. The
+                        // server's own reading, when it has one, wins.
+                        var reading = fromPty
+                            ? sessionChatView(ref, widget.sessionId)
+                            : const SessionChatView.unread(prior: true);
+                        final absence = window?.absence;
+                        if (absence != null) {
+                          reading = SessionChatView.read(
+                            absence,
+                            prior: reading.prior,
+                            path: window?.path,
+                          );
+                        }
+                        // Past a compaction the view draws nothing older, so
+                        // there is nothing earlier worth asking for.
+                        final compacted =
+                            transcript.asData?.value.firstOrNull?.role ==
+                            kCompactionNoticeRole;
+                        final earlier =
+                            window != null && window.hasOlder && !compacted
+                            ? window.from
+                            : 0;
+                        return _conversation(
+                          transcript: transcript,
+                          // The badge's reading only while a process is behind
+                          // the session: a killed agent's last status can stay
+                          // "working", which kept its final turn live — and
+                          // unfolded — forever. Nothing running, the turn is over.
+                          turn: sessionHasLiveProcess(ref, widget.sessionId)
+                              ? ref.watch(
+                                  agentSessionStatusProvider(
+                                    widget.sessionId,
+                                  ).select(
+                                    (s) => transcriptTurnFor(s.asData?.value),
+                                  ),
+                                )
+                              : TranscriptTurn.idle,
+                          resolveHostPath: _hostPathResolver(),
+                          notesEnabled: notesEnabled,
+                          active:
+                              fromPty ||
+                              ref
+                                  .read(sessionEngineProvider)
+                                  .isActive(widget.sessionId),
+                          chatAvailable: !fromPty || reading.hasChatView,
+                          reading: reading,
+                          fromPty: fromPty,
+                          // A server elsewhere that cannot read transcripts:
+                          // this machine's disk has none of its sessions.
+                          serverTooOld:
+                              fromPty &&
+                              !caps.chatViaServer &&
+                              !caps.readsServerDisk,
+                          earlier: earlier,
+                          firstOrdinal: window?.from ?? 0,
+                          // Whether there is a terminal to point at: the user
+                          // can switch, so the sentences must be true.
+                          hasTerminal:
+                              sessionTerminalPane(ref, widget.sessionId) !=
+                              null,
+                          footer: footer,
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

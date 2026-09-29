@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
@@ -5,7 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import '../../sessions/presentation/transcript_image_preview.dart';
-import '../domain/session_media_item.dart';
+import 'package:agent_cli/read.dart' show SessionMediaItem;
 
 /// The picture behind a `[Image #6]` somebody Ctrl+clicked. Drawn by
 /// [TranscriptImagePreview], so every failure degrades to a line of text.
@@ -15,9 +17,13 @@ class SessionImageDialog extends StatelessWidget {
     required this.item,
     this.matches = 1,
     this.resolveHostPath,
+    this.fetch,
     this.now,
     super.key,
   });
+
+  /// Brings the picture from a server elsewhere; null when this disk has it.
+  final Future<File> Function(String path)? fetch;
 
   /// The text that was clicked, `[Image #6]`, shown as the title — naming it is
   /// what says the right picture was found.
@@ -96,6 +102,7 @@ class SessionImageDialog extends StatelessWidget {
                         resolveHostPath: item.fromAgentEnvironment
                             ? resolveHostPath
                             : null,
+                        fetch: fetch,
                       ),
               ),
             ),

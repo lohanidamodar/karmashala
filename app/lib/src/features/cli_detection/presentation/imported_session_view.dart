@@ -18,6 +18,10 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/message_composer.dart';
+import '../../sessions/presentation/transcript_image_preview.dart'
+    show TranscriptImageSource;
+import '../../media/application/session_media_providers.dart'
+    show sessionImageFetchProvider;
 import '../../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:agent_cli/read.dart';
@@ -131,40 +135,46 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: transcript.when(
-            loading: () => const Center(
-              child: InlineSpinner(size: InlineSpinnerSize.large),
-            ),
-            error: (e, _) => Center(child: Text('Could not read history: $e')),
-            data: (messages) => ChatTranscriptView(
-              messages: [
-                for (final m in messages)
-                  ChatMessage(role: m.role, text: m.text, tool: m.tool),
-              ],
-              earlier: earlier,
-              onLoadEarlier: earlier > 0
-                  ? () => unawaited(transcripts.loadOlder(widget.sessionId))
-                  : null,
-              firstOrdinal: window?.from ?? 0,
-              // An imported session records paths in the environment it ran in;
-              // an image read in WSL needs its host form before `dart:io` can.
-              resolveHostPath: (path) => ref
-                  .read(editorActionsProvider)
-                  .windowsPathFor(
-                    EnvironmentPath(
-                      environmentId: session.environmentId,
-                      path: path,
+          // Pictures in its rows come through the server when it is
+          // elsewhere.
+          child: TranscriptImageSource(
+            fetch: ref.watch(sessionImageFetchProvider(widget.sessionId)),
+            child: transcript.when(
+              loading: () => const Center(
+                child: InlineSpinner(size: InlineSpinnerSize.large),
+              ),
+              error: (e, _) =>
+                  Center(child: Text('Could not read history: $e')),
+              data: (messages) => ChatTranscriptView(
+                messages: [
+                  for (final m in messages)
+                    ChatMessage(role: m.role, text: m.text, tool: m.tool),
+                ],
+                earlier: earlier,
+                onLoadEarlier: earlier > 0
+                    ? () => unawaited(transcripts.loadOlder(widget.sessionId))
+                    : null,
+                firstOrdinal: window?.from ?? 0,
+                // An imported session records paths in the environment it ran in;
+                // an image read in WSL needs its host form before `dart:io` can.
+                resolveHostPath: (path) => ref
+                    .read(editorActionsProvider)
+                    .windowsPathFor(
+                      EnvironmentPath(
+                        environmentId: session.environmentId,
+                        path: path,
+                      ),
                     ),
-                  ),
-              emptyHint: emptyHint,
-              footer: MessageComposer(
-                hintText: 'Continue this session — type a message',
-                // Attachments go where the session's agent runs.
-                server: () =>
-                    ref.read(pickServerProvider(session.environmentId)),
-                onSend: (text) => ref
-                    .read(sessionActionsProvider)
-                    .resumeAndSend(session, text),
+                emptyHint: emptyHint,
+                footer: MessageComposer(
+                  hintText: 'Continue this session — type a message',
+                  // Attachments go where the session's agent runs.
+                  server: () =>
+                      ref.read(pickServerProvider(session.environmentId)),
+                  onSend: (text) => ref
+                      .read(sessionActionsProvider)
+                      .resumeAndSend(session, text),
+                ),
               ),
             ),
           ),

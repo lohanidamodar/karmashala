@@ -26,10 +26,12 @@ class SessionMediaPanel extends ConsumerWidget {
 
     final media = ref.watch(sessionMediaProvider(sessionId));
     final resolveHostPath = ref.watch(sessionMediaHostPathProvider(sessionId));
+    final fetch = ref.watch(sessionMediaFetchProvider(sessionId));
     return media.when(
       data: (items) => SessionMediaList(
         items: items,
         resolveHostPath: resolveHostPath,
+        fetch: fetch,
         // Read here rather than inside the list so ages are deterministic in
         // tests and move only when the list is rebuilt.
         now: ref.watch(clockProvider).nowUtc(),

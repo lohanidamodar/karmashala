@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/media/application/session_media_providers.dart';
-import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
 import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';

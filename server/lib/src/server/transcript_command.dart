@@ -92,7 +92,8 @@ Future<int> runTranscript(
   try {
     // `--read=rewindPoints|changedFiles|openQuestion`: a raw-line reader's
     // answer (Stage 0 step 7), as the wire carries it. `--read=stats
-    // [--lifetime]` counts every session named, in one request (step 9).
+    // [--lifetime]` counts every session named, in one request (step 9);
+    // `--read=media`, the session's pictures (step 10).
     final reader = text('read');
     if (reader != null) {
       Future<Object?> read<R>(DataRequest<R> ask) async =>
@@ -104,6 +105,7 @@ Future<int> runTranscript(
         'stats' => read(
           SessionStatsRead(named, lifetime: args.contains('--lifetime')),
         ),
+        'media' => read(SessionMediaRead(sessionId)),
         _ => throw DataRefused.invalid('no reader named $reader'),
       };
       sink.writeln(const JsonEncoder.withIndent('  ').convert(answer));

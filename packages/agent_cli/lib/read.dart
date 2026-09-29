@@ -46,5 +46,7 @@ export 'src/cli_detection/domain/detected_project.dart';
 export 'src/cli_detection/domain/detected_project_merger.dart';
 export 'src/cli_detection/domain/detected_session.dart';
 export 'src/cli_detection/domain/imported_session.dart';
+export 'src/media/session_media_item.dart';
+export 'src/media/session_media_store.dart';
 export 'src/util/sqlite_rows.dart';
 export 'src/util/sqlite_writer.dart';
