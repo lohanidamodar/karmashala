@@ -1,0 +1,21 @@
+Karmashala runs coding-agent CLIs on your computer. This app puts them in your pocket.
+
+Pair your phone with the Karmashala server on your computer, your WSL box or a machine you reach over SSH, and every session it runs is one tap away. Sessions that need you come first.
+
+WHAT YOU CAN DO
+• See every session at a glance: working, waiting on you, finished or failed.
+• Answer approvals and questions: allow, deny, or deny and say why.
+• Read the chat and send messages, with files from your phone or from the server, or a photo.
+• Open a session's terminal, drawn at the session's own size, with pan, pinch-zoom and an extra-keys row for Esc, Tab, Ctrl, Alt and the arrows.
+• Browse the session's changes, history and files.
+• Start new sessions and add projects.
+• Get notified while the app is open when a session needs you, finishes or fails.
+
+WORKS WITH
+Claude Code, Codex and Antigravity CLI sessions run through Karmashala on your computer.
+
+PRIVATE BY DESIGN
+Your phone talks to your own machine over an end-to-end sealed channel, directly on your network or through a relay. Your code and your sessions stay on your machine. What each paired phone may do is granted on the computer and can be changed or revoked at any time.
+
+YOU NEED
+Karmashala running on a computer you own. Pair by scanning its QR code, pasting a code, or typing its address.
