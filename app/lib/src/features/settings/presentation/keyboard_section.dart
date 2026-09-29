@@ -8,6 +8,8 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/keymap.dart';
 import '../../../app/shell/keymap_controller.dart';
+import '../../../app/shell/shell_area.dart' show shellCommandShownWith;
+import '../../../core/capabilities/capabilities.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../application/settings_controller.dart';
 import 'settings_catalog.dart';
@@ -55,12 +57,14 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
     );
     final path = status.path;
     final query = _filter.text.trim().toLowerCase();
+    final caps = ref.watch(capabilitiesProvider);
     final bindings = [
       for (final binding in resolvedKeymapBindings(overrides))
-        if (query.isEmpty ||
-            binding.does.toLowerCase().contains(query) ||
-            binding.command.toLowerCase().contains(query) ||
-            (binding.keys?.toLowerCase().contains(query) ?? false))
+        if (shellCommandShownWith(binding.command, caps) &&
+            (query.isEmpty ||
+                binding.does.toLowerCase().contains(query) ||
+                binding.command.toLowerCase().contains(query) ||
+                (binding.keys?.toLowerCase().contains(query) ?? false)))
           binding,
     ];
     List<KeymapBinding> where(bool Function(KeymapBinding b) test) => [
