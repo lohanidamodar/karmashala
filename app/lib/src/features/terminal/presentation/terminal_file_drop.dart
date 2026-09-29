@@ -8,13 +8,10 @@ import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../core/data/data_providers.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/failure_words.dart';
 import '../../files/data/files_client.dart';
 import '../application/dropped_paths.dart';
-import '../application/local_host_providers.dart';
-import 'package:karmashala_terminal_runtime/host_link.dart'
-    show SharedHostLinks;
 import '../application/terminal_profiles.dart';
 import '../application/terminal_sessions_controller.dart';
 
@@ -65,7 +62,7 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
     final text = droppedPathsText(
       paths,
       reach: _reachOf(instance),
-      windowsHost: Platform.isWindows,
+      windowsHost: ref.read(capabilitiesProvider).serverOnWindows,
     );
     if (text == null) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -112,12 +109,10 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
       );
       return;
     }
-    final access = ref.read(serverAccessProvider);
-    final link = access == null ? null : SharedHostLinks.current(access);
     final text = droppedPathsText(
       landed,
       reach: PaneReach.local,
-      windowsHost: link?.welcome.operatingSystem == 'windows',
+      windowsHost: ref.read(capabilitiesProvider).serverOnWindows,
     );
     if (text == null || !mounted) return;
     instance.terminal.paste(text);
@@ -133,7 +128,7 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
       onDragDone: (details) {
         setState(() => _over = false);
         final paths = [for (final file in details.files) file.path];
-        if (ref.read(dataClientProvider).serverOnThisMachine) {
+        if (ref.read(capabilitiesProvider).readsServerDisk) {
           _drop(paths);
         } else {
           unawaited(_upload(paths));

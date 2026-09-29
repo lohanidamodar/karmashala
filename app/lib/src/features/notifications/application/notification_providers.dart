@@ -9,6 +9,7 @@ import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
 import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
@@ -127,7 +128,7 @@ final windowRaiseRequestProvider =
 final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
   // A probe shows no toasts: on Windows the first one rewrites the Start Menu
   // shortcut the real app's toasts are delivered through.
-  if (!DesktopNotificationPresenter.isSupportedHere ||
+  if (!ref.read(capabilitiesProvider).osToasts ||
       ref.read(probeModeProvider).enabled) {
     return const NoopNotificationPresenter();
   }

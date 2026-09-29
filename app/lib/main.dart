@@ -10,6 +10,7 @@ import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
+import 'src/core/capabilities/capabilities.dart';
 import 'src/core/data/app_preferences.dart';
 import 'src/core/data/data_providers.dart';
 import 'src/core/data/metadata_keys.dart';
@@ -42,7 +43,6 @@ import 'src/features/terminal/application/local_host_providers.dart';
 import 'src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart'
     show TerminalLayoutStore;
-import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
 
 /// Application entry point. Logging and the uncaught-error handlers first, so
@@ -143,7 +143,23 @@ Future<void> _bootstrap(AppLogger logger) async {
   final data = remoteAccess == null
       ? await connectLocalServerData(access: hostAccess, logger: logger)
       : await connectRemoteServerData(access: remoteAccess, logger: logger);
-  final onThisMachine = remoteAccess == null;
+  final container = ProviderContainer(
+    overrides: [
+      terminalLayoutStoreProvider.overrideWithValue(layoutStore),
+      dataClientProvider.overrideWithValue(data),
+      localHostSessionAccessProvider.overrideWithValue(hostAccess),
+      if (remoteAccess != null)
+        serverAccessProvider.overrideWithValue(remoteAccess),
+      machinesProvider.overrideWithValue(machines),
+      activeMachineProvider.overrideWithValue(remote),
+      probeModeProvider.overrideWithValue(probe),
+      // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
+      // runner factory, where it keeps data, its settings and its shell.
+      ...deviceBindings,
+    ],
+  );
+  // Read once for the start-up acts below; each is done once per launch.
+  final capabilities = container.read(capabilitiesProvider);
   final preferences = AppPreferences(data);
   // Only what the server said: an unread copy is not a first run.
   final preferencesRead = data.preferences.isPrimed;
@@ -164,7 +180,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   const clock = SystemClock();
   // This machine's environments are the server's only when it runs here: a
   // server elsewhere finds its own.
-  if (onThisMachine) {
+  if (capabilities.setsUpThisMachine) {
     final discovered = await EnvironmentDiscoveryService(
       host: const LocalCommandRunner(),
       // The app keeps one clock; the package carries its own copy of the type
@@ -189,22 +205,6 @@ Future<void> _bootstrap(AppLogger logger) async {
     logger.info('A client of the server on ${remote!.hostName}.');
   }
 
-  final container = ProviderContainer(
-    overrides: [
-      terminalLayoutStoreProvider.overrideWithValue(layoutStore),
-      dataClientProvider.overrideWithValue(data),
-      localHostSessionAccessProvider.overrideWithValue(hostAccess),
-      if (remoteAccess != null)
-        serverAccessProvider.overrideWithValue(remoteAccess),
-      machinesProvider.overrideWithValue(machines),
-      activeMachineProvider.overrideWithValue(remote),
-      probeModeProvider.overrideWithValue(probe),
-      // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
-      // runner factory, where it keeps data, its settings and its shell.
-      ...deviceBindings,
-    ],
-  );
-
   // The supervisor keeps the server up; the data link follows it back.
   final supervisor = container.read(localHostSupervisorProvider);
   if (supervisor != null) superviseDataLink(data, supervisor);
@@ -215,7 +215,7 @@ Future<void> _bootstrap(AppLogger logger) async {
 
   // First run, or one that never completed: probe every environment once, in
   // the background. The controller's state updates when it finishes.
-  if (onThisMachine &&
+  if (capabilities.setsUpThisMachine &&
       preferencesRead &&
       preferences.read(MetadataKeys.agentsDiscoveredAt) == null) {
     unawaited(_discoverAgentsOnFirstRun(container, preferences, clock, logger));
@@ -231,7 +231,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   lifecycle.startMemoryCensus();
 
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
-  if (SystemIntegrationService.isSupported) {
+  if (capabilities.systemIntegration) {
     try {
       await windowManager.ensureInitialized();
       final settings = container.read(settingsControllerProvider);
@@ -267,7 +267,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   // session's first turn is heard only if it is already up. Started after
   // `runApp` so it never delays the window; the hook sweep below and the
   // lifecycle subscriber both wait for it.
-  if (onThisMachine) lifecycle.startLocalHost();
+  if (capabilities.setsUpThisMachine) lifecycle.startLocalHost();
 
   // The agents' status hooks, **after the first frame** rather than before the
   // window. The gate's timeout is load-bearing: a tray launch may never paint.
@@ -281,19 +281,19 @@ Future<void> _bootstrap(AppLogger logger) async {
   // This machine's agents, hooks, skills and CLI stores belong to the server
   // that runs them — this machine's own. A client of a server elsewhere
   // touches none of them (slice 5e).
-  if (onThisMachine && SystemIntegrationService.isSupported) {
+  if (capabilities.setsUpThisMachine && capabilities.systemIntegration) {
     lifecycle.installAgentHooks(afterFirstFrame: afterFirstFrame);
   }
 
   // The skills, beside the hooks because it is the same act: a skill needs no
   // address, and its bytes are constant.
-  if (onThisMachine) {
+  if (capabilities.setsUpThisMachine) {
     lifecycle.installAgentSkills(afterFirstFrame: afterFirstFrame);
   }
 
   // The CLI stores, **once**, behind the same gate. The project row's "Refresh
   // CLI sessions" is what re-runs it. Nothing here needs a bound server.
-  if (onThisMachine) {
+  if (capabilities.setsUpThisMachine) {
     unawaited(lifecycle.importCliSessions(afterFirstFrame: afterFirstFrame));
   }
 
@@ -306,7 +306,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   // A server elsewhere reads only its own disk: the in-app picker browses it,
   // where the OS dialog would offer this machine's files.
   FilePickerChoice.prefersInApp = () =>
-      !onThisMachine ||
+      !container.read(capabilitiesProvider).readsServerDisk ||
       (container.read(settingsControllerProvider).useInAppFilePicker ??
           FilePickerChoice.platformDefault);
   // And one answer about hidden files for every browser, persisted.
@@ -318,7 +318,7 @@ Future<void> _bootstrap(AppLogger logger) async {
 
   // The stored agent executables, on every launch: a path is durable state,
   // whether it resolves is a measurement, and Codex's self-update rots it.
-  if (onThisMachine) {
+  if (capabilities.setsUpThisMachine) {
     unawaited(lifecycle.repairAgentPaths(afterFirstFrame: afterFirstFrame));
   }
 }

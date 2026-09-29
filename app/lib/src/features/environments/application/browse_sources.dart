@@ -2,6 +2,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../files/data/files_client.dart';
 import 'environments_controller.dart';
 
@@ -15,6 +16,7 @@ import 'environments_controller.dart';
 /// an executable path and an SSH key are stored as. Nothing is translated.
 List<BrowseSource> browseSourcesFrom(ProviderContainer container) {
   final files = container.read(filesClientProvider);
+  final readsServerDisk = container.read(capabilitiesProvider).readsServerDisk;
   return [
     for (final environment in container.read(environmentsControllerProvider))
       if (_browsable(environment))
@@ -25,7 +27,7 @@ List<BrowseSource> browseSourcesFrom(ProviderContainer container) {
               (_isLocal(environment) ? 'This computer' : environment.name),
           // This machine's own drives and folders are worth offering as
           // shortcuts only when the server's disk is this machine's.
-          local: _isLocal(environment) && files.serverOnThisMachine,
+          local: _isLocal(environment) && readsServerDisk,
           home: () async => (await files.home(environment.id)).path,
           lister: (path) => _list(files, environment.id, path),
         ),
