@@ -50,6 +50,7 @@ class TranscriptPage {
     this.reset = false,
     this.absence,
     this.path,
+    this.digest,
   });
 
   final String sessionId;
@@ -75,6 +76,11 @@ class TranscriptPage {
   /// The transcript's path on the server's machine, when located.
   final String? path;
 
+  /// What the rows before this client's window hold that a follower needs,
+  /// when asked for (`SessionTranscriptRead.digest`, Stage 0 step 8). Null
+  /// from a server older than that, and when it was not asked for.
+  final TranscriptDigest? digest;
+
   bool get hasOlder => from > 0;
   bool get hasNewer => from + messages.length < total;
 
@@ -90,6 +96,7 @@ class TranscriptPage {
     if (reset) 'reset': true,
     'absence': ?absence?.name,
     'path': ?path,
+    'digest': ?digest?.toJson(),
   };
 
   /// Throws on a page out of shape. An absence this build does not know
@@ -116,8 +123,69 @@ class TranscriptPage {
                 ChatViewEvidence.notLocated
           : null,
       path: json['path'] as String?,
+      digest: json['digest'] is Map
+          ? TranscriptDigest.fromJson((json['digest']! as Map).cast())
+          : null,
     );
   }
+}
+
+/// **What rows `[0, end)` of a record hold that a follower of its tail
+/// needs** (Stage 0 step 8): the newest row that published a plan, and every
+/// row still [pending] — a call not answered, a background subagent not
+/// retired. A client that holds only the tail learns from these the plan the
+/// agent works to and the calls still running, without the rows between.
+class TranscriptDigest {
+  const TranscriptDigest({
+    required this.end,
+    this.plan,
+    this.pending = const [],
+  });
+
+  /// The rows this digest covers are those before this index.
+  final int end;
+
+  /// The newest row before [end] whose tool published a plan.
+  final TranscriptUpdate? plan;
+
+  /// The rows before [end] with a call or a background subagent still open,
+  /// oldest first.
+  final List<TranscriptUpdate> pending;
+
+  /// The digest of [messages]' rows before [end].
+  static TranscriptDigest of(List<TranscriptMessage> messages, int end) {
+    TranscriptUpdate? plan;
+    final pending = <TranscriptUpdate>[];
+    for (var i = 0; i < end && i < messages.length; i++) {
+      final message = messages[i];
+      if (message.tool?.plan != null) plan = TranscriptUpdate(i, message);
+      if (message.pendingToolUseId != null ||
+          message.pendingBackgroundAgentId != null) {
+        pending.add(TranscriptUpdate(i, message));
+      }
+    }
+    return TranscriptDigest(end: end, plan: plan, pending: pending);
+  }
+
+  Map<String, Object?> toJson() => {
+    'end': end,
+    'plan': ?plan?.toJson(),
+    if (pending.isNotEmpty)
+      'pending': [for (final row in pending) row.toJson()],
+  };
+
+  /// Throws on a digest out of shape.
+  static TranscriptDigest fromJson(Map<String, Object?> json) =>
+      TranscriptDigest(
+        end: json['end']! as int,
+        plan: json['plan'] is Map
+            ? TranscriptUpdate.fromJson((json['plan']! as Map).cast())
+            : null,
+        pending: [
+          for (final row in (json['pending'] as List?) ?? const [])
+            TranscriptUpdate.fromJson((row as Map).cast()),
+        ],
+      );
 }
 
 /// What `sessions.changedFiles` answers: the files a session's agent says it

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefusalCode, DataRefused;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart';
@@ -125,6 +127,28 @@ Stream<List<TranscriptMessage>> serverTranscriptMessages(
     ref.listen<bool>(visible, (_, shown) => lease.watching = shown);
   }
   return lease.windows.map((window) => window.messages);
+}
+
+/// Session [sessionId]'s turns as the server reads them, text only, paged
+/// back until [enough] (see [ServerTranscripts.turns]). Null when this client
+/// reads its own disk instead: a server that does not offer
+/// `sessions.transcript.turns`, or refuses it `invalid`.
+Future<ServerTurns?> serverSessionTurns(
+  Ref ref,
+  String sessionId, {
+  bool spoken = false,
+  required bool Function(List<TranscriptMessage> held) enough,
+  void Function(int held, int total)? progress,
+}) async {
+  if (!ref.read(capabilitiesProvider).turnsViaServer) return null;
+  try {
+    return await ref
+        .read(serverTranscriptsProvider)
+        .turns(sessionId, spoken: spoken, enough: enough, progress: progress);
+  } on DataRefused catch (refusal) {
+    if (refusal.code == DataRefusalCode.invalid) return null;
+    rethrow;
+  }
 }
 
 /// The chat rendering of a PTY-hosted session, polled while it is on screen.

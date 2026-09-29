@@ -45,12 +45,22 @@ Future<int> runTranscript(
   final sessionId = named.first;
   // `--subagent=<path>`: a delegate's turns, as an expanded `Task` row asks.
   final subagent = text('subagent');
+  // `--turns [--spoken]`: the text-only pages export and recap read;
+  // `--digest=<first row held>`: the plan and open calls before it (step 8).
   final DataRequest<TranscriptPage> request = subagent != null
       ? SessionTranscriptSubagent(
           sessionId,
           subagent,
           after: number('after'),
           limit: number('limit'),
+        )
+      : args.contains('--turns')
+      ? SessionTranscriptTurns(
+          sessionId,
+          before: number('before'),
+          limit: number('limit'),
+          generation: text('generation'),
+          spoken: args.contains('--spoken'),
         )
       : SessionTranscriptRead(
           sessionId,
@@ -59,6 +69,7 @@ Future<int> runTranscript(
           limit: number('limit'),
           generation: text('generation'),
           revision: number('revision'),
+          digest: number('digest'),
         );
   final resolved = hostPathsFor(
     'transcript',
@@ -137,6 +148,12 @@ void _printPage(IOSink sink, TranscriptPage page) {
     '${page.absence == null ? '' : ' absence=${page.absence!.name}'}',
   );
   if (page.path != null) sink.writeln('path=${page.path}');
+  if (page.digest case final digest?) {
+    sink.writeln(
+      'digest end=${digest.end} plan=${digest.plan?.index ?? 'none'} '
+      'pending=${[for (final row in digest.pending) row.index].join(',')}',
+    );
+  }
   void line(int index, TranscriptMessage message) {
     final tool = message.tool;
     final body = tool != null ? tool.summary : message.text.split('\n').first;

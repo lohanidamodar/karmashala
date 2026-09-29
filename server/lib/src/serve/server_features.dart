@@ -16,4 +16,9 @@ const Set<String> kServerFeatures = <String>{
   'sessions.rewindPoints',
   'sessions.changedFiles',
   'sessions.openQuestion',
+  // `sessions.transcript` answers `digest` when asked (the plan and open
+  // calls before a client's window), and `sessions.transcript.turns` pages a
+  // record's turns as text only, for export and recap (Stage 0 step 8).
+  'sessions.transcript.digest',
+  'sessions.transcript.turns',
 };

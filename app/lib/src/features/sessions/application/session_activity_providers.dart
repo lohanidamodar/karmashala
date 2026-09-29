@@ -6,6 +6,8 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
+import '../../../core/capabilities/capabilities.dart';
+import '../data/server_transcripts.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
@@ -177,12 +179,23 @@ final sessionOutstandingCallsProvider = Provider.autoDispose
           !_isOver(row.status) && status == AgentActivityStatus.working;
       // Null rather than empty for a record we are not reading: this is how
       // the rule tells "nothing outstanding" from "nothing to look at".
-      final messages =
+      var messages =
           working &&
               row.surface == SessionSurface.pane &&
               hasReadableRecord(ref, row)
           ? ref.watch(sessionChatTranscriptProvider(sessionId)).asData?.value
           : null;
+      // From a server, [messages] are the tail: a call or background subagent
+      // opened before it is in the window's digest (Stage 0 step 8).
+      final older = ref.read(capabilitiesProvider).chatViaServer
+          ? ref
+                .read(serverTranscriptsProvider)
+                .windowFor(sessionId, messages)
+                ?.olderPending
+          : null;
+      if (messages != null && older != null && older.isNotEmpty) {
+        messages = [...older, ...messages];
+      }
       return sessionActivityFrom(
         rowStatus: row.status,
         surface: row.surface,

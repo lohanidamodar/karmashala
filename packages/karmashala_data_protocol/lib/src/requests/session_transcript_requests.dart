@@ -21,6 +21,14 @@ DataRequest<Object?>? _sessionTranscriptRequestFromJson(
     limit: args.optionalInt('limit'),
     generation: args.optionalString('generation'),
     revision: args.optionalInt('revision'),
+    digest: args.optionalInt('digest'),
+  ),
+  SessionTranscriptTurns.name => SessionTranscriptTurns(
+    args.string('sessionId'),
+    before: args.optionalInt('before'),
+    limit: args.optionalInt('limit'),
+    generation: args.optionalString('generation'),
+    spoken: args.boolean('spoken', orElse: false),
   ),
   SessionTranscriptWatch.name => SessionTranscriptWatch(
     args.string('sessionId'),
@@ -62,6 +70,9 @@ sealed class SessionTranscriptRequest<R> extends DataRequest<R> {
 ///   since. Another generation, or a revision the server never answered, is
 ///   answered `reset` with the tail.
 /// - [before]: the [limit] rows before that index, for scrolling back.
+/// - [digest], the first row this client holds (Stage 0 step 8): the page
+///   also answers `digest` for the rows before the window the client holds
+///   once it has read this page. An older server ignores it.
 final class SessionTranscriptRead
     extends SessionTranscriptRequest<TranscriptPage> {
   const SessionTranscriptRead(
@@ -71,6 +82,7 @@ final class SessionTranscriptRead
     this.limit,
     this.generation,
     this.revision,
+    this.digest,
   });
 
   static const String name = 'sessions.transcript';
@@ -82,6 +94,7 @@ final class SessionTranscriptRead
   final int? limit;
   final String? generation;
   final int? revision;
+  final int? digest;
 
   @override
   String get kind => name;
@@ -94,6 +107,54 @@ final class SessionTranscriptRead
     'limit': ?limit,
     'generation': ?generation,
     'revision': ?revision,
+    'digest': ?digest,
+  };
+
+  @override
+  Object? resultToJson(TranscriptPage result) => result.toJson();
+
+  @override
+  TranscriptPage resultFromJson(Object? json) =>
+      _decode(kind, () => TranscriptPage.fromJson(_object(json, kind)));
+}
+
+/// One page of session [sessionId]'s turns as text only — role, text and
+/// time, no thinking and no tool detail (Stage 0 step 8): what an export or
+/// a recap quotes, at a fraction of [SessionTranscriptRead]'s bytes.
+///
+/// [spoken] keeps only user and agent turns that say something; `total` and
+/// `from` then count those. No cursor answers the tail; [before] with the
+/// [generation] last answered pages back. Another generation is answered
+/// `reset` with the tail. An older server refuses the kind as `invalid`.
+final class SessionTranscriptTurns
+    extends SessionTranscriptRequest<TranscriptPage> {
+  const SessionTranscriptTurns(
+    this.sessionId, {
+    this.before,
+    this.limit,
+    this.generation,
+    this.spoken = false,
+  });
+
+  static const String name = 'sessions.transcript.turns';
+
+  @override
+  final String sessionId;
+  final int? before;
+  final int? limit;
+  final String? generation;
+  final bool spoken;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'before': ?before,
+    'limit': ?limit,
+    'generation': ?generation,
+    if (spoken) 'spoken': true,
   };
 
   @override
