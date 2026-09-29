@@ -199,11 +199,15 @@ class ContextTabs extends ConsumerWidget {
     );
   }
 
-  /// The More menu: every offered surface no other tab holds, minus the ones
-  /// the user took out of it.
-  Future<void> _openMore(BuildContext anchor, WidgetRef ref) async {
+  /// The More menu's entries: every offered surface no other tab holds, minus
+  /// the ones the user took out of it — though never [open] itself. The panel
+  /// and the phone's context sheet list the same.
+  static List<SidePanelSurface> moreSurfaces(
+    WidgetRef ref,
+    SidePanelSurface open,
+  ) {
     final hidden = ref.read(hiddenSidePanelSurfacesProvider);
-    final surfaces = [
+    return [
       for (final surface in SidePanelSurface.offered(
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
@@ -214,15 +218,28 @@ class ContextTabs extends ConsumerWidget {
             (!hidden.contains(surface) || surface == open))
           surface,
     ];
-    final picked = await showDesktopMenuUnder<SidePanelSurface>(anchor, [
-      for (final surface in surfaces)
-        DesktopMenuItem(
-          value: surface,
-          label: surface.label,
-          icon: SidePanel.iconFor(surface),
-          selected: surface == open,
-        ),
-    ]);
+  }
+
+  /// [moreSurfaces] as menu entries, the open one ticked.
+  static List<PopupMenuEntry<SidePanelSurface>> moreItems(
+    WidgetRef ref,
+    SidePanelSurface open,
+  ) => [
+    for (final surface in moreSurfaces(ref, open))
+      DesktopMenuItem(
+        value: surface,
+        label: surface.label,
+        icon: SidePanel.iconFor(surface),
+        selected: surface == open,
+      ),
+  ];
+
+  /// The More menu, under its tab.
+  Future<void> _openMore(BuildContext anchor, WidgetRef ref) async {
+    final picked = await showDesktopMenuUnder<SidePanelSurface>(
+      anchor,
+      moreItems(ref, open),
+    );
     if (picked != null) ref.read(sidePanelProvider.notifier).show(picked);
   }
 }
@@ -287,14 +304,14 @@ class _ContextTabButton extends StatelessWidget {
 
 /// **Checkpoints · Decisions · Plan** — the History tab's header, in place of
 /// a name, so its three records read as one tab.
-class _HistorySwitch extends ConsumerWidget {
-  const _HistorySwitch({required this.open});
+class _HistorySwitch extends StatelessWidget {
+  const _HistorySwitch({required this.open, required this.onShow});
 
   final SidePanelSurface open;
+  final ValueChanged<SidePanelSurface> onShow;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final panel = ref.read(sidePanelProvider.notifier);
+  Widget build(BuildContext context) {
     final surfaces = ContextTab.history.surfaces;
     return Row(
       children: [
@@ -304,7 +321,7 @@ class _HistorySwitch extends ConsumerWidget {
             child: SidebarPill(
               label: surface.label,
               selected: surface == open,
-              onTap: () => panel.show(surface),
+              onTap: () => onShow(surface),
             ),
           ),
         ],
@@ -342,20 +359,9 @@ class _SidePanelBody extends ConsumerWidget {
           children: [
             ContextTabs(open: surface),
             Expanded(
-              child: _titled(
-                surface,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!surface.drawsOwnHeader)
-                      _SidePanelHeader(surface: surface),
-                    if (surface.scopedToRepository) ...[
-                      const SidePanelContextLine(),
-                      const SidePanelWorktrees(),
-                    ],
-                    Expanded(child: _surfaceBody(surface)),
-                  ],
-                ),
+              child: ContextSurfaceBody(
+                surface: surface,
+                onShow: ref.read(sidePanelProvider.notifier).show,
               ),
             ),
           ],
@@ -363,19 +369,47 @@ class _SidePanelBody extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// One surface of the context, under its tabs: its header, the checkout line
+/// for a surface about one checkout, and the body. The panel draws it, and so
+/// does the phone's context sheet; [onShow] is how History's switch moves.
+class ContextSurfaceBody extends StatelessWidget {
+  const ContextSurfaceBody({
+    required this.surface,
+    required this.onShow,
+    super.key,
+  });
+
+  final SidePanelSurface surface;
+  final ValueChanged<SidePanelSurface> onShow;
+
+  @override
+  Widget build(BuildContext context) => _titled(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!surface.drawsOwnHeader) _SidePanelHeader(surface: surface),
+        if (surface.scopedToRepository) ...[
+          const SidePanelContextLine(),
+          const SidePanelWorktrees(),
+        ],
+        Expanded(child: _surfaceBody(surface)),
+      ],
+    ),
+  );
 
   /// A surface under a named tab does not say that name again: its header
   /// keeps only its actions, and History's carries its switch. More's still
   /// name themselves, since the tab says only "More".
-  Widget _titled(SidePanelSurface surface, Widget child) =>
-      switch (ContextTab.of(surface)) {
-        ContextTab.more => child,
-        ContextTab.history => PaneTitleOverride(
-          title: _HistorySwitch(open: surface),
-          child: child,
-        ),
-        _ => PaneTitleOverride(child: child),
-      };
+  Widget _titled(Widget child) => switch (ContextTab.of(surface)) {
+    ContextTab.more => child,
+    ContextTab.history => PaneTitleOverride(
+      title: _HistorySwitch(open: surface, onShow: onShow),
+      child: child,
+    ),
+    _ => PaneTitleOverride(child: child),
+  };
 
   Widget _surfaceBody(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => const AttentionInboxView(),

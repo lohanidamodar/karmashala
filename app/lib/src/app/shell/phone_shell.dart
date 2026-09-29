@@ -15,6 +15,7 @@ import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/terminal/presentation/session_host_banner.dart'
     show RemoteResumingStrip;
 import 'activity_strip.dart' show ActivityStrip;
+import 'context_sheet.dart';
 import 'phone_ask_banner.dart';
 import 'phone_more_page.dart';
 import 'phone_top_bar.dart';
@@ -319,13 +320,13 @@ class _PhoneWorkbench extends ConsumerWidget {
         padding: EdgeInsetsDirectional.only(end: Insets.sm),
         child: ShellTabSwitcher(),
       ),
-      actions: const [
-        WorkbenchFaceToggle(),
-        // The context panel's sheet lands here in Stage 2 step 8.
+      actions: [
+        const WorkbenchFaceToggle(),
+        // The context panel, which the phone mounts only as this sheet.
         IconButton(
           tooltip: 'Session context',
-          onPressed: null,
-          icon: Icon(AppIcons.dotsThreeVertical),
+          onPressed: () => showContextSheet(context),
+          icon: const Icon(AppIcons.dotsThreeVertical),
         ),
       ],
     ),
