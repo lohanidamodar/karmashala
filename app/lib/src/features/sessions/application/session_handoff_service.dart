@@ -185,13 +185,15 @@ class SessionHandoffService {
         ),
       );
 
-  /// Branches [sessionId] into a session of the same agent.
+  /// Branches [sessionId] into a session of the same agent. [sourceBrief] goes
+  /// with the fork: in its packet, or beside the CLI's own fork.
   Future<SessionLaunchResult> forkSession({
     required String sessionId,
     String instruction = '',
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async => _ref
       .read(sessionLauncherProvider)
       .showStarted(
@@ -202,6 +204,7 @@ class SessionHandoffService {
             unresolved: unresolvedTasks,
             newWorktree: intoNewWorktree,
             permissionMode: permissionMode?.canonical,
+            sourceBrief: sourceBrief,
           ),
         ),
       );

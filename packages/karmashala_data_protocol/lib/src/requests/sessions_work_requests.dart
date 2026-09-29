@@ -55,6 +55,10 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     unresolved: args.strings('unresolved', orEmpty: true),
     newWorktree: args.boolean('newWorktree', orElse: false),
     permissionMode: args.optionalString('permissionMode'),
+    // Optional: a client from before 2026-09-29 sends none.
+    sourceBrief: args.values['sourceBrief'] == null
+        ? null
+        : args.value('sourceBrief', sourceBriefFromJson),
   ),
   SessionForkFromCheckpoint.name => SessionForkFromCheckpoint(
     sessionId: args.string('sessionId'),
@@ -266,7 +270,9 @@ final class SessionHandoff extends _StartedRequest {
 }
 
 /// Branches session [sessionId] into a new one of the same agent: the CLI's
-/// own fork where it has one, a packet otherwise.
+/// own fork where it has one, a packet otherwise. [sourceBrief] goes with it
+/// either way: in the packet, or beside the CLI's own fork of the
+/// conversation.
 final class SessionFork extends _StartedRequest {
   const SessionFork({
     required this.sessionId,
@@ -274,6 +280,7 @@ final class SessionFork extends _StartedRequest {
     this.unresolved = const [],
     this.newWorktree = false,
     this.permissionMode,
+    this.sourceBrief,
   });
 
   static const String name = 'sessions.fork';
@@ -283,6 +290,10 @@ final class SessionFork extends _StartedRequest {
   final List<String> unresolved;
   final bool newWorktree;
   final String? permissionMode;
+
+  /// The brief the source wrote for this fork; null when nobody asked. Sent
+  /// only when present, so an older server reads the request it always did.
+  final HandoffSourceBrief? sourceBrief;
 
   @override
   String get kind => name;
@@ -294,6 +305,7 @@ final class SessionFork extends _StartedRequest {
     'unresolved': unresolved,
     'newWorktree': newWorktree,
     'permissionMode': ?permissionMode,
+    if (sourceBrief != null) 'sourceBrief': sourceBriefToJson(sourceBrief!),
   };
 }
 

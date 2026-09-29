@@ -697,6 +697,91 @@ class HandoffPacket {
   }
 }
 
+/// What a **native** fork is told besides the conversation it already has: the
+/// brief its source wrote, framed as [HandoffPacket] frames one, and the
+/// instruction last. A fork that falls back to a packet carries the brief in
+/// the packet instead; this is only for the CLI's own fork, which needs no
+/// recap and would otherwise lose the brief the source spent a turn on.
+class ForkBrief {
+  const ForkBrief({
+    required this.sourceAgentName,
+    required this.text,
+    required this.instruction,
+  });
+
+  /// The fork's brief for [brief], or null when there is nothing to add — no
+  /// brief was asked for, or it was not written. A native fork keeps the
+  /// whole conversation, so "it did not answer" tells it nothing.
+  static ForkBrief? of({
+    required String sourceAgentName,
+    required HandoffSourceBrief? brief,
+    required String instruction,
+  }) {
+    final text = brief?.text?.trim();
+    if (text == null || text.isEmpty) return null;
+    return ForkBrief(
+      sourceAgentName: sourceAgentName,
+      text: text,
+      instruction: instruction,
+    );
+  }
+
+  final String sourceAgentName;
+
+  /// What the source wrote. Quoted, never edited.
+  final String text;
+
+  /// What the user wants done next; may be empty.
+  final String instruction;
+
+  /// The brief as Markdown. Ends with the instruction, so it can stand in for
+  /// the opening message when the agent takes no system-prompt file.
+  String render() {
+    final out = StringBuffer()
+      ..writeln('# A brief for this fork, from $sourceAgentName')
+      ..writeln()
+      ..writeln(
+        'This session is a **branch** of an existing $sourceAgentName '
+        'session, and it carries that whole conversation. Just before the '
+        'branch, $sourceAgentName was asked to write a handoff summary for '
+        'whoever continues the work; here is the brief the previous session '
+        'wrote for you. It may also be the last turn of the conversation you '
+        'already have — it is the same text. The original session still '
+        'exists and is unchanged.',
+      )
+      ..writeln()
+      ..writeln('## In $sourceAgentName\'s own words')
+      ..writeln()
+      // No editors: it is a quotation, and an edited quotation is not one.
+      ..writeln(HandoffSectionOwner(sourceAgentName).line)
+      ..writeln()
+      ..writeln(
+        '_$sourceAgentName wrote this when the fork was prepared, in answer to '
+        'a request for a context-checkpoint handoff summary. It is that '
+        'agent\'s account of its own work and nobody has checked it: where '
+        'it disagrees with the files in front of you, **the files win**._',
+      )
+      ..writeln();
+    for (final line in HandoffPacket._lines(text)) {
+      out.writeln('> $line');
+    }
+    out
+      ..writeln()
+      ..writeln('## What you are being asked to do')
+      ..writeln()
+      ..writeln(const HandoffSectionOwner('the user').line)
+      ..writeln();
+    final asked = instruction.trim();
+    out.writeln(
+      asked.isEmpty
+          ? 'No instruction came with this fork. Say in a line that you have '
+                'the brief, then wait for the user.'
+          : asked,
+    );
+    return out.toString().trimRight();
+  }
+}
+
 /// How much of a conversation a packet carries. A budget rather than a turn
 /// count: turns are uneven, and the agent pays for every character on turn one.
 class HandoffRecapBudget {

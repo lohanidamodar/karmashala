@@ -29,15 +29,14 @@ class ServerSessionWork implements SessionWork {
           r.sessionId,
           timeoutSeconds: r.timeoutSeconds,
         ),
-        final SessionHandoffPreview r =>
-          (await continuations.buildPacket(
-            sessionId: r.sessionId,
-            targetAgentName: r.targetAgentName,
-            instruction: r.instruction,
-            unresolvedTasks: r.unresolved,
-            isFork: r.isFork,
-            sourceBrief: r.sourceBrief,
-          )).render(),
+        final SessionHandoffPreview r => await continuations.preview(
+          sessionId: r.sessionId,
+          targetAgentName: r.targetAgentName,
+          instruction: r.instruction,
+          unresolvedTasks: r.unresolved,
+          isFork: r.isFork,
+          sourceBrief: r.sourceBrief,
+        ),
         final SessionHandoff r => await continuations.handoff(
           sessionId: r.sessionId,
           targetInstallationId: r.targetInstallationId,
@@ -53,6 +52,7 @@ class ServerSessionWork implements SessionWork {
           unresolvedTasks: r.unresolved,
           intoNewWorktree: r.newWorktree,
           permissionMode: r.permissionMode,
+          sourceBrief: r.sourceBrief,
         ),
         final SessionForkFromCheckpoint r =>
           await continuations.forkFromCheckpoint(

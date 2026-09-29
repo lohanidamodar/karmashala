@@ -21,26 +21,31 @@ String? continueSummary({
   required String? sessionTitle,
   required String? checkoutName,
   required bool newWorktree,
+  bool withSourceBrief = false,
 }) {
   final subject = sessionTitle == null ? 'this session' : '“$sessionTitle”';
   final where = newWorktree
       ? 'in a new worktree${checkoutName == null ? '' : ' of $checkoutName'}'
       : 'in ${checkoutName ?? 'the same checkout'}, same folder and '
             'branch';
+  // The brief is asked for first, and whatever it says goes with the launch.
+  final brief = withSourceBrief
+      ? ' $sourceName writes a brief first, and it goes with the new session.'
+      : '';
   if (fork) {
     return switch (plan.kind) {
       SessionForkKind.native =>
         'Forks $subject with its whole conversation into a new $sourceName '
-            'session $where. This session is left as it is.',
+            'session $where.$brief This session is left as it is.',
       SessionForkKind.handoff =>
         'Starts a new $sourceName session $where from a written recap of '
-            '$subject. This session is left as it is.',
+            '$subject.$brief This session is left as it is.',
       SessionForkKind.refused => null,
     };
   }
   if (target == null || !target.canReceive) return null;
   return 'Starts a new ${target.agentName} session $where, briefed with a '
-      'written recap of $subject. This session keeps running.';
+      'written recap of $subject.$brief This session keeps running.';
 }
 
 /// Why the primary button is disabled, or null when it is not.
@@ -466,9 +471,18 @@ class ContinueSummary extends StatelessWidget {
 
 /// The packet exactly as the next agent receives it, read before launching.
 class PacketPreview extends StatelessWidget {
-  const PacketPreview({required this.packet, required this.stale, super.key});
+  const PacketPreview({
+    required this.packet,
+    required this.stale,
+    this.lead = 'This is exactly what the next agent is told:',
+    super.key,
+  });
 
   final String packet;
+
+  /// The line above it, saying what it is — a CLI's own fork is told this
+  /// *besides* the conversation it carries, so it cannot say "all of it".
+  final String lead;
 
   /// Whether the instruction or the open tasks changed after this was built.
   final bool stale;
@@ -484,7 +498,7 @@ class PacketPreview extends StatelessWidget {
         Text(
           // Not "as its first message": an agent that takes a system-prompt
           // file gets the packet as one.
-          'This is exactly what the next agent is told:',
+          lead,
           style: theme.textTheme.labelSmall?.copyWith(color: muted),
         ),
         if (stale) ...[

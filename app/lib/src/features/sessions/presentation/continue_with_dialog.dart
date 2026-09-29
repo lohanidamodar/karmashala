@@ -137,7 +137,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           .previewPacket(
             sessionId: widget.sessionId,
             targetAgentName: _fork
-                ? (target?.agentName ?? 'the same agent')
+                ? (_agentInFocus(targets)?.agentName ?? 'the same agent')
                 : (target?.agentName ?? ''),
             instruction: _instruction.text.trim().isEmpty
                 ? '(you have not written an instruction yet)'
@@ -175,6 +175,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           unresolvedTasks: _taskLines,
           intoNewWorktree: _newWorktree,
           permissionMode: _chosenMode,
+          sourceBrief: brief,
         );
       } else {
         await service.handoffTo(
@@ -254,6 +255,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
         sessionTitle: title,
         checkoutName: checkout,
         newWorktree: _newWorktree,
+        withSourceBrief: _askSource,
       ),
       blockedReason: continueBlockedReason(
         fork: _fork,
@@ -323,7 +325,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                     ? null
                     : () => setState(() => _moreOpen = !_moreOpen),
                 setCount: (_askSource ? 1 : 0) + (_taskLines.isEmpty ? 0 : 1),
-                children: _moreChildren(view.sourceName),
+                children: _moreChildren(view),
               ),
               const SizedBox(height: Insets.lg),
               ContinueSummary(
@@ -332,7 +334,16 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
               ),
               if (_preview case final preview?) ...[
                 const SizedBox(height: Insets.md),
-                PacketPreview(packet: preview, stale: _previewStale),
+                if (_fork && view.plan.isNative)
+                  PacketPreview(
+                    packet: preview,
+                    stale: _previewStale,
+                    lead:
+                        'The fork keeps its whole conversation. Besides it, '
+                        'this is exactly what it is told:',
+                  )
+                else
+                  PacketPreview(packet: preview, stale: _previewStale),
               ],
               if (_error case final error?) ...[
                 const SizedBox(height: Insets.md),
@@ -483,7 +494,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
     ),
   );
 
-  List<Widget> _moreChildren(String sourceName) => [
+  List<Widget> _moreChildren(_View view) => [
     TextField(
       controller: _tasks,
       minLines: 1,
@@ -506,12 +517,17 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
               _askSource = v ?? false;
               _preview = null;
             }),
-      title: Text('Ask $sourceName to write the brief first'),
+      title: Text('Ask ${view.sourceName} to write the brief first'),
       subtitle: Text(
         _sourceBrief?.notWritten != null
             ? 'It did not: ${_sourceBrief!.notWritten}'
-            : 'Costs $sourceName one turn. The packet is assembled from '
-                  'files either way; this adds that agent\'s own account '
+            : _fork && view.plan.isNative
+            ? 'Costs ${view.sourceName} one turn. The fork carries the whole '
+                  'conversation either way; this adds that agent\'s own '
+                  'account of it, marked as its words, to what the fork is '
+                  'told.'
+            : 'Costs ${view.sourceName} one turn. The packet is assembled '
+                  'from files either way; this adds that agent\'s own account '
                   'beside them, marked as its words.',
       ),
     ),
@@ -528,7 +544,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           : const Icon(AppIcons.eye, size: Chrome.iconAction),
       label: Text(
         !previewing
-            ? 'Preview packet'
+            ? (_fork && view.plan.isNative ? 'Preview' : 'Preview packet')
             : _askSource && _sourceBrief == null
             ? 'Asking ${view.sourceName}…'
             : 'Previewing…',

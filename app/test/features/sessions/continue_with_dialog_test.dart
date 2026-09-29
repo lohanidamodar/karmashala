@@ -184,6 +184,7 @@ class _RecordingService extends SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     forked = true;
     forkedUnder = permissionMode;

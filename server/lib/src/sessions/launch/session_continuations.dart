@@ -235,6 +235,38 @@ class SessionContinuations {
     );
   }
 
+  /// What the next agent would be told, as text: the packet, except for a
+  /// fork the CLI performs itself, which carries its own conversation and is
+  /// told only the source's brief (when one was written) and the instruction.
+  Future<String> preview({
+    required String sessionId,
+    required String targetAgentName,
+    required String instruction,
+    List<String> unresolvedTasks = const [],
+    bool isFork = false,
+    HandoffSourceBrief? sourceBrief,
+  }) async {
+    if (isFork && forkPlanFor(sessionId).isNative) {
+      final session =
+          sessions.getById(sessionId) ??
+          (throw const LaunchTargetMissing('This session no longer exists.'));
+      final forked = ForkBrief.of(
+        sourceAgentName: _agentNameOf(session),
+        brief: sourceBrief,
+        instruction: instruction,
+      );
+      return forked?.render() ?? instruction.trim();
+    }
+    return (await buildPacket(
+      sessionId: sessionId,
+      targetAgentName: targetAgentName,
+      instruction: instruction,
+      unresolvedTasks: unresolvedTasks,
+      isFork: isFork,
+      sourceBrief: sourceBrief,
+    )).render();
+  }
+
   List<HandoffCheckpoint> _checkpointsFor(String sessionId) {
     try {
       final chain = checkpoints.forSession(sessionId);
@@ -506,6 +538,7 @@ class SessionContinuations {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     String? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     final session =
         sessions.getById(sessionId) ??
@@ -524,9 +557,28 @@ class SessionContinuations {
         link: SessionLink.fork,
         isFork: true,
         permissionMode: permissionMode,
+        sourceBrief: sourceBrief,
       );
     }
     final context = _contextFor(session, session.agentInstallationId);
+    // The CLI carries the conversation; the brief the source spent a turn on
+    // goes beside it, the way a handoff's packet does — a system-prompt file
+    // where the agent takes one, otherwise the opening message (which ends
+    // with the instruction, so nothing typed is lost).
+    final brief = ForkBrief.of(
+      sourceAgentName: context.agentName,
+      brief: sourceBrief,
+      instruction: instruction,
+    )?.render();
+    if (brief != null) {
+      final support =
+          context.descriptor?.launch.systemPromptFile ??
+          const AgentSystemPromptFileSupport.unchecked();
+      log?.call(
+        'Fork of $sessionId carries its brief: ${brief.length} chars '
+        'delivery=${support.isSupported ? support.token : 'typed'}',
+      );
+    }
     final carried = _resolvePermission(
       sessionId: sessionId,
       descriptor: context.descriptor,
@@ -543,6 +595,7 @@ class SessionContinuations {
         title: _forkTitle(sessionId, session.title),
         forkConversationId: session.externalSessionId,
         prompt: instruction.trim().isEmpty ? null : instruction,
+        systemPrompt: brief,
         parentSessionId: sessionId,
         parentLink: SessionLink.fork,
         worktree: intoNewWorktree,
@@ -809,6 +862,12 @@ class SessionContinuations {
       descriptor: registry.byId(installation.agentId),
       agentName: registry.displayNameFor(installation.agentId),
     );
+  }
+
+  /// The display name of the agent running [session].
+  String _agentNameOf(Session session) {
+    final agentId = rows.installation(session.agentInstallationId)?.agentId;
+    return agentId == null ? 'this agent' : registry.displayNameFor(agentId);
   }
 
   /// `Fix the parser` → `Fix the parser (fork)`, or `(fork 2)` for the second.

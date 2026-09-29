@@ -100,6 +100,7 @@ class _RecordingService extends SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     forks.add(sessionId);
     return SessionLaunchResult(session: session());
