@@ -1,172 +1,22 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../features/explorer/application/agent_state_providers.dart';
-import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-import 'activity_strip.dart';
-import 'devices_dock.dart';
-import 'shell_area.dart';
-import 'shell_shortcuts.dart';
-import 'shell_state.dart';
 import 'tab_picker.dart';
 import 'workbench.dart' show terminalTabEntries;
-import 'workbench_tabs.dart';
-
-/// The compact top bar's square buttons (board N4's 34px `.act`), and the
-/// corner they share with the activity strip's glyphs.
-const double kCompactButton = 34;
-const double kCompactButtonRadius = 9;
 
 /// The session switcher field's height and corner (board N4).
 const double _switcherHeight = 32;
 const double _switcherRadius = 7;
 
-/// **The strip as a menu** (UI overhaul spec §5, Compact): under 600 px the
-/// activity strip's column is worth more as workbench, so its glyphs — the
-/// areas, Usage, Settings — fold into one title-bar glyph. An area picked here
-/// opens full width over the workbench, as a strip press does wider.
-class ShellAreasMenuButton extends ConsumerWidget {
-  const ShellAreasMenuButton({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final attention = SemanticColors.of(context).attention;
-    // The strip's counts: the Inbox counts its asks, and an unread update
-    // that is not an ask is only the neutral dot.
-    final sessions = ref.watch(needsYouCountProvider);
-    final asks = ref.watch(inboxAskCountProvider);
-    final news = ref.watch(inboxHasUnseenUpdateProvider);
-    final badges = {
-      ShellArea.sessions: sessions,
-      ShellArea.devices: ref.watch(readyDeviceCountProvider),
-      ShellArea.inbox: asks,
-    };
-    // Only what waits on the user marks the glyph amber, as on the strip: a
-    // connected device is not a reason to open the menu. A waiting session
-    // and its ask in the Inbox are one wait seen twice, so the total is the
-    // larger count, never the sum.
-    final waiting = math.max(sessions, asks);
-    final open = ref.watch(
-      shellControllerProvider.select((s) => s.explorerPaneVisible),
-    );
-    final area = ref.watch(shellAreaProvider);
-    final says = waiting > 0
-        ? '$waiting need you'
-        : news
-        ? 'new updates'
-        : null;
-    return Builder(
-      builder: (anchor) => Tooltip(
-        message: says == null ? 'Areas' : 'Areas  ·  $says',
-        child: Semantics(
-          button: true,
-          label: says == null ? 'Areas' : 'Areas, $says',
-          excludeSemantics: true,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(kCompactButtonRadius),
-            onTap: () => _open(anchor, ref, badges, news, open ? area : null),
-            child: SizedBox(
-              width: kCompactButton,
-              height: kCompactButton,
-              child: Badge(
-                isLabelVisible: says != null,
-                smallSize: Chrome.dot,
-                backgroundColor: waiting > 0
-                    ? attention
-                    : scheme.onSurfaceVariant,
-                alignment: AlignmentDirectional.topEnd,
-                child: Center(
-                  child: Icon(
-                    open ? ActivityStrip.iconFor(area) : AppIcons.list,
-                    size: Chrome.icon,
-                    color: open ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _open(
-    BuildContext anchor,
-    WidgetRef ref,
-    Map<ShellArea, int> badges,
-    bool news,
-    ShellArea? showing,
-  ) async {
-    final picked = await showDesktopMenuUnder<Object>(anchor, [
-      // With an area covering the workbench, the way back is the first row:
-      // at this width there is no workbench edge left to click.
-      if (showing != null) ...[
-        DesktopMenuItem(
-          value: #workbench,
-          label: 'Back to the workbench',
-          icon: AppIcons.terminal,
-        ),
-        const DesktopMenuDivider(),
-      ],
-      for (final area in ShellArea.values)
-        DesktopMenuItem(
-          value: area,
-          label: switch (badges[area] ?? 0) {
-            0 when area == ShellArea.inbox && news => '${area.label}  ·  new',
-            0 => area.label,
-            final count => '${area.label}  ·  $count',
-          },
-          icon: ActivityStrip.iconFor(area),
-          selected: area == showing,
-          shortcut: shellChordLabel<ShowShellAreaIntent>(
-            where: (intent) => intent.area == area,
-          ),
-        ),
-      const DesktopMenuDivider(),
-      DesktopMenuItem(
-        value: #usage,
-        label: 'Usage',
-        icon: AppIcons.chartBar,
-        shortcut: shellChordLabel<OpenUsageIntent>(),
-      ),
-      DesktopMenuItem(
-        value: #settings,
-        label: 'Settings',
-        icon: AppIcons.gearSix,
-        shortcut: shellChordLabel<OpenSettingsIntent>(),
-      ),
-    ]);
-    if (!anchor.mounted) return;
-    switch (picked) {
-      case final ShellArea area:
-        // A menu row never hides: picking the area on show leaves it up.
-        showShellArea(ref, area);
-      case #workbench:
-        ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
-        if (ref.read(shellControllerProvider).explorerPaneVisible) {
-          ref.read(shellControllerProvider.notifier).toggleExplorerPane();
-        }
-      case #usage:
-        openUsageTab(ref);
-      case #settings:
-        openSettingsTab(ref);
-    }
-  }
-}
-
 /// **The session switcher** (spec §5, board N4 Compact): a field on the
 /// raised tone naming the tab in front with what its agent is doing, and a
-/// caret — a press picks another. `Ctrl+K` still opens the quick panel.
+/// caret — a press picks another. The phone's workbench wears it on top.
 class ShellTabSwitcher extends ConsumerWidget {
   const ShellTabSwitcher({super.key});
 
@@ -245,82 +95,6 @@ class ShellActiveTabGlyph extends ConsumerWidget {
         size: Chrome.iconSmall,
         semanticLabel: 'Agent: ${agentStatusAppearance(status).label}',
         askShield: true,
-      ),
-    );
-  }
-}
-
-/// **The Sessions button** (board N4 Compact): the Sessions list as a sheet,
-/// with how many sessions need you on an amber badge — the count the strip's
-/// Sessions glyph carries at wider sizes.
-class ShellSessionsButton extends ConsumerWidget {
-  const ShellSessionsButton({super.key});
-
-  /// The board's badge: 14px round, 9.5px bold ink.
-  static const _badge = 14.0;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final attention = SemanticColors.of(context).attention;
-    final count = ref.watch(needsYouCountProvider);
-    final showing =
-        ref.watch(
-          shellControllerProvider.select((s) => s.explorerPaneVisible),
-        ) &&
-        ref.watch(shellAreaProvider) == ShellArea.sessions;
-    final label = count == 0 ? 'Sessions' : 'Sessions, $count need you';
-    return Tooltip(
-      message: count == 0 ? 'Sessions' : 'Sessions  ·  $count need you',
-      child: Semantics(
-        button: true,
-        selected: showing,
-        label: label,
-        excludeSemantics: true,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(kCompactButtonRadius),
-          onTap: () => toggleShellArea(ref, ShellArea.sessions),
-          child: SizedBox(
-            width: kCompactButton,
-            height: kCompactButton,
-            child: Stack(
-              children: [
-                Center(
-                  child: Icon(
-                    ActivityStrip.iconFor(ShellArea.sessions),
-                    size: Chrome.icon,
-                    color: showing ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                ),
-                if (count > 0)
-                  PositionedDirectional(
-                    end: 2,
-                    top: 2,
-                    child: Container(
-                      constraints: const BoxConstraints(
-                        minWidth: _badge,
-                        minHeight: _badge,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: attention,
-                        borderRadius: BorderRadius.circular(Radii.pill),
-                      ),
-                      child: Text(
-                        '$count',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: SurfaceTones.of(context).background,
-                          fontWeight: FontWeight.w700,
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

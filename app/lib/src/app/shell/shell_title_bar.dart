@@ -11,9 +11,7 @@ import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
-import 'app_shell.dart' show ShellWidth;
 import 'native_menus.dart';
-import 'shell_compact_bar.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
@@ -24,9 +22,7 @@ import 'side_panel_state.dart';
 /// New and the window's toggles. No mark or name of its own: the window's
 /// title bar above it already says Karmashala on every platform (owner,
 /// 2026-09-29). The terminal's own verbs moved to View ▸ Terminal and their
-/// chords.
-/// Under 600 px (§5, Compact) the strip is a glyph too, and a tab switcher
-/// stands where the field and the usage were.
+/// chords. Under 600 px the phone shell draws its own top bar instead.
 class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   const ShellTitleBar({this.height = Chrome.titleBar, super.key});
 
@@ -40,20 +36,14 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
-    // The window's class, not the row's: the row is a few pixels narrower,
-    // and the bar must agree with the body below it about whether the strip
-    // is still there.
-    final compactToolbar = ShellWidth.of(
-      MediaQuery.sizeOf(context).width,
-    ).isCompact;
     return Material(
       color: tones.strip,
       child: Container(
         height: height,
         // Board A2 insets the mark further than the window's controls at the
-        // other end; the compact bar keeps its own, tighter, edge.
+        // other end.
         padding: EdgeInsetsDirectional.only(
-          start: compactToolbar || useNativeMenus ? Insets.xs : Insets.md,
+          start: useNativeMenus ? Insets.xs : Insets.md,
           end: Insets.xs,
         ),
         decoration: BoxDecoration(
@@ -63,34 +53,6 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
         // menu: nothing measures this row by intrinsics.
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // One column under 600 (spec §5): the strip is gone, so its
-            // glyphs fold in beside the menu glyph, and the tab switcher
-            // takes the quick panel's place — usage too, which has no room.
-            // Board N4: the menu, the session switcher, the Sessions list
-            // with who needs you — eight apart. The window's own menus and
-            // the dormant-session badges (nothing, unless there are some)
-            // follow; New, Zen and the side panel keep their chords and
-            // their rows in those menus.
-            if (compactToolbar) {
-              return Row(
-                children: [
-                  const SizedBox(width: Insets.xs),
-                  const ShellAreasMenuButton(),
-                  const SizedBox(width: Insets.sm),
-                  const Expanded(child: ShellTabSwitcher()),
-                  const SizedBox(width: Insets.sm),
-                  const ShellSessionsButton(),
-                  const _RestoredSessionsBadge(),
-                  const _BackgroundSessionsBadge(),
-                  // Not a second `≡`: the areas button beside it wears that.
-                  if (!useNativeMenus)
-                    const ShellMenuButton(
-                      icon: AppIcons.dotsThreeVertical,
-                      extent: kCompactButton,
-                    ),
-                ],
-              );
-            }
             // Board A2 without its mark and name: the menus behind one glyph,
             // the field, then the accounts' usage at the right. On macOS the
             // menus live in the system menu bar (NativeShellMenus) and the
