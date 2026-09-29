@@ -338,7 +338,7 @@ class _ChangedFiles extends ConsumerWidget {
         ),
       if (unstaged.isNotEmpty)
         (
-          title: 'Changes',
+          title: 'Unstaged changes',
           files: orderedForReview(unstaged, (f) => f.path),
           staged: false,
           conflicted: false,

@@ -31,8 +31,8 @@ import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
 /// **The context panel** (UI overhaul spec §6): tabs — Changes, Repo,
-/// History, and More for every other surface — over the open surface. Closed,
-/// it takes no width at all; the title bar's toggle opens it again.
+/// History, Files, and More for every other surface — over the open surface.
+/// Closed, it takes no width at all; the title bar's toggle opens it again.
 class SidePanel extends ConsumerWidget {
   const SidePanel({
     this.bodyWidth,
@@ -154,27 +154,42 @@ class ContextTabs extends ConsumerWidget {
       height: Chrome.tabStrip,
       color: SurfaceTones.of(context).chrome,
       padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = labelsWidth(context) > constraints.maxWidth;
-          return Row(
-            children: [
-              for (final tab in ContextTab.values)
-                Builder(
-                  builder: (anchor) => _ContextTabButton(
-                    label: labelOf(tab),
-                    icon: SidePanel.tabIcon(tab),
-                    compact: compact,
-                    selected: tab == current,
-                    onTap: tab == ContextTab.more
-                        ? () => _openMore(anchor, ref)
-                        : () => panel.showTab(tab),
-                  ),
-                ),
-              const Spacer(),
-            ],
-          );
-        },
+      child: Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = labelsWidth(context) > constraints.maxWidth;
+                return Row(
+                  children: [
+                    for (final tab in ContextTab.values)
+                      Builder(
+                        builder: (anchor) => _ContextTabButton(
+                          label: labelOf(tab),
+                          icon: SidePanel.tabIcon(tab),
+                          compact: compact,
+                          selected: tab == current,
+                          onTap: tab == ContextTab.more
+                              ? () => _openMore(anchor, ref)
+                              : () => panel.showTab(tab),
+                        ),
+                      ),
+                    const Spacer(),
+                  ],
+                );
+              },
+            ),
+          ),
+          // The panel's one way out, whichever surface is open.
+          IconButton(
+            tooltip:
+                'Close panel  ·  '
+                '${shellChordLabel<ToggleSidePanelIntent>()}',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(AppIcons.x, size: Chrome.iconAction),
+            onPressed: panel.collapse,
+          ),
+        ],
       ),
     );
   }
@@ -315,49 +330,44 @@ class _SidePanelBody extends ConsumerWidget {
       onResizeEnd: onResizeEnd,
       child: Material(
         color: SurfaceTones.of(context).panel,
-        // Every surface here closes from its header, the panel's or its own —
-        // handed down, so the panel watches nothing for a glyph.
-        child: PaneCloseAction(
-          tooltip:
-              'Close panel  ·  '
-              '${shellChordLabel<ToggleSidePanelIntent>()}',
-          onClose: () => ref.read(sidePanelProvider.notifier).collapse(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ContextTabs(open: surface),
-              Expanded(
-                child: _titled(
-                  surface,
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!surface.drawsOwnHeader)
-                        _SidePanelHeader(surface: surface),
-                      if (surface.scopedToRepository) ...[
-                        const SidePanelContextLine(),
-                        const SidePanelWorktrees(),
-                      ],
-                      Expanded(child: _surfaceBody(surface)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ContextTabs(open: surface),
+            Expanded(
+              child: _titled(
+                surface,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!surface.drawsOwnHeader)
+                      _SidePanelHeader(surface: surface),
+                    if (surface.scopedToRepository) ...[
+                      const SidePanelContextLine(),
+                      const SidePanelWorktrees(),
                     ],
-                  ),
+                    Expanded(child: _surfaceBody(surface)),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  /// History's header carries its switch in place of a surface's name.
+  /// A surface under a named tab does not say that name again: its header
+  /// keeps only its actions, and History's carries its switch. More's still
+  /// name themselves, since the tab says only "More".
   Widget _titled(SidePanelSurface surface, Widget child) =>
       switch (ContextTab.of(surface)) {
+        ContextTab.more => child,
         ContextTab.history => PaneTitleOverride(
           title: _HistorySwitch(open: surface),
           child: child,
         ),
-        _ => child,
+        _ => PaneTitleOverride(child: child),
       };
 
   Widget _surfaceBody(SidePanelSurface surface) => switch (surface) {
@@ -388,7 +398,7 @@ class _ChangesSurface extends ConsumerWidget {
 }
 
 /// The header the panel draws for a surface that has none of its own. The close
-/// button comes from the [PaneCloseAction] around the body, not from here.
+/// button is the tab row's, not this one's.
 class _SidePanelHeader extends StatelessWidget {
   const _SidePanelHeader({required this.surface});
 

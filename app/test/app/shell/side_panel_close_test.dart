@@ -22,10 +22,8 @@ import 'package:agent_cli/process.dart';
 /// rail — the same glyph you opened it with, which is not where anyone looks
 /// for a way out.
 ///
-/// The fix hands the button *down* through [PaneCloseAction] rather than
-/// pulling five features' actions up into the panel. `drawsOwnHeader` still
-/// means what it says — whether the panel stacks a header of its own — and the
-/// panel still watches nothing on those five features' behalf.
+/// The button now sits once in the panel's tab row, whatever surface is open.
+/// [PaneCloseAction] still hands one down to a header for any other container.
 void main() {
   /// Settle, but do not require the tree to go quiet: a surface that is still
   /// probing draws a progress indicator, and `pumpAndSettle` would time the
@@ -92,7 +90,7 @@ void main() {
     });
   });
 
-  testWidgets('every offered surface can be closed from its header', (
+  testWidgets('every offered surface can be closed from the tab row', (
     tester,
   ) async {
     final db = TestMachine();
@@ -138,8 +136,8 @@ void main() {
         closeButton,
         findsOneWidget,
         reason:
-            '${surface.label} offers exactly one way out of the panel from '
-            'its header, whether the header is its own or the panel\'s',
+            '${surface.label} offers exactly one way out of the panel: the '
+            'tab row\'s, never a second in its own header',
       );
 
       await tester.tap(closeButton);
