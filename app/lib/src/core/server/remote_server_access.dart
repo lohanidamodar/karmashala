@@ -8,9 +8,14 @@ import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart' show CapabilitySet;
 
 /// A Karmashala server on another machine (slice 5e), reached the way the
-/// phone reaches one — its LAN listener or a relay, the sealed channel —
-/// and switched to the host protocol. Nothing is started or supervised: it
-/// is only dialled.
+/// phone reaches one — its LAN listener, a beacon sighting, its announced LAN
+/// address or a relay, the sealed channel — and switched to the host
+/// protocol. Nothing is started or supervised: it is only dialled.
+///
+/// Owns the process's one [LanPathScout] while this machine is in use: it
+/// starts listening for beacons here, so sightings have gathered by the first
+/// dial, and stops at [close]. The local server never builds one of these, so
+/// the scout never runs for it.
 class RemoteServerAccess implements HostSessionAccess {
   RemoteServerAccess({
     required this.hostId,
@@ -18,14 +23,23 @@ class RemoteServerAccess implements HostSessionAccess {
     required this.store,
     DesktopServerDialer? dialer,
     AppLogger? logger,
-  }) : _dialer = dialer ?? DesktopServerDialer(store: store),
-       _log = logger ?? AppLogger.named('remote');
+    void Function(String message)? onLog,
+  }) : _dialer =
+           dialer ??
+           DesktopServerDialer(
+             store: store,
+             scout: LanPathScout(onLog: onLog ?? _defaultLog),
+             onLog: onLog ?? _defaultLog,
+           ),
+       _log = logger ?? AppLogger.named('remote') {
+    unawaited(_dialer.startScouting());
+  }
 
   final String hostId;
   final String hostName;
 
   /// Where the pairing record lives; read on every dial, since each dial
-  /// moves its generation on.
+  /// moves its generation on and may learn new routes.
   final CompanionStore store;
   final DesktopServerDialer _dialer;
   final AppLogger _log;
@@ -36,6 +50,9 @@ class RemoteServerAccess implements HostSessionAccess {
   /// null before the first link. A grant edited on the server reaches this
   /// only when the link is next dialled.
   ValueListenable<CapabilitySet?> get grants => _grants;
+
+  static final AppLogger _dialLog = AppLogger.named('remote_dial');
+  static void _defaultLog(String message) => _dialLog.info(message);
 
   @override
   String get address => hostName;
@@ -71,4 +88,9 @@ class RemoteServerAccess implements HostSessionAccess {
       throw HostLinkException(error.message);
     }
   }
+
+  /// This machine is no longer in use: beacon listening stops. Links already
+  /// open are their owners' to close. Today a switch relaunches the app, so
+  /// the process ending does this; step 13's per-server `close()` calls it.
+  Future<void> close() => _dialer.close();
 }
