@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../core/lifecycle/server_switcher.dart';
 import '../core/util/failure_words.dart';
+import 'no_server_pairing.dart';
 
 /// The window's root (plan step 14): the open server session's app under its
 /// own container, keyed by the session so a switch builds a fresh tree and
@@ -18,12 +19,16 @@ class ServerSessionRoot extends StatelessWidget {
     super.key,
     required this.switcher,
     required this.app,
+    required this.deviceName,
   });
 
   final ServerSwitcher switcher;
 
   /// The app one server's container runs.
   final Widget app;
+
+  /// What a machine paired from [NoServer] calls this device.
+  final String deviceName;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ServerRoot>(
@@ -46,6 +51,9 @@ class ServerSessionRoot extends StatelessWidget {
       ),
       ServerOpenFailed() => _BetweenServers(
         child: _OpenFailed(failure: root, switcher: switcher),
+      ),
+      NoServer() => _BetweenServers(
+        child: NoServerPairing(switcher: switcher, deviceName: deviceName),
       ),
     },
   );
@@ -93,7 +101,13 @@ class _OpenFailed extends StatelessWidget {
     final previous = failure.previous;
     final name = serverNameForSwitch(target);
     final backDiffers = previous?.hostId.value != target?.hostId.value;
-    final offerLocal = target != null && previous != null;
+    // Only a client with a server of its own has "this computer" to offer;
+    // without one, null is the pairing screen.
+    final offerLocal =
+        switcher.hostsServer && target != null && previous != null;
+    final back = previous == null && !switcher.hostsServer
+        ? 'Back to pairing'
+        : 'Back to ${serverNameForSwitch(previous)}';
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,7 +130,7 @@ class _OpenFailed extends StatelessWidget {
             if (backDiffers)
               FilledButton(
                 onPressed: () => unawaited(switcher.retry(previous)),
-                child: Text('Back to ${serverNameForSwitch(previous)}'),
+                child: Text(back),
               ),
             OutlinedButton(
               onPressed: () => unawaited(switcher.retry(target)),

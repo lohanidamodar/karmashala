@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/lifecycle/relaunch.dart';
 import '../../../core/lifecycle/server_switcher.dart';
 import '../../../core/server/machine_pairing.dart';
@@ -215,6 +216,7 @@ class _AddMachineDialogState extends ConsumerState<AddMachineDialog> {
         store: machines.store,
         code: _code.text,
         address: _address.text,
+        deviceName: ref.read(clientCapabilitiesProvider).deviceName,
       );
       ref.invalidate(pairedMachinesProvider);
       if (mounted) setState(() => _paired = record);

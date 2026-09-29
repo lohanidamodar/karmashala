@@ -13,6 +13,7 @@ Future<CompanionPairing> pairWithMachine({
   required CompanionStore store,
   required String code,
   String? address,
+  String? deviceName,
   RemoteTransport Function(String host, int port)? lanDialer,
   Duration timeout = const Duration(seconds: 30),
 }) async {
@@ -20,7 +21,7 @@ Future<CompanionPairing> pairWithMachine({
   final client = CompanionPairingClient(
     store: store,
     deviceId: await _deviceId(store),
-    deviceName: _machineName(),
+    deviceName: _machineName(deviceName),
   );
   RemoteTransport? lan(String? endpoint) {
     final at = parseEndpoint(endpoint);
@@ -129,8 +130,8 @@ Future<DeviceId> _deviceId(CompanionStore store) async {
   return minted;
 }
 
-String _machineName() {
-  final name = Platform.localHostname.trim();
+String _machineName(String? given) {
+  final name = (given ?? Platform.localHostname).trim();
   if (name.isEmpty) return 'Karmashala desktop';
   return name.length > 64 ? name.substring(0, 64) : name;
 }

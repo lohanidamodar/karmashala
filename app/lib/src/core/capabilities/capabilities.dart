@@ -24,10 +24,15 @@ final class ClientCapabilities {
     required this.fileDrop,
     required this.relaunch,
     required this.density,
+    required this.hostsServer,
+    required this.multicastLock,
+    required this.mediaPlayback,
+    required this.deviceName,
   });
 
-  /// This process's platform, read once.
-  factory ClientCapabilities.measure() {
+  /// This process's platform, read once. [deviceModel] names a client that is
+  /// not a desktop; a desktop is named by its hostname.
+  factory ClientCapabilities.measure({String? deviceModel}) {
     final desktop =
         !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
     return ClientCapabilities(
@@ -38,7 +43,31 @@ final class ClientCapabilities {
       fileDrop: desktop,
       relaunch: desktop,
       density: UiDensity.forPlatform(defaultTargetPlatform),
+      hostsServer: desktop,
+      multicastLock: !kIsWeb && Platform.isAndroid,
+      mediaPlayback: desktop,
+      deviceName: desktop ? _hostname() : _named(deviceModel),
     );
+  }
+
+  /// [measure], with [readModel] asked for the name only where the hostname
+  /// is not one (a phone's is `localhost`).
+  static Future<ClientCapabilities> measureNamed(
+    Future<String?> Function() readModel,
+  ) async {
+    final measured = ClientCapabilities.measure();
+    if (measured.hostsServer) return measured;
+    return ClientCapabilities.measure(deviceModel: await readModel());
+  }
+
+  static String _hostname() {
+    final name = Platform.localHostname.trim();
+    return name.isEmpty ? 'karmashala' : name;
+  }
+
+  static String _named(String? model) {
+    final name = model?.trim() ?? '';
+    return name.isEmpty ? 'Karmashala phone' : name;
   }
 
   /// Tray, window chrome, hotkeys, launch at login.
@@ -59,6 +88,19 @@ final class ClientCapabilities {
   /// The app can restart itself.
   final bool relaunch;
   final UiDensity density;
+
+  /// This client can run its own Karmashala server. Without it, no machine
+  /// chosen leaves nothing to show but pairing.
+  final bool hostsServer;
+
+  /// Hearing the LAN beacon needs an OS multicast lock held.
+  final bool multicastLock;
+
+  /// media_kit has a backend here.
+  final bool mediaPlayback;
+
+  /// What this client is called at a server.
+  final String deviceName;
 }
 
 /// What the attached server offers this client.
@@ -121,6 +163,19 @@ final class Capabilities {
   bool get systemIntegration => client.systemIntegration;
 
   bool get osToasts => client.osToasts;
+
+  /// The Devices area, its dock and its settings: adb and simctl run here.
+  bool get devicesArea => client.localDevices;
+
+  /// Diagnostics › Server: starting and stopping the server on this machine.
+  bool get serverSettings => server.sameMachine;
+
+  /// Settings › Keyboard: the global hotkeys this client registers.
+  bool get keyboardSettings => client.systemIntegration;
+
+  /// "Pair a phone" and the server-side half of Remote: this client's own
+  /// server is the one in use.
+  bool get pairsHere => client.hostsServer && server.sameMachine;
 
   /// Administer the server: its config, devices, agents and pairings.
   bool get serverAdmin => server.granted(Capability.serverAdmin);

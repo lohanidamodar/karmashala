@@ -11,6 +11,7 @@ import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/server_session_root.dart';
 import 'src/app/companion/companion_bootstrap.dart';
+import 'src/app/companion/companion_device_name.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
@@ -38,14 +39,6 @@ Future<void> main() async {
   if (CompanionMode.enabled) return runCompanionApp();
 
   ensureAppBinding();
-  // A desktop bootstrap on a phone is a build mistake, and it used to be a
-  // silent one: an APK that installed, launched and sat on a black screen.
-  if (Platform.isAndroid || Platform.isIOS) {
-    throw StateError(
-      'This is the desktop build running on a phone. Build the companion with '
-      '--dart-define=KARMASHALA_MODE=companion.',
-    );
-  }
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
   UncaughtErrorHandlers(logger).install();
@@ -78,8 +71,10 @@ Future<Directory?> _logDirectoryOrNull() async {
 /// [ServerSession.open]. A switch of server closes that session and opens
 /// the next in this process ([ServerSwitcher], plan step 14).
 Future<void> _bootstrap(AppLogger logger) async {
+  // What this client can do, measured once and handed to every session.
+  final client = await ClientCapabilities.measureNamed(readDeviceModel);
   // Loads libmpv, which decodes the device pane's H.264 live view.
-  MediaKit.ensureInitialized();
+  if (client.mediaPlayback) MediaKit.ensureInitialized();
 
   // Which build, on what OS — first line of the buffer, so it is the first line
   // of anything copied out. A log that cannot say its version answers nothing.
@@ -104,7 +99,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   final support = await appSupportDirectory();
   final machines = Machines(MachinesFileStore.inDirectory(support.path));
   final remote = await machines.active();
-  SharedHostLinks.clientName = _machineName();
+  SharedHostLinks.clientName = client.deviceName;
 
   // The verification artifact root, before the first frame: a Riverpod provider
   // that threw stays errored for the life of the process. Best-effort.
@@ -134,6 +129,7 @@ Future<void> _bootstrap(AppLogger logger) async {
         probe: probe,
         support: support,
         logger: logger,
+        client: client,
         overrides: [serverSwitcherProvider.overrideWithValue(switcher)],
       );
   Future<void> quit() async {
@@ -150,21 +146,41 @@ Future<void> _bootstrap(AppLogger logger) async {
     quit: quit,
     // The fallback when the old session will not close: start afresh, as
     // every switch did before. Only where the app can restart itself.
-    relaunch: ClientCapabilities.measure().relaunch
+    relaunch: client.relaunch
         ? () async {
             await relaunchAfterExit();
             await quit();
           }
         : null,
-    onOpened: (remote) => unawaited(_retitleWindow(probe, remote, logger)),
+    onOpened: client.systemIntegration
+        ? (remote) => unawaited(_retitleWindow(probe, remote, logger))
+        : null,
+    hostsServer: client.hostsServer,
     logger: logger,
   );
+
+  // A client with no server of its own and no machine chosen opens nothing:
+  // the root shows pairing, and the pairing's switch opens the first session.
+  if (remote == null && !client.hostsServer) {
+    logger.info('No machine chosen and none to host; showing pairing.');
+    lifecycle = AppLifecycle.withoutSession(logger: logger);
+    switcher.startWithoutServer(lifecycle: lifecycle);
+    lifecycle.startMemoryCensus();
+    runApp(
+      ServerSessionRoot(
+        switcher: switcher,
+        app: const KarmashalaApp(),
+        deviceName: client.deviceName,
+      ),
+    );
+    installServerSessionStatics();
+    return;
+  }
 
   // Everything that belongs to that server: the layout store, the access, the
   // data connection, the container and the start-up acts that need them.
   final session = await openSession(remote);
   final container = session.container;
-  final capabilities = container.read(capabilitiesProvider);
 
   // One owner for everything below, so quitting is an ordered teardown rather
   // than a process that happens to end. See `AppLifecycle`.
@@ -177,7 +193,7 @@ Future<void> _bootstrap(AppLogger logger) async {
   lifecycle.startMemoryCensus();
 
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
-  if (capabilities.systemIntegration) {
+  if (client.systemIntegration) {
     try {
       await windowManager.ensureInitialized();
       final settings = container.read(settingsControllerProvider);
@@ -202,7 +218,13 @@ Future<void> _bootstrap(AppLogger logger) async {
   }
 
   // The root holds the open session's container, and swaps it on a switch.
-  runApp(ServerSessionRoot(switcher: switcher, app: const KarmashalaApp()));
+  runApp(
+    ServerSessionRoot(
+      switcher: switcher,
+      app: const KarmashalaApp(),
+      deviceName: client.deviceName,
+    ),
+  );
 
   session.startAfterRunApp(lifecycle, afterFirstFrame: afterFirstFrame);
 
@@ -228,10 +250,4 @@ Future<void> _retitleWindow(
   } on Object catch (error) {
     logger.warning('Setting the window title failed: $error');
   }
-}
-
-/// What this client is called at a server: the machine's name.
-String _machineName() {
-  final name = Platform.localHostname.trim();
-  return name.isEmpty ? 'karmashala' : name;
 }

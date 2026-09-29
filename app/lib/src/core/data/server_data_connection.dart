@@ -17,16 +17,22 @@ import 'data_client.dart';
 ///
 /// A server that does not come up is said, not replaced: the client comes
 /// back unavailable with the reason, keeps redialling, and everything is
-/// read again when the server answers.
+/// read again when the server answers. [hostsServer] false: this client
+/// cannot run one, so the missing server is not this machine's.
 Future<DataClient> connectLocalServerData({
   required LocalHostSessionAccess? access,
+  required bool hostsServer,
   AppLogger? logger,
 }) async {
   final log = logger ?? AppLogger.named('data');
   if (access == null) {
     const reason = 'no Karmashala server may run here';
     log.warning('Data: $reason.');
-    return DataClient.unavailable(reason, logger: log);
+    return DataClient.unavailable(
+      reason,
+      logger: log,
+      serverOnThisMachine: hostsServer,
+    );
   }
   String? notUp;
   try {

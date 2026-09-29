@@ -94,6 +94,14 @@ class AppLifecycle {
        // ignore: prefer_initializing_formals — named for the doc above.
        _stopwatch = stopwatch;
 
+  /// A lifecycle with no session yet: a client that hosts no server and has
+  /// no machine chosen. The first pairing's switch adopts one.
+  AppLifecycle.withoutSession({AppLogger? logger})
+    : _logger = logger ?? AppLogger.named('lifecycle'),
+      _session = null,
+      _shutdownBudget = kShutdownBudget,
+      _stopwatch = null;
+
   /// The server session every step acts on. Null between a switch's
   /// [leaveSession] and its [adoptSession] (plan step 14).
   ServerSession? _session;
