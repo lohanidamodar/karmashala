@@ -265,14 +265,21 @@ class _InboxRowContentState extends State<_InboxRowContent> {
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.
     final muted = item.seen;
-    // No band and no edge for an ask: the *Needs you* label over it, its amber
-    // glyph and its bold title say it, as a waiting row says it in Sessions.
+    final ask = item.kind == InboxItemKind.needsApproval;
+    // An ask rests on the attention tone, as a waiting row does in Sessions
+    // and Projects (board N1); the hover is a wash over it, not in its place.
+    final rest = ask ? SurfaceTones.of(context).attentionSurface : null;
+    final hover = StateLayers.hover(scheme);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Container(
         decoration: BoxDecoration(
-          color: _hovered ? StateLayers.hover(scheme) : null,
+          color: !_hovered
+              ? rest
+              : rest == null
+              ? hover
+              : Color.alphaBlend(hover, rest),
           borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
         ),
         padding: const EdgeInsets.fromLTRB(
@@ -288,7 +295,7 @@ class _InboxRowContentState extends State<_InboxRowContent> {
               padding: const EdgeInsets.only(top: 2),
               // An ask wears the needs-you mark every other surface does, seen
               // or not: reading it did not answer it.
-              child: item.kind == InboxItemKind.needsApproval
+              child: ask
                   ? NeedsYouGlyph(
                       size: Chrome.icon,
                       question: widget.wait == AgentWaitKind.question,
@@ -313,9 +320,26 @@ class _InboxRowContentState extends State<_InboxRowContent> {
                       color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
                     ),
                   ),
-                  Text(
-                    '${item.kind.label}  ·  '
-                    '${describeAge(now.difference(item.at))}',
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        // What an ask waits for, in the Sessions area's word
+                        // and its amber: approve, question or waiting.
+                        if (ask)
+                          TextSpan(
+                            text: needsYouWord(widget.wait),
+                            style: TextStyle(
+                              color: semantic.attention,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        else
+                          TextSpan(text: item.kind.label),
+                        TextSpan(
+                          text: '  ·  ${describeAge(now.difference(item.at))}',
+                        ),
+                      ],
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelSmall?.copyWith(

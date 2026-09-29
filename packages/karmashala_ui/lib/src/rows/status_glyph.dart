@@ -159,6 +159,15 @@ class NeedsYouGlyph extends StatelessWidget {
   }
 }
 
+/// What a needs-you row says it waits for, in one word (board N1):
+/// "approve" or "question" where the status source could tell, "waiting"
+/// where it could not.
+String needsYouWord(AgentWaitKind? wait) => switch (wait) {
+  AgentWaitKind.approval => 'approve',
+  AgentWaitKind.question => 'question',
+  _ => 'waiting',
+};
+
 /// **The ask's breath**, for anything that says an ask is waiting — the
 /// [AskGlyph] shield, the strip's needs-you badges — so every one of them
 /// breathes together, on one clock, and all stand still under reduced motion.

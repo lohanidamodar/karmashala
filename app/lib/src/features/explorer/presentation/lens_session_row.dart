@@ -230,11 +230,7 @@ class LensSessionRow extends ConsumerWidget {
           if (waiting) ...[
             const SizedBox(width: Insets.xs),
             Text(
-              switch (waitKind) {
-                AgentWaitKind.approval => 'approve',
-                AgentWaitKind.question => 'question',
-                _ => 'waiting',
-              },
+              needsYouWord(waitKind),
               style: muted?.copyWith(
                 color: SemanticColors.of(context).attention,
                 fontWeight: FontWeight.w600,
