@@ -19,7 +19,7 @@
 ///    project's service-account JSON (see `relay/README.md`).
 library;
 
-import '../../features/companion/client/secure_companion_store.dart';
+import '../../core/server/secure_machine_store.dart';
 import 'package:karmashala_companion/notifications.dart';
 import 'package:karmashala_companion/push.dart';
 

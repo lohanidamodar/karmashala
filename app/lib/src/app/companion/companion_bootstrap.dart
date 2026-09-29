@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'companion_device_name.dart';
+import '../../core/capabilities/device_name.dart';
 import '../../core/lifecycle/app_binding.dart';
 import '../../core/lifecycle/uncaught_errors.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
 import 'package:karmashala_remote/companion.dart';
-import '../../features/companion/client/secure_companion_store.dart';
+import '../../core/server/secure_machine_store.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_companion/providers.dart';

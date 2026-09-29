@@ -4,7 +4,7 @@
 /// its own authoritative sniff; this must never be stricter than it.
 library;
 
-import '../../pairing/pairing_code.dart';
+import 'pairing_code.dart';
 
 /// What a scanned or typed string looks like.
 enum PairingInputKind {

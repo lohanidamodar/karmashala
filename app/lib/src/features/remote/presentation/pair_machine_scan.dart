@@ -1,26 +1,26 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:karmashala_companion/pairing.dart'
-    show
-        CameraPairingScanner,
-        PairingScanner,
-        ScannerFailure,
-        ScannerTorch,
-        platformCanScan;
-import 'package:karmashala_remote/companion.dart'
-    show PairingInputKind, classifyPairingInput;
 import 'package:karmashala_remote/pairing.dart'
     show
         HostInviteExpiredException,
         HostInviteTooNewException,
-        HostPairingInvite;
+        HostPairingInvite,
+        PairingInputKind,
+        classifyPairingInput;
 import 'package:karmashala_remote/remote.dart' show ProtocolException;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'pair_machine_forms.dart';
 import 'pair_machine_page.dart';
+import 'pairing_scanner.dart'
+    show
+        CameraPairingScanner,
+        PairingScanner,
+        ScannerFailure,
+        ScannerTorch,
+        platformCanScan;
 
 /// Scans a machine's pairing QR with the companion's [PairingScanner]: a
 /// server's `karmashala_host pair` invite, or a desktop's "Pair a phone".

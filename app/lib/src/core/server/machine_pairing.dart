@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_remote/client.dart';
-import 'package:karmashala_remote/companion.dart'
-    show RemoteCompanionGateway, kDefaultCompanionRelayUrl;
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
@@ -216,7 +214,7 @@ Future<DeviceId> _deviceId(CompanionStore store) async {
 /// A phone's identity is the companion's (`karmashala.remote.device_id`, else
 /// its active record's), so a server sees the same device across the move.
 Future<DeviceId> _phoneDeviceId(CompanionStore store) async {
-  const key = RemoteCompanionGateway.kDeviceIdStoreKey;
+  const key = kDeviceIdStoreKey;
   final saved = await store.read(key);
   if (saved != null) {
     try {
@@ -234,7 +232,7 @@ Future<DeviceId> _phoneDeviceId(CompanionStore store) async {
 /// The relay a phone's typed code meets its server on: the companion's
 /// setting, else the default.
 Future<Uri> _pairingRelay(CompanionStore store) async {
-  final raw = await store.read(RemoteCompanionGateway.kPairingRelayStoreKey);
+  final raw = await store.read(kPairingRelayStoreKey);
   final parsed = raw == null ? null : Uri.tryParse(raw.trim());
   if (parsed != null && parsed.hasScheme) return parsed;
   return Uri.parse(kDefaultCompanionRelayUrl);

@@ -14,7 +14,7 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/core/server/secure_machine_store.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';

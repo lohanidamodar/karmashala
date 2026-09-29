@@ -12,6 +12,13 @@ import '../protocol.dart';
 import 'relay_candidates.dart';
 import 'route_pin.dart';
 
+/// Where the typed code's relay setting lives in the phone's store.
+const String kPairingRelayStoreKey = 'karmashala.companion.relay';
+
+/// Where this phone's own identity lives — beside the pairing records
+/// rather than inside one, because it must outlive unpairing every host.
+const String kDeviceIdStoreKey = 'karmashala.remote.device_id';
+
 /// A tiny async key/value store for the companion's secrets and counters.
 abstract interface class CompanionStore {
   Future<String?> read(String key);
