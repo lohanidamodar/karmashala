@@ -10,6 +10,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../data/server_transcripts.dart';
 import 'session_chat_view_providers.dart';
@@ -26,8 +27,13 @@ final chatTranscriptPollIntervalProvider = Provider<Duration>(
 
 /// Whether a mounted conversation is the surface on screen, and so whether its
 /// transcript is worth re-reading: one 43.8 MB parse costs 888 ms on the UI.
+/// A phone in the background is not showing it; a desktop window that lost
+/// focus still is.
 final chatTranscriptPollingProvider = Provider<bool>(
-  (ref) => ref.watch(anyChatVisibleProvider),
+  (ref) =>
+      ref.watch(anyChatVisibleProvider) &&
+      (ref.watch(capabilitiesProvider.select((c) => c.systemIntegration)) ||
+          ref.watch(windowFocusedProvider)),
 );
 
 /// How long to keep looking for a transcript the agent has not written yet: a

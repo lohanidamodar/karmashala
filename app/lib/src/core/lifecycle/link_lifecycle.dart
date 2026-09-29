@@ -8,8 +8,10 @@ import 'server_session.dart';
 /// The link to a server elsewhere follows the app on a phone (Stage 1 step
 /// 11): in the background it is held for the resume grace, then hung up;
 /// back in front it is proved or redialled at once; a network change proves
-/// it too. Attached only where the OS puts the app in the background — a
-/// desktop window that is minimised keeps its link as it is.
+/// it too. The session also sets `windowFocusedProvider` from it: the phone's
+/// "in front" (Stage 3 step 1). Attached only where the OS puts the app in
+/// the background — a desktop window that is minimised keeps its link as it
+/// is, and its focus stays the window's.
 ///
 /// Reads [currentServerSession] on each event, so a switch of server needs
 /// nothing from here.

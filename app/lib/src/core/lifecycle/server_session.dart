@@ -21,6 +21,7 @@ import '../../features/devices/application/device_bindings.dart';
 import '../../features/environments/application/browse_sources.dart';
 import '../../features/environments/data/environments_data.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
+import '../../features/notifications/application/notification_providers.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -244,6 +245,8 @@ class ServerSession {
   /// to a server elsewhere is held for the resume grace, then hung up.
   void appBackgrounded() {
     if (isClosing) return;
+    // Not looking: the Inbox stops marking seen and chat watches end.
+    container.read(windowFocusedProvider.notifier).set(false);
     _remoteAccess?.rest();
     // The app may not come back: the last session list is saved now, not at
     // the end of its interval (decision 9).
@@ -256,6 +259,7 @@ class ServerSession {
     if (isClosing) return;
     _remoteAccess?.wake();
     _data?.retry();
+    container.read(windowFocusedProvider.notifier).set(true);
   }
 
   /// The device's network changed under the link.
