@@ -12,6 +12,13 @@ class MetadataKeys {
   /// triggers a one-time probe on startup.
   static const agentsDiscoveredAt = 'agents_discovered_at';
   static const environmentHealthOnboarding = 'environment_health_onboarding';
+
+  /// `open` or `dismissed`; absent on an install that predates the quick
+  /// start, which then shows it only when asked.
+  static const quickStart = 'quick_start';
+
+  /// The quick start's steps seen done, comma-separated by name.
+  static const quickStartDone = 'quick_start_done';
 }
 
 /// Stamps the first run, once. Answers whether this is it.

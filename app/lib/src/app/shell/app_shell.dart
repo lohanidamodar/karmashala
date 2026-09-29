@@ -24,7 +24,7 @@ import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
-import '../../features/environments/presentation/environment_health_dialog.dart';
+import '../../features/onboarding/application/quick_start.dart';
 import '../../features/terminal/application/client_intents.dart';
 import '../../features/terminal/application/client_presence.dart';
 import '../../features/notes/application/note_tabs.dart';
@@ -234,7 +234,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         return;
       }
       preferences.write(MetadataKeys.environmentHealthOnboarding, 'shown');
-      EnvironmentHealthDialog.show(context);
+      // Not a dialog over the terminal: the quick start opens in the sidebar
+      // and the machine is checked, read-only, beside it.
+      ref.read(quickStartProvider.notifier).beginFirstRun();
     });
   }
 
