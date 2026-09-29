@@ -985,6 +985,13 @@ class _DeviceRuntime {
       peerLive = true;
       return;
     }
+    final moved = _active;
+    if (moved != null &&
+        moved.generation == generation &&
+        _isStrayHostFrame(moved, transport)) {
+      await _onStrayHostFrame(moved, frame);
+      return;
+    }
     final suspended = _active;
     if (suspended != null &&
         suspended.generation == generation &&
@@ -1002,6 +1009,14 @@ class _DeviceRuntime {
       // The tag did not verify: letting junk move a generation would let anyone
       // who can reach the rendezvous rotate a link at will.
       service.onLog?.call('refused a frame: $error');
+      return;
+    } on ReplayedFrameException catch (error) {
+      // A switched link that moved sockets (Stage 0 step 18) sees the frames
+      // in flight on the old one twice: the copy is dropped, never a reason
+      // to retire. Anyone else's repeat is refused as before.
+      if (active.host != null) return;
+      service.onLog?.call('retiring generation $generation: $error');
+      await _retireGeneration(generation);
       return;
     } on SealedChannelException catch (error) {
       // The tag verified but the sequence repeats: the channel cannot be reset
@@ -1111,6 +1126,8 @@ class _DeviceRuntime {
       deviceName: device.name,
       capabilities: device.capabilities,
       retainForResume: true,
+      // `link.keepalive` (Stage 0 step 18): an empty frame is answered.
+      answersPings: true,
     );
     active.host = link;
     // Host-protocol bytes cannot carry a `link.ping`; see SETTLED.md.
@@ -1184,6 +1201,42 @@ class _DeviceRuntime {
     );
     // Its `done` runs [_hostEnded]: the generation retires, the socket closes.
     host.close('not resumed within the grace');
+  }
+
+  /// Whether a frame on [transport] is one a switched link's client left
+  /// behind on the socket it moved off (Stage 0 step 18, `link.promote`):
+  /// the relay a desktop promoted to the LAN from, still draining what it
+  /// sent before its `link.resume`. A live link takes frames only on its own
+  /// socket, and a suspended one waiting for a resume only its `link.resume`
+  /// on the socket that asked — anything else on the generation is a stray.
+  /// A suspended link that nobody is resuming yet is not asked here: its
+  /// rules are [_onSuspendedFrame]'s.
+  bool _isStrayHostFrame(_ActiveLink active, RemoteTransport transport) {
+    final host = active.host;
+    if (host == null || host.isClosed) return false;
+    final resumingOn = active.resumingOn;
+    if (identical(transport, resumingOn)) return false;
+    return host.suspended
+        ? resumingOn != null
+        : !identical(transport, active.transport);
+  }
+
+  /// A stray: taken when it is the next frame in order, dropped when it is a
+  /// copy of one already taken over the new socket. It never moves the link
+  /// back to the socket it came on, and never ends it.
+  Future<void> _onStrayHostFrame(_ActiveLink active, Uint8List frame) async {
+    final SealedFrame opened;
+    try {
+      opened = await active.channel.unseal(frame);
+    } on SealedChannelException {
+      // Junk, or a copy the new socket already brought: either way, nothing.
+      return;
+    }
+    final host = active.host;
+    if (host == null || !identical(_active, active)) return;
+    // In order, a copy (dropped by the link), or a gap that ends it as any
+    // gap does.
+    host.receive(opened);
   }
 
   /// A frame for [active]'s generation while its switched link is suspended.

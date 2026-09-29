@@ -232,6 +232,17 @@ class SealedChannel {
     }
   }
 
+  /// Lets [sequence], just opened, be opened **once** more: its owner did not
+  /// take it, and the peer will send it again (Stage 0 step 18 — a frame
+  /// that finished opening on a socket a host link had just left).
+  void forget(int sequence) {
+    if (sequence < 0 || sequence > _highestReceived) return;
+    _received.remove(sequence);
+    // Within the window an unseen sequence is admitted anyway; past it, only
+    // a readmitted one is.
+    if (_highestReceived - sequence >= replayWindow) _readmitted.add(sequence);
+  }
+
   /// Applies the anti-replay policy, or throws.
   void _admit(int sequence) {
     if (sequence <= _highestReceived && _readmitted.remove(sequence)) {
