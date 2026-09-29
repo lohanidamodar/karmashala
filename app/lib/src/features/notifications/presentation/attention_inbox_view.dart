@@ -262,10 +262,11 @@ class _InboxRowContentState extends State<_InboxRowContent> {
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final look = inboxKindAppearance(item.kind, semantic);
-    // Seen items stay in the list but stop shouting — an approval you have
-    // read is still an approval you have not answered.
-    final muted = item.seen;
     final ask = item.kind == InboxItemKind.needsApproval;
+    // Seen updates stay in the list but stop shouting. An ask never does: it
+    // is in the inbox only while its session still waits, and seeing it did
+    // not answer it — a grey title on its amber rest read as "done".
+    final muted = item.seen && !ask;
     // An ask rests on the attention tone, as a waiting row does in Sessions
     // and Projects (board N1); the hover is a wash over it, not in its place.
     final rest = ask ? SurfaceTones.of(context).attentionSurface : null;
