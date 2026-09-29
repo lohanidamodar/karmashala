@@ -50,6 +50,10 @@ class AgentPermissions {
   int get hashCode => Object.hash(newSessions, existingSessions);
 }
 
+/// The sidebar's width until a person drags it (UI overhaul spec §4). A
+/// width already saved stays theirs.
+const double kDefaultSidebarWidth = 264;
+
 /// User settings: the default agent and per-agent permission preferences.
 class Settings {
   const Settings({
@@ -69,7 +73,7 @@ class Settings {
     this.androidSlimmingEnabled = kDefaultAndroidSlimming,
     this.androidEmulatorGpu = 'auto',
     this.androidSdkPath = '',
-    this.explorerPaneWidth = 304,
+    this.explorerPaneWidth = kDefaultSidebarWidth,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
     this.accent = AppAccent.blue,
@@ -673,7 +677,8 @@ class Settings {
           ? json['androidEmulatorGpu'] as String
           : 'auto',
       androidSdkPath: androidSdkPathIn(json) ?? '',
-      explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
+      explorerPaneWidth:
+          toDouble(json['explorerPaneWidth']) ?? kDefaultSidebarWidth,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
       collapsedExplorerNodes: json['collapsedExplorerNodes'] is List
           ? (json['collapsedExplorerNodes'] as List)

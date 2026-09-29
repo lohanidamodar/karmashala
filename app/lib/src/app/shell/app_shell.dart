@@ -351,7 +351,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   if (!zen && !overlays && sidebarOpen)
                     ResizableColumn(
                       width: layout.explorerWidth!,
-                      semanticLabel: 'Resize Explorer width',
+                      semanticLabel: 'Resize sidebar width',
                       onResize: (value) => setState(
                         () => _explorerDrag = layout.clampExplorer(value),
                       ),
@@ -463,7 +463,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ? const ShellSidebar()
                 : ResizableColumn(
                     width: sidebarWidth,
-                    semanticLabel: 'Resize Explorer width',
+                    semanticLabel: 'Resize sidebar width',
                     onResize: (value) => setState(
                       () => _explorerDrag = fit(
                         value,
