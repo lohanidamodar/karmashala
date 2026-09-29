@@ -10,6 +10,36 @@ import 'desktop_menu.dart';
 /// Explorer paid for eight hundred menu entries on every frame it rebuilt.
 typedef RowMenuItemBuilder = List<PopupMenuEntry<String>> Function();
 
+/// Shows a row's menu as a sheet titled [title]; resolves to the value picked.
+typedef RowMenuSheetPresenter =
+    Future<String?> Function(
+      BuildContext context,
+      String title,
+      List<PopupMenuEntry<String>> items,
+    );
+
+/// Installed by an app that shows row menus as sheets under a thumb. Read only
+/// at touch density, so a pointer surface keeps its popup.
+class RowMenuSheetScope extends InheritedWidget {
+  const RowMenuSheetScope({
+    required this.present,
+    required super.child,
+    super.key,
+  });
+
+  final RowMenuSheetPresenter present;
+
+  /// The presenter for [context], or null where menus stay popups.
+  static RowMenuSheetPresenter? touchOf(BuildContext context) =>
+      UiDensity.of(context).isTouch
+      ? context.getInheritedWidgetOfExactType<RowMenuSheetScope>()?.present
+      : null;
+
+  @override
+  bool updateShouldNotify(RowMenuSheetScope oldWidget) =>
+      oldWidget.present != present;
+}
+
 /// Whether a pointer or the keyboard is on the row, as something to listen to
 /// rather than `setState` — a row's builder is the entire card.
 class RowInteraction extends ChangeNotifier {
@@ -111,6 +141,11 @@ class _RowContextMenuState extends State<RowContextMenu> {
   Future<void> _openMenu(BuildContext context) async {
     final items = widget.itemBuilder?.call();
     if (items == null || items.isEmpty) return;
+    if (RowMenuSheetScope.touchOf(context) case final present?) {
+      final picked = await present(context, widget.menuLabel, items);
+      if (picked != null && mounted) widget.onSelected(picked);
+      return;
+    }
     final box = context.findRenderObject() as RenderBox?;
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -210,6 +245,24 @@ class _RowMenuButtonState extends State<RowMenuButton> {
         density.isTouch ||
         _open ||
         (RowInteractionScope.maybeOf(context)?.engaged ?? true);
+    if (RowMenuSheetScope.touchOf(context) case final present?) {
+      return SizedBox(
+        width: slot,
+        height: slot,
+        child: IconButton(
+          tooltip: widget.tooltip,
+          padding: EdgeInsets.zero,
+          iconSize: RowMenuButton.glyphOf(density),
+          icon: const Icon(AppIcons.dotsThreeVertical),
+          onPressed: () async {
+            final items = widget.itemBuilder();
+            if (items.isEmpty) return;
+            final picked = await present(context, widget.tooltip, items);
+            if (picked != null && mounted) widget.onSelected(picked);
+          },
+        ),
+      );
+    }
     return SizedBox(
       width: slot,
       height: slot,

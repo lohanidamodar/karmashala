@@ -12,11 +12,11 @@ const double _menuGlyphGap = 10;
 class DesktopMenuItem<T> extends PopupMenuItem<T> {
   DesktopMenuItem({
     required super.value,
-    required String label,
-    required IconData icon,
+    required this.label,
+    required this.icon,
     String? shortcut,
-    bool destructive = false,
-    bool selected = false,
+    this.destructive = false,
+    this.selected = false,
     super.enabled,
     super.key,
   }) : super(
@@ -67,6 +67,12 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
            },
          ),
        );
+
+  // Kept so a touch sheet can draw the same entry at 48dp (MenuSheetList).
+  final String label;
+  final IconData icon;
+  final bool destructive;
+  final bool selected;
 }
 
 /// A row in a show-or-hide list: a check slot, then the thing's own glyph and
@@ -75,9 +81,9 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
 class DesktopMenuCheckItem<T> extends PopupMenuItem<T> {
   DesktopMenuCheckItem({
     required super.value,
-    required String label,
-    required IconData icon,
-    required bool checked,
+    required this.label,
+    required this.icon,
+    required this.checked,
     super.enabled,
     super.key,
   }) : super(
@@ -118,6 +124,10 @@ class DesktopMenuCheckItem<T> extends PopupMenuItem<T> {
            },
          ),
        );
+
+  final String label;
+  final IconData icon;
+  final bool checked;
 }
 
 /// The two-line sibling of [DesktopMenuItem], for pickers whose choices cannot
@@ -300,6 +310,109 @@ class _HeaderLabel extends StatelessWidget {
       style: theme.textTheme.labelSmall
           ?.merge(Chrome.groupLabel)
           .copyWith(color: theme.colorScheme.onSurfaceVariant),
+    );
+  }
+}
+
+/// A menu's [items] as a list of 48dp rows, for a sheet under a thumb. A tap
+/// pops the enclosing route with the item's value, as the popup would.
+class MenuSheetList<T> extends StatelessWidget {
+  const MenuSheetList({required this.items, super.key});
+
+  final List<PopupMenuEntry<T>> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    Widget tile({
+      required PopupMenuItem<T> item,
+      required String label,
+      IconData? icon,
+      String? detail,
+      Color? color,
+      bool checked = false,
+      bool emphasised = false,
+    }) {
+      final tint = item.enabled ? color : scheme.onSurfaceVariant;
+      return ListTile(
+        enabled: item.enabled,
+        minTileHeight: Touch.target,
+        leading: checked
+            ? Icon(AppIcons.check, size: Touch.icon, color: scheme.primary)
+            : icon == null
+            ? const SizedBox(width: Touch.icon)
+            : Icon(icon, size: Touch.icon, color: tint),
+        title: Text(
+          label,
+          style: TextStyle(
+            color: tint,
+            fontWeight: emphasised ? FontWeight.w600 : null,
+          ),
+        ),
+        subtitle: detail == null ? null : Text(detail),
+        onTap: () {
+          item.onTap?.call();
+          Navigator.of(context).pop<T>(item.value);
+        },
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final entry in items)
+          switch (entry) {
+            PopupMenuDivider() => const Divider(height: Insets.md),
+            final DesktopMenuHeader<T> header => Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.lg,
+                Insets.md,
+                Insets.lg,
+                Insets.xs,
+              ),
+              child: header.child,
+            ),
+            final DesktopMenuItem<T> item => tile(
+              item: item,
+              label: item.label,
+              icon: item.icon,
+              color: item.destructive
+                  ? scheme.error
+                  : item.selected
+                  ? scheme.primary
+                  : null,
+              checked: item.selected,
+              emphasised: item.selected,
+            ),
+            final DesktopMenuCheckItem<T> item => tile(
+              item: item,
+              label: item.label,
+              icon: item.icon,
+              checked: item.checked,
+            ),
+            final PopupMenuItem<T> item
+                when item.child is DesktopMenuDetailRow =>
+              () {
+                final row = item.child! as DesktopMenuDetailRow;
+                return tile(
+                  item: item,
+                  label: row.label,
+                  icon: row.icon,
+                  detail: row.detail,
+                  color: row.selected ? scheme.primary : null,
+                  checked: row.selected,
+                  emphasised: row.selected,
+                );
+              }(),
+            // Anything else draws itself; a popup item pops its own route.
+            _ => ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Touch.target),
+              child: entry,
+            ),
+          },
+      ],
     );
   }
 }

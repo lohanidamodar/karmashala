@@ -145,10 +145,16 @@ class _FilterMenuFieldState<T> extends State<FilterMenuField<T>> {
 
   Widget _panel(BuildContext context) {
     final theme = Theme.of(context);
-    // Two lines of text per row, so the row grows with the text scale.
-    final extent = MediaQuery.textScalerOf(context).scale(Chrome.menuRowTall);
+    // Two lines of text per row, so the row grows with the text scale; never
+    // under a thumb's target.
+    final extent = math.max(
+      MediaQuery.textScalerOf(context).scale(Chrome.menuRowTall),
+      UiDensity.of(context).minRow,
+    );
+    // A phone may be narrower than the panel.
+    final room = MediaQuery.sizeOf(context).width - Insets.lg * 2;
     return SizedBox(
-      width: _panelWidth,
+      width: math.min(_panelWidth, room),
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _filter,
         builder: (context, typed, _) {
@@ -202,8 +208,7 @@ class _FilterMenuFieldState<T> extends State<FilterMenuField<T>> {
                     : ListView.builder(
                         itemExtent: extent,
                         itemCount: matches.length,
-                        itemBuilder: (context, i) =>
-                            _row(context, matches[i]),
+                        itemBuilder: (context, i) => _row(context, matches[i]),
                       ),
               ),
             ],

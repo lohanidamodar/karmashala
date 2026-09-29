@@ -9,6 +9,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import '../../../app/widgets/full_screen_form.dart';
 import '../../sessions/presentation/new_dialog_section.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 
@@ -38,7 +39,7 @@ class NewProjectDialog extends ConsumerStatefulWidget {
   static Future<bool?> show(
     BuildContext context, {
     String? initialEnvironmentId,
-  }) => showDialog<bool>(
+  }) => showFormDialog<bool>(
     context: context,
     builder: (_) =>
         NewProjectDialog(initialEnvironmentId: initialEnvironmentId),
@@ -369,121 +370,128 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final isSsh = target?.kind == EnvironmentKind.ssh;
     final hasGit = _gitUrlController.text.trim().isNotEmpty;
 
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // One dialog, two tabs (spec §5): Session swaps this dialog for
+        // the new-session one in the same place.
+        NewKindSwitch(
+          current: NewKind.project,
+          onChanged: (_) {
+            final navigator = Navigator.of(context);
+            final host = navigator.context;
+            navigator.pop();
+            NewSessionDialog.show(host);
+          },
+        ),
+        // Three labelled parts in the order the choice is made (spec §5):
+        // the machine, what to add from it, and what to call it.
+        NewDialogSection(
+          label: 'Machine',
+          first: true,
+          child: DropdownButtonFormField<String>(
+            initialValue: _targetId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Machine'),
+            items: [
+              for (final env in environments)
+                DropdownMenuItem(
+                  value: env.id,
+                  child: _Choice(_environmentLabel(env)),
+                ),
+            ],
+            onChanged: (v) {
+              setState(() {
+                _targetId = v ?? localHostEnvironmentId;
+                _suggestWorkspace();
+              });
+              _schedulePreview();
+            },
+          ),
+        ),
+        NewDialogSection(
+          label: 'Folder or clone',
+          child: _source(isSsh: isSsh, hasGit: hasGit, preview: preview),
+        ),
+        if (hasGit || _folderController.text.trim().isNotEmpty)
+          NewDialogSection(
+            label: 'What was found',
+            child: _ProjectSourceFacts(
+              cloneUrl: hasGit ? _gitUrlController.text.trim() : null,
+              preview: _preview,
+              reading: _previewing,
+            ),
+          ),
+        NewDialogSection(
+          label: 'Name & context',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Project name',
+                  hintText: 'Karmashala',
+                ),
+              ),
+              const SizedBox(height: Insets.md),
+              _ContextField(
+                workspaces: workspaces,
+                selectedId: _workspaceId,
+                naming: _namingWorkspace,
+                newName: _newWorkspaceController,
+                enabled: !_busy,
+                onSelected: (value) => setState(() {
+                  _workspaceId = value;
+                  _workspaceChosen = true;
+                }),
+                onStartNaming: () => setState(() {
+                  _namingWorkspace = true;
+                  _workspaceChosen = true;
+                }),
+                onStopNaming: () => setState(() {
+                  _namingWorkspace = false;
+                  _newWorkspaceController.clear();
+                }),
+              ),
+            ],
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: Insets.md),
+          DesktopErrorBanner(_error!),
+        ],
+      ],
+    );
+    final VoidCallback? cancel = _busy
+        ? null
+        : () => Navigator.of(context).pop(false);
+    final create = FilledButton(
+      onPressed: _busy ? null : _create,
+      child: _busy
+          ? const InlineSpinner(size: InlineSpinnerSize.medium)
+          : Text(hasGit ? 'Clone & create' : 'Create & scan'),
+    );
+    if (opensFullScreen(context)) {
+      return FullScreenForm(
+        title: 'New project',
+        body: body,
+        onClose: cancel,
+        primary: create,
+      );
+    }
     return AlertDialog(
       title: const DesktopDialogTitle(
         icon: AppIcons.folderPlus,
         title: 'New project',
         subtitle: 'Add a folder or clone a repository.',
       ),
-      content: BoundedDialogContent(
-        width: DialogWidth.regular,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // One dialog, two tabs (spec §5): Session swaps this dialog for
-            // the new-session one in the same place.
-            NewKindSwitch(
-              current: NewKind.project,
-              onChanged: (_) {
-                final navigator = Navigator.of(context);
-                final host = navigator.context;
-                navigator.pop();
-                NewSessionDialog.show(host);
-              },
-            ),
-            // Three labelled parts in the order the choice is made (spec §5):
-            // the machine, what to add from it, and what to call it.
-            NewDialogSection(
-              label: 'Machine',
-              first: true,
-              child: DropdownButtonFormField<String>(
-                initialValue: _targetId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Machine'),
-                items: [
-                  for (final env in environments)
-                    DropdownMenuItem(
-                      value: env.id,
-                      child: _Choice(_environmentLabel(env)),
-                    ),
-                ],
-                onChanged: (v) {
-                  setState(() {
-                    _targetId = v ?? localHostEnvironmentId;
-                    _suggestWorkspace();
-                  });
-                  _schedulePreview();
-                },
-              ),
-            ),
-            NewDialogSection(
-              label: 'Folder or clone',
-              child: _source(isSsh: isSsh, hasGit: hasGit, preview: preview),
-            ),
-            if (hasGit || _folderController.text.trim().isNotEmpty)
-              NewDialogSection(
-                label: 'What was found',
-                child: _ProjectSourceFacts(
-                  cloneUrl: hasGit ? _gitUrlController.text.trim() : null,
-                  preview: _preview,
-                  reading: _previewing,
-                ),
-              ),
-            NewDialogSection(
-              label: 'Name & context',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Project name',
-                      hintText: 'Karmashala',
-                    ),
-                  ),
-                  const SizedBox(height: Insets.md),
-                  _ContextField(
-                    workspaces: workspaces,
-                    selectedId: _workspaceId,
-                    naming: _namingWorkspace,
-                    newName: _newWorkspaceController,
-                    enabled: !_busy,
-                    onSelected: (value) => setState(() {
-                      _workspaceId = value;
-                      _workspaceChosen = true;
-                    }),
-                    onStartNaming: () => setState(() {
-                      _namingWorkspace = true;
-                      _workspaceChosen = true;
-                    }),
-                    onStopNaming: () => setState(() {
-                      _namingWorkspace = false;
-                      _newWorkspaceController.clear();
-                    }),
-                  ),
-                ],
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: Insets.md),
-              DesktopErrorBanner(_error!),
-            ],
-          ],
-        ),
-      ),
+      content: BoundedDialogContent(width: DialogWidth.regular, child: body),
       actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _create,
-          child: _busy
-              ? const InlineSpinner(size: InlineSpinnerSize.medium)
-              : Text(hasGit ? 'Clone & create' : 'Create & scan'),
-        ),
+        TextButton(onPressed: cancel, child: const Text('Cancel')),
+        create,
       ],
     );
   }
