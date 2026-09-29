@@ -13,13 +13,16 @@ import 'new_dialog_section.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 
-/// What offering "Continue with…" promises, wherever it is offered from. The
-/// row is a shorter path *to* a confirmation, never a way past one.
+/// What offering "Continue with…" promises, wherever it is offered from. Only
+/// what the dialog enforces: it opens first and launches on its own button,
+/// and reading what the next agent is told stays optional (owner, 2026-09-29).
 const String kContinueWithPromise =
-    'Nothing is launched until you have seen what the next agent will be told.';
+    'Nothing starts until you press Fork or Hand off. What happens says what '
+    'that does; Preview shows exactly what the next agent will be told.';
 
-/// "Continue with…" — move a session to another agent, or branch it. Nothing is
-/// launched until the user has seen what the next agent will be told.
+/// "Continue with…" — move a session to another agent, or branch it. Nothing
+/// starts before its button is pressed; the "What happens" summary says what
+/// that does, and the optional Preview shows what the next agent is told.
 ///
 /// Laid out like New session (spec §5): labelled parts in the order the choice
 /// is made — who continues, what they are told, where they work — the rarely
