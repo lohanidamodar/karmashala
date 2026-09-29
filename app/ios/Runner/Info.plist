@@ -24,12 +24,23 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- The owner's to confirm before the first upload: whether the sealed
+	     channel's XChaCha20-Poly1305 is exempt (docs/superpowers/plans/
+	     2026-09-30-stage-1-ios-release-gaps.md). -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- The pairing screen's QR scanner. Without this string iOS kills the app
 	     the moment the camera is asked for, rather than prompting. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Scan a pairing code from Karmashala on your computer</string>
+	<!-- The LAN dial and the multicast beacon listener. Without it iOS denies
+	     local network access outright and the phone reaches the machine only
+	     through a relay. No NSBonjourServices: the beacon is raw UDP multicast
+	     (lan_beacon.dart), not Bonjour. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Karmashala looks for your computer on this network so your phone can connect to it directly instead of going through the relay.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
