@@ -95,6 +95,7 @@ Future<DataClient> connectRemoteServerData({
   required HostSessionAccess access,
   AppLogger? logger,
   Duration? firstDialWithin,
+  Duration? Function()? redialHoldOff,
 }) async {
   final log = logger ?? AppLogger.named('data');
   final client = await DataClient.connect(
@@ -102,6 +103,7 @@ Future<DataClient> connectRemoteServerData({
     logger: log,
     serverOnThisMachine: false,
     firstDialWithin: firstDialWithin,
+    redialHoldOff: redialHoldOff,
   );
   if (client.connection.state == DataLinkState.connected) {
     log.info('Data: through the Karmashala server on ${access.address}.');
