@@ -16,6 +16,7 @@ import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
+import 'src/core/lifecycle/link_lifecycle.dart';
 import 'src/core/lifecycle/relaunch.dart';
 import 'src/core/lifecycle/server_session.dart';
 import 'src/core/lifecycle/server_switcher.dart';
@@ -26,6 +27,7 @@ import 'src/core/paths/app_support_directory.dart';
 import 'src/core/paths/server_data_directory.dart';
 import 'src/core/probe/probe_mode.dart';
 import 'src/core/server/machines.dart';
+import 'src/core/server/network_changes.dart';
 import 'src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show SharedHostLinks;
@@ -165,6 +167,12 @@ Future<void> _bootstrap(AppLogger logger) async {
     hostsServer: client.hostsServer,
     logger: logger,
   );
+
+  // A phone's link follows the app into the background and back, and across
+  // network changes. A desktop window is never put in the background.
+  if (!client.systemIntegration) {
+    LinkLifecycle(networkChanges: networkChanges(onLog: logger.info)).attach();
+  }
 
   // A client with no server of its own and no machine chosen opens nothing:
   // the root shows pairing, and the pairing's switch opens the first session.

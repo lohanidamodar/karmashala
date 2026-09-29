@@ -59,7 +59,14 @@ class DesktopLinkResume {
     this.keepaliveOffered,
     this.lanRoutes,
     this.lanChances,
+    this.proofs,
   });
+
+  /// Fires when the link may be on a socket that is gone — the app came back
+  /// to the front, or the network changed. A live link pings and is taken
+  /// for dropped if nothing answers within [kDesktopProofWindow]; a held one
+  /// tries its routes at once.
+  final Stream<void>? proofs;
 
   /// Hears true when the link is held for a resume, and false once it is
   /// back or has ended — for a "Reconnecting…" banner. A promotion is not a
@@ -146,6 +153,11 @@ const List<Duration> kDesktopResumeDelays = [
   Duration(seconds: 2),
   Duration(seconds: 5),
 ];
+
+/// How long a link asked to prove itself waits for any frame after its ping
+/// before its socket is taken for dropped: a relay round trip on a cellular
+/// network, with slack.
+const Duration kDesktopProofWindow = Duration(seconds: 4);
 
 /// How often a link on a relay looks for a LAN route without a beacon to
 /// prompt it — the server's announced LAN address, or the typed one.

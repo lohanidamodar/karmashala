@@ -33,6 +33,7 @@ import '../data/metadata_keys.dart';
 import '../data/server_data_connection.dart';
 import '../probe/probe_mode.dart';
 import '../server/machines.dart';
+import '../server/multicast_lock_channel.dart';
 import '../server/remote_server_access.dart';
 import '../util/agent_cli_bridge.dart';
 import 'app_lifecycle.dart';
@@ -125,6 +126,9 @@ class ServerSession {
               hostId: remote.hostId.value,
               hostName: remote.hostName,
               store: machines.store,
+              lanLock: client.multicastLock
+                  ? ChannelMulticastLock(onLog: logger.info)
+                  : null,
             );
       data = remoteAccess == null
           ? await connectLocalServerData(
@@ -205,6 +209,27 @@ class ServerSession {
 
   /// Whether [close] has been started.
   bool get isClosing => _closing != null;
+
+  /// The app went to the background on a phone (`LinkLifecycle`): the link
+  /// to a server elsewhere is held for the resume grace, then hung up.
+  void appBackgrounded() {
+    if (!isClosing) _remoteAccess?.rest();
+  }
+
+  /// The app is in front again: the link is proved or redialled now, and
+  /// the data client dials at once rather than at its next backoff step.
+  void appForegrounded() {
+    if (isClosing) return;
+    _remoteAccess?.wake();
+    _data?.retry();
+  }
+
+  /// The device's network changed under the link.
+  void networkChanged() {
+    if (isClosing) return;
+    _remoteAccess?.networkChanged();
+    _data?.retry();
+  }
 
   /// Releases everything this session holds, in this order:
   ///
