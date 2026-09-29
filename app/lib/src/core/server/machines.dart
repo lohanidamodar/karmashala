@@ -88,6 +88,14 @@ class Machines {
   /// Chooses [hostId]'s server, or this machine's own with null.
   Future<void> use(String? hostId) => store.write(_activeKey, hostId ?? _local);
 
+  /// Sets how [hostId]'s server is reached; [CompanionRoutePin.auto] clears a
+  /// pin. A dial reads the record afresh, so the next one obeys it.
+  Future<void> setPin(String hostId, CompanionRoutePin pin) =>
+      CompanionConnections.mutate(store, (all) {
+        final record = all.byHost(hostId);
+        if (record != null) all.upsert(record.withPin(pin));
+      });
+
   /// Forgets a paired server; this window falls back to its own if it used it.
   Future<void> forget(String hostId) async {
     await CompanionConnections.mutate(store, (all) => all.remove(hostId));

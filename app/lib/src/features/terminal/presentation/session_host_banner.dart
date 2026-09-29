@@ -6,7 +6,10 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart' show WidthClass;
 
+import '../../../core/data/data_client.dart';
+import '../../../core/data/data_providers.dart';
 import '../../../core/server/remote_server_access.dart';
+import '../../remote/presentation/use_auto_button.dart';
 import '../../settings/presentation/session_host_status_line.dart'
     show sessionHostRestartLabel, sessionHostStatusText;
 import '../application/local_host_providers.dart';
@@ -140,63 +143,115 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
 }
 
 /// "Reconnecting to *server*…" while a remote server's link is held for a
-/// resume (Stage 0 step 17). Nothing to press: it either comes back, or the
-/// link ends and its owners redial as they always did.
-/// "Reconnecting to …" while a remote link resumes, for a page to draw under
-/// its own app bar. Nothing on a local link.
+/// resume (Stage 0 step 17), for a phone page to draw under its own app bar.
+/// Once the dials give up it stays as "Not connected", with the reason, *Use
+/// Auto* while the route is pinned, and *Try again* — unless [whenDown] is
+/// false, where the page already says so (the stale session list).
+/// Nothing on a local link.
 class RemoteResumingStrip extends ConsumerWidget {
-  const RemoteResumingStrip({super.key});
+  const RemoteResumingStrip({this.whenDown = true, super.key});
+
+  final bool whenDown;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
       switch (ref.watch(serverAccessProvider)) {
-        final RemoteServerAccess access => _ResumingStrip(access: access),
+        final RemoteServerAccess access => _ResumingStrip(
+          access: access,
+          linkActions: true,
+          whenDown: whenDown,
+        ),
         _ => const SizedBox.shrink(),
       };
 }
 
-class _ResumingStrip extends StatelessWidget {
-  const _ResumingStrip({required this.access});
+/// The desktop draws it with neither [linkActions] nor [whenDown]: resuming
+/// only, nothing to press.
+class _ResumingStrip extends ConsumerWidget {
+  const _ResumingStrip({
+    required this.access,
+    this.linkActions = false,
+    this.whenDown = false,
+  });
 
   final RemoteServerAccess access;
+  final bool linkActions;
+  final bool whenDown;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-    valueListenable: access.resuming,
-    builder: (context, resuming, _) {
-      if (!resuming) return const SizedBox.shrink();
-      final scheme = Theme.of(context).colorScheme;
-      return Material(
-        key: const ValueKey('remote_resuming_banner'),
-        color: scheme.secondaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              SizedBox.square(
-                dimension: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: scheme.onSecondaryContainer,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Reconnecting to ${access.hostName}…',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: scheme.onSecondaryContainer,
+  Widget build(BuildContext context, WidgetRef ref) {
+    DataConnection? down;
+    if (whenDown) {
+      final client = ref.watch(dataClientProvider);
+      final connection =
+          ref.watch(dataConnectionProvider).value ?? client.connection;
+      if (connection.state == DataLinkState.unavailable) down = connection;
+    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: access.resuming,
+      builder: (context, resuming, _) {
+        if (!resuming && down == null) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        final textTheme = Theme.of(context).textTheme;
+        final fore = scheme.onSecondaryContainer;
+        final reason = resuming ? null : down?.reason;
+        return Material(
+          key: const ValueKey('remote_resuming_banner'),
+          color: scheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                if (resuming)
+                  SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: fore,
+                    ),
+                  )
+                else
+                  Icon(AppIcons.warningCircle, size: 16, color: fore),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        resuming
+                            ? 'Reconnecting to ${access.hostName}…'
+                            : 'Not connected to ${access.hostName}',
+                        style: textTheme.labelMedium?.copyWith(color: fore),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (reason != null)
+                        Text(
+                          reason,
+                          key: const ValueKey('remote_resuming_reason'),
+                          style: textTheme.bodySmall?.copyWith(color: fore),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                if (linkActions) UseAutoButton(foreground: fore),
+                if (!resuming)
+                  TextButton(
+                    key: const ValueKey('remote_resuming_retry'),
+                    style: TextButton.styleFrom(foregroundColor: fore),
+                    onPressed: ref.read(dataClientProvider).retry,
+                    child: const Text('Try again'),
+                  ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }
 
 /// Whether [supervision] needs the person: it gave up, or an older host holds
