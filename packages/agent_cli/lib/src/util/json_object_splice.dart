@@ -1,4 +1,7 @@
-// Copied verbatim from packages/karmashala_core/lib/src/util/json_object_splice.dart; see PACKAGE_SPLIT.md on consolidation.
+// The code is a copy of packages/karmashala_core/lib/src/util/json_object_splice.dart, kept identical to it.
+// The doc comments are not kept in step: they are this package's
+// pub.dev documentation, and the original's were trimmed.
+// See PACKAGE_SPLIT.md on consolidation.
 /// Textually replaces the value of a **top-level** property in a JSON object,
 /// leaving the rest of the document byte-for-byte intact.
 ///

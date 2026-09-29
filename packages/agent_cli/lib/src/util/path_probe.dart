@@ -1,4 +1,7 @@
-// Copied verbatim from packages/karmashala_core/lib/src/paths/path_probe.dart; see PACKAGE_SPLIT.md on consolidation.
+// The code is a copy of packages/karmashala_core/lib/src/paths/path_probe.dart, kept identical to it.
+// The doc comments are not kept in step: they are this package's
+// pub.dev documentation, and the original's were trimmed.
+// See PACKAGE_SPLIT.md on consolidation.
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
