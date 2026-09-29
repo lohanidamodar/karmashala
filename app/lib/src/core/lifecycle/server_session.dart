@@ -240,7 +240,11 @@ class ServerSession {
   /// The app went to the background on a phone (`LinkLifecycle`): the link
   /// to a server elsewhere is held for the resume grace, then hung up.
   void appBackgrounded() {
-    if (!isClosing) _remoteAccess?.rest();
+    if (isClosing) return;
+    _remoteAccess?.rest();
+    // The app may not come back: the last session list is saved now, not at
+    // the end of its interval (decision 9).
+    unawaited(container.read(sessionListSnapshotStoreProvider)?.flush());
   }
 
   /// The app is in front again: the link is proved or redialled now, and

@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show immutable;
-import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/rows.dart' show needsYouWord;
@@ -160,11 +159,10 @@ class SessionListSnapshot {
 /// Reads and writes `<app support>/machines/<hostId>/sessions-snapshot.json`
 /// for the one remote server a session is open on. Writes at most every
 /// [kSessionSnapshotInterval], only when the list differs from the last
-/// write, and at once when the app is paused.
+/// write; [flush] writes at once when the app goes to the background
+/// (`ServerSession.appBackgrounded`).
 class SessionListSnapshotStore {
-  SessionListSnapshotStore._(this.file, this.loaded, this._log) {
-    _lifecycle = AppLifecycleListener(onPause: () => unawaited(flush()));
-  }
+  SessionListSnapshotStore._(this.file, this.loaded, this._log);
 
   static const fileName = 'sessions-snapshot.json';
 
@@ -203,7 +201,6 @@ class SessionListSnapshotStore {
   final SessionListSnapshot? loaded;
 
   final AppLogger _log;
-  late final AppLifecycleListener _lifecycle;
   SessionListSnapshot? _pending;
   String? _lastGroups;
   DateTime? _lastWriteAt;
@@ -275,7 +272,6 @@ class SessionListSnapshotStore {
     if (!_closed) unawaited(flush());
     _closed = true;
     _timer?.cancel();
-    _lifecycle.dispose();
   }
 
   var _disposed = false;

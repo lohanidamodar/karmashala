@@ -8,8 +8,10 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
+import '../../../core/server/remote_server_access.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../terminal/application/local_host_providers.dart';
 import '../application/agent_states.dart';
 import '../application/session_list_snapshot.dart';
 import 'sidebar_chrome.dart';
@@ -152,7 +154,18 @@ class _StaleStrip extends ConsumerWidget {
     final client = ref.watch(dataClientProvider);
     final connection =
         ref.watch(dataConnectionProvider).value ?? client.connection;
+    // Dialling — the first dial, a redial after the app came back — or the
+    // link held for a resume, is still reconnecting.
     final dialling = connection.state != DataLinkState.unavailable;
+    final access = ref.watch(serverAccessProvider);
+    if (access is! RemoteServerAccess) return _strip(context, client, dialling);
+    return ValueListenableBuilder<bool>(
+      valueListenable: access.resuming,
+      builder: (context, held, _) => _strip(context, client, dialling || held),
+    );
+  }
+
+  Widget _strip(BuildContext context, DataClient client, bool dialling) {
     final theme = Theme.of(context);
     final attention = SemanticColors.of(context).attention;
     final seen = 'last seen ${lastSeenLabel(context, savedAt)}';
