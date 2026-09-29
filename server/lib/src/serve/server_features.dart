@@ -28,4 +28,7 @@ const Set<String> kServerFeatures = <String>{
   // record's turns as text only, for export and recap (Stage 0 step 8).
   'sessions.transcript.digest',
   'sessions.transcript.turns',
+  // `sessions.stats`: sessions' counts in one batched request, and an agent's
+  // lifetime totals (Stage 0 step 9).
+  'sessions.stats',
 };

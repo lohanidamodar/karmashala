@@ -863,13 +863,16 @@ Future<int> runServe(
   );
   data.sessionTranscripts = sessionTranscripts;
   // Rewind points, changed files and the open question (Stage 0 step 7):
-  // the adapters' readers of raw lines, run over the same records.
+  // the adapters' readers of raw lines, run over the same records; and each
+  // session's counts with its agent's lifetime totals (step 9).
   final sessionRecordReadings = SessionRecordReadings(
     lookUp: sessionTranscripts.lookUp,
     registry: transcripts.registry,
     sessions: sessionRows,
     rows: checkoutRows,
     runners: ssh.runners,
+    storeHome: transcripts.storeHome,
+    readRows: readSqliteRows,
   );
   data.sessionRecordReadings = sessionRecordReadings;
   // Recordings the server writes itself (slice 5b): a terminal's output as

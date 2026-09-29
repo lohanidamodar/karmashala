@@ -165,10 +165,12 @@ final usageSessionRowsProvider =
       final stats = ref.read(sessionStatsServiceProvider);
       final workspace = ref.read(workspaceDataProvider);
       final installations = ref.read(agentInstallationsDataProvider);
+      final recent = sessions.take(kTokenTotalsMaxSessions).toList();
+      // One `sessions.stats` request for all of them, through the server.
+      final views = await stats.countsFor([for (final s in recent) s.id]);
       final rows = <UsageSessionRow>[];
-      for (final session in sessions.take(kTokenTotalsMaxSessions)) {
-        final view = await stats.statsFor(session.id);
-        final counted = view.stats;
+      for (final session in recent) {
+        final counted = views[session.id]?.stats;
         final last = counted?.lastActivityAt;
         // Outside the longest range: no tab range can show it.
         if (last != null && last.isBefore(since)) continue;

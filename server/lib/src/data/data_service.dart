@@ -782,6 +782,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
             .changedFiles(sessionId),
         SessionOpenQuestionRead(:final sessionId) => await readings()
             .openQuestion(sessionId),
+        final SessionStatsRead read => await readings().stats(read),
       };
       return DataReply(result as R, _service._revision);
     }

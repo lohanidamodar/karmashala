@@ -7,15 +7,21 @@ import 'package:agent_cli/descriptors.dart'
         AgentQuestionSet,
         AgentRegistry,
         AgentRewindPoints,
+        AgentStats,
         AgentStoreServerClient,
+        LifetimeStatsReader,
         OwnRewindPoints,
+        SessionStatsReader,
         StoreServerFileChange,
         StoreServerFileChanges,
         TranscriptFileEdits,
         openQuestionIn;
 import 'package:agent_cli/process.dart'
     show CommandRequest, CommandRunnerFactory;
-import 'package:agent_cli/read.dart' show FileEditRecord;
+import 'package:agent_cli/read.dart'
+    show FileEditRecord, SqliteRowReader, noSqliteBinding;
+import 'package:agent_cli/usage.dart'
+    show LifetimeStats, LifetimeStatsUnavailable, SessionStats;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
@@ -26,7 +32,7 @@ import 'session_records.dart';
 
 /// **The readers of a session's raw record lines, run here for any client**
 /// (Stage 0 step 7): its agent's rewind points, the files it changed and the
-/// question it has open. Each runs the agent adapter's own code over the
+/// question it has open; and its counts (step 9). Each runs the agent adapter's own code over the
 /// record [lookUp] finds, as the app ran it over its own disk.
 class SessionRecordReadings {
   SessionRecordReadings({
@@ -35,7 +41,11 @@ class SessionRecordReadings {
     required this.sessions,
     required this.rows,
     required this.runners,
-  });
+    this.storeHome,
+    this.readRows = noSqliteBinding,
+    this.lifetimeFresh = const Duration(seconds: 30),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
   final Future<SessionRecordLookup> Function(String sessionId) lookUp;
   final AgentRegistry registry;
@@ -43,8 +53,133 @@ class SessionRecordReadings {
   final CheckoutRows rows;
   final CommandRunnerFactory runners;
 
+  /// Agent `agentId`'s store home in environment `environmentId`, else in
+  /// any environment that has one; null answers no lifetime totals.
+  final Future<String?> Function(String agentId, String? environmentId)?
+  storeHome;
+
+  /// This server's SQLite binding, for lifetime totals kept in a database.
+  final SqliteRowReader readRows;
+
+  /// How long one reading of an agent's lifetime totals answers: they scan
+  /// its whole store home.
+  final Duration lifetimeFresh;
+  final DateTime Function() _now;
+
   /// One store server per (environment, agent), opened on first use.
   final _storeServers = <(String, String), AgentStoreServerClient>{};
+
+  /// One reader per agent: each keeps its own cache per record, so a second
+  /// read of an unchanged record costs a `stat`.
+  final _sessionReaders = <String, SessionStatsReader>{};
+  final _lifetimeReaders = <String, LifetimeStatsReader>{};
+  final _lifetimes =
+      <
+        (String, String?),
+        ({
+          DateTime at,
+          LifetimeStats? stats,
+          LifetimeStatsUnavailable? gap,
+        })
+      >{};
+
+  /// Each session's counts (`sessions.stats`, Stage 0 step 9), read as the
+  /// app read them from its own disk: the adapter's `SessionStatsReader`
+  /// over the record [lookUp] finds.
+  Future<SessionStatsBatch> stats(SessionStatsRead request) async {
+    final ids = request.sessionIds.toSet();
+    if (ids.length > kSessionStatsBatchMax) {
+      throw DataRefused.invalid(
+        '${SessionStatsRead.name}: at most $kSessionStatsBatchMax sessions '
+        'at once',
+      );
+    }
+    return SessionStatsBatch({
+      for (final id in ids)
+        id: await _statsOf(id, lifetime: request.lifetime),
+    });
+  }
+
+  Future<SessionStatsReading> _statsOf(
+    String sessionId, {
+    required bool lifetime,
+  }) async {
+    final found = await lookUp(sessionId);
+    final agentId = found.agentId;
+    final row = sessions.getById(sessionId);
+    if (agentId == null && row == null) {
+      return SessionStatsReading(
+        gap: SessionStatsGap.unknownSession,
+        lifetimeGap: lifetime
+            ? LifetimeStatsUnavailable.agentKeepsNoAggregate
+            : null,
+      );
+    }
+    final stats = agentId == null ? null : registry.adapterFor(agentId)?.stats;
+    final (LifetimeStats?, LifetimeStatsUnavailable?) books = lifetime
+        ? await _lifetimeOf(
+            agentId,
+            stats,
+            row?.workingDirectory?.environmentId,
+          )
+        : (null, null);
+    SessionStatsReading gap(SessionStatsGap why) => SessionStatsReading(
+      gap: why,
+      lifetime: books.$1,
+      lifetimeGap: books.$2,
+    );
+    if (agentId == null || stats == null) {
+      return gap(SessionStatsGap.agentKeepsNoCounts);
+    }
+    final path = found.path;
+    if (path == null) return gap(SessionStatsGap.recordNotFound);
+    final SessionStats? counted;
+    try {
+      counted = await _sessionReaders
+          .putIfAbsent(agentId, stats.sessionStatsReader)
+          .readSessionStats(path);
+    } on Object {
+      return gap(SessionStatsGap.recordNotFound);
+    }
+    if (counted == null) return gap(SessionStatsGap.recordNotFound);
+    return SessionStatsReading(
+      stats: counted,
+      lifetime: books.$1,
+      lifetimeGap: books.$2,
+    );
+  }
+
+  Future<(LifetimeStats?, LifetimeStatsUnavailable?)> _lifetimeOf(
+    String? agentId,
+    AgentStats? stats,
+    String? environmentId,
+  ) async {
+    if (agentId == null || stats == null) {
+      return (null, LifetimeStatsUnavailable.agentKeepsNoAggregate);
+    }
+    final key = (agentId, environmentId);
+    final held = _lifetimes[key];
+    if (held != null && _now().difference(held.at) < lifetimeFresh) {
+      return (held.stats, held.gap);
+    }
+    LifetimeStats? read;
+    try {
+      final home = await storeHome?.call(agentId, environmentId);
+      read = home == null
+          ? null
+          : await _lifetimeReaders
+                .putIfAbsent(
+                  agentId,
+                  () => stats.lifetimeReader(readRows: readRows),
+                )
+                .read(home);
+    } on Object {
+      read = null;
+    }
+    final gap = read == null ? LifetimeStatsUnavailable.sourceNotFound : null;
+    _lifetimes[key] = (at: _now(), stats: read, gap: gap);
+    return (read, gap);
+  }
 
   Future<AgentRewindPoints?> rewindPoints(String sessionId) async {
     final found = await lookUp(sessionId);

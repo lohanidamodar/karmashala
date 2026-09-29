@@ -140,6 +140,10 @@ final class Capabilities {
   /// record's turns as the server reads them, text only (Stage 0 step 8).
   bool get turnsViaServer => serverOffers('sessions.transcript.turns');
 
+  /// A session's counts and its agent's lifetime totals are read by the
+  /// server, a list of sessions in one request (Stage 0 step 9).
+  bool get statsViaServer => serverOffers('sessions.stats');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }
