@@ -1509,8 +1509,8 @@ packages:
     dependency: transitive
     description:
       path: "."
-      ref: "4f7450a543500a8d50d0e97fa8dc19c131b5c778"
-      resolved-ref: "4f7450a543500a8d50d0e97fa8dc19c131b5c778"
+      ref: dd9b99e73a9ca407dd9499f7db4bab03c3226275
+      resolved-ref: dd9b99e73a9ca407dd9499f7db4bab03c3226275
       url: "https://github.com/lohanidamodar/xterm2.git"
     source: git
     version: "5.3.0"

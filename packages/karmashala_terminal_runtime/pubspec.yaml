@@ -25,7 +25,7 @@ dependencies:
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git
-      ref: 4f7450a543500a8d50d0e97fa8dc19c131b5c778
+      ref: dd9b99e73a9ca407dd9499f7db4bab03c3226275
   # A pane paints into a frame: `SchedulerBinding`, `ChangeNotifier`, and the
   # `painting` layer the cast renderer draws its frames with.
   flutter:
