@@ -57,12 +57,20 @@ class MachinePairer {
 /// a machine by address — the companion's three ways in, all through
 /// [pairWithMachine]. [NoServer]'s screen, and the phone's "Add a machine".
 class PairMachinePage extends StatelessWidget {
-  const PairMachinePage({super.key, required this.pairer, this.title});
+  const PairMachinePage({
+    super.key,
+    required this.pairer,
+    this.title,
+    this.leading,
+  });
 
   final MachinePairer pairer;
 
   /// Shown above the choices; null where the route's app bar says it.
   final String? title;
+
+  /// Drawn between the title and the ways to pair: [NoServer]'s saved machines.
+  final Widget? leading;
 
   /// The machines list's "Add a machine" on a client that cannot host: the
   /// page as a route, and a pairing then switches this app to that machine.
@@ -135,6 +143,7 @@ class PairMachinePage extends StatelessWidget {
             Text(title!, style: theme.textTheme.titleLarge),
             const SizedBox(height: Insets.md),
           ],
+          ?leading,
           Text(
             'On the machine, open Settings → Remote → "Pair a phone", or run '
             '`karmashala_host pair` on a server. Then:',
