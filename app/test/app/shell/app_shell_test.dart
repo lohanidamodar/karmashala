@@ -105,8 +105,8 @@ void main() {
     container.read(sidePanelProvider.notifier).expand();
     await tester.pumpAndSettle();
 
-    // The three tabs, then everything else behind More.
-    for (final label in ['Changes', 'Repo', 'History']) {
+    // The tabs, then everything else behind More.
+    for (final label in ['Changes', 'Repo', 'History', 'Files']) {
       expect(
         find.descendant(
           of: find.byType(ContextTabs),

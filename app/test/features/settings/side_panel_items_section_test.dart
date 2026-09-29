@@ -126,6 +126,7 @@ void main() {
     for (final surface in SidePanelSurface.offered(
       debugMode: container.read(settingsControllerProvider).debugMode,
     )) {
+      if (ContextTab.of(surface) != ContextTab.more) continue;
       expect(checked(tester, surface.label), isTrue, reason: surface.label);
     }
 
@@ -159,15 +160,15 @@ void main() {
     expect(showAll().onPressed, isNull);
 
     final settings = container.read(settingsControllerProvider.notifier);
-    settings.setSidePanelSurfaceHidden('plan', hidden: true);
+    settings.setSidePanelSurfaceHidden('media', hidden: true);
     settings.setSidePanelSurfaceHidden('todos', hidden: true);
     await tester.pumpAndSettle();
-    expect(checked(tester, 'Plan'), isFalse);
+    expect(checked(tester, 'Media'), isFalse);
 
     await tester.tap(find.widgetWithText(TextButton, 'Show all'));
     await tester.pumpAndSettle();
     expect(stored(), isEmpty);
-    expect(checked(tester, 'Plan'), isTrue);
+    expect(checked(tester, 'Media'), isTrue);
   });
 
   testWidgets('search finds it by the words people use for it', (tester) async {

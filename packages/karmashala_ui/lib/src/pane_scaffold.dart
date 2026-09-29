@@ -29,6 +29,22 @@ class PaneCloseAction extends InheritedWidget {
       tooltip != oldWidget.tooltip || onClose != oldWidget.onClose;
 }
 
+/// Set by a container whose tab already names the surface. A [PaneHeader] under
+/// it draws [title] in place of its own name, and no row when that is empty.
+class PaneTitleOverride extends InheritedWidget {
+  const PaneTitleOverride({required super.child, this.title, super.key});
+
+  /// Null draws no name at all: the header keeps only its actions.
+  final Widget? title;
+
+  static PaneTitleOverride? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PaneTitleOverride>();
+
+  @override
+  bool updateShouldNotify(PaneTitleOverride oldWidget) =>
+      title != oldWidget.title;
+}
+
 /// The header a shell pane wears — a [Chrome.tabStripOf] row, a glyph, the
 /// title, the surface's own actions, and the hairline a site could otherwise
 /// forget.
@@ -61,6 +77,14 @@ class PaneHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final ink = focused ? scheme.onSurface : scheme.onSurfaceVariant;
+    final override = PaneTitleOverride.maybeOf(context);
+    final close = PaneCloseAction.maybeOf(context);
+    if (override != null &&
+        override.title == null &&
+        actions.isEmpty &&
+        close == null) {
+      return const SizedBox.shrink();
+    }
     // A thumb's header is as tall as its close button's target, or the button
     // is squeezed to the row and a 30px target is a miss.
     final height = UiDensity.of(context).isTouch
@@ -76,17 +100,31 @@ class PaneHeader extends StatelessWidget {
           padding: const EdgeInsets.only(left: Insets.md, right: 2),
           child: Row(
             children: [
-              if (icon case final glyph?) ...[
-                Icon(glyph, size: Chrome.iconSmall, color: ink),
-                const SizedBox(width: Insets.sm),
-              ],
-              // Expanded rather than a Spacer: the title is the only thing in
-              // this row that can give way, and at 200px the actions are wider.
-              Expanded(child: EyebrowLabel(title, maxLines: 1, color: ink)),
-              ...actions,
+              if (override == null) ...[
+                if (icon case final glyph?) ...[
+                  Icon(glyph, size: Chrome.iconSmall, color: ink),
+                  const SizedBox(width: Insets.sm),
+                ],
+                // Expanded rather than a Spacer: the title is the only thing
+                // in this row that can give way, and at 200px the actions are
+                // wider.
+                Expanded(child: EyebrowLabel(title, maxLines: 1, color: ink)),
+                ...actions,
+              ] else if (override.title case final replacement?) ...[
+                Expanded(child: replacement),
+                ...actions,
+              ] else
+                // No name: the actions take the row, right-aligned, and a
+                // Flexible one among them still gives way.
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: actions,
+                  ),
+                ),
               // Last, so a surface's own actions keep their order and the way
               // out is always in the same corner.
-              if (PaneCloseAction.maybeOf(context) case final close?)
+              if (close != null)
                 IconButton(
                   tooltip: close.tooltip,
                   icon: const Icon(AppIcons.x, size: Chrome.iconAction),

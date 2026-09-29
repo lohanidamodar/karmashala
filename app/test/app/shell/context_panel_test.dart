@@ -17,8 +17,9 @@ import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
 
 /// **The context panel** (UI overhaul spec §6): closed by default, tabs for
-/// Changes, Repo and History, and More for every other surface. A surface the
-/// user took out of More is still reachable from the View menu and quick open.
+/// Changes, Repo, History and Files, and More for every other surface. A
+/// surface the user took out of More is still reachable from the View menu and
+/// quick open.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
@@ -95,14 +96,17 @@ void main() {
       expect(SidePanelSurface.fromId('fromANewerBuild'), isNull);
     });
 
-    test('three surfaces are tabs; everything else is More', () {
+    test('four tabs hold their surfaces; everything else is More', () {
       expect(ContextTab.of(SidePanelSurface.changes), ContextTab.changes);
       expect(ContextTab.of(SidePanelSurface.repository), ContextTab.repo);
       expect(ContextTab.of(SidePanelSurface.checkpoints), ContextTab.history);
       for (final surface in SidePanelSurface.values) {
         final tab = ContextTab.of(surface);
-        expect(tab.surface == null || tab.surface == surface, isTrue);
+        expect(tab.surfaces.isEmpty || tab.surfaces.contains(surface), isTrue);
       }
+      expect(ContextTab.of(SidePanelSurface.decisions), ContextTab.history);
+      expect(ContextTab.of(SidePanelSurface.plan), ContextTab.history);
+      expect(ContextTab.of(SidePanelSurface.files), ContextTab.files);
       expect(ContextTab.of(SidePanelSurface.todos), ContextTab.more);
     });
 
@@ -139,7 +143,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(visibleSidePanelProvider), SidePanelSurface.changes);
-    for (final label in ['Changes', 'Repo', 'History']) {
+    for (final label in ['Changes', 'Repo', 'History', 'Files']) {
       expect(tab(label), findsOneWidget, reason: '$label is not a tab');
     }
     expect(tab('More ▾'), findsOneWidget);
@@ -175,7 +179,7 @@ void main() {
     );
   });
 
-  testWidgets('More lists the rest, and takes the name of the one it shows', (
+  testWidgets('More lists the rest, and keeps its own name', (
     tester,
   ) async {
     final container = await pumpApp(tester);
@@ -183,15 +187,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await openMore(tester);
-    for (final label in ['Todos', 'Media', 'Plan', 'Decisions']) {
+    for (final label in ['Todos', 'Media', 'Notes']) {
       expect(menuRow(label), findsOneWidget, reason: '$label is not in More');
     }
     expect(menuRow('Repository'), findsNothing, reason: 'Repo is a tab');
+    expect(menuRow('Plan'), findsNothing, reason: 'Plan is under History');
     await tester.tap(menuRow('Todos'));
     await tester.pumpAndSettle();
 
     expect(container.read(visibleSidePanelProvider), SidePanelSurface.todos);
-    expect(tab('Todos ▾'), findsOneWidget);
+    expect(tab('More ▾'), findsOneWidget);
 
     // Back to Changes, then More again goes to the one it showed last.
     await tester.tap(tab('Changes'));

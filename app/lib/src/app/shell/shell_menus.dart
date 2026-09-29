@@ -317,8 +317,8 @@ class ViewMenuSubmenu extends ViewMenuEntry {
 /// One row per control. The strip's areas are not here — the strip is their
 /// one place and its tooltips name Ctrl 1…5 — and neither is which tools More
 /// lists, a preference that lives in Settings › Appearance › Sidebar & context
-/// panel. The context panel is listed the way it is drawn: its toggle, its
-/// three tabs, and More.
+/// panel. The context panel is listed the way it is drawn: its toggle, then
+/// its tabs in [ContextTab] order, History and More as submenus.
 List<List<ViewMenuEntry>> viewMenuSections(
   WidgetRef ref,
   ShellMenuActions actions,
@@ -384,30 +384,30 @@ List<List<ViewMenuEntry>> viewMenuSections(
         command: 'view.toggleSidePanel',
         onPressed: withRoom(actions.toggleSidePanel),
       ),
-      for (final tab in [
-        ContextTab.changes,
-        ContextTab.repo,
-        ContextTab.history,
-      ])
-        ViewMenuCommand(
-          label: tab.label,
-          icon: SidePanel.iconFor(tab.surface!),
-          onPressed: withRoom(() => actions.showContextTab(tab)),
-        ),
-      // Every tool More can show, hidden from its menu or not: taking one out
-      // of More is not switching it off.
-      ViewMenuSubmenu(
-        label: ContextTab.more.label,
-        icon: AppIcons.dotsThree,
-        entries: [
-          for (final surface in more)
-            ViewMenuCommand(
-              label: surface.label,
-              icon: SidePanel.iconFor(surface),
-              onPressed: withRoom(() => actions.showSurface(surface)),
-            ),
-        ],
-      ),
+      for (final tab in ContextTab.values)
+        if (tab.surfaces.length == 1)
+          ViewMenuCommand(
+            label: tab.label,
+            icon: SidePanel.tabIcon(tab),
+            onPressed: withRoom(() => actions.showContextTab(tab)),
+          )
+        else
+          // History's records, and every tool More can show — hidden from its
+          // menu or not: taking one out of More is not switching it off.
+          ViewMenuSubmenu(
+            label: tab.label,
+            icon: SidePanel.tabIcon(tab),
+            entries: [
+              for (final surface in tab == ContextTab.more
+                  ? more
+                  : tab.surfaces)
+                ViewMenuCommand(
+                  label: surface.label,
+                  icon: SidePanel.iconFor(surface),
+                  onPressed: withRoom(() => actions.showSurface(surface)),
+                ),
+            ],
+          ),
     ],
     [
       // The focused terminal's own verbs. They left the title bar (spec §4:

@@ -111,7 +111,7 @@ void main() {
       contains(SidePanelSurface.checkpoints),
     );
     expect(ContextTab.of(SidePanelSurface.checkpoints), ContextTab.history);
-    expect(ContextTab.history.surface, SidePanelSurface.checkpoints);
+    expect(ContextTab.history.surfaces.first, SidePanelSurface.checkpoints);
     // It describes a *session*'s turns, not the selected checkout, so the
     // repository context line above the scoped surfaces would answer a
     // question nobody asked here.

@@ -2,35 +2,38 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../features/settings/application/settings_controller.dart';
 
-/// **The context panel's tabs** (UI overhaul spec §6): three surfaces a
-/// session is steered by, and **More** for everything else — which takes the
-/// name of the surface it is showing.
+/// **The context panel's tabs** (UI overhaul spec §6), in the order they are
+/// drawn. Every menu that lists the panel follows this order.
 enum ContextTab {
   changes('Changes'),
   repo('Repo'),
   history('History'),
+  files('Files'),
   more('More');
 
   const ContextTab(this.label);
 
   final String label;
 
-  /// The surface this tab stands for; null for More, which shows whichever of
-  /// the rest was open last.
-  SidePanelSurface? get surface => switch (this) {
-    ContextTab.changes => SidePanelSurface.changes,
-    ContextTab.repo => SidePanelSurface.repository,
-    ContextTab.history => SidePanelSurface.checkpoints,
-    ContextTab.more => null,
+  /// The surfaces under this tab, the one it opens first leading. Empty for
+  /// More, which holds every surface no other tab does.
+  List<SidePanelSurface> get surfaces => switch (this) {
+    ContextTab.changes => const [SidePanelSurface.changes],
+    ContextTab.repo => const [SidePanelSurface.repository],
+    ContextTab.history => const [
+      SidePanelSurface.checkpoints,
+      SidePanelSurface.decisions,
+      SidePanelSurface.plan,
+    ],
+    ContextTab.files => const [SidePanelSurface.files],
+    ContextTab.more => const [],
   };
 
   /// The tab [surface] sits under.
-  static ContextTab of(SidePanelSurface surface) => switch (surface) {
-    SidePanelSurface.changes => ContextTab.changes,
-    SidePanelSurface.repository => ContextTab.repo,
-    SidePanelSurface.checkpoints => ContextTab.history,
-    _ => ContextTab.more,
-  };
+  static ContextTab of(SidePanelSurface surface) => values.firstWhere(
+    (tab) => tab.surfaces.contains(surface),
+    orElse: () => ContextTab.more,
+  );
 }
 
 /// The surfaces the context panel can show (spec §4). Named `SidePanel` for the
@@ -163,11 +166,12 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
   /// somewhere to go back to.
   SidePanelSurface _last = SidePanelSurface.changes;
 
-  /// What the **More** tab shows when it is picked: the last surface under it.
-  SidePanelSurface _lastMore = SidePanelSurface.todos;
+  /// What each tab shows when it is picked: the last surface open under it.
+  final _lastIn = <ContextTab, SidePanelSurface>{};
 
-  /// The surface the More tab would open.
-  SidePanelSurface get lastMore => _lastMore;
+  /// The surface [tab] would open.
+  SidePanelSurface lastIn(ContextTab tab) =>
+      _lastIn[tab] ?? tab.surfaces.firstOrNull ?? SidePanelSurface.todos;
 
   @override
   SidePanelSurface? build() => null;
@@ -191,12 +195,12 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
   void show(SidePanelSurface surface) {
     if (!_hasRoom) return;
     _last = surface;
-    if (ContextTab.of(surface) == ContextTab.more) _lastMore = surface;
+    _lastIn[ContextTab.of(surface)] = surface;
     state = surface;
   }
 
-  /// Opens [tab]: its own surface, or for More the one shown there last.
-  void showTab(ContextTab tab) => show(tab.surface ?? _lastMore);
+  /// Opens [tab] on the surface last shown under it.
+  void showTab(ContextTab tab) => show(lastIn(tab));
 
   void collapse() => state = null;
 

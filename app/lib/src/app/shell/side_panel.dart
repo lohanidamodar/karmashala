@@ -26,6 +26,7 @@ import '../../features/notes/presentation/notes_view.dart';
 import '../../features/sessions/presentation/agent_plan_panel.dart';
 import '../../features/sessions/presentation/decision_record_panel.dart';
 import '../../features/todos/presentation/todos_view.dart';
+import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
@@ -85,6 +86,16 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.logs => AppIcons.article,
   };
 
+  /// A tab's glyph: in the tab row when the panel is too narrow for labels,
+  /// and in the View menu.
+  static IconData tabIcon(ContextTab tab) => switch (tab) {
+    ContextTab.changes => AppIcons.gitDiff,
+    ContextTab.repo => AppIcons.bookBookmark,
+    ContextTab.history => AppIcons.clockCounterClockwise,
+    ContextTab.files => AppIcons.folder,
+    ContextTab.more => AppIcons.dotsThree,
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final open = openSurface(ref);
@@ -99,51 +110,77 @@ class SidePanel extends ConsumerWidget {
   }
 }
 
-/// The panel's tab row: Changes, Repo, History, and **More ▾** — named for
-/// the surface it shows while one of its own is open.
+/// The panel's tab row, drawn from [ContextTab.values]: Changes, Repo,
+/// History, Files and **More ▾**. Where the labels would not fit — the panel
+/// goes down to 240px — every tab is its glyph alone, named by its tooltip.
 class ContextTabs extends ConsumerWidget {
   const ContextTabs({required this.open, super.key});
 
   final SidePanelSurface open;
 
+  /// Each side of a tab's label or glyph.
+  static const padX = Insets.sm;
+
+  /// What a tab says: More says what it is, never the name of the open panel —
+  /// that is the header's job, and saying it twice is the bug this replaced.
+  static String labelOf(ContextTab tab) =>
+      tab == ContextTab.more ? '${tab.label} ▾' : tab.label;
+
+  /// The width every tab's label needs, measured the way it is drawn: bold (a
+  /// selected tab) and at the ambient text scale.
+  static double labelsWidth(BuildContext context) {
+    final style = DefaultTextStyle.of(
+      context,
+    ).style.merge(Chrome.tabLabel).copyWith(fontWeight: FontWeight.w600);
+    var total = 0.0;
+    for (final tab in ContextTab.values) {
+      final painter = TextPainter(
+        text: TextSpan(text: labelOf(tab), style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      total += painter.width + padX * 2;
+      painter.dispose();
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final panel = ref.read(sidePanelProvider.notifier);
     final current = ContextTab.of(open);
-    final moreLabel = current == ContextTab.more ? open.label : 'More';
     return Container(
       height: Chrome.tabStrip,
       color: SurfaceTones.of(context).chrome,
       padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-      child: Row(
-        children: [
-          for (final tab in [
-            ContextTab.changes,
-            ContextTab.repo,
-            ContextTab.history,
-          ])
-            _ContextTabButton(
-              label: tab.label,
-              selected: tab == current,
-              onTap: () => panel.showTab(tab),
-            ),
-          Flexible(
-            child: Builder(
-              builder: (anchor) => _ContextTabButton(
-                label: '$moreLabel ▾',
-                selected: current == ContextTab.more,
-                onTap: () => _openMore(anchor, ref),
-              ),
-            ),
-          ),
-          const Spacer(),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = labelsWidth(context) > constraints.maxWidth;
+          return Row(
+            children: [
+              for (final tab in ContextTab.values)
+                Builder(
+                  builder: (anchor) => _ContextTabButton(
+                    label: labelOf(tab),
+                    icon: SidePanel.tabIcon(tab),
+                    compact: compact,
+                    selected: tab == current,
+                    onTap: tab == ContextTab.more
+                        ? () => _openMore(anchor, ref)
+                        : () => panel.showTab(tab),
+                  ),
+                ),
+              const Spacer(),
+            ],
+          );
+        },
       ),
     );
   }
 
-  /// The More menu: every offered surface that is not one of the three tabs,
-  /// minus the ones the user took out of it.
+  /// The More menu: every offered surface no other tab holds, minus the ones
+  /// the user took out of it.
   Future<void> _openMore(BuildContext anchor, WidgetRef ref) async {
     final hidden = ref.read(hiddenSidePanelSurfacesProvider);
     final surfaces = [
@@ -171,18 +208,25 @@ class ContextTabs extends ConsumerWidget {
 class _ContextTabButton extends StatelessWidget {
   const _ContextTabButton({
     required this.label,
+    required this.icon,
+    required this.compact,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final IconData icon;
+
+  /// Glyph only, the label moved to the tooltip.
+  final bool compact;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Semantics(
+    final ink = selected ? scheme.onSurface : scheme.onSurfaceVariant;
+    Widget button = Semantics(
       button: true,
       selected: selected,
       label: label,
@@ -191,7 +235,7 @@ class _ContextTabButton extends StatelessWidget {
         onTap: onTap,
         child: Container(
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+          padding: const EdgeInsets.symmetric(horizontal: ContextTabs.padX),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -200,17 +244,49 @@ class _ContextTabButton extends StatelessWidget {
               ),
             ),
           ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Chrome.tabLabel.copyWith(
-              color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-              fontWeight: selected ? FontWeight.w600 : null,
-            ),
-          ),
+          child: compact
+              ? Icon(icon, size: Chrome.icon, color: ink)
+              : Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Chrome.tabLabel.copyWith(
+                    color: ink,
+                    fontWeight: selected ? FontWeight.w600 : null,
+                  ),
+                ),
         ),
       ),
+    );
+    if (compact) button = Tooltip(message: label, child: button);
+    return button;
+  }
+}
+
+/// **Checkpoints · Decisions · Plan** — the History tab's header, in place of
+/// a name, so its three records read as one tab.
+class _HistorySwitch extends ConsumerWidget {
+  const _HistorySwitch({required this.open});
+
+  final SidePanelSurface open;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final panel = ref.read(sidePanelProvider.notifier);
+    final surfaces = ContextTab.history.surfaces;
+    return Row(
+      children: [
+        for (final (index, surface) in surfaces.indexed) ...[
+          if (index > 0) const SizedBox(width: Insets.xs),
+          Flexible(
+            child: SidebarPill(
+              label: surface.label,
+              selected: surface == open,
+              onTap: () => panel.show(surface),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -250,18 +326,39 @@ class _SidePanelBody extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ContextTabs(open: surface),
-              if (!surface.drawsOwnHeader) _SidePanelHeader(surface: surface),
-              if (surface.scopedToRepository) ...[
-                const SidePanelContextLine(),
-                const SidePanelWorktrees(),
-              ],
-              Expanded(child: _surfaceBody(surface)),
+              Expanded(
+                child: _titled(
+                  surface,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!surface.drawsOwnHeader)
+                        _SidePanelHeader(surface: surface),
+                      if (surface.scopedToRepository) ...[
+                        const SidePanelContextLine(),
+                        const SidePanelWorktrees(),
+                      ],
+                      Expanded(child: _surfaceBody(surface)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// History's header carries its switch in place of a surface's name.
+  Widget _titled(SidePanelSurface surface, Widget child) =>
+      switch (ContextTab.of(surface)) {
+        ContextTab.history => PaneTitleOverride(
+          title: _HistorySwitch(open: surface),
+          child: child,
+        ),
+        _ => child,
+      };
 
   Widget _surfaceBody(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => const AttentionInboxView(),

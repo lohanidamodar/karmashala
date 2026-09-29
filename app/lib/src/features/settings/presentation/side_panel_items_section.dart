@@ -16,7 +16,7 @@ import 'settings_section.dart';
 /// says. This is the one place to choose them: the View menu's copy, Tools in
 /// More, went on 2026-09-29 (one place per control).
 ///
-/// Only More's own tools are listed: Changes, Repo and History are tabs, and
+/// Only More's own tools are listed: the other tabs' surfaces are not in it, and
 /// taking one out of More never touched them, so a box for them would do
 /// nothing.
 class SidePanelItemsSection extends ConsumerWidget {
