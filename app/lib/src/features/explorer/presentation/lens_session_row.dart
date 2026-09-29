@@ -2,7 +2,9 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
+import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -18,7 +20,11 @@ import '../application/agent_states.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_selection.dart';
 import '../application/workspace_session_entry.dart';
+import '../../settings/application/settings_controller.dart';
+import '../../terminal/application/system_terminal_providers.dart';
 import 'explorer_selection_actions.dart';
+import 'section_membership_dialog.dart';
+import 'session_row_menu.dart';
 import 'sidebar_chrome.dart';
 
 /// A session row in a cross-project lens, on one line: its state glyph, its
@@ -91,6 +97,12 @@ class LensSessionRow extends ConsumerWidget {
     final waitKind = waiting
         ? ref.read(sessionStatusLookupProvider)(id)?.waiting
         : null;
+    final terminals =
+        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
+    final hasSections = SectionMembershipDialog.hasManualSections(ref);
+    // Read when the menu opens; the row draws no pin of its own.
+    bool isPinned() =>
+        ref.read(settingsControllerProvider).pinnedSessionIds.contains(id);
     final order = SelectionOrderScope.maybeOf(context);
     void tap() {
       if (!handleSelectableClick(
@@ -111,13 +123,30 @@ class LensSessionRow extends ConsumerWidget {
       needsYou: waiting,
       settled: state == AgentState.ended,
       onTap: tap,
+      // The project tree's session menu, headed by Open; an imported
+      // conversation's "Resume" is that same Open, so it is not offered twice.
       menuItemsBuilder: () =>
           selectionRowMenu(ref, context, id) ??
           [
             DesktopMenuItem(value: 'open', label: 'Open', icon: AppIcons.play),
-            selectRowMenuItem(),
+            ...switch ((entry.native, entry.imported)) {
+              (final Session native, _) => nativeSessionMenuItems(
+                ref,
+                native,
+                pinned: isPinned(),
+                hasSections: hasSections,
+                terminals: terminals,
+              ),
+              (_, ImportedSession()) => importedSessionMenuItems(
+                pinned: isPinned(),
+                hasSections: hasSections,
+                terminals: terminals,
+                resume: false,
+              ),
+              _ => [selectRowMenuItem()],
+            },
           ],
-      onMenu: (action) {
+      onMenu: (action) async {
         if (runSelectionRowAction(
           ref,
           context,
@@ -127,7 +156,26 @@ class LensSessionRow extends ConsumerWidget {
         )) {
           return;
         }
-        if (action == 'open') _open(context, ref);
+        if (action == 'open') return _open(context, ref);
+        final native = entry.native;
+        final imported = entry.imported;
+        if (native != null) {
+          await runNativeSessionMenuAction(
+            context,
+            ref,
+            native,
+            action,
+            terminals: terminals,
+          );
+        } else if (imported != null) {
+          await runImportedSessionMenuAction(
+            context,
+            ref,
+            imported,
+            action,
+            terminals: terminals,
+          );
+        }
       },
       builder: (context) => Row(
         children: [

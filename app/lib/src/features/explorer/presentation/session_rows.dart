@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
-import 'package:karmashala_ui/menus.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -18,24 +17,16 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/lineage.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
-import '../../sessions/presentation/continue_with_dialog.dart';
-import '../../sessions/presentation/session_changed_files_dialog.dart';
-import '../../sessions/presentation/session_recap_card.dart';
-import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
-import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_row_attention.dart';
 import '../application/session_selection.dart';
 import 'explorer_selection_actions.dart';
 import 'section_membership_dialog.dart';
+import 'session_row_menu.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
-import '../../automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
-import '../../github/application/pull_request_context_service.dart';
-import '../../github/presentation/pull_request_context_dialog.dart';
-import '../../sessions/presentation/export_session_action.dart';
 
 /// The two rows that stand for a session, wherever the app draws one: the tree
 /// and the sections must be the same object. Both watch inside their own
@@ -78,32 +69,8 @@ class NativeSessionRow extends ConsumerWidget {
     final tickEnabled = ref.watch(
       sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
     );
-    final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-
-    Future<void> delete() async {
-      final deleteFromCli = await _confirmDelete(context, session.title);
-      if (deleteFromCli == null) return;
-      try {
-        final notice = await actions.deleteNative(
-          session.id,
-          deleteFromCli: deleteFromCli,
-        );
-        if (notice != null && context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(notice)));
-        }
-      } catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error is StateError ? error.message : '$error'),
-          ),
-        );
-      }
-    }
 
     // One click opens the session: a live pane of ours comes back, a stopped
     // conversation resumes in its own worktree, a refusal is said in words.
@@ -222,111 +189,13 @@ class NativeSessionRow extends ConsumerWidget {
       // A ticked row's menu acts on the whole selection.
       menuItemsBuilder: () =>
           selectionRowMenu(ref, context, session.id) ??
-          [
-            // Moving a session to another agent belongs on the session, not only on
-            // the delivery strip, which needs the session already on screen.
-            DesktopMenuItem(
-              value: 'continue-with',
-              label: 'Continue with…',
-              icon: AppIcons.gitBranch,
-            ),
-            // The row you come back to a day later and have not opened. It spends a
-            // turn, so it is picked, never done by the row itself.
-            DesktopMenuItem(
-              value: 'recap',
-              label: 'Recap',
-              icon: AppIcons.article,
-            ),
-            // Read when the menu opens: what it offers depends on what waits.
-            if (ref.read(sessionResumeBadgeProvider(session.id)) == null)
-              DesktopMenuItem(
-                value: 'resume-on-reset',
-                label: 'Resume when usage resets…',
-                icon: AppIcons.clock,
-              )
-            else ...[
-              DesktopMenuItem(
-                value: 'resume-on-reset',
-                label: 'Change scheduled resume…',
-                icon: AppIcons.clock,
-              ),
-              DesktopMenuItem(
-                value: 'resume-cancel',
-                label: 'Cancel scheduled resume',
-                icon: AppIcons.x,
-              ),
-            ],
-            // One entry, not one per installed terminal: three of eight items here
-            // used to be external openers. The rest is a setting.
-            if (terminals.isNotEmpty)
-              DesktopMenuItem(
-                value: 'terminal:${terminals.first.id}',
-                label: 'Open in system terminal',
-                icon: AppIcons.terminal,
-              ),
-            const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: 'pin',
-              label: pinned ? 'Unpin' : 'Pin to top',
-              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-            ),
-            // Beside "Pin to top" because they are the same kind of act, which is
-            // what stops Pin being read as a third way into a section.
-            if (hasSections)
-              DesktopMenuItem(
-                value: 'sections',
-                label: 'Add to section…',
-                icon: AppIcons.folder,
-              ),
-            // Every session gets this, including one whose agent keeps no record of
-            // its own — that case is *why* the dialog exists.
-            DesktopMenuItem(
-              value: 'changed-files',
-              label: 'Files changed…',
-              icon: AppIcons.gitDiff,
-            ),
-            DesktopMenuItem(
-              value: 'copy-cmd',
-              label: 'Copy resume command',
-              icon: AppIcons.copy,
-            ),
-            // Read when the menu opens: offered once something has been
-            // attached, because an empty dialog reads as a broken feature —
-            // and while the server's log is still being read, when the
-            // dialog says so itself if there is nothing.
-            if (ref
-                    .read(sentContextCardsProvider(session.id))
-                    .value
-                    ?.isNotEmpty ??
-                true)
-              DesktopMenuItem(
-                value: 'context-sent',
-                label: 'Context sent to this session…',
-                icon: AppIcons.article,
-              ),
-            // The whole session as one file, for a bug report or an archive.
-            // It says inside itself what it could not read, so what leaves
-            // here cannot be mistaken for the whole story.
-            DesktopMenuItem(
-              value: 'export',
-              label: 'Export session…',
-              icon: AppIcons.package,
-            ),
-            DesktopMenuItem(
-              value: 'rename',
-              label: 'Rename',
-              icon: AppIcons.pencilSimple,
-              shortcut: 'F2',
-            ),
-            selectRowMenuItem(),
-            const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: 'delete',
-              label: 'Delete',
-              icon: AppIcons.trash,
-              destructive: true,
-            ),
-          ],
+          nativeSessionMenuItems(
+            ref,
+            session,
+            pinned: pinned,
+            hasSections: hasSections,
+            terminals: terminals,
+          ),
       onMenu: (action) async {
         if (runSelectionRowAction(
           ref,
@@ -337,49 +206,13 @@ class NativeSessionRow extends ConsumerWidget {
         )) {
           return;
         }
-        if (action.startsWith('terminal:')) {
-          final id = action.substring('terminal:'.length);
-          final terminal = terminals.where((t) => t.id == id).firstOrNull;
-          if (terminal != null) {
-            await _openNativeInTerminal(context, actions, session, terminal);
-          }
-          return;
-        }
-        switch (action) {
-          case 'recap':
-            await requestSessionRecap(context, ref, session.id);
-          case 'continue-with':
-            // The dialog owns every decision and launches nothing until the
-            // user has seen the packet; this is a route to it, not a second one.
-            await ContinueWithDialog.show(context, session.id);
-          case 'pin':
-            ref
-                .read(settingsControllerProvider.notifier)
-                .togglePinnedSession(session.id);
-          case 'resume-on-reset':
-            await ResumeOnResetDialog.show(context, [session.id]);
-          case 'resume-cancel':
-            ref.read(scheduledResumeControllerProvider).cancelFor(session.id);
-          case 'sections':
-            await SectionMembershipDialog.show(context, ref, session.id);
-          case 'changed-files':
-            await SessionChangedFilesDialog.show(context, session.id);
-          case 'copy-cmd':
-            unawaited(
-              copyCommandToClipboard(
-                context,
-                () => actions.nativeResumeShellCommand(session.id),
-              ),
-            );
-          case 'context-sent':
-            await SentContextCardsDialog.show(context, session.id);
-          case 'export':
-            await exportSession(context, ref, session.id);
-          case 'rename':
-            unawaited(renameNativeSession(context, ref, session));
-          case 'delete':
-            unawaited(delete());
-        }
+        await runNativeSessionMenuAction(
+          context,
+          ref,
+          session,
+          action,
+          terminals: terminals,
+        );
       },
     );
   }
@@ -426,7 +259,6 @@ class ImportedSessionRow extends ConsumerWidget {
     final ticked = ref.watch(
       sessionSelectionProvider.select((s) => s.contains(session.id)),
     );
-    final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
     // Flips only when the selection's kind does, so a tick moves no other row.
@@ -458,39 +290,13 @@ class ImportedSessionRow extends ConsumerWidget {
       )) {
         return;
       }
-      switch (action) {
-        case final value when value.startsWith('terminal:'):
-          final id = value.substring('terminal:'.length);
-          final terminal = terminals.where((t) => t.id == id).firstOrNull;
-          if (terminal != null) {
-            await _openImportedInTerminal(context, actions, session, terminal);
-          }
-        case 'pin':
-          ref
-              .read(settingsControllerProvider.notifier)
-              .togglePinnedSession(session.id);
-        case 'sections':
-          await SectionMembershipDialog.show(context, ref, session.id);
-        case 'resume':
-          await _open(context, ref, session);
-        case 'copy-cmd':
-          unawaited(
-            copyCommandToClipboard(
-              context,
-              () => actions.resumeShellCommand(session),
-            ),
-          );
-        case 'rename':
-          await renameImportedSession(context, ref, session);
-        case 'delete':
-          final deleteFromCli = await _confirmDelete(
-            context,
-            session.displayTitle,
-          );
-          if (deleteFromCli != null) {
-            await actions.deleteImported(session, deleteFromCli: deleteFromCli);
-          }
-      }
+      await runImportedSessionMenuAction(
+        context,
+        ref,
+        session,
+        action,
+        terminals: terminals,
+      );
     }
 
     final (:stat, :pending) = ref.watch(
@@ -532,107 +338,17 @@ class ImportedSessionRow extends ConsumerWidget {
           id: session.id,
           kind: SelectionKind.sessions,
         )) {
-          _open(context, ref, session);
+          openImportedSession(context, ref, session);
         }
       },
       menuItemsBuilder: () =>
           selectionRowMenu(ref, context, session.id) ??
-          [
-            DesktopMenuItem(
-              value: 'resume',
-              label: 'Resume',
-              icon: AppIcons.play,
-            ),
-            if (terminals.isNotEmpty)
-              DesktopMenuItem(
-                value: 'terminal:${terminals.first.id}',
-                label: 'Open in system terminal',
-                icon: AppIcons.terminal,
-              ),
-            const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: 'pin',
-              label: pinned ? 'Unpin' : 'Pin to top',
-              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-            ),
-            if (hasSections)
-              DesktopMenuItem(
-                value: 'sections',
-                label: 'Add to section…',
-                icon: AppIcons.folder,
-              ),
-            DesktopMenuItem(
-              value: 'copy-cmd',
-              label: 'Copy resume command',
-              icon: AppIcons.copy,
-            ),
-            DesktopMenuItem(
-              value: 'rename',
-              label: 'Rename',
-              icon: AppIcons.pencilSimple,
-              shortcut: 'F2',
-            ),
-            selectRowMenuItem(),
-            const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: 'delete',
-              label: 'Delete from CLI store',
-              icon: AppIcons.trash,
-              destructive: true,
-            ),
-          ],
+          importedSessionMenuItems(
+            pinned: pinned,
+            hasSections: hasSections,
+            terminals: terminals,
+          ),
       onMenu: onMenu,
-    );
-  }
-}
-
-Future<void> _open(
-  BuildContext context,
-  WidgetRef ref,
-  ImportedSession session,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final result = await ref.read(explorerActionsProvider).openImported(session);
-  final message = result.message;
-  if (message != null) {
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-
-Future<void> _openNativeInTerminal(
-  BuildContext context,
-  SessionActions actions,
-  Session session,
-  SystemTerminal terminal,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    await actions.openSessionInSystemTerminal(session.id, terminal);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Opening in ${terminal.label}…')),
-    );
-  } catch (error) {
-    messenger.showSnackBar(
-      SnackBar(content: Text(error is StateError ? error.message : '$error')),
-    );
-  }
-}
-
-Future<void> _openImportedInTerminal(
-  BuildContext context,
-  SessionActions actions,
-  ImportedSession session,
-  SystemTerminal terminal,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    await actions.openInSystemTerminal(session, terminal);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Opening in ${terminal.label}…')),
-    );
-  } catch (error) {
-    messenger.showSnackBar(
-      SnackBar(content: Text(error is StateError ? error.message : '$error')),
     );
   }
 }
@@ -708,54 +424,6 @@ Future<String?> _promptRename(BuildContext context, String current) {
       ],
     ),
   ).then((v) => (v == null || v.isEmpty) ? null : v);
-}
-
-Future<bool?> _confirmDelete(BuildContext context, String title) {
-  var deleteFromCli = true;
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const DesktopDialogTitle(
-          icon: AppIcons.trash,
-          title: 'Delete session?',
-          subtitle: 'Choose whether to also remove the CLI history.',
-        ),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Remove "$title" from Karmashala.'),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: deleteFromCli,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Also delete from the CLI store'),
-                subtitle: const Text(
-                  'Checked by default. This removes the original transcript.',
-                ),
-                onChanged: (value) =>
-                    setState(() => deleteFromCli = value ?? true),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          DestructiveButton(
-            onPressed: () => Navigator.of(context).pop(deleteFromCli),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 /// The shared age clause as a tooltip opens: "active 3m ago" -> "Active 3m
