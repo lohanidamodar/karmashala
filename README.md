@@ -159,13 +159,14 @@ through the `KarmashalaBuild` scheduled task (never from WSL — interop cannot
 traverse the plugin symlinks a Flutter Windows build needs). It builds the
 desktop app, compiles `karmashala_mcp.exe` beside it, runs Inno Setup
 ([`app/windows/installer/karmashala.iss`](app/windows/installer/karmashala.iss)) and
-builds the Android companion APK.
+builds the Android APKs (the one app, and the old companion until Stage 4).
 [`tool/build_release.sh`](tool/build_release.sh) is the macOS counterpart.
 
 CI: [`release-build.yml`](.github/workflows/release-build.yml) attaches Windows
 and Linux artifacts to a published GitHub release.
-[`codemagic.yaml`](codemagic.yaml) holds four manual-only App Store / Play
-workflows for the companion.
+[`android-release.yml`](.github/workflows/android-release.yml) is the
+manual-only Play release: it builds the app bundle and uploads it to the
+chosen track through fastlane (secrets in [PROJECT.md §13](PROJECT.md)).
 
 ## Environment variables
 

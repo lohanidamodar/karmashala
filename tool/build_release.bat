@@ -121,9 +121,21 @@ echo === INSTALLER === >> "%LOG%"
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! app\windows\installer\karmashala.iss >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
-echo === ANDROID COMPANION APK === >> "%LOG%"
+rem Both APKs are signed by app\android\key.properties when present, else the
+rem debug key. Both builds write app-release.apk, so the companion goes first
+rem and is copied aside.
+echo === ANDROID COMPANION APK (old companion, until Stage 4) === >> "%LOG%"
 pushd app
 call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_MODE=companion --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
+set RC=!errorlevel!
+if "!RC!"=="0" copy /y build\app\outputs\flutter-apk\app-release.apk build\app\outputs\flutter-apk\app-companion-release.apk >> "%LOG%" 2>&1
+if "!RC!"=="0" set RC=!errorlevel!
+popd
+if not "!RC!"=="0" goto :fail
+
+echo === ANDROID APK (the one app) === >> "%LOG%"
+pushd app
+call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
 set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail
