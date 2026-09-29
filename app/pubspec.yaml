@@ -1,7 +1,7 @@
 name: karmashala
 description: "Desktop agent development environment for local coding-agent CLIs — Claude Code, Codex and Antigravity."
 publish_to: 'none'
-version: 1.26.3+48
+version: 1.27.0+49
 
 environment:
   sdk: ^3.12.2
