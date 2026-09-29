@@ -1,8 +1,11 @@
 /// What `sessions.transcript` answers (Stage 0 step 5): one page of a
-/// session's agent record, read on the server's machine.
+/// session's agent record, read on the server's machine; and what the readers
+/// of its raw lines answer (step 7).
 library;
 
-import 'package:agent_cli/read.dart' show TranscriptMessage;
+import 'package:agent_cli/descriptors.dart' show StoreServerFileChange;
+import 'package:agent_cli/read.dart' show FileEditKind, TranscriptMessage;
+import 'package:karmashala_session/delivery.dart' show SessionRecordGap;
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
 
 /// The most messages one page carries, and the default.
@@ -113,6 +116,61 @@ class TranscriptPage {
                 ChatViewEvidence.notLocated
           : null,
       path: json['path'] as String?,
+    );
+  }
+}
+
+/// What `sessions.changedFiles` answers: the files a session's agent says it
+/// changed, read where its record is (Stage 0 step 7). [changes] is null when
+/// the agent's record could not answer, and [gap] and [detail] say why.
+class AgentFileChangesReading {
+  const AgentFileChangesReading({
+    this.changes,
+    this.gap = SessionRecordGap.none,
+    this.detail = '',
+  });
+
+  /// In the agent's own spelling, one per recorded write, oldest first.
+  final List<StoreServerFileChange>? changes;
+  final SessionRecordGap gap;
+  final String detail;
+
+  Map<String, Object?> toJson() => {
+    if (changes case final changes?)
+      'changes': [
+        for (final change in changes)
+          {
+            'path': change.path,
+            'kind': change.kind.name,
+            'movedTo': ?change.movedTo,
+          },
+      ],
+    'gap': gap.name,
+    if (detail.isNotEmpty) 'detail': detail,
+  };
+
+  /// Throws on a value out of shape. A kind or gap this build does not know
+  /// reads as `modified` and `recordUnreadable`.
+  static AgentFileChangesReading fromJson(Map<String, Object?> json) {
+    final changes = json['changes'] as List?;
+    return AgentFileChangesReading(
+      changes: changes == null
+          ? null
+          : [
+              for (final raw in changes)
+                if (raw case final Map change)
+                  StoreServerFileChange(
+                    path: change['path']! as String,
+                    kind:
+                        FileEditKind.values.asNameMap()[change['kind']] ??
+                        FileEditKind.modified,
+                    movedTo: change['movedTo'] as String?,
+                  ),
+            ],
+      gap:
+          SessionRecordGap.values.asNameMap()[json['gap']] ??
+          SessionRecordGap.recordUnreadable,
+      detail: json['detail'] as String? ?? '',
     );
   }
 }

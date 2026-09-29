@@ -48,6 +48,7 @@ import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
+import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
@@ -861,6 +862,16 @@ Future<int> runServe(
     ),
   );
   data.sessionTranscripts = sessionTranscripts;
+  // Rewind points, changed files and the open question (Stage 0 step 7):
+  // the adapters' readers of raw lines, run over the same records.
+  final sessionRecordReadings = SessionRecordReadings(
+    lookUp: sessionTranscripts.lookUp,
+    registry: transcripts.registry,
+    sessions: sessionRows,
+    rows: checkoutRows,
+    runners: ssh.runners,
+  );
+  data.sessionRecordReadings = sessionRecordReadings;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1079,6 +1090,7 @@ Future<int> runServe(
   await git.stop();
   await files.close();
   await sessionTranscripts.close();
+  await sessionRecordReadings.close();
   await terminals.dispose();
   await ssh.close();
   await attention.close();

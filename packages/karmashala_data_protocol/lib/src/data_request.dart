@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:agent_cli/descriptors.dart'
+    show AgentQuestionSet, AgentRewindPoints;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show questionFromJson, questionToJson;
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';

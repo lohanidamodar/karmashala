@@ -130,6 +130,12 @@ final class Capabilities {
   /// other. Without it, only a server on this machine has a chat to show.
   bool get chatViaServer => serverOffers('sessions.transcript');
 
+  /// The agent's rewind points, the files it changed and the question it has
+  /// open are read by the server, where its record is (Stage 0 step 7).
+  bool get rewindPointsViaServer => serverOffers('sessions.rewindPoints');
+  bool get changedFilesViaServer => serverOffers('sessions.changedFiles');
+  bool get openQuestionViaServer => serverOffers('sessions.openQuestion');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }
