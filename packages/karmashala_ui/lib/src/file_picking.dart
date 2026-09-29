@@ -62,6 +62,18 @@ class FilePickerChoice {
       return platformDefault;
     }
   }
+
+  /// The user's preference for **this device's** files, or null while unset.
+  /// Separate from [prefersInApp], which a remote client forces to the server.
+  static bool Function()? devicePrefersInApp;
+
+  static bool get deviceInApp {
+    try {
+      return devicePrefersInApp?.call() ?? platformDefault;
+    } on Object {
+      return platformDefault;
+    }
+  }
 }
 
 /// The host's open-file dialog. A seam, so a test can stand where the platform
@@ -262,6 +274,7 @@ Future<XFile?> pickOneFile({
   String? environmentId,
   String? startNear,
   List<XTypeGroup> acceptedTypeGroups = const [],
+  List<BrowseSource>? sources,
   @visibleForTesting ShowFileDialog show = openFile,
   @visibleForTesting ForgetLastVisited forget = forgetLastVisitedFolder,
   @visibleForTesting ForgetRemoteRecent forgetRemote = _forgetRemoteRecent,
@@ -289,6 +302,7 @@ Future<XFile?> pickOneFile({
         environmentId: environmentId,
         startAt: _startFor(environmentId, start, startNear),
         acceptedTypeGroups: acceptedTypeGroups,
+        sources: sources,
       );
       _remember(chosen == null ? null : _parentOf(chosen));
       _report('file', what, chosen, clock);
@@ -325,6 +339,23 @@ Future<XFile?> pickOneFile({
     resume();
   }
 }
+
+/// Asks for one file on **this device**, even when every other "Browse…" is
+/// pointed at a server elsewhere: the in-app browser over this computer only,
+/// or the host's dialog, as [FilePickerChoice.deviceInApp] says.
+Future<XFile?> pickDeviceFile({
+  required String what,
+  BuildContext? context,
+  String? startNear,
+  List<XTypeGroup> acceptedTypeGroups = const [],
+}) => pickOneFile(
+  what: what,
+  context: context,
+  startNear: startNear,
+  acceptedTypeGroups: acceptedTypeGroups,
+  sources: const [],
+  inApp: FilePickerChoice.deviceInApp,
+);
 
 /// Asks the host for one directory, announcing it first.
 Future<String?> pickOneDirectory({
