@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/read.dart' show SessionMediaScan, SessionMediaStore;
@@ -64,16 +65,47 @@ class SessionMedia {
     final folder = Directory(p.join(root, _folderName(sessionId)));
     final previous = _scans.remove(sessionId);
     if (previous == null) await _admit(folder);
-    final scan = await SessionMediaStore(
-      folder,
-      registry: registry,
-    ).refresh(path, agentId, previous: previous);
+    final SessionMediaScan scan;
+    if (await _grew(path, previous) &&
+        identical(registry, AgentRegistry.builtIn) &&
+        registry.adapterFor(agentId)?.media != null) {
+      scan = await _refreshOffThread(folder.path, path, agentId, previous);
+    } else {
+      scan = await SessionMediaStore(
+        folder,
+        registry: registry,
+      ).refresh(path, agentId, previous: previous);
+    }
     _scans[sessionId] = scan;
     while (_scans.length > _heldScans) {
       _scans.remove(_scans.keys.first);
     }
     return scan;
   }
+
+  /// Whether [path] holds more than [previous] scanned, so a scan has work.
+  static Future<bool> _grew(String path, SessionMediaScan? previous) async {
+    if (previous == null || previous.transcriptPath != path) return true;
+    try {
+      return (await File(path).stat()).size != previous.scannedBytes;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// The scan on a worker: a large pasted picture is decoded and written
+  /// there, not on the isolate serving every client. Only paths and plain
+  /// values cross; the worker finds the reader in [AgentRegistry.builtIn].
+  static Future<SessionMediaScan> _refreshOffThread(
+    String folder,
+    String path,
+    String agentId,
+    SessionMediaScan? previous,
+  ) => Isolate.run(
+    () => SessionMediaStore(
+      Directory(folder),
+    ).refresh(path, agentId, previous: previous),
+  );
 
   /// Marks [folder] as read now and drops the least recently read beyond
   /// [keptSessions].
