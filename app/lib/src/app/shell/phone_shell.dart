@@ -219,6 +219,7 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
     });
     final tab = ref.watch(phoneTabProvider);
     final workbench = ref.watch(phoneWorkbenchProvider);
+    final staleShown = ref.watch(staleSessionListProvider) != null;
     final tabs = Scaffold(
       appBar: const PhoneTopBar(),
       body: ColoredBox(
@@ -227,7 +228,10 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Under the app bar, not above it where the status bar covers it.
-            const RemoteResumingStrip(),
+            // The stale list's own strip says "Not connected" on Sessions.
+            RemoteResumingStrip(
+              whenDown: tab != PhoneTab.sessions || !staleShown,
+            ),
             Expanded(child: _tabStack(tab, workbench)),
           ],
         ),

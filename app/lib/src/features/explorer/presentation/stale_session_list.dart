@@ -11,6 +11,7 @@ import '../../../core/data/data_providers.dart';
 import '../../../core/server/remote_server_access.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../remote/presentation/use_auto_button.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../application/agent_states.dart';
 import '../application/session_list_snapshot.dart';
@@ -143,7 +144,8 @@ class _StaleSessionListState extends ConsumerState<StaleSessionList>
 }
 
 /// "Reconnecting… · last seen 14:32", or, once a dial has failed,
-/// "Not connected · last seen 14:32 · Try again".
+/// "Not connected · last seen 14:32 · Try again" over the dial's reason, and
+/// *Use Auto* while the machine's route is pinned.
 class _StaleStrip extends ConsumerWidget {
   const _StaleStrip({required this.savedAt});
 
@@ -157,19 +159,30 @@ class _StaleStrip extends ConsumerWidget {
     // Dialling — the first dial, a redial after the app came back — or the
     // link held for a resume, is still reconnecting.
     final dialling = connection.state != DataLinkState.unavailable;
+    final reason = connection.reason;
     final access = ref.watch(serverAccessProvider);
-    if (access is! RemoteServerAccess) return _strip(context, client, dialling);
+    if (access is! RemoteServerAccess) {
+      return _strip(context, client, dialling, reason);
+    }
     return ValueListenableBuilder<bool>(
       valueListenable: access.resuming,
-      builder: (context, held, _) => _strip(context, client, dialling || held),
+      builder: (context, held, _) =>
+          _strip(context, client, dialling || held, reason),
     );
   }
 
-  Widget _strip(BuildContext context, DataClient client, bool dialling) {
+  Widget _strip(
+    BuildContext context,
+    DataClient client,
+    bool dialling,
+    String? reason,
+  ) {
     final theme = Theme.of(context);
     final attention = SemanticColors.of(context).attention;
     final seen = 'last seen ${lastSeenLabel(context, savedAt)}';
     final words = dialling ? 'Reconnecting… · $seen' : 'Not connected · $seen';
+    // Why, once the dials have given up: a pinned route is named here.
+    final why = dialling ? null : reason;
     return Semantics(
       liveRegion: true,
       container: true,
@@ -190,15 +203,37 @@ class _StaleStrip extends ConsumerWidget {
                 ),
                 const SizedBox(width: Insets.sm),
                 Expanded(
-                  child: Text(
-                    words,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: why == null ? 0 : Insets.xs,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          words,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (why != null)
+                          Text(
+                            why,
+                            key: const ValueKey('stale-session-strip-reason'),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
+                const UseAutoButton(),
                 if (!dialling)
                   TextButton(
                     onPressed: client.retry,
