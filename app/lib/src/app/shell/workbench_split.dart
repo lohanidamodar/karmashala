@@ -166,29 +166,36 @@ class WorkbenchSplitButton extends ConsumerWidget {
   final String groupId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => IconButton(
-    tooltip:
-        'Split — open a terminal, a session, Files, a diff, Devices or the '
-        'browser beside',
-    icon: const Icon(AppIcons.squareSplitHorizontal),
-    onPressed: () async {
-      final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-      sessions.focusGroup(groupId);
-      final devicesArea = ref.read(capabilitiesProvider).devicesArea;
-      final picked = await showDesktopMenuUnder<SplitContent>(context, [
-        for (final content in SplitContent.values)
-          if (devicesArea || content != SplitContent.devices) ...[
-            if (content == SplitContent.emptyRight) const DesktopMenuDivider(),
-            DesktopMenuItem(
-              value: content,
-              label: content.label,
-              icon: content.icon,
-              enabled: sessions.canSplitWorkspace(content.axis),
-            ),
-          ],
-      ]);
-      if (picked == null || !context.mounted) return;
-      await splitWith(context, ref, groupId: groupId, content: picked);
-    },
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final devicesArea = ref.watch(
+      capabilitiesProvider.select((c) => c.devicesArea),
+    );
+    return IconButton(
+      tooltip: devicesArea
+          ? 'Split — open a terminal, a session, Files, a diff, Devices or the '
+                'browser beside'
+          : 'Split — open a terminal, a session, Files, a diff or the '
+                'browser beside',
+      icon: const Icon(AppIcons.squareSplitHorizontal),
+      onPressed: () async {
+        final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+        sessions.focusGroup(groupId);
+        final picked = await showDesktopMenuUnder<SplitContent>(context, [
+          for (final content in SplitContent.values)
+            if (devicesArea || content != SplitContent.devices) ...[
+              if (content == SplitContent.emptyRight)
+                const DesktopMenuDivider(),
+              DesktopMenuItem(
+                value: content,
+                label: content.label,
+                icon: content.icon,
+                enabled: sessions.canSplitWorkspace(content.axis),
+              ),
+            ],
+        ]);
+        if (picked == null || !context.mounted) return;
+        await splitWith(context, ref, groupId: groupId, content: picked);
+      },
+    );
+  }
 }

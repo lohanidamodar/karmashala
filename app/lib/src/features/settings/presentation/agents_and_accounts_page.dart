@@ -9,6 +9,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_more_page.dart' show phoneUsagePageOpener;
 import '../../../app/shell/workbench_tabs.dart' show openUsageTab;
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -359,7 +360,14 @@ class UsageAndLimitsSection extends ConsumerWidget {
             help:
                 'Every account’s windows, their history, and what spent them.',
             control: OutlinedButton(
-              onPressed: () => openUsageTab(ref),
+              onPressed: () {
+                final phoneUsage = phoneUsagePageOpener(context, ref);
+                if (phoneUsage != null) {
+                  phoneUsage();
+                } else {
+                  openUsageTab(ref);
+                }
+              },
               child: const Text('Open Usage tab'),
             ),
           ),

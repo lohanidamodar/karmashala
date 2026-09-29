@@ -222,6 +222,7 @@ class _AccountEntry extends ConsumerWidget {
   Future<void> _manage(BuildContext anchor, WidgetRef ref) async {
     final usage = this.usage;
     final onForget = this.onForget;
+    final phoneUsage = phoneUsagePageOpener(anchor, ref);
     final picked = await showDesktopMenuUnder<String>(anchor, [
       if (usage != null) ...[
         DesktopMenuItem(
@@ -253,7 +254,12 @@ class _AccountEntry extends ConsumerWidget {
           'Read $title’s usage.',
         );
       case 'open' when usage != null:
-        openUsageTab(ref, accountId: usageAccountId(usage));
+        final accountId = usageAccountId(usage);
+        if (phoneUsage != null) {
+          phoneUsage(accountId: accountId);
+        } else {
+          openUsageTab(ref, accountId: accountId);
+        }
       case 'forget':
         onForget?.call();
     }

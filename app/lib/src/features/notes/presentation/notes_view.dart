@@ -16,6 +16,7 @@ import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
 import 'note_delete.dart';
+import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/shell/workbench_tabs.dart';
 import 'note_provenance.dart';
 
@@ -60,7 +61,7 @@ class NotesView extends ConsumerWidget {
               iconSize: Chrome.icon,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.plus),
-              onPressed: () => writeNewNote(ref),
+              onPressed: () => _writeNewNote(context, ref),
             ),
           ],
         ),
@@ -78,6 +79,19 @@ class NotesView extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// A note opens in a workbench tab, so on the phone the workbench comes up.
+void _writeNewNote(BuildContext context, WidgetRef ref) {
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
+  writeNewNote(ref);
+  showWorkbench?.call();
+}
+
+void _openNote(BuildContext context, WidgetRef ref, String noteId) {
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
+  openNoteTab(ref, noteId);
+  showWorkbench?.call();
 }
 
 /// What an empty Notes panel says. The feature is invisible until someone taps
@@ -111,7 +125,7 @@ class _EmptyNotes extends ConsumerWidget {
       // The way out of the empty state, named. An icon-only **+** is how the
       // owner ended up asking "where can we add notes?" while looking at it.
       action: FilledButton.icon(
-        onPressed: () => writeNewNote(ref),
+        onPressed: () => _writeNewNote(context, ref),
         icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
         label: const Text('Write a note'),
       ),
@@ -161,7 +175,7 @@ class _NoteCard extends ConsumerWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(Radii.sm),
             hoverColor: StateLayers.hover(scheme),
-            onTap: () => openNoteTab(ref, note.id),
+            onTap: () => _openNote(context, ref, note.id),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 density.padX + 2,
@@ -287,7 +301,7 @@ class _NoteCard extends ConsumerWidget {
       case 'send':
         _sendBack(context, ref);
       case 'open':
-        openNoteTab(ref, note.id);
+        _openNote(context, ref, note.id);
       case 'delete':
         if (!await confirmNoteDelete(context, note) || !context.mounted) {
           return;

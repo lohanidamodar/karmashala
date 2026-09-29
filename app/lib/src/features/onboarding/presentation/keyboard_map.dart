@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/keymap_controller.dart';
+import '../../../app/shell/shell_area.dart' show shellCommandShownWith;
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../core/capabilities/capabilities.dart';
 
 /// The keys an empty workspace and the quick start offer, by command: the few
 /// a newcomer needs to find everything else.
@@ -43,7 +45,11 @@ class KeyboardMap extends ConsumerWidget {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final rows = [for (final command in commands) ?boundShellChord(command)];
+    final caps = ref.watch(capabilitiesProvider);
+    final rows = [
+      for (final command in commands)
+        if (shellCommandShownWith(command, caps)) ?boundShellChord(command),
+    ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,

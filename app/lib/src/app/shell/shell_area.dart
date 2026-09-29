@@ -29,6 +29,13 @@ List<ShellArea> visibleShellAreas(Capabilities caps) => [
     if (area.shownWith(caps)) area,
 ];
 
+/// Whether a keymap [command] is one this client can use: an area's chord
+/// (`view.area.devices`, Ctrl+4) is not, where the area is hidden.
+bool shellCommandShownWith(String command, Capabilities caps) =>
+    !ShellArea.values.any(
+      (area) => !area.shownWith(caps) && command == 'view.area.${area.name}',
+    );
+
 /// Which area the sidebar shows — the one it showed last, across restarts;
 /// Projects the first time. One this client cannot show (Devices, saved on a
 /// desktop) is Sessions.

@@ -38,26 +38,31 @@ class UsageTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // Under a page that already names it (the phone's More), no second title.
+    final untitled = PaneTitleOverride.maybeOf(context) != null;
     return Scaffold(
-      appBar: AppBar(
-        // A page header, as Settings has: `Chrome.titleBar` is 30px.
-        toolbarHeight: 44,
-        // A workbench tab: an implied back button would pop the app's route.
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Icon(AppIcons.chartBar, color: theme.colorScheme.tertiary),
-            const SizedBox(width: Insets.sm),
-            const Flexible(
-              child: Text(
-                'Usage',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      appBar: untitled
+          ? null
+          : AppBar(
+              // A page header, as Settings has: `Chrome.titleBar` is 30px.
+              toolbarHeight: 44,
+              // A workbench tab: an implied back button would pop the app's
+              // route.
+              automaticallyImplyLeading: false,
+              title: Row(
+                children: [
+                  Icon(AppIcons.chartBar, color: theme.colorScheme.tertiary),
+                  const SizedBox(width: Insets.sm),
+                  const Flexible(
+                    child: Text(
+                      'Usage',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final gutter = constraints.maxWidth < 560 ? Insets.lg : Insets.xl;
