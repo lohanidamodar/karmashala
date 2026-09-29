@@ -58,6 +58,10 @@ class _DockMenuState extends State<_DockMenu> {
   @override
   Widget build(BuildContext context) {
     final menu = widget.menu;
+    // Full width on a phone: the stacked column is the width limit there.
+    final optionMaxWidth = _Docked.touchOf(context)
+        ? double.infinity
+        : _optionMaxWidth;
     return _DockColumn(
       children: [
         if (menu.prompt.isNotEmpty) _DockBox(text: menu.prompt.join('\n')),
@@ -66,7 +70,7 @@ class _DockMenuState extends State<_DockMenu> {
           buttons: [
             for (var i = 0; i < menu.options.length; i++)
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _optionMaxWidth),
+                constraints: BoxConstraints(maxWidth: optionMaxWidth),
                 child: _DockButton(
                   key: ValueKey('dock-menu-option-$i'),
                   label: menu.options[i],
@@ -119,21 +123,38 @@ class _DockButtonRow extends StatelessWidget {
   final List<Widget> buttons;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Wrap(
-          spacing: Insets.sm,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: buttons,
+  Widget build(BuildContext context) {
+    // A phone stacks them full width, in the order given, with the way to the
+    // terminal under them rather than at a row's end a thumb cannot reach.
+    if (_Docked.touchOf(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < buttons.length; i++) ...[
+            if (i > 0) const SizedBox(height: Touch.gap),
+            buttons[i],
+          ],
+          _AnswerInTerminal(sessionId: sessionId),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: Insets.sm,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: buttons,
+          ),
         ),
-      ),
-      const SizedBox(width: Insets.sm),
-      _AnswerInTerminal(sessionId: sessionId),
-    ],
-  );
+        const SizedBox(width: Insets.sm),
+        _AnswerInTerminal(sessionId: sessionId),
+      ],
+    );
+  }
 }
 
 /// The way to the terminal from the dock: in the terminal view it focuses the
@@ -147,7 +168,10 @@ class _AnswerInTerminal extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => TextButton(
     style: TextButton.styleFrom(
       foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-      minimumSize: const Size(0, _dockButtonHeight),
+      minimumSize: Size(
+        0,
+        _Docked.touchOf(context) ? Touch.target : _dockButtonHeight,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
@@ -199,13 +223,15 @@ class _DockButton extends StatelessWidget {
       Colors.black.withValues(alpha: 0.88),
       attention,
     );
-    final hint = keyHint;
+    final touch = _Docked.touchOf(context);
+    // No key caps on a phone: there is no Enter or Esc to press.
+    final hint = touch ? null : keyHint;
     final more = detail;
     final button = FilledButton(
       style: FilledButton.styleFrom(
         backgroundColor: primary ? attention : tones.selected,
         foregroundColor: primary ? ink : scheme.onSurface,
-        minimumSize: const Size(0, _dockButtonHeight),
+        minimumSize: Size(0, touch ? Touch.target : _dockButtonHeight),
         padding: const EdgeInsets.symmetric(
           horizontal: Insets.md,
           vertical: Insets.xs,
@@ -229,7 +255,7 @@ class _DockButton extends StatelessWidget {
           Flexible(
             child: Text(
               label,
-              maxLines: wrap ? 2 : 1,
+              maxLines: touch ? 3 : (wrap ? 2 : 1),
               overflow: TextOverflow.ellipsis,
             ),
           ),

@@ -63,6 +63,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     if (_busy) return;
     final answers = ref.read(sessionPromptAnswersProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final said = _AnswerSaid.of(context);
     setState(() => _busy = true);
     try {
       await answers.answer(
@@ -72,10 +73,13 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
           ask: _ask,
         ),
       );
+      said?.say(approve ? 'Allowed once.' : 'Denied.');
     } on SessionPromptRefusal catch (refusal) {
       // Only a refusal is reported: the agent's own screen is the
       // acknowledgement of one that landed.
-      messenger.showSnackBar(SnackBar(content: Text(_refused(refusal))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_refused(refusal, touch: said != null))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -99,20 +103,23 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
   /// the deny hands back and presses Enter — through the one typist every
   /// message goes through, which reads the send back off the screen. Read
   /// before the first await: a deny ends the ask, and this dock with it.
-  Future<void> _denyAndSay() async {
-    final why = _reason.text.trim();
+  Future<void> _denyAndSay([String? typed]) async {
+    final why = (typed ?? _reason.text).trim();
     if (_busy || why.isEmpty) return;
     final sessionId = widget.sessionId;
     final answers = ref.read(sessionPromptAnswersProvider);
     final typist = ref.read(sessionInputProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final touch = _Docked.touchOf(context);
     setState(() => _busy = true);
     try {
       await answers.answer(
         ApprovalAnswerRequest(sessionId: sessionId, approve: false, ask: _ask),
       );
     } on SessionPromptRefusal catch (refusal) {
-      messenger.showSnackBar(SnackBar(content: Text(_refused(refusal))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_refused(refusal, touch: touch))),
+      );
       if (mounted) setState(() => _busy = false);
       return;
     }
@@ -130,6 +137,10 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
               'reason into.',
             ),
           ),
+        );
+      } else if (touch) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Denied, and your reason was sent.')),
         );
       }
     } on SessionPromptRefusal catch (refusal) {
@@ -150,8 +161,33 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
         : null,
   );
 
-  static String _refused(SessionPromptRefusal refusal) =>
-      _approvalRefusalText(refusal);
+  static String _refused(SessionPromptRefusal refusal, {bool touch = false}) =>
+      _approvalRefusalText(refusal, touch: touch);
+
+  /// *Deny and say why…* on a phone: the reason is typed in a sheet over the
+  /// keyboard, not in a field squeezed into the dock. The sheet only collects
+  /// the words; the deny is sent from here, with this dock's `ask`.
+  Future<void> _sayWhyInSheet() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final why = await showAdaptiveModal<String>(
+      context: context,
+      title: 'Deny and say why',
+      builder: (_) => _DenyReasonSheet(agentName: widget.agentName),
+    );
+    if (why == null || why.trim().isEmpty) return;
+    if (!mounted) {
+      // The ask closed while the sheet was up: nothing may be denied now.
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That prompt closed before you denied it — nothing was sent.',
+          ),
+        ),
+      );
+      return;
+    }
+    await _denyAndSay(why);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +199,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
         ? null
         : _alwaysOption(menu, widget.menus);
     final idle = !_busy;
+    final touch = _Docked.touchOf(context);
     return _DockColumn(
       children: [
         ?widget.command,
@@ -180,7 +217,9 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
               ),
             if (always != null)
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
+                constraints: BoxConstraints(
+                  maxWidth: touch ? double.infinity : 320,
+                ),
                 child: _DockButton(
                   key: const ValueKey('dock-always-allow'),
                   label: always.label,
@@ -203,17 +242,19 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
                 tooltip:
                     'Denies, then types your reason into ${widget.agentName} '
                     'and sends it',
-                onPressed: idle
-                    ? () {
+                onPressed: !idle
+                    ? null
+                    : touch
+                    ? _sayWhyInSheet
+                    : () {
                         setState(() => _sayingWhy = true);
                         _reasonFocus.requestFocus();
-                      }
-                    : null,
+                      },
               ),
             ],
           ],
         ),
-        if (_sayingWhy && deny != null)
+        if (_sayingWhy && deny != null && !touch)
           CallbackShortcuts(
             bindings: {
               const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -261,6 +302,70 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
             style: UiDensity.of(context).muted(theme),
           ),
       ],
+    );
+  }
+}
+
+/// The phone's sheet for *Deny and say why…*: the reason, then *Deny and
+/// send*, which closes the sheet with the words. Sends nothing itself.
+class _DenyReasonSheet extends StatefulWidget {
+  const _DenyReasonSheet({required this.agentName});
+
+  final String agentName;
+
+  @override
+  State<_DenyReasonSheet> createState() => _DenyReasonSheetState();
+}
+
+class _DenyReasonSheetState extends State<_DenyReasonSheet> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _reason.text.trim().isNotEmpty;
+    return Padding(
+      // Above the keyboard, which the sheet does not make room for itself.
+      padding: EdgeInsets.fromLTRB(
+        Insets.lg,
+        0,
+        Insets.lg,
+        MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('dock-deny-reason'),
+            controller: _reason,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 6,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              hintText: 'Tell ${widget.agentName} what to do instead',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: Insets.md),
+          FilledButton(
+            key: const ValueKey('dock-deny-send'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(Touch.target),
+            ),
+            onPressed: ready
+                ? () => Navigator.of(context).pop(_reason.text.trim())
+                : null,
+            child: const Text('Deny and send'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -60,9 +60,18 @@ import 'transcript_image_preview.dart';
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
 class SessionTranscriptView extends ConsumerStatefulWidget {
-  const SessionTranscriptView({required this.sessionId, super.key});
+  const SessionTranscriptView({
+    required this.sessionId,
+    this.holdForPrompt = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// The phone's session page: while the agent has a prompt or question open,
+  /// the box is held with "Answer the prompt above first", as the companion
+  /// did — typed text would land in the prompt the dock answers.
+  final bool holdForPrompt;
 
   @override
   ConsumerState<SessionTranscriptView> createState() =>
@@ -115,6 +124,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   @override
   void didUpdateWidget(SessionTranscriptView old) {
     super.didUpdateWidget(old);
+    if (old.holdForPrompt != widget.holdForPrompt) _footer = null;
     if (old.sessionId != widget.sessionId) {
       _footer = null;
       _resolver = null;
@@ -581,6 +591,26 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// The activity line over the composer. The delivery strip sits on the
   /// composer's channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
+    Widget composer({required bool prompted}) => MessageComposer(
+      controller: _composer,
+      // Attachments and the message, nothing else: mode, model
+      // and stats are on the pane's status bar (owner, 2026-09-28).
+      chips: const [],
+      // Read when the menu opens, never watched: the footer is
+      // built once, and the library changing must not rebuild it.
+      snippets: _snippets,
+      // Read per paste or attach, like the snippets: never watched.
+      server: _pickServer,
+      enabled: !prompted,
+      hintText: prompted
+          ? 'Answer the prompt above first'
+          : active
+          // No emoji: the old hint named a 🖼 that is nowhere
+          // in the composer; the attach tooltip does.
+          ? 'Message the agent…'
+          : 'Type to continue this session…',
+      onSend: _send,
+    );
     return LayoutBuilder(
       builder: (context, box) => Column(
         mainAxisSize: MainAxisSize.min,
@@ -613,23 +643,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             constraints: BoxConstraints(
               maxHeight: box.maxHeight * _composerShare,
             ),
-            child: MessageComposer(
-              controller: _composer,
-              // Attachments and the message, nothing else: mode, model
-              // and stats are on the pane's status bar (owner, 2026-09-28).
-              chips: const [],
-              // Read when the menu opens, never watched: the footer is
-              // built once, and the library changing must not rebuild it.
-              snippets: _snippets,
-              // Read per paste or attach, like the snippets: never watched.
-              server: _pickServer,
-              hintText: active
-                  // No emoji: the old hint named a 🖼 that is nowhere
-                  // in the composer; the attach tooltip does.
-                  ? 'Message the agent…'
-                  : 'Type to continue this session…',
-              onSend: _send,
-            ),
+            child: !widget.holdForPrompt
+                ? composer(prompted: false)
+                : Consumer(
+                    builder: (context, ref, _) => composer(
+                      // Watched here and only here: the footer is built once.
+                      prompted: ref.watch(
+                        agentSessionStatusProvider(widget.sessionId).select(
+                          (status) =>
+                              status.asData?.value.hasOpenPrompt == true ||
+                              status.asData?.value.hasOpenQuestion == true,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),

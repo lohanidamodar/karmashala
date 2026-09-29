@@ -64,7 +64,11 @@ class _CompactSessionBar extends StatelessWidget {
       children: [
         ColoredBox(
           color: tones.term,
-          child: ApprovalRequestCard(sessionId: sessionId, docked: true),
+          child: ApprovalRequestCard(
+            sessionId: sessionId,
+            docked: true,
+            touch: true,
+          ),
         ),
         Container(
           constraints: const BoxConstraints(minHeight: Touch.target),

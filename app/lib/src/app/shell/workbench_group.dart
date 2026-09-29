@@ -115,7 +115,10 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                         // group could be reading another tab's transcript.
                         if (conversationMounted)
                           if (session.native)
-                            SessionTranscriptView(sessionId: session.id)
+                            SessionTranscriptView(
+                              sessionId: session.id,
+                              holdForPrompt: compact,
+                            )
                           else
                             ImportedSessionView(sessionId: session.id),
                       ],
