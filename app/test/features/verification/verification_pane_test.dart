@@ -698,6 +698,12 @@ class _SyncEvidenceReader implements VerificationEvidenceReader {
     final file = File(path);
     return Future.value(file.existsSync() ? file.readAsStringSync() : null);
   }
+
+  @override
+  Future<ImageProvider?> image(String path) {
+    final file = File(path);
+    return Future.value(file.existsSync() ? FileImage(file) : null);
+  }
 }
 
 /// A reader nothing answers until the test says so, for proving that a read
@@ -707,6 +713,10 @@ class _ManualEvidenceReader implements VerificationEvidenceReader {
 
   @override
   Future<bool> exists(String path) => Future.value(true);
+
+  @override
+  Future<ImageProvider?> image(String path) =>
+      Future.value(FileImage(File(path)));
 
   @override
   Future<String?> read(String path) {

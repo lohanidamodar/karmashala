@@ -18,6 +18,7 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -156,6 +157,7 @@ class ExplorerProjectRow extends ConsumerWidget {
                 .read(revealInFileManagerProvider)
                 .canReveal(project.root),
             checkedSuffix: actions.checkedSuffix(),
+            canOpenExternally: ref.read(capabilitiesProvider).readsServerDisk,
           ),
           const DesktopMenuDivider(),
           selectRowMenuItem(),
@@ -411,6 +413,7 @@ List<PopupMenuEntry<String>> projectMenuItems({
   required List<AgentInstallation> installations,
   required bool canReveal,
   required String checkedSuffix,
+  bool canOpenExternally = true,
 }) => [
   DesktopMenuItem(
     value: 'new-session',
@@ -438,17 +441,20 @@ List<PopupMenuEntry<String>> projectMenuItems({
     label: 'Copy new-session command',
     icon: AppIcons.copy,
   ),
-  const DesktopMenuDivider(),
-  DesktopMenuItem(
-    value: 'open-editor',
-    label: 'Open in editor',
-    icon: AppIcons.code,
-  ),
-  DesktopMenuItem(
-    value: 'open-editor-subfolder',
-    label: 'Open sub-folder in editor…',
-    icon: AppIcons.folderOpen,
-  ),
+  // An external editor here cannot open a folder on a server elsewhere.
+  if (canOpenExternally) ...[
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'open-editor',
+      label: 'Open in editor',
+      icon: AppIcons.code,
+    ),
+    DesktopMenuItem(
+      value: 'open-editor-subfolder',
+      label: 'Open sub-folder in editor…',
+      icon: AppIcons.folderOpen,
+    ),
+  ],
   const DesktopMenuDivider(),
   // An SSH-owned row has no local spelling, so the entry would always fail.
   if (canReveal)

@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../files/data/files_client.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../agents/data/agents_data.dart';
 import 'package:agent_cli/read.dart';
@@ -276,6 +278,8 @@ class ProjectsController extends Notifier<List<Project>> {
   /// here: [projectPathMissingProvider] is the asynchronous form that can ask
   /// those properly, and "we did not look" must not read as "it is gone".
   bool _rootProvablyMissing(Project project) {
+    // The server refuses a bad folder itself; this disk is not its.
+    if (!ref.read(capabilitiesProvider).readsServerDisk) return false;
     final env = ref
         .read(environmentsDataProvider)
         .getById(project.environmentId);
@@ -425,6 +429,16 @@ final projectPathMissingProvider = FutureProvider.autoDispose
       final env = environmentDao.getById(project.environmentId);
       if (env == null) return false;
       if (env.kind == EnvironmentKind.ssh) return false;
+
+      // A server elsewhere is asked about its own disk, once per row shown.
+      if (!ref.read(capabilitiesProvider).readsServerDisk) {
+        try {
+          final stat = await ref.read(filesClientProvider).stat(project.root);
+          return !(stat.exists && stat.isDirectory);
+        } on Object {
+          return false;
+        }
+      }
 
       final path = project.root.path;
       if (env.kind == EnvironmentKind.wsl) {

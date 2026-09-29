@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../files/data/files_client.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/remote_links.dart';
 
@@ -43,8 +45,30 @@ class AppTerminalLinkActions implements TerminalLinkActions {
     await _ref.read(openExternalUrlProvider)(url);
   }
 
+  bool get _readsServerDisk =>
+      _ref.read(capabilitiesProvider).readsServerDisk;
+
   @override
   Future<TerminalPathKind?> kindOf(String hostPath) async {
+    // A pane's paths are the server's; one elsewhere is asked, not this disk.
+    if (!_readsServerDisk) {
+      try {
+        final stat = await _ref
+            .read(filesClientProvider)
+            .stat(
+              EnvironmentPath(
+                environmentId: localHostEnvironmentId,
+                path: hostPath,
+              ),
+            );
+        if (!stat.exists) return null;
+        return stat.isDirectory
+            ? TerminalPathKind.directory
+            : TerminalPathKind.file;
+      } on Object {
+        return null;
+      }
+    }
     // Follows links, so a symlinked directory is a directory. A path that
     // cannot even be stat-ed — a permission error, a dead UNC host — is
     // "nothing there", the same answer and the same silence as missing.
@@ -67,6 +91,9 @@ class AppTerminalLinkActions implements TerminalLinkActions {
     int? column,
   }) async {
     if (kind == TerminalPathKind.directory) {
+      if (!_readsServerDisk) {
+        return '$hostPath is a folder on the server; nothing here can show it.';
+      }
       final outcome = await _ref
           .read(revealInFileManagerProvider)
           .reveal(

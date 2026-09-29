@@ -1,3 +1,4 @@
+import '../../../core/capabilities/capabilities.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,6 +32,9 @@ class SidePanelItemsSection extends ConsumerWidget {
           settingsControllerProvider.select((s) => s.debugMode),
         ),
         notesEnabled: ref.watch(notesEnabledProvider),
+        readsServerDisk: ref.watch(
+          capabilitiesProvider.select((c) => c.readsServerDisk),
+        ),
       ))
         if (ContextTab.of(surface) == ContextTab.more) surface,
     ];
