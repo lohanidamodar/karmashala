@@ -267,6 +267,9 @@ dependencies:
   # Files dragged in from the OS: a drop target needs the platform's own
   # (IDropTarget on Windows), which Flutter's DragTarget does not reach.
   desktop_drop: ^0.8.4
+  # A phone's attach › Take a photo, through the system camera app. Only its
+  # camera source is used; the gallery goes through file_selector.
+  image_picker: ^1.2.3
 
 dependency_overrides:
   # launch_at_startup 0.5.1 is upstream's latest and pins

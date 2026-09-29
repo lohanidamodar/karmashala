@@ -38,6 +38,7 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        AppSettingsChannel.register(messenger, this)
         EventChannel(messenger, "karmashala/network")
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink) {

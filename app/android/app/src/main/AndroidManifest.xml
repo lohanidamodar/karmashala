@@ -1,7 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The companion talks to the desktop host over the relay or the LAN. -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- The pairing screen's QR scanner. -->
+    <!-- The pairing screen's QR scanner. Declared, it also makes the system
+         camera intent behind "Take a photo" need a run-time grant, which
+         image_picker asks for itself. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Attention notifications (Android 13+ runtime permission). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

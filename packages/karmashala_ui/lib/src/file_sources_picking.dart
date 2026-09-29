@@ -27,7 +27,12 @@ enum FileSources {
 }
 
 /// The one place a pick came from, and what [pickFileFrom] remembers.
-enum FileSource { server, device }
+/// [camera] is a device file too, taken just now.
+enum FileSource { server, device, camera }
+
+/// Takes a photo with this device's camera; null when none was taken. The
+/// app's to give: this package knows no camera plugin.
+typedef TakePhoto = Future<XFile?> Function();
 
 /// What [pickFileFrom] answers.
 sealed class PickedFile {
@@ -138,6 +143,9 @@ void forgetLastFileSources() => _lastSource.clear();
 ///
 /// On the server's own machine there is one disk and no choice: today's
 /// picker, answering a [DevicePick] for `device` and a [ServerPick] otherwise.
+///
+/// [takePhoto] adds "Take a photo" to the choice of [FileSources.both]; its
+/// photo is a [DevicePick].
 Future<PickedFile?> pickFileFrom(
   BuildContext context, {
   required String what,
@@ -146,6 +154,7 @@ Future<PickedFile?> pickFileFrom(
   String? purpose,
   String? startNear,
   List<XTypeGroup> acceptedTypeGroups = const [],
+  TakePhoto? takePhoto,
 }) async {
   if (server.onThisMachine) {
     final file = await pickOneFile(
@@ -180,6 +189,7 @@ Future<PickedFile?> pickFileFrom(
         what: what,
         server: server,
         last: _lastSource[key],
+        camera: takePhoto != null,
       );
       if (chosen == null) return null;
       _lastSource[key] = chosen;
@@ -195,6 +205,9 @@ Future<PickedFile?> pickFileFrom(
         acceptedTypeGroups: acceptedTypeGroups,
       );
       return file == null ? null : DevicePick(file);
+    case FileSource.camera:
+      final photo = await takePhoto?.call();
+      return photo == null ? null : DevicePick(photo);
     case FileSource.server:
       final file = await pickOneFile(
         what: what,
@@ -420,6 +433,7 @@ Future<FileSource?> _askSource(
   required String what,
   required PickServer server,
   FileSource? last,
+  bool camera = false,
 }) => _showAdaptive<FileSource>(
   context,
   builder: (context) => _AdaptivePanel(
@@ -437,7 +451,10 @@ Future<FileSource?> _askSource(
           title: 'This device',
           detail: 'Sent to ${server.name} once chosen',
           last: last == FileSource.device,
-          autofocus: last != FileSource.server,
+          autofocus:
+              last == null ||
+              last == FileSource.device ||
+              (last == FileSource.camera && !camera),
           onTap: () => Navigator.of(context).pop(FileSource.device),
         ),
         const SizedBox(height: Insets.xs),
@@ -449,6 +466,17 @@ Future<FileSource?> _askSource(
           autofocus: last == FileSource.server,
           onTap: () => Navigator.of(context).pop(FileSource.server),
         ),
+        if (camera) ...[
+          const SizedBox(height: Insets.xs),
+          _SourceRow(
+            icon: AppIcons.camera,
+            title: 'Take a photo',
+            detail: 'Sent to ${server.name} once taken',
+            last: last == FileSource.camera,
+            autofocus: last == FileSource.camera,
+            onTap: () => Navigator.of(context).pop(FileSource.camera),
+          ),
+        ],
       ],
     ),
   ),

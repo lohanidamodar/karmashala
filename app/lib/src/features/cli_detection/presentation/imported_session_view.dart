@@ -13,6 +13,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../files/data/pick_server.dart';
+import '../../files/presentation/take_photo.dart';
 import 'package:agent_cli/process.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -178,6 +179,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                   // Attachments go where the session's agent runs.
                   server: () =>
                       ref.read(pickServerProvider(session.environmentId)),
+                  camera: () => photoTakerFor(context, ref),
                   onSend: (text) => ref
                       .read(sessionActionsProvider)
                       .resumeAndSend(session, text),

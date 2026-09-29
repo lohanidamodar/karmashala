@@ -36,7 +36,7 @@
 	<!-- Companion mode's QR scanner. The desktop app never asks for the camera;
 	     without the string macOS refuses it outright instead of prompting. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Scan a pairing code from Karmashala on your computer</string>
+	<string>Scan a pairing code from Karmashala on your computer, or take a photo to attach to a session</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

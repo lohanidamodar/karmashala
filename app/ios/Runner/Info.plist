@@ -31,10 +31,11 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<!-- The pairing screen's QR scanner. Without this string iOS kills the app
-	     the moment the camera is asked for, rather than prompting. -->
+	<!-- The pairing screen's QR scanner and attach's "Take a photo". Without
+	     this string iOS kills the app the moment the camera is asked for,
+	     rather than prompting. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Scan a pairing code from Karmashala on your computer</string>
+	<string>Scan a pairing code from Karmashala on your computer, or take a photo to attach to a session</string>
 	<!-- The LAN dial and the multicast beacon listener. Without it iOS denies
 	     local network access outright and the phone reaches the machine only
 	     through a relay. No NSBonjourServices: the beacon is raw UDP multicast
