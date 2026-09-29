@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- PENDING Apple's approval, requested by the account holder. Not wired
+	     into the Runner target yet (no CODE_SIGN_ENTITLEMENTS): a profile
+	     without the grant fails every signed build that asks for it. Without
+	     it the LAN beacon is silent on iOS 14+ and the phone dials the LAN
+	     hint and relays only. Wiring it is in
+	     docs/superpowers/plans/2026-09-30-stage-1-ios-release-gaps.md. -->
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
+</dict>
+</plist>
