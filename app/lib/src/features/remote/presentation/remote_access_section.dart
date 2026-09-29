@@ -477,11 +477,14 @@ class _DeviceRow extends ConsumerWidget {
       device.capabilities.attachTier == null &&
       GrantPreset.of(device.capabilities) == GrantPreset.phone;
 
+  /// The Phone preset on top of what it holds: `phone_client` alone would
+  /// leave a companion pairing without bits the app enforces (uploads,
+  /// usage), as `karmashala_host grant --add=phone` does.
   Future<void> _grantApp(WidgetRef ref) => ref
       .read(remoteAccessControllerProvider)
       .updateCapabilities(
         device,
-        device.capabilities | CapabilitySet.of([Capability.phoneClient]),
+        device.capabilities | GrantPreset.phone.grants,
       );
 
   /// How much of what this build can grant the device holds — the row says

@@ -176,7 +176,7 @@ its code and QR, then wait until a device pairs or the window closes.
 
   --grants=<list|all>         what the device may do (default all: a phone's
                               grants, the app on a phone included — `phone`
-                              names that one alone). Another machine's
+                              is the same set). Another machine's
                               desktop app: --grants=desktop (add ,admin to let
                               it administer this server, ,ssh to answer its
                               SSH questions)
@@ -214,8 +214,10 @@ a prefix only it has (see `devices`). A link it has open reattaches with the
 new grant.
 
   --add=<list>            grants to add: capability names or aliases
-                          (`phone` gives an existing phone the app)
-  --remove=<list>         grants to take away, the same names
+                          (`phone` gives an existing phone the app and every
+                          phone grant it uses; never admin or SSH prompts)
+  --remove=<list>         grants to take away, the same names (`phone` takes
+                          away the app alone, `phone_client`)
 ''',
     positional: 1,
     valueFlags: {'add', 'remove'},

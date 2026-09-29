@@ -279,11 +279,9 @@ final class Capabilities {
   bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;
 
   /// Attach offers "Take a photo": a camera here, a server elsewhere to
-  /// upload it to, and the attachment grant (`send_attachment`).
-  bool get takesPhotos =>
-      client.camera &&
-      uploads &&
-      server.granted(Capability.sendAttachment);
+  /// upload it to, and [mayAttach]: the camera row shows exactly when Attach
+  /// does, before the first `host.status` too.
+  bool get takesPhotos => client.camera && uploads && mayAttach;
 
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);

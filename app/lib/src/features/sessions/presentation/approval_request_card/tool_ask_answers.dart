@@ -226,7 +226,9 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
       shown.waitingSince?.millisecondsSinceEpoch ==
           now.waitingSince?.millisecondsSinceEpoch &&
       shown.toolUseId == now.toolUseId &&
-      (shown.menuId == null || now.menuId == null || shown.menuId == now.menuId);
+      (shown.menuId == null ||
+          now.menuId == null ||
+          shown.menuId == now.menuId);
 
   @override
   Widget build(BuildContext context) {
@@ -239,6 +241,9 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
         : _alwaysOption(menu, widget.menus);
     final idle = !_busy;
     final touch = _Docked.touchOf(context);
+    // The reason is a prompt: a phone without `send_prompt` would deny, then
+    // be refused the words. Plain Deny stays.
+    final saysWhy = ref.watch(capabilitiesProvider.select((c) => c.maySend));
     return _DockColumn(
       children: [
         ?widget.command,
@@ -275,25 +280,26 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
                 tooltip: deny.effect,
                 onPressed: idle ? () => _answer(approve: false) : null,
               ),
-              _DockButton(
-                key: const ValueKey('dock-deny-say-why'),
-                label: 'Deny and say why…',
-                tooltip:
-                    'Denies, then types your reason into ${widget.agentName} '
-                    'and sends it',
-                onPressed: !idle
-                    ? null
-                    : touch
-                    ? _sayWhyInSheet
-                    : () {
-                        setState(() => _sayingWhy = true);
-                        _reasonFocus.requestFocus();
-                      },
-              ),
+              if (saysWhy)
+                _DockButton(
+                  key: const ValueKey('dock-deny-say-why'),
+                  label: 'Deny and say why…',
+                  tooltip:
+                      'Denies, then types your reason into ${widget.agentName} '
+                      'and sends it',
+                  onPressed: !idle
+                      ? null
+                      : touch
+                      ? _sayWhyInSheet
+                      : () {
+                          setState(() => _sayingWhy = true);
+                          _reasonFocus.requestFocus();
+                        },
+                ),
             ],
           ],
         ),
-        if (_sayingWhy && deny != null && !touch)
+        if (_sayingWhy && saysWhy && deny != null && !touch)
           CallbackShortcuts(
             bindings: {
               const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -311,8 +317,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
                     style: theme.textTheme.bodyMedium,
                     decoration: InputDecoration(
                       isDense: true,
-                      hintText:
-                          'Tell ${widget.agentName} what to do instead',
+                      hintText: 'Tell ${widget.agentName} what to do instead',
                     ),
                     onSubmitted: (_) => _denyAndSay(),
                   ),
@@ -419,9 +424,8 @@ class _DenyReasonSheetState extends State<_DenyReasonSheet> {
 ) {
   if (menus == null) return null;
   final once = menus.affirmativeIn(menu);
-  bool any(List<String> patterns, String option) => patterns.any(
-    (p) => RegExp(p, caseSensitive: false).hasMatch(option),
-  );
+  bool any(List<String> patterns, String option) =>
+      patterns.any((p) => RegExp(p, caseSensitive: false).hasMatch(option));
   for (var i = 0; i < menu.options.length; i++) {
     final option = menu.options[i];
     if (i == once ||
@@ -444,8 +448,10 @@ class _DenyReasonSheetState extends State<_DenyReasonSheet> {
         detail: cleaned == 'this' ? 'this command' : cleaned,
       );
     }
-    if (RegExp(r'accept edits|all edits', caseSensitive: false)
-        .hasMatch(option)) {
+    if (RegExp(
+      r'accept edits|all edits',
+      caseSensitive: false,
+    ).hasMatch(option)) {
       return (index: i, label: 'Always allow', detail: 'edits');
     }
     // Some other standing yes: in the agent's own words.
