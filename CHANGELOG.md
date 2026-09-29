@@ -17,6 +17,34 @@ installs claim the same version name.
 
 ---
 
+## 1.28.0 — 2026-09-30 (build 51)
+
+Built from `integration/next`. Not yet run on a device before release.
+
+- **The desktop is a correct remote client** (Stage 0). Chat, plan, media,
+  stats, rewind points and changed files are read through the server, not the
+  local disk. Links resume across a dropped socket for 2 minutes, and move
+  from relay to LAN without a break.
+- **The one app runs as the phone** (Stages 1-3). It pairs by scan, paste or
+  address, and the phone gets a `phone_client` grant whose bits the server
+  enforces. It has a bottom bar with Sessions first, and the session page at
+  phone width with touch approvals, a composer with attachments from the phone
+  or the server (or a photo), a terminal drawn at the session's own size with
+  an extra-keys row, a context sheet, local notifications while the app runs,
+  and an offline stale session list.
+- **Answers name their prompt**, so a late one is refused instead of landing on
+  the next prompt. Chat sends and Stop are typed by the server, so a client
+  never takes a session's input or resizes it to send.
+- **Fixes:**
+  - An agent's `session_send` to a session on an SSH box typed nothing and
+    reported it delivered. It now types in.
+  - A deny's reason can no longer be typed into the next prompt.
+  - Session rows show the agent's logo, and hovering says the full title,
+    agent and environment.
+  - Ending a session that waits on you asks first.
+- **Android release signing:** an upload key from `key.properties`, and
+  fastlane in place of codemagic.
+
 ## 1.26.3 — 2026-09-24 (build 48)
 
 - **A resize reaches the program in a host pane on macOS** (`0feec984`). macOS
