@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:agent_cli/read.dart'
     show
@@ -7,7 +8,10 @@ import 'package:agent_cli/read.dart'
         CompactionBoundary,
         SubagentRef,
         TranscriptMessage,
+        readSubagentTranscript,
+        subagentsDirectoryFor,
         transcriptFileFor;
+import 'package:path/path.dart' as p;
 import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
@@ -65,6 +69,47 @@ class SessionTranscripts {
     final held = _hold(request.sessionId);
     await _refresh(held);
     return _pageOf(held, request);
+  }
+
+  /// One page of a subagent of [SessionTranscriptSubagent.sessionId]: read
+  /// whole, off this isolate, and not held — a row is expanded once, and one
+  /// session's delegates came to 1,485 MiB. Refused `invalid` for a path
+  /// outside the session's own subagents directory, so the request cannot
+  /// read any other file.
+  Future<TranscriptPage> subagent(SessionTranscriptSubagent request) async {
+    final held = _hold(request.sessionId);
+    await _refresh(held);
+    final record = held.file;
+    final path = p.normalize(request.path);
+    if (record == null ||
+        p.extension(path) != '.jsonl' ||
+        !p.isWithin(subagentsDirectoryFor(record), path)) {
+      throw const DataRefused.invalid(
+        'that path is not a subagent of this session',
+      );
+    }
+    List<TranscriptMessage> messages;
+    try {
+      messages = await Isolate.run(() => readSubagentTranscript(path));
+    } on Object {
+      messages = const [];
+    }
+    final total = messages.length;
+    final from = (request.after ?? 0).clamp(0, total);
+    final limit = (request.limit ?? kTranscriptPageMaxMessages).clamp(
+      1,
+      kTranscriptPageMaxMessages,
+    );
+    final end = _endAfter(messages, from, limit, _kPageChars);
+    return TranscriptPage(
+      sessionId: request.sessionId,
+      generation: 'subagent',
+      revision: 0,
+      total: total,
+      from: from,
+      messages: messages.sublist(from, end),
+      path: path,
+    );
   }
 
   /// [link] is told of every revision of [sessionId]'s transcript from now

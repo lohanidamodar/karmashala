@@ -43,14 +43,23 @@ Future<int> runTranscript(
   }
 
   final sessionId = named.first;
-  final request = SessionTranscriptRead(
-    sessionId,
-    after: number('after'),
-    before: number('before'),
-    limit: number('limit'),
-    generation: text('generation'),
-    revision: number('revision'),
-  );
+  // `--subagent=<path>`: a delegate's turns, as an expanded `Task` row asks.
+  final subagent = text('subagent');
+  final DataRequest<TranscriptPage> request = subagent != null
+      ? SessionTranscriptSubagent(
+          sessionId,
+          subagent,
+          after: number('after'),
+          limit: number('limit'),
+        )
+      : SessionTranscriptRead(
+          sessionId,
+          after: number('after'),
+          before: number('before'),
+          limit: number('limit'),
+          generation: text('generation'),
+          revision: number('revision'),
+        );
   final resolved = hostPathsFor(
     'transcript',
     paths: paths,

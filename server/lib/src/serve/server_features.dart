@@ -7,4 +7,6 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.transcript` pages, `.watch`/`.unwatch` and the
   // `transcriptChanged` notice (Stage 0 step 5).
   'sessions.transcript',
+  // `sessions.transcript.subagent`: a delegate's turns (Stage 0 step 6).
+  'sessions.transcript.subagent',
 };

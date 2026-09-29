@@ -125,6 +125,11 @@ final class Capabilities {
   /// Administer the server: its config, devices, agents and pairings.
   bool get serverAdmin => server.granted(Capability.serverAdmin);
 
+  /// A session's chat, an imported session's history and a subagent's turns
+  /// are read by the server (`sessions.transcript`), on this machine or any
+  /// other. Without it, only a server on this machine has a chat to show.
+  bool get chatViaServer => serverOffers('sessions.transcript');
+
   /// Whether the server announced [feature] in its welcome.
   bool serverOffers(String feature) => server.features.contains(feature);
 }

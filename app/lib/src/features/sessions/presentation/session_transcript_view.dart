@@ -1,4 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show mapEquals;
@@ -36,6 +37,8 @@ import '../application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport;
 import '../application/session_ui_providers.dart';
+import '../data/server_transcripts.dart';
+import '../../../core/capabilities/capabilities.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
@@ -174,6 +177,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         return SubagentTurnsTile(
           reference: reference,
           resolveHostPath: _hostPathResolver(),
+          sessionId: widget.sessionId,
         );
       };
 
@@ -310,24 +314,57 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 Expanded(
                   child: Consumer(
                     builder: (context, ref, _) {
-                      final transcript = fromPty
+                      final caps = ref.watch(capabilitiesProvider);
+                      final agentRecord = fromPty
+                          ? ref.watch(
+                              sessionChatTranscriptProvider(widget.sessionId),
+                            )
+                          : null;
+                      // What the server holds beyond these rows, and why it
+                      // has none — only when it read them (Stage 0 step 6).
+                      final window = caps.chatViaServer && agentRecord != null
                           ? ref
-                                .watch(
-                                  sessionChatTranscriptProvider(
-                                    widget.sessionId,
-                                  ),
+                                .read(serverTranscriptsProvider)
+                                .windowFor(
+                                  widget.sessionId,
+                                  agentRecord.asData?.value,
                                 )
-                                .whenData(_fromTranscript)
+                          : null;
+                      final transcript = agentRecord != null
+                          ? agentRecord.whenData(
+                              (messages) => _fromTranscript(
+                                messages,
+                                earlier: window?.from ?? 0,
+                              ),
+                            )
                           : ref
                                 .watch(
                                   sessionTranscriptProvider(widget.sessionId),
                                 )
                                 .whenData(_toMessages);
                       // Whether a chat rendering is possible for **this
-                      // session** — a reading, not a registry lookup.
-                      final reading = fromPty
+                      // session** — a reading, not a registry lookup. The
+                      // server's own reading, when it has one, wins.
+                      var reading = fromPty
                           ? sessionChatView(ref, widget.sessionId)
                           : const SessionChatView.unread(prior: true);
+                      final absence = window?.absence;
+                      if (absence != null) {
+                        reading = SessionChatView.read(
+                          absence,
+                          prior: reading.prior,
+                          path: window?.path,
+                        );
+                      }
+                      // Past a compaction the view draws nothing older, so
+                      // there is nothing earlier worth asking for.
+                      final compacted =
+                          transcript.asData?.value.firstOrNull?.role ==
+                          kCompactionNoticeRole;
+                      final earlier =
+                          window != null && window.hasOlder && !compacted
+                          ? window.from
+                          : 0;
                       return _conversation(
                         transcript: transcript,
                         // The badge's reading only while a process is behind
@@ -353,6 +390,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                         chatAvailable: !fromPty || reading.hasChatView,
                         reading: reading,
                         fromPty: fromPty,
+                        // A server elsewhere that cannot read transcripts:
+                        // this machine's disk has none of its sessions.
+                        serverTooOld:
+                            fromPty &&
+                            !caps.chatViaServer &&
+                            !caps.readsServerDisk,
+                        earlier: earlier,
+                        firstOrdinal: window?.from ?? 0,
                         // Whether there is a terminal to point at: the user
                         // can switch, so the sentences must be true.
                         hasTerminal:
@@ -379,6 +424,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required bool chatAvailable,
     required SessionChatView reading,
     required bool fromPty,
+    required bool serverTooOld,
+    required int earlier,
+    required int firstOrdinal,
     required bool hasTerminal,
     required Widget footer,
   }) {
@@ -388,6 +436,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) => ChatTranscriptView(
         messages: messages,
+        earlier: earlier,
+        onLoadEarlier: earlier > 0
+            ? () => unawaited(
+                ref.read(serverTranscriptsProvider).loadOlder(widget.sessionId),
+              )
+            : null,
+        firstOrdinal: firstOrdinal,
         turn: turn,
         resolveHostPath: resolveHostPath,
         // Paths in the conversation are clickable, and a click reveals
@@ -404,6 +459,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           chatAvailable: chatAvailable,
           reading: reading,
           fromPty: fromPty,
+          serverTooOld: serverTooOld,
           active: active,
           hasTerminal: hasTerminal,
         ),
@@ -526,9 +582,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required bool chatAvailable,
     required SessionChatView reading,
     required bool fromPty,
+    required bool serverTooOld,
     required bool active,
     required bool hasTerminal,
   }) {
+    if (serverTooOld) {
+      return 'This server is older than the app. Update it to see the '
+          'conversation here.';
+    }
     if (!chatAvailable) {
       // The refusal names *why* it is one: "keeps no transcript" was true of
       // every Antigravity session until one install turned out to keep them.
@@ -553,9 +614,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// The agent's own transcript as chat messages. The subagent a row spawned
   /// travels beside them, not inside [ChatMessage], which has no room for it.
-  List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
+  List<ChatMessage> _fromTranscript(
+    List<TranscriptMessage> messages, {
+    int earlier = 0,
+  }) {
     final subagents = <int, SubagentRef>{};
-    final out = chatMessagesFromTranscript(messages, subagents: subagents);
+    final out = chatMessagesFromTranscript(
+      messages,
+      subagents: subagents,
+      earlier: earlier,
+    );
     if (!mapEquals(subagents, _subagents)) {
       _subagents = subagents;
       _detailBuilder = _subagentDetailFor(subagents);
@@ -752,12 +820,15 @@ String? sessionTerminalPane(WidgetRef ref, String sessionId) {
 List<ChatMessage> chatMessagesFromTranscript(
   List<TranscriptMessage> messages, {
   Map<int, SubagentRef>? subagents,
+  int earlier = 0,
 }) {
   // The **last** boundary: a session compacted twice has restated its history
-  // twice, and only the newest summary covers all of it.
+  // twice, and only the newest summary covers all of it. [earlier] rows come
+  // before [messages] (a server-read window), so its first row can be one.
   var from = 0;
   CompactionBoundary? boundary;
-  for (var i = messages.length - 1; i > 0; i--) {
+  final first = earlier > 0 ? 0 : 1;
+  for (var i = messages.length - 1; i >= first; i--) {
     final compaction = messages[i].compaction;
     if (compaction != null) {
       from = i;
@@ -769,13 +840,15 @@ List<ChatMessage> chatMessagesFromTranscript(
   final out = <ChatMessage>[];
   if (boundary != null) {
     final trigger = boundary.trigger;
+    final compacted = earlier + from;
     out.add(
       ChatMessage(
         role: kCompactionNoticeRole,
         // The count, because a reader must be able to tell how much is behind
         // the line. The trigger only when the record carried one.
         text:
-            '$from earlier ${from == 1 ? 'message' : 'messages'} were '
+            '$compacted earlier '
+            '${compacted == 1 ? 'message' : 'messages'} were '
             'compacted away by the agent'
             '${trigger == null ? '' : ' ($trigger)'}. What it kept is the '
             'summary below; the transcript file still holds them, and so does '

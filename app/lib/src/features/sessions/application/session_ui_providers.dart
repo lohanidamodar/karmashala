@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/read.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/events.dart';
+import 'session_chat_source.dart' show serverTranscriptMessages;
 import 'session_engine_provider.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
@@ -60,9 +62,18 @@ final selectedSessionIdProvider =
 /// polled, so a session running elsewhere streams into the app.
 final importedTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
+      final viaServer = ref.watch(
+        capabilitiesProvider.select((caps) => caps.chatViaServer),
+      );
       final session = ref.read(importedSessionsProvider).getById(sessionId);
       if (session == null) {
         yield const [];
+        return;
+      }
+      // Read where it was recorded, by the server, under the imported row's
+      // own id (Stage 0 step 6). Followed while the history is on screen.
+      if (viaServer) {
+        yield* serverTranscriptMessages(ref, sessionId);
         return;
       }
       // A store record may not be the transcript itself (an agent whose store
