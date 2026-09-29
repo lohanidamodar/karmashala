@@ -63,8 +63,9 @@ final notificationSettingsControllerProvider =
       NotificationSettingsController.new,
     );
 
-/// Whether the app window currently has OS focus. Defaults to focused: the app
-/// shows its window on launch, and assuming focus is the quiet answer.
+/// Whether the app is in front: the window's OS focus on a desktop, the app's
+/// lifecycle on a phone (`ServerSession.appBackgrounded`). Defaults to
+/// focused: the app shows its window on launch, and that is the quiet answer.
 class WindowFocusController extends Notifier<bool> {
   @override
   bool build() => true;
