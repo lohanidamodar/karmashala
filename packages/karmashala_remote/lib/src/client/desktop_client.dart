@@ -32,13 +32,21 @@ part 'desktop_client/server_dialer.dart';
 
 /// Why a desktop could not reach its server; [message] is safe to show.
 class DesktopConnectException implements Exception {
-  const DesktopConnectException(this.message, {this.refused = false});
+  const DesktopConnectException(
+    this.message, {
+    this.refused = false,
+    this.granted,
+  });
 
   final String message;
 
   /// The server answered and said no (the pairing grants no desktop): no
   /// other route or generation will say otherwise.
   final bool refused;
+
+  /// On a refused attach, what the server's `host.status` said this pairing
+  /// holds (the stored record's grants when an older server said nothing).
+  final CapabilitySet? granted;
 
   @override
   String toString() => message;
@@ -240,6 +248,7 @@ Future<SealedHostLink> connectDesktopLink({
               DesktopConnectException(
                 message is String ? message : 'the server refused',
                 refused: true,
+                granted: granted,
               ),
             );
           }

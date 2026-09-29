@@ -72,6 +72,14 @@ class RemoteServerAccess implements HostSessionAccess {
   /// (Stage 0 step 17): what was open stays open, and nothing has ended yet.
   ValueListenable<bool> get resuming => _resuming;
 
+  final ValueNotifier<bool> _needsGrant = ValueNotifier(false);
+
+  /// True while the server refuses to attach this pairing because it holds
+  /// neither the app's grant nor a desktop's — a phone paired by the old
+  /// companion (Stage 1 step 12). Only the owner grants it; false again once
+  /// a dial attaches.
+  ValueListenable<bool> get needsGrant => _needsGrant;
+
   static final AppLogger _dialLog = AppLogger.named('remote_dial');
   static void _defaultLog(String message) => _dialLog.info(message);
 
@@ -115,12 +123,17 @@ class RemoteServerAccess implements HostSessionAccess {
         keepaliveOffered: () => _offers(kLinkKeepaliveFeature),
       );
       _grants.value = link.capabilities;
+      _needsGrant.value = false;
       _log.info(
         'Linked to $hostName; grants=['
         '${link.capabilities.granted.map((c) => c.wire).join(',')}].',
       );
       return SealedHostChannel(link);
     } on DesktopConnectException catch (error) {
+      if (error.refused) {
+        _needsGrant.value = error.granted?.attachTier == null;
+        _log.warning('$hostName refused the attach: ${error.message}');
+      }
       throw HostLinkException(error.message);
     }
   }

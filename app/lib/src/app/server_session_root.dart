@@ -10,6 +10,7 @@ import '../core/capabilities/capabilities.dart';
 import '../core/lifecycle/server_switcher.dart';
 import '../core/util/failure_words.dart';
 import '../features/remote/presentation/pair_machine_page.dart';
+import '../features/remote/presentation/phone_grant_page.dart';
 
 /// The window's root (plan step 14): the open server session's app under its
 /// own container, keyed by the session so a switch builds a fresh tree and
@@ -38,7 +39,7 @@ class ServerSessionRoot extends StatelessWidget {
       ServingServer(:final session) => UncontrolledProviderScope(
         key: ObjectKey(session),
         container: session.container,
-        child: app,
+        child: PhoneGrantGate(child: app),
       ),
       SwitchingServer(:final name) => _BetweenServers(
         child: Column(

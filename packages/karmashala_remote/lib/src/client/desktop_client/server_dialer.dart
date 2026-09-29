@@ -411,7 +411,13 @@ class DesktopServerDialer {
         await _settle(pairing, generation, status, relay: relay);
         return link;
       } on DesktopConnectException catch (error) {
-        if (error.refused) rethrow;
+        if (error.refused) {
+          // The server spent this generation on the hello: a record left
+          // behind it would drift one further on every refused retry, past
+          // the probe window, and never reach the server once granted.
+          await _settleRefused(pairing, generation, status);
+          rethrow;
+        }
         notes.add('$label: ${error.message}');
         onLog?.call('$path attempt at $label failed: ${error.message}');
         if (!socketOpened) break;
@@ -483,6 +489,9 @@ class DesktopServerDialer {
             candidates: candidates,
             lanHint: status?.lanHint,
             relay: relay,
+            // A grant added on the server since pairing (a companion's
+            // pairing given the app) is the record's from now on.
+            capabilities: status?.capabilities,
           ),
         );
         return all;
@@ -490,6 +499,30 @@ class DesktopServerDialer {
     } on Object catch (error) {
       // A counter that did not stick costs a probe forward next time.
       onLog?.call('saving the link to ${pairing.hostName} failed: $error');
+    }
+  }
+
+  /// After a refused attach: the counter moves on as after a link, and the
+  /// record holds what the server says it is granted, nothing else.
+  Future<void> _settleRefused(
+    CompanionPairing pairing,
+    int used,
+    RemoteHostStatus? status,
+  ) async {
+    try {
+      await CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(pairing.hostId.value);
+        if (saved == null) return all;
+        all.upsert(
+          saved.copyWith(
+            generation: used + 1 > saved.generation ? used + 1 : null,
+            capabilities: status?.capabilities,
+          ),
+        );
+        return all;
+      });
+    } on Object catch (error) {
+      onLog?.call('saving the refusal by ${pairing.hostName} failed: $error');
     }
   }
 
