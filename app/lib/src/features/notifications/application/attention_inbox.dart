@@ -161,8 +161,28 @@ final attentionInboxProvider =
       AttentionInboxController.new,
     );
 
-/// The one attention count in the app — the activity strip's badges and the
-/// tray all read this, so they cannot disagree.
+/// Every unseen item, asks and updates alike — the tray's count.
 final attentionCountProvider = Provider<int>(
   (ref) => ref.watch(attentionInboxProvider).unseen,
+);
+
+/// The inbox's *Needs you* group: every ask, seen or not — reading a question
+/// does not answer it. The Inbox badge on the strip (spec §4) counts this, so
+/// it agrees with the group it opens.
+final inboxAskCountProvider = Provider<int>((ref) {
+  var count = 0;
+  for (final item in ref.watch(attentionInboxProvider).items) {
+    if (item.kind == InboxItemKind.needsApproval) count++;
+  }
+  return count;
+});
+
+/// Whether the inbox holds an update (not an ask) nobody has looked at — the
+/// Inbox glyph's neutral dot, which says "something new" without claiming it
+/// needs you.
+final inboxHasUnseenUpdateProvider = Provider<bool>(
+  (ref) => ref
+      .watch(attentionInboxProvider)
+      .pending
+      .any((item) => item.kind != InboxItemKind.needsApproval),
 );

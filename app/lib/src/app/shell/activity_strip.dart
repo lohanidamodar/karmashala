@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/rows.dart' show AskPulse;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/explorer/application/agent_state_providers.dart';
@@ -33,8 +34,11 @@ class ShellActivityStrip extends ConsumerWidget {
       badges: {
         ShellArea.sessions: ref.watch(needsYouCountProvider),
         ShellArea.devices: ref.watch(readyDeviceCountProvider),
-        ShellArea.inbox: ref.watch(attentionCountProvider),
+        // What waits on an answer, as the Sessions badge; an unread update
+        // is only the neutral dot below.
+        ShellArea.inbox: ref.watch(inboxAskCountProvider),
       },
+      news: {if (ref.watch(inboxHasUnseenUpdateProvider)) ShellArea.inbox},
       // A hover worth having teaches the key that reaches the same place.
       hints: {
         for (final area in ShellArea.values)
@@ -60,6 +64,7 @@ class ActivityStrip extends StatelessWidget {
     required this.onSelect,
     required this.onSettings,
     this.badges = const {},
+    this.news = const {},
     this.hints = const {},
     this.settingsHint,
     this.onUsage,
@@ -69,6 +74,10 @@ class ActivityStrip extends StatelessWidget {
 
   final ShellArea? selected;
   final Map<ShellArea, int> badges;
+
+  /// Areas holding something unread that does not need the user: a small
+  /// neutral dot, drawn only where there is no count.
+  final Set<ShellArea> news;
 
   /// The chord that reaches an area, shown after its name on hover.
   final Map<ShellArea, String> hints;
@@ -105,6 +114,7 @@ class ActivityStrip extends StatelessWidget {
               hint: hints[area],
               selected: area == selected,
               badge: badges[area] ?? 0,
+              news: news.contains(area),
               // Devices counts what is there, not what wants the user.
               urgent: area != ShellArea.devices,
               onPressed: () => onSelect(area),
@@ -140,6 +150,7 @@ class _StripButton extends StatelessWidget {
     required this.selected,
     required this.onPressed,
     this.badge = 0,
+    this.news = false,
     this.urgent = true,
     this.hint,
   });
@@ -150,8 +161,11 @@ class _StripButton extends StatelessWidget {
   final bool selected;
   final int badge;
 
-  /// A count of things waiting on the user, on the attention tone; otherwise
-  /// a plain count on a neutral one.
+  /// Something unread that is not an ask: a neutral dot, never amber.
+  final bool news;
+
+  /// A count of things waiting on the user, on the attention tone and
+  /// breathing with the ask's shield; otherwise a plain count on a neutral one.
   final bool urgent;
   final VoidCallback onPressed;
 
@@ -172,7 +186,7 @@ class _StripButton extends StatelessWidget {
           button: true,
           selected: selected,
           label: badge == 0
-              ? label
+              ? (news ? '$label, new updates' : label)
               : urgent
               ? '$label, $badge need you'
               : '$label, $badge connected',
@@ -215,25 +229,43 @@ class _StripButton extends StatelessWidget {
                     right: 6,
                     top: 3,
                     child: IgnorePointer(
-                      child: Container(
-                        constraints: const BoxConstraints(minWidth: 15),
-                        height: 15,
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: urgent
-                              ? semantic.attention
-                              : theme.colorScheme.onSurfaceVariant,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          badge > 99 ? '99+' : '$badge',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: tones.strip,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0,
-                            height: 1,
+                      child: _maybePulse(
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 15),
+                          height: 15,
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: urgent
+                                ? semantic.attention
+                                : theme.colorScheme.onSurfaceVariant,
+                            borderRadius: BorderRadius.circular(8),
                           ),
+                          child: Text(
+                            badge > 99 ? '99+' : '$badge',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: tones.strip,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (news)
+                  Positioned(
+                    right: 9,
+                    top: 7,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: Chrome.dot,
+                        height: Chrome.dot,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: tones.strip, width: 1.5),
                         ),
                       ),
                     ),
@@ -245,4 +277,7 @@ class _StripButton extends StatelessWidget {
       ),
     );
   }
+
+  /// Only a count of asks breathes: a count of devices is not waiting.
+  Widget _maybePulse(Widget badge) => urgent ? AskPulse(child: badge) : badge;
 }

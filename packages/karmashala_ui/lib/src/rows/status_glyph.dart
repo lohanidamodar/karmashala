@@ -113,22 +113,37 @@ class AskGlyph extends StatelessWidget {
   /// As [Icon.semanticLabel].
   final String? semanticLabel;
 
-  /// The dimmest the shield gets: the board's `opacity: .45` at mid-pulse.
+  @override
+  Widget build(BuildContext context) {
+    return AskPulse(
+      child: Icon(
+        AppIcons.shield,
+        size: size,
+        color: SemanticColors.of(context).attention,
+        semanticLabel: semanticLabel,
+      ),
+    );
+  }
+}
+
+/// **The ask's breath**, for anything that says an ask is waiting — the
+/// [AskGlyph] shield, the strip's needs-you badges — so every one of them
+/// breathes together, on one clock, and all stand still under reduced motion.
+class AskPulse extends StatelessWidget {
+  const AskPulse({required this.child, super.key});
+
+  final Widget child;
+
+  /// The dimmest it gets: the board's `opacity: .45` at mid-pulse.
   static const _floor = 0.45;
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      AppIcons.shield,
-      size: size,
-      color: SemanticColors.of(context).attention,
-      semanticLabel: semanticLabel,
-    );
     final animate =
         Motion.of(context).animate &&
         TickerMode.valuesOf(context).enabled &&
         Visibility.of(context);
-    if (!animate) return icon;
+    if (!animate) return child;
     final clock = StatusSpinnerClock.instance;
     return ListenableBuilder(
       listenable: clock,
@@ -139,7 +154,7 @@ class AskGlyph extends StatelessWidget {
         final opacity = _floor + (1 - _floor) * (0.5 + 0.5 * math.cos(phase));
         return Opacity(opacity: opacity, child: child);
       },
-      child: icon,
+      child: child,
     );
   }
 }
