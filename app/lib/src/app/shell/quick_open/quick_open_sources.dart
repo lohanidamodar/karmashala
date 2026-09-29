@@ -13,6 +13,7 @@ import '../../../features/environments/presentation/environment_health_dialog.da
 import '../../../features/automations/application/scheduled_resume_providers.dart';
 import '../../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
+import '../../../features/onboarding/presentation/quick_start_card.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
 import '../../../features/notifications/application/notification_providers.dart';
@@ -327,6 +328,23 @@ class QuickOpenSources {
         icon: AppIcons.checkCircle,
         keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
+      ),
+      _command(
+        kQuickStartCommandLabel,
+        subtitle:
+            'First steps, where things are, the keys, and what this machine '
+            'has — in the sidebar',
+        icon: AppIcons.rocketLaunch,
+        keywords: const [
+          'onboarding',
+          'getting started',
+          'welcome',
+          'tour',
+          'help',
+          'preflight',
+          'setup',
+        ],
+        onSelect: () => showQuickStart(ref),
       ),
       // About the workspace rather than the machine: rows whose agent has no
       // record of the conversation they name.

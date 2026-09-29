@@ -12,17 +12,6 @@ class _NoTerminalOpen extends ConsumerWidget {
 
   final VoidCallback onNewTerminal;
 
-  /// The keys an empty workspace offers, by command: the few a newcomer needs
-  /// to find everything else.
-  static const _keys = [
-    'quickOpen.show',
-    'quickOpen.commands',
-    'session.new',
-    'project.new',
-    'attention.nextWaiting',
-    'settings.open',
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -45,8 +34,8 @@ class _NoTerminalOpen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: Insets.lg),
-          for (final command in _keys)
-            if (_bound(command) case final chord?)
+          for (final command in kWorkspaceKeyCommands)
+            if (boundShellChord(command) case final chord?)
               Padding(
                 padding: const EdgeInsets.only(bottom: Insets.xs),
                 child: Row(
@@ -71,16 +60,5 @@ class _NoTerminalOpen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  /// The chord [command] is on now, preferring the one a pane lets through;
-  /// null when the keymap left it without keys.
-  static ShellChord? _bound(String command) {
-    ShellChord? best;
-    for (final chord in shellChords) {
-      if (chord.command != command) continue;
-      if (best == null || (!best.skipsShell && chord.skipsShell)) best = chord;
-    }
-    return best;
   }
 }

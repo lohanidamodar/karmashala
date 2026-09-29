@@ -11,6 +11,7 @@ import '../../features/explorer/presentation/agents_lens.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
+import '../../features/onboarding/presentation/quick_start_card.dart';
 import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
@@ -61,12 +62,17 @@ class ShellSidebar extends ConsumerWidget {
       color: SurfaceTones.of(context).side,
       child: area == ShellArea.devices
           ? list
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: list),
-                const ShellDevicesDock(),
-              ],
+          : LayoutBuilder(
+              builder: (context, constraints) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: list),
+                  // Beside the list, above the dock: never over the terminal,
+                  // and never more than half the sidebar.
+                  QuickStartCard(maxHeight: constraints.maxHeight * 0.5),
+                  const ShellDevicesDock(),
+                ],
+              ),
             ),
     );
   }
