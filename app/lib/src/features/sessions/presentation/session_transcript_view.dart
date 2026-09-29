@@ -38,6 +38,7 @@ import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
@@ -620,6 +621,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       _say(kPromptNotGranted);
       return;
     }
+    // An Esc closes an open prompt too: not one answered elsewhere.
+    ref.read(ownPromptAnswersProvider).note(widget.sessionId);
     if (ref.read(sessionInputProvider).viaServer) {
       unawaited(_interruptViaServer());
       return;

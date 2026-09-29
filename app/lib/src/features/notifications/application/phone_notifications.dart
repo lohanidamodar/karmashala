@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show InboxChanged;
+import 'package:karmashala_notifications/attention.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../explorer/application/session_list_snapshot.dart'
     show sessionsPrimedProvider;
 import '../data/device_notification_store.dart';
@@ -27,9 +31,33 @@ void startPhoneNotifications(
   // first piece of news, which would be judged against the defaults.
   container.read(notificationSettingsControllerProvider);
   container.read(attentionPresenterProvider).start();
+  container.read(answeredAskWithdrawalProvider);
   logger.info('Notifications: started by the phone session, one per session.');
   unawaited(_afterStart(container, presenter, logger));
 }
+
+/// Takes down a session's ask notification once the server's inbox no longer
+/// holds its needs-you item: answered here, on the desktop, or anywhere else
+/// (Stage 3 step 4). Heard only while the link is up, as the asks are.
+final answeredAskWithdrawalProvider = Provider<void>((ref) {
+  final presenter = ref.watch(notificationPresenterProvider);
+  if (presenter is! PhoneNotificationPresenter) return;
+  final client = ref.watch(dataClientProvider);
+  Set<String> asking(AttentionInbox inbox) => {
+    for (final item in inbox.items)
+      if (item.kind == InboxItemKind.needsApproval) item.session.openId,
+  };
+  var before = asking(client.attention.inbox);
+  final changes = client.attentionChanges.listen((change) {
+    if (change is! InboxChanged) return;
+    final now = asking(change.snapshot.inbox);
+    for (final openId in before.difference(now)) {
+      unawaited(presenter.withdraw(openId));
+    }
+    before = now;
+  });
+  ref.onDispose(changes.cancel);
+});
 
 Future<void> _afterStart(
   ProviderContainer container,
