@@ -9,11 +9,13 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
 import '../application/explorer_view_mode.dart';
+import '../application/session_list_snapshot.dart';
 import '../application/session_selection.dart';
 import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
 import 'session_selection_bar.dart';
 import 'sidebar_chrome.dart';
+import 'stale_session_list.dart';
 
 /// The Explorer's way to the Agents page, and the one place it says how many
 /// sessions wait on the user. The count is drawn only above zero: an empty
@@ -118,8 +120,30 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     if (!_opened.remove(state)) _opened.add(state);
   });
 
+  /// A remote server's list is saved as it is drawn, and until the server
+  /// answers, the last one saved is drawn stale in its place (decision 9).
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(sessionListSnapshotStoreProvider) == null) {
+      return _live(context);
+    }
+    ref.watch(sessionListSnapshotWriterProvider);
+    final stale = ref.watch(staleSessionListProvider);
+    return AnimatedSwitcher(
+      duration: Motion.of(context).base,
+      child: stale != null
+          ? StaleSessionList(
+              key: const ValueKey('agents-stale'),
+              snapshot: stale,
+            )
+          : KeyedSubtree(
+              key: const ValueKey('agents-live'),
+              child: _live(context),
+            ),
+    );
+  }
+
+  Widget _live(BuildContext context) {
     final groups = ref.watch(agentStateGroupsProvider);
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),

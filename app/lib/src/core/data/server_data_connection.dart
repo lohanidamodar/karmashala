@@ -90,18 +90,23 @@ void Function() superviseDataLink(
 /// This app's data on a server on another machine (slice 5e): dialled, never
 /// started, on the one link its panes and lifecycle feed share. Unreachable,
 /// it comes back unavailable and keeps redialling, as the local one does.
+/// With [firstDialWithin], it returns after that long still dialling.
 Future<DataClient> connectRemoteServerData({
   required HostSessionAccess access,
   AppLogger? logger,
+  Duration? firstDialWithin,
 }) async {
   final log = logger ?? AppLogger.named('data');
   final client = await DataClient.connect(
     () => dialServerData(access, logger: log),
     logger: log,
     serverOnThisMachine: false,
+    firstDialWithin: firstDialWithin,
   );
   if (client.connection.state == DataLinkState.connected) {
     log.info('Data: through the Karmashala server on ${access.address}.');
+  } else if (client.connection.state == DataLinkState.connecting) {
+    log.info('Data: still dialling ${access.address}; opening without it.');
   } else {
     log.warning(
       'Data: the Karmashala server on ${access.address} is not reachable '

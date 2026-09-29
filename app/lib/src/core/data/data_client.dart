@@ -121,13 +121,16 @@ class DataClient {
   /// before returning. When it does not, the client comes back
   /// [DataLinkState.unavailable] ([unavailableReason], or what the dial
   /// said) and keeps redialling. Writes wait up to [waitForServer] for a
-  /// server that is not there, then are refused.
+  /// server that is not there, then are refused. With [firstDialWithin], it
+  /// returns after that long still [DataLinkState.connecting], and the first
+  /// dial goes on.
   static Future<DataClient> connect(
     Future<DataEndpoint?> Function() dial, {
     String? unavailableReason,
     Duration waitForServer = const Duration(seconds: 20),
     AppLogger? logger,
     bool serverOnThisMachine = true,
+    Duration? firstDialWithin,
   }) async {
     final client = DataClient._(
       dial,
@@ -139,11 +142,21 @@ class DataClient {
       logger: logger,
       serverOnThisMachine: serverOnThisMachine,
     );
-    if (!await client._dialOnce(unavailableReason)) {
-      unawaited(client._redial());
+    client._firstDialing = true;
+    final first = client._dialOnce(unavailableReason).then((connected) {
+      client._firstDialing = false;
+      if (!connected || client._endpoint == null) unawaited(client._redial());
+    });
+    if (firstDialWithin == null) {
+      await first;
+    } else {
+      await first.timeout(firstDialWithin, onTimeout: () {});
     }
     return client;
   }
+
+  /// While [connect]'s first dial runs, no redial starts beside it.
+  var _firstDialing = false;
 
   final Future<DataEndpoint?> Function()? _dial;
   final AppLogger _log;
@@ -1024,7 +1037,7 @@ class DataClient {
   ];
 
   Future<void> _redial() async {
-    if (_redialing || _dial == null) return;
+    if (_redialing || _dial == null || _firstDialing) return;
     _redialing = true;
     try {
       for (var attempt = 0; !_closed && _endpoint == null; attempt++) {

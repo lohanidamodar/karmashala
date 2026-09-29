@@ -20,6 +20,7 @@ import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/devices/application/device_bindings.dart';
 import '../../features/environments/application/browse_sources.dart';
 import '../../features/environments/data/environments_data.dart';
+import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -93,9 +94,12 @@ class ServerSession {
     List<Override> overrides = const [],
   }) async {
     if (remote == null && !client.hostsServer) {
-      throw StateError('This device runs no Karmashala server; pair a machine.');
+      throw StateError(
+        'This device runs no Karmashala server; pair a machine.',
+      );
     }
     TerminalLayoutStore? layoutStore;
+    SessionListSnapshotStore? snapshots;
     RemoteServerAccess? remoteAccess;
     DataClient? data;
     ProviderContainer? container;
@@ -104,13 +108,20 @@ class ServerSession {
       // server's (docs/daemon-architecture.md, slice 1). The layout is this
       // window's own, beside the app — one per server, since a pane names a
       // session on the server it was opened on.
-      layoutStore = TerminalLayoutStore.open(
-        remote == null
-            ? support
-            : (await Directory(
-                p.join(support.path, 'machines', remote.hostId.value),
-              ).create(recursive: true)),
-      );
+      final machineDirectory = remote == null
+          ? support
+          : await Directory(
+              p.join(support.path, 'machines', remote.hostId.value),
+            ).create(recursive: true);
+      layoutStore = TerminalLayoutStore.open(machineDirectory);
+      // A server elsewhere may not answer: its last session list is drawn
+      // stale until it does (decision 9).
+      if (remote != null) {
+        snapshots = await SessionListSnapshotStore.open(
+          machineDirectory,
+          logger: logger,
+        );
+      }
 
       // Notes, todos and preferences live at the server, started here (or
       // adopted) or dialled elsewhere before anything reads a setting. One
@@ -132,7 +143,15 @@ class ServerSession {
               hostsServer: client.hostsServer,
               logger: logger,
             )
-          : await connectRemoteServerData(access: remoteAccess, logger: logger);
+          : await connectRemoteServerData(
+              access: remoteAccess,
+              logger: logger,
+              // With a list to show, a slow dial goes on behind it.
+              firstDialWithin: snapshots?.loaded == null
+                  ? null
+                  : kStaleListFirstDialWait,
+            );
+      final openedSnapshots = snapshots;
       container = ProviderContainer(
         overrides: [
           clientCapabilitiesProvider.overrideWithValue(client),
@@ -141,6 +160,11 @@ class ServerSession {
           localHostSessionAccessProvider.overrideWithValue(hostAccess),
           if (remoteAccess != null)
             serverAccessProvider.overrideWithValue(remoteAccess),
+          if (openedSnapshots != null)
+            sessionListSnapshotStoreProvider.overrideWith((ref) {
+              ref.onDispose(openedSnapshots.dispose);
+              return openedSnapshots;
+            }),
           machinesProvider.overrideWithValue(machines),
           activeMachineProvider.overrideWithValue(remote),
           probeModeProvider.overrideWithValue(probe),
@@ -151,6 +175,8 @@ class ServerSession {
           ...overrides,
         ],
       );
+      // Built now, so the container's disposal is what releases it.
+      container.read(sessionListSnapshotStoreProvider);
 
       final undoSupervision = await _startServerActs(
         container,
@@ -175,6 +201,7 @@ class ServerSession {
       } on Object {
         // As below: the open's own failure is the one worth reporting.
       }
+      snapshots?.dispose();
       if (data != null) unawaited(data.close().catchError((Object _) {}));
       if (remoteAccess != null) {
         unawaited(remoteAccess.close().catchError((Object _) {}));
