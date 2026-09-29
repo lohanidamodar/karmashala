@@ -7,8 +7,8 @@ import '../../terminal/application/local_host_providers.dart';
 /// Whether local agents' hooks go to this machine's server rather than the
 /// app's own `/agent-hook` route: whenever a server may be reached, whatever
 /// runs the panes — the server takes every turn's checkpoint, adopts, and
-/// keeps status from them (slice 2b), and relays each hook to the app. The
-/// WSL spool is the app's either way.
+/// keeps status from them (slice 2b), and relays each hook to the app. WSL
+/// agents spool instead, and the server drains those too (slice 5a).
 final agentHooksAtHostProvider = Provider<bool>(
   (ref) => ref.watch(localHostSessionAccessProvider) != null,
 );
