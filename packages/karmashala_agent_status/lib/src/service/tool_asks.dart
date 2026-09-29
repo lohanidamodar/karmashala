@@ -103,10 +103,19 @@ class ToolAskTracker {
         before != null &&
         (before.hasOpenPrompt || before.hasOpenQuestion) &&
         before.waiting == next.waiting;
-    final since =
-        (wasAsking ? before.waitingSince : null) ??
-        (next.source == AgentStatusSource.hook ? next.observedAt : now);
-    final ask = next.hasOpenPrompt ? _askFor(next, since) : null;
+    final fresh = next.source == AgentStatusSource.hook ? next.observedAt : now;
+    var since = (wasAsking ? before.waitingSince : null) ?? fresh;
+    var ask = next.hasOpenPrompt ? _askFor(next, since) : null;
+    // One prompt straight after another, with no report between them that
+    // was not asking: a different call is a different prompt, and its wait
+    // starts now, so an answer drawn from the first cannot match the second.
+    final previous = wasAsking ? before.toolAsk?.toolUseId : null;
+    if (previous != null &&
+        ask?.toolUseId != null &&
+        ask!.toolUseId != previous) {
+      since = fresh;
+      ask = _askFor(next, since);
+    }
     return next.withAsk(toolAsk: ask, waitingSince: since);
   }
 

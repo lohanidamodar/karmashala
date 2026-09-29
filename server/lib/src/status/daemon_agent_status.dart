@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala_store/database.dart';
 import '../domain/host_session.dart';
 import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
+import '../ssh/boxes/remote_sessions.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 
@@ -82,13 +84,30 @@ class DaemonAgentStatus {
 
   /// Whether the server holds row [sessionId]'s agent — one of its own
   /// PTYs, or a session on an SSH box it keeps a copy of (slice 5d).
-  bool holds(String sessionId) {
-    if (runningSessionOf(sessionId) != null) return true;
+  bool holds(String sessionId) => liveScreenOf(sessionId) != null;
+
+  /// The screen of row [sessionId]'s running agent: one of this host's own
+  /// PTYs, or its copy of a session on an SSH box. Null when neither runs it.
+  ScreenSession? liveScreenOf(String sessionId) {
+    final own = runningSessionOf(sessionId);
+    if (own != null) return own;
     final id = hostSessionIdOf(sessionId);
     for (final screen in remoteScreens?.call() ?? const <ScreenSession>[]) {
-      if (screen.id == id && !screen.lifecycle.hasEnded) return true;
+      if (screen.id == id && !screen.lifecycle.hasEnded) return screen;
     }
-    return false;
+    return null;
+  }
+
+  /// Types [bytes] into row [sessionId]'s agent as the server, past every
+  /// client's write token: its own PTY, or a box session over the server's
+  /// own link. False when neither can take them.
+  bool typeAsServer(String sessionId, List<int> bytes) {
+    if (bytes.isEmpty) return false;
+    return switch (liveScreenOf(sessionId)) {
+      final HostSession own => own.typeAsHost(Uint8List.fromList(bytes)),
+      final RemoteSession box => box.type(bytes),
+      _ => false,
+    };
   }
 
   void start() {

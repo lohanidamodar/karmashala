@@ -1,9 +1,9 @@
 part of '../approval_request_card.dart';
 
 /// How long the dock waits for the prompt to close after a deny before it
-/// types the reason — the words belong in the composer the deny returns to,
-/// never in the menu.
-const Duration _promptClosePatience = Duration(milliseconds: 1500);
+/// gives up on typing the reason — the words belong in the composer the deny
+/// returns to, never in the menu.
+const Duration _promptClosePatience = Duration(seconds: 3);
 
 /// **The answers to a structured ask** (board N1): the exact command, then
 /// Allow once, Always allow `<prefix>` when the agent's menu offers it, Deny,
@@ -103,18 +103,25 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
   /// the deny hands back and presses Enter — through the one typist every
   /// message goes through, which reads the send back off the screen. Read
   /// before the first await: a deny ends the ask, and this dock with it.
-  Future<void> _denyAndSay([String? typed]) async {
+  /// [ask] is the prompt the reason was written for, when it was taken
+  /// before the dock could change under it.
+  Future<void> _denyAndSay([String? typed, PromptAsk? ask]) async {
     final why = (typed ?? _reason.text).trim();
     if (_busy || why.isEmpty) return;
     final sessionId = widget.sessionId;
     final answers = ref.read(sessionPromptAnswersProvider);
+    final statusOf = ref.read(sessionStatusLookupProvider);
     final typist = ref.read(sessionInputProvider);
     final messenger = ScaffoldMessenger.of(context);
     final touch = _Docked.touchOf(context);
     setState(() => _busy = true);
     try {
       await answers.answer(
-        ApprovalAnswerRequest(sessionId: sessionId, approve: false, ask: _ask),
+        ApprovalAnswerRequest(
+          sessionId: sessionId,
+          approve: false,
+          ask: ask ?? _ask,
+        ),
       );
     } on SessionPromptRefusal catch (refusal) {
       messenger.showSnackBar(
@@ -123,10 +130,32 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
       if (mounted) setState(() => _busy = false);
       return;
     }
+    // Typed while any prompt shows — this one not yet gone, or the next
+    // already open — the reason would land in its menu, and its Return
+    // would pick that menu's default.
+    bool promptShows() {
+      final status = statusOf(sessionId);
+      return answers.menuOnScreen(sessionId) != null ||
+          (status?.hasOpenPrompt ?? false) ||
+          (status?.hasOpenQuestion ?? false);
+    }
+
     final deadline = DateTime.now().add(_promptClosePatience);
-    while (answers.menuOnScreen(sessionId) != null &&
-        DateTime.now().isBefore(deadline)) {
+    while (promptShows() && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (promptShows()) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Denied. Your reason was not sent: a prompt is still open in the '
+            'session, and typing now would answer it. Send it from the chat '
+            'once the prompt is gone.',
+          ),
+        ),
+      );
+      if (mounted) setState(() => _busy = false);
+      return;
     }
     try {
       if (!await typist.send(sessionId, why, requestId: newSessionInputId())) {
@@ -169,25 +198,35 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
   /// the words; the deny is sent from here, with this dock's `ask`.
   Future<void> _sayWhyInSheet() async {
     final messenger = ScaffoldMessenger.of(context);
+    // Taken now: this dock outlives one prompt, and the next one's status can
+    // arrive while the sheet is up.
+    final shown = _ask;
     final why = await showAdaptiveModal<String>(
       context: context,
       title: 'Deny and say why',
       builder: (_) => _DenyReasonSheet(agentName: widget.agentName),
     );
     if (why == null || why.trim().isEmpty) return;
-    if (!mounted) {
-      // The ask closed while the sheet was up: nothing may be denied now.
+    if (!mounted || !_samePrompt(shown, _ask)) {
       messenger.showSnackBar(
         const SnackBar(
           content: Text(
-            'That prompt closed before you denied it — nothing was sent.',
+            'That prompt changed before you denied it — nothing was sent.',
           ),
         ),
       );
       return;
     }
-    await _denyAndSay(why);
+    await _denyAndSay(why, shown);
   }
+
+  /// Whether [now] is still the prompt [shown] named. A menu read on one side
+  /// only is no difference: it can become readable while the sheet is up.
+  static bool _samePrompt(PromptAsk shown, PromptAsk now) =>
+      shown.waitingSince?.millisecondsSinceEpoch ==
+          now.waitingSince?.millisecondsSinceEpoch &&
+      shown.toolUseId == now.toolUseId &&
+      (shown.menuId == null || now.menuId == null || shown.menuId == now.menuId);
 
   @override
   Widget build(BuildContext context) {

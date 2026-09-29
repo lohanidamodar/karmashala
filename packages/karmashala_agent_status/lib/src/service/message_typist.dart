@@ -52,10 +52,14 @@ class SessionMessageTypist {
   /// then. Throws [SessionPromptRefusal] when the words were typed but the
   /// composer kept them: the message is on screen, and saying it was sent
   /// would be a lie.
-  Future<bool> send(String sessionId, String text) async {
+  Future<bool> send(String sessionId, String text) async =>
+      await deliver(sessionId, text) != MessageDelivery.none;
+
+  /// [send], saying whether the Return was read back off the screen.
+  Future<MessageDelivery> deliver(String sessionId, String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return false;
-    if (!type(sessionId, trimmed)) return false;
+    if (trimmed.isEmpty) return MessageDelivery.none;
+    if (!type(sessionId, trimmed)) return MessageDelivery.none;
 
     final markers = markersFor(sessionId);
     final probe = messageProbe(trimmed);
@@ -65,8 +69,8 @@ class SessionMessageTypist {
     final typed =
         markers != null &&
         await _until(sessionId, (rows) => composerHolds(rows, markers, probe));
-    if (!press(sessionId, _enter)) return false;
-    if (!typed) return true;
+    if (!press(sessionId, _enter)) return MessageDelivery.none;
+    if (!typed) return MessageDelivery.unverified;
 
     for (var pressed = 1; ; pressed++) {
       if (await _until(
@@ -74,7 +78,7 @@ class SessionMessageTypist {
         (rows) => !composerHolds(rows, markers, probe),
         within: sendPatience,
       )) {
-        return true;
+        return MessageDelivery.readBack;
       }
       if (pressed >= presses) {
         throw const SessionPromptRefusal(
@@ -100,6 +104,18 @@ class SessionMessageTypist {
     }
     return true;
   }
+}
+
+/// How a [SessionMessageTypist] send went.
+enum MessageDelivery {
+  /// Nothing was typed: the session has no live pane.
+  none,
+
+  /// Typed with one Return, which could not be read back off the screen.
+  unverified,
+
+  /// The composer was seen to let the message go.
+  readBack,
 }
 
 /// Whether the composer on [rows] still holds [probe]. The composer is the

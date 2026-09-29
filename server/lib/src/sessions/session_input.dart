@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -9,6 +10,8 @@ import '../status/daemon_prompt_answers.dart';
 /// step 2): past the write token, so a phone never takes a session's input or
 /// resizes its terminal to its own grid. The typist is the one MCP
 /// `session_send` uses, so the Return is read back off this server's screen.
+/// Every session the server holds is served: its own PTYs and its copies of
+/// sessions on SSH boxes.
 class SessionInput {
   SessionInput({
     required this.prompts,
@@ -31,29 +34,30 @@ class SessionInput {
   final Map<String, _Remembered> _ledger = {};
 
   /// Answers [request] from [device] (null: this machine), once per
-  /// `requestId`: a resend joins or repeats the first answer and types
-  /// nothing.
+  /// `requestId`: a resend of one that went through joins or repeats its
+  /// answer and types nothing. A refused one is forgotten, so an explicit
+  /// retry is tried again.
   Future<Object?> handle(SessionInputRequest<Object?> request, String? device) {
     final id = request.requestId;
     if (id == null || id.isEmpty || id.length > 128) return _run(request);
     _forgetOld();
-    final key = '${device ?? 'local'}\u0000${request.kind}\u0000$id';
+    final sessionId = switch (request) {
+      SessionSend(:final sessionId) => sessionId,
+      SessionInterrupt(:final sessionId) => sessionId,
+    };
+    final key = [device ?? 'local', request.kind, sessionId, id].join('\u0000');
     final remembered = _ledger[key];
     if (remembered != null) {
       log?.call('${request.kind} $id repeated: answered as the first');
       return remembered.answer;
     }
     final answer = _run(request);
-    _ledger[key] = _Remembered(answer, _now());
-    // Nothing was typed into a session that is not here, so the id is free
-    // for the send its client makes after resuming.
+    final entry = _ledger[key] = _Remembered(answer, _now());
     unawaited(
       answer.then<void>(
         (_) {},
-        onError: (Object error) {
-          if (error is DataRefused && error.code == DataRefusalCode.notFound) {
-            _ledger.remove(key);
-          }
+        onError: (Object _) {
+          if (identical(_ledger[key], entry)) _ledger.remove(key);
         },
       ),
     );
@@ -71,43 +75,58 @@ class SessionInput {
     _ledger.removeWhere((_, remembered) => remembered.at.isBefore(cutoff));
   }
 
-  bool _runsHere(String sessionId) =>
-      prompts.status.runningSessionOf(sessionId) != null;
-
   static const _notHere = DataRefused.notFound(
     'this session is not running here',
+  );
+
+  /// As MCP `session_send` refuses: text typed into an open prompt presses
+  /// its keys — its Return picks the default — and is never sent.
+  static const _promptOpen = DataRefused(
+    DataRefusalCode.conflict,
+    'the session has an approval prompt open, so nothing was sent — the '
+    'message would have been typed into the prompt. Answer it, then send',
+  );
+
+  static const _questionOpen = DataRefused(
+    DataRefusalCode.conflict,
+    'the session is asking a multiple-choice question, so nothing was sent — '
+    'the message would have been typed into the question. Answer it, then '
+    'send',
   );
 
   Future<SessionSent> _send(String sessionId, String text) async {
     if (text.trim().isEmpty) {
       throw const DataRefused.invalid('there is no message to send');
     }
-    if (!_runsHere(sessionId)) throw _notHere;
-    final readable = prompts.agentOf(sessionId)?.menus?.markers != null;
-    if (!readable) {
-      log?.call(
-        'sessions.send $sessionId: its composer cannot be read here, so the '
-        'message is typed with one Return and not read back',
-      );
-    }
-    final bool typed;
+    if (!prompts.status.holds(sessionId)) throw _notHere;
+    final report = prompts.status.statusOf(sessionId)?.report;
+    if (report?.hasOpenQuestion ?? false) throw _questionOpen;
+    if (report?.hasOpenPrompt ?? false) throw _promptOpen;
+    final MessageDelivery delivery;
     try {
-      typed = await typist.send(sessionId, text);
+      delivery = await typist.deliver(sessionId, text);
     } on SessionPromptRefusal catch (refusal) {
       throw DataRefused(
         DataRefusalCode.failed,
         'the agent did not take the Return: ${refusal.message}',
       );
     }
-    if (!typed) throw _notHere;
-    return SessionSent(
-      sent: true,
-      via: readable ? SessionSent.readBack : SessionSent.unverified,
-    );
+    switch (delivery) {
+      case MessageDelivery.none:
+        throw _notHere;
+      case MessageDelivery.unverified:
+        log?.call(
+          'sessions.send $sessionId: the message was typed with one Return '
+          'that could not be read back off the screen',
+        );
+        return const SessionSent(sent: true, via: SessionSent.unverified);
+      case MessageDelivery.readBack:
+        return const SessionSent(sent: true, via: SessionSent.readBack);
+    }
   }
 
   Future<DataAck> _interrupt(String sessionId) async {
-    if (!_runsHere(sessionId) || !prompts.press(sessionId, _interruptKey)) {
+    if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }
     return const DataAck();

@@ -164,15 +164,15 @@ class PromptAsk {
             since.millisecondsSinceEpoch) {
       return false;
     }
+    // A card that named its call answers only a prompt about that call: one
+    // the status no longer ties to it is some other prompt.
     final call = toolUseId;
-    final openCall = open?.toolAsk?.toolUseId;
-    return call == null || openCall == null || call == openCall;
+    return call == null || call == open?.toolAsk?.toolUseId;
   }
 
   /// Whether [matches] had anything to compare, beside [menuId].
   bool comparable(AgentStatusReport? open) =>
-      waitingSince != null ||
-      (toolUseId != null && open?.toolAsk?.toolUseId != null);
+      waitingSince != null || toolUseId != null;
 
   Map<String, Object?> toJson() => {
     if (waitingSince case final since?)

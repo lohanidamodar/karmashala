@@ -15,6 +15,7 @@ import '../../status/hosted_session_wait.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_tool_schemas.dart';
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/stream.dart';
 
 /// **Operating a session that already exists**, by the server — `session_send`,
@@ -435,26 +436,39 @@ class SessionToolSet extends ServerToolSet {
     };
   }
 
-  /// Types into the session's own PTY as the host — not subject to the write
-  /// token: the desktop pane that holds it is usually who asked — and reads
-  /// the Return back off the host's own copy of the screen.
+  /// Types into the session's PTY as the host — its own, or a box session's
+  /// over the server's link — not subject to the write token: the desktop
+  /// pane that holds it is usually who asked. The Return is read back off the
+  /// server's own copy of the screen.
   static SessionMessageTypist typistOver(
     DaemonPromptAnswers prompts, {
     Duration poll = const Duration(milliseconds: 50),
     Duration typedPatience = const Duration(milliseconds: 1500),
     Duration sendPatience = const Duration(seconds: 2),
-  }) => SessionMessageTypist(
-        poll: poll,
-        typedPatience: typedPatience,
-        sendPatience: sendPatience,
-        readScreen: prompts.screen,
-        markersFor: (sessionId) =>
-            prompts.agentOf(sessionId)?.menus?.markers,
-        type: (sessionId, text) =>
-            prompts.status
-                .runningSessionOf(sessionId)
-                ?.typeAsHost(utf8.encode(text)) ??
-            false,
-        press: prompts.press,
-      );
+  }) {
+    final status = prompts.status;
+    return SessionMessageTypist(
+      poll: poll,
+      typedPatience: typedPatience,
+      sendPatience: sendPatience,
+      readScreen: (sessionId) =>
+          status.liveScreenOf(sessionId)?.tailText(kMenuScreenRows),
+      markersFor: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
+      type: (sessionId, text) {
+        if (!status.typeAsServer(sessionId, utf8.encode(text))) return false;
+        // Ends Codex's paste burst, which would fold the Return into a
+        // newline — as the app's own typist does.
+        if (prompts.agentOf(sessionId)?.id == AgentIds.codex) {
+          status.typeAsServer(sessionId, const [_endOfLineKey]);
+        }
+        return true;
+      },
+      press: (sessionId, keys) =>
+          status.typeAsServer(sessionId, utf8.encode(keys)),
+    );
+  }
+
+  /// `Ctrl+E`, `kEndOfLineKey` in `karmashala_terminal_core` (a Flutter
+  /// package).
+  static const int _endOfLineKey = 0x05;
 }
