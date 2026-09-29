@@ -33,6 +33,7 @@ import '../automations/session_mcp_access.dart';
 import '../data/data_service.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
+import '../sessions/session_records.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import '../status/daemon_prompt_answers.dart';
 import 'companion_handler.dart';
@@ -182,26 +183,20 @@ class DaemonCompanion implements CompanionHandler {
   /// Where [sessionId]'s agent keeps its record here: imported history names
   /// its file; a row names its agent and conversation, found in the index.
   Future<AgentRecordLocation?> _recordOf(String sessionId) async {
-    final imported = ImportedSessionDao(database).getById(sessionId);
-    if (imported != null) {
-      return (path: imported.filePath, agentId: imported.cli);
-    }
-    final row = _sessions.getById(sessionId);
-    final conversation = row?.externalSessionId;
-    if (row == null || conversation == null || conversation.isEmpty) {
-      return null;
-    }
-    final agentId = _rows.installation(row.agentInstallationId)?.agentId;
     final index = recordIndex;
-    if (agentId == null || index == null) return null;
-    final Map<String, String> paths;
-    try {
-      paths = await index();
-    } on Object {
-      return null;
-    }
-    final path = paths['$agentId/$conversation'];
-    return path == null ? null : (path: path, agentId: agentId);
+    final found = await lookUpSessionRecord(
+      sessionId,
+      imported: ImportedSessionDao(database),
+      sessions: _sessions,
+      installation: _rows.installation,
+      locate: (agentId, conversation) async =>
+          index == null ? null : (await index())['$agentId/$conversation'],
+    );
+    final path = found.path;
+    final agentId = found.agentId;
+    return path == null || agentId == null
+        ? null
+        : (path: path, agentId: agentId);
   }
 
   final Duration transcriptPollInterval;

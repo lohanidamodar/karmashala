@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/process.dart'
@@ -217,6 +218,40 @@ class TranscriptStores {
   /// [conversationId]'s transcript in agent [cli]'s store, or null.
   Future<String?> locate(String cli, String conversationId) async =>
       (await all())['$cli/$conversationId'];
+
+  /// [locate], but a miss walks again once the last walk is [maxAge] old,
+  /// then tries where the adapter says an unplaced record may be — as the
+  /// client's locator does, so a first turn is found in seconds, not 30.
+  Future<String?> recordFor(
+    String cli,
+    String conversationId, {
+    Duration maxAge = const Duration(seconds: 3),
+  }) async {
+    final key = '$cli/$conversationId';
+    final cached = (await all())[key];
+    if (cached != null) return cached;
+    final at = _lastAt;
+    if (at == null || _now().difference(at) >= maxAge) {
+      final walked = await (_walking ??= _walk().whenComplete(
+        () => _walking = null,
+      ));
+      if (walked[key] case final path?) return path;
+    }
+    final store = registry.adapterFor(cli)?.store;
+    if (store == null) return null;
+    try {
+      for (final located in await locator.locate(environments())) {
+        final home = located.homeFor(cli);
+        if (home == null) continue;
+        for (final record in store.recordCandidates(home, conversationId)) {
+          if (await File(record).exists()) return record;
+        }
+      }
+    } on Object {
+      // A store we cannot read is the same answer as one with nothing in it.
+    }
+    return null;
+  }
 
   Future<Map<String, String>> _walk() async {
     walks++;

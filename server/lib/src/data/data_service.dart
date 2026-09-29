@@ -13,6 +13,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../domain/uuid.dart';
+import '../sessions/session_transcripts.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
 import 'automations_handler.dart';
@@ -134,6 +135,10 @@ class DataService {
   /// fork, an end), set by `serve`; without it that work is refused
   /// `unavailable`.
   SessionWork? sessionWork;
+
+  /// Sessions' transcripts read here for any client (`sessions.transcript`),
+  /// set by `serve`; without them that work is refused `unavailable`.
+  SessionTranscripts? sessionTranscripts;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -231,17 +236,20 @@ class DataService {
   ///
   /// A link from another machine passes what its pairing grants: without
   /// [admin] it may not rename, grant or revoke devices; without
-  /// [sshPrompts] it is neither told nor may answer an SSH question.
+  /// [sshPrompts] it is neither told nor may answer an SSH question; without
+  /// [transcripts] it may not read a session's transcript.
   DataSession open(
     void Function(DataChanges changes) deliver, {
     bool admin = true,
     bool sshPrompts = true,
+    bool transcripts = true,
   }) {
     final link = DataSession._(
       this,
       sshPrompts ? deliver : (batch) => deliver(_withoutPrompts(batch)),
       admin: admin,
       sshPrompts: sshPrompts,
+      transcripts: transcripts,
     );
     _links.add(link);
     return link;
@@ -468,6 +476,7 @@ class DataService {
         TerminalWorkRequest() ||
         ChecksWorkRequest() ||
         SessionWorkRequest() ||
+        SessionTranscriptRequest() ||
         EnvVaultRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
@@ -605,19 +614,21 @@ class DataService {
 }
 
 /// One client's link to the [DataService].
-class DataSession implements FileWatchLink {
+class DataSession implements FileWatchLink, TranscriptWatchLink {
   DataSession._(
     this._service,
     this._deliver, {
     required this.admin,
     required this.sshPrompts,
+    required this.transcripts,
   });
 
   final DataService _service;
 
-  /// What this link's pairing grants (slice 5e); both true on this machine.
+  /// What this link's pairing grants (slice 5e); all true on this machine.
   final bool admin;
   final bool sshPrompts;
+  final bool transcripts;
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
   var _signOfLife = 0;
@@ -649,6 +660,7 @@ class DataSession implements FileWatchLink {
       request is TerminalWorkRequest ||
       request is ChecksWorkRequest ||
       request is SessionWorkRequest ||
+      request is SessionTranscriptRequest ||
       request is EnvVaultRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
@@ -732,6 +744,27 @@ class DataSession implements FileWatchLink {
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final SessionTranscriptRequest<Object?> asked) {
+      if (!transcripts) {
+        throw const DataRefused.denied(
+          'this client may not read transcripts: its pairing does not grant it',
+        );
+      }
+      final work =
+          _service.sessionTranscripts ??
+          (throw const DataRefused.unavailable(
+            'this server reads no transcripts',
+          ));
+      switch (asked) {
+        case final SessionTranscriptRead read:
+          return DataReply(await work.page(read) as R, _service._revision);
+        case SessionTranscriptWatch(:final sessionId):
+          await work.watch(this, sessionId);
+        case SessionTranscriptUnwatch(:final sessionId):
+          work.unwatch(this, sessionId);
+      }
+      return DataReply(const DataAck() as R, _service._revision);
+    }
     if (request case final EnvVaultRequest<Object?> asked) {
       final work =
           _service.envVault ??
@@ -797,6 +830,7 @@ class DataSession implements FileWatchLink {
   void close() {
     _service._links.remove(this);
     _service.filesWork?.linkClosed(this);
+    _service.sessionTranscripts?.closed(this);
     _service.attentionWork?.linkClosed(this);
   }
 

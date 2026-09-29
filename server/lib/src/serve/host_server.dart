@@ -580,6 +580,7 @@ class _ClientSession implements BoxRelayPeer {
       (changes) => _send(DataChangesMessage(DataEnvelope.changes(changes))),
       admin: _trust.admin,
       sshPrompts: _trust.sshPrompts,
+      transcripts: _trust.transcripts,
     );
     final answer = session.handleJson(message.envelope);
     if (answer is Future<Map<String, Object?>>) {

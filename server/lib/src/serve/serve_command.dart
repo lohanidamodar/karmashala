@@ -28,7 +28,11 @@ import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart'
-    show DecisionRecordDao, SessionDao, SessionRepositoryDao;
+    show
+        DecisionRecordDao,
+        ImportedSessionDao,
+        SessionDao,
+        SessionRepositoryDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -44,6 +48,8 @@ import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
+import '../sessions/session_records.dart';
+import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
@@ -842,6 +848,19 @@ Future<int> runServe(
     launches: launches,
     continuations: continuations,
   );
+  // Sessions' transcripts for any client (`sessions.transcript`): read here,
+  // where the agents write them.
+  final sessionTranscripts = SessionTranscripts(
+    lookUp: (sessionId) => lookUpSessionRecord(
+      sessionId,
+      imported: ImportedSessionDao(database),
+      sessions: sessionRows,
+      installation: checkoutRows.installation,
+      locate: transcripts.recordFor,
+      registry: transcripts.registry,
+    ),
+  );
+  data.sessionTranscripts = sessionTranscripts;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1059,6 +1078,7 @@ Future<int> runServe(
   delivery.stop();
   await git.stop();
   await files.close();
+  await sessionTranscripts.close();
   await terminals.dispose();
   await ssh.close();
   await attention.close();

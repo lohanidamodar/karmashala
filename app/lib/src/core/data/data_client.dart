@@ -239,6 +239,14 @@ class DataClient {
   /// client alone; a new link watches nothing until asked again.
   Stream<FileChanged> get fileChanges => _fileChanges.stream;
 
+  final _transcriptChanges = StreamController<TranscriptChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A transcript this link watches (`sessions.transcript.watch`) moved. Told
+  /// to this client alone; a new link watches nothing until asked again.
+  Stream<TranscriptChanged> get transcriptChanges => _transcriptChanges.stream;
+
   /// The terminals the server runs (slice 5a), as its screens read them,
   /// by session id — greeted whole on subscribe, then kept by each change.
   final terminals = <String, TerminalRecord>{};
@@ -879,6 +887,8 @@ class DataClient {
           if (!_runsChanges.isClosed) _runsChanges.add(change);
         case final FileChanged change:
           if (!_fileChanges.isClosed) _fileChanges.add(change);
+        case final TranscriptChanged change:
+          if (!_transcriptChanges.isClosed) _transcriptChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1071,6 +1081,7 @@ class DataClient {
     unawaited(_runsChanges.close());
     unawaited(_intents.close());
     unawaited(_fileChanges.close());
+    unawaited(_transcriptChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());

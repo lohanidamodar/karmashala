@@ -10,6 +10,7 @@ import 'serve/serve_command.dart';
 import 'server/admin_commands.dart';
 import 'server/init_command.dart';
 import 'server/pair_command.dart';
+import 'server/transcript_command.dart';
 import 'store/store_probe.dart';
 
 const _usage =
@@ -210,6 +211,25 @@ karmashala_host agents — the agent CLIs the running server recorded.
     switches: {'refresh'},
     run: (args, out, err, env) =>
         runAgents(args, out: out, err: err, environment: env),
+  ),
+  'transcript': _Command(
+    usage: '''
+karmashala_host transcript <session-id> — one page of a session's transcript
+as the running server reads it for a client (sessions.transcript).
+
+  --after=<n>             rows from index n (with --generation, --revision)
+  --before=<n>            the page before index n
+  --limit=<n>             at most n rows (default 300)
+  --generation=<g>        the generation a previous page answered
+  --revision=<r>          the revision a previous page answered
+  --json                  the page as the wire carries it
+  --watch                 then print each change until interrupted
+''',
+    valueFlags: {'after', 'before', 'limit', 'generation', 'revision'},
+    switches: {'json', 'watch'},
+    positional: 1,
+    run: (args, out, err, env) =>
+        runTranscript(args, out: out, err: err, environment: env),
   ),
   'attach': _Command(
     usage: '''

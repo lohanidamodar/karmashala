@@ -366,7 +366,11 @@ void main() {
   });
 
   group('a link from another machine', () {
-    const remote = LinkTrust.remote(admin: false, sshPrompts: false);
+    const remote = LinkTrust.remote(
+      admin: false,
+      sshPrompts: false,
+      transcripts: true,
+    );
 
     test('may not pair, stop, open by argv or administer', () async {
       final env = build();
@@ -405,7 +409,11 @@ void main() {
       final client = await connect(
         env.server,
         'far',
-        trust: const LinkTrust.remote(admin: true, sshPrompts: false),
+        trust: const LinkTrust.remote(
+          admin: true,
+          sshPrompts: false,
+          transcripts: true,
+        ),
       );
       await client.send(
         const ServerCallMessage(requestId: 4, method: 'server.info'),

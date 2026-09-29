@@ -76,6 +76,7 @@ import 'env_values.dart';
 import 'attention_values.dart';
 import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import 'session_work_values.dart';
+import 'transcript_values.dart';
 
 part 'requests/subscription_requests.dart';
 part 'requests/sessions_requests.dart';
@@ -100,6 +101,7 @@ part 'requests/terminals_requests.dart';
 part 'requests/env_requests.dart';
 part 'requests/attention_requests.dart';
 part 'requests/sessions_work_requests.dart';
+part 'requests/session_transcript_requests.dart';
 part 'requests/intents_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
@@ -294,6 +296,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _envRequestFromJson(kind, args) ??
     _attentionRequestFromJson(kind, args) ??
     _sessionWorkRequestFromJson(kind, args) ??
+    _sessionTranscriptRequestFromJson(kind, args) ??
     _intentsRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 

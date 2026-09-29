@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataChanges, DataEnvelope, DataReply, DataRequest;
 import 'package:karmashala_host_protocol/protocol.dart';
 import '../pty/process_alive.dart';
 import 'package:karmashala_host_protocol/host_paths.dart';
@@ -195,6 +197,29 @@ class HostClient {
     if (refused != null) throw HostClientRefusal(refused);
     return result.result ?? const {};
   }
+
+  /// Asks the server's data API [request], as an app does. Throws
+  /// [DataRefused] with the server's refusal.
+  Future<DataReply<R>> data<R>(
+    DataRequest<R> request, {
+    Duration within = const Duration(seconds: 30),
+  }) async {
+    final id = ++_lastRequestId;
+    final answer = _expect<DataAnswerMessage>(
+      within: within,
+      where: (message) => DataEnvelope.answerId(message.envelope) == id,
+    );
+    _send(DataRequestMessage(DataEnvelope.request(id, request)));
+    return DataEnvelope.readAnswer((await answer).envelope, request);
+  }
+
+  /// Every change batch the server tells this link.
+  Stream<DataChanges> get dataChanges => _messages
+      .where((message) => message is DataChangesMessage)
+      .map(
+        (message) =>
+            DataEnvelope.readChanges((message as DataChangesMessage).envelope),
+      );
 
   Future<void> close() async => _socket.destroy();
 }
