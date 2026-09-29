@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +13,7 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
 import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../sessions/application/ask_resolutions.dart';
 import '../../sessions/application/session_handoff_service.dart';
 import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -19,15 +22,102 @@ import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../explorer/presentation/sidebar_chrome.dart';
 import '../application/attention_inbox.dart';
+import '../application/notification_providers.dart' show focusWatchedSession;
 import 'package:karmashala_notifications/attention.dart';
 
 /// The attention inbox: everything pending, newest first, each item one click
 /// from its source — the list behind the number the badges show.
-class AttentionInboxView extends ConsumerWidget {
+class AttentionInboxView extends ConsumerStatefulWidget {
   const AttentionInboxView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AttentionInboxView> createState() => _AttentionInboxViewState();
+}
+
+class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
+  /// Each ask on the list: when this client first listed it, and the wait
+  /// its status named then — what "answered elsewhere" is judged against.
+  final _listed = <String, ({DateTime at, DateTime? since})>{};
+
+  /// Asks that left the list on a phone, kept in place while judged and then
+  /// while their row says "Answered elsewhere" (Stage 3 step 4).
+  final _leaving = <String, ({InboxItem item, String? said})>{};
+  final _timers = <String, Timer>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _list(ref.read(attentionInboxProvider));
+  }
+
+  @override
+  void dispose() {
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    super.dispose();
+  }
+
+  void _list(AttentionInbox inbox) {
+    final now = ref.read(clockProvider).nowUtc();
+    final status = ref.read(sessionStatusLookupProvider);
+    final asks = <String>{};
+    for (final item in inbox.items) {
+      if (item.kind != InboxItemKind.needsApproval) continue;
+      asks.add(item.id);
+      final since = status(item.session.openId)?.waitingSince;
+      final was = _listed[item.id];
+      _listed[item.id] = (at: was?.at ?? now, since: since ?? was?.since);
+      if (_leaving.remove(item.id) != null) _timers.remove(item.id)?.cancel();
+    }
+    _listed.removeWhere((id, _) => !asks.contains(id));
+  }
+
+  void _changed(AttentionInbox? before, AttentionInbox after) {
+    final listed = Map.of(_listed);
+    _list(after);
+    if (!mounted || !PhoneTabsScope.contains(context)) return;
+    for (final item in before?.items ?? const <InboxItem>[]) {
+      if (item.kind != InboxItemKind.needsApproval ||
+          item.session.imported ||
+          _listed.containsKey(item.id)) {
+        continue;
+      }
+      final asked = listed[item.id];
+      if (asked == null) continue;
+      _leave(item, asked.at, asked.since);
+    }
+  }
+
+  void _leave(InboxItem item, DateTime shownAt, DateTime? since) {
+    setState(() => _leaving[item.id] = (item: item, said: null));
+    _timers.remove(item.id)?.cancel();
+    _timers[item.id] = Timer(kAskClosingSettle, () {
+      if (!mounted || !_leaving.containsKey(item.id)) return;
+      final said = ref.read(askAnsweredElsewhereProvider)(
+        item.session.openId,
+        shownAt: shownAt,
+        waitingSince: since,
+      );
+      if (said == null) return _forget(item.id);
+      setState(() => _leaving[item.id] = (item: item, said: said));
+      _timers[item.id] = Timer(
+        kAnsweredElsewhereShown,
+        () => _forget(item.id),
+      );
+    });
+  }
+
+  void _forget(String id) {
+    _timers.remove(id)?.cancel();
+    if (mounted && _leaving.containsKey(id)) {
+      setState(() => _leaving.remove(id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(attentionInboxProvider, _changed);
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.watch(clockProvider).nowUtc();
@@ -37,6 +127,10 @@ class AttentionInboxView extends ConsumerWidget {
     final asks = [
       for (final item in inbox.items)
         if (item.kind == InboxItemKind.needsApproval) item,
+    ];
+    final leaving = [
+      for (final gone in _leaving.values)
+        if (!asks.any((item) => item.id == gone.item.id)) gone,
     ];
     final updates = [
       for (final item in inbox.items)
@@ -50,11 +144,13 @@ class AttentionInboxView extends ConsumerWidget {
           count: '${asks.length}',
         ),
       for (final item in asks) row(item, controller, now, showWorkbench),
+      for (final gone in leaving)
+        row(gone.item, controller, now, showWorkbench, left: true, said: gone.said),
       if (updates.isNotEmpty)
         SidebarGroupLabel(
           label: 'Updates',
           count: '${updates.length}',
-          spaceAbove: asks.isNotEmpty,
+          spaceAbove: asks.isNotEmpty || leaving.isNotEmpty,
         ),
       for (final item in updates) row(item, controller, now, showWorkbench),
     ];
@@ -76,7 +172,7 @@ class AttentionInboxView extends ConsumerWidget {
           ],
         ),
         Expanded(
-          child: inbox.isEmpty
+          child: inbox.isEmpty && leaving.isEmpty
               ? PanePlaceholder(
                   message: 'Nothing needs you.',
                   icon: AppIcons.checkCircle,
@@ -94,16 +190,29 @@ class AttentionInboxView extends ConsumerWidget {
     InboxItem item,
     AttentionInboxController controller,
     DateTime now,
-    VoidCallback? showWorkbench,
-  ) => _InboxRow(
+    VoidCallback? showWorkbench, {
+    bool left = false,
+    String? said,
+  }) => _InboxRow(
     key: ValueKey(item.id),
     item: item,
     now: now,
+    left: left,
+    said: said,
     onOpen: () {
-      controller.open(item);
+      // An ask already gone is no longer the server's to open.
+      if (!left) {
+        controller.open(item);
+      } else if (!focusWatchedSession(
+        ref.container,
+        openId: item.session.openId,
+        imported: item.session.imported,
+      )) {
+        return;
+      }
       showWorkbench?.call();
     },
-    onDismiss: () => controller.dismiss(item.id),
+    onDismiss: () => left ? _forget(item.id) : controller.dismiss(item.id),
   );
 }
 
@@ -170,12 +279,19 @@ class _InboxRow extends ConsumerWidget {
     required this.now,
     required this.onOpen,
     required this.onDismiss,
+    this.left = false,
+    this.said,
   });
 
   final InboxItem item;
   final DateTime now;
   final VoidCallback onOpen;
   final VoidCallback onDismiss;
+
+  /// An ask already off the server's list, kept a moment on a phone: no
+  /// answers, and [said] under its words once judged.
+  final bool left;
+  final String? said;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -190,10 +306,12 @@ class _InboxRow extends ConsumerWidget {
         : null;
     // The phone answers a plain approval from here (Stage 2 answer 7); the
     // desktop has its ask toasts, and its rows stay as they were.
-    final answers =
-        item.kind == InboxItemKind.needsApproval &&
-            !item.session.imported &&
-            PhoneTabsScope.contains(context)
+    final said = this.said;
+    final answers = left
+        ? (said == null ? null : _AnsweredElsewhereLine(said: said))
+        : item.kind == InboxItemKind.needsApproval &&
+              !item.session.imported &&
+              PhoneTabsScope.contains(context)
         ? _InboxAnswers(sessionId: item.session.openId)
         : null;
 
@@ -527,6 +645,48 @@ class _InboxAnswersState extends ConsumerState<_InboxAnswers> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Under a phone's ask that went without this phone, as the dock says it.
+class _AnsweredElsewhereLine extends StatelessWidget {
+  const _AnsweredElsewhereLine({required this.said});
+
+  final String said;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        key: const ValueKey('inbox-answered-elsewhere'),
+        padding: const EdgeInsets.only(top: Insets.sm, right: Insets.xs),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: Touch.target),
+          child: Row(
+            children: [
+              Icon(
+                AppIcons.checkCircle,
+                size: Chrome.iconSmall,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  said,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -15,11 +15,13 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/capabilities/capabilities.dart'
     show capabilitiesProvider, kApprovalNotGranted;
+import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
+import '../application/ask_resolutions.dart';
 import '../application/session_input.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_providers.dart';
@@ -27,6 +29,7 @@ import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
 
+part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
 part 'approval_request_card/dock_buttons.dart';
 part 'approval_request_card/tool_ask_answers.dart';
@@ -61,20 +64,28 @@ class ApprovalRequestCard extends ConsumerWidget {
         .watch(agentSessionStatusProvider(sessionId))
         .asData
         ?.value;
-    if (report == null ||
-        report.status != AgentActivityStatus.awaitingApproval) {
-      return const SizedBox.shrink();
-    }
+    final asking = report != null && _asks(report) ? report : null;
+    final card = asking == null
+        ? const SizedBox.shrink()
+        : _open(context, ref, asking);
+    // Where the desktop shows the other screen, a phone's dock under a thumb
+    // would simply vanish (Stage 3 step 4).
+    return !touch
+        ? card
+        : _AnsweredElsewhere(sessionId: sessionId, asking: asking, child: card);
+  }
 
+  bool _asks(AgentStatusReport report) =>
+      report.status == AgentActivityStatus.awaitingApproval &&
+      // Docked, it is an ask or nothing: an agent that finished a turn and
+      // waits for input has nothing to answer here, and an amber card saying
+      // so under the prompt was the complaint that removed the first dock.
+      (!docked ||
+          report.waiting == AgentWaitKind.approval ||
+          report.waiting == AgentWaitKind.question);
+
+  Widget _open(BuildContext context, WidgetRef ref, AgentStatusReport report) {
     final waiting = report.waiting;
-    // Docked, it is an ask or nothing: an agent that finished a turn and waits
-    // for input has nothing to answer here, and an amber card saying so under
-    // the prompt was the complaint that removed the first dock.
-    if (docked &&
-        waiting != AgentWaitKind.approval &&
-        waiting != AgentWaitKind.question) {
-      return const SizedBox.shrink();
-    }
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);

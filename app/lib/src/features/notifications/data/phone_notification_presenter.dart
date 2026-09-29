@@ -46,6 +46,9 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   Future<bool>? _ready;
   bool _disposed = false;
 
+  /// The sessions whose notification up now is an ask.
+  final _asking = <String>{};
+
   @override
   bool get isSupported => isSupportedHere;
 
@@ -99,6 +102,11 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   Future<void> show(NotificationRequest request) async {
     if (_disposed || !await initialize()) return;
     final payload = NotificationPayload.decode(request.payload);
+    if (payload != null) {
+      request.asks
+          ? _asking.add(payload.openId)
+          : _asking.remove(payload.openId);
+    }
     try {
       await _plugin.show(
         id: payload == null
@@ -123,9 +131,11 @@ class PhoneNotificationPresenter implements NotificationPresenter {
     }
   }
 
-  /// Takes down [openId]'s notification, if one is up.
+  /// Takes down [openId]'s notification while it is still an ask this process
+  /// showed: a finished or failed one that replaced it stays until tapped or
+  /// cleared.
   Future<void> withdraw(String openId) async {
-    if (!await initialize()) return;
+    if (!_asking.remove(openId) || !await initialize()) return;
     try {
       await _plugin.cancel(id: notificationIdFor(openId));
     } on Object catch (error) {

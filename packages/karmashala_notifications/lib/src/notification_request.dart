@@ -41,10 +41,15 @@ class NotificationRequest {
     required this.body,
     this.payload,
     this.actions = const [],
+    this.asks = false,
   });
 
   final String title;
   final String body;
+
+  /// One session's open ask ([NotificationReason.needsInput]): what a phone
+  /// withdraws once the ask has been answered anywhere.
+  final bool asks;
 
   /// Opaque data carried back when the toast is clicked; see
   /// [NotificationPayload].
@@ -119,6 +124,7 @@ class NotificationCoalescer {
                 !only.session.imported
             ? kApprovalNotificationActions
             : const [],
+        asks: only.reason == NotificationReason.needsInput,
       );
     }
 

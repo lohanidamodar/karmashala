@@ -16,6 +16,7 @@ import '../../agents/application/agent_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../data/server_transcripts.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import 'ask_resolutions.dart';
 import 'decision_recorder.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
@@ -36,6 +37,7 @@ class AppPromptAnswers implements PromptAnswering {
     required this.local,
     required this.hostAnswers,
     required this.hostChecksAsk,
+    this.onAnswering,
   });
 
   /// This app's own panes.
@@ -50,8 +52,13 @@ class AppPromptAnswers implements PromptAnswering {
   /// (`Capabilities.answersCarryAsk`). This app's own panes always do.
   final bool Function() hostChecksAsk;
 
+  /// Told of every answer before it is sent, so a prompt this client closed
+  /// is never said to have been answered elsewhere.
+  final void Function(String sessionId)? onAnswering;
+
   @override
   Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) async {
+    onAnswering?.call(request.sessionId);
     final host = hostAnswers(request.sessionId);
     if (host == null) return local.answer(request);
     final checked = hostChecksAsk();
@@ -265,6 +272,7 @@ final sessionPromptAnswersProvider = Provider<PromptAnswering>(
       return subscriber.answerPrompt;
     },
     hostChecksAsk: () => ref.read(capabilitiesProvider).answersCarryAsk,
+    onAnswering: ref.read(ownPromptAnswersProvider).note,
   ),
 );
 
