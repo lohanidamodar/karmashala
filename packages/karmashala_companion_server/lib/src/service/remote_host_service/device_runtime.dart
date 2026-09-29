@@ -456,7 +456,7 @@ class _DeviceRuntime {
 
   /// Switches [active] to the host protocol for a desktop client (slice 5e):
   /// answered once in the envelope, then every frame is host bytes. A pairing
-  /// without [Capability.desktopClient] is refused in words.
+  /// with no attach tier (desktop or phone client) is refused in words.
   Future<void> _attachHost(
     _ActiveLink active,
     Envelope envelope,
@@ -465,10 +465,10 @@ class _DeviceRuntime {
     final serve = service.onHostLink;
     String? refusal;
     var code = ErrorCode.notPermitted;
-    if (!device.capabilities.has(Capability.desktopClient)) {
+    if (device.capabilities.attachTier == null) {
       refusal =
-          'this pairing is not a desktop client\'s: pair again with the '
-          'desktop grant';
+          'this pairing is neither a desktop client\'s nor the app\'s on a '
+          'phone: pair again, or grant this device the app';
     } else if (serve == null) {
       refusal = 'this server takes no desktop clients';
       code = ErrorCode.internal;

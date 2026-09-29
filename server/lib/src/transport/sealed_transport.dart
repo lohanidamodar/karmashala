@@ -6,9 +6,9 @@ import 'package:karmashala_remote/remote.dart';
 import 'link_trust.dart';
 import 'transport.dart';
 
-/// A desktop client on another machine (slice 5e): the companion's sealed
-/// channel after `host.attach`, served like any other connection with what
-/// its pairing grants.
+/// A desktop client, or the app on a phone, on another machine (slice 5e):
+/// the companion's sealed channel after `host.attach`, served like any other
+/// connection with what its pairing grants.
 class SealedHostConnection implements HostConnection {
   SealedHostConnection(this._link);
 
@@ -22,7 +22,8 @@ class SealedHostConnection implements HostConnection {
     // grant covers transcripts; `readTranscript` is the phone's word for it.
     transcripts:
         _link.capabilities.has(Capability.readTranscript) ||
-        _link.capabilities.has(Capability.desktopClient),
+        _link.capabilities.attachTier != null,
+    phone: _link.capabilities.attachTier == AttachTier.phone,
     label: _link.deviceName,
   );
 
