@@ -830,6 +830,14 @@ const claudeCodeDescriptor = AgentDescriptor(
         'Karmashala transcripts, 2026-09: Read tool calls naming .png/.jpg '
         'files, drawn by TranscriptImagePreview from that path',
   ),
+  // WSL keeps `ctrl+v`: Claude Code binds it there as well as `alt+v`, and it
+  // is what already worked.
+  imagePaste: AgentImagePasteKey(
+    windowsNative: AgentImagePasteKey.altV,
+    evidence:
+        'claude.exe 2.1.284 keybindings: xe=(windows||wsl)?"alt+v":"ctrl+v", '
+        '[xe]:"chat:imagePaste", and "ctrl+v":"chat:imagePaste" under wsl only',
+  ),
   // The whole declaration, with the counts it was read off, is at
   // [kClaudeCodeTodoWrite]. It is not inlined here because the transcript
   // reader looks the same value up by tool name, and two copies of a schema is

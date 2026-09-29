@@ -73,6 +73,7 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
         await pasteIntoTerminal(
           session.terminal,
           controller: session.controller,
+          keyToProgram: imagePasteKeyFor(ref, session),
         );
       case 'find':
         _actions.openSearch();

@@ -218,6 +218,46 @@ class AgentSystemPromptFileSupport {
       isSupported && path != null && path.isNotEmpty ? [token, path] : const [];
 }
 
+/// The key this agent binds to **paste the image on the clipboard**, by where
+/// it runs.
+///
+/// A pane cannot paste an image as text, so it sends the agent this key and
+/// the agent reads the clipboard itself. The key differs by platform, not by
+/// shell: Claude Code binds `alt+v` on Windows and WSL because Windows
+/// terminals keep `ctrl+v` for text, and adds `ctrl+v` under WSL only. So a
+/// `ctrl+v` sent to Claude Code on Windows did nothing at all.
+///
+/// Defaults to `ctrl+v` everywhere — what every pane sent before this was
+/// measured — so an agent nobody has checked behaves as it always did.
+class AgentImagePasteKey {
+  const AgentImagePasteKey({
+    this.windowsNative = ctrlV,
+    this.wsl = ctrlV,
+    this.elsewhere = ctrlV,
+    this.evidence = '',
+  });
+
+  static const String ctrlV = '\x16';
+
+  /// `alt+v` as a terminal sends it: `ESC` then the letter.
+  static const String altV = '\x1bv';
+
+  final String windowsNative;
+  final String wsl;
+
+  /// A POSIX host, local or over SSH.
+  final String elsewhere;
+
+  /// Where the keys were read off. Empty for the unchecked default.
+  final String evidence;
+
+  String keyFor(EnvironmentKind kind) => switch (kind) {
+    EnvironmentKind.windowsNative => windowsNative,
+    EnvironmentKind.wsl => wsl,
+    EnvironmentKind.localPosix || EnvironmentKind.ssh => elsewhere,
+  };
+}
+
 /// The media types one agent reads from a path written into its prompt.
 ///
 /// **Defaults to none**, and the asymmetry is the same one [AgentForkSupport]

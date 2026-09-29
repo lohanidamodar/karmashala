@@ -524,6 +524,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
           onInvoke: (_) => pasteIntoTerminal(
             widget.instance.terminal,
             controller: widget.instance.controller,
+            keyToProgram: imagePasteKeyFor(ref, widget.instance),
           ),
         ),
       },

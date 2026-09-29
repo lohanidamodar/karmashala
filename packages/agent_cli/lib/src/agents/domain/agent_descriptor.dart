@@ -58,6 +58,7 @@ class AgentDescriptor {
     this.questions,
     this.menus,
     this.attachments = const AgentAttachmentSupport.none(),
+    this.imagePaste = const AgentImagePasteKey(),
     this.plan = const AgentPlanSupport.none(),
     this.skills = const AgentSkillSupport.none(),
     this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
@@ -106,6 +107,9 @@ class AgentDescriptor {
   /// has is not a door that is open once the session is up. Only a path in the
   /// prompt is.
   final AgentAttachmentSupport attachments;
+
+  /// Which key makes this agent paste the clipboard's image, by platform.
+  final AgentImagePasteKey imagePaste;
 
   /// **Whether this agent keeps a plan for itself, and where to read it.**
   ///
