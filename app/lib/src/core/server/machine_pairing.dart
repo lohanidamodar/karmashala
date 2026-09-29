@@ -1,26 +1,33 @@
 import 'dart:io';
 
 import 'package:karmashala_remote/client.dart';
+import 'package:karmashala_remote/companion.dart'
+    show RemoteCompanionGateway, kDefaultCompanionRelayUrl;
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
-/// Pairs this desktop with a server on another machine (slice 5e), as a
-/// phone adds a machine: the code `karmashala_host pair --grants desktop`
-/// prints (or another desktop's pairing dialog shows), as its QR text, its
-/// host invite or the typed code with the address it is reached at. The
-/// record is saved in [store]; throws [CompanionPairingException] in words.
+/// Pairs this client with a server on another machine (slice 5e): the code
+/// `karmashala_host pair` prints (or a desktop's pairing dialog shows), as its
+/// QR text, its host invite or the typed code with the address it is reached
+/// at. [hostsServer] is `ClientCapabilities.hostsServer`: a desktop needs the
+/// `desktop_client` grant, a client that cannot host (a phone) that or
+/// `phone_client`. The record is saved in [store]; throws
+/// [CompanionPairingException] in words.
 Future<CompanionPairing> pairWithMachine({
   required CompanionStore store,
   required String code,
   String? address,
   String? deviceName,
+  bool hostsServer = true,
   RemoteTransport Function(String host, int port)? lanDialer,
   Duration timeout = const Duration(seconds: 30),
 }) async {
   final text = code.trim();
   final client = CompanionPairingClient(
     store: store,
-    deviceId: await _deviceId(store),
+    deviceId: hostsServer
+        ? await _deviceId(store)
+        : await _phoneDeviceId(store),
     deviceName: _machineName(deviceName),
   );
   RemoteTransport? lan(String? endpoint) {
@@ -45,6 +52,11 @@ Future<CompanionPairing> pairWithMachine({
       invite = HostPairingInvite.decode(text);
     } on HostInviteExpiredException catch (error) {
       throw CompanionPairingException(error.message);
+    } on HostInviteTooNewException {
+      throw const CompanionPairingException(
+        'This code was made by a newer Karmashala. Update this app, then '
+        'try it again.',
+      );
     } on ProtocolException {
       throw const CompanionPairingException('That is not a Karmashala code.');
     }
@@ -76,12 +88,17 @@ Future<CompanionPairing> pairWithMachine({
   } else {
     final secret = PairingCode.tryDecode(text);
     if (secret == null) {
-      throw const CompanionPairingException(
-        'That is not a Karmashala code. Paste the code `karmashala_host pair '
-        '--grants desktop` printed, or its payload.',
+      throw CompanionPairingException(
+        'That is not a Karmashala code. Paste the code `karmashala_host pair'
+        '${hostsServer ? ' --grants desktop' : ''}` printed, or its payload.',
       );
     }
-    if (typedAddress == null) {
+    // With no address, a phone meets the server on the relay the companion
+    // used for typed codes; a desktop is always told where the server is.
+    final relay = typedAddress == null && !hostsServer
+        ? await _pairingRelay(store)
+        : null;
+    if (typedAddress == null && relay == null) {
       throw const CompanionPairingException(
         'A typed code needs the server\'s address (host:port), or paste the '
         'whole payload instead.',
@@ -90,19 +107,30 @@ Future<CompanionPairing> pairWithMachine({
     direct = typedAddress;
     record = await client.pairWithTypedCode(
       codeSecret: secret,
-      relay: Uri.parse('https://invalid.local'),
+      relay: relay ?? Uri.parse('https://invalid.local'),
       transport: lan(direct),
       timeout: timeout,
     );
   }
-  if (!record.capabilities.has(Capability.desktopClient)) {
+  final usable = hostsServer
+      ? record.capabilities.has(Capability.desktopClient)
+      : record.capabilities.attachTier != null;
+  if (!usable) {
     await CompanionConnections.mutate(
       store,
       (all) => all.remove(record.hostId.value),
     );
-    throw const CompanionPairingException(
-      'That code pairs a phone, not a desktop. On the server run '
-      '`karmashala_host pair --grants desktop` for a code this app can use.',
+    throw CompanionPairingException(
+      hostsServer
+          ? 'That code pairs a phone, not a desktop. On the server run '
+                '`karmashala_host pair --grants desktop` for a code this app '
+                'can use.'
+          // The confirm carries no server version, so both causes are named.
+          : 'That code pairs the old phone companion, not this app. On the '
+                'server, pair again: `karmashala_host pair` (its default now '
+                'includes the app), or `--grants phone`. If the server does '
+                'not know `phone`, it is older than this app: update it '
+                'first.',
     );
   }
   if (direct != null) {
@@ -128,6 +156,33 @@ Future<DeviceId> _deviceId(CompanionStore store) async {
   final minted = DeviceId.generate();
   await store.write(_deviceIdKey, minted.value);
   return minted;
+}
+
+/// A phone's identity is the companion's (`karmashala.remote.device_id`, else
+/// its active record's), so a server sees the same device across the move.
+Future<DeviceId> _phoneDeviceId(CompanionStore store) async {
+  const key = RemoteCompanionGateway.kDeviceIdStoreKey;
+  final saved = await store.read(key);
+  if (saved != null) {
+    try {
+      return DeviceId.parse(saved);
+    } on ProtocolException {
+      // Inherited or minted below.
+    }
+  }
+  final connections = await CompanionConnections.load(store);
+  final id = connections.active?.deviceId ?? DeviceId.generate();
+  await store.write(key, id.value);
+  return id;
+}
+
+/// The relay a phone's typed code meets its server on: the companion's
+/// setting, else the default.
+Future<Uri> _pairingRelay(CompanionStore store) async {
+  final raw = await store.read(RemoteCompanionGateway.kPairingRelayStoreKey);
+  final parsed = raw == null ? null : Uri.tryParse(raw.trim());
+  if (parsed != null && parsed.hasScheme) return parsed;
+  return Uri.parse(kDefaultCompanionRelayUrl);
 }
 
 String _machineName(String? given) {
