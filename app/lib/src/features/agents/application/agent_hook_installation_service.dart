@@ -153,22 +153,14 @@ class AgentHookInstallationService {
       );
 
   /// Deletes every endpoint file [installAll] wrote and leaves the constant
-  /// entries and scripts alone — **this is what runs on the way out**.
-  /// [keepLocal] leaves Windows-native and local POSIX stores alone: their
-  /// endpoint names the session host, which outlives the app.
-  Future<List<AgentHookInstallation>> retireEndpoints({
-    bool keepLocal = false,
-  }) => _forEachStore(
+  /// entries and scripts alone, in every store. Whether retiring is this
+  /// app's to do at all is the caller's rule — `AppLifecycle`'s step 1b skips
+  /// it whenever the endpoints name this machine's server, which outlives it.
+  Future<List<AgentHookInstallation>> retireEndpoints() => _forEachStore(
     verb: 'retire the endpoint for',
     skipUnreachable: false,
-    act: (installer, descriptor, home, kind) async {
-      if (keepLocal &&
-          (kind == EnvironmentKind.windowsNative ||
-              kind == EnvironmentKind.localPosix)) {
-        return false;
-      }
-      return installer.retireEndpoint(descriptor: descriptor, storeHome: home);
-    },
+    act: (installer, descriptor, home, _) =>
+        installer.retireEndpoint(descriptor: descriptor, storeHome: home),
   );
 
   /// Removes every hook [installAll] wrote. Matches on [agentHookMarker] and

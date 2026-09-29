@@ -391,8 +391,9 @@ class AppLifecycle {
   /// 0. a skill sweep still running is abandoned;
   /// 1. a hook rewrite in flight is awaited (bounded), since half of another
   ///    application's config is worse than none;
-  /// 1b. the hook endpoints are retired as at quit — only when the session
-  ///    set up this machine, since a client of a server elsewhere wrote none;
+  /// 1b. the hook endpoints are retired by quit's own rule, which leaves
+  ///    alone every file this machine's server still answers — see
+  ///    [_retireHookEndpoints];
   /// 2. the attention presenter is disposed;
   /// 4. system integration is **detached**, not disposed: the tray, hotkey
   ///    and window listeners stay, and read no container until [adoptSession];
@@ -424,21 +425,11 @@ class AppLifecycle {
       () => hookInstallation ?? Future<void>.value(),
       _kSwitchHookBudget,
     );
-    var setsUpThisMachine = false;
-    try {
-      setsUpThisMachine = container
-          .read(capabilitiesProvider)
-          .setsUpThisMachine;
-    } on Object catch (error) {
-      _logger.warning('lifecycle: reading the capabilities failed: $error');
-    }
-    if (setsUpThisMachine) {
-      await _bounded(
-        'agent hook endpoint retirement',
-        () => _retireHookEndpoints(container),
-        _kSwitchHookBudget,
-      );
-    }
+    await _bounded(
+      'agent hook endpoint retirement',
+      () => _retireHookEndpoints(container),
+      _kSwitchHookBudget,
+    );
     await _bounded(
       'background watchers',
       () async => _stopWatchers(container),
@@ -507,6 +498,7 @@ class AppLifecycle {
 
     // 1b. Retire the callback endpoint: delete the generated per-agent endpoint
     //     files, leaving the config entries — removing those raced the installer.
+    //     Only those this session wrote whose receiver quits with the app.
     await _step(
       'agent hook endpoint retirement',
       watch,
@@ -590,14 +582,36 @@ class AppLifecycle {
     }
   }
 
-  /// Step 1b: the generated per-agent endpoint files, not the config entries.
+  /// Step 1b, at quit and at a switch alike: the generated per-agent endpoint
+  /// files, not the config entries — and **only those this session wrote
+  /// whose receiver goes away with the app**. The files are this app's to
+  /// write, by the hook sweep a session that sets up this machine runs; the
+  /// server writes only its own `hook.endpoint` beside its data.
   Future<void> _retireHookEndpoints(ProviderContainer container) async {
     // A probe wrote no endpoint, so the files there are the real app's.
     if (_isProbe ??= container.read(probeModeProvider).enabled) return;
-    // Hooks posting to the session host keep going to it with the app shut.
+    // A client of a server elsewhere wrote none: the files on this machine
+    // were written for this machine's server, which keeps running without
+    // this window — deleting them silenced its agents.
+    if (!_setsUpThisMachine(container)) return;
+    // Every file names this machine's server — its hook listener, or a WSL
+    // spool it drains (slice 5a) — and that server outlives the app.
+    if (container.read(agentHooksAtHostProvider)) return;
+    // No server here to hand hooks to: what is on disk names nobody.
     await container
         .read(agentHookInstallationServiceProvider)
-        .retireEndpoints(keepLocal: container.read(agentHooksAtHostProvider));
+        .retireEndpoints();
+  }
+
+  /// Whether [container]'s session is this machine's own server. False, and
+  /// logged, when that cannot be read: retiring nothing is the safe side.
+  bool _setsUpThisMachine(ProviderContainer container) {
+    try {
+      return container.read(capabilitiesProvider).setsUpThisMachine;
+    } on Object catch (error) {
+      _logger.warning('lifecycle: reading the capabilities failed: $error');
+      return false;
+    }
   }
 
   /// Step 2: nothing new arrives while the rest closes.
