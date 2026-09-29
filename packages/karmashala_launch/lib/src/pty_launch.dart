@@ -447,6 +447,47 @@ String powerShellLiteral(String value) {
   return segments.length == 1 ? segments.single : '(${segments.join('+')})';
 }
 
+/// The longest argument [survivesWindowsNativeArgv] lets ride on argv. `cmd.exe`
+/// refuses a line past 8,191 characters, and the rest of the agent's command
+/// line (its path, the MCP flags, a session id) has to fit beside it.
+const kWindowsNativeArgvLimit = 2000;
+
+/// Whether [value] reaches a program's argv **intact** when it is one argument
+/// of a Windows-native launch — [wrapForPty]'s `powershell.exe -Command` — and
+/// the program is a `.cmd` shim, as npm installs `codex`, `claude` and friends.
+///
+/// Three parsers stand between the [powerShellLiteral] and the program, and
+/// the literal is only correct for the first half of the first:
+/// 1. **PowerShell 5.1's native-argument passing** wraps an argument that has
+///    whitespace in `"…"` but does not escape a `"` inside it (so the argument
+///    splits), and leaves a trailing `\` to escape its own closing quote.
+/// 2. **`cmd.exe`**, running the shim, re-reads the line: it expands `%NAME%`,
+///    ends the command at a newline (a multi-line brief arrives as its first
+///    line), and `& | < > ^` are live wherever its quote state — toggled by
+///    every `"` — is off.
+/// 3. **The program's own argv parser** (`CommandLineToArgvW` rules, node's
+///    included) then reads what `cmd.exe` substituted for `%*`.
+///
+/// So the rule is an allow-list, not an escape: a non-empty value of at most
+/// [kWindowsNativeArgvLimit] characters, with no `"`, `%`, `& | < > ^`, `;`
+/// (Windows Terminal's own command separator, for the external-terminal
+/// launch), no control character but a tab, and not ending in `\`. Anything
+/// else — typographic quotes, Devanagari, emoji — was measured arriving
+/// intact. A value that fails is handed over as a file, never as argv.
+bool survivesWindowsNativeArgv(String value) {
+  if (value.isEmpty || value.length > kWindowsNativeArgvLimit) return false;
+  if (value.endsWith(r'\')) return false;
+  for (final unit in value.codeUnits) {
+    if (unit < 0x20 && unit != 0x09) return false;
+    if (unit == 0x7F) return false;
+    if (_windowsNativeArgvUnsafe.contains(unit)) return false;
+  }
+  return true;
+}
+
+/// `"` `%` `&` `|` `<` `>` `^` `;` — see [survivesWindowsNativeArgv].
+final Set<int> _windowsNativeArgvUnsafe = '"%&|<>^;'.codeUnits.toSet();
+
 /// Quotes one argument for a **POSIX** shell. Single quotes, so everything
 /// arrives byte for byte; it cannot defend against `cmd.exe`, the first parser.
 String quotePosixShellArgument(String value) =>

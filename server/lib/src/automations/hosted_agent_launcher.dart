@@ -14,7 +14,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ExternalTerminalCommand;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/worktrees.dart';
-import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
+import 'package:karmashala_launch/karmashala_launch.dart'
+    show AgentPaneLaunch, survivesWindowsNativeArgv;
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
@@ -441,9 +442,14 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     );
     // A packet that could not travel as a file travels as the opening message
     // — it ends with the instruction, so nothing is lost.
-    final prompt = launch.systemPrompt != null && systemPromptPath == null
-        ? launch.systemPrompt
-        : launch.prompt;
+    final typedPacket =
+        launch.systemPrompt != null && systemPromptPath == null;
+    final prompt = _promptOnArgv(
+      id,
+      typedPacket ? launch.systemPrompt : launch.prompt,
+      kind,
+      isPacket: typedPacket,
+    );
     final newConversation = resumeId == null || resumeId.isEmpty;
     final permission = launch.followSettings
         ? agents.permissionOf(
@@ -607,6 +613,40 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     );
   }
 
+  /// [prompt] as it can ride on the agent's command line in [kind].
+  ///
+  /// On a Windows-native launch the command crosses PowerShell 5.1, `cmd.exe`
+  /// (npm's `.cmd` shim) and the program's argv parser, and a prompt with a
+  /// `"` splits into several arguments — Codex read `and` as a subcommand —
+  /// while one with a newline arrives as its first line. So a prompt that
+  /// fails [survivesWindowsNativeArgv] is written to a file and the agent is
+  /// told, in one plain line, to read it. Everywhere else, and for a prompt
+  /// that survives, it is returned as it is; a file that cannot be written,
+  /// or a path that would not survive either, leaves it as it was.
+  String? _promptOnArgv(
+    String sessionId,
+    String? prompt,
+    EnvironmentKind kind, {
+    required bool isPacket,
+  }) {
+    final text = prompt?.trim();
+    if (text == null || text.isEmpty) return prompt;
+    final throughPowerShell =
+        _windows && kind != EnvironmentKind.wsl && kind != EnvironmentKind.ssh;
+    if (!throughPowerShell || survivesWindowsNativeArgv(text)) return prompt;
+    final files = handoffFiles;
+    if (files == null) return prompt;
+    final written = files.writePrompt(
+      sessionId: sessionId,
+      prompt: text,
+      liveSessionIds: {for (final row in sessions.getClaimingLive()) row.id},
+    );
+    final path = written == null ? null : agentConfigPathFor(written, kind);
+    if (path == null) return prompt;
+    final pointer = promptFilePointer(path, isPacket: isPacket);
+    return survivesWindowsNativeArgv(pointer) ? pointer : prompt;
+  }
+
   /// The system-prompt file [text] is handed over as, spelled as the agent in
   /// [kind] names it, or null — every null falls back to the opening message.
   String? _systemPromptFile(
@@ -630,3 +670,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     return written == null ? null : agentConfigPathFor(written, kind);
   }
 }
+
+/// The one plain line an agent is handed in place of a prompt written to
+/// [path] — quote-free, so it survives the Windows-native launch itself.
+///
+/// A handoff packet ([isPacket]) is the agent's whole brief and ends with what
+/// to do, so it is framed as the brief — the same standing Claude Code gives a
+/// packet appended to its system prompt — not as a document to look at.
+String promptFilePointer(String path, {required bool isPacket}) => isPacket
+    ? 'Your handoff brief for this session is the file $path. Read all of it '
+          'before doing anything else, treat it as your instructions, and '
+          'carry out what it ends with.'
+    : 'My opening message to you is in the file $path. Read all of it and '
+          'act on it exactly as if I had typed it here.';
