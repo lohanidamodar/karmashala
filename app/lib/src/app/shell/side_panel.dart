@@ -65,6 +65,7 @@ class SidePanel extends ConsumerWidget {
       readsServerDisk: ref.watch(
         capabilitiesProvider.select((c) => c.readsServerDisk),
       ),
+      devicesArea: ref.watch(capabilitiesProvider.select((c) => c.devicesArea)),
     );
     return offered ? selected : null;
   }
@@ -207,6 +208,7 @@ class ContextTabs extends ConsumerWidget {
         debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
         readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
+        devicesArea: ref.read(capabilitiesProvider).devicesArea,
       ))
         if (ContextTab.of(surface) == ContextTab.more &&
             (!hidden.contains(surface) || surface == open))

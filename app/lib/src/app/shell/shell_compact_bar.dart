@@ -8,6 +8,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/sessions/application/session_status_providers.dart';
@@ -46,9 +47,11 @@ class ShellAreasMenuButton extends ConsumerWidget {
     final sessions = ref.watch(needsYouCountProvider);
     final asks = ref.watch(inboxAskCountProvider);
     final news = ref.watch(inboxHasUnseenUpdateProvider);
+    final areas = visibleShellAreas(ref.watch(capabilitiesProvider));
     final badges = {
       ShellArea.sessions: sessions,
-      ShellArea.devices: ref.watch(readyDeviceCountProvider),
+      if (areas.contains(ShellArea.devices))
+        ShellArea.devices: ref.watch(readyDeviceCountProvider),
       ShellArea.inbox: asks,
     };
     // Only what waits on the user marks the glyph amber, as on the strip: a
@@ -74,7 +77,8 @@ class ShellAreasMenuButton extends ConsumerWidget {
           excludeSemantics: true,
           child: InkWell(
             borderRadius: BorderRadius.circular(kCompactButtonRadius),
-            onTap: () => _open(anchor, ref, badges, news, open ? area : null),
+            onTap: () =>
+                _open(anchor, ref, areas, badges, news, open ? area : null),
             child: SizedBox(
               width: kCompactButton,
               height: kCompactButton,
@@ -103,6 +107,7 @@ class ShellAreasMenuButton extends ConsumerWidget {
   Future<void> _open(
     BuildContext anchor,
     WidgetRef ref,
+    List<ShellArea> areas,
     Map<ShellArea, int> badges,
     bool news,
     ShellArea? showing,
@@ -118,7 +123,7 @@ class ShellAreasMenuButton extends ConsumerWidget {
         ),
         const DesktopMenuDivider(),
       ],
-      for (final area in ShellArea.values)
+      for (final area in areas)
         DesktopMenuItem(
           value: area,
           label: switch (badges[area] ?? 0) {

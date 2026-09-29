@@ -1,6 +1,9 @@
 import 'about_page.dart';
 import 'notifications_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/capabilities/capabilities.dart';
 
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_page.dart';
@@ -99,11 +102,29 @@ List<Widget> settingsPageChildren(SettingsSectionId page) =>
     ? const [AgentsAndAccountsBody()]
     : [
         for (final anchor in page.anchors)
-          SettingsAnchorTarget(
+          _ShownSection(
             anchor: anchor,
-            child: settingsSectionFor(anchor),
+            child: SettingsAnchorTarget(
+              anchor: anchor,
+              child: settingsSectionFor(anchor),
+            ),
           ),
       ];
+
+/// [child], unless this client hides [anchor]'s section
+/// ([SettingsAnchor.shownWith]).
+class _ShownSection extends ConsumerWidget {
+  const _ShownSection({required this.anchor, required this.child});
+
+  final SettingsAnchor anchor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      anchor.shownWith(ref.watch(capabilitiesProvider))
+      ? child
+      : const SizedBox.shrink();
+}
 
 /// The widget that draws [anchor]. Every section is named once, here — except
 /// that Agents and accounts lays its page out agent by agent

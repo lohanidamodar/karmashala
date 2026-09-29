@@ -177,6 +177,12 @@ final class Capabilities {
   /// server is the one in use.
   bool get pairsHere => client.hostsServer && server.sameMachine;
 
+  /// "This computer" is a machine to choose: this client can run the server.
+  bool get hostsServer => client.hostsServer;
+
+  /// A pane takes files dropped from the OS.
+  bool get fileDrop => client.fileDrop;
+
   /// Administer the server: its config, devices, agents and pairings.
   bool get serverAdmin => server.granted(Capability.serverAdmin);
 

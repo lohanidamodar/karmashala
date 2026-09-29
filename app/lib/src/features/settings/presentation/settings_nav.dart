@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../../core/capabilities/capabilities.dart';
 import 'settings_catalog.dart';
 
 export 'settings_catalog.dart'
@@ -12,7 +14,7 @@ export 'settings_catalog.dart'
 /// a query the list narrows to the pages it matches and lists the settings it
 /// found under each. Up/Down move the page selection while a row has focus;
 /// the search box keeps its own arrows.
-class SettingsNav extends StatefulWidget {
+class SettingsNav extends ConsumerStatefulWidget {
   const SettingsNav({
     required this.selected,
     required this.onSelect,
@@ -29,10 +31,10 @@ class SettingsNav extends StatefulWidget {
   final ValueChanged<SettingsTarget>? onOpen;
 
   @override
-  State<SettingsNav> createState() => _SettingsNavState();
+  ConsumerState<SettingsNav> createState() => _SettingsNavState();
 }
 
-class _SettingsNavState extends State<SettingsNav> {
+class _SettingsNavState extends ConsumerState<SettingsNav> {
   final _filter = TextEditingController();
 
   @override
@@ -43,7 +45,8 @@ class _SettingsNavState extends State<SettingsNav> {
 
   List<SettingsSectionId> get _visible => [
     for (final page in SettingsSectionId.values)
-      if (page.matches(_filter.text)) page,
+      if (page.matches(_filter.text, caps: ref.read(capabilitiesProvider)))
+        page,
   ];
 
   KeyEventResult _onListKey(FocusNode node, KeyEvent event) {
@@ -77,8 +80,9 @@ class _SettingsNavState extends State<SettingsNav> {
 
   @override
   Widget build(BuildContext context) {
+    final caps = ref.watch(capabilitiesProvider);
     final pages = _visible;
-    final hits = searchSettings(_filter.text);
+    final hits = searchSettings(_filter.text, caps: caps);
     final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;

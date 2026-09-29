@@ -345,6 +345,7 @@ List<List<ViewMenuEntry>> viewMenuSections(
       readsServerDisk: ref.watch(
         capabilitiesProvider.select((c) => c.readsServerDisk),
       ),
+      devicesArea: ref.watch(capabilitiesProvider.select((c) => c.devicesArea)),
     ))
       if (ContextTab.of(surface) == ContextTab.more) surface,
   ];

@@ -5,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart' show AskPulse;
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import 'devices_dock.dart';
@@ -29,11 +30,15 @@ class ShellActivityStrip extends ConsumerWidget {
     final open = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
+    final areas = visibleShellAreas(ref.watch(capabilitiesProvider));
     return ActivityStrip(
       selected: open ? area : null,
+      areas: areas,
       badges: {
         ShellArea.sessions: ref.watch(needsYouCountProvider),
-        ShellArea.devices: ref.watch(readyDeviceCountProvider),
+        // Not even read without a Devices area: it would run adb.
+        if (areas.contains(ShellArea.devices))
+          ShellArea.devices: ref.watch(readyDeviceCountProvider),
         // What waits on an answer, as the Sessions badge; an unread update
         // is only the neutral dot below.
         ShellArea.inbox: ref.watch(inboxAskCountProvider),
@@ -41,7 +46,7 @@ class ShellActivityStrip extends ConsumerWidget {
       news: {if (ref.watch(inboxHasUnseenUpdateProvider)) ShellArea.inbox},
       // A hover worth having teaches the key that reaches the same place.
       hints: {
-        for (final area in ShellArea.values)
+        for (final area in areas)
           area: ?shellChordLabel<ShowShellAreaIntent>(
             where: (intent) => intent.area == area,
           ),
@@ -63,6 +68,7 @@ class ActivityStrip extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.onSettings,
+    this.areas = ShellArea.values,
     this.badges = const {},
     this.news = const {},
     this.hints = const {},
@@ -73,6 +79,9 @@ class ActivityStrip extends StatelessWidget {
   });
 
   final ShellArea? selected;
+
+  /// The glyphs drawn, in order: [visibleShellAreas].
+  final List<ShellArea> areas;
   final Map<ShellArea, int> badges;
 
   /// Areas holding something unread that does not need the user: a small
@@ -107,7 +116,7 @@ class ActivityStrip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Insets.sm),
       child: Column(
         children: [
-          for (final area in ShellArea.values)
+          for (final area in areas)
             _StripButton(
               icon: iconFor(area),
               label: area.label,

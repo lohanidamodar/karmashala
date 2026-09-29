@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import 'package:karmashala_ui/icons.dart';
 
+import '../../../core/capabilities/capabilities.dart';
+
 /// The one description of the settings screen: its groups, pages, the titled
 /// sections on each page, and every option a search can land on. The page
 /// list, search, page layout and deep links all read this, so none can drift.
@@ -216,28 +218,40 @@ enum SettingsSectionId {
       if (entry.anchor.page == this) entry,
   ];
 
+  /// Whether this client lists the page: one of its sections is shown.
+  bool shownWith(Capabilities caps) => anchors.any((a) => a.shownWith(caps));
+
   /// Every word this page answers to: its [aliases], its sections' titles and
   /// keywords and its options' labels and keywords, lower-cased.
-  List<String> get keywords => {
+  List<String> get keywords => _keywords(null);
+
+  /// [keywords], leaving out the sections [caps] hides.
+  List<String> _keywords(Capabilities? caps) => {
     ...aliases,
-    for (final anchor in anchors) ...[
-      anchor.title.toLowerCase(),
-      ...anchor.keywords,
-    ],
-    for (final entry in entries) ...[
-      entry.label.toLowerCase(),
-      ...entry.keywords,
-    ],
+    for (final anchor in anchors)
+      if (caps == null || anchor.shownWith(caps)) ...[
+        anchor.title.toLowerCase(),
+        ...anchor.keywords,
+      ],
+    for (final entry in entries)
+      if (caps == null || entry.anchor.shownWith(caps)) ...[
+        entry.label.toLowerCase(),
+        ...entry.keywords,
+      ],
   }.toList();
 
-  /// Whether the page stays listed while [query] is in the filter.
-  bool matches(String query) {
+  /// Whether the page stays listed while [query] is in the filter. With
+  /// [caps], a page or section this client hides never matches.
+  bool matches(String query, {Capabilities? caps}) {
+    if (caps != null && !shownWith(caps)) return false;
     final q = normaliseSettingsQuery(query);
     if (q.isEmpty) return true;
     if (label.toLowerCase().contains(q)) return true;
     if (description.toLowerCase().contains(q)) return true;
-    return keywords.any((k) => k.contains(q)) ||
-        entries.any((e) => e.matches(q));
+    return _keywords(caps).any((k) => k.contains(q)) ||
+        entries.any(
+          (e) => (caps == null || e.anchor.shownWith(caps)) && e.matches(q),
+        );
   }
 }
 
@@ -606,6 +620,18 @@ enum SettingsAnchor {
 
   /// The heading the section draws on its page.
   String get heading => title.toUpperCase();
+
+  /// Whether this client shows the section (spec §3.2, rule 2): one that needs
+  /// this machine is hidden, not shown broken.
+  bool shownWith(Capabilities caps) => switch (this) {
+    startup || launcherHotkey => caps.systemIntegration,
+    keyboard => caps.keyboardSettings,
+    notifications => caps.osToasts,
+    androidEmulators || iosSimulators => caps.devicesArea,
+    // The server-side half: its device list is refused without admin anyway.
+    remoteAccess => caps.pairsHere || caps.serverAdmin,
+    _ => true,
+  };
 }
 
 /// One option a search can find: the label it has on screen, a line saying
@@ -638,14 +664,16 @@ class SettingsEntry {
 
 String normaliseSettingsQuery(String query) => query.trim().toLowerCase();
 
-/// The options [query] finds, in page-list order.
-List<SettingsEntry> searchSettings(String query) {
+/// The options [query] finds, in page-list order; with [caps], none in a
+/// section this client hides.
+List<SettingsEntry> searchSettings(String query, {Capabilities? caps}) {
   final q = normaliseSettingsQuery(query);
   if (q.isEmpty) return const [];
   return [
     for (final page in SettingsSectionId.values)
       for (final entry in page.entries)
-        if (entry.matches(q)) entry,
+        if ((caps == null || entry.anchor.shownWith(caps)) && entry.matches(q))
+          entry,
   ];
 }
 

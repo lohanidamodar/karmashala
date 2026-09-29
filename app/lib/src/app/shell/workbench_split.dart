@@ -6,6 +6,7 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
+import '../../core/capabilities/capabilities.dart';
 import '../../features/files/application/files_tab_actions.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/git/application/diff_tab_actions.dart';
@@ -173,16 +174,18 @@ class WorkbenchSplitButton extends ConsumerWidget {
     onPressed: () async {
       final sessions = ref.read(terminalSessionsControllerProvider.notifier);
       sessions.focusGroup(groupId);
+      final devicesArea = ref.read(capabilitiesProvider).devicesArea;
       final picked = await showDesktopMenuUnder<SplitContent>(context, [
-        for (final content in SplitContent.values) ...[
-          if (content == SplitContent.emptyRight) const DesktopMenuDivider(),
-          DesktopMenuItem(
-            value: content,
-            label: content.label,
-            icon: content.icon,
-            enabled: sessions.canSplitWorkspace(content.axis),
-          ),
-        ],
+        for (final content in SplitContent.values)
+          if (devicesArea || content != SplitContent.devices) ...[
+            if (content == SplitContent.emptyRight) const DesktopMenuDivider(),
+            DesktopMenuItem(
+              value: content,
+              label: content.label,
+              icon: content.icon,
+              enabled: sessions.canSplitWorkspace(content.axis),
+            ),
+          ],
       ]);
       if (picked == null || !context.mounted) return;
       await splitWith(context, ref, groupId: groupId, content: picked);

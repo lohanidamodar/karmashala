@@ -53,9 +53,12 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
       return showing ? const UsageTabView() : const SizedBox.shrink();
     }
     // The same gate: a device pane off screen would keep its live view and its
-    // polling of adb going for nobody.
+    // polling of adb going for nobody. A layout restored from a desktop onto a
+    // client with no Devices area draws nothing there.
     if (isDevicePane(paneId)) {
-      return showing ? const DevicePane() : const SizedBox.shrink();
+      return showing && ref.read(capabilitiesProvider).devicesArea
+          ? const DevicePane()
+          : const SizedBox.shrink();
     }
     // The same gate: off screen it would follow the attached page's state for
     // nobody. The controller outlives it, so coming back loses no connection.
