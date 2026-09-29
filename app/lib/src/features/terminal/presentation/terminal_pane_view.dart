@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'terminal_copy_text.dart';
+import 'terminal_key_bar.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/widgets/adaptive_modal.dart';
