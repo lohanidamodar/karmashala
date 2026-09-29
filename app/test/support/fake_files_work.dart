@@ -191,6 +191,11 @@ class FakeFilesWork {
         await _space(path.environmentId).delete(path, recursive: recursive);
         await _moved(path);
         return const DataAck();
+      case FilesTrash(:final path):
+        // No recycle bin in a fake: gone is what the client can observe.
+        await _space(path.environmentId).delete(path, recursive: true);
+        await _moved(path);
+        return const DataAck();
       case FilesCopy(:final source, :final toDirectory, :final fileName):
         final landed = await const FileTransfer().copy(
           from: _space(source.environmentId),

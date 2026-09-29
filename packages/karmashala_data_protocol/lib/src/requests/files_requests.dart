@@ -48,6 +48,7 @@ DataRequest<Object?>? _filesRequestFromJson(String kind, _Arguments args) =>
         args._path('path'),
         recursive: args.boolean('recursive', orElse: false),
       ),
+      FilesTrash.name => FilesTrash(args._path('path')),
       FilesCopy.name => FilesCopy(
         args._path('source'),
         args._path('toDirectory'),
@@ -351,6 +352,21 @@ final class FilesDelete extends _FilesAt<DataAck> with _AnswersAck {
     ...super.argumentsToJson(),
     if (recursive) 'recursive': true,
   };
+}
+
+/// Moves [path] — a file, or a folder with everything in it — to the recycle
+/// bin of the machine it is on. Refused (`invalid`) where that machine has
+/// none the server can reach: a WSL distribution's share, an SSH host. Never
+/// a permanent delete in disguise: a client that wants one asks
+/// `files.delete`, and an older server refuses this request by name rather
+/// than deleting anything.
+final class FilesTrash extends _FilesAt<DataAck> with _AnswersAck {
+  const FilesTrash(super.path);
+
+  static const String name = 'files.trash';
+
+  @override
+  String get kind => name;
 }
 
 /// Copies the file [source] into the folder [toDirectory] — on the same

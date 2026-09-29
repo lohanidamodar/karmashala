@@ -161,6 +161,32 @@ class FilesClient {
   Future<void> delete(EnvironmentPath path, {bool recursive = false}) =>
       _send(FilesDelete(path, recursive: recursive));
 
+  /// Moves [path], with anything in it, to its machine's recycle bin. Asked
+  /// only where [canTrash] says there is one; an older server refuses the
+  /// request by name, and nothing is deleted.
+  Future<void> trash(EnvironmentPath path) async {
+    try {
+      await _send(FilesTrash(path));
+    } on FilesException catch (error) {
+      if (!error.message.contains('no data request is called')) rethrow;
+      throw const FilesException(
+        'the server is older than this app and has no recycle bin yet. '
+        'Nothing was deleted; restart the server to use it.',
+      );
+    }
+  }
+
+  /// Whether [path] goes to a recycle bin when deleted: a drive path in a
+  /// Windows environment. A WSL distribution's files (over a share) and an SSH
+  /// host's have none this server reaches — a delete there is permanent.
+  bool canTrash(EnvironmentPath path) {
+    if (!RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path.path)) return false;
+    final environment = _client.environments.view[path.environmentId];
+    return environment == null
+        ? path.environmentId == localHostEnvironmentId
+        : environment.kind == EnvironmentKind.windowsNative;
+  }
+
   /// Copies the file [source] into the folder [toDirectory] — on any machine
   /// the server reaches — and answers where it landed.
   Future<EnvironmentPath> copy(

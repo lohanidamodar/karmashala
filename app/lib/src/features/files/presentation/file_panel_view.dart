@@ -10,6 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/file_panel_controller.dart';
 import 'package:karmashala_files/values.dart';
+import 'file_delete.dart';
 import 'file_name_dialog.dart';
 
 /// One side of the file browser: where it is looking, what is there, and the
@@ -319,23 +320,13 @@ class _Toolbar extends StatelessWidget {
     await controller.rename(entry, name);
   }
 
+  /// The same question and the same delete as the Files tab's row menu:
+  /// the recycle bin where the machine has one, permanently (and said so)
+  /// where it does not.
   Future<void> _delete(BuildContext context, List<FileEntry> entries) async {
-    final folders = entries.where((e) => e.isDirectory).length;
-    final what = entries.length == 1
-        ? '"${entries.single.name}"'
-        : '${entries.length} items';
-    final confirmed = await showConfirmDialog(
-      context,
-      destructive: true,
-      title: 'Delete $what?',
-      message: folders > 0
-          ? 'Anything inside goes with it. This cannot be undone — nothing '
-                'here goes to the recycle bin.'
-          : 'This cannot be undone — nothing here goes to the recycle bin.',
-      confirmLabel: 'Delete',
-    );
-    if (!confirmed) return;
-    await controller.delete(entries, recursive: folders > 0);
+    final outcome = await confirmAndDeleteFiles(context, entries);
+    if (outcome.deleted.isEmpty && outcome.failures.isEmpty) return;
+    await controller.showDeleted(outcome.failures);
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:karmashala_files/karmashala_files.dart';
 import '../data/data_service.dart';
 import '../data/files_work.dart';
 import 'file_watches.dart';
+import 'recycle_bin.dart';
 
 /// **A machine's files, for every client** (slice 3c): the file pane, the
 /// editor's reads and saves, the "Browse…" dialogs, the Files tab's copies
@@ -175,8 +176,34 @@ class ServerFiles implements FilesWork {
         await _moved(path, also: renamed);
         return renamed;
       case FilesDelete(:final path, :final recursive):
-        await _space(path).delete(path, recursive: recursive);
-        await _moved(path);
+        final space = _space(path);
+        _refuseProtected(space, path);
+        await space.delete(path, recursive: recursive);
+        await _gone(path);
+        return const DataAck();
+      case FilesTrash(:final path):
+        final space = _space(path);
+        _refuseProtected(space, path);
+        final host = space is LocalFileSpace ? space.hostPathOf(path) : null;
+        if (host == null || !canRecycle(host)) {
+          throw DataRefused.invalid(
+            '${path.path} is on ${space.label}, which has no recycle bin '
+            'this server can reach.',
+          );
+        }
+        if (!(await space.stat(path)).exists) {
+          throw DataRefused.notFound('${path.path} is not there any more.');
+        }
+        try {
+          await moveToRecycleBin(host);
+        } on RecycleBinException catch (error) {
+          throw DataRefused(
+            DataRefusalCode.failed,
+            'Cannot move ${space.pathContext.basename(path.path)} to the '
+            'recycle bin: ${error.message}',
+          );
+        }
+        await _gone(path);
         return const DataAck();
       case FilesCopy(:final source, :final toDirectory, :final fileName):
         if (fileName != null) _name(fileName);
@@ -342,6 +369,38 @@ class ServerFiles implements FilesWork {
       index.touchUnder(one);
     }
     await watches.check(touched);
+  }
+
+  /// [path] went, with whatever was under it: an editor on a file inside a
+  /// deleted folder hears too, not only the folder's own watchers.
+  Future<void> _gone(EnvironmentPath path) async {
+    await _moved(path);
+    await watches.check([path], under: true);
+  }
+
+  /// A delete that would take a disk's root, a project or checkout the
+  /// workspace names, or a folder holding one, is refused whoever asks —
+  /// those are removed through the workspace, not a file browser.
+  void _refuseProtected(FileSpace space, EnvironmentPath path) {
+    final context = space.pathContext;
+    final here = context.normalize(path.path);
+    if (context.dirname(here) == here || context.rootPrefix(here) == here) {
+      throw DataRefused.invalid('${path.path} is the root of a disk.');
+    }
+    for (final root in data.workspaceRoots) {
+      if (root.environmentId != path.environmentId) continue;
+      if (context.equals(root.path, here)) {
+        throw DataRefused.invalid(
+          '${path.path} is a project or checkout root; remove it from the '
+          'workspace instead.',
+        );
+      }
+      if (context.isWithin(here, root.path)) {
+        throw DataRefused.invalid(
+          '${path.path} holds the project or checkout at ${root.path}.',
+        );
+      }
+    }
   }
 
   Future<EnvironmentPath> _home(String environmentId) async {

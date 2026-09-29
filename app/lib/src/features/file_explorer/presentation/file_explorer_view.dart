@@ -10,6 +10,7 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../../files/application/server_file_opening.dart';
 import '../../files/data/files_client.dart';
+import '../../files/presentation/file_delete.dart';
 import '../../files/presentation/file_name_dialog.dart';
 import '../../terminal/application/dropped_paths.dart';
 import 'package:agent_cli/process.dart';
@@ -315,6 +316,7 @@ class FileEntryRow extends ConsumerWidget {
           // Neither starts a process, so asking while building is free.
           canReveal: opening.canReveal(_path),
           canOpen: opening.canOpen,
+          canDelete: true,
         ),
         onSelected: actions.onMenu,
         // Dropped on a session's pane, it pastes the path — what dragging the
@@ -438,11 +440,13 @@ class FileRowTile extends StatelessWidget {
 
 /// A file row's right-click items. Reveal only where this machine has the
 /// file; open with the default app wherever a file can be brought here
-/// ([canOpen], which is [canReveal] unless said).
+/// ([canOpen], which is [canReveal] unless said). Delete last, set apart, and
+/// only where [canDelete] — the dialog it opens says bin or permanent.
 List<PopupMenuEntry<String>> fileEntryMenuItems({
   required bool isDirectory,
   required bool canReveal,
   bool? canOpen,
+  bool canDelete = false,
   String name = '',
 }) => [
   if (isDirectory) ...[
@@ -488,6 +492,15 @@ List<PopupMenuEntry<String>> fileEntryMenuItems({
     label: 'Copy path',
     icon: AppIcons.copySimple,
   ),
+  if (canDelete) ...[
+    const PopupMenuDivider(),
+    DesktopMenuItem(
+      value: 'delete',
+      label: 'Delete…',
+      icon: AppIcons.trash,
+      destructive: true,
+    ),
+  ],
 ];
 
 class _FileEntryActions {
@@ -570,6 +583,26 @@ class _FileEntryActions {
         _openWithDefaultApp();
       case 'copy-path':
         _copyPath();
+      case 'delete':
+        _delete();
+    }
+  }
+
+  /// Asks, then has the server delete it — the one delete the Split browser
+  /// uses too. Only what is inside the tree's own folder, never the folder.
+  Future<void> _delete() async {
+    final root = ref.read(fileTreeRootProvider);
+    final parent = parentOf(path);
+    final messenger = ScaffoldMessenger.of(context);
+    // The container outlives this row, which goes when its folder re-lists.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final outcome = await confirmAndDeleteFiles(context, [entry], within: root);
+    if (outcome.deleted.isNotEmpty && parent != null) {
+      // The server's watch tells the folder; asking again shows it at once.
+      container.invalidate(directoryListingProvider(parent));
+    }
+    for (final failure in outcome.failures) {
+      messenger.showSnackBar(SnackBar(content: Text(failure)));
     }
   }
 }

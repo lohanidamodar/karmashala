@@ -181,6 +181,14 @@ class FilePanelController extends ValueNotifier<FilePanelState> {
         return null;
       });
 
+  /// Lists again after a delete done elsewhere (the shared confirm-and-delete),
+  /// showing whatever did not go.
+  Future<void> showDeleted(List<String> failures) async {
+    await refresh();
+    if (_disposed || failures.isEmpty) return;
+    value = value.copyWith(error: failures.join('\n'), selected: const {});
+  }
+
   /// Runs one operation against the directory on screen, then lists it again.
   /// The listing is what the panel shows, so nothing is drawn that the
   /// filesystem did not do.

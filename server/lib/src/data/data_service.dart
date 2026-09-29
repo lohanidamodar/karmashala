@@ -315,6 +315,16 @@ class DataService {
   /// Every recorded environment.
   List<ExecutionEnvironment> get environments => _hosts.allEnvironments();
 
+  /// Where every project and checkout the workspace names lives — what a
+  /// file browser's delete must never take.
+  List<EnvironmentPath> get workspaceRoots {
+    final workspace = _workspace.list();
+    return [
+      for (final project in workspace.projects) project.root,
+      for (final repository in workspace.repositories) repository.path,
+    ];
+  }
+
   /// Records a probe of [environmentId] by the one rule (`planReconcile`).
   InstallationsReconciled reconcileProbe({
     required String environmentId,
