@@ -14,6 +14,8 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../app/widgets/adaptive_modal.dart';
+import '../../../core/capabilities/capabilities.dart'
+    show capabilitiesProvider, kApprovalNotGranted;
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../remote/application/remote_approval_bindings.dart';
@@ -27,6 +29,10 @@ import '../application/session_status_providers.dart';
 part 'approval_request_card/ask_dock.dart';
 part 'approval_request_card/dock_buttons.dart';
 part 'approval_request_card/tool_ask_answers.dart';
+
+const _noLiveTerminal =
+    'This session has no live terminal here, so it cannot be answered from '
+    'Karmashala.';
 
 /// The pending approval for one session, and the buttons that answer it. It
 /// never words the request itself, and offers only keys the agent named.
@@ -77,6 +83,10 @@ class ApprovalRequestCard extends ConsumerWidget {
     // answers in. Without either — an external terminal, a session whose
     // process has gone — the buttons would silently do nothing.
     final canAnswer = ref.read(sessionAnswerableProvider)(sessionId);
+    // Why it cannot, in the companion's words when it is the phone's grant.
+    final cannot = ref.watch(capabilitiesProvider.select((c) => c.mayApprove))
+        ? _noLiveTerminal
+        : kApprovalNotGranted;
 
     if (docked) {
       final dock = _AskDock(
@@ -86,6 +96,7 @@ class ApprovalRequestCard extends ConsumerWidget {
         rules: rules,
         menus: descriptor?.menus,
         canAnswer: canAnswer,
+        cannot: cannot,
       );
       return _Docked(
         touch: touch,
@@ -136,6 +147,7 @@ class ApprovalRequestCard extends ConsumerWidget {
             rules: rules,
             agentName: agentName,
             canAnswer: canAnswer,
+            cannot: cannot,
           )
         else
           _NothingToAnswer(
@@ -553,6 +565,7 @@ class _Answers extends ConsumerWidget {
     required this.rules,
     required this.agentName,
     required this.canAnswer,
+    required this.cannot,
   });
 
   final String sessionId;
@@ -563,6 +576,9 @@ class _Answers extends ConsumerWidget {
   final String agentName;
   final bool canAnswer;
 
+  /// Said in place of the buttons when not [canAnswer].
+  final String cannot;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -570,8 +586,7 @@ class _Answers extends ConsumerWidget {
 
     if (!canAnswer) {
       return Text(
-        'This session has no live terminal here, so it cannot be answered from '
-        'Karmashala.',
+        cannot,
         style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
       );
     }

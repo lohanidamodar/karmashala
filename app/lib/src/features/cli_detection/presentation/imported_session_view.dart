@@ -167,7 +167,14 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                     ),
                 emptyHint: emptyHint,
                 footer: MessageComposer(
-                  hintText: 'Continue this session — type a message',
+                  // Continuing starts the session, then sends to it.
+                  enabled: caps.mayStart && caps.maySend,
+                  attaches: caps.mayAttach,
+                  hintText: !caps.mayStart
+                      ? kStartNotGranted
+                      : !caps.maySend
+                      ? kPromptNotGranted
+                      : 'Continue this session — type a message',
                   // Attachments go where the session's agent runs.
                   server: () =>
                       ref.read(pickServerProvider(session.environmentId)),

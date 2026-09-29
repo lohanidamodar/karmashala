@@ -27,6 +27,7 @@ class _AskDock extends ConsumerWidget {
     required this.rules,
     required this.menus,
     required this.canAnswer,
+    required this.cannot,
   });
 
   final String sessionId;
@@ -35,6 +36,9 @@ class _AskDock extends ConsumerWidget {
   final AgentApprovalRules rules;
   final AgentMenuSupport? menus;
   final bool canAnswer;
+
+  /// Said in place of the answers when not [canAnswer].
+  final String cannot;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -94,12 +98,7 @@ class _AskDock extends ConsumerWidget {
       AgentWaitKind.approval when summary != null => _DockColumn(
         children: [
           ?command,
-          _DockNote(
-            note:
-                'This session has no live terminal here, so it cannot be '
-                'answered from Karmashala.',
-            sessionId: sessionId,
-          ),
+          _DockNote(note: cannot, sessionId: sessionId),
         ],
       ),
       AgentWaitKind.approval when canAnswer => _MenuOr(
@@ -137,12 +136,7 @@ class _AskDock extends ConsumerWidget {
       _ => _DockColumn(
         children: [
           quoted,
-          _DockNote(
-            note:
-                'This session has no live terminal here, so it cannot be '
-                'answered from Karmashala.',
-            sessionId: sessionId,
-          ),
+          _DockNote(note: cannot, sessionId: sessionId),
         ],
       ),
     };

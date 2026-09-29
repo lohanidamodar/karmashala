@@ -22,8 +22,9 @@ class SealedHostConnection implements HostConnection {
     // grant covers transcripts; `readTranscript` is the phone's word for it.
     transcripts:
         _link.capabilities.has(Capability.readTranscript) ||
-        _link.capabilities.attachTier != null,
+        _link.capabilities.attachTier == AttachTier.desktop,
     phone: _link.capabilities.attachTier == AttachTier.phone,
+    grants: _link.capabilities,
     label: _link.deviceName,
     deviceId: _link.deviceId,
   );

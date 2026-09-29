@@ -7,6 +7,8 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../../core/capabilities/capabilities.dart'
+    show capabilitiesProvider, kUsageNotGranted;
 import '../../../../core/util/clock_provider.dart';
 import '../../../environments/application/environments_controller.dart';
 import '../../../sessions/data/server_session_stats.dart';
@@ -74,7 +76,17 @@ class UsageTabView extends ConsumerWidget {
                 constraints: const BoxConstraints(
                   maxWidth: kUsageTabContentMaxWidth,
                 ),
-                child: const _UsagePage(),
+                child:
+                    ref.watch(
+                      capabilitiesProvider.select((c) => c.mayViewUsage),
+                    )
+                    ? const _UsagePage()
+                    : Text(
+                        kUsageNotGranted,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
               ),
             ),
           );

@@ -9,6 +9,7 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../core/capabilities/capabilities.dart' show capabilitiesProvider;
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../application/explorer_section_nodes.dart';
@@ -90,7 +91,9 @@ class ExplorerPanel extends ConsumerWidget {
           title: 'Projects',
           actions: const [ExplorerHeaderActions()],
           newLabel: 'New project',
-          onNew: () => newProject(context),
+          onNew: ref.watch(capabilitiesProvider.select((c) => c.mayAddProject))
+              ? () => newProject(context)
+              : null,
         ),
         Expanded(
           child: ExplorerLensBody(

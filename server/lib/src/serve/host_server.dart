@@ -11,6 +11,7 @@ import '../data/data_service.dart';
 import '../data/data_streams.dart';
 import '../domain/host_session.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
+import 'package:karmashala_remote/remote.dart' show Capability;
 import '../domain/session_registry.dart';
 import '../domain/write_token.dart';
 import '../pty/pty.dart';
@@ -513,6 +514,16 @@ class _ClientSession implements BoxRelayPeer {
   /// Not awaited: an answer reads the screen back between keys, and this
   /// client's other frames must not wait behind it.
   void _onPromptAnswer(PromptAnswerMessage message) {
+    if (!_trust.may(Capability.approve)) {
+      _send(
+        PromptAnsweredMessage.refused(
+          requestId: message.requestId,
+          refusal: PromptRefusalKind.refused,
+          message: 'this device was not granted ${Capability.approve.wire}',
+        ),
+      );
+      return;
+    }
     final prompts = _server.prompts;
     if (prompts == null) {
       _send(
@@ -583,6 +594,7 @@ class _ClientSession implements BoxRelayPeer {
       sshPrompts: _trust.sshPrompts,
       transcripts: _trust.transcripts,
       phone: _trust.phone,
+      grants: _trust.grants,
       device: _trust.deviceId,
     );
     final answer = session.handleJson(message.envelope);

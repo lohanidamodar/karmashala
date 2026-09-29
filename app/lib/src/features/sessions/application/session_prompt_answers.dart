@@ -269,11 +269,15 @@ final sessionPromptAnswersProvider = Provider<PromptAnswering>(
 );
 
 /// Whether [String] session can be answered from the app at all: a live pane
-/// of its own, or a process this machine's host runs.
+/// of its own, or a process this machine's host runs — and, on a phone, a
+/// pairing that grants `approve`.
 final sessionAnswerableProvider = Provider<bool Function(String sessionId)>(
   (ref) =>
       (sessionId) =>
-          ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null ||
-          (ref.read(hostLifecycleSubscriberProvider)?.isRunning(sessionId) ??
-              false),
+          ref.read(capabilitiesProvider).mayApprove &&
+          (ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null ||
+              (ref
+                      .read(hostLifecycleSubscriberProvider)
+                      ?.isRunning(sessionId) ??
+                  false)),
 );

@@ -1,3 +1,5 @@
+import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
+
 /// What one connection may do (slice 5e). The local socket's peer is this OS
 /// user, so it may do everything; a client on another machine, over the
 /// companion's sealed channel, gets only what its pairing grants.
@@ -8,6 +10,7 @@ class LinkTrust {
     required this.sshPrompts,
     required this.transcripts,
   }) : phone = false,
+       grants = null,
        label = null,
        deviceId = null;
 
@@ -29,6 +32,7 @@ class LinkTrust {
     required bool sshPrompts,
     required this.transcripts,
     this.phone = false,
+    this.grants,
     this.label,
     this.deviceId,
   }) : remote = true,
@@ -43,6 +47,15 @@ class LinkTrust {
   /// The app on a phone (`phone_client`): the data API also refuses it the
   /// server's secrets, SSH hosts and agent-account deletes.
   final bool phone;
+
+  /// A [phone]'s pairing grants, each refused in words when left out (Stage 3
+  /// step 3). Ignored for a desktop client, which may do all a desktop does.
+  final CapabilitySet? grants;
+
+  /// Whether this link holds [capability]: always, unless it is a phone
+  /// whose pairing leaves it out.
+  bool may(Capability capability) =>
+      !phone || (grants?.has(capability) ?? true);
 
   /// The paired device's name, for a client that names itself nothing.
   final String? label;

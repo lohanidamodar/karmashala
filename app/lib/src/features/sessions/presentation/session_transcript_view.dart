@@ -615,6 +615,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// pressed by the server when it offers it, else typed into the agent's
   /// pane. Said, not silent, when nothing runs the session.
   void _interruptTurn() {
+    if (!ref.read(capabilitiesProvider).maySend) {
+      _say(kPromptNotGranted);
+      return;
+    }
     if (ref.read(sessionInputProvider).viaServer) {
       unawaited(_interruptViaServer());
       return;
@@ -657,25 +661,40 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// The activity line over the composer. The delivery strip sits on the
   /// composer's channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
-    Widget composer({required bool prompted}) => MessageComposer(
-      controller: _composer,
-      // Attachments and the message, nothing else: mode, model
-      // and stats are on the pane's status bar (owner, 2026-09-28).
-      chips: const [],
-      // Read when the menu opens, never watched: the footer is
-      // built once, and the library changing must not rebuild it.
-      snippets: _snippets,
-      // Read per paste or attach, like the snippets: never watched.
-      server: _pickServer,
-      enabled: !prompted,
-      hintText: prompted
-          ? 'Answer the prompt above first'
-          : active
-          // No emoji: the old hint named a 🖼 that is nowhere
-          // in the composer; the attach tooltip does.
-          ? 'Message the agent…'
-          : 'Type to continue this session…',
-      onSend: _send,
+    // A phone's grants are watched here: the footer is built once.
+    Widget composer({required bool prompted}) => Consumer(
+      builder: (context, ref, _) {
+        final caps = ref.watch(capabilitiesProvider);
+        // A session that is not running is resumed to take the message.
+        final refusal = !caps.maySend
+            ? kPromptNotGranted
+            : !active && !caps.mayStart
+            ? kStartNotGranted
+            : null;
+        return MessageComposer(
+          controller: _composer,
+          // Attachments and the message, nothing else: mode, model
+          // and stats are on the pane's status bar (owner, 2026-09-28).
+          chips: const [],
+          // Read when the menu opens, never watched: the footer is
+          // built once, and the library changing must not rebuild it.
+          snippets: _snippets,
+          // Read per paste or attach, like the snippets: never watched.
+          server: _pickServer,
+          attaches: caps.mayAttach,
+          enabled: !prompted && refusal == null,
+          hintText:
+              refusal ??
+              (prompted
+                  ? 'Answer the prompt above first'
+                  : active
+                  // No emoji: the old hint named a 🖼 that is nowhere
+                  // in the composer; the attach tooltip does.
+                  ? 'Message the agent…'
+                  : 'Type to continue this session…'),
+          onSend: _send,
+        );
+      },
     );
     return LayoutBuilder(
       builder: (context, box) => Column(

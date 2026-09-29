@@ -62,11 +62,21 @@ class NewSessionDialog extends ConsumerStatefulWidget {
 
   /// Opens the session flow, optionally placing an in-app session in an empty
   /// split instead of creating another workbench tab.
-  static Future<void> show(BuildContext context, {String? targetPaneId}) =>
-      showFormDialog<void>(
-        context: context,
-        builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
-      );
+  /// A phone not granted `start_session` is told so instead: every way in
+  /// comes through here.
+  static Future<void> show(BuildContext context, {String? targetPaneId}) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (!container.read(capabilitiesProvider).mayStart) {
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text(kStartNotGranted)));
+      return Future.value();
+    }
+    return showFormDialog<void>(
+      context: context,
+      builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
+    );
+  }
 
   final String? targetPaneId;
 
