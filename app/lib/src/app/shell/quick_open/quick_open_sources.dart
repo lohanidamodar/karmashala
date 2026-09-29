@@ -244,7 +244,7 @@ class QuickOpenSources {
             'scratchpad',
           ],
           onSelect: () {
-            panel.select(SidePanelSurface.notes);
+            panel.show(SidePanelSurface.notes);
             writeNewNote(ref);
           },
         ),
@@ -262,7 +262,7 @@ class QuickOpenSources {
           'remind',
         ],
         onSelect: () {
-          panel.select(SidePanelSurface.todos);
+          panel.show(SidePanelSurface.todos);
           ref.read(todoComposerFocusProvider.notifier).request();
         },
       ),
@@ -310,7 +310,7 @@ class QuickOpenSources {
           surface.label,
           subtitle: 'Context panel',
           icon: SidePanel.iconFor(surface),
-          onSelect: () => panel.select(surface),
+          onSelect: () => panel.show(surface),
         ),
       _command(
         'Zen',
@@ -900,10 +900,10 @@ class QuickOpenSources {
     final panel = ref.read(sidePanelProvider.notifier);
     if (changed &&
         ref.read(diffTabActionsProvider).open(file.relativePath) != null) {
-      panel.select(SidePanelSurface.changes);
+      panel.show(SidePanelSurface.changes);
       return;
     }
-    panel.select(SidePanelSurface.files);
+    panel.show(SidePanelSurface.files);
     ref.read(editorTabActionsProvider).openAt(file.path);
   }
 
@@ -927,7 +927,8 @@ class QuickOpenSources {
               : 'Worktree branch',
           icon: AppIcons.gitBranch,
           weight: _branchWeight,
-          onSelect: () => dismiss(() => panel.select(SidePanelSurface.changes)),
+          onSelect: () =>
+              dismiss(() => panel.show(SidePanelSurface.repository)),
         ),
       for (final pr in facts.pullRequests)
         QuickOpenItem(
@@ -941,7 +942,7 @@ class QuickOpenSources {
           keywords: ['#${pr.number}', 'pull request'],
           weight: _githubWeight,
           onSelect: () =>
-              dismiss(() => panel.select(SidePanelSurface.repository)),
+              dismiss(() => panel.show(SidePanelSurface.repository)),
         ),
       for (final issue in facts.issues)
         QuickOpenItem(
@@ -954,7 +955,7 @@ class QuickOpenSources {
           keywords: ['#${issue.number}', 'issue'],
           weight: _githubWeight,
           onSelect: () =>
-              dismiss(() => panel.select(SidePanelSurface.repository)),
+              dismiss(() => panel.show(SidePanelSurface.repository)),
         ),
     ];
   }

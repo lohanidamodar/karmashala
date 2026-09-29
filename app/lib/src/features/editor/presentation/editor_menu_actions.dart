@@ -130,9 +130,7 @@ void revealInFilesPanel(WidgetRef ref, EnvironmentPath path) {
   ref
       .read(fileRevealTargetProvider.notifier)
       .reveal(FileRevealTarget(path: path, isDirectory: false));
-  if (ref.read(sidePanelProvider) != SidePanelSurface.files) {
-    ref.read(sidePanelProvider.notifier).select(SidePanelSurface.files);
-  }
+  ref.read(sidePanelProvider.notifier).show(SidePanelSurface.files);
 }
 
 /// Keeps [text] as a note through the same dialog a terminal capture uses,

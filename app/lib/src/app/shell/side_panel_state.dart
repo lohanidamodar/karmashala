@@ -182,7 +182,7 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
   bool get _hasRoom => ref.read(sidePanelRoomProvider);
 
   /// Choosing the open surface again closes the panel; choosing another
-  /// switches to it. The same gesture does both jobs, as in every editor.
+  /// switches to it. Anything that means "go there" wants [show] instead.
   void select(SidePanelSurface surface) {
     if (!_hasRoom) return;
     if (state == surface) {
