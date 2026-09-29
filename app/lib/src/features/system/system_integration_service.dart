@@ -178,10 +178,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// it. The *inbox*, not the raw attention set: one list, one count.
   List<InboxItem> _pending = const [];
 
-  /// How many were showing last time the icon and tooltip were set, so the
-  /// native calls only happen when the count actually moved. `-1` forces the
-  /// first apply.
-  int _appliedAttentionCount = -1;
+  /// The tooltip last set, so the native calls only happen when what it says
+  /// actually moved. Null forces the first apply.
+  String? _appliedToolTip;
 
   static bool get isSupported =>
       !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
@@ -457,28 +456,43 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> _applyAttention(AttentionInbox inbox) async {
     if (_disposed) return;
     _pending = inbox.pending;
-    final count = inbox.unseen;
-    if (count != _appliedAttentionCount) {
-      final wasBadged = _appliedAttentionCount > 0;
-      final isBadged = count > 0;
-      _appliedAttentionCount = count;
+    // "Need you" is the asks alone, seen or not, as the strip's Inbox badge
+    // counts them (inboxAskCountProvider); an unseen finished turn is news,
+    // said separately, never claimed as needing the user.
+    var asks = 0;
+    for (final item in inbox.items) {
+      if (item.kind == InboxItemKind.needsApproval) asks++;
+    }
+    var updates = 0;
+    for (final item in inbox.pending) {
+      if (item.kind != InboxItemKind.needsApproval) updates++;
+    }
+    final toolTip = _toolTip(asks, updates);
+    if (toolTip != _appliedToolTip) {
+      final wasBadged = _appliedToolTip != null && _appliedToolTip != _appLabel;
+      final isBadged = toolTip != _appLabel;
+      _appliedToolTip = toolTip;
       await _run(NativeSetting.trayIcon, () async {
         if (wasBadged != isBadged) {
           await _native.tray.setIcon(
             isBadged ? _kAttentionTrayIcon : _kIdleTrayIcon,
           );
         }
-        await _native.tray.setToolTip(_toolTip(count));
+        await _native.tray.setToolTip(toolTip);
       });
     }
     await _refreshMenu(_settings);
   }
 
-  String _toolTip(int count) => switch (count) {
-    0 => _appLabel,
-    1 => '$_appLabel — 1 thing needs you',
-    _ => '$_appLabel — $count things need you',
-  };
+  /// "Karmashala — 2 need you · 3 new updates"; either half only when it
+  /// has something to say, and the bare name when neither does.
+  String _toolTip(int asks, int updates) {
+    final parts = [
+      if (asks > 0) '$asks need${asks == 1 ? 's' : ''} you',
+      if (updates > 0) '$updates new update${updates == 1 ? '' : 's'}',
+    ];
+    return parts.isEmpty ? _appLabel : '$_appLabel — ${parts.join(' · ')}';
+  }
 
   Future<void> _refreshMenu(Settings settings) async {
     if (_disposed) return;
