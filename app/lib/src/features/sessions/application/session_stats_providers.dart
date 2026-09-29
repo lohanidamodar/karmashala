@@ -1,5 +1,14 @@
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/database/sqlite_row_reader.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show
+        DataRefusalCode,
+        DataRefused,
+        SessionStatsGap,
+        SessionStatsReading;
 import 'package:riverpod/riverpod.dart';
+
+import '../data/server_session_stats.dart';
 
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -64,21 +73,83 @@ class SessionStatsView {
 
 /// Reads a session's own counts out of whichever store its agent keeps — both
 /// transcript-writing agents record them, so nothing types into the session.
+///
+/// A server that offers `sessions.stats` reads them where the record is
+/// (Stage 0 step 9); an older one refuses it `invalid` and this disk is read
+/// as before.
 class SessionStatsService {
   const SessionStatsService(this._ref);
 
   final Ref _ref;
 
-  Future<SessionStatsView> statsFor(String sessionId) async {
-    final session = _ref.read(sessionsDataProvider).getById(sessionId);
-    if (session == null) {
-      return const SessionStatsView.unavailable(
-        SessionStatsUnavailable.unknownSession,
-        '',
-        lifetimeUnavailable: LifetimeStatsUnavailable.agentKeepsNoAggregate,
-      );
-    }
+  ServerSessionStats? get _server =>
+      _ref.read(capabilitiesProvider).statsViaServer
+      ? _ref.read(serverSessionStatsProvider)
+      : null;
 
+  /// One session's counts and its agent's lifetime totals. [current] skips a
+  /// reading the client holds from the server.
+  Future<SessionStatsView> statsFor(
+    String sessionId, {
+    bool current = false,
+  }) async {
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (session == null) return _unknownSession;
+    if (_server case final server?) {
+      try {
+        final reading = await server.read(
+          sessionId,
+          lifetime: true,
+          current: current,
+        );
+        return _viewOf(reading, session);
+      } on DataRefused catch (refusal) {
+        if (refusal.code != DataRefusalCode.invalid) rethrow;
+      }
+    }
+    return _readHere(session);
+  }
+
+  /// The counts of each of [sessionIds], without lifetime totals: one
+  /// request through the server, or one read per session of this disk.
+  Future<Map<String, SessionStatsView>> countsFor(
+    Iterable<String> sessionIds,
+  ) async {
+    final sessions = _ref.read(sessionsDataProvider);
+    final ids = sessionIds.toList(growable: false);
+    if (_server case final server?) {
+      try {
+        final readings = await server.readAll([
+          for (final id in ids)
+            if (sessions.getById(id) != null) id,
+        ]);
+        return {
+          for (final id in ids)
+            id: switch ((sessions.getById(id), readings[id])) {
+              (final session?, final reading?) => _viewOf(reading, session),
+              _ => _unknownSession,
+            },
+        };
+      } on DataRefused catch (refusal) {
+        if (refusal.code != DataRefusalCode.invalid) rethrow;
+      }
+    }
+    return {
+      for (final id in ids)
+        id: switch (sessions.getById(id)) {
+          final session? => await _readHere(session),
+          null => _unknownSession,
+        },
+    };
+  }
+
+  static const _unknownSession = SessionStatsView.unavailable(
+    SessionStatsUnavailable.unknownSession,
+    '',
+    lifetimeUnavailable: LifetimeStatsUnavailable.agentKeepsNoAggregate,
+  );
+
+  (String?, AgentAdapter?, String) _agentOf(Session session) {
     final agentId = _ref
         .read(agentInstallationsDataProvider)
         .getById(session.agentInstallationId)
@@ -86,7 +157,43 @@ class SessionStatsService {
     final adapter = agentId == null
         ? null
         : _ref.read(agentRegistryProvider).adapterFor(agentId);
-    final name = adapter?.descriptor.displayName ?? agentId ?? '';
+    return (agentId, adapter, adapter?.descriptor.displayName ?? agentId ?? '');
+  }
+
+  SessionStatsView _viewOf(SessionStatsReading reading, Session session) {
+    final name = _agentOf(session).$3;
+    final lifetime = reading.lifetime;
+    final lifetimeUnavailable = lifetime != null
+        ? null
+        : reading.lifetimeGap ?? LifetimeStatsUnavailable.sourceNotFound;
+    if (reading.stats case final stats?) {
+      return SessionStatsView.computed(
+        stats,
+        name,
+        lifetime: lifetime,
+        lifetimeUnavailable: lifetimeUnavailable,
+        sessionTitle: session.title,
+      );
+    }
+    return SessionStatsView.unavailable(
+      switch (reading.gap) {
+        SessionStatsGap.unknownSession => SessionStatsUnavailable.unknownSession,
+        SessionStatsGap.agentKeepsNoCounts =>
+          SessionStatsUnavailable.agentRecordsNoCounts,
+        SessionStatsGap.recordNotFound ||
+        SessionStatsGap.none => SessionStatsUnavailable.transcriptNotFound,
+      },
+      name,
+      lifetime: lifetime,
+      lifetimeUnavailable: lifetimeUnavailable,
+      sessionTitle: session.title,
+    );
+  }
+
+  /// Today's read of this machine's disk, for a server without
+  /// `sessions.stats`.
+  Future<SessionStatsView> _readHere(Session session) async {
+    final (agentId, adapter, name) = _agentOf(session);
 
     // Read first and independently of everything below: the two sections
     // answer different questions and neither is a precondition of the other.
@@ -230,9 +337,12 @@ final sessionStatsServiceProvider = Provider<SessionStatsService>(
 
 /// A session's stats: computed when the dialog opens or the status line's
 /// context chip appears, and again when that chip sees a turn end — an
-/// on-demand question, never a poll, subscribed to **this row only**.
+/// on-demand question, never a poll, subscribed to **this row only**. Each
+/// asks the server afresh: its row moving is the news a held reading lacks.
 final sessionStatsProvider = FutureProvider.autoDispose
     .family<SessionStatsView, String>((ref, sessionId) {
       ref.watchSession(sessionId);
-      return ref.read(sessionStatsServiceProvider).statsFor(sessionId);
+      return ref
+          .read(sessionStatsServiceProvider)
+          .statsFor(sessionId, current: true);
     });

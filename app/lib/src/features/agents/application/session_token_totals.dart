@@ -100,9 +100,11 @@ final tokenTotalsProvider = FutureProvider.autoDispose<TokenTotals>((
   final stats = ref.read(sessionStatsServiceProvider);
   final workspace = ref.read(workspaceDataProvider);
   final installations = ref.read(agentInstallationsDataProvider);
+  final recent = sessions.take(kTokenTotalsMaxSessions).toList();
+  final views = await stats.countsFor([for (final s in recent) s.id]);
   final rows = <SessionTokens>[];
-  for (final session in sessions.take(kTokenTotalsMaxSessions)) {
-    final view = await stats.statsFor(session.id);
+  for (final session in recent) {
+    final view = views[session.id];
     final repository = workspace.repository(session.repositoryId);
     final project = repository == null
         ? null
@@ -113,8 +115,8 @@ final tokenTotalsProvider = FutureProvider.autoDispose<TokenTotals>((
       agent: agentId == null
           ? 'Unknown agent'
           : AgentRegistry.builtIn.displayNameFor(agentId),
-      tokens: view.stats?.tokens.total,
-      lastActivityAt: view.stats?.lastActivityAt,
+      tokens: view?.stats?.tokens.total,
+      lastActivityAt: view?.stats?.lastActivityAt,
     ));
   }
   return aggregateTokenTotals(rows, since: since);

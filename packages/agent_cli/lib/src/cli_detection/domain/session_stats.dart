@@ -86,7 +86,35 @@ class TokenTally {
   String toString() =>
       'TokenTally(in: $input, out: $output, cacheCreated: $cacheCreated, '
       'cacheRead: $cacheRead, reasoning: $reasoning)';
+
+  /// The wire form of a server's `sessions.stats` answer (Stage 0 step 9): a
+  /// count not recorded is left out, so it reads back as null, not zero.
+  Map<String, Object?> toJson() => {
+    'input': ?input,
+    'output': ?output,
+    'cacheCreated': ?cacheCreated,
+    'cacheRead': ?cacheRead,
+    'reasoning': ?reasoning,
+  };
+
+  /// Reads [toJson]'s form; anything malformed is not recorded.
+  static TokenTally fromJson(Object? json) {
+    if (json is! Map) return unknown;
+    int? count(String key) => _countFromJson(json[key]);
+    return TokenTally(
+      input: count('input'),
+      output: count('output'),
+      cacheCreated: count('cacheCreated'),
+      cacheRead: count('cacheRead'),
+      reasoning: count('reasoning'),
+    );
+  }
 }
+
+int? _countFromJson(Object? value) => value is int ? value : null;
+
+DateTime? _timeFromJson(Object? value) =>
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
 
 /// What one session cost, in counts.
 ///
@@ -178,6 +206,72 @@ class SessionStats {
       lastActivityAt == null &&
       (output == null || output!.trim().isEmpty) &&
       tokens.isUnknown;
+
+  /// The wire form of a server's `sessions.stats` answer (Stage 0 step 9):
+  /// lowerCamel names, a null field left out, times as ISO-8601 UTC. A field
+  /// added to this class is added here too.
+  Map<String, Object?> toJson() => {
+    'source': source.name,
+    'turns': ?turns,
+    'replies': ?replies,
+    'toolCalls': ?toolCalls,
+    if (!tokens.isUnknown) 'tokens': tokens.toJson(),
+    'contextWindow': ?contextWindow,
+    'firstActivityAt': ?firstActivityAt?.toUtc().toIso8601String(),
+    'lastActivityAt': ?lastActivityAt?.toUtc().toIso8601String(),
+    'output': ?output,
+    'toolCallsByName': ?toolCallsByName,
+    if (tokensByModel case final models?)
+      'tokensByModel': {
+        for (final MapEntry(:key, :value) in models.entries)
+          key: value.toJson(),
+      },
+    'lastPromptTokens': ?lastPromptTokens,
+    'outputTokensPerTurn': ?outputTokensPerTurn,
+  };
+
+  /// Reads [toJson]'s form. An unknown field is ignored and a missing or
+  /// malformed optional one is null; an unknown source reads as
+  /// [SessionStatsSource.localStore].
+  static SessionStats fromJson(Map<String, Object?> json) {
+    int? count(String key) => _countFromJson(json[key]);
+    final byName = json['toolCallsByName'];
+    final byModel = json['tokensByModel'];
+    final perTurn = json['outputTokensPerTurn'];
+    final output = json['output'];
+    return SessionStats(
+      source:
+          SessionStatsSource.values.asNameMap()[json['source']] ??
+          SessionStatsSource.localStore,
+      turns: count('turns'),
+      replies: count('replies'),
+      toolCalls: count('toolCalls'),
+      tokens: TokenTally.fromJson(json['tokens']),
+      contextWindow: count('contextWindow'),
+      firstActivityAt: _timeFromJson(json['firstActivityAt']),
+      lastActivityAt: _timeFromJson(json['lastActivityAt']),
+      output: output is String ? output : null,
+      toolCallsByName: byName is Map
+          ? {
+              for (final MapEntry(:key, :value) in byName.entries)
+                if (key is String && value is int) key: value,
+            }
+          : null,
+      tokensByModel: byModel is Map
+          ? {
+              for (final MapEntry(:key, :value) in byModel.entries)
+                if (key is String) key: TokenTally.fromJson(value),
+            }
+          : null,
+      lastPromptTokens: count('lastPromptTokens'),
+      outputTokensPerTurn: perTurn is List
+          ? [
+              for (final value in perTurn)
+                if (value is int) value,
+            ]
+          : null,
+    );
+  }
 }
 
 /// Where an agent's lifetime totals came from.
@@ -262,4 +356,37 @@ class LifetimeStats {
       firstActivityAt == null &&
       lastActivityAt == null &&
       tokens.isUnknown;
+
+  /// The wire form, as [SessionStats.toJson].
+  Map<String, Object?> toJson() => {
+    'source': source.name,
+    'sessions': ?sessions,
+    'messages': ?messages,
+    if (!tokens.isUnknown) 'tokens': tokens.toJson(),
+    'totalTokens': ?totalTokens,
+    'computedAt': ?computedAt?.toUtc().toIso8601String(),
+    'firstActivityAt': ?firstActivityAt?.toUtc().toIso8601String(),
+    'lastActivityAt': ?lastActivityAt?.toUtc().toIso8601String(),
+    'note': ?note,
+  };
+
+  /// Reads [toJson]'s form; an unknown source reads as
+  /// [LifetimeStatsSource.agentCache], the one that may be stale.
+  static LifetimeStats fromJson(Map<String, Object?> json) {
+    int? count(String key) => _countFromJson(json[key]);
+    final note = json['note'];
+    return LifetimeStats(
+      source:
+          LifetimeStatsSource.values.asNameMap()[json['source']] ??
+          LifetimeStatsSource.agentCache,
+      sessions: count('sessions'),
+      messages: count('messages'),
+      tokens: TokenTally.fromJson(json['tokens']),
+      totalTokens: count('totalTokens'),
+      computedAt: _timeFromJson(json['computedAt']),
+      firstActivityAt: _timeFromJson(json['firstActivityAt']),
+      lastActivityAt: _timeFromJson(json['lastActivityAt']),
+      note: note is String ? note : null,
+    );
+  }
 }

@@ -51,15 +51,18 @@ DataRequest<Object?>? _sessionTranscriptRequestFromJson(
   SessionOpenQuestionRead.name => SessionOpenQuestionRead(
     args.string('sessionId'),
   ),
+  SessionStatsRead.name => SessionStatsRead(
+    args.strings('sessionIds'),
+    lifetime: args.boolean('lifetime', orElse: false),
+  ),
   _ => null,
 };
 
-/// A session's transcript, read on the server; answered when done.
+/// A session's transcript, read on the server; answered when done. Each
+/// names its session by `sessionId`: a session row's id or an imported
+/// session's.
 sealed class SessionTranscriptRequest<R> extends DataRequest<R> {
   const SessionTranscriptRequest();
-
-  /// A session row's id or an imported session's.
-  String get sessionId;
 }
 
 /// One page of session [sessionId]'s transcript.
@@ -87,7 +90,6 @@ final class SessionTranscriptRead
 
   static const String name = 'sessions.transcript';
 
-  @override
   final String sessionId;
   final int? after;
   final int? before;
@@ -138,7 +140,6 @@ final class SessionTranscriptTurns
 
   static const String name = 'sessions.transcript.turns';
 
-  @override
   final String sessionId;
   final int? before;
   final int? limit;
@@ -173,7 +174,6 @@ final class SessionTranscriptWatch extends SessionTranscriptRequest<DataAck> {
 
   static const String name = 'sessions.transcript.watch';
 
-  @override
   final String sessionId;
 
   @override
@@ -209,7 +209,6 @@ final class SessionTranscriptSubagent
 
   static const String name = 'sessions.transcript.subagent';
 
-  @override
   final String sessionId;
   final String path;
   final int? after;
@@ -247,7 +246,6 @@ final class SessionRewindPointsRead
 
   static const String name = 'sessions.rewindPoints';
 
-  @override
   final String sessionId;
 
   @override
@@ -273,7 +271,6 @@ final class SessionChangedFilesRead
 
   static const String name = 'sessions.changedFiles';
 
-  @override
   final String sessionId;
 
   @override
@@ -300,7 +297,6 @@ final class SessionOpenQuestionRead
 
   static const String name = 'sessions.openQuestion';
 
-  @override
   final String sessionId;
 
   @override
@@ -318,13 +314,44 @@ final class SessionOpenQuestionRead
       json == null ? null : _decode(kind, () => questionFromJson(json));
 }
 
+/// The counts each of [sessionIds] recorded (Stage 0 step 9): what the
+/// agent's `SessionStatsReader` reads from its record, and with [lifetime]
+/// the agent's own lifetime totals from the store home it ran in. One
+/// request for a list, so a Usage tab of 200 sessions is one round trip; at
+/// most [kSessionStatsBatchMax], else refused `invalid`. An older server
+/// refuses the kind as `invalid`; a client then reads its own disk.
+final class SessionStatsRead
+    extends SessionTranscriptRequest<SessionStatsBatch> {
+  const SessionStatsRead(this.sessionIds, {this.lifetime = false});
+
+  static const String name = 'sessions.stats';
+
+  final List<String> sessionIds;
+  final bool lifetime;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionIds': sessionIds,
+    if (lifetime) 'lifetime': true,
+  };
+
+  @override
+  Object? resultToJson(SessionStatsBatch result) => result.toJson();
+
+  @override
+  SessionStatsBatch resultFromJson(Object? json) =>
+      _decode(kind, () => SessionStatsBatch.fromJson(_object(json, kind)));
+}
+
 /// Stops [SessionTranscriptWatch] for [sessionId] on this link.
 final class SessionTranscriptUnwatch extends SessionTranscriptRequest<DataAck> {
   const SessionTranscriptUnwatch(this.sessionId);
 
   static const String name = 'sessions.transcript.unwatch';
 
-  @override
   final String sessionId;
 
   @override

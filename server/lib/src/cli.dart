@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show kSessionStatsBatchMax;
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'pty/pty_exec.dart';
 import 'pty/pty_probe.dart';
@@ -224,8 +226,10 @@ as the running server reads it for a client (sessions.transcript).
   --revision=<r>          the revision a previous page answered
   --subagent=<path>       a subagent's turns instead (with --after, --limit)
   --read=<reader>         rewindPoints, changedFiles or openQuestion instead,
-                          as JSON
-  --digest=<n>            also the plan and open calls before row n
+                          as JSON; stats counts every session id named in one
+                          request (sessions.stats), --lifetime adds the
+                          agent's lifetime totals
+  --digest=<n>          also the plan and open calls before row n
   --turns                 text-only turns instead (with --before, --limit,
                           --generation); --spoken keeps user and agent turns
   --json                 the page as the wire carries it
@@ -241,8 +245,9 @@ as the running server reads it for a client (sessions.transcript).
       'read',
       'digest',
     },
-    switches: {'json', 'watch', 'turns', 'spoken'},
-    positional: 1,
+    switches: {'json', 'watch', 'turns', 'spoken', 'lifetime'},
+    // More than one only for `--read=stats`.
+    positional: kSessionStatsBatchMax,
     run: (args, out, err, env) =>
         runTranscript(args, out: out, err: err, environment: env),
   ),

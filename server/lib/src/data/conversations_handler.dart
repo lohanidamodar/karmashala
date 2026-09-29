@@ -215,6 +215,24 @@ class TranscriptStores {
     return _walking ??= _walk().whenComplete(() => _walking = null);
   }
 
+  /// Agent [agentId]'s store home in environment [environmentId], else in
+  /// any environment that has one — a session whose environment row went
+  /// still has books. Null when none does.
+  Future<String?> storeHome(String agentId, String? environmentId) async {
+    try {
+      String? fallback;
+      for (final store in await locator.locate(environments())) {
+        final home = store.homeFor(agentId);
+        if (home == null) continue;
+        if (store.environmentId == environmentId) return home;
+        fallback ??= home;
+      }
+      return fallback;
+    } on Object {
+      return null;
+    }
+  }
+
   /// [conversationId]'s transcript in agent [cli]'s store, or null.
   Future<String?> locate(String cli, String conversationId) async =>
       (await all())['$cli/$conversationId'];

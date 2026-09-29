@@ -1,12 +1,18 @@
 /// What `sessions.transcript` answers (Stage 0 step 5): one page of a
 /// session's agent record, read on the server's machine; and what the readers
-/// of its raw lines answer (step 7).
+/// of its raw lines answer (step 7), and its counts (step 9).
 library;
 
 import 'package:agent_cli/descriptors.dart' show StoreServerFileChange;
 import 'package:agent_cli/read.dart' show FileEditKind, TranscriptMessage;
+import 'package:agent_cli/usage.dart'
+    show LifetimeStats, LifetimeStatsUnavailable, SessionStats;
 import 'package:karmashala_session/delivery.dart' show SessionRecordGap;
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
+
+/// The most sessions one `sessions.stats` asks for: the Usage tab's newest
+/// 200 in one request.
+const int kSessionStatsBatchMax = 200;
 
 /// The most messages one page carries, and the default.
 const int kTranscriptPageMaxMessages = 1000;
@@ -240,5 +246,90 @@ class AgentFileChangesReading {
           SessionRecordGap.recordUnreadable,
       detail: json['detail'] as String? ?? '',
     );
+  }
+}
+
+/// Why `sessions.stats` has no counts for a session.
+enum SessionStatsGap {
+  none,
+
+  /// No such session row or imported session on the server.
+  unknownSession,
+
+  /// Its agent keeps no store that records counts.
+  agentKeepsNoCounts,
+
+  /// The store is readable but holds no record for it yet, or it could not
+  /// be read.
+  recordNotFound,
+}
+
+/// One session's counts as `sessions.stats` answers them (Stage 0 step 9),
+/// read where its record is. [stats] is null exactly when [gap] says why.
+/// [lifetime] and [lifetimeGap] are both null when lifetime was not asked.
+class SessionStatsReading {
+  const SessionStatsReading({
+    this.stats,
+    this.gap = SessionStatsGap.none,
+    this.lifetime,
+    this.lifetimeGap,
+  });
+
+  final SessionStats? stats;
+  final SessionStatsGap gap;
+
+  /// The agent's own lifetime totals in the store home the session ran in.
+  final LifetimeStats? lifetime;
+  final LifetimeStatsUnavailable? lifetimeGap;
+
+  Map<String, Object?> toJson() => {
+    'stats': ?stats?.toJson(),
+    if (gap != SessionStatsGap.none) 'gap': gap.name,
+    'lifetime': ?lifetime?.toJson(),
+    'lifetimeGap': ?lifetimeGap?.name,
+  };
+
+  /// A gap this build does not know reads as `recordNotFound`.
+  static SessionStatsReading fromJson(Map<String, Object?> json) {
+    final stats = json['stats'];
+    final lifetime = json['lifetime'];
+    final gap = json['gap'];
+    final lifetimeGap = json['lifetimeGap'];
+    return SessionStatsReading(
+      stats: stats is Map ? SessionStats.fromJson(stats.cast()) : null,
+      gap: gap == null && stats is Map
+          ? SessionStatsGap.none
+          : SessionStatsGap.values.asNameMap()[gap] ??
+                SessionStatsGap.recordNotFound,
+      lifetime: lifetime is Map ? LifetimeStats.fromJson(lifetime.cast()) : null,
+      lifetimeGap: lifetimeGap == null
+          ? null
+          : LifetimeStatsUnavailable.values.asNameMap()[lifetimeGap] ??
+                LifetimeStatsUnavailable.sourceNotFound,
+    );
+  }
+}
+
+/// What `sessions.stats` answers: a reading per session asked, by id.
+class SessionStatsBatch {
+  const SessionStatsBatch(this.sessions);
+
+  final Map<String, SessionStatsReading> sessions;
+
+  Map<String, Object?> toJson() => {
+    'sessions': {
+      for (final MapEntry(:key, :value) in sessions.entries)
+        key: value.toJson(),
+    },
+  };
+
+  static SessionStatsBatch fromJson(Map<String, Object?> json) {
+    final sessions = json['sessions'];
+    return SessionStatsBatch({
+      if (sessions is Map)
+        for (final MapEntry(:key, :value) in sessions.entries)
+          if (key is String && value is Map)
+            key: SessionStatsReading.fromJson(value.cast()),
+    });
   }
 }
