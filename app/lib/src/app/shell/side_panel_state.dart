@@ -38,34 +38,16 @@ enum ContextTab {
 
 /// The surfaces the context panel can show (spec §4). Named `SidePanel` for the
 /// right-hand side panel and its rail, which the context panel replaced.
+/// Declared in the order every list of them follows: the tabs' surfaces, then
+/// More's. Stored by name, so reordering is safe.
 enum SidePanelSurface {
-  /// First because it is the thing you check first: everything pending, in one
-  /// list, whichever pane owns the thing that is waiting. Also an area of the
-  /// activity strip.
-  inbox('Inbox', drawsOwnHeader: true),
   changes('Changes', drawsOwnHeader: true, scopedToRepository: true),
-  files('Files', drawsOwnHeader: true, scopedToRepository: true),
-  device('Device'),
-  browser('Browser'),
-
-  /// The Flutter app the developer is running: its debug console, hot reload
-  /// and a widget picker.
-  flutterApp('Flutter app'),
-  verification('Verification'),
-
-  /// Every picture the session on screen has produced or been shown, newest
-  /// first — a picture pasted into a terminal is recorded as bytes with no path.
-  media('Media'),
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here. GitHub's
   /// pull requests and issues too, since 2026-09-28: they describe the same
   /// checkout, and a pane of their own was blank without a GitHub remote.
   repository('Repository', scopedToRepository: true),
-
-  /// **The agent's own plan**, read out of the record it writes for itself, and
-  /// read-only. Two agents of the three publish one; the third says so.
-  plan('Plan'),
 
   /// **The way back from a turn.** One entry per turn an agent finished, plus
   /// the safety captures taken before a restore — the only undo for its edits.
@@ -75,6 +57,11 @@ enum SidePanelSurface {
   /// of the trio a handoff carries *ahead* of the transcript.
   decisions('Decisions', drawsOwnHeader: true),
 
+  /// **The agent's own plan**, read out of the record it writes for itself, and
+  /// read-only. Two agents of the three publish one; the third says so.
+  plan('Plan'),
+  files('Files', drawsOwnHeader: true, scopedToRepository: true),
+
   /// The user's own list: a line of text, done or not, filed under a project or
   /// under nothing. **Not gated** on Notes — that switch is about capture.
   todos('Todos', drawsOwnHeader: true),
@@ -82,15 +69,29 @@ enum SidePanelSurface {
   /// Ideas kept out of a conversation instead of acted on, and sent back to an
   /// agent when the user is ready for them. Hidden when Notes is switched off.
   notes('Notes', drawsOwnHeader: true, requiresNotes: true),
+  verification('Verification'),
+
+  /// Every picture the session on screen has produced or been shown, newest
+  /// first — a picture pasted into a terminal is recorded as bytes with no path.
+  media('Media'),
+  browser('Browser'),
+
+  /// The Flutter app the developer is running: its debug console, hot reload
+  /// and a widget picker.
+  flutterApp('Flutter app'),
+  device('Device'),
 
   /// **What a session started here would be given** — the MCP servers and
   /// skills the agent's own configuration names, read off files with their
   /// age. Never what a running session bound; the CLI owns that (§19).
-  agentContext('Context'),
+  agentContext('Agent context'),
 
   /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
   /// a tool, and an entry nobody needs is in the way of the daily ones.
-  logs('Logs', requiresDebugMode: true);
+  logs('Logs', requiresDebugMode: true),
+
+  /// Never offered: an area of the activity strip, kept for its stored id.
+  inbox('Inbox', drawsOwnHeader: true);
 
   const SidePanelSurface(
     this.label, {

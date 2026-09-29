@@ -80,6 +80,10 @@ Future<T> openOrRelease<T>({
   }
 }
 
+// TODO(device-stream): every mounted DevicePane owns a session here, so the
+// sidebar's Devices area, the context panel and a Split pane on screen at once
+// each stream the same phone. Share one by lifting this state into a
+// ref-counted provider the mounts subscribe to.
 mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
   Player? _player;
   VideoController? _video;
