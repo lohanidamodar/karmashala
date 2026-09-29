@@ -68,6 +68,12 @@ class _SessionBar extends ConsumerWidget {
           ).select((d) => d.isLoading && !d.hasValue),
         );
 
+    // Read off the page rather than a `LayoutBuilder`, so the row does not
+    // change form as the keyboard opens.
+    if (CompactWorkbenchScope.of(context)) {
+      return _CompactSessionBar(sessionId: sessionId, reading: reading);
+    }
+
     final textScaler = MediaQuery.textScalerOf(context);
     final thirdControl = WidthClass.scaleBreakpoint(
       _sessionBarThirdControlWidth,
@@ -479,6 +485,7 @@ class _ViewToggle extends StatelessWidget {
     required this.onChat,
     required this.onTerminalView,
     this.compact = false,
+    this.touch = false,
   });
 
   final bool onTerminal;
@@ -488,6 +495,9 @@ class _ViewToggle extends StatelessWidget {
   /// Glyphs only, for a group too narrow to spell the two words; the tooltip
   /// and the semantics label are unchanged.
   final bool compact;
+
+  /// Each half at least [Touch.target] square, for the phone's app bar.
+  final bool touch;
 
   @override
   Widget build(BuildContext context) {
@@ -509,6 +519,7 @@ class _ViewToggle extends StatelessWidget {
             tooltip: 'Terminal view',
             selected: onTerminal,
             compact: compact,
+            touch: touch,
             onTap: onTerminalView,
           ),
           _ViewToggleHalf(
@@ -517,6 +528,7 @@ class _ViewToggle extends StatelessWidget {
             tooltip: 'Chat view',
             selected: !onTerminal,
             compact: compact,
+            touch: touch,
             onTap: onChat,
           ),
         ],
@@ -534,6 +546,7 @@ class _ViewToggleHalf extends StatelessWidget {
     required this.selected,
     required this.compact,
     required this.onTap,
+    this.touch = false,
   });
 
   final IconData icon;
@@ -543,6 +556,7 @@ class _ViewToggleHalf extends StatelessWidget {
   final String tooltip;
   final bool selected;
   final bool compact;
+  final bool touch;
   final VoidCallback onTap;
 
   @override
@@ -559,6 +573,13 @@ class _ViewToggleHalf extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Container(
+            constraints: touch
+                ? const BoxConstraints(
+                    minWidth: Touch.target,
+                    minHeight: Touch.target,
+                  )
+                : null,
+            alignment: touch ? Alignment.center : null,
             // Padded rather than fixed at 22px: the halves must grow with the
             // ambient text scale or the row loses its shared centre-line.
             padding: const EdgeInsets.symmetric(

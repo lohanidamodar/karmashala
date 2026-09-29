@@ -41,6 +41,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   @override
   Widget build(BuildContext context) {
     final groupId = widget.groupId;
+    final compact = CompactWorkbenchScope.of(context);
     final focused =
         groupId == null || ref.watch(focusedWorkspaceGroupProvider) == groupId;
     final activeTab = groupId == null
@@ -72,9 +73,12 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // On a phone the app bar's switcher is the strip.
+          if (compact)
+            const SizedBox.shrink()
           // Zen is only the pane (spec §5): the Zen bar floats where the strip
           // was, and switches tabs itself.
-          if (ref.watch(terminalMaximizedProvider))
+          else if (ref.watch(terminalMaximizedProvider))
             const SizedBox(height: kZenBarRoom)
           else ...[
             _TabStrip(groupId: groupId, groupFocused: focused),
@@ -86,7 +90,11 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
               // An IndexedStack rather than a branch: the conversation keeps
               // its scroll position, and the hidden one paints nothing.
               child: empty
-                  ? _EmptyGroup(groupId: groupId, focused: focused)
+                  ? _EmptyGroup(
+                      groupId: groupId,
+                      focused: focused,
+                      compact: compact,
+                    )
                   : session == null
                   ? _TerminalSurface(
                       groupId: groupId,
@@ -158,51 +166,52 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     return next;
   }
 
-  /// The session this group is about: **this group's own active tab**, and a
-  /// *read* — writing the selection would fight the surface the user is on.
-  _WorkbenchSession? _groupSession() {
-    // The strip draws the session's name and offers the toggle its pane
-    // decides. Statuses and permission modes are drawn elsewhere.
-    ref.watchSessionKinds(const {
-      SessionChangeKind.membership,
-      SessionChangeKind.title,
-      SessionChangeKind.placement,
-    });
-    // A pane appearing or ending changes whether this session has a terminal.
-    // Only the tab list: a *process* dying cannot change which panes exist.
-    ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
-    final groupId = widget.groupId;
-    final hosted = _hostedSelection(ref, groupId);
-    if (hosted != null) {
-      if (!hosted.native) {
-        final imported = ref.read(importedSessionsProvider).getById(hosted.id);
-        return _WorkbenchSession(
-          id: hosted.id,
-          title: imported?.displayTitle ?? 'Session',
-          paneId: null,
-          native: false,
-        );
-      }
-      final Session? row = ref.read(sessionsDataProvider).getById(hosted.id);
+  _WorkbenchSession? _groupSession() => _groupSessionOf(ref, widget.groupId);
+}
+
+/// The session group [groupId] is about: **its own active tab**, and a *read*
+/// — writing the selection would fight the surface the user is on.
+_WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
+  // The strip draws the session's name and offers the toggle its pane
+  // decides. Statuses and permission modes are drawn elsewhere.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.title,
+    SessionChangeKind.placement,
+  });
+  // A pane appearing or ending changes whether this session has a terminal.
+  // Only the tab list: a *process* dying cannot change which panes exist.
+  ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
+  final hosted = _hostedSelection(ref, groupId);
+  if (hosted != null) {
+    if (!hosted.native) {
+      final imported = ref.read(importedSessionsProvider).getById(hosted.id);
       return _WorkbenchSession(
         id: hosted.id,
-        title: row?.title ?? 'Session',
+        title: imported?.displayTitle ?? 'Session',
         paneId: null,
-        native: true,
+        native: false,
       );
     }
-    final sessionId = groupId == null
-        ? null
-        : ref.watch(workspaceGroupSessionIdProvider(groupId));
-    if (sessionId == null) return null;
-    final Session? record = ref.read(sessionsDataProvider).getById(sessionId);
+    final Session? row = ref.read(sessionsDataProvider).getById(hosted.id);
     return _WorkbenchSession(
-      id: sessionId,
-      title: record?.title ?? 'Session',
-      paneId: sessionTerminalPane(ref, sessionId),
+      id: hosted.id,
+      title: row?.title ?? 'Session',
+      paneId: null,
       native: true,
     );
   }
+  final sessionId = groupId == null
+      ? null
+      : ref.watch(workspaceGroupSessionIdProvider(groupId));
+  if (sessionId == null) return null;
+  final Session? record = ref.read(sessionsDataProvider).getById(sessionId);
+  return _WorkbenchSession(
+    id: sessionId,
+    title: record?.title ?? 'Session',
+    paneId: sessionTerminalPane(ref, sessionId),
+    native: true,
+  );
 }
 
 /// The session group [groupId] was asked to show that has no tab to show it in.
@@ -230,10 +239,17 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
 /// The room a workspace split cleared, before anything has been put in it — the
 /// same face an empty *region* wears one level down ([EmptyPaneRegion]).
 class _EmptyGroup extends ConsumerWidget {
-  const _EmptyGroup({required this.groupId, required this.focused});
+  const _EmptyGroup({
+    required this.groupId,
+    required this.focused,
+    required this.compact,
+  });
 
   final String groupId;
   final bool focused;
+
+  /// A phone shows one group and offers no moves between them.
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -279,8 +295,12 @@ class _EmptyGroup extends ConsumerWidget {
       onClose: () => closeEditors(context, ref, [
         for (final tab in sessions.tabsInGroup(groupId)) tab.id,
       ], () => sessions.closeGroup(groupId)),
-      onMoveTabHere: () =>
-          TabPicker.show(context, (ref) => tabsMovableToGroup(ref, groupId)),
+      onMoveTabHere: compact
+          ? null
+          : () => TabPicker.show(
+              context,
+              (ref) => tabsMovableToGroup(ref, groupId),
+            ),
     );
   }
 }

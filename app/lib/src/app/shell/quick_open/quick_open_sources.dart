@@ -49,6 +49,7 @@ import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart' show WidthClass;
 import '../karmashala_about_dialog.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
@@ -451,6 +452,8 @@ class QuickOpenSources {
   /// The keyboard's way to every layout verb the chrome can be dragged to do. A
   /// *group* divides the workspace; a *region* divides one tab.
   List<QuickOpenItem> _splitCommands() {
+    // A phone shows one group and one pane: nothing to split or move into.
+    if (WidthClass.of(MediaQuery.sizeOf(context).width).isCompact) return [];
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final emptyGroup = sessions.emptyWorkspaceGroup();
     final slot = sessions.emptySlotInActiveTab();

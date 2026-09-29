@@ -28,11 +28,7 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
-    final label = theme.textTheme.labelSmall
-        ?.merge(Chrome.groupLabel)
-        .copyWith(color: theme.colorScheme.onSurfaceVariant);
     return MenuAnchor(
       controller: _controller,
       style: const MenuStyle(
@@ -56,27 +52,7 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(Insets.sm),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SESSION', style: label),
-                  const SizedBox(height: Insets.xs),
-                  Row(
-                    children: [
-                      SessionRecapButton(sessionId: widget.sessionId),
-                      OpenSessionInSystemTerminalButton(
-                        sessionId: widget.sessionId,
-                      ),
-                      StopSessionButton(sessionId: widget.sessionId),
-                    ],
-                  ),
-                  const SizedBox(height: Insets.sm),
-                  Text('REPOSITORIES', style: label),
-                  const SizedBox(height: Insets.xs),
-                  SessionRepositoriesBar(sessionId: widget.sessionId),
-                ],
-              ),
+              child: SessionMoreBody(sessionId: widget.sessionId),
             ),
           ),
         ),
@@ -90,6 +66,41 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
         onPressed: () =>
             _controller.isOpen ? _controller.close() : _controller.open(),
       ),
+    );
+  }
+}
+
+/// What [SessionMoreButton]'s card holds; the phone's Session sheet lists the
+/// same, so the verbs stay in one place.
+class SessionMoreBody extends StatelessWidget {
+  const SessionMoreBody({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = theme.textTheme.labelSmall
+        ?.merge(Chrome.groupLabel)
+        .copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('SESSION', style: label),
+        const SizedBox(height: Insets.xs),
+        Row(
+          children: [
+            SessionRecapButton(sessionId: sessionId),
+            OpenSessionInSystemTerminalButton(sessionId: sessionId),
+            StopSessionButton(sessionId: sessionId),
+          ],
+        ),
+        const SizedBox(height: Insets.sm),
+        Text('REPOSITORIES', style: label),
+        const SizedBox(height: Insets.xs),
+        SessionRepositoriesBar(sessionId: sessionId),
+      ],
     );
   }
 }

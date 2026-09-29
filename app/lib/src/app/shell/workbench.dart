@@ -10,6 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/descriptors.dart';
+import '../../core/capabilities/capabilities.dart';
 import '../../features/automations/presentation/scheduled_resume_chip.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/editor/application/editor_tab_actions.dart';
@@ -50,6 +51,7 @@ import 'workbench_conversation.dart';
 import 'workbench_tabs.dart';
 import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
+import '../widgets/adaptive_modal.dart';
 import 'zen_bar.dart' show kZenBarRoom;
 
 // Re-exported so `workbench.dart` stays the one import for the tab strip.
@@ -62,6 +64,7 @@ export 'workbench_tabs.dart';
 // library: every widget below is private and the tree golden records its name.
 import 'session_more_button.dart';
 
+part 'workbench_compact.dart';
 part 'workbench_group.dart';
 part 'workbench_surface.dart';
 part 'workbench_session_bar.dart';
@@ -95,11 +98,13 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   @override
   void initState() {
     super.initState();
-    // There is always at least one terminal when the workbench opens.
+    // A desktop always has a terminal when the workbench opens. A client that
+    // hosts no server would start a shell on someone else's machine unasked.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final terminal = TerminalActions(ref);
-      if (ref.read(terminalSessionsControllerProvider).isEmpty) {
+      if (ref.read(clientCapabilitiesProvider).hostsServer &&
+          ref.read(terminalSessionsControllerProvider).isEmpty) {
         terminal.open(terminal.defaultProfile());
       }
       // Not conditional on having opened anything: it records that the
@@ -162,6 +167,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // screen.
     if (paneId != null) {
       _showTerminalFor(paneId, sessionId);
+      _showChatOnCompact(paneId);
     } else if (ended) {
       _releaseEndedPane();
     }
@@ -177,6 +183,19 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   void _showSurfaceFor(String? paneId, String? sessionId) {
     _shownPane = paneId;
     _showTerminalFor(paneId, sessionId);
+    _showChatOnCompact(paneId);
+  }
+
+  /// On a phone a session opens on its chat (Stage 2 answer 3). The pane is
+  /// still reattached above, so the terminal is one tap away.
+  void _showChatOnCompact(String? paneId) {
+    if (!CompactWorkbenchScope.of(context)) return;
+    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    if (paneId != null) {
+      terminals.revealConversationForPane(paneId);
+    } else if (ref.read(focusedWorkspaceGroupProvider) case final group?) {
+      terminals.showFaceIn(group, terminal: false);
+    }
   }
 
   @override
@@ -241,6 +260,25 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // it: an empty strip, and no session to put a bar under.
     if (workspace == null) {
       return _WorkspaceGroup(groupId: null, autoOpenDone: _autoOpenDone);
+    }
+    // A phone has room for one group: the focused one, with the others kept
+    // mounted behind it so their state is there when the window widens.
+    if (CompactWorkbenchScope.of(context)) {
+      final focused = ref.watch(focusedWorkspaceGroupProvider);
+      final groups = workspace.groups;
+      final index = groups.indexWhere((group) => group.id == focused);
+      return IndexedStack(
+        index: index < 0 ? 0 : index,
+        sizing: StackFit.expand,
+        children: [
+          for (final group in groups)
+            _WorkspaceGroup(
+              key: ValueKey(group.id),
+              groupId: group.id,
+              autoOpenDone: _autoOpenDone,
+            ),
+        ],
+      );
     }
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     return PaneLayoutView(

@@ -4,6 +4,7 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart' show WidthClass;
 
 import '../../../core/server/remote_server_access.dart';
 import '../../settings/presentation/session_host_status_line.dart'
@@ -43,9 +44,12 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
     // element, so it is never rebuilt from scratch — which also re-created
     // everything above its content, the macOS menu bar among it.
     final access = ref.watch(serverAccessProvider);
+    // The phone shell draws it under its app bar ([RemoteResumingStrip]).
+    final compact = WidthClass.of(MediaQuery.sizeOf(context).width).isCompact;
     return Column(
       children: [
-        if (access is RemoteServerAccess) _ResumingStrip(access: access),
+        if (access is RemoteServerAccess && !compact)
+          _ResumingStrip(access: access),
         if (shown) _strip(context, supervision),
         Expanded(
           key: const ValueKey('session_host_banner_child'),
@@ -138,6 +142,19 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
 /// "Reconnecting to *server*…" while a remote server's link is held for a
 /// resume (Stage 0 step 17). Nothing to press: it either comes back, or the
 /// link ends and its owners redial as they always did.
+/// "Reconnecting to …" while a remote link resumes, for a page to draw under
+/// its own app bar. Nothing on a local link.
+class RemoteResumingStrip extends ConsumerWidget {
+  const RemoteResumingStrip({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      switch (ref.watch(serverAccessProvider)) {
+        final RemoteServerAccess access => _ResumingStrip(access: access),
+        _ => const SizedBox.shrink(),
+      };
+}
+
 class _ResumingStrip extends StatelessWidget {
   const _ResumingStrip({required this.access});
 
