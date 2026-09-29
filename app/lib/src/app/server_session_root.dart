@@ -6,9 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../core/capabilities/capabilities.dart';
 import '../core/lifecycle/server_switcher.dart';
 import '../core/util/failure_words.dart';
-import 'no_server_pairing.dart';
+import '../features/remote/presentation/pair_machine_page.dart';
 
 /// The window's root (plan step 14): the open server session's app under its
 /// own container, keyed by the session so a switch builds a fresh tree and
@@ -19,7 +20,7 @@ class ServerSessionRoot extends StatelessWidget {
     super.key,
     required this.switcher,
     required this.app,
-    required this.deviceName,
+    required this.client,
   });
 
   final ServerSwitcher switcher;
@@ -27,8 +28,8 @@ class ServerSessionRoot extends StatelessWidget {
   /// The app one server's container runs.
   final Widget app;
 
-  /// What a machine paired from [NoServer] calls this device.
-  final String deviceName;
+  /// This client, for the pairing [NoServer] shows.
+  final ClientCapabilities client;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ServerRoot>(
@@ -53,7 +54,15 @@ class ServerSessionRoot extends StatelessWidget {
         child: _OpenFailed(failure: root, switcher: switcher),
       ),
       NoServer() => _BetweenServers(
-        child: NoServerPairing(switcher: switcher, deviceName: deviceName),
+        child: PairMachinePage(
+          title: 'Pair this phone with a machine',
+          pairer: MachinePairer(
+            machines: switcher.machines,
+            client: client,
+            // This tree goes with the switch; nothing here is touched after.
+            onPaired: (record) => unawaited(switcher.switchTo(record)),
+          ),
+        ),
       ),
     },
   );

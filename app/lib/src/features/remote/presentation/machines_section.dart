@@ -14,6 +14,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../system/system_integration_service.dart';
 import '../application/machines_providers.dart';
+import 'pair_machine_page.dart';
 
 /// Settings → Machines (slice 5e): the Karmashala server this window is a
 /// client of — this computer's own, or one on another machine reached like
@@ -28,18 +29,27 @@ class MachinesSection extends ConsumerWidget {
     final machines = ref.watch(machinesProvider);
     final active = ref.watch(activeMachineProvider);
     final paired = ref.watch(pairedMachinesProvider).value ?? const [];
+    // A phone has no server of its own to offer, and pairs on its own page.
+    final client = ref.watch(clientCapabilitiesProvider);
+    final hostsServer = client.hostsServer;
+    final pairCommand = hostsServer
+        ? '`karmashala_host pair --grants desktop`'
+        : '`karmashala_host pair`';
     // Board rows: a row per server, then adding one as the list's last row.
     return SettingsSection(
       title: 'MACHINES',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _MachineRow(
-            name: 'This computer',
-            detail: 'Its own Karmashala server, started and kept up here.',
-            inUse: active == null,
-            onUse: machines == null ? null : () => _switch(context, ref, null),
-          ),
+          if (hostsServer)
+            _MachineRow(
+              name: 'This computer',
+              detail: 'Its own Karmashala server, started and kept up here.',
+              inUse: active == null,
+              onUse: machines == null
+                  ? null
+                  : () => _switch(context, ref, null),
+            ),
           for (final machine in paired)
             _MachineRow(
               name: machine.hostName.isEmpty ? 'Server' : machine.hostName,
@@ -52,20 +62,28 @@ class MachinesSection extends ConsumerWidget {
             SettingsRow(
               label: 'A server on another machine',
               help: paired.isEmpty
-                  ? 'A droplet, another PC: run `karmashala_host pair '
-                        '--grants desktop` there, then add it here.'
+                  ? 'A droplet, another PC: run $pairCommand there, then add '
+                        'it here.'
                   : null,
               control: OutlinedButton(
                 key: const Key('machines-add'),
-                onPressed: () => AddMachineDialog.show(context),
+                onPressed: hostsServer
+                    ? () => AddMachineDialog.show(context)
+                    : () => PairMachinePage.push(
+                        context,
+                        machines: machines,
+                        client: client,
+                        switcher: ref.read(serverSwitcherProvider),
+                        onListChanged: () =>
+                            ref.invalidate(pairedMachinesProvider),
+                      ),
                 child: const Text('Add a machine'),
               ),
             )
           else if (paired.isEmpty)
-            const SettingsNote(
+            SettingsNote(
               'Use a server on another machine — a droplet, another PC: '
-              'run `karmashala_host pair --grants desktop` there, then Add '
-              'a machine here.',
+              'run $pairCommand there, then Add a machine here.',
             ),
         ],
       ),

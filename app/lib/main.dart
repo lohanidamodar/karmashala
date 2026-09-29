@@ -26,6 +26,7 @@ import 'src/core/paths/app_support_directory.dart';
 import 'src/core/paths/server_data_directory.dart';
 import 'src/core/probe/probe_mode.dart';
 import 'src/core/server/machines.dart';
+import 'src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show SharedHostLinks;
 import 'src/features/settings/application/settings_controller.dart';
@@ -97,7 +98,13 @@ Future<void> _bootstrap(AppLogger logger) async {
   // Which server this window is a client of (slice 5e): this machine's own,
   // or one elsewhere chosen in Settings → Machines, only dialled.
   final support = await appSupportDirectory();
-  final machines = Machines(MachinesFileStore.inDirectory(support.path));
+  // A client that cannot host keeps its machines, device keys and all, in
+  // the keystore-backed store the companion already paired into.
+  final machines = Machines(
+    client.hostsServer
+        ? MachinesFileStore.inDirectory(support.path)
+        : SecureCompanionStore(onLog: logger.info),
+  );
   final remote = await machines.active();
   SharedHostLinks.clientName = client.deviceName;
 
@@ -170,7 +177,7 @@ Future<void> _bootstrap(AppLogger logger) async {
       ServerSessionRoot(
         switcher: switcher,
         app: const KarmashalaApp(),
-        deviceName: client.deviceName,
+        client: client,
       ),
     );
     installServerSessionStatics();
@@ -222,7 +229,7 @@ Future<void> _bootstrap(AppLogger logger) async {
     ServerSessionRoot(
       switcher: switcher,
       app: const KarmashalaApp(),
-      deviceName: client.deviceName,
+      client: client,
     ),
   );
 
