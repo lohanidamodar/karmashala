@@ -12,6 +12,8 @@ import '../../core/lifecycle/server_switcher.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/remote/application/machines_providers.dart';
+import '../../features/remote/presentation/machine_route.dart'
+    show machineRouteLine;
 import '../../features/remote/presentation/machines_section.dart'
     show AddMachineDialog;
 import '../../features/remote/presentation/pair_machine_page.dart';
@@ -197,13 +199,6 @@ class PhoneHostSwitcher extends ConsumerWidget {
 class _HostList extends ConsumerWidget {
   const _HostList();
 
-  static String _routeOf(CompanionPairing machine) {
-    final direct = machine.directEndpoint;
-    if (direct != null) return 'At $direct';
-    final relay = machine.relay;
-    return relay.host == 'invalid.local' ? 'Paired' : 'Through ${relay.host}';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final active = ref.watch(activeMachineProvider);
@@ -232,7 +227,10 @@ class _HostList extends ConsumerWidget {
       children: [
         if (hostsServer) row(null, 'Its own Karmashala server.'),
         for (final machine in paired.value ?? const <CompanionPairing>[])
-          row(machine, _routeOf(machine)),
+          row(
+            machine,
+            machineRouteLine(machine, inUse: machine.hostId == active?.hostId),
+          ),
         if (paired.isLoading && !paired.hasValue)
           const ListTile(title: Text('Loading machines…')),
         if (paired.hasError)
