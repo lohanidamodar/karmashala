@@ -696,6 +696,61 @@ class _MessageComposerState extends State<MessageComposer> {
           style: theme.textTheme.bodyMedium,
           textScaler: textScaler,
         );
+        final field = TextField(
+          controller: _input,
+          focusNode: _focusNode,
+          enabled: canType,
+          // **Three lines at rest, not one.** The glyphs got 19 of the
+          // composer's 113 logical pixels. Fewer only when the pane has
+          // no room for three. A phone starts at one: its keyboard
+          // already takes half the screen from the conversation.
+          minLines: touch ? 1 : math.min(3, maxLines),
+          maxLines: maxLines,
+          textInputAction: TextInputAction.newline,
+          // Android keyboards insert images through the field, not a
+          // clipboard the app can read.
+          contentInsertionConfiguration: touch && widget.attaches
+              ? ContentInsertionConfiguration(
+                  allowedMimeTypes: _insertableImages.keys.toList(),
+                  onContentInserted: _onKeyboardContent,
+                )
+              : null,
+          style: theme.textTheme.bodyMedium,
+          decoration: InputDecoration(
+            isDense: true,
+            // `filled` is on in the app's theme, and with no border it
+            // painted a rectangle inside this card.
+            filled: false,
+            // Every state, not only the resting one: the theme's own
+            // focused border drew a second ring inside the card's
+            // (owner, 2026-10-01). The card's ring is the focus signal.
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            // The wrapper above already spends `Insets.sm` vertically;
+            // a second helping here paid twice.
+            contentPadding: EdgeInsets.zero,
+            // Board N2: the prompt, then the keys in a dimmer voice.
+            // Two texts in a wrap rather than one span, so a narrow pane
+            // puts the keys on the next line instead of clipping them.
+            hint: Wrap(
+              children: [
+                Text(widget.hintText, style: hintStyle),
+                // A soft keyboard's Enter is a new line: Send sends.
+                if (!touch)
+                  Text(
+                    ' (Enter sends · Shift Enter new line)',
+                    style: hintStyle?.copyWith(
+                      color: scheme.onSurfaceVariant.withValues(
+                        alpha: _dimAlpha,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
         final body = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -716,89 +771,45 @@ class _MessageComposerState extends State<MessageComposer> {
                 uploading: _uploading,
                 onRemove: (i) => setState(() => _attachments.removeAt(i)),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.md,
-                vertical: Insets.sm,
+            if (touch)
+              _touchRow(field, canType: canType)
+            else ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.md,
+                  vertical: Insets.sm,
+                ),
+                child: field,
               ),
-              child: TextField(
-                controller: _input,
-                focusNode: _focusNode,
-                enabled: canType,
-                // **Three lines at rest, not one.** The glyphs got 19 of the
-                // composer's 113 logical pixels. Fewer only when the pane has
-                // no room for three. A phone starts at one: its keyboard
-                // already takes half the screen from the conversation.
-                minLines: touch ? 1 : math.min(3, maxLines),
-                maxLines: maxLines,
-                textInputAction: TextInputAction.newline,
-                // Android keyboards insert images through the field, not a
-                // clipboard the app can read.
-                contentInsertionConfiguration: touch && widget.attaches
-                    ? ContentInsertionConfiguration(
-                        allowedMimeTypes: _insertableImages.keys.toList(),
-                        onContentInserted: _onKeyboardContent,
-                      )
-                    : null,
-                style: theme.textTheme.bodyMedium,
-                decoration: InputDecoration(
-                  isDense: true,
-                  // `filled` is on in the app's theme, and with no border it
-                  // painted a rectangle inside this card.
-                  filled: false,
-                  border: InputBorder.none,
-                  // The wrapper above already spends `Insets.sm` vertically;
-                  // a second helping here paid twice.
-                  contentPadding: EdgeInsets.zero,
-                  // Board N2: the prompt, then the keys in a dimmer voice.
-                  // Two texts in a wrap rather than one span, so a narrow pane
-                  // puts the keys on the next line instead of clipping them.
-                  hint: Wrap(
-                    children: [
-                      Text(widget.hintText, style: hintStyle),
-                      // A soft keyboard's Enter is a new line: Send sends.
-                      if (!touch)
-                        Text(
-                          ' (Enter sends · Shift Enter new line)',
-                          style: hintStyle?.copyWith(
-                            color: scheme.onSurfaceVariant.withValues(
-                              alpha: _dimAlpha,
-                            ),
-                          ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.sm,
+                  0,
+                  Insets.sm,
+                  Insets.sm,
+                ),
+                child: _ComposerToolbar(
+                  chips: widget.chips,
+                  touch: touch,
+                  attaches: widget.attaches,
+                  onAttach: canType ? (touch ? _attachAnyFile : _attach) : null,
+                  snippets: snippets == null
+                      ? null
+                      : _SnippetsButton(
+                          snippets: snippets,
+                          touch: touch,
+                          onPicked: canType ? _insertSnippet : null,
                         ),
-                    ],
+                  send: _SendButton(
+                    input: _input,
+                    attachments: _attachments,
+                    busy: _busy,
+                    touch: touch,
+                    onSend: canType && _uploads.isEmpty ? _send : null,
                   ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.sm,
-                0,
-                Insets.sm,
-                Insets.sm,
-              ),
-              child: _ComposerToolbar(
-                chips: widget.chips,
-                touch: touch,
-                attaches: widget.attaches,
-                onAttach: canType ? (touch ? _attachAnyFile : _attach) : null,
-                snippets: snippets == null
-                    ? null
-                    : _SnippetsButton(
-                        snippets: snippets,
-                        touch: touch,
-                        onPicked: canType ? _insertSnippet : null,
-                      ),
-                send: _SendButton(
-                  input: _input,
-                  attachments: _attachments,
-                  busy: _busy,
-                  touch: touch,
-                  onSend: canType && _uploads.isEmpty ? _send : null,
-                ),
-              ),
-            ),
+            ],
           ],
         );
         return SingleChildScrollView(
@@ -838,6 +849,83 @@ class _MessageComposerState extends State<MessageComposer> {
     );
   }
 
+  /// **The phone's composer is one row**: attach and snippets, the field,
+  /// send — the shape every messaging app has. Stacked, the 48dp buttons
+  /// under a one-line field left a band of nothing twice its height (owner,
+  /// 2026-10-01). The buttons stay at the bottom as the text grows, where the
+  /// thumb already is; any chips go on a line of their own under it.
+  Widget _touchRow(Widget field, {required bool canType}) {
+    final snippets = widget.snippets;
+    final tools = widget.attaches || snippets != null;
+    return Padding(
+      padding: const EdgeInsets.all(Insets.xs),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (widget.attaches)
+                _ToolbarIconButton(
+                  tooltip: 'Attach a file',
+                  icon: AppIcons.plus,
+                  touch: true,
+                  onPressed: canType ? _attachAnyFile : null,
+                ),
+              if (snippets != null)
+                _SnippetsButton(
+                  snippets: snippets,
+                  touch: true,
+                  onPicked: canType ? _insertSnippet : null,
+                ),
+              Expanded(
+                // A thumb's height even for one line, the text centred in it,
+                // so the row's controls line up with the words.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: Touch.target),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        tools ? Insets.xs : Insets.md,
+                        Insets.sm,
+                        Insets.sm,
+                        Insets.sm,
+                      ),
+                      child: field,
+                    ),
+                  ),
+                ),
+              ),
+              _SendButton(
+                input: _input,
+                attachments: _attachments,
+                busy: _busy,
+                touch: true,
+                onSend: canType && _uploads.isEmpty ? _send : null,
+              ),
+            ],
+          ),
+          if (widget.chips.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.sm,
+                Insets.xs,
+                Insets.sm,
+                Insets.xs,
+              ),
+              child: Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
+                children: widget.chips,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Board N2's card corner: 12px, between the row radius and the dialog's.
   static const _radius = Radii.md + Insets.hair * 2;
 
@@ -849,6 +937,16 @@ class _MessageComposerState extends State<MessageComposer> {
   /// low costs a few pixels of scroll, never an overflow.
   double _chromeHeight(double width, TextScaler textScaler, bool touch) {
     // Bottom padding, the ring, the text's own padding, the toolbar.
+    // The phone's one row: its padding, the ring and the row's lines of
+    // text beside the buttons — which the lines are counted into, so only
+    // the chips' own line is chrome.
+    if (touch) {
+      var height = Insets.md + 2 + 2 * Insets.xs + 2 * Insets.sm;
+      if (widget.chips.isNotEmpty) height += 2 * Insets.xs + Chrome.control;
+      final rows = _attachments.length + _uploads.length;
+      if (rows > 0) height += Insets.sm + rows * _TouchAttachmentRow.height;
+      return height;
+    }
     var height =
         Insets.md +
         2 +
