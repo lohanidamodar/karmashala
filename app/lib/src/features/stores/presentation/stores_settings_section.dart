@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AppleKeySummary, DataRefused, PlayAccountSummary;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
-import 'package:store_console_apple/store_console_apple.dart';
-import 'package:store_console_play/store_console_play.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_catalog.dart';
@@ -14,17 +14,21 @@ import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
 import '../application/store_credentials.dart';
-import '../application/stores_dashboard.dart';
+import '../application/stores_controller.dart';
 import 'stores_format.dart';
 
-/// Settings → Stores: import, edit, replace and remove the two credentials
-/// the Stores tab reads with. A private key is taken in and never shown.
+/// Settings → Stores: the two credentials the Karmashala server reads the
+/// stores with. Imported, edited and removed here on a desktop; shown
+/// read-only on a phone. A private key is taken in and never shown.
 class StoresSettingsSection extends ConsumerWidget {
   const StoresSettingsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final credentials = ref.watch(storeCredentialsProvider).value;
+    final async = ref.watch(storesProvider);
+    final view = async.value?.view;
+    final writable = ref.watch(storeCredentialsWritableProvider);
+    final error = async.error;
     return SettingsSection(
       title: SettingsAnchor.storeCredentials.heading,
       child: Column(
@@ -32,21 +36,51 @@ class StoresSettingsSection extends ConsumerWidget {
         children: [
           const SettingsNote(
             'Read-only: nothing here changes a listing, a release or a '
-            'review. Each key is kept in this device’s system keystore, and '
-            'its file is read once, when it is imported.',
+            'review. The keys are kept by the Karmashala server on its '
+            'machine, in a file only its owner can read, and a key file is '
+            'read once, when it is imported. Agents read store status '
+            'through their Karmashala tools, never the keys.',
           ),
-          if (credentials == null)
-            const SettingsNote('Reading the keystore…')
+          if (!writable)
+            const SettingsNote(
+              'Store keys are imported in Karmashala on the desktop. This '
+              'phone shows which keys the server holds.',
+            ),
+          if (view == null && error != null)
+            SettingsNote(
+              error is DataRefused
+                  ? storeRefusalSentence(error)
+                  : 'The Karmashala server could not say which keys it holds.',
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => ref.invalidate(storesProvider),
+                  child: const Text('Try again'),
+                ),
+              ),
+            )
+          else if (view == null)
+            const SettingsNote('Asking the Karmashala server…')
           else ...[
-            // Keyed by presence, so a form's typed text does not outlive the
-            // credential it was typed for.
+            // Keyed by what is held, so a form's typed text does not outlive
+            // the credential it was typed for.
             _AppleCard(
-              key: ValueKey(('apple', credentials.apple?.keyId)),
-              current: credentials.apple,
+              key: ValueKey((
+                'apple',
+                view.apple?.keyId,
+                view.apple?.importedAt,
+              )),
+              current: view.apple,
+              writable: writable,
             ),
             _PlayCard(
-              key: ValueKey(('play', credentials.play?.clientEmail)),
-              current: credentials.play,
+              key: ValueKey((
+                'play',
+                view.play?.clientEmail,
+                view.play?.importedAt,
+              )),
+              current: view.play,
+              writable: writable,
             ),
           ],
         ],
@@ -96,24 +130,25 @@ Future<bool> _confirmRemoval(BuildContext context, String what) =>
       context,
       title: 'Remove the $what?',
       message:
-          'It is deleted from this device’s keystore, and that store leaves '
-          'the Stores tab. To connect again you would import the file again.',
+          'The Karmashala server deletes it, and that store leaves the Stores '
+          'tab. To connect again you would import the file again.',
       confirmLabel: 'Remove',
       destructive: true,
     );
 
-/// A card's name, and whether the last time the store was asked for its apps
-/// with this credential worked, and when.
+/// A card's name, when its key was imported, and whether the last time the
+/// server asked the store for its apps with it worked, and when.
 class _CardTitle extends ConsumerWidget {
-  const _CardTitle(this.store, {required this.imported});
+  const _CardTitle(this.store, {required this.importedAt});
 
   final StoreKind store;
-  final bool imported;
+  final DateTime? importedAt;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reading = imported
-        ? ref.watch(storesDashboardProvider).value?.stores[store]
+    final imported = importedAt;
+    final reading = imported != null
+        ? ref.watch(storesProvider).value?.stores[store]
         : null;
     final now = ref.watch(clockProvider).nowUtc();
     String age(DateTime at) => formatDataAge(now.difference(at));
@@ -126,6 +161,11 @@ class _CardTitle extends ConsumerWidget {
             store == StoreKind.appStore ? 'App Store Connect' : store.label,
             style: SettingsStyles.rowLabel(context),
           ),
+          if (imported != null)
+            Text(
+              'Imported ${formatDay(imported)}.',
+              style: SettingsStyles.rowHelp(context),
+            ),
           switch (reading) {
             ReadingMissing(:final checkedAt, :final message) => Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
@@ -140,7 +180,7 @@ class _CardTitle extends ConsumerWidget {
               style: SettingsStyles.rowHelp(context),
             ),
             null => Text(
-              imported ? 'Imported. Not checked yet.' : 'Not imported.',
+              imported != null ? 'Not checked yet.' : 'Not imported.',
               style: SettingsStyles.rowHelp(context),
             ),
           },
@@ -229,10 +269,24 @@ class _Problem extends StatelessWidget {
         );
 }
 
-class _AppleCard extends ConsumerStatefulWidget {
-  const _AppleCard({required this.current, super.key});
+/// A value the server holds, shown as text: on a phone, and for what a
+/// desktop edits only by replacing the key.
+class _Held extends StatelessWidget {
+  const _Held(this.label, this.value);
 
-  final AppleApiKey? current;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) =>
+      LabeledValueRow(label: label, value: SelectableText(value));
+}
+
+class _AppleCard extends ConsumerStatefulWidget {
+  const _AppleCard({required this.current, required this.writable, super.key});
+
+  final AppleKeySummary? current;
+  final bool writable;
 
   @override
   ConsumerState<_AppleCard> createState() => _AppleCardState();
@@ -245,7 +299,7 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
     text: widget.current?.vendorNumber ?? '',
   );
 
-  /// The picked `.p8`'s text, held only until Save hands it to the vault.
+  /// The picked `.p8`'s text, held only until Save sends it to the server.
   String? _pem;
   String? _fileName;
   String? _problem;
@@ -260,8 +314,7 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
     super.dispose();
   }
 
-  StoreCredentialsController get _controller =>
-      ref.read(storeCredentialsProvider.notifier);
+  StoresController get _controller => ref.read(storesProvider.notifier);
 
   Future<void> _run(Future<String?> Function() change) async {
     setState(() => _busy = true);
@@ -318,12 +371,27 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
   Future<void> _remove() async {
     if (!await _confirmRemoval(context, 'App Store Connect key')) return;
     if (!mounted) return;
-    await _run(_controller.removeAppleKey);
+    await _run(() => _controller.remove(StoreKind.appStore));
   }
+
+  Widget _readOnly(AppleKeySummary? held) => SettingsCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CardTitle(StoreKind.appStore, importedAt: held?.importedAt),
+        if (held != null) ...[
+          _Held('Key ID', held.keyId),
+          _Held('Issuer ID', held.issuerId),
+          _Held('Vendor number', held.vendorNumber ?? 'Not set'),
+        ],
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final imported = widget.current;
+    if (!widget.writable) return _readOnly(imported);
     // What is shown as imported; null while a replacement is being typed.
     final current = _replacing ? null : imported;
     final editing = current == null;
@@ -331,16 +399,10 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _CardTitle(StoreKind.appStore, imported: imported != null),
+          _CardTitle(StoreKind.appStore, importedAt: imported?.importedAt),
           if (current != null) ...[
-            LabeledValueRow(
-              label: 'Key ID',
-              value: SelectableText(current.keyId),
-            ),
-            LabeledValueRow(
-              label: 'Issuer ID',
-              value: SelectableText(current.issuerId),
-            ),
+            _Held('Key ID', current.keyId),
+            _Held('Issuer ID', current.issuerId),
             const SizedBox(height: Insets.xs),
           ] else ...[
             _Field(controller: _keyId, label: 'Key ID'),
@@ -381,9 +443,7 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
                 FilledButton(
                   onPressed: _busy
                       ? null
-                      : () => _run(
-                          () => _controller.setAppleVendorNumber(_vendor.text),
-                        ),
+                      : () => _run(() => _controller.updateApple(_vendor.text)),
                   child: const Text('Save vendor number'),
                 ),
                 TextButton(
@@ -421,9 +481,10 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
 }
 
 class _PlayCard extends ConsumerStatefulWidget {
-  const _PlayCard({required this.current, super.key});
+  const _PlayCard({required this.current, required this.writable, super.key});
 
-  final PlayAccount? current;
+  final PlayAccountSummary? current;
+  final bool writable;
 
   @override
   ConsumerState<_PlayCard> createState() => _PlayCardState();
@@ -437,7 +498,7 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
     text: widget.current?.packageNames.join('\n') ?? '',
   );
 
-  /// The picked key file's text, held only until Save hands it to the vault.
+  /// The picked key file's text, held only until Save sends it to the server.
   String? _json;
   String? _fileName;
   String? _problem;
@@ -451,8 +512,7 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
     super.dispose();
   }
 
-  StoreCredentialsController get _controller =>
-      ref.read(storeCredentialsProvider.notifier);
+  StoresController get _controller => ref.read(storesProvider.notifier);
 
   Future<void> _run(Future<String?> Function() change) async {
     setState(() => _busy = true);
@@ -508,12 +568,30 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
   Future<void> _remove() async {
     if (!await _confirmRemoval(context, 'Google Play service account')) return;
     if (!mounted) return;
-    await _run(_controller.removePlayAccount);
+    await _run(() => _controller.remove(StoreKind.googlePlay));
   }
+
+  Widget _readOnly(PlayAccountSummary? held) => SettingsCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CardTitle(StoreKind.googlePlay, importedAt: held?.importedAt),
+        if (held != null) ...[
+          _Held('Account', held.clientEmail ?? 'Not named'),
+          _Held('Reports bucket', held.reportsBucket ?? 'Not set'),
+          _Held(
+            'Extra package names',
+            held.packageNames.isEmpty ? 'None' : held.packageNames.join(', '),
+          ),
+        ],
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final imported = widget.current;
+    if (!widget.writable) return _readOnly(imported);
     // What is shown as imported; null while a replacement is being typed.
     final current = _replacing ? null : imported;
     final editing = current == null;
@@ -521,12 +599,9 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _CardTitle(StoreKind.googlePlay, imported: imported != null),
+          _CardTitle(StoreKind.googlePlay, importedAt: imported?.importedAt),
           if (current != null) ...[
-            LabeledValueRow(
-              label: 'Account',
-              value: SelectableText(current.clientEmail ?? 'Not named'),
-            ),
+            _Held('Account', current.clientEmail ?? 'Not named'),
             const SizedBox(height: Insets.xs),
           ],
           _Field(
@@ -571,7 +646,7 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
                   onPressed: _busy
                       ? null
                       : () => _run(
-                          () => _controller.setPlayOptions(
+                          () => _controller.updatePlay(
                             bucket: _bucket.text,
                             packageNames: parsePackageNames(_packages.text),
                           ),

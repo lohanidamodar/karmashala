@@ -80,6 +80,8 @@ import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show MemoryPairedDeviceStore;
 import 'package:karmashala_remote/remote.dart'
     show PairedDevice, pairedDeviceNameOf, pairedDeviceWithoutSecrets;
+import 'package:store_console/store_console.dart'
+    show Reading, StoreApp, StoreAppSnapshot, StoreKind;
 
 import 'fake_command_runner.dart';
 
@@ -99,6 +101,7 @@ part 'fake_git_work.dart';
 part 'fake_runs_work.dart';
 part 'fake_files_work.dart';
 part 'fake_env_vault.dart';
+part 'fake_stores.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -265,6 +268,10 @@ class FakeDataServer {
   /// The server's environment vault, write-only, in memory.
   late final envVault = FakeEnvVault._(this);
 
+  /// The server's app stores: credential summaries and what was read, in
+  /// memory; no store is reached.
+  late final stores = FakeStores._(this);
+
   /// The server's terminals: profiles, starts, records — nothing spawned.
   late final terminals = FakeTerminalsWork._(this);
 
@@ -405,6 +412,7 @@ class FakeDataServer {
           // Names only: seed a value through [envVault].
           break;
         case StoresChanged() || StoresProgress():
+          // Told by [stores] as it changes; a test seeds its view directly.
           break;
         case TerminalChanged(:final terminal):
           terminals.records[terminal.sessionId] = terminal;
@@ -546,6 +554,9 @@ class FakeDataServer {
     }
     if (request case final EnvVaultRequest<Object?> work) {
       return DataReply(envVault._handle(work) as R, revision, const []);
+    }
+    if (request case final StoreRequest<Object?> work) {
+      return DataReply(stores._handle(work) as R, revision, const []);
     }
     if (request case final TerminalWorkRequest<Object?> work) {
       return DataReply(terminals._handle(work) as R, revision, const []);
@@ -719,9 +730,7 @@ class FakeDataServer {
       SessionInputRequest() => throw const DataRefused.unavailable(
         'this fake types into no sessions',
       ),
-      StoreRequest() => throw const DataRefused.unavailable(
-        'this fake reads no stores',
-      ),
+      StoreRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

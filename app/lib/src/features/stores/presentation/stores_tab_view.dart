@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -9,8 +11,8 @@ import 'package:store_console/store_console.dart';
 import '../../../app/shell/workbench_tabs.dart' show openSettingsTab;
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_catalog.dart';
-import '../application/store_credentials.dart';
-import '../application/stores_dashboard.dart';
+import '../application/store_groups.dart';
+import '../application/stores_controller.dart';
 import 'store_app_card.dart';
 import 'store_app_detail.dart';
 import 'stores_format.dart';
@@ -30,7 +32,8 @@ void _openStoreSettings(WidgetRef ref) =>
 
 /// **The Stores tab**: every app on the App Store and Google Play — what is
 /// live, what is pending, its rating and downloads — and one app's detail.
-/// Read-only, and read from the stores only on open and on request.
+/// Read-only. The Karmashala server reads the stores, on open and on request;
+/// this tab shows what it holds.
 class StoresTabView extends ConsumerStatefulWidget {
   const StoresTabView({super.key});
 
@@ -44,16 +47,25 @@ class _StoresTabViewState extends ConsumerState<StoresTabView> {
     super.initState();
     // Each time the tab opens, not only when the provider is first built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(storesDashboardProvider.notifier).refreshIfStale();
+      if (mounted) ref.read(storesProvider.notifier).refreshIfStale();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // A credential imported while the tab is open is read without asking.
-    ref.listen(storeCredentialsProvider, (previous, next) {
-      ref.read(storesDashboardProvider.notifier).refreshIfStale();
-    });
+    // A store connected while the tab is open is read without asking.
+    ref.listen(
+      storesProvider.select((async) {
+        final view = async.value?.view;
+        return view == null ? null : (view.apple != null, view.play != null);
+      }),
+      (previous, next) {
+        if (previous == null || next == null) return;
+        if ((next.$1 && !previous.$1) || (next.$2 && !previous.$2)) {
+          ref.read(storesProvider.notifier).refresh();
+        }
+      },
+    );
     final theme = Theme.of(context);
     // Under a page that already names it (the phone's More), no second title.
     final untitled = PaneTitleOverride.maybeOf(context) != null;
@@ -89,16 +101,30 @@ class _StoresBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final credentials = ref.watch(storeCredentialsProvider).value;
-    if (credentials == null) {
+    final async = ref.watch(storesProvider);
+    final state = async.value;
+    if (state == null) {
+      if (async.error case final error?) {
+        return PanePlaceholder(
+          icon: AppIcons.warning,
+          message: error is DataRefused
+              ? storeRefusalSentence(error)
+              : 'The Karmashala server could not say how the stores stand.',
+          action: TextButton(
+            onPressed: () => ref.invalidate(storesProvider),
+            child: const Text('Try again'),
+          ),
+        );
+      }
       return const Center(
         child: InlineSpinner(
           size: InlineSpinnerSize.large,
-          semanticsLabel: 'Reading the keystore',
+          semanticsLabel: 'Asking the Karmashala server',
         ),
       );
     }
-    if (credentials.isEmpty) {
+    final connected = state.connected;
+    if (connected.isEmpty) {
       return PanePlaceholder(
         icon: AppIcons.package,
         message:
@@ -113,13 +139,16 @@ class _StoresBody extends ConsumerWidget {
         ),
       );
     }
-    final dashboard =
-        ref.watch(storesDashboardProvider).value ?? const StoresDashboard();
-    final connected = credentials.connected;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _StatusRow(dashboard: dashboard),
+        _StatusRow(dashboard: state),
+        if (state.problem case final problem?)
+          PaneNoticeBar(
+            icon: AppIcons.warning,
+            tone: NoticeTone.attention,
+            message: problem,
+          ),
         for (final store in StoreKind.values)
           if (!connected.contains(store))
             PaneNoticeBar(
@@ -130,7 +159,7 @@ class _StoresBody extends ConsumerWidget {
                 child: const Text('Connect'),
               ),
             )
-          else if (dashboard.stores[store] case ReadingMissing<List<StoreApp>>(
+          else if (state.stores[store] case ReadingMissing<List<StoreApp>>(
             :final message,
           ))
             PaneNoticeBar(
@@ -138,7 +167,7 @@ class _StoresBody extends ConsumerWidget {
               tone: NoticeTone.attention,
               message: '${store.label}: $message',
             ),
-        Expanded(child: _Dashboard(dashboard: dashboard)),
+        Expanded(child: _Dashboard(dashboard: state)),
       ],
     );
   }
@@ -148,7 +177,7 @@ class _StoresBody extends ConsumerWidget {
 class _StatusRow extends ConsumerWidget {
   const _StatusRow({required this.dashboard});
 
-  final StoresDashboard dashboard;
+  final StoresState dashboard;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -185,7 +214,7 @@ class _StatusRow extends ConsumerWidget {
           TextButton.icon(
             onPressed: refreshing
                 ? null
-                : () => ref.read(storesDashboardProvider.notifier).refresh(),
+                : () => ref.read(storesProvider.notifier).refresh(),
             icon: refreshing
                 ? const InlineSpinner(semanticsLabel: 'Reading the stores')
                 : const Icon(AppIcons.arrowsClockwise, size: Chrome.iconAction),
@@ -202,7 +231,7 @@ class _StatusRow extends ConsumerWidget {
 class _Dashboard extends ConsumerWidget {
   const _Dashboard({required this.dashboard});
 
-  final StoresDashboard dashboard;
+  final StoresState dashboard;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

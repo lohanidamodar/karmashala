@@ -5,7 +5,7 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
-import '../application/stores_dashboard.dart';
+import '../application/store_groups.dart';
 import 'stores_format.dart';
 
 /// One app on the dashboard: its name, and a row per store it is on.

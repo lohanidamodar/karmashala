@@ -355,6 +355,22 @@ class DataClient {
   /// The vault's names, whole, each time they change.
   Stream<List<EnvVariableName>> get envChanges => _envChanges.stream;
 
+  /// The app stores as the server holds them, as last told; null until the
+  /// server has said. Never a credential: summaries only.
+  StoresView? storesView;
+
+  final _storesChanges = StreamController<StoresView>.broadcast(sync: true);
+
+  /// The stores' view, whole, each time it changes.
+  Stream<StoresView> get storesChanges => _storesChanges.stream;
+
+  final _storesProgress = StreamController<({int done, int total})>.broadcast(
+    sync: true,
+  );
+
+  /// How far a refresh under way has got, once per app read.
+  Stream<({int done, int total})> get storesProgress => _storesProgress.stream;
+
   /// The Flutter apps the server is attached to, as last told (slice 3d);
   /// null until the server has said.
   FlutterAppRegistry? flutterApps;
@@ -923,9 +939,13 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
-        case StoresChanged() || StoresProgress():
-          // Read by the Stores feature from its own subscription.
-          break;
+        case StoresChanged(:final view):
+          storesView = view;
+          if (!_storesChanges.isClosed) _storesChanges.add(view);
+        case StoresProgress(:final done, :final total):
+          if (!_storesProgress.isClosed) {
+            _storesProgress.add((done: done, total: total));
+          }
         case final AttentionChange change:
           _applyAttention(change);
         case final ClientIntent intent:
@@ -1106,6 +1126,8 @@ class DataClient {
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
     unawaited(_envChanges.close());
+    unawaited(_storesChanges.close());
+    unawaited(_storesProgress.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
     unawaited(_intents.close());

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/stores/application/store_credentials.dart';
-import 'package:karmashala/src/features/stores/application/stores_dashboard.dart';
+import 'package:karmashala/src/features/stores/application/store_groups.dart';
 import 'package:store_console/store_console.dart';
 
 import 'store_fixtures.dart';
@@ -70,6 +70,30 @@ void main() {
     final app = storeApp(StoreKind.googlePlay, 'com.example.notes');
     final groups = groupStoreApps([app, app], const {});
     expect(groups.single.entries, hasLength(1));
+  });
+
+  test('the server view keeps an app read before from a store now failing', () {
+    final listed = storeApp(StoreKind.appStore, 'com.example.notes');
+    final kept = storeApp(StoreKind.googlePlay, 'com.example.tasks');
+
+    final groups = groupStoreView(
+      {
+        StoreKind.appStore: ReadingValue([listed], fixtureCheckedAt),
+        StoreKind.googlePlay: ReadingMissing(
+          StoreFailure.network,
+          'Google Play could not be reached.',
+          fixtureCheckedAt,
+        ),
+      },
+      [storeSnapshot(kept)],
+    );
+
+    expect(groups.map((group) => group.bundleId), [
+      'com.example.notes',
+      'com.example.tasks',
+    ]);
+    expect(groups.first.entries.single.snapshot, isNull);
+    expect(groups.last.entries.single.snapshot?.app, kept);
   });
 
   test('package names are split on commas and new lines', () {

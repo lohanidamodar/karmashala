@@ -2,39 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/stores/application/store_credentials.dart';
-import 'package:karmashala/src/features/stores/application/stores_dashboard.dart';
+import 'package:karmashala/src/features/stores/application/stores_controller.dart';
 import 'package:karmashala/src/features/stores/presentation/store_app_card.dart';
 import 'package:karmashala/src/features/stores/presentation/store_app_detail.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:store_console/store_console.dart';
-import 'package:store_console_apple/store_console_apple.dart';
 
 import '../../support/fakes.dart';
 import 'store_fixtures.dart';
 
-class _Credentials extends StoreCredentialsController {
-  _Credentials(this._credentials);
+/// The server's view already told, which never asks the server again.
+class _Stores extends StoresController {
+  _Stores(this._state);
 
-  final StoreCredentials _credentials;
-
-  @override
-  Future<StoreCredentials> build() async => _credentials;
-}
-
-/// A dashboard already read, which never reaches for a store.
-class _Dashboard extends StoresDashboardController {
-  _Dashboard(this._dashboard);
-
-  final StoresDashboard _dashboard;
+  final StoresState _state;
   int refreshes = 0;
+  int staleChecks = 0;
 
   @override
-  Future<StoresDashboard> build() async => _dashboard;
+  Future<StoresState> build() async => _state;
 
   @override
-  Future<void> refreshIfStale() async {}
+  Future<void> refreshIfStale() async => staleChecks++;
 
   @override
   Future<void> refresh() async => refreshes++;
@@ -44,13 +35,12 @@ const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
 
 void main() {
-  // Not a key: text the import form would refuse as one.
-  const apple = AppleApiKey(
+  final now = DateTime.utc(2026, 9, 30, 9, 12);
+  final apple = AppleKeySummary(
     keyId: 'KEYID',
     issuerId: 'issuer',
-    privateKeyPem: 'placeholder',
+    importedAt: DateTime.utc(2026, 9, 29),
   );
-  final now = DateTime.utc(2026, 9, 30, 9, 12);
 
   final notes = storeApp(
     StoreKind.appStore,
@@ -63,58 +53,77 @@ void main() {
     name: 'Tasks',
   );
 
-  StoresDashboard populated() => StoresDashboard(
-    stores: {
-      StoreKind.appStore: ReadingValue([notes, tasks], fixtureCheckedAt),
-    },
-    snapshots: {
-      notes: storeSnapshot(
-        notes,
-        releases: [
-          storeRelease(ReleaseState.live, version: '2.3.0', track: 'App Store'),
-          storeRelease(
-            ReleaseState.inReview,
-            version: '2.4.0',
-            track: 'App Store',
-          ),
-        ],
-      ),
-      tasks: storeSnapshot(
-        tasks,
-        rating: ReadingMissing(
-          StoreFailure.network,
-          'The App Store could not be reached.',
-          fixtureCheckedAt,
+  StoresState populated({
+    bool refreshing = false,
+    int done = 0,
+    int total = 0,
+    String? problem,
+  }) => StoresState(
+    view: StoresView(
+      apple: apple,
+      stores: {
+        StoreKind.appStore: ReadingValue([notes, tasks], fixtureCheckedAt),
+      },
+      apps: [
+        storeSnapshot(
+          notes,
+          releases: [
+            storeRelease(
+              ReleaseState.live,
+              version: '2.3.0',
+              track: 'App Store',
+            ),
+            storeRelease(
+              ReleaseState.inReview,
+              version: '2.4.0',
+              track: 'App Store',
+            ),
+          ],
         ),
-      ),
-    },
-    refreshedAt: now.subtract(const Duration(minutes: 12)),
+        storeSnapshot(
+          tasks,
+          rating: ReadingMissing(
+            StoreFailure.network,
+            'The App Store could not be reached.',
+            fixtureCheckedAt,
+          ),
+        ),
+      ],
+      refreshedAt: now.subtract(const Duration(minutes: 12)),
+      refreshing: refreshing,
+    ),
+    done: done,
+    total: total,
+    problem: problem,
   );
 
-  Future<_Dashboard> pump(
+  Future<_Stores> pump(
     WidgetTester tester, {
     required Size size,
-    StoreCredentials credentials = const StoreCredentials(),
-    StoresDashboard dashboard = const StoresDashboard(),
+    StoresState state = const StoresState(),
+    bool settle = true,
   }) async {
     tester.view
       ..physicalSize = size
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final controller = _Dashboard(dashboard);
+    final controller = _Stores(state);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           clockProvider.overrideWithValue(FixedClock(now)),
-          storeCredentialsProvider.overrideWith(
-            () => _Credentials(credentials),
-          ),
-          storesDashboardProvider.overrideWith(() => controller),
+          storesProvider.overrideWith(() => controller),
         ],
         child: const MaterialApp(home: StoresTabView()),
       ),
     );
-    await tester.pumpAndSettle();
+    // A refresh under way spins, and a spinner never settles.
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump();
+    }
     return controller;
   }
 
@@ -136,12 +145,7 @@ void main() {
 
     testWidgets('shows each app, its age and the store that is not connected '
         '($width)', (tester) async {
-      await pump(
-        tester,
-        size: size,
-        credentials: const StoreCredentials(apple: apple),
-        dashboard: populated(),
-      );
+      await pump(tester, size: size, state: populated());
 
       expect(tester.takeException(), isNull);
       expect(find.text('Updated 12 min ago'), findsOneWidget);
@@ -164,28 +168,55 @@ void main() {
     });
   }
 
+  testWidgets('opening the tab asks for a stale view to be read', (
+    tester,
+  ) async {
+    final controller = await pump(tester, size: _desktop, state: populated());
+    expect(controller.staleChecks, 1);
+    expect(controller.refreshes, 0);
+  });
+
   testWidgets('Refresh asks the controller, once', (tester) async {
-    final controller = await pump(
-      tester,
-      size: _desktop,
-      credentials: const StoreCredentials(apple: apple),
-      dashboard: populated(),
-    );
+    final controller = await pump(tester, size: _desktop, state: populated());
 
     await tester.tap(find.text('Refresh'));
     await tester.pump();
     expect(controller.refreshes, 1);
   });
 
-  testWidgets('a card opens its detail beside the list at desktop width', (
-    tester,
-  ) async {
+  testWidgets('a refresh under way shows how far it has got', (tester) async {
     await pump(
       tester,
       size: _desktop,
-      credentials: const StoreCredentials(apple: apple),
-      dashboard: populated(),
+      state: populated(refreshing: true, done: 1, total: 2),
+      settle: false,
     );
+
+    expect(find.text('Updated 12 min ago · reading 1 of 2'), findsOneWidget);
+    // TextButton.icon is a subclass, which byType would not match.
+    final refresh = tester.widget<TextButton>(
+      find.ancestor(
+        of: find.text('Refresh'),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      ),
+    );
+    expect(refresh.onPressed, isNull);
+  });
+
+  testWidgets('a refresh the server refused says why', (tester) async {
+    await pump(
+      tester,
+      size: _desktop,
+      state: populated(problem: 'The Karmashala server did not answer.'),
+    );
+
+    expect(find.text('The Karmashala server did not answer.'), findsOneWidget);
+  });
+
+  testWidgets('a card opens its detail beside the list at desktop width', (
+    tester,
+  ) async {
+    await pump(tester, size: _desktop, state: populated());
 
     await tester.tap(find.text('Notes'));
     await tester.pumpAndSettle();
@@ -201,12 +232,7 @@ void main() {
   testWidgets('and in the place of the dashboard on a phone, with a way back', (
     tester,
   ) async {
-    await pump(
-      tester,
-      size: _phone,
-      credentials: const StoreCredentials(apple: apple),
-      dashboard: populated(),
-    );
+    await pump(tester, size: _phone, state: populated());
 
     await tester.tap(find.text('Notes'));
     await tester.pumpAndSettle();

@@ -9,7 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../git/application/remote_links.dart' show openExternalUrlProvider;
-import '../application/stores_dashboard.dart';
+import '../application/store_groups.dart';
 import 'store_app_card.dart';
 import 'stores_format.dart';
 

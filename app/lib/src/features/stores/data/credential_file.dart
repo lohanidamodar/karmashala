@@ -14,7 +14,7 @@ class CredentialFileException implements Exception {
 const int kCredentialFileMaxBytes = 256 * 1024;
 
 /// The text of the credential file at [path], read once at import. Its
-/// contents go to the vault and nowhere else.
+/// contents go to the server in one set request and nowhere else.
 Future<String> readCredentialFile(String path) async {
   final file = File(path);
   try {
