@@ -91,11 +91,65 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
   String? _streamError;
   bool _starting = false;
 
-  /// The device the live view is for, `null` when off: only ever a reflection
-  /// of [selectedDeviceSerialProvider], kept there so it survives a remount.
-  String? get _liveSerial => ref.read(androidLiveViewProvider);
-  set _liveSerial(String? serial) =>
+  /// The one device a preview tab is for, null for the Devices pane.
+  String? get _previewSerial => widget.previewSerial;
+
+  /// Whether this pane only lists: the host opens each picture in a tab of
+  /// its own, so nothing streams here.
+  bool get _listOnly =>
+      _previewSerial == null && ref.read(devicePreviewOpenerProvider) != null;
+
+  /// The device the live view is for, `null` when off. Kept in a provider so
+  /// it survives a remount: a preview tab's in [androidLivePreviewsProvider],
+  /// one entry per device; the pane's own in [androidLiveViewProvider], a
+  /// reflection of [selectedDeviceSerialProvider].
+  String? get _liveSerial {
+    final preview = _previewSerial;
+    if (preview == null) return ref.read(androidLiveViewProvider);
+    return ref.read(androidLivePreviewsProvider).contains(preview)
+        ? preview
+        : null;
+  }
+
+  set _liveSerial(String? serial) {
+    final preview = _previewSerial;
+    if (preview == null) {
       ref.read(androidLiveViewProvider.notifier).select(serial);
+      return;
+    }
+    final previews = ref.read(androidLivePreviewsProvider.notifier);
+    serial == null ? previews.stop(preview) : previews.start(preview);
+  }
+
+  /// Shows [device] live: in a tab of its own where the host opens one, else
+  /// in this pane.
+  Future<void> _preview(AndroidDevice device) async {
+    final open = ref.read(devicePreviewOpenerProvider);
+    if (open == null || _previewSerial != null) return _startStream(device);
+    // Marked live first, so the tab that opens starts its picture at once —
+    // and one already open and switched off turns back on.
+    ref.read(androidLivePreviewsProvider.notifier).start(device.serial);
+    open(ref, device);
+  }
+
+  /// Brings a preview tab's session in line with whether its live view is
+  /// meant to be on: the Devices pane turns one on by opening it again, and
+  /// stopping an emulator turns one off.
+  void _followPreviewIntent(String serial) {
+    if (!mounted) return;
+    final on = ref.read(androidLivePreviewsProvider).contains(serial);
+    if (on && _session == null && !_starting && !_resuming) {
+      final device = ref
+          .read(devicesProvider)
+          .asData
+          ?.value
+          .where((d) => d.serial == serial && d.isReady)
+          .firstOrNull;
+      if (device != null) unawaited(_startStream(device));
+    } else if (!on && _session != null) {
+      unawaited(_stopAndRebuild());
+    }
+  }
 
   /// A live view being brought back after a remount. Kept apart from
   /// [_starting], which refuses a second start — a resume must be let through.
@@ -147,7 +201,7 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     // The side panel unmounts this pane on every surface switch; what
     // survives is the intent, and this is what acts on it.
-    final serial = ref.read(androidLiveViewProvider);
+    final serial = _listOnly ? null : _liveSerial;
     if (serial != null) {
       // From the first frame, so the pane does not flash "pick a device" on
       // its way back to a live view it is about to have.
@@ -277,7 +331,10 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
 
   /// Restarts the live view for the device it is already showing.
   Future<void> _restartStream({bool manual = true}) async {
-    final serial = _liveSerial ?? ref.read(selectedDeviceProvider)?.serial;
+    final serial =
+        _liveSerial ??
+        _previewSerial ??
+        ref.read(selectedDeviceProvider)?.serial;
     final device = ref
         .read(devicesProvider)
         .asData
@@ -343,7 +400,10 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
     _liveSerial = device.serial;
     // Starting the live view *is* choosing a device: pinning it here keeps the
     // toolbar, picture, gestures and hardware keys from disagreeing.
-    ref.read(selectedDeviceSerialProvider.notifier).select(device.serial);
+    // A preview tab is for one device whatever the pane has picked.
+    if (_previewSerial == null) {
+      ref.read(selectedDeviceSerialProvider.notifier).select(device.serial);
+    }
     // Only for the device already on screen. Another device's last frame is
     // not a stale picture of this one — it is the wrong phone.
     final retainPicture = _session?.serial == device.serial && _player != null;

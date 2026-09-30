@@ -27,6 +27,7 @@ import 'device_section_header.dart';
 import 'device_start_options.dart';
 import 'device_controls.dart';
 import 'device_app_controls.dart';
+import 'device_apps_dialog.dart';
 import 'device_keyboard_surface.dart';
 import 'device_logcat_section.dart';
 import 'device_recording_banner.dart';
@@ -47,8 +48,29 @@ part 'device_pane_stream.dart';
 part 'device_pane_toolbar.dart';
 
 /// The device pane: pick a device or emulator, watch it live, and drive it.
+///
+/// Two shapes. **The list** (the default): every device and emulator, each
+/// row acting on its own device — live view, files, install. Where the host
+/// opens tabs ([devicePreviewOpenerProvider]) that is all it is, and a live
+/// view opens as **a preview** ([DevicePane.preview]): one device's picture,
+/// its controls, install/launch and its log, in a tab of its own — so one
+/// phone can be watched while another's files are read (owner, 2026-09-30).
 class DevicePane extends ConsumerStatefulWidget {
-  const DevicePane({super.key});
+  const DevicePane({super.key}) : previewSerial = null, focused = false;
+
+  /// The live preview of the device with [serial].
+  const DevicePane.preview({
+    required String serial,
+    this.focused = false,
+    super.key,
+  }) : previewSerial = serial;
+
+  /// The one device this is a preview of, or null for the list.
+  final String? previewSerial;
+
+  /// Whether the workbench's focus is on this preview: typing then goes to
+  /// the device.
+  final bool focused;
 
   @override
   ConsumerState<DevicePane> createState() => _DevicePaneState();
@@ -114,8 +136,189 @@ class _DevicePaneState extends ConsumerState<DevicePane>
   void _onDevicesChanged(Object? _, Object? _) =>
       scheduleMicrotask(_dropVanishedDevices);
 
+  _DeviceListActions get _listActions => _DeviceListActions(
+    stopping: _stopping,
+    booting: _booting,
+    onPreview: _preview,
+    onStopEmulator: _stopEmulator,
+    onBootAvd: _bootAvd,
+  );
+
+  /// The list alone: the picture is a tab's.
+  Widget _buildList(BuildContext context) {
+    ref.listen(iosSimulatorsProvider, _onDevicesChanged);
+    ref.listen(simulatorLiveViewProvider, _onDevicesChanged);
+    final sdk = ref.watch(androidSdkProvider);
+    final deviceList = ref.watch(devicesProvider);
+    final reason = deviceUnavailableReason(
+      sdk: sdk.asData?.value,
+      sdkResolved: sdk.asData != null || sdk.hasError,
+      devices: deviceList.asData?.value ?? const <AndroidDevice>[],
+      kind: ref.watch(deviceEnvironmentProvider).kind,
+    );
+    final probing =
+        !(sdk.asData != null || sdk.hasError) || !deviceList.hasValue;
+    // A simulator's picture is still this pane's: it has no tab yet.
+    final simulatorShowing =
+        ref.watch(simulatorLiveViewProvider) is! SimulatorLiveViewIdle;
+    return Column(
+      children: [
+        const _DeviceListToolbar(),
+        const DeviceRecordingBanner(),
+        const Divider(height: 1),
+        Expanded(
+          child: simulatorShowing
+              ? const SimulatorLivePane()
+              : _DeviceEmptyState(
+                  message:
+                      reason ??
+                      (probing
+                          ? 'Looking for devices…'
+                          : 'Open a live view, browse files or install a '
+                                'build from a device\'s row.'),
+                  actions: _listActions,
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// One device's preview: its picture, its controls, its apps and its log.
+  Widget _buildPreview(BuildContext context, String serial) {
+    ref.listen(devicesProvider, _onDevicesChanged);
+    // A microtask on: starting and stopping write providers of their own.
+    ref.listen<Set<String>>(
+      androidLivePreviewsProvider,
+      (_, _) => scheduleMicrotask(() => _followPreviewIntent(serial)),
+    );
+    final sdk = ref.watch(androidSdkProvider);
+    final deviceList = ref.watch(devicesProvider);
+    final devices = deviceList.asData?.value ?? const <AndroidDevice>[];
+    final device = devices.where((d) => d.serial == serial).firstOrNull;
+    final ready = device != null && device.isReady;
+    final on = ref.watch(androidLivePreviewsProvider).contains(serial);
+    final busy = _starting || _resuming;
+    final probing =
+        !(sdk.asData != null || sdk.hasError) || !deviceList.hasValue;
+    final canStream = ref.watch(deviceStreamServiceProvider) != null;
+    // Input follows the running session, as in the pane.
+    final live = on ? device : null;
+    final name = device?.displayName ?? serial;
+    final start = ready && canStream ? () => _startStream(device) : null;
+
+    final Widget picture;
+    if (!ready) {
+      picture = PanePlaceholder(
+        icon: AppIcons.deviceMobile,
+        message: probing
+            ? 'Looking for $name…'
+            : '$name is not connected. Plug it in, or start it from Devices.',
+      );
+    } else if (!canStream) {
+      picture = PanePlaceholder(
+        icon: AppIcons.deviceMobile,
+        message:
+            'The live view is not available on this machine — screenshots, '
+            'input and logcat still work.',
+      );
+    } else if (_streamError != null) {
+      picture = PanePlaceholder(
+        icon: AppIcons.warning,
+        iconColor: Theme.of(context).colorScheme.error,
+        message:
+            'Live view unavailable: $_streamError — screenshots, input and '
+            'logcat still work.',
+        action: TextButton.icon(
+          onPressed: start,
+          icon: const Icon(AppIcons.eye),
+          label: const Text('Try again'),
+        ),
+      );
+    } else if (!on && !busy) {
+      // A tab brought back by a restart, or one switched off: it does not
+      // reach for the phone until asked.
+      picture = PanePlaceholder(
+        icon: AppIcons.eyeSlash,
+        message: 'The live view of $name is off.',
+        action: FilledButton.icon(
+          onPressed: start,
+          icon: const Icon(AppIcons.eye),
+          label: const Text('Start live view'),
+        ),
+      );
+    } else {
+      final video = _video ?? _heldVideo;
+      picture = _LiveView(
+        video: video,
+        device: device,
+        // No picture yet is "starting" here: there is no list to fall back to.
+        starting: busy || video == null,
+        reconnecting: _holdingPicture,
+        sink: _sink,
+        keyboard: _keyboardSink,
+        health: _health,
+        exhausted: _restarts.isExhausted && _reconnectTimer == null,
+        probing: probing,
+        onRestart: _restartStream,
+        listActions: _listActions,
+        focusKeyboard: widget.focused,
+      );
+    }
+
+    return Column(
+      children: [
+        _PreviewToolbar(
+          name: name,
+          serial: serial,
+          on: on,
+          busy: busy,
+          onStart: start,
+          onStop: _stopAndRebuild,
+          onRestart: on ? _restartStream : null,
+          onFiles: ready
+              ? () => DeviceFilesDialog.show(context, device)
+              : null,
+        ),
+        const DeviceRecordingBanner(),
+        const Divider(height: 1),
+        Expanded(
+          child: _DevicePaneLayout(
+            picture: picture,
+            controls: device == null
+                ? null
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Divider(height: 1),
+                      _AndroidControls(
+                        device: live,
+                        clipboard: _clipboard,
+                        recordable: _session != null,
+                      ),
+                      DeviceAppControls(device: device),
+                    ],
+                  ),
+            // Reading a log is not driving: it works with the live view off.
+            logcat: device == null
+                ? null
+                : (logHeight) => DeviceLogcatSection(
+                    device: device,
+                    logHeight: logHeight,
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final preview = widget.previewSerial;
+    if (preview != null) return _buildPreview(context, preview);
+    if (ref.watch(devicePreviewOpenerProvider) != null) {
+      return _buildList(context);
+    }
     ref.listen<String?>(
       selectedDeviceSerialProvider,
       (_, serial) => _onSelectionChanged(serial),

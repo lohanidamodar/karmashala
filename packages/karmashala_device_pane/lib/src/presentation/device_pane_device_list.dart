@@ -209,6 +209,15 @@ class _DeviceList extends ConsumerWidget {
                     tooltip: 'Files',
                     onPressed: () => DeviceFilesDialog.show(context, device),
                   ),
+                // Install, launch, stop — on this row's device, whichever one
+                // a preview is showing.
+                if (device.isReady)
+                  DeviceRowAction(
+                    key: Key('apps-${device.serial}'),
+                    icon: AppIcons.package,
+                    tooltip: 'Install or launch an app',
+                    onPressed: () => DeviceAppsDialog.show(context, device),
+                  ),
                 // Only emulators: `emu kill` talks to the emulator console, so
                 // on a phone it could only ever fail.
                 if (device.isReady && device.isEmulator)

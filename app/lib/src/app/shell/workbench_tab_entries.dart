@@ -94,6 +94,7 @@ IconData? documentIconFor(TerminalTab tab) {
   final paneId = tab.layout.panes.single;
   if (isSettingsPane(paneId)) return AppIcons.gearSix;
   if (isDevicePane(paneId)) return AppIcons.deviceMobile;
+  if (isDevicePreviewPane(paneId)) return AppIcons.deviceMobile;
   if (isUsagePane(paneId)) return AppIcons.chartBar;
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;

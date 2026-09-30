@@ -46,7 +46,7 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
     final devices = await ref.read(devicesProvider.future);
     final device = devices.where((d) => d.serial == serial).firstOrNull;
     if (!mounted || device == null || !device.isReady) return;
-    await _startStream(device);
+    await _preview(device);
   }
 
   Future<void> _stopEmulator({
@@ -80,6 +80,8 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
     // Take the stream down first: killing the emulator underneath a live view
     // leaves a frozen picture that reads as a new fault.
     if (_liveSerial == serial) await _stopStream();
+    // And the picture in its own tab, which follows this.
+    ref.read(androidLivePreviewsProvider.notifier).stop(serial);
     String? failure;
     try {
       final stopped = await adb.stopEmulator(serial);

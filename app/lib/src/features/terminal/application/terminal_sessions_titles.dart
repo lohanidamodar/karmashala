@@ -48,6 +48,14 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // directory.
     if (isSettingsPane(paneId)) return 'Settings';
     if (isDevicePane(paneId)) return 'Devices';
+    // A preview is named for its device; its serial until the list has it.
+    if (devicePreviewSerial(paneId) case final serial?) {
+      final devices = ref.read(devicesProvider).asData?.value ?? const [];
+      for (final device in devices) {
+        if (device.serial == serial) return device.displayName;
+      }
+      return serial;
+    }
     if (isUsagePane(paneId)) return 'Usage';
     if (isFilesPane(paneId)) return 'Files';
     if (isBrowserPane(paneId)) return 'Browser';

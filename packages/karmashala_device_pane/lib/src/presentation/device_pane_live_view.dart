@@ -17,7 +17,12 @@ class _LiveView extends ConsumerWidget {
     required this.probing,
     required this.onRestart,
     required this.listActions,
+    this.focusKeyboard = false,
   });
+
+  /// Whether the picture takes the keyboard as it gains the workbench's focus
+  /// (a preview tab), rather than on a click.
+  final bool focusKeyboard;
 
   final VideoController? video;
 
@@ -93,6 +98,7 @@ class _LiveView extends ConsumerWidget {
           child: DeviceKeyboardSurface(
             sink: keyboard,
             deviceLabel: currentDevice.displayName,
+            autofocus: focusKeyboard,
             child: Center(
               child: AspectRatio(
                 aspectRatio: aspect,

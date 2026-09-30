@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_device_pane/providers.dart' show AndroidDevice;
 import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
@@ -24,6 +25,16 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
   // The group that holds it, which activating the tab has just focused.
   terminals.showTerminalForTab(tabId);
   releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
+}
+
+/// Opens [device]'s live preview as a workbench tab, or brings forward the
+/// one already open: one tab per device, so a second click is not a second
+/// stream of the same phone.
+void openDevicePreviewTab(WidgetRef ref, AndroidDevice device) {
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openDocumentTab(devicePreviewPaneId(device.serial));
+  activateTerminalTab(ref, tabId);
 }
 
 /// Opens the file browser on [leftEnvironmentId] and [rightEnvironmentId], or

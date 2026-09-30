@@ -23,7 +23,13 @@ class DeviceKeyboardSurface extends StatefulWidget {
     required this.child,
     this.sink,
     this.deviceLabel,
+    this.autofocus = false,
   });
+
+  /// Whether the surface takes the keyboard when this turns true: a preview
+  /// tab that has the workbench's focus types into its device without a click
+  /// on the picture first. The escape chord still hands the keyboard back.
+  final bool autofocus;
 
   /// Where keystrokes go. `null` means no transport is available, and nothing
   /// can be forwarded at all.
@@ -59,6 +65,18 @@ class _DeviceKeyboardSurfaceState extends State<DeviceKeyboardSurface> {
   bool get _live => _armed && _hasFocus;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.autofocus) _focusAfterFrame();
+  }
+
+  void _focusAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.autofocus) _node.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
     _releaseHeldKeys();
     _node.dispose();
@@ -68,6 +86,7 @@ class _DeviceKeyboardSurfaceState extends State<DeviceKeyboardSurface> {
   @override
   void didUpdateWidget(DeviceKeyboardSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.autofocus && !oldWidget.autofocus) _focusAfterFrame();
     if (oldWidget.sink != widget.sink) {
       // The transport changed under us, so what the old one believed was held
       // is not ours to lift through the new one — reset, never replayed.

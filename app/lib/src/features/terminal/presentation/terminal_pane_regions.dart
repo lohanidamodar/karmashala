@@ -60,6 +60,18 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
           ? const DevicePane()
           : const SizedBox.shrink();
     }
+    // One device's live preview. The same gate, and it is what pauses the
+    // picture: off screen the session is torn down, and coming back resumes
+    // it. Keyed by the pane: two previews can share a region.
+    if (devicePreviewSerial(paneId) case final serial?) {
+      return showing && ref.read(capabilitiesProvider).devicesArea
+          ? DevicePane.preview(
+              key: ValueKey(paneId),
+              serial: serial,
+              focused: focused,
+            )
+          : const SizedBox.shrink();
+    }
     // The same gate: off screen it would follow the attached page's state for
     // nobody. The controller outlives it, so coming back loses no connection.
     if (isBrowserPane(paneId)) {

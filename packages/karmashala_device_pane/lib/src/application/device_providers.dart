@@ -75,6 +75,27 @@ class AndroidLiveView extends Notifier<String?> {
   void select(String? serial) => state = serial;
 }
 
+/// Serials whose **preview tab** has its live view on. One per device, so two
+/// phones can be watched at once; kept here so a tab that leaves the screen —
+/// its picture is torn down, a hidden preview costs the phone no encode —
+/// comes back live. In memory only: after a restart a preview tab is off until
+/// it is started.
+final androidLivePreviewsProvider =
+    NotifierProvider<AndroidLivePreviews, Set<String>>(AndroidLivePreviews.new);
+
+class AndroidLivePreviews extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void start(String serial) {
+    if (!state.contains(serial)) state = {...state, serial};
+  }
+
+  void stop(String serial) {
+    if (state.contains(serial)) state = {...state}..remove(serial);
+  }
+}
+
 /// The selected device, defaulting to the only ready one when there is exactly
 /// one — which is the common case and saves a click.
 final selectedDeviceProvider = Provider<AndroidDevice?>((ref) {

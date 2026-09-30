@@ -13,6 +13,7 @@ import '../../../core/paths/app_support_directory.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/application/settings_controller.dart';
 
 /// What the app fills into `karmashala_device_pane`'s ports. Installed once,
@@ -40,6 +41,8 @@ final deviceBindings = [
   // The server's claims, when the server runs on this machine: the pane's
   // devices are then the ones its agents drive (slice 4a). No registry here.
   deviceHoldersProvider.overrideWith(serverDeviceHolders),
+  // A live view opens as a workbench tab, one per device; the pane lists.
+  devicePreviewOpenerProvider.overrideWithValue(openDevicePreviewTab),
   devicePathRevealerProvider.overrideWith(
     (ref) => _ShellPathRevealer(ref.watch(revealInFileManagerProvider)),
   ),

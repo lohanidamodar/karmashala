@@ -147,3 +147,23 @@ filesPaneSides(String paneId) {
 
 /// Whether [paneId] is the file browser.
 bool isFilesPane(String paneId) => filesPaneSides(paneId) != null;
+
+/// The prefix a device's live preview carries. The device's serial follows
+/// it: one tab per device, so opening a preview that is already open is that
+/// tab — and two phones are two tabs, each with its own picture, controls and
+/// log (owner, 2026-09-30).
+const String kDevicePreviewPanePrefix = '${kDocumentPanePrefix}device-preview:';
+
+/// The pane id for the live preview of the device with [serial].
+String devicePreviewPaneId(String serial) =>
+    '$kDevicePreviewPanePrefix$serial';
+
+/// The serial [paneId] previews, or null when it is not a device preview.
+String? devicePreviewSerial(String paneId) {
+  if (!paneId.startsWith(kDevicePreviewPanePrefix)) return null;
+  final serial = paneId.substring(kDevicePreviewPanePrefix.length);
+  return serial.isEmpty ? null : serial;
+}
+
+/// Whether [paneId] is a device's live preview.
+bool isDevicePreviewPane(String paneId) => devicePreviewSerial(paneId) != null;

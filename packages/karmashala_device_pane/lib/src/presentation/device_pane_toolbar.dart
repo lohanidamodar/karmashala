@@ -346,3 +346,132 @@ Future<bool> confirmSimulatorShutdown(BuildContext context, String name) async {
   );
   return confirmed ?? false;
 }
+
+/// The bar over the list when the picture is a tab's: what the pane is, and
+/// the two things that are about the list itself.
+class _DeviceListToolbar extends ConsumerWidget {
+  const _DeviceListToolbar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        DeviceListMetrics.inset,
+        Insets.xs,
+        Insets.sm,
+        Insets.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Devices',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          if (ref.watch(adbServiceProvider) != null)
+            IconButton(
+              key: const Key('wireless-pairing-open'),
+              tooltip: 'Pair a device over Wi-Fi',
+              icon: const Icon(AppIcons.wifiHigh),
+              onPressed: () => WirelessPairingDialog.show(context),
+            ),
+          IconButton(
+            tooltip: 'Refresh device list',
+            icon: const Icon(AppIcons.arrowsClockwise),
+            onPressed: () {
+              ref.invalidate(devicesProvider);
+              ref.invalidate(avdsProvider);
+              ref.invalidate(iosSimulatorsProvider);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The bar over one device's preview: which device, its files, and its live
+/// view's restart and on/off.
+class _PreviewToolbar extends StatelessWidget {
+  const _PreviewToolbar({
+    required this.name,
+    required this.serial,
+    required this.on,
+    required this.busy,
+    required this.onStart,
+    required this.onStop,
+    required this.onRestart,
+    required this.onFiles,
+  });
+
+  final String name;
+  final String serial;
+  final bool on;
+  final bool busy;
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
+  final VoidCallback? onRestart;
+  final VoidCallback? onFiles;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact =
+            constraints.maxWidth <
+            WidthClass.scaleBreakpoint(
+              _DeviceToolbar.compactBelow,
+              MediaQuery.textScalerOf(context),
+            );
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            DeviceListMetrics.inset,
+            Insets.xs,
+            Insets.sm,
+            Insets.xs,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name == serial ? serial : '$name ($serial)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Files',
+                icon: const Icon(AppIcons.folder),
+                onPressed: onFiles,
+              ),
+              if (onRestart != null)
+                IconButton(
+                  tooltip: 'Restart live view',
+                  icon: const Icon(AppIcons.arrowClockwise),
+                  onPressed: onRestart,
+                ),
+              _PrimaryStreamAction(
+                kind: busy
+                    ? PrimaryStreamKind.starting
+                    : on
+                    ? PrimaryStreamKind.stopAndroid
+                    : PrimaryStreamKind.startAndroid,
+                compact: compact,
+                onPressed: busy
+                    ? null
+                    : on
+                    ? onStop
+                    : onStart,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

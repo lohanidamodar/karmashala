@@ -9,7 +9,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:path/path.dart' as p;
-import 'package:riverpod/riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_devices/karmashala_devices.dart';
 
@@ -170,6 +170,16 @@ class NoPathRevealer implements DevicePathRevealer {
   Future<String?> reveal(EnvironmentPath path, {bool select = false}) async =>
       'This platform has no file manager Karmashala can open.';
 }
+
+/// Opens a device's live preview **as a tab of its own**, where the host has
+/// tabs: the picture, its controls, install/launch and the log go with it,
+/// and the Devices pane stays a list that works on any device meanwhile.
+/// Null — the default — is a host with no tabs, where the pane shows the
+/// picture itself as it always did.
+final devicePreviewOpenerProvider =
+    Provider<void Function(WidgetRef ref, AndroidDevice device)?>(
+      (ref) => null,
+    );
 
 /// How a device file or recording is shown in the host's file manager.
 final devicePathRevealerProvider = Provider<DevicePathRevealer>(
