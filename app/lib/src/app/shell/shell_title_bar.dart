@@ -67,7 +67,6 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 const _BarDivider(),
                 const _NewButton(key: ValueKey('title-bar-new')),
                 const _RestoredSessionsBadge(),
-                const _BackgroundSessionsBadge(),
                 const _FocusModeToggle(),
                 const _SidePanelToggle(),
               ],
@@ -256,27 +255,6 @@ class _RestoredSessionsBadge extends ConsumerWidget {
       // one row are one icon as far as the eye is concerned.
       icon: AppIcons.playCircle,
       onPressed: () => TerminalActions(ref).showRestoredSessions(context),
-    );
-  }
-}
-
-/// Sessions kept alive with no tab.
-class _BackgroundSessionsBadge extends ConsumerWidget {
-  const _BackgroundSessionsBadge();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final background = ref.watch(
-      terminalSessionsControllerProvider.select((s) => s.detached.length),
-    );
-    if (background == 0) return const SizedBox.shrink();
-    return _CountBadgeButton(
-      count: background,
-      tooltip:
-          '$background session'
-          '${background == 1 ? '' : 's'} running in the background',
-      icon: AppIcons.terminalWindow,
-      onPressed: () => TerminalActions(ref).showBackgroundSessions(context),
     );
   }
 }

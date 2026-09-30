@@ -29,7 +29,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
   }
 
   /// Closes [paneId], collapsing its split, and the tab if it was the last pane
-  /// in it. Like [closeTab], a running process is detached rather than killed
+  /// in it. Like [closeTab], what runs in it is left running at the server
   /// unless [detach] is false.
   void closePane(String paneId, {bool detach = true}) {
     final tab = _tabContaining(paneId);
@@ -221,49 +221,15 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     return tab != null && _occupiedPanes(tab) > 1;
   }
 
-  /// Detaches [paneId] if a process is still running behind it, and releases it
-  /// otherwise: keep-alive protects running work, and without the asymmetry
-  /// every closed tab would leave a dead entry in the background list.
-  void _detachOrRelease(String paneId) {
-    final instance = _instances[paneId];
-    if (instance == null) return;
-    if (!_shouldDetach(instance)) {
-      _releasePane(paneId);
-      return;
-    }
-    _detached.add(
-      DetachedSession(
-        paneId: paneId,
-        title: instance.title,
-        workingDirectory: instance.workingDirectory,
-        detachedAt: ref.read(clockProvider).nowUtc(),
-      ),
-    );
-    _detachedMutated();
-  }
-
-  /// Whether closing this pane keeps its process alive — [shouldDetachOnClose]
-  /// with the pane's own answers to its four questions.
-  bool _shouldDetach(TerminalInstance instance) {
-    final recorder = instance.commandBlocks;
-    final greeting = instance.greetingLines;
-    return shouldDetachOnClose(
-      isLive: instance.liveness.value.isLive,
-      isAgentSession: instance.agentLaunch != null,
-      // Null means the shell is not instrumented. `pending` is the block being
-      // typed *or* run; only a started one is a command executing.
-      commandRunning: recorder == null
-          ? null
-          : recorder.tracker.pending?.hasStarted ?? false,
-      // One past the threshold the rule applies, so a pane at the scrollback
-      // cap still closes in a walk of a few lines.
-      nonBlankLines: nonBlankLineCount(
-        instance.terminal,
-        stopAt: (greeting ?? 0) + kIdleShellHistoryLines + 1,
-      ),
-      greetingLines: greeting,
-    );
-  }
+  /// Closes the view of [paneId] and leaves what it shows running: the pane is
+  /// dropped, which is a disconnect — the server keeps the terminal, and
+  /// Sessions (an agent) or its machine's terminals (a shell) opens it again.
+  ///
+  /// It used to keep a live pane here with no tab, listed as a "background
+  /// session". That list showed this window's closed tabs, not what the
+  /// server runs, held each one's scrollback, and its End ended the session
+  /// for every window (owner, 2026-09-30).
+  void _detachOrRelease(String paneId) => _releasePane(paneId);
 
   /// Disposes the pane [paneId] owns and stops tracking it.
   void _releasePane(String paneId) {

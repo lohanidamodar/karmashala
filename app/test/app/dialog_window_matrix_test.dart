@@ -8,9 +8,6 @@ import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_changed_alert.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_secret_dialog.dart';
-import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -162,44 +159,6 @@ void main() {
         because: 'two full fingerprints stacked, with a warning above them',
       );
     });
-  });
-
-  testWidgets('BackgroundSessionsDialog with enough rows to scroll', (
-    tester,
-  ) async {
-    final container = ProviderContainer(overrides: noProcessOverrides());
-    addTearDown(container.dispose);
-
-    // Eight, because the dialog's whole job is to list what is still running
-    // and one row proves nothing about a list. Long titles for the same reason
-    // the fingerprints above are real length.
-    final sessions = [
-      for (var i = 0; i < 8; i++)
-        DetachedSession(
-          paneId: 'p$i',
-          title: 'karmashala-app — claude — refactor the terminal ingest $i',
-          workingDirectory: r'C:\Users\dlohani\projects\popupbits\karmashala',
-          detachedAt: testTime,
-        ),
-    ];
-
-    await expectSurvivesWindowMatrix(
-      tester,
-      build: () => app(
-        container,
-        BackgroundSessionsDialog(
-          sessions: sessions,
-          // Alternating, so the row renders both of its states in one pass.
-          livenessOf: (paneId) => paneId.endsWith('0') || paneId.endsWith('4')
-              ? PaneLiveness.exited
-              : PaneLiveness.live,
-          onAttach: (_) {},
-          onEnd: (_) {},
-          onEndAll: () {},
-        ),
-      ),
-      because: 'a list of what is still running, with per-row actions',
-    );
   });
 
   testWidgets('QuickOpen with results to show', (tester) async {

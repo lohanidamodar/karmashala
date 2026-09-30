@@ -13,7 +13,6 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../../core/capabilities/capabilities.dart'
     show clientCapabilitiesProvider;
 import '../../../core/data/data_providers.dart';
-import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../editor/domain/document_id.dart';
 import '../../environments/application/environments_controller.dart';
@@ -24,7 +23,6 @@ import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';

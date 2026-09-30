@@ -53,23 +53,9 @@ extension TerminalLayoutRestore on TerminalSessionsController {
         if (storedTab.id == stored.activeTabId) _activeTabId = storedTab.id;
       }
 
-      // Sessions that had no tab stay tab-less, in the background list: the
-      // user already closed their view, and starting one would spawn a process
-      // with nowhere to show it.
-      for (final storedTab in stored.detached) {
-        for (final pane in storedTab.panes) {
-          if (!_adoptRestored(pane, inActiveTab: false)) continue;
-          _detached.add(
-            DetachedSession(
-              paneId: pane.id,
-              title: pane.title,
-              workingDirectory: pane.workingDirectory,
-              detachedAt: ref.read(clockProvider).nowUtc(),
-            ),
-          );
-          _detachedMutated();
-        }
-      }
+      // A pane an older build kept with no tab (`stored.detached`) is not
+      // brought back: the server runs its session whether a pane shows it or
+      // not, and Sessions — or its machine's terminals — opens it again.
 
       _activeTabId ??= _tabs.isEmpty ? null : _tabs.last.id;
       _restoreWorkspace(dao.loadWorkspace());

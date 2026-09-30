@@ -4,7 +4,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_ui/rows.dart';
 
@@ -117,77 +116,6 @@ class TabAgentStatusDot extends StatelessWidget {
   }
 }
 
-/// The sessions still running with no tab showing them. Without this list
-/// keep-alive would be a process leak with good intentions.
-class BackgroundSessionsDialog extends StatelessWidget {
-  const BackgroundSessionsDialog({
-    required this.sessions,
-    required this.livenessOf,
-    required this.onAttach,
-    required this.onEnd,
-    required this.onEndAll,
-    super.key,
-  });
-
-  final List<DetachedSession> sessions;
-  final PaneLiveness Function(String paneId) livenessOf;
-  final ValueChanged<String> onAttach;
-  final ValueChanged<String> onEnd;
-  final VoidCallback onEndAll;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Background sessions'),
-      contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      // Both `scrollable` and the `FocusTraversalGroup` below, measured one at a
-      // time: without both, Tab cannot reach the rows past the fold.
-      scrollable: true,
-      content: SizedBox(
-        width: 520,
-        child: sessions.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(Insets.lg),
-                child: Text(
-                  'Nothing is running in the background. Closing a terminal '
-                  'tab leaves its session here instead of killing it.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              )
-            : FocusTraversalGroup(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final session in sessions)
-                      _SessionRow(
-                        session: session,
-                        liveness: livenessOf(session.paneId),
-                        onAttach: () => onAttach(session.paneId),
-                        onEnd: () => onEnd(session.paneId),
-                      ),
-                  ],
-                ),
-              ),
-      ),
-      actions: [
-        if (sessions.isNotEmpty)
-          TextButton(
-            onPressed: onEndAll,
-            child: Text(
-              'End all',
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
 /// One pane holding restored agent history, as [RestoredSessionsDialog] shows
 /// it. A view model, joined here so the dialog does not ask three questions per
 /// row while it builds.
@@ -224,7 +152,8 @@ class RestoredSessionsDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('Restored sessions'),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      // Both lines, for the reason [BackgroundSessionsDialog] measured them.
+      // Both `scrollable` and the `FocusTraversalGroup` below, measured one at a
+      // time: without both, Tab cannot reach the rows past the fold.
       scrollable: true,
       content: SizedBox(
         width: 520,
@@ -310,62 +239,6 @@ class _RestoredRow extends StatelessWidget {
         style: theme.textTheme.bodySmall,
       ),
       trailing: TextButton(onPressed: onResume, child: const Text('Resume')),
-    );
-  }
-}
-
-class _SessionRow extends StatelessWidget {
-  const _SessionRow({
-    required this.session,
-    required this.liveness,
-    required this.onAttach,
-    required this.onEnd,
-  });
-
-  final DetachedSession session;
-  final PaneLiveness liveness;
-  final VoidCallback onAttach;
-  final VoidCallback onEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final live = liveness.isLive;
-    final status = live
-        ? 'Running · detached ${describeAge(session.detachedAt)}'
-        : 'Restored — the process is gone';
-
-    return ListTile(
-      dense: true,
-      leading: Icon(
-        live ? AppIcons.terminal : AppIcons.clockCounterClockwise,
-        color: live
-            ? theme.colorScheme.tertiary
-            : theme.colorScheme.onSurfaceVariant,
-      ),
-      title: Text(session.title, style: theme.textTheme.bodyMedium),
-      subtitle: Text(
-        session.workingDirectory == null
-            ? status
-            : '$status · ${session.workingDirectory}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextButton(
-            onPressed: onAttach,
-            child: Text(live ? 'Attach' : 'Reopen'),
-          ),
-          IconButton(
-            tooltip: live ? 'End session' : 'Discard',
-            icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
-            onPressed: onEnd,
-          ),
-        ],
-      ),
     );
   }
 }

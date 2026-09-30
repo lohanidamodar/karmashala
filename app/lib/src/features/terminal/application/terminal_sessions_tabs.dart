@@ -272,8 +272,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   TerminalTab? _tabContaining(String paneId) => _tabById(_paneOwner[paneId]);
 
-  /// Puts [paneId] on screen wherever it lives: focused in its own tab, or —
-  /// for one in the background list — back in a tab of its own.
+  /// Puts [paneId] on screen wherever it lives: focused in its own tab, or
+  /// — for one with no tab — in a tab of its own.
   String _showPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab != null) {

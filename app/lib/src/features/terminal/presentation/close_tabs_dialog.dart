@@ -9,7 +9,7 @@ enum BulkCloseChoice {
   /// End them for real. The default answer, and the one the dialog focuses.
   end,
 
-  /// Detach them: the tabs go, the processes carry on in the background list.
+  /// Close only the tabs: the server keeps running what they showed.
   keepRunning,
 }
 
@@ -37,9 +37,9 @@ Future<BulkCloseChoice?> confirmBulkTabClose(
         content: SizedBox(
           width: 420,
           child: Text(
-            'Ending stops those processes now. Keeping them running moves them '
-            'to the background list, where you can bring one back or end it '
-            'later.',
+            'Ending stops those processes now. Keeping them running closes '
+            'only the tabs: the server carries on, and Sessions opens one '
+            'again.',
             style: theme.textTheme.bodySmall,
           ),
         ),

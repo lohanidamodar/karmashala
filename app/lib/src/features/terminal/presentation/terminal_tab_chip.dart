@@ -111,7 +111,7 @@ class TerminalTabChip extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// Closes the tab, leaving anything running in the background.
+  /// Closes the tab; the server keeps running what it showed.
   final VoidCallback onClose;
 
   /// Ends the tab's sessions outright — only from the context menu, because
@@ -164,9 +164,9 @@ class TerminalTabChip extends StatelessWidget {
         Offset.zero & overlay.size,
       ),
       items: [
-        // Closing one tab detaches silently — a view action, and the session
-        // is still in the background list. The four below clear the deck, so
-        // they ask first ([confirmBulkTabClose]).
+        // Closing one tab is silent — a view action: the server keeps the
+        // session and Sessions opens it again. The four below clear the
+        // deck, so they ask first ([confirmBulkTabClose]).
         DesktopMenuItem(value: 'close', label: 'Close tab', icon: AppIcons.x),
         for (final scope in TabCloseScope.values)
           DesktopMenuItem(

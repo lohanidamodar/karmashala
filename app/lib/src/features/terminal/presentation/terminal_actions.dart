@@ -171,33 +171,6 @@ class TerminalActions {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Shows what is still running with no tab, and lets the user bring one back
-  /// or end it.
-  Future<void> showBackgroundSessions(BuildContext context) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) {
-          final detached = ref.watch(terminalDetachedProvider);
-          return BackgroundSessionsDialog(
-            sessions: detached,
-            livenessOf: (paneId) =>
-                ref.read(terminalPaneLivenessProvider(paneId)),
-            onAttach: (paneId) {
-              _sessions.reattachSession(paneId);
-              Navigator.of(context).pop();
-            },
-            onEnd: _sessions.endSession,
-            onEndAll: () {
-              _sessions.endAllDetached();
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      ),
-    );
-  }
-
   /// Shows what a restart brought back as history, and offers to continue one
   /// or all. Never per-tab: it is a question about the whole window.
   Future<void> showRestoredSessions(BuildContext context) async {
