@@ -16,6 +16,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../system/system_integration_service.dart';
 import '../application/machines_providers.dart';
+import 'machine_route.dart';
 import 'pair_machine_page.dart';
 
 /// Settings → Machines (slice 5e): the Karmashala server this window is a
@@ -55,8 +56,14 @@ class MachinesSection extends ConsumerWidget {
           for (final machine in paired)
             _MachineRow(
               name: machine.hostName.isEmpty ? 'Server' : machine.hostName,
-              detail: _routeOf(machine),
+              detail: machineRouteLine(
+                machine,
+                inUse: active?.hostId == machine.hostId,
+              ),
               inUse: active?.hostId == machine.hostId,
+              route: routeIsChoosable(machine)
+                  ? MachineRouteButton(machine: machine)
+                  : null,
               onUse: () => _switch(context, ref, machine),
               onForget: () => _forget(context, ref, machine),
             ),
@@ -90,13 +97,6 @@ class MachinesSection extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  static String _routeOf(CompanionPairing machine) {
-    final direct = machine.directEndpoint;
-    if (direct != null) return 'At $direct';
-    final relay = machine.relay;
-    return relay.host == 'invalid.local' ? 'Paired' : 'Through ${relay.host}';
   }
 
   static Future<void> _switch(
@@ -179,6 +179,7 @@ class _MachineRow extends StatelessWidget {
     required this.inUse,
     this.onUse,
     this.onForget,
+    this.route,
   });
 
   final String name;
@@ -186,6 +187,9 @@ class _MachineRow extends StatelessWidget {
   final bool inUse;
   final VoidCallback? onUse;
   final VoidCallback? onForget;
+
+  /// *Route…*, on a paired machine whose route can be chosen.
+  final Widget? route;
 
   @override
   Widget build(BuildContext context) => SettingsRow(
@@ -201,6 +205,7 @@ class _MachineRow extends StatelessWidget {
           const SettingsValue(label: 'In use')
         else if (onUse != null)
           TextButton(onPressed: onUse, child: const Text('Use')),
+        ?route,
         if (onForget != null && !inUse)
           TextButton(onPressed: onForget, child: const Text('Forget')),
       ],

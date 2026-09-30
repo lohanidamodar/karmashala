@@ -4,9 +4,9 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/data/data_providers.dart';
 import 'machines_providers.dart';
 
-/// The active machine's route pin, and the one place that changes it: *Use
-/// Auto* on the link strips today, a route picker when one is built. Auto on
-/// this computer's own server.
+/// The active machine's route pin, and the one place that changes any
+/// machine's: *Use Auto* on the link strips, and the route picker on a
+/// machine's row in Settings → Machines. Auto on this computer's own server.
 class RoutePinController extends AsyncNotifier<CompanionRoutePin> {
   @override
   Future<CompanionRoutePin> build() async {
@@ -20,15 +20,20 @@ class RoutePinController extends AsyncNotifier<CompanionRoutePin> {
     return (saved ?? active).pin;
   }
 
-  /// Saves [pin] for the active machine and dials now. A resume in flight
-  /// reloads the record, so it walks the new routes too.
-  Future<void> choose(CompanionRoutePin pin) async {
+  /// Saves [pin] for [hostId]'s machine, the active one when null. For the
+  /// active machine it also dials now: a resume in flight reloads the record,
+  /// so it walks the new routes too. Another machine obeys it at its next
+  /// dial.
+  Future<void> choose(CompanionRoutePin pin, {String? hostId}) async {
     final machines = ref.read(machinesProvider);
+    if (machines == null) return;
     final active = ref.read(activeMachineProvider);
-    if (machines == null || active == null) return;
-    await machines.setPin(active.hostId.value, pin);
-    state = AsyncData(pin);
+    final target = hostId ?? active?.hostId.value;
+    if (target == null) return;
+    await machines.setPin(target, pin);
     ref.invalidate(pairedMachinesProvider);
+    if (target != active?.hostId.value) return;
+    state = AsyncData(pin);
     ref.read(dataClientProvider).retry();
   }
 }
