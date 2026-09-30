@@ -5,6 +5,7 @@ import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show localHostEnvironmentId;
 import 'agent_model_catalog_providers.dart';
 
 /// The model one session will run on. A value with `==` rather than a record,
@@ -92,8 +93,15 @@ final sessionModelProvider = Provider.autoDispose
         modelId: effective.modelId,
         defaultModelId: effective.defaultModelId,
         inherited: effective.inherited,
+        // The list of the installation this session runs — in a WSL
+        // distribution that is its own CLI's, not the host's.
         support: agentId == null
             ? null
-            : ref.watch(agentModelSupportProvider(agentId)),
+            : ref.watch(
+                agentModelSupportInProvider(
+                  agentModelsKeyOfSession(ref, sessionId) ??
+                      (agentId: agentId, environmentId: localHostEnvironmentId),
+                ),
+              ),
       );
     });

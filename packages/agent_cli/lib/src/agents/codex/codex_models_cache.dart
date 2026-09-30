@@ -13,6 +13,16 @@ class CodexModelLister implements AgentModelLister {
 
   @override
   Future<List<AgentModel>?> list(ModelListContext context) async {
+    // In a WSL distribution the cache is that distribution's own file.
+    // Unquoted on purpose: the distribution's shell expands it, and a quote
+    // does not survive the trip through `wsl.exe`.
+    final run = context.runInEnvironment;
+    if (run != null) {
+      final json = await run('cat', const [
+        r'${CODEX_HOME:-$HOME/.codex}/models_cache.json',
+      ]);
+      return json == null ? null : parseCodexModelsCache(json);
+    }
     final env = context.hostEnvironment;
     final home =
         env['CODEX_HOME'] ??
