@@ -469,6 +469,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Gives the active tab's focused pane the keyboard, a frame late:
   /// [IndexedStack] excludes focus from unselected children until the rebuild.
   void _focusActivePane() {
+    // A thumb raises the keyboard by tapping the grid: focus given on show
+    // put the keyboard over half the phone's screen to only look.
+    if (ref.read(clientCapabilitiesProvider).density.isTouch) return;
     _afterFrame(() {
       final tab = _activeTab;
       if (tab == null) return;

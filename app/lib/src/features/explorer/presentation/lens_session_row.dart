@@ -337,7 +337,9 @@ class LensSessionRow extends ConsumerWidget {
                     ],
                   ),
           ),
-          if (endable) ...[
+          // A thumb ends a session from the ⋮ (End session): the × beside
+          // it took the title's room at phone width.
+          if (endable && !density.isTouch) ...[
             const SizedBox(width: Insets.xs),
             // The age or the ask at rest, the × in its place while the pointer
             // or the keyboard is on the row — the tree's `+` / `⋮` swap. A
