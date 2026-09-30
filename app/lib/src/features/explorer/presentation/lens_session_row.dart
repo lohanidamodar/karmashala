@@ -254,53 +254,88 @@ class LensSessionRow extends ConsumerWidget {
           // The title first; where it lives after it, muted, on the same line
           // and the first to give way.
           Expanded(
-            child: Row(
-              children: [
-                if (agentId != null) ...[
-                  Tooltip(
-                    message: AgentRegistry.builtIn.displayNameFor(agentId),
-                    child: Semantics(
-                      label: AgentRegistry.builtIn.displayNameFor(agentId),
-                      child: SizedBox.square(
-                        dimension: ExplorerRow.glyphSize,
-                        child: Center(
-                          child: AgentLogo(
-                            agentId: agentId,
-                            size: ExplorerRow.glyphSize,
+            child: density.isTouch
+                ? _touchLines(
+                    agentMark: agentId == null
+                        ? null
+                        : Tooltip(
+                            message: AgentRegistry.builtIn.displayNameFor(
+                              agentId,
+                            ),
+                            child: AgentLogo(
+                              agentId: agentId,
+                              size: ExplorerRow.glyphSize,
+                            ),
+                          ),
+                    title: hover(
+                      Text(
+                        entry.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: density.rowTitle(theme, strong: waiting),
+                      ),
+                    ),
+                    details: clauses.isEmpty
+                        ? null
+                        : Text(
+                            clauses.join('  ·  '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: muted,
+                          ),
+                    gap: density.glyphGap,
+                  )
+                : Row(
+                    children: [
+                      if (agentId != null) ...[
+                        Tooltip(
+                          message: AgentRegistry.builtIn.displayNameFor(
+                            agentId,
+                          ),
+                          child: Semantics(
+                            label: AgentRegistry.builtIn.displayNameFor(
+                              agentId,
+                            ),
+                            child: SizedBox.square(
+                              dimension: ExplorerRow.glyphSize,
+                              child: Center(
+                                child: AgentLogo(
+                                  agentId: agentId,
+                                  size: ExplorerRow.glyphSize,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: density.glyphGap),
+                      ],
+                      Flexible(
+                        flex: 3,
+                        child: hover(
+                          Text(
+                            entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: density.rowTitle(theme, strong: waiting),
                           ),
                         ),
                       ),
-                    ),
+                      if (clauses.isNotEmpty) ...[
+                        const SizedBox(width: Insets.sm),
+                        Flexible(
+                          flex: 2,
+                          child: hover(
+                            Text(
+                              clauses.join('  ·  '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: muted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  SizedBox(width: density.glyphGap),
-                ],
-                Flexible(
-                  flex: 3,
-                  child: hover(
-                    Text(
-                      entry.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: density.rowTitle(theme, strong: waiting),
-                    ),
-                  ),
-                ),
-                if (clauses.isNotEmpty) ...[
-                  const SizedBox(width: Insets.sm),
-                  Flexible(
-                    flex: 2,
-                    child: hover(
-                      Text(
-                        clauses.join('  ·  '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: muted,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
           ),
           if (endable) ...[
             const SizedBox(width: Insets.xs),
@@ -335,6 +370,28 @@ class LensSessionRow extends ConsumerWidget {
       ),
     );
   }
+
+  /// A thumb's row: the title gets the whole line, and where the session
+  /// lives goes under it. On one line at phone width the title kept a few
+  /// letters beside the project, the × and the ⋮.
+  static Widget _touchLines({
+    required Widget? agentMark,
+    required Widget title,
+    required Widget? details,
+    required double gap,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Row(
+        children: [
+          if (agentMark != null) ...[agentMark, SizedBox(width: gap)],
+          Flexible(child: title),
+        ],
+      ),
+      ?details,
+    ],
+  );
 
   Future<void> _open(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.maybeOf(context);

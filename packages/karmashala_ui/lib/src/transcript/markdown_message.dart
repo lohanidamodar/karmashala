@@ -79,10 +79,24 @@ class MarkdownMessage extends StatelessWidget {
       ),
     );
 
+    final highlight = codeHighlightTheme(
+      dark ? Brightness.dark : Brightness.light,
+    );
     final body = MarkdownBody(
       data: data,
       selectable: selectable,
       styleSheet: sheet,
+      // A thumb gets code wrapped: a sideways-scrolling block at phone width
+      // shows as a clipped line with nothing saying it scrolls.
+      builders: UiDensity.of(context).isTouch
+          ? {
+              'pre': _WrappedCodeBuilder(
+                highlight: highlight,
+                decoration: sheet.codeblockDecoration,
+                padding: sheet.codeblockPadding,
+              ),
+            }
+          : const {},
       inlineSyntaxes: onPathTap == null ? null : kPathLinkSyntaxes,
       onTapLink: (text, href, title) {
         if (href == null) return;
@@ -92,9 +106,7 @@ class MarkdownMessage extends StatelessWidget {
           onLinkTap?.call(href);
         }
       },
-      syntaxHighlighter: _HighlightAdapter(
-        codeHighlightTheme(dark ? Brightness.dark : Brightness.light),
-      ),
+      syntaxHighlighter: _HighlightAdapter(highlight),
     );
     return selectable ? body : TranscriptSelectionGroup(child: body);
   }
@@ -133,6 +145,43 @@ class _PathLinkSyntax extends md.InlineSyntax {
         ..attributes['title'] = kPathLinkTitle,
     );
     return true;
+  }
+}
+
+/// A fenced block drawn wrapped at the message's width, coloured as the
+/// scrolling block is. Under a thumb only.
+class _WrappedCodeBuilder extends MarkdownElementBuilder {
+  _WrappedCodeBuilder({
+    required this.highlight,
+    required this.decoration,
+    required this.padding,
+  });
+
+  final Map<String, TextStyle> highlight;
+  final Decoration? decoration;
+  final EdgeInsets? padding;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    // The fence's text, without the newline markdown leaves on its end.
+    final source = element.textContent.replaceFirst(RegExp(r'\n$'), '');
+    return Container(
+      width: double.infinity,
+      decoration: decoration,
+      padding: padding,
+      child: Text.rich(
+        highlightedCode(source, theme: highlight, base: MonoStyles.label),
+        softWrap: true,
+      ),
+    );
   }
 }
 

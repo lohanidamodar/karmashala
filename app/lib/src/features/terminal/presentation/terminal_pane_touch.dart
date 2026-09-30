@@ -12,6 +12,10 @@ const _tapTimeout = Duration(milliseconds: 300);
 /// Two two-finger taps this close together fit the session's width.
 const _twoFingerDoubleTap = Duration(milliseconds: 400);
 
+/// A phone's terminal size until a pinch sets its own: the desktop's shared
+/// size drew about twenty columns across a phone.
+const double kPhoneTerminalFontSize = 10;
+
 /// The grid's padding on both sides, as [TerminalView] is given it.
 const double _gridInset = Insets.sm * 2;
 
@@ -22,7 +26,7 @@ extension _TouchPane on _TerminalPaneViewState {
   }
 
   double get _touchFontSize =>
-      ref.read(deviceTerminalFontSizeProvider) ?? widget.fontSize;
+      ref.read(deviceTerminalFontSizeProvider) ?? kPhoneTerminalFontSize;
 
   /// One cell at [fontSize], measured as the grid's painter measures it, so
   /// the pan's width and the view's grid agree with what is drawn.
@@ -42,7 +46,7 @@ extension _TouchPane on _TerminalPaneViewState {
 
   Widget _buildTouch(BuildContext context) {
     final fontSize =
-        ref.watch(deviceTerminalFontSizeProvider) ?? widget.fontSize;
+        ref.watch(deviceTerminalFontSizeProvider) ?? kPhoneTerminalFontSize;
     final host = _host;
     final Widget body = host == null
         ? _touchGrid(fontSize, atSessionGrid: false)

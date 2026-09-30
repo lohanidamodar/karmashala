@@ -642,7 +642,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         // not compound onto it.
         textScaler: TextScaler.noScaling,
         padding: const EdgeInsets.all(Insets.sm),
-        autofocus: widget.focused,
+        // A thumb raises the keyboard by tapping the grid: taking focus on
+        // open put the keyboard over half the screen to only look.
+        autofocus: widget.focused && !touch,
         // `true` swaps in `CustomKeyboardListener`, which never calls
         // `TextInput.attach` — dictation and IMEs then silently cannot type into a
         // pane. It was `true` to dodge a "view ID is null" bug xterm2 has fixed.

@@ -90,8 +90,8 @@ class _CompactSessionBar extends StatelessWidget {
                           child: DeliveryStateLine(sessionId: sessionId),
                         ),
                       ),
-                      const SizedBox(width: Insets.xs),
-                      PermissionModeChip(sessionId: sessionId),
+                      // The mode chip is in the sheet: at phone width it
+                      // squeezed the delivery line to a word.
                       const SizedBox(width: Insets.xs),
                       _SessionSheetButton(sessionId: sessionId),
                     ],
@@ -168,7 +168,7 @@ class _SessionSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('MODEL', style: label),
+          Text('MODEL AND MODE', style: label),
           row(
             Wrap(
               spacing: Insets.sm,
@@ -176,6 +176,7 @@ class _SessionSheet extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SessionModelChip(sessionId: sessionId),
+                PermissionModeChip(sessionId: sessionId),
                 SessionStatsButton(sessionId: sessionId),
                 ScheduledResumeChip(sessionId: sessionId),
               ],
