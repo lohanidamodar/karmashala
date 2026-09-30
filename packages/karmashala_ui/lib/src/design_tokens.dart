@@ -441,6 +441,27 @@ enum UiDensity {
   /// Explorer's density is the point.
   double get minRow => isTouch ? Touch.target : 0;
 
+  /// For a control a pointer draws compact: compact density takes 8px off
+  /// the 48dp tap target, so a thumb gets standard.
+  VisualDensity get controlDensity =>
+      isTouch ? VisualDensity.standard : VisualDensity.compact;
+
+  /// For a control a pointer shrink-wraps: a thumb keeps the padded target.
+  MaterialTapTargetSize get tapTargetSize =>
+      isTouch ? MaterialTapTargetSize.padded : MaterialTapTargetSize.shrinkWrap;
+
+  /// An icon button's constraints: [pointer] square under a pointer, the
+  /// 48dp floor under a thumb.
+  BoxConstraints iconConstraints(double pointer) => BoxConstraints(
+    minWidth: isTouch ? Touch.target : pointer,
+    minHeight: isTouch ? Touch.target : pointer,
+  );
+
+  /// A dense glyph's size: [pointer] under a pointer, [Touch.icon] under a
+  /// thumb — never smaller than [pointer].
+  double iconSize(double pointer) =>
+      isTouch && pointer < Touch.icon ? Touch.icon : pointer;
+
   /// The strongest line on a card — a session's title, a project's name.
   TextStyle? title(ThemeData theme) =>
       (isTouch ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
@@ -569,6 +590,34 @@ enum UiDensity {
       dialogTheme: base.dialogTheme.copyWith(
         insetPadding: const EdgeInsets.all(Insets.xl),
       ),
+      // The desktop theme pins these compact or shrink-wrapped, which undoes
+      // the padded tap target set above.
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: (base.segmentedButtonTheme.style ?? const ButtonStyle())
+            .copyWith(
+              visualDensity: VisualDensity.standard,
+              minimumSize: const WidgetStatePropertyAll(Size(0, Touch.target)),
+              tapTargetSize: MaterialTapTargetSize.padded,
+            ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: (base.menuButtonTheme.style ?? const ButtonStyle()).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, Touch.target)),
+          textStyle: WidgetStatePropertyAll(text.bodyMedium),
+          iconSize: const WidgetStatePropertyAll(Touch.icon),
+        ),
+      ),
+      checkboxTheme: base.checkboxTheme.copyWith(
+        visualDensity: VisualDensity.standard,
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      ),
+      radioTheme: base.radioTheme.copyWith(
+        visualDensity: VisualDensity.standard,
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      ),
+      switchTheme: base.switchTheme.copyWith(
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      ),
     );
   }
 
@@ -641,6 +690,27 @@ class UiDensityScope extends InheritedWidget {
   @override
   bool updateShouldNotify(UiDensityScope oldWidget) =>
       oldWidget.density != density;
+}
+
+/// Grows [child] to the 48dp [Touch.target] under a thumb, centred, and is
+/// [child] itself under a pointer. Goes *inside* the `InkWell` or
+/// `GestureDetector`, so the hit area grows while the glyph keeps its size.
+class TouchTarget extends StatelessWidget {
+  const TouchTarget({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!UiDensity.of(context).isTouch) return child;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: Touch.target,
+        minHeight: Touch.target,
+      ),
+      child: Center(widthFactor: 1, heightFactor: 1, child: child),
+    );
+  }
 }
 
 /// Motion durations and curves. Animate through [Motion.of], which collapses

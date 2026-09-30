@@ -8,6 +8,27 @@ import 'design_tokens.dart';
 const EdgeInsets _menuRowPadding = EdgeInsets.symmetric(horizontal: 10);
 const double _menuGlyphGap = 10;
 
+/// A popup row's body grown to [Touch.target] under a thumb: a popup that
+/// opens on a phone (a chip's picker) keeps its rows but not their 32px.
+class _TouchMenuRow extends StatelessWidget {
+  const _TouchMenuRow({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!UiDensity.of(context).isTouch) return child;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: Touch.target),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        heightFactor: 1,
+        child: child,
+      ),
+    );
+  }
+}
+
 /// Compact, icon-led menu item sized for mouse-driven desktop menus.
 class DesktopMenuItem<T> extends PopupMenuItem<T> {
   DesktopMenuItem({
@@ -30,39 +51,41 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
                  : selected
                  ? theme.colorScheme.primary
                  : theme.colorScheme.onSurface;
-             return Row(
-               children: [
-                 // In a pick-one menu the leading slot answers "which one is
-                 // set", so the check takes the icon's place rather than
-                 // crowding in beside it.
-                 Icon(
-                   selected ? AppIcons.check : icon,
-                   size: Chrome.icon,
-                   color: color,
-                 ),
-                 const SizedBox(width: _menuGlyphGap),
-                 Expanded(
-                   child: Text(
-                     label,
-                     maxLines: 1,
-                     overflow: TextOverflow.ellipsis,
-                     style: theme.textTheme.bodySmall?.copyWith(
-                       color: color,
-                       fontWeight: selected ? FontWeight.w600 : null,
+             return _TouchMenuRow(
+               child: Row(
+                 children: [
+                   // In a pick-one menu the leading slot answers "which one is
+                   // set", so the check takes the icon's place rather than
+                   // crowding in beside it.
+                   Icon(
+                     selected ? AppIcons.check : icon,
+                     size: Chrome.icon,
+                     color: color,
+                   ),
+                   const SizedBox(width: _menuGlyphGap),
+                   Expanded(
+                     child: Text(
+                       label,
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: theme.textTheme.bodySmall?.copyWith(
+                         color: color,
+                         fontWeight: selected ? FontWeight.w600 : null,
+                       ),
                      ),
                    ),
-                 ),
-                 if (shortcut != null) ...[
-                   const SizedBox(width: Insets.xl),
-                   Text(
-                     shortcut,
-                     style: theme.textTheme.labelSmall?.copyWith(
-                       fontWeight: FontWeight.w400,
-                       letterSpacing: 0,
+                   if (shortcut != null) ...[
+                     const SizedBox(width: Insets.xl),
+                     Text(
+                       shortcut,
+                       style: theme.textTheme.labelSmall?.copyWith(
+                         fontWeight: FontWeight.w400,
+                         letterSpacing: 0,
+                       ),
                      ),
-                   ),
+                   ],
                  ],
-               ],
+               ),
              );
            },
          ),
@@ -95,30 +118,38 @@ class DesktopMenuCheckItem<T> extends PopupMenuItem<T> {
              final color = theme.colorScheme.onSurface;
              return Semantics(
                checked: checked,
-               child: Row(
-                 children: [
-                   SizedBox(
-                     width: Chrome.icon,
-                     child: checked
-                         ? Icon(AppIcons.check, size: Chrome.icon, color: color)
-                         : null,
-                   ),
-                   const SizedBox(width: _menuGlyphGap),
-                   Icon(
-                     icon,
-                     size: Chrome.icon,
-                     color: theme.colorScheme.onSurfaceVariant,
-                   ),
-                   const SizedBox(width: _menuGlyphGap),
-                   Expanded(
-                     child: Text(
-                       label,
-                       maxLines: 1,
-                       overflow: TextOverflow.ellipsis,
-                       style: theme.textTheme.bodySmall?.copyWith(color: color),
+               child: _TouchMenuRow(
+                 child: Row(
+                   children: [
+                     SizedBox(
+                       width: Chrome.icon,
+                       child: checked
+                           ? Icon(
+                               AppIcons.check,
+                               size: Chrome.icon,
+                               color: color,
+                             )
+                           : null,
                      ),
-                   ),
-                 ],
+                     const SizedBox(width: _menuGlyphGap),
+                     Icon(
+                       icon,
+                       size: Chrome.icon,
+                       color: theme.colorScheme.onSurfaceVariant,
+                     ),
+                     const SizedBox(width: _menuGlyphGap),
+                     Expanded(
+                       child: Text(
+                         label,
+                         maxLines: 1,
+                         overflow: TextOverflow.ellipsis,
+                         style: theme.textTheme.bodySmall?.copyWith(
+                           color: color,
+                         ),
+                       ),
+                     ),
+                   ],
+                 ),
                ),
              );
            },
@@ -218,6 +249,15 @@ class DesktopMenuDetailRow extends StatelessWidget {
         ? scheme.primary
         : scheme.onSurface;
     final glyph = selected ? AppIcons.check : icon;
+    return _TouchMenuRow(child: _row(theme, scheme, color, glyph));
+  }
+
+  Widget _row(
+    ThemeData theme,
+    ColorScheme scheme,
+    Color color,
+    IconData? glyph,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

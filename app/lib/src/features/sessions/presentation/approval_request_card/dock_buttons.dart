@@ -174,7 +174,10 @@ class _AnswerInTerminal extends ConsumerWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
+      // Compact takes eight pixels off the 48dp floor on a phone.
+      visualDensity: _Docked.touchOf(context)
+          ? VisualDensity.standard
+          : VisualDensity.compact,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_dockInnerRadius),
       ),
