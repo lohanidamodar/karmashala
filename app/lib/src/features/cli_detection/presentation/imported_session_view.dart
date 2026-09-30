@@ -147,6 +147,8 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
               error: (e, _) =>
                   Center(child: Text('Could not read history: $e')),
               data: (messages) => ChatTranscriptView(
+                // Per session, or a switch keeps the last one's scroll offset.
+                key: ValueKey(widget.sessionId),
                 messages: [
                   for (final m in messages)
                     ChatMessage(role: m.role, text: m.text, tool: m.tool),
