@@ -24,12 +24,25 @@ class TerminalKeyBar extends StatefulWidget {
 
 class _TerminalKeyBarState extends State<TerminalKeyBar> {
   late _StickyModifiers _sticky;
+  final _scroll = ScrollController();
+
+  /// Keys lie past the right edge. True before the first layout, so the fade
+  /// shows until the row is measured.
+  bool get _moreToTheRight =>
+      !_scroll.hasClients ||
+      !_scroll.position.hasContentDimensions ||
+      _scroll.position.extentAfter > 0;
 
   @override
   void initState() {
     super.initState();
     _install(widget.terminal);
     widget.focusNode.addListener(_onFocusChanged);
+    // The row's width is known after its first layout: a screen wide enough
+    // for every key loses the fade then.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -49,6 +62,7 @@ class _TerminalKeyBarState extends State<TerminalKeyBar> {
   void dispose() {
     widget.focusNode.removeListener(_onFocusChanged);
     _uninstall(widget.terminal);
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -105,37 +119,53 @@ class _TerminalKeyBarState extends State<TerminalKeyBar> {
           border: Border(top: BorderSide(color: scheme.outlineVariant)),
         ),
         child: ListenableBuilder(
-          listenable: _sticky,
-          builder: (context, _) => SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-            child: Row(
-              children: [
-                // A menu's keys first: move, pick, back out.
-                plain('Esc', 'Escape', TerminalKey.escape),
-                plain('↑', 'Up arrow', TerminalKey.arrowUp),
-                plain('↓', 'Down arrow', TerminalKey.arrowDown),
-                plain('⏎', 'Enter', TerminalKey.enter),
-                plain('Tab', 'Tab', TerminalKey.tab),
-                _BarKey(
-                  label: 'Ctrl',
-                  semantics: 'Control, applies to the next key',
-                  armed: _sticky.ctrl,
-                  onPressed: _sticky.toggleCtrl,
-                ),
-                _BarKey(
-                  label: 'Alt',
-                  semantics: 'Alt, applies to the next key',
-                  armed: _sticky.alt,
-                  onPressed: _sticky.toggleAlt,
-                ),
-                plain('←', 'Left arrow', TerminalKey.arrowLeft),
-                plain('→', 'Right arrow', TerminalKey.arrowRight),
-                plain('|', 'Pipe', TerminalKey.none, '|'),
-                plain('~', 'Tilde', TerminalKey.none, '~'),
-                plain('/', 'Slash', TerminalKey.slash, '/'),
-                plain('-', 'Minus', TerminalKey.minus, '-'),
+          listenable: Listenable.merge([_sticky, _scroll]),
+          builder: (context, _) => ShaderMask(
+            // A fade at the right edge while there is more to scroll: the
+            // row's other keys sat past the edge with nothing saying so.
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (bounds) => LinearGradient(
+              colors: [
+                Colors.white,
+                Colors.white,
+                _moreToTheRight ? Colors.transparent : Colors.white,
               ],
+              stops: const [0, 0.88, 1],
+            ).createShader(bounds),
+            child: SingleChildScrollView(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+              child: Row(
+                children: [
+                  // What fits one phone's width first (owner, 2026-09-30):
+                  // back out, move, pick, erase.
+                  plain('Esc', 'Escape', TerminalKey.escape),
+                  plain('←', 'Left arrow', TerminalKey.arrowLeft),
+                  plain('↑', 'Up arrow', TerminalKey.arrowUp),
+                  plain('↓', 'Down arrow', TerminalKey.arrowDown),
+                  plain('→', 'Right arrow', TerminalKey.arrowRight),
+                  plain('⏎', 'Enter', TerminalKey.enter),
+                  plain('⌫', 'Backspace', TerminalKey.backspace),
+                  plain('Tab', 'Tab', TerminalKey.tab),
+                  _BarKey(
+                    label: 'Ctrl',
+                    semantics: 'Control, applies to the next key',
+                    armed: _sticky.ctrl,
+                    onPressed: _sticky.toggleCtrl,
+                  ),
+                  _BarKey(
+                    label: 'Alt',
+                    semantics: 'Alt, applies to the next key',
+                    armed: _sticky.alt,
+                    onPressed: _sticky.toggleAlt,
+                  ),
+                  plain('|', 'Pipe', TerminalKey.none, '|'),
+                  plain('~', 'Tilde', TerminalKey.none, '~'),
+                  plain('/', 'Slash', TerminalKey.slash, '/'),
+                  plain('-', 'Minus', TerminalKey.minus, '-'),
+                ],
+              ),
             ),
           ),
         ),
