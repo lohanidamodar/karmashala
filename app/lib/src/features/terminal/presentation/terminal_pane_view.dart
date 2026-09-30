@@ -170,6 +170,11 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   (double, Size)? _cellSize;
   double _viewWidth = 0;
   bool _keyboardUp = false;
+
+  /// Touch only: whether this showing of the pane has fitted the session to
+  /// the phone (owner, 2026-09-30). Cleared when the pane leaves the screen,
+  /// so each time it is shown again it fits once.
+  bool _phoneFitted = false;
   bool _revealQueued = false;
   bool _followingCursor = false;
 

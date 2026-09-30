@@ -44,6 +44,28 @@ extension _TouchPane on _TerminalPaneViewState {
     return size;
   }
 
+  /// The owner's rule (2026-09-30): a phone that shows a session's terminal
+  /// fits the session to its width while it is on it, so nothing scrolls
+  /// sideways; the desktop takes the width back when it types. Once per
+  /// showing, and only on screen — a terminal kept behind the chat face does
+  /// not take the session. "Back to the session's size" in the size chip
+  /// holds for the rest of that showing.
+  void _fitToPhoneOnShow({required bool atSessionGrid}) {
+    final visible = Visibility.of(context);
+    if (!visible) {
+      _phoneFitted = false;
+      return;
+    }
+    final host = _host;
+    if (_phoneFitted || !atSessionGrid || host == null) return;
+    // Measured, and linked: presence arrives once the attach is answered.
+    if (host.viewGrid == null || host.presence.value == null) return;
+    _phoneFitted = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(host.fitToView());
+    });
+  }
+
   Widget _buildTouch(BuildContext context) {
     final fontSize =
         ref.watch(deviceTerminalFontSizeProvider) ?? kPhoneTerminalFontSize;
@@ -111,6 +133,7 @@ extension _TouchPane on _TerminalPaneViewState {
           math.max(1, (constraints.maxHeight - _gridInset) ~/ cell.height),
         );
       }
+      _fitToPhoneOnShow(atSessionGrid: atSessionGrid);
       // The keyboard coming up shrinks the pane; the cursor is kept in view.
       final keyboardUp = View.of(context).viewInsets.bottom > 0;
       if (keyboardUp && !_keyboardUp) {
