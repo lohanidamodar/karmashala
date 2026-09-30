@@ -400,6 +400,24 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// The live terminal behind [paneId], or `null` once it has been closed.
   TerminalInstance? instanceFor(String paneId) => _instances[paneId];
 
+  /// A pane of this window whose agent is session [sessionId] and is [where],
+  /// or `null`. The session's row names only the pane that last opened it, and
+  /// every window writes its own there — a phone opening the session left the
+  /// desktop unable to find its tab, so each click attached another (owner,
+  /// 2026-09-30).
+  String? paneRunningSession(
+    String sessionId,
+    bool Function(PaneLiveness) where,
+  ) {
+    for (final MapEntry(key: paneId, value: instance) in _instances.entries) {
+      if (instance.agentLaunch?.sessionId == sessionId &&
+          where(instance.liveness.value)) {
+        return paneId;
+      }
+    }
+    return null;
+  }
+
   /// What the panes are holding, for the memory census. O(panes), and every
   /// term is a length or a field read, so a pane with a megabyte of history
   /// costs what an empty one does.

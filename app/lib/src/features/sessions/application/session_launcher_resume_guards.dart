@@ -9,24 +9,26 @@ extension SessionResumeGuards on SessionLauncher {
   /// pane is live; one restored from disk is not, whatever its buffer shows.
   String? livePaneFor(String? sessionId) {
     if (sessionId == null) return null;
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
     final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-    if (paneId == null) return null;
-    final instance = _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(paneId);
-    return instance != null && instance.liveness.value.isLive ? paneId : null;
+    final instance = paneId == null ? null : terminals.instanceFor(paneId);
+    if (instance != null && instance.liveness.value.isLive) return paneId;
+    // The row names another window's pane: find ours by what it runs.
+    return terminals.paneRunningSession(sessionId, (l) => l.isLive);
   }
 
   /// The pane [sessionId] was **restored** into and has never run, or `null`:
   /// it holds this session's own scrollback but nothing running behind it.
   String? dormantPaneFor(String? sessionId) {
     if (sessionId == null) return null;
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
     final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-    if (paneId == null) return null;
-    final instance = _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(paneId);
-    return instance?.liveness.value == PaneLiveness.restored ? paneId : null;
+    final instance = paneId == null ? null : terminals.instanceFor(paneId);
+    if (instance?.liveness.value == PaneLiveness.restored) return paneId;
+    return terminals.paneRunningSession(
+      sessionId,
+      (l) => l == PaneLiveness.restored,
+    );
   }
 
   /// The session we are already running conversation [externalSessionId] in:
