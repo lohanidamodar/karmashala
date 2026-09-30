@@ -230,6 +230,9 @@ class CodexAppServerReader implements StoreSessionReader {
   /// The same shape [CodexStoreReader] gives a preview — whitespace collapsed,
   /// 120 characters — so a fallback does not change how a session is labelled.
   static String _preview(String raw) {
+    // A block Codex injected is not what anybody typed, and titled rows
+    // `<recommended_plugins> Here is a list…`.
+    if (isInjectedCodexContext(raw)) return '';
     final trimmed = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (trimmed.length <= 120) return trimmed;
     return '${trimmed.substring(0, 119)}…';

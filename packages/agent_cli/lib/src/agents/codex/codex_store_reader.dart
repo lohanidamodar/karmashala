@@ -31,6 +31,18 @@ class CodexRolloutCache {
   void clear() => _byPath.clear();
 }
 
+/// Whether a rollout's `session_meta.source` is a conversation a person had
+/// — `cli` or `vscode`, or none recorded (older rollouts) — rather than a run
+/// a tool made: `exec`, `mcp`, or a subagent (recorded as an object).
+bool isInteractiveCodexSource(Object? source) =>
+    source == null || source == 'cli' || source == 'vscode';
+
+/// Whether a user-role message is context Codex injected rather than what a
+/// person typed: a whole `<tag>…</tag>` block such as `<recommended_plugins>`,
+/// `<environment_context>` or `<user_instructions>`.
+bool isInjectedCodexContext(String text) =>
+    RegExp(r'^\s*<([a-z_][a-z0-9_-]*)[^>]*>[\s\S]*</\1>\s*$').hasMatch(text);
+
 class _CachedRollout {
   const _CachedRollout({
     required this.meta,
@@ -38,7 +50,9 @@ class _CachedRollout {
     required this.modified,
   });
 
-  final _CodexMeta meta;
+  /// Null for a rollout that is not a conversation (see
+  /// [isInteractiveCodexSource]): remembered, so it is not read again.
+  final _CodexMeta? meta;
 
   /// The size the file had when it was read. A file that has only *grown*
   /// still says the same thing — see [CodexStoreReader._readRollout].
@@ -179,6 +193,7 @@ class CodexStoreReader implements StoreSessionReader {
     String? cwd;
     String? id;
     DateTime? startedAt;
+    Object? source;
     String preview = '';
     var lines = 0;
     try {
@@ -203,6 +218,7 @@ class CodexStoreReader implements StoreSessionReader {
           if (payload is Map) {
             cwd ??= payload['cwd'] as String?;
             id ??= payload['id'] as String?;
+            source ??= payload['source'];
             // The payload's own timestamp, not the envelope's. They are not the
             // same moment: in the owner's rollout the conversation began at
             // 10:11:12.953Z and the line recording that was flushed at
@@ -220,6 +236,19 @@ class CodexStoreReader implements StoreSessionReader {
     } catch (_) {}
 
     if (cwd == null || cwd.isEmpty) return null;
+    // `codex exec`, an MCP call or a subagent: a run a tool made, not a
+    // conversation. Codex's own `resume` never offers one, so neither do we;
+    // they showed as rows titled by an injected `<recommended_plugins>` block
+    // that could not be resumed. Cached as a miss by the size and mtime, like
+    // any read, so they are not re-read every scan.
+    if (!isInteractiveCodexSource(source)) {
+      _cache._byPath[file.path] = _CachedRollout(
+        meta: null,
+        size: stat.size,
+        modified: stat.modified,
+      );
+      return null;
+    }
     id ??= _idFromFileName(p.basename(file.path));
     final meta = _CodexMeta(
       cwd: cwd,
@@ -262,7 +291,9 @@ class CodexStoreReader implements StoreSessionReader {
       for (final block in content) {
         if (block is Map && block['type'] == 'input_text') {
           final text = block['text'];
-          if (text is String && text.trim().isNotEmpty) {
+          if (text is String &&
+              text.trim().isNotEmpty &&
+              !isInjectedCodexContext(text)) {
             final cleaned = text.replaceAll(RegExp(r'\s+'), ' ').trim();
             return cleaned.length > 120
                 ? '${cleaned.substring(0, 119)}…'
