@@ -47,9 +47,13 @@ class PlayStoreClient implements StoreClient {
       for (final app in found) {
         names[app.packageName] = app.displayName ?? names[app.packageName];
       }
-    } on Object {
-      // The typed packages still stand when the account may not search.
-      if (names.isEmpty) rethrow;
+    } on Object catch (error) {
+      // The typed packages stand when the account may not search; a refused
+      // key or a dead connection must still be said.
+      final failure = playFailure(error);
+      if (names.isEmpty || failure.kind != StoreFailure.permission) {
+        throw failure;
+      }
     }
     final apps = [
       for (final MapEntry(key: packageName, value: name) in names.entries)
