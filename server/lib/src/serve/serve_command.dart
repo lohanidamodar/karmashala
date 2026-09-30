@@ -792,6 +792,10 @@ Future<int> runServe(
       final signIn = await agentWork.accounts.current(installation.id);
       return signIn is AnthropicSignIn && signIn.usableLogin;
     },
+    runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+      checkoutRows.environment(id) ??
+          localHostEnvironment(DateTime.now().toUtc()),
+    ),
     vaultNames: () => {for (final name in envVault.names) name.name},
     handoffFiles: HandoffPacketFiles(
       Directory(p.join(dataDirectory, 'handoff')),

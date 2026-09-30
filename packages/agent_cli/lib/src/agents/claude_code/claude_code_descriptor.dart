@@ -277,6 +277,20 @@ const claudeCodeDescriptor = AgentDescriptor(
     missingConversation: AgentMissingConversationRules(
       markers: [GridMatcher('No conversation found with session ID')],
     ),
+    // A session sent to the background runs under `claude daemon` and a
+    // resume of it is refused; `claude agents --json` names it and
+    // `claude attach <id>` opens it.
+    backgroundSessions: AgentBackgroundSessions.listed(
+      listArguments: ['agents', '--json'],
+      attachToken: 'attach',
+      evidence:
+          'claude 2.1.280 (WSL), 2026-09-30: `claude agents --json` printed '
+          '{"id":"2360c006","kind":"background","sessionId":"2360c006-…"} '
+          'for a conversation whose `--resume` exited 1 with "is running as '
+          'a background session (2360c006). Run `claude attach 2360c006` to '
+          'open it"; `claude attach --help`: "Open the background session in '
+          'this terminal"',
+    ),
     // The folder-trust question a first launch in a directory stops at,
     // captured whole in `test/features/agents/fixtures/
     // claude-code-trust-prompt.raw` and seen again live on 2026-09-25 when an

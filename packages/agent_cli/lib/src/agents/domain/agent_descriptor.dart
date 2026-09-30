@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../environments/environment_kind.dart';
 import '../../permissions/permission_risk.dart';
 import './agent_mcp_config.dart';

@@ -37,6 +37,80 @@ class AgentResume {
       style == AgentResumeStyle.unsupported ? const [] : [token, sessionId];
 }
 
+/// Whether an agent can move a conversation into **a service of its own**,
+/// and how that conversation is opened again.
+///
+/// Claude Code does: a session sent to the background leaves its terminal and
+/// carries on under `claude daemon`, which outlives the terminal, the app and
+/// the Karmashala server. While it does, `--resume <id>` is refused —
+///
+/// ```
+/// Session 2360c006-… is running as a background session (2360c006). Run
+/// `claude attach 2360c006` to open it, or `claude stop 2360c006` first to
+/// resume it here.
+/// [process exited with code 1]
+/// ```
+///
+/// — and the row in Karmashala could not be started at all (owner,
+/// 2026-09-30). The conversation is not lost and not held by a stranger: the
+/// agent has it, and says how to open it. So a resume **asks first**
+/// ([listArguments]) and attaches ([attachArgumentsFor]) when the agent
+/// answers that it holds the conversation, instead of spawning the refusal.
+///
+/// [evidence] is required, like [AgentForkSupport]'s, so a future CLI version
+/// is re-checked rather than trusted.
+class AgentBackgroundSessions {
+  const AgentBackgroundSessions.listed({
+    required this.listArguments,
+    required this.attachToken,
+    required this.evidence,
+  });
+
+  /// It has none, or nobody has looked. The default: nothing is asked.
+  const AgentBackgroundSessions.none()
+    : listArguments = const [],
+      attachToken = '',
+      evidence = '';
+
+  /// The arguments that print the agent's running sessions as a JSON array of
+  /// objects carrying `kind`, `sessionId` and `id`.
+  final List<String> listArguments;
+
+  /// The subcommand that opens a background session in a terminal.
+  final String attachToken;
+
+  final String evidence;
+
+  bool get isSupported => attachToken.isNotEmpty;
+
+  /// The id to attach to for [conversationId], read off [listing], or null
+  /// when the agent does not hold it in the background — or said something
+  /// this cannot read, which is never a reason to refuse a resume.
+  String? attachIdIn(String listing, String conversationId) {
+    if (!isSupported || conversationId.isEmpty) return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(listing.trim());
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! List) return null;
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      if (entry['kind'] != 'background') continue;
+      if (entry['sessionId'] != conversationId) continue;
+      final id = entry['id'];
+      if (id is String && id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
+  /// The whole command line that opens background session [id]: an attach
+  /// takes no mode, model or MCP flag — the session keeps the ones it has.
+  List<String> attachArgumentsFor(String id) =>
+      isSupported && id.isNotEmpty ? [attachToken, id] : const [];
+}
+
 /// How an agent CLI starts a **new** conversation that already contains an
 /// existing one's history.
 ///

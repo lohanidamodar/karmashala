@@ -158,6 +158,7 @@ class HostedStart {
     this.launch,
     this.external,
     this.credentialNotice,
+    this.attachNotice,
   });
 
   final Session session;
@@ -171,6 +172,10 @@ class HostedStart {
 
   /// Credential variables withheld from the agent, in a person's words.
   final String? credentialNotice;
+
+  /// Said when the terminal attached to the agent's own background session
+  /// instead of resuming the conversation, in a person's words.
+  final String? attachNotice;
 }
 
 /// Opens an agent's terminal: [launch] as a PTY under its session's own id
@@ -200,6 +205,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.openAgent,
     this.settings,
     this.hasUsableLogin,
+    this.runnerFor,
     this.vaultNames,
     this.handoffFiles,
     this.links,
@@ -242,6 +248,11 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Whether an interactive login exists for an installation — asked only
   /// when an inherited credential would outrank it. Null: never withheld.
   final Future<bool> Function(AgentInstallation installation)? hasUsableLogin;
+
+  /// Runs a command to its end in an environment — how an agent is asked
+  /// whether its own service holds a conversation before a resume of it.
+  /// Null: never asked, and a resume is a resume.
+  final CommandRunner Function(String environmentId)? runnerFor;
 
   /// The names the server's vault sets; a name set there is never withheld.
   final Set<String> Function()? vaultNames;
@@ -470,26 +481,42 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             defaultModelId: policy.defaultModels[agentId],
           ).modelId
         : session.modelId;
-    final durable = agentPaneArguments(
-      descriptor,
-      permission,
-      modelId: modelId,
-      sessionId: assignsOwnId ? id : null,
-      resumeSessionId: forking ? null : resumeId,
-      forkSessionId: launch.forkConversationId,
-      prompt: prompt,
-      systemPromptFilePath: systemPromptPath,
-      suppressSelfUpdate: suppressUpdate,
-    );
+    // A conversation the agent keeps in a service of its own is attached to,
+    // not resumed: the resume would be refused and the pane would die on it.
+    // Never with something to say — an attach carries no prompt.
+    final attachId = forking || newConversation || prompt != null
+        ? null
+        : await _backgroundSessionId(
+            descriptor,
+            installation,
+            directory,
+            resumeId,
+          );
+    final durable = attachId != null
+        ? descriptor!.launch.backgroundSessions.attachArgumentsFor(attachId)
+        : agentPaneArguments(
+            descriptor,
+            permission,
+            modelId: modelId,
+            sessionId: assignsOwnId ? id : null,
+            resumeSessionId: forking ? null : resumeId,
+            forkSessionId: launch.forkConversationId,
+            prompt: prompt,
+            systemPromptFilePath: systemPromptPath,
+            suppressSelfUpdate: suppressUpdate,
+          );
     final agentLaunch = AgentPaneLaunch(
       agentId: agentId,
       executable: installation.executable.path,
       arguments: durable,
-      mcpArguments: agentMcpArguments(
-        descriptor,
-        url: access?.url,
-        configPath: access?.configPath,
-      ),
+      // The attached session keeps the tools it was started with.
+      mcpArguments: attachId != null
+          ? const []
+          : agentMcpArguments(
+              descriptor,
+              url: access?.url,
+              configPath: access?.configPath,
+            ),
       environment: suppressUpdate
           ? descriptor.launch.selfUpdate.disableEnvironment
           : const {},
@@ -581,7 +608,47 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       session: session,
       launch: stored,
       credentialNotice: notice,
+      attachNotice: attachId == null
+          ? null
+          : '${descriptor?.displayName ?? 'The agent'} is running this '
+                'conversation in its own background service, so this terminal '
+                'attached to it instead of resuming it. Ending the session '
+                'here closes the terminal; the conversation carries on there.',
     );
+  }
+
+  /// The id [installation]'s own service runs [conversationId] under, or
+  /// null: it holds none, it has no such service, or it could not be asked —
+  /// and "could not tell" is a resume, as before.
+  Future<String?> _backgroundSessionId(
+    AgentDescriptor? descriptor,
+    AgentInstallation installation,
+    EnvironmentPath directory,
+    String? conversationId,
+  ) async {
+    final background = descriptor?.launch.backgroundSessions;
+    final runner = runnerFor;
+    if (background == null ||
+        !background.isSupported ||
+        runner == null ||
+        conversationId == null ||
+        conversationId.isEmpty) {
+      return null;
+    }
+    try {
+      final listed = await runner(directory.environmentId).run(
+        CommandRequest(
+          executable: installation.executable.path,
+          arguments: background.listArguments,
+          workingDirectory: directory,
+          timeout: const Duration(seconds: 10),
+        ),
+      );
+      if (listed.exitCode != 0) return null;
+      return background.attachIdIn(listed.stdout, conversationId);
+    } on Object {
+      return null;
+    }
   }
 
   /// What to withhold of the Anthropic credentials this server's own

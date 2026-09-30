@@ -100,6 +100,7 @@ class AgentLaunchSpec {
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
+    this.backgroundSessions = const AgentBackgroundSessions.none(),
     this.firstRunPrompt = const AgentFirstRunPromptRules(),
     this.rejectedValue = const AgentRejectedValueRules.none(),
     this.fork = const AgentForkSupport.unsupported(),
@@ -180,6 +181,11 @@ class AgentLaunchSpec {
   /// record of. Empty for an agent whose answer we have never seen, which
   /// resolves to "no explanation" rather than a guessed one.
   final AgentMissingConversationRules missingConversation;
+
+  /// Whether this agent can keep a conversation running in a service of its
+  /// own, where a resume is refused and an attach is what opens it. See
+  /// [AgentBackgroundSessions]; defaults to "it has none".
+  final AgentBackgroundSessions backgroundSessions;
 
   /// What this agent draws when it will not start in a directory until a
   /// person answers a first-run question about it (directory trust). Empty

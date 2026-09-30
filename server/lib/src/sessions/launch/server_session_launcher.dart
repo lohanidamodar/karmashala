@@ -257,7 +257,6 @@ class ServerSessionLauncher {
       resumeId ?? spec.forkConversationId,
       launchDirectory,
     );
-    final words = [?notice, ?caveat].join(' ');
 
     // A session another one started names its parent in the prompt, the only
     // channel it has — built from the row, never pattern-matched.
@@ -303,6 +302,7 @@ class ServerSessionLauncher {
         followSettings: true,
       ),
     );
+    final words = [?notice, ?caveat, ?started.attachNotice].join(' ');
     log?.call(
       'Started ${started.session.id}: agent=$agentId '
       'conversation=${resumeId ?? spec.forkConversationId ?? 'new'} '
