@@ -40,9 +40,12 @@ class ServerMediaFiles {
   /// [path] as a file on this machine. Throws [MediaUnavailable].
   Future<File> fetch(EnvironmentPath path) {
     final key = pathKey(path);
-    return _running[key] ??= _fetch(
-      path,
-    ).whenComplete(() => _running.remove(key));
+    // A block, not `=>`: `remove` returns this very future, and a future
+    // `whenComplete`'s callback returns is awaited — every fetch waited on
+    // itself and never finished (2026-09-30).
+    return _running[key] ??= _fetch(path).whenComplete(() {
+      _running.remove(key);
+    });
   }
 
   Future<File> _fetch(EnvironmentPath path) async {

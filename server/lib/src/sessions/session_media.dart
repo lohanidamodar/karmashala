@@ -49,7 +49,12 @@ class SessionMedia {
       sessionId,
       path,
       agentId,
-    ).whenComplete(() => _running.remove(sessionId)));
+      // A block, not `=>`: `remove` returns this very future, and a future
+      // `whenComplete`'s callback returns is awaited — the scan waited on
+      // itself and no media read was ever answered (2026-09-30).
+    ).whenComplete(() {
+      _running.remove(sessionId);
+    }));
     final stamp = '${scan.transcriptPath}|${scan.scannedBytes}';
     if (request.known == stamp) {
       return SessionMediaListing(stamp: stamp, unchanged: true);
