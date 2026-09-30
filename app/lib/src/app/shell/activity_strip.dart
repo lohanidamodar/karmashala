@@ -56,6 +56,7 @@ class ShellActivityStrip extends ConsumerWidget {
       onSelect: (picked) => toggleShellArea(ref, picked),
       onSettings: () => openSettingsTab(ref),
       onUsage: () => openUsageTab(ref),
+      onStores: () => openStoresTab(ref),
     );
   }
 }
@@ -75,6 +76,7 @@ class ActivityStrip extends StatelessWidget {
     this.settingsHint,
     this.onUsage,
     this.usageHint,
+    this.onStores,
     super.key,
   });
 
@@ -98,6 +100,9 @@ class ActivityStrip extends StatelessWidget {
   /// drawn with no way to open the tab should not offer one.
   final VoidCallback? onUsage;
   final String? usageHint;
+
+  /// Opens the Stores tab. Null leaves its glyph out, as [onUsage] does.
+  final VoidCallback? onStores;
 
   static IconData iconFor(ShellArea area) => switch (area) {
     ShellArea.sessions => AppIcons.chatCircleDots,
@@ -131,6 +136,13 @@ class ActivityStrip extends StatelessWidget {
           const Spacer(),
           // Above Settings, and like it never marked selected: both open a
           // tab, and the tab strip already says which tab is in front.
+          if (onStores case final onStores?)
+            _StripButton(
+              icon: AppIcons.package,
+              label: 'Stores',
+              selected: false,
+              onPressed: onStores,
+            ),
           if (onUsage case final onUsage?)
             _StripButton(
               icon: AppIcons.chartBar,

@@ -487,6 +487,21 @@ class QuickOpenSources {
         keywords: const ['usage', 'quota', 'limits', 'tokens', 'rate limit'],
         onSelect: () => openUsageTab(ref),
       ),
+      _command(
+        'Open Stores',
+        subtitle: 'Each app on the App Store and Google Play',
+        icon: AppIcons.package,
+        keywords: const [
+          'stores',
+          'app store',
+          'google play',
+          'releases',
+          'reviews',
+          'ratings',
+          'downloads',
+        ],
+        onSelect: () => openStoresTab(ref),
+      ),
     ];
   }
 
