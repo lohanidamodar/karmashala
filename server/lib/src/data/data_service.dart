@@ -19,6 +19,7 @@ import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
+import '../stores/store_desk.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
 import 'automations_handler.dart';
@@ -123,6 +124,10 @@ class DataService {
   /// The server's environment vault (slice 5a, write-only), set by `serve`;
   /// without it that work is refused `unavailable`.
   EnvVault? envVault;
+
+  /// The app stores this server reads, set by `serve`; without it that work
+  /// is refused `unavailable`.
+  StoreWork? storeWork;
 
   /// The server's terminals (slice 5a: every local and WSL pane's PTY), set
   /// by `serve`; without them that work is refused `unavailable`.
@@ -713,7 +718,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
       request is SessionInputRequest ||
-      request is EnvVaultRequest;
+      request is EnvVaultRequest ||
+      request is StoreRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
@@ -857,6 +863,15 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final StoreRequest<Object?> asked) {
+      final work =
+          _service.storeWork ??
+          (throw const DataRefused.unavailable(
+            'this server holds no app stores',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
     if (request case final FilesWorkRequest<Object?> asked) {
       final work =
           _service.filesWork ??
@@ -966,6 +981,9 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     EnvSet() || EnvRemove() =>
       'a phone may not change this server\'s environment variables or '
           'secrets; use a desktop paired with it',
+    StoreAppleSet() || StorePlaySet() || StoreCredentialRemove() =>
+      'a phone may not change the app-store credentials this server holds; '
+          'import them on a desktop paired with it',
     SshHostPut() || SshHostDelete() || KnownHostTrust() || KnownHostForget() =>
       'a phone may not change this server\'s SSH hosts or trusted host keys; '
           'use a desktop paired with it',

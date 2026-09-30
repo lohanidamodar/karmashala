@@ -11,3 +11,10 @@ abstract interface class StoreDesk {
   /// way is joined, not doubled.
   Future<StoresView> refresh({Duration? maxAge});
 }
+
+/// What answers the data protocol's `stores.*` requests; every answer is the
+/// view as it stands after the work.
+abstract interface class StoreWork {
+  /// Does [request]'s work; throws [DataRefused].
+  Future<StoresView> handle(StoreRequest<Object?> request);
+}
