@@ -1,0 +1,29 @@
+name: store_console_play
+description: >-
+  Google Play behind `store_console`: Android Publisher for tracks and
+  reviews, Play Developer Reporting for apps and vitals, and the reports
+  bucket for ratings and installs. Pure Dart, and no Karmashala in it.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Google's generated clients: `androidpublisher/v3` and `storage/v1`.
+  googleapis: ^17.0.0
+  # The service-account token.
+  googleapis_auth: ^2.0.0
+  # The client every call goes through, so a test can hand in a fake.
+  http: ^1.6.0
+  # The values and the interface this implements.
+  store_console:
+    path: ../store_console
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

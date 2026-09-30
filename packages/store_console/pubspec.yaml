@@ -1,0 +1,19 @@
+name: store_console
+description: >-
+  What an app store says about an app, in one shape for every store: releases,
+  reviews, rating, vitals and downloads, the client interface a store
+  implements, and the aggregator over several of them. Pure Dart, and no
+  Karmashala in it, so another app can take it as it is.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
