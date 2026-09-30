@@ -48,10 +48,18 @@ class WorkbenchFaceToggle extends ConsumerWidget {
 /// and **Session ▾**, whose sheet is the row's overflow. The same row in the
 /// chat and the terminal; the toggle is in the app bar.
 class _CompactSessionBar extends StatelessWidget {
-  const _CompactSessionBar({required this.sessionId, required this.reading});
+  const _CompactSessionBar({
+    required this.sessionId,
+    required this.reading,
+    required this.onTerminal,
+  });
 
   final String? sessionId;
   final bool reading;
+
+  /// The terminal is showing: its prompt is answered on the terminal, with
+  /// the key row, so the dock stays in the chat (owner, 2026-09-30).
+  final bool onTerminal;
 
   @override
   Widget build(BuildContext context) {
@@ -62,14 +70,15 @@ class _CompactSessionBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ColoredBox(
-          color: tones.term,
-          child: ApprovalRequestCard(
-            sessionId: sessionId,
-            docked: true,
-            touch: true,
+        if (!onTerminal)
+          ColoredBox(
+            color: tones.term,
+            child: ApprovalRequestCard(
+              sessionId: sessionId,
+              docked: true,
+              touch: true,
+            ),
           ),
-        ),
         Container(
           constraints: const BoxConstraints(minHeight: Touch.target),
           color: tones.chrome,

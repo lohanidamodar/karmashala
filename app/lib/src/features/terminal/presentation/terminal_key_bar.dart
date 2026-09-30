@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:xterm2/xterm.dart';
 
-/// The extra keys a soft keyboard lacks, in one row under a focused pane at
-/// touch density (Stage 2 step 10). Every key goes through the terminal's
+/// The extra keys a soft keyboard lacks, in one row under the pane at touch
+/// density (Stage 2 step 10), keyboard up or down. Every key goes through the terminal's
 /// `keyInput` or `textInput`, the road a typed key takes, so the session's
 /// input rules apply to it unchanged.
 class TerminalKeyBar extends StatefulWidget {
@@ -84,7 +84,8 @@ class _TerminalKeyBarState extends State<TerminalKeyBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.focusNode.hasFocus) return const SizedBox.shrink();
+    // Shown with the keyboard down too (owner, 2026-09-30): the arrows and
+    // Enter answer an agent's menu without raising it.
     final scheme = Theme.of(context).colorScheme;
     Widget plain(
       String label,
@@ -110,7 +111,11 @@ class _TerminalKeyBarState extends State<TerminalKeyBar> {
             padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
             child: Row(
               children: [
+                // A menu's keys first: move, pick, back out.
                 plain('Esc', 'Escape', TerminalKey.escape),
+                plain('↑', 'Up arrow', TerminalKey.arrowUp),
+                plain('↓', 'Down arrow', TerminalKey.arrowDown),
+                plain('⏎', 'Enter', TerminalKey.enter),
                 plain('Tab', 'Tab', TerminalKey.tab),
                 _BarKey(
                   label: 'Ctrl',
@@ -124,8 +129,6 @@ class _TerminalKeyBarState extends State<TerminalKeyBar> {
                   armed: _sticky.alt,
                   onPressed: _sticky.toggleAlt,
                 ),
-                plain('↑', 'Up arrow', TerminalKey.arrowUp),
-                plain('↓', 'Down arrow', TerminalKey.arrowDown),
                 plain('←', 'Left arrow', TerminalKey.arrowLeft),
                 plain('→', 'Right arrow', TerminalKey.arrowRight),
                 plain('|', 'Pipe', TerminalKey.none, '|'),

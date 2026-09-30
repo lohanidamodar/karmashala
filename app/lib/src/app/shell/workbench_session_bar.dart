@@ -71,7 +71,11 @@ class _SessionBar extends ConsumerWidget {
     // Read off the page rather than a `LayoutBuilder`, so the row does not
     // change form as the keyboard opens.
     if (CompactWorkbenchScope.of(context)) {
-      return _CompactSessionBar(sessionId: sessionId, reading: reading);
+      return _CompactSessionBar(
+        sessionId: sessionId,
+        reading: reading,
+        onTerminal: onTerminal,
+      );
     }
 
     final textScaler = MediaQuery.textScalerOf(context);
@@ -104,8 +108,9 @@ class _SessionBar extends ConsumerWidget {
         // answerable here, floating on the pane's own surface just above the
         // line that describes it — outside the bar, so the amber panel sits
         // on the terminal's tone with a margin all round, in Zen as well.
-        // Nothing at all while it is not waiting.
-        if (sessionId != null)
+        // Nothing at all while it is not waiting. Chat only (owner,
+        // 2026-09-30): on the terminal the prompt is on screen to answer.
+        if (sessionId != null && !onTerminal)
           ColoredBox(
             color: tones.term,
             child: ApprovalRequestCard(sessionId: sessionId, docked: true),

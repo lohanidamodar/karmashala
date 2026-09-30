@@ -35,6 +35,17 @@ class TerminalGridStatusSource {
         belowComposer != null &&
         menus != null &&
         readScreenMenu(belowComposer, menus) != null;
+    // **With no composer, a prompt still has to draw its choices.** A slash
+    // command's panel takes the composer's place too — `/usage`, `/stats`,
+    // `/status` — and its footer says `Esc to cancel`, which read as an
+    // approval and raised the ask dock over a session nobody had asked
+    // anything (owner, 2026-09-30). A permission modal, the trust modal and a
+    // question all draw a menu the agent's menu rules read; those panels do
+    // not. An agent with no menu rules keeps the old reading.
+    final choicesDrawn =
+        composerRow != null ||
+        menus == null ||
+        readScreenMenu(tailLines, menus) != null;
 
     // The wait kind travels with the bucket that matched: an approval matcher
     // fires on a drawn modal, an idle one on the agent's own prompt footer.
@@ -55,6 +66,7 @@ class TerminalGridStatusSource {
     ]) {
       final prompt = status == AgentActivityStatus.awaitingApproval;
       if (prompt && composerRow != null && !modalBelow) continue;
+      if (prompt && !choicesDrawn) continue;
       // A prompt under a composer is read off the rows under it alone.
       final rows = prompt && modalBelow ? belowComposer : tailLines;
       final hit = _firstMatch(matchers, rows);
