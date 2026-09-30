@@ -88,7 +88,21 @@ String? sessionInTab(Ref ref, TerminalTab? tab) {
     if (paneId == tab.focusedPaneId) return record.id;
     if (fallback == null && siblings.contains(paneId)) fallback = record.id;
   }
-  return fallback;
+  if (fallback != null) return fallback;
+  // No row names these panes: a row keeps only the pane that last opened it,
+  // and another window (a phone) writes its own there. The pane still knows
+  // which session it was opened for, so the panels keep following it.
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  String? launchedIn(String? paneId) => paneId == null
+      ? null
+      : terminals.instanceFor(paneId)?.agentLaunch?.sessionId;
+  final focused = launchedIn(tab.focusedPaneId);
+  if (focused != null) return focused;
+  for (final paneId in tab.layout.panes) {
+    final sessionId = launchedIn(paneId);
+    if (sessionId != null) return sessionId;
+  }
+  return null;
 }
 
 /// The session the window is about: the one selected in the Explorer, or what
