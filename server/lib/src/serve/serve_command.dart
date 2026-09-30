@@ -74,6 +74,7 @@ import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../hooks/hook_spools.dart';
+import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../attention/daemon_attention.dart';
@@ -940,6 +941,7 @@ Future<int> runServe(
     ..add(LaunchToolSet(tools, launches: launches))
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
+    ..add(StoreToolSet(storeDesk))
     // The inbox is the server's (slice 5c), app or no app.
     ..add(InboxToolSet(attention.attention))
     // The browser, the Flutter loop and builds are the server's (slice 3d).
