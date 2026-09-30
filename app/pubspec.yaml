@@ -276,6 +276,9 @@ dependencies:
   # blocks behind a full-screen Play dialog until it finishes. Every method
   # no-ops off Android, and on an install that did not come from Play.
   in_app_update: ^5.0.0
+  # About › Rate Karmashala on the phone (the beej template's review brick):
+  # the store's own rating sheet, with the listing as the fallback.
+  in_app_review: ^2.0.12
 
 dependency_overrides:
   # launch_at_startup 0.5.1 is upstream's latest and pins

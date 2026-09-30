@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../application/store_rating.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -86,6 +87,16 @@ class AboutSection extends StatelessWidget {
               ),
             ),
           ),
+          if (ratesOnStore)
+            SettingsRow(
+              label: 'Rate Karmashala',
+              help: 'On Google Play — it helps other people find it.',
+              control: OutlinedButton.icon(
+                icon: const Icon(AppIcons.star),
+                label: const Text('Rate'),
+                onPressed: requestStoreRating,
+              ),
+            ),
           SettingsRow(
             label: 'Licences',
             help: 'The open source this build is made of.',
