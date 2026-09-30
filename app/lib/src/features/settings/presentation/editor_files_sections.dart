@@ -130,31 +130,33 @@ class FileBrowsingSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // One board row: the choice as its control, what it means as its
-          // help, and the way back to the default under it once chosen.
-          SettingsRow(
-            label: 'File picker',
-            help: _blurbFor(inApp),
-            controlMaxWidth: 280,
-            control: SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
-                  label: Text('Karmashala'),
-                ),
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(AppIcons.stack, size: Chrome.icon),
-                  label: Text('System dialog'),
-                ),
-              ],
-              selected: {inApp},
-              onSelectionChanged: (values) =>
-                  controller.setUseInAppFilePicker(values.first),
-              showSelectedIcon: false,
+          // help, and the way back to the default under it once chosen. Not
+          // on a phone, where the answer is fixed ([FilePickerChoice.isPhone]).
+          if (!FilePickerChoice.isPhone)
+            SettingsRow(
+              label: 'File picker',
+              help: _blurbFor(inApp),
+              controlMaxWidth: 280,
+              control: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
+                    label: Text('Karmashala'),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(AppIcons.stack, size: Chrome.icon),
+                    label: Text('System dialog'),
+                  ),
+                ],
+                selected: {inApp},
+                onSelectionChanged: (values) =>
+                    controller.setUseInAppFilePicker(values.first),
+                showSelectedIcon: false,
+              ),
             ),
-          ),
-          if (chosen != null)
+          if (chosen != null && !FilePickerChoice.isPhone)
             Padding(
               padding: const EdgeInsets.only(bottom: Insets.sm),
               child: Align(

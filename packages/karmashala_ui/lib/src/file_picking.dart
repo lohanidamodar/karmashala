@@ -54,7 +54,15 @@ class FilePickerChoice {
   /// What this platform does when nobody has said otherwise.
   static bool get platformDefault => Platform.isWindows;
 
+  /// A phone has no choice to make, so it offers none (owner, 2026-10-01):
+  /// its own files open in the system picker, the one that reaches its
+  /// photos and cloud drives, and the server's in Karmashala's, the only one
+  /// that can see another machine's disk.
+  static bool get isPhone => Platform.isAndroid || Platform.isIOS;
+
+  /// Whether a pick of **the server's** files opens Karmashala's browser.
   static bool get inApp {
+    if (isPhone) return true;
     try {
       return prefersInApp?.call() ?? platformDefault;
     } on Object {
@@ -67,7 +75,9 @@ class FilePickerChoice {
   /// Separate from [prefersInApp], which a remote client forces to the server.
   static bool Function()? devicePrefersInApp;
 
+  /// Whether a pick of **this device's** files opens Karmashala's browser.
   static bool get deviceInApp {
+    if (isPhone) return false;
     try {
       return devicePrefersInApp?.call() ?? platformDefault;
     } on Object {
