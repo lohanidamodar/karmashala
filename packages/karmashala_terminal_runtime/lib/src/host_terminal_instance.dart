@@ -83,12 +83,16 @@ class HostTerminalInstance
     AppLogger? logger,
     bool shellIntegration = false,
     bool drawsAtSessionGrid = false,
+    bool indicClusterWidthFromBase = false,
     this.redialDelays = kHostRedialDelays,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory),
        _atSessionGrid = ValueNotifier(drawsAtSessionGrid) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler()
+      // Before the restored history is written, so it is measured the same
+      // way as what the program draws next (xterm2 divergence 15).
+      ..indicClusterWidthFromBase = indicClusterWidthFromBase
       ..onPrivateOSC = _osc.dispatch
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
 

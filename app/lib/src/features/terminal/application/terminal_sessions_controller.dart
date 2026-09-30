@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../../core/capabilities/capabilities.dart'

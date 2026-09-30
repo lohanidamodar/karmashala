@@ -38,4 +38,4 @@ dev_dependencies:
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git
-      ref: dd9b99e73a9ca407dd9499f7db4bab03c3226275
+      ref: 0f8f42da5c32bd3c255e3aec367fffb65f26f7c6
