@@ -8,6 +8,7 @@ import 'probe_banner.dart';
 import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import '../features/terminal/presentation/session_host_banner.dart';
+import '../features/update/update_listener.dart';
 import 'shell/app_shell.dart';
 import 'shell/native_menus.dart';
 import 'widgets/row_menu_sheet.dart';
@@ -77,9 +78,25 @@ class KarmashalaApp extends ConsumerWidget {
       // host banner one to confirm a restart on. The macOS menu bar is above
       // both, so a strip coming or going never re-creates it: there is one
       // menu bar per app, and a second mounting over the first is an error.
-      home: const NativeShellMenus(
-        child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+      home: _PlayUpdates(
+        enabled: !ref.watch(clientCapabilitiesProvider).hostsServer,
+        child: const NativeShellMenus(
+          child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+        ),
       ),
     );
   }
+}
+
+/// Play's in-app update, for the phone app only: a desktop updates through
+/// its own installer. Under the app's messenger, so its snackbar has a home.
+class _PlayUpdates extends StatelessWidget {
+  const _PlayUpdates({required this.enabled, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      enabled ? UpdateListener(child: child) : child;
 }

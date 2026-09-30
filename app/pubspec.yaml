@@ -271,6 +271,11 @@ dependencies:
   # A phone's attach › Take a photo, through the system camera app. Only its
   # camera source is used; the gallery goes through file_selector.
   image_picker: ^1.2.3
+  # Play Core flexible update, on the Android phone app only (the beej
+  # template's brick). Flexible rather than immediate: an immediate update
+  # blocks behind a full-screen Play dialog until it finishes. Every method
+  # no-ops off Android, and on an install that did not come from Play.
+  in_app_update: ^5.0.0
 
 dependency_overrides:
   # launch_at_startup 0.5.1 is upstream's latest and pins
