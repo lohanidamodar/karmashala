@@ -39,6 +39,10 @@ dependencies:
   # Command snippets and saved terminal presets.
   karmashala_snippets:
     path: ../karmashala_snippets
+  # The app stores' values: what a store said about an app, and the reading
+  # each part of it came with (`StoresView`).
+  store_console:
+    path: ../store_console
   # Paired devices, as a client is told them (no key, no push token).
   karmashala_remote:
     path: ../karmashala_remote

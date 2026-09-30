@@ -404,6 +404,8 @@ class FakeDataServer {
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;
+        case StoresChanged() || StoresProgress():
+          break;
         case TerminalChanged(:final terminal):
           terminals.records[terminal.sessionId] = terminal;
         case TerminalRemoved(:final sessionId):
@@ -716,6 +718,9 @@ class FakeDataServer {
       ),
       SessionInputRequest() => throw const DataRefused.unavailable(
         'this fake types into no sessions',
+      ),
+      StoreRequest() => throw const DataRefused.unavailable(
+        'this fake reads no stores',
       ),
     };
     _tell(origin, changes);

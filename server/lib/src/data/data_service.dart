@@ -506,7 +506,8 @@ class DataService {
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
         SessionInputRequest() ||
-        EnvVaultRequest() => throw DataRefused.invalid(
+        EnvVaultRequest() ||
+        StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
         final AttentionRequest r =>

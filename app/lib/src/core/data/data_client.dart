@@ -923,6 +923,9 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
+        case StoresChanged() || StoresProgress():
+          // Read by the Stores feature from its own subscription.
+          break;
         case final AttentionChange change:
           _applyAttention(change);
         case final ClientIntent intent:
