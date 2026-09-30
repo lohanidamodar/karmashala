@@ -20,6 +20,7 @@ import '../../remote/presentation/remote_access_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
+import '../../stores/presentation/stores_settings_section.dart';
 import 'agent_detection_section.dart';
 import 'agents_and_accounts_page.dart';
 import 'agent_path_section.dart';
@@ -181,6 +182,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.knownHosts => const KnownHostsSection(),
   SettingsAnchor.machines => const MachinesSection(),
   SettingsAnchor.remoteAccess => const RemoteAccessSection(),
+  SettingsAnchor.storeCredentials => const StoresSettingsSection(),
   SettingsAnchor.debugMode => const DebugModeSection(),
   SettingsAnchor.logFile => const LogFileSection(),
   SettingsAnchor.scrollbackPersistence => const ScrollbackPersistenceSection(),

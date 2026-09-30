@@ -155,6 +155,16 @@ enum SettingsSectionId {
     'Variables every new terminal starts with.',
     ['variables & secrets'],
   ),
+  // The credentials the Stores tab reads with; the tab itself is a workbench
+  // tab, as Usage is.
+  stores(
+    'Stores',
+    AppIcons.package,
+    SettingsGroup.connections,
+    'The App Store Connect key and the Google Play service account the '
+        'Stores tab reads with.',
+    ['app store', 'google play', 'app store connect', 'play console'],
+  ),
   diagnostics(
     'Diagnostics',
     AppIcons.listMagnifyingGlass,
@@ -584,6 +594,15 @@ enum SettingsAnchor {
     'relay',
     'ssh relay',
     'devices',
+  ]),
+  storeCredentials(SettingsSectionId.stores, 'Store credentials', [
+    'stores',
+    'app store',
+    'google play',
+    'app store connect',
+    'play console',
+    'credential',
+    'api key',
   ]),
   debugMode(SettingsSectionId.diagnostics, 'Debug mode', [
     'debug',
@@ -1130,6 +1149,33 @@ const settingsEntries = <SettingsEntry>[
         'Run the relay on a machine of your own, so phones meet this '
         'desktop there.',
     keywords: ['relay', 'ssh relay', 'ssh', 'self-hosted', 'own server', 'box'],
+  ),
+  SettingsEntry(
+    'App Store Connect key',
+    anchor: SettingsAnchor.storeCredentials,
+    description: 'The team API key the Stores tab reads the App Store with.',
+    keywords: [
+      'app store',
+      'apple',
+      'p8',
+      'issuer',
+      'vendor number',
+      'testflight',
+    ],
+  ),
+  SettingsEntry(
+    'Google Play service account',
+    anchor: SettingsAnchor.storeCredentials,
+    description:
+        'The service-account key the Stores tab reads Google Play with.',
+    keywords: [
+      'google play',
+      'play console',
+      'service account',
+      'json',
+      'reports bucket',
+      'package name',
+    ],
   ),
   SettingsEntry(
     'Debug mode',
