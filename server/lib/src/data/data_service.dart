@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:agent_cli/read.dart' show ImportedSession;
 import 'package:agent_cli/usage.dart'
     show ClaudeAccount, CodexAccount, UsageSample;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -346,6 +347,10 @@ class DataService {
   /// Every recorded environment.
   List<ExecutionEnvironment> get environments => _hosts.allEnvironments();
 
+  /// Every imported conversation, for the server's own upkeep (the import's
+  /// prune): not a client request.
+  List<ImportedSession> get importedSessions => _sessions.allImported();
+
   /// Where every project and checkout the workspace names lives — what a
   /// file browser's delete must never take.
   List<EnvironmentPath> get workspaceRoots {
@@ -671,6 +676,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     final refusal = phoneRefusal(request, grants: grants);
     if (refusal != null) throw DataRefused.denied(refusal);
   }
+
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
   var _signOfLife = 0;

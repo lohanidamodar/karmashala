@@ -349,6 +349,9 @@ class SessionsHandler {
         SessionRowRemoved(id),
   ];
 
+  /// Every imported conversation, for the server's own upkeep.
+  List<ImportedSession> allImported() => _imported.getAll();
+
   ImportedSession _importedRow(String id) =>
       _imported.getById(id) ??
       (throw DataRefused.notFound('no imported session with id $id'));

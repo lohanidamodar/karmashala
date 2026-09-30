@@ -108,6 +108,8 @@ class ServerAgentWork implements AgentWork {
     if (!onItsOwn) return;
     usage.start();
     await detection.startup(log: log);
+    // Rows an older import took for conversations; cheap, one line a row.
+    await imports.pruneNonConversations(log: log);
   }
 
   void stop() {

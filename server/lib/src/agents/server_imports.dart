@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -155,6 +158,51 @@ class ServerImports {
     if (added.isEmpty) return;
     await forRepositories([for (final repository in added) repository.id]);
   }
+
+  /// Removes imported Codex rows that are not conversations: `codex exec`
+  /// runs (and MCP or subagent ones) the import once took, titled by an
+  /// injected `<recommended_plugins>` block and never resumable. The import
+  /// skips them now; this clears the ones already recorded. Only a rollout
+  /// this machine can read, and whose opening `session_meta` says so, is
+  /// removed — nothing is taken on a guess. Answers how many went.
+  Future<int> pruneNonConversations({void Function(String line)? log}) async {
+    var removed = 0;
+    for (final row in _data.importedSessions) {
+      if (row.cli != AgentIds.codex) continue;
+      final source = await _codexSourceOf(row.filePath);
+      if (source == _unread || isInteractiveCodexSource(source)) continue;
+      _data.applyAsServer(ImportedDelete(row.id));
+      removed++;
+    }
+    if (removed > 0) {
+      log?.call(
+        'import: removed $removed Codex run(s) that were not conversations',
+      );
+    }
+    return removed;
+  }
+
+  /// A rollout's `session_meta.source`, or [_unread] when the file is not
+  /// here to read or opens with no `session_meta`.
+  static Future<Object?> _codexSourceOf(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return _unread;
+      final first = await file
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .first;
+      final json = jsonDecode(first);
+      if (json is! Map || json['type'] != 'session_meta') return _unread;
+      final payload = json['payload'];
+      return payload is Map ? payload['source'] : _unread;
+    } on Object {
+      return _unread;
+    }
+  }
+
+  static const Object _unread = Object();
 
   /// Records each of [sessions] under the checkout [checkoutOf] names (none:
   /// skipped); answers how many were new.
