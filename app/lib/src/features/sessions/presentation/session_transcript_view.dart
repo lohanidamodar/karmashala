@@ -540,6 +540,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) => ChatTranscriptView(
+        // Per session: this view outlives a switch within its group, and an
+        // unkeyed list kept the last session's scroll offset.
+        key: ValueKey(widget.sessionId),
         messages: messages,
         earlier: earlier,
         onLoadEarlier: earlier > 0

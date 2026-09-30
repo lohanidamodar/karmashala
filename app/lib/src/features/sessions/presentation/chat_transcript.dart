@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
@@ -162,8 +163,13 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   static const _page = 40;
   final _scroll = ScrollController();
   int _shown = _page;
-  int _lastLen = 0;
+
+  /// Whether the reader is at the newest message. While it holds, the list is
+  /// kept at its end by [_onMetrics] whatever moves that end.
   bool _stickToBottom = true;
+
+  /// Whether the list was on screen at the last build — see [_followVisibility].
+  bool _visible = true;
 
   /// Touch only: the turn whose actions a tap has shown.
   final _tappedTurn = ValueNotifier<Object?>(null);
@@ -177,19 +183,6 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    _lastLen = widget.messages.length;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
-  }
-
-  @override
-  void didUpdateWidget(ChatTranscriptView old) {
-    super.didUpdateWidget(old);
-    if (widget.messages.length != _lastLen) {
-      _lastLen = widget.messages.length;
-      if (_stickToBottom) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
-      }
-    }
   }
 
   @override
@@ -223,17 +216,42 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     }
   }
 
-  /// A lazy list only estimates its end until the rows there are built, so
-  /// the jump is made again once they are.
   void _toLatest() {
     _stickToBottom = true;
     _jumpToBottom();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+  }
+
+  /// Keeps a pinned list at its end after every layout that moves the end
+  /// without scrolling: a lazy list's estimate settling as the last rows are
+  /// built, a page arriving, a row growing (an image, markdown, a turn's
+  /// meta), or the viewport shrinking under the recap or the keyboard. A
+  /// single jump on open landed on the first estimate, short of the newest.
+  bool _onMetrics(ScrollMetricsNotification notification) {
+    if (notification.depth != 0 || !_stickToBottom) return false;
+    final pos = _scroll.hasClients ? _scroll.position : null;
+    // Never under a finger or a fling: the reader is leaving the bottom.
+    if (pos == null || pos.userScrollDirection != ScrollDirection.idle) {
+      return false;
+    }
+    if (pos.pixels < pos.maxScrollExtent) _jumpToBottom();
+    return false;
+  }
+
+  /// Coming back on screen — Chat after Terminal, or the phone's group in
+  /// front again — lands on the newest message.
+  void _followVisibility(bool visible) {
+    if (visible && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _toLatest();
+      });
+    }
+    _visible = visible;
   }
 
   @override
   Widget build(BuildContext context) {
     _touch = UiDensity.of(context).isTouch;
+    _followVisibility(Visibility.of(context));
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
@@ -293,53 +311,58 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                               // One selection over every built row: a drag runs
                               // from one message into the next.
                               child: TranscriptSelectionArea(
-                                child: ListView.builder(
-                                  controller: _scroll,
-                                  // The pane's whole width (owner, 2026-09-28),
-                                  // with a gutter so no word touches its edge.
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: gutter,
-                                    vertical: Insets.xl,
-                                  ),
-                                  itemCount: rows.length + lead,
-                                  findChildIndexCallback: (key) =>
-                                      indexOfKey[key],
-                                  itemBuilder: (context, index) {
-                                    if (lead == 1 && index == 0) {
-                                      // Held here first; then, from the
-                                      // server, the ones before those.
-                                      final more = start > 0
-                                          ? start
-                                          : widget.earlier;
-                                      return SelectionContainer.disabled(
-                                        child: Center(
-                                          child: TextButton.icon(
-                                            onPressed: start > 0
-                                                ? () => setState(
-                                                    () => _shown = math.min(
-                                                      _shown + _page,
-                                                      total,
-                                                    ),
-                                                  )
-                                                : widget.onLoadEarlier,
-                                            icon: const Icon(AppIcons.caretUp),
-                                            label: Text(
-                                              'Load $more earlier message'
-                                              '${more == 1 ? '' : 's'}',
+                                child: NotificationListener<ScrollMetricsNotification>(
+                                  onNotification: _onMetrics,
+                                  child: ListView.builder(
+                                    controller: _scroll,
+                                    // The pane's whole width (owner, 2026-09-28),
+                                    // with a gutter so no word touches its edge.
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: gutter,
+                                      vertical: Insets.xl,
+                                    ),
+                                    itemCount: rows.length + lead,
+                                    findChildIndexCallback: (key) =>
+                                        indexOfKey[key],
+                                    itemBuilder: (context, index) {
+                                      if (lead == 1 && index == 0) {
+                                        // Held here first; then, from the
+                                        // server, the ones before those.
+                                        final more = start > 0
+                                            ? start
+                                            : widget.earlier;
+                                        return SelectionContainer.disabled(
+                                          child: Center(
+                                            child: TextButton.icon(
+                                              onPressed: start > 0
+                                                  ? () => setState(
+                                                      () => _shown = math.min(
+                                                        _shown + _page,
+                                                        total,
+                                                      ),
+                                                    )
+                                                  : widget.onLoadEarlier,
+                                              icon: const Icon(
+                                                AppIcons.caretUp,
+                                              ),
+                                              label: Text(
+                                                'Load $more earlier message'
+                                                '${more == 1 ? '' : 's'}',
+                                              ),
                                             ),
                                           ),
-                                        ),
+                                        );
+                                      }
+                                      final row = rows[index - lead];
+                                      if (!row.isBatch) return rowAt(row.from);
+                                      return _ToolBatchTile(
+                                        key: keyOf(row),
+                                        messages: visible,
+                                        row: row,
+                                        rowAt: rowAt,
                                       );
-                                    }
-                                    final row = rows[index - lead];
-                                    if (!row.isBatch) return rowAt(row.from);
-                                    return _ToolBatchTile(
-                                      key: keyOf(row),
-                                      messages: visible,
-                                      row: row,
-                                      rowAt: rowAt,
-                                    );
-                                  },
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
