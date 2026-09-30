@@ -54,6 +54,16 @@ class PickerFace extends StatelessWidget {
       );
     }
 
+    // Always the child of a menu button's InkWell, so this is its hit area.
+    return TouchTarget(child: _face(scheme, foreground, name, style));
+  }
+
+  Widget _face(
+    ColorScheme scheme,
+    Color foreground,
+    Widget name,
+    TextStyle? style,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 3),
       decoration: BoxDecoration(

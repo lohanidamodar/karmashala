@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_remote/client.dart' show CompanionPairing;
-import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../core/capabilities/capabilities.dart';
@@ -12,6 +11,7 @@ import '../core/lifecycle/server_switcher.dart';
 import '../core/util/failure_words.dart';
 import '../features/remote/presentation/pair_machine_page.dart';
 import '../features/remote/presentation/phone_grant_page.dart';
+import 'widgets/bare_app.dart';
 
 /// The window's root (plan step 14): the open server session's app under its
 /// own container, keyed by the session so a switch builds a fresh tree and
@@ -46,6 +46,7 @@ class ServerSessionRoot extends StatelessWidget {
       // route pushed on NoServer's cannot stay on top of the switch after it.
       SwitchingServer(:final name) => _BetweenServers(
         key: const ValueKey('switching'),
+        density: client.density,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -57,10 +58,12 @@ class ServerSessionRoot extends StatelessWidget {
       ),
       ServerOpenFailed() => _BetweenServers(
         key: const ValueKey('failed'),
+        density: client.density,
         child: _OpenFailed(failure: root, switcher: switcher),
       ),
       NoServer() => _BetweenServers(
         key: const ValueKey('none'),
+        density: client.density,
         child: PairMachinePage(
           title: 'Pair this phone with a machine',
           leading: _SavedMachines(switcher: switcher),
@@ -79,16 +82,18 @@ class ServerSessionRoot extends StatelessWidget {
 /// A bare app for the screens between sessions: no container is open, so
 /// nothing here may read a provider.
 class _BetweenServers extends StatelessWidget {
-  const _BetweenServers({super.key, required this.child});
+  const _BetweenServers({
+    super.key,
+    required this.density,
+    required this.child,
+  });
 
+  final UiDensity density;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Karmashala',
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.light(),
-    darkTheme: AppTheme.dark(),
+  Widget build(BuildContext context) => BareApp(
+    density: density,
     home: Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -223,7 +228,9 @@ class _OpenFailed extends StatelessWidget {
               ),
             TextButton(
               onPressed: () => Clipboard.setData(
-                ClipboardData(text: 'Could not open $name.\n\n${failure.error}'),
+                ClipboardData(
+                  text: 'Could not open $name.\n\n${failure.error}',
+                ),
               ),
               child: const Text('Copy details'),
             ),

@@ -30,36 +30,38 @@ class ScheduledResumeChip extends ConsumerWidget {
           builder: (context) => InkWell(
             onTap: () => _menu(context, ref),
             borderRadius: BorderRadius.circular(Radii.sm),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.sm,
-                vertical: 3,
-              ),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(Radii.sm),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    AppIcons.clock,
-                    size: Chrome.iconSmall,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Flexible(
-                    child: Text(
-                      badge.label,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+            child: TouchTarget(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.sm,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      AppIcons.clock,
+                      size: Chrome.iconSmall,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Flexible(
+                      child: Text(
+                        badge.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/bare_app.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
@@ -27,19 +27,16 @@ class PhoneGrantGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final access = ref.watch(serverAccessProvider);
-    if (access is! RemoteServerAccess ||
-        ref.watch(clientCapabilitiesProvider).hostsServer) {
+    final client = ref.watch(clientCapabilitiesProvider);
+    if (access is! RemoteServerAccess || client.hostsServer) {
       return child;
     }
     return ValueListenableBuilder<bool>(
       valueListenable: access.needsGrant,
       builder: (context, needsGrant, _) {
         if (!needsGrant) return child;
-        return MaterialApp(
-          title: 'Karmashala',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
+        return BareApp(
+          density: client.density,
           home: Scaffold(
             body: SafeArea(
               child: Center(

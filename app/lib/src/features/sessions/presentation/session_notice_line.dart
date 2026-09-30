@@ -50,6 +50,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
     if (notice == null) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
+    final density = UiDensity.of(context);
     final semantic = SemanticColors.of(context);
     final warning = notice.tone == SessionNoticeTone.warning;
     final accent = warning
@@ -94,7 +95,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                                 action.onPressed();
                               },
                               style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
+                                visualDensity: density.controlDensity,
                                 textStyle: theme.textTheme.labelMedium,
                               ),
                               child: Text(action.label),
@@ -145,11 +146,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                     IconButton(
                       tooltip: 'Dismiss',
                       icon: const Icon(AppIcons.x, size: Chrome.iconAction),
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(
-                        minWidth: 24,
-                        minHeight: 24,
-                      ),
+                      visualDensity: density.controlDensity,
+                      constraints: density.iconConstraints(24),
                       padding: EdgeInsets.zero,
                       onPressed: () => ref
                           .read(sessionNoticesProvider.notifier)
