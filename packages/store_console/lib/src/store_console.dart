@@ -100,9 +100,9 @@ class StoreConsole {
 
   Future<List<StoreAppsReading>> listApps() => Future.wait([
     for (final client in clients)
-      _read(client.listApps).then(
-        (apps) => StoreAppsReading(client.store, apps),
-      ),
+      _read(
+        client.listApps,
+      ).then((apps) => StoreAppsReading(client.store, apps)),
   ]);
 
   Future<StoreAppSnapshot> snapshot(StoreApp app) async {
