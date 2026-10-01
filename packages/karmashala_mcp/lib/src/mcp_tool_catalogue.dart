@@ -433,6 +433,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'verification_note': McpToolAnnotations(movesAttention: false),
   // Writes the report and the evidence; it opens no pane to show them.
   'verification_finish': McpToolAnnotations(movesAttention: false),
+
+  // App stores. None changes a listing, release or review; the two that can
+  // read the stores themselves reach Apple and Google.
+  'store_apps': McpToolAnnotations.readOutside,
+  'store_app': McpToolAnnotations.read,
+  'store_reviews': McpToolAnnotations.read,
+  'store_refresh': McpToolAnnotations.readOutside,
 };
 
 /// The families the tools are shown in, in the order Settings draws them. A
@@ -489,6 +496,10 @@ enum McpToolCategory {
   appProjects(
     'App projects',
     'What a checkout is, and the artifact its own toolchain builds.',
+  ),
+  stores(
+    'App stores',
+    'How each app is doing on the App Store and Google Play, read-only.',
   ),
   guides(
     'Guides',
@@ -957,6 +968,24 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'project_build': McpToolListing(
     McpToolCategory.appProjects,
     'What a checkout is, and the artifact its own toolchain builds.',
+  ),
+
+  // App stores.
+  'store_apps': McpToolListing(
+    McpToolCategory.stores,
+    'Every app on both stores: live version, releases in flight, rating, vitals.',
+  ),
+  'store_app': McpToolListing(
+    McpToolCategory.stores,
+    'One app in full: releases per track, rating, vitals, downloads per day.',
+  ),
+  'store_reviews': McpToolListing(
+    McpToolCategory.stores,
+    'An app\'s store reviews, newest first, by rating or unanswered only.',
+  ),
+  'store_refresh': McpToolListing(
+    McpToolCategory.stores,
+    'Read the App Store and Google Play again; takes tens of seconds.',
   ),
 
   // Guides.

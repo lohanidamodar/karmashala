@@ -36,6 +36,13 @@ const String kUsagePaneId = '${kDocumentPanePrefix}usage';
 /// Whether [paneId] is the Usage document.
 bool isUsagePane(String paneId) => paneId == kUsagePaneId;
 
+/// The Stores page as a tab: every app's standing on the App Store and Google
+/// Play. One, like Usage — it is a view of the account's apps.
+const String kStoresPaneId = '${kDocumentPanePrefix}stores';
+
+/// Whether [paneId] is the Stores document.
+bool isStoresPane(String paneId) => paneId == kStoresPaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';

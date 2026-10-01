@@ -16,6 +16,7 @@ import 'review_thread_tool_set.dart';
 import 'snippet_tool_set.dart';
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
+import 'store_tool_set.dart' show storeToolSchemas;
 import 'inbox_tool_set.dart';
 import 'build_tool_schemas.dart';
 import 'device_tool_set.dart' show deviceToolSchemas;
@@ -52,6 +53,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...sessionControlToolSchemas,
   ...launchToolSchemas,
   ...usageToolSchemas,
+  ...storeToolSchemas,
   ...inboxToolSchemas,
   ...browserToolSchemas,
   ...flutterAppToolSchemas,

@@ -54,6 +54,7 @@ import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
+import '../stores/server_store_desk.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
@@ -73,6 +74,7 @@ import '../git/server_git.dart';
 import '../hooks/hook_endpoint_file.dart';
 import '../hooks/hook_server.dart';
 import '../hooks/hook_spools.dart';
+import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../attention/daemon_attention.dart';
@@ -381,6 +383,15 @@ Future<int> runServe(
   data
     ..envVault = envVault
     ..greeters.add(envVault.greeting);
+  // The app stores, read with credentials only this server holds.
+  final storeDesk = ServerStoreDesk(
+    dataDirectory: dataDirectory,
+    tell: data.announce,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  data
+    ..storeWork = storeDesk
+    ..greeters.add(storeDesk.greeting);
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
   final hostEnvironment = environment ?? Platform.environment;
@@ -935,6 +946,7 @@ Future<int> runServe(
     ..add(LaunchToolSet(tools, launches: launches))
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
+    ..add(StoreToolSet(storeDesk))
     // The inbox is the server's (slice 5c), app or no app.
     ..add(InboxToolSet(attention.attention))
     // The browser, the Flutter loop and builds are the server's (slice 3d).
@@ -1121,6 +1133,7 @@ Future<int> runServe(
   await sessionRecordReadings.close();
   await terminals.dispose();
   await ssh.close();
+  storeDesk.close();
   await attention.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.

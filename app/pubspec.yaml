@@ -101,6 +101,10 @@ dependencies:
   # Karmashala ran itself; the session host writes a check it ran. Pure Dart.
   karmashala_verification:
     path: ../packages/karmashala_verification
+  # The app stores' values, as the server tells them (`StoresView`). The
+  # server holds the credentials and runs the two store clients.
+  store_console:
+    path: ../packages/store_console
   # Checkpoints: the snapshot, its table and the service that captures and
   # restores one; the session host takes an automation's base. Pure Dart.
   karmashala_checkpoints:

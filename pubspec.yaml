@@ -70,3 +70,6 @@ workspace:
   - packages/karmashala_ui
   - packages/karmashala_verification
   - packages/local_ipc
+  - packages/store_console
+  - packages/store_console_apple
+  - packages/store_console_play

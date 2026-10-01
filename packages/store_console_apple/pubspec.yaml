@@ -1,0 +1,27 @@
+name: store_console_apple
+description: >-
+  The App Store behind `store_console`: App Store Connect for apps, versions,
+  builds, reviews and sales reports, and the public lookup for the rating.
+  Pure Dart, and no Karmashala in it.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Signs the ES256 token App Store Connect asks for.
+  dart_jsonwebtoken: ^3.4.1
+  # The client every call goes through, so a test can hand in a fake.
+  http: ^1.6.0
+  # The values and the interface this implements.
+  store_console:
+    path: ../store_console
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

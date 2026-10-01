@@ -13,6 +13,7 @@ import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
 import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
+import '../../features/stores/presentation/stores_tab_view.dart';
 import 'phone_log_page.dart';
 import 'phone_routes.dart';
 import 'phone_shell.dart' show PhoneTabsScope;
@@ -25,6 +26,11 @@ class PhoneMoreList extends StatelessWidget {
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
         PhoneMoreEntry.usage => ('Usage', AppIcons.chartBar, _usage),
+        PhoneMoreEntry.stores => (
+          'Stores',
+          AppIcons.package,
+          (_) => const PaneTitleOverride(child: StoresTabView()),
+        ),
         // The page's app bar names it, so its own header drops the name.
         PhoneMoreEntry.notes => (
           'Notes',

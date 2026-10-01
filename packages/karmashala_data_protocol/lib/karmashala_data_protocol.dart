@@ -23,6 +23,7 @@ export 'src/refusal.dart';
 export 'src/session_values.dart';
 export 'src/session_work_values.dart';
 export 'src/ssh_values.dart';
+export 'src/store_values.dart';
 export 'src/terminal_values.dart';
 export 'src/transcript_values.dart';
 export 'src/usage_limit_values.dart';

@@ -86,6 +86,14 @@ dependencies:
   # `src/data/` answers from the store.
   karmashala_data_protocol:
     path: ../packages/karmashala_data_protocol
+  # The app stores, read on request with the credentials this server holds:
+  # the values and aggregator, and the two store clients. All pure Dart.
+  store_console:
+    path: ../packages/store_console
+  store_console_apple:
+    path: ../packages/store_console_apple
+  store_console_play:
+    path: ../packages/store_console_play
   # Environments, SSH hosts, trusted host keys, agent installations, saved
   # accounts and usage history: the rules `src/data/` applies and the tables
   # it writes.

@@ -2413,6 +2413,125 @@
       }
     },
     {
+      "name": "store_apps",
+      "description": "Every app on the App Store and Google Play, one entry per bundle id or package name with a line per store: the live version, releases in flight (rejected or halted first), rating, downloads over the last 14 reported days, crash and ANR rates in percent, and counts of the reviews last read. Apps needing attention come first. Data is as of the last refresh: every answer carries refreshedAt and ageMinutes. Pass refresh: true to read the stores first when that is over 10 minutes old, or call store_refresh. A number a store did not give is {\"missing\": kind, \"message\": why} — never a zero or a guess. Downloads and installs lag a day or more. Read-only: nothing here changes a listing, release or review. Credentials are imported in Karmashala Settings → Stores.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "refresh": {
+            "type": "boolean",
+            "description": "Read the stores first if the last read is over 10 minutes old. Calls out to Apple and Google; tens of seconds."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "store_app",
+      "description": "One app in full, as of the last refresh: every release per track (state, version, build, rollout, date), the rating, the vitals window with crash and ANR rates in percent, downloads per day, and review counts by star. A number a store did not give is {\"missing\": kind, \"message\": why}, never a zero. Downloads lag a day or more. store_refresh reads the stores again.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Bundle id, package name, App Store numeric id, or app name (case-insensitive). An ambiguous or unknown name is refused with the candidates."
+          },
+          "store": {
+            "type": "string",
+            "enum": [
+              "app_store",
+              "google_play"
+            ],
+            "description": "Only this store. Omit for both."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "store_reviews",
+      "description": "An app's reviews as of the last refresh, newest first: store, rating, title, body, author, locale, appVersion, createdAt, and the developer reply if any. Google Play's API returns only the last 7 days of reviews, so an older Play review is absent, not deleted. A store whose reviews could not be read is listed under unavailable with its reason. Read-only: this never replies to a review.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string",
+            "description": "Bundle id, package name, App Store numeric id, or app name (case-insensitive)."
+          },
+          "store": {
+            "type": "string",
+            "enum": [
+              "app_store",
+              "google_play"
+            ],
+            "description": "Only this store. Omit for both."
+          },
+          "maxRating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Only reviews with at most this many stars."
+          },
+          "unansweredOnly": {
+            "type": "boolean",
+            "description": "Only reviews with no developer reply."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "At most this many. Default 20."
+          }
+        },
+        "required": [
+          "app"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "store_refresh",
+      "description": "Read every connected store again — calls out to Apple and Google and takes tens of seconds — then answer as store_apps does. A refresh already under way is joined. Read-only toward the stores. If no store is connected, import credentials in Karmashala Settings → Stores first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "maxAgeMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Skip the read when the last one is younger than this. Default 0: always read."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "inbox_list",
       "description": "Everything waiting on somebody: agents asking for approval, turns that failed, turns that finished unread, and pull requests that went red, were sent back, or are ready to merge. Each item carries the source's own detail, so the prompt a blocked agent is waiting on is here too. This is where an agent orchestrating other agents finds out what to do next. Unseen items only unless includeSeen is set.",
       "inputSchema": {
@@ -4621,6 +4740,22 @@
     "get_usage": {
       "category": "sessions",
       "summary": "An agent's usage against its limit, where the agent reports one."
+    },
+    "store_apps": {
+      "category": "stores",
+      "summary": "Every app on both stores: live version, releases in flight, rating, vitals."
+    },
+    "store_app": {
+      "category": "stores",
+      "summary": "One app in full: releases per track, rating, vitals, downloads per day."
+    },
+    "store_reviews": {
+      "category": "stores",
+      "summary": "An app's store reviews, newest first, by rating or unanswered only."
+    },
+    "store_refresh": {
+      "category": "stores",
+      "summary": "Read the App Store and Google Play again; takes tens of seconds."
     },
     "inbox_list": {
       "category": "records",

@@ -106,6 +106,19 @@ void openUsageTab(WidgetRef ref, {String? accountId}) {
   activateTerminalTab(ref, tabId);
 }
 
+/// Opens the Stores page as a workbench tab, or brings the open one forward.
+void openStoresTab(WidgetRef ref) {
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.stores);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openStoresTab();
+  activateTerminalTab(ref, tabId);
+}
+
 /// Opens note [noteId] in a tab of its own, or brings its open tab forward.
 void openNoteTab(WidgetRef ref, String noteId) {
   final tabId = ref
