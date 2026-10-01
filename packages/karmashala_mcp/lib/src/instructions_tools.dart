@@ -415,6 +415,9 @@ the developer grants "Run JavaScript in the page" for this project under
 Settings → Tools and reach → Browser. That grant is per project, recorded with
 when it was made, and revocable in the same place.
 
+`browser_audit` runs Karmashala's own audit script in the same origin, so it
+needs the same grant; it changes nothing on the page unless `reload` is asked.
+
 A refusal for consent is not a transient failure. Do not retry it. Ask, say
 what you want to run and why, and in the meantime use `browser_find`,
 `browser_capture` and `browser_screenshot`, which need no grant. The other

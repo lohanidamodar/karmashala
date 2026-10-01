@@ -1,4 +1,5 @@
 import '../domain/browser_consent.dart' show kBrowserConsentLocation;
+import 'page_audit.dart' show browserAuditToolSchema;
 
 /// MCP tool definitions for the browser, served to the bridge by the launcher
 /// control server. The descriptions are the only manual an agent gets, and the
@@ -278,4 +279,5 @@ const List<Map<String, dynamic>> browserToolSchemas = [
       },
     },
   },
+  browserAuditToolSchema,
 ];

@@ -382,6 +382,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     openWorld: true,
     movesAttention: false,
   ),
+  // Reads the DOM with Karmashala's own script; `reload` reloads the page,
+  // which is why it is not read-only.
+  'browser_audit': McpToolAnnotations(openWorld: true, movesAttention: false),
 
   // Open-world for the same reason the device tools are: the app is a
   // process on a desktop, a phone or a simulator.
@@ -949,6 +952,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'browser_evaluate': McpToolListing(
     McpToolCategory.browser,
     'Run JavaScript in the page. Needs a one-time grant, per project.',
+  ),
+  'browser_audit': McpToolListing(
+    McpToolCategory.browser,
+    'Accessibility and quality checks of the page; evaluate\'s grant.',
   ),
 
   // Flutter: starting a project, and the app once it is running.
