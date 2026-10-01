@@ -50,9 +50,17 @@ class PlayStoreClient implements StoreClient {
     } on Object catch (error) {
       // The typed packages stand when the account may not search; a refused
       // key or a dead connection must still be said.
-      final failure = playFailure(error);
-      if (names.isEmpty || failure.kind != StoreFailure.permission) {
-        throw failure;
+      final failure = playFailure(error, area: PlayArea.reporting);
+      if (failure.kind != StoreFailure.permission) throw failure;
+      if (names.isEmpty) {
+        // Releases and reviews go through another API, which may well answer
+        // for a package named outright.
+        throw StoreException(
+          failure.kind,
+          '${failure.message} Or type the package names in Settings → '
+          'Stores, so releases and reviews are read without finding the apps '
+          'first.',
+        );
       }
     }
     final apps = [
@@ -103,7 +111,7 @@ class PlayStoreClient implements StoreClient {
       await _auth.client(),
     ).reviews.list(app.id, maxResults: 100);
     return reviewsFrom(response.reviews ?? const []);
-  });
+  }, area: PlayArea.reviews);
 
   @override
   Future<RatingSummary> rating(StoreApp app) => playGuarded(() async {
@@ -134,14 +142,16 @@ class PlayStoreClient implements StoreClient {
     final failure = crashed.failure ?? notResponding.failure;
     if (failure != null) throw failure;
     final window = crashed.window ?? notResponding.window;
-    if (window == null) throw playStatusFailure(null);
+    if (window == null) {
+      throw playStatusFailure(null, area: PlayArea.reporting);
+    }
     return VitalsSummary(
       from: window.from,
       to: window.to,
       crashRate: crashed.rate,
       anrRate: notResponding.rate,
     );
-  });
+  }, area: PlayArea.reporting);
 
   @override
   Future<DownloadSeries> downloads(StoreApp app) => playGuarded(() async {
@@ -204,7 +214,11 @@ class PlayStoreClient implements StoreClient {
       );
       return (window: (from: start, to: end), rate: rate, failure: null);
     } on Object catch (error) {
-      return (window: null, rate: null, failure: playFailure(error));
+      return (
+        window: null,
+        rate: null,
+        failure: playFailure(error, area: PlayArea.reporting),
+      );
     }
   }
 }

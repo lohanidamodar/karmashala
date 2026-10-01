@@ -12,7 +12,7 @@ import 'package:store_console_play/store_console_play.dart';
 import 'package:store_console_play/src/play_errors.dart';
 import 'package:test/test.dart';
 
-StoreFailure kindOf(Object error, {PlayArea area = PlayArea.console}) =>
+StoreFailure kindOf(Object error, {PlayArea area = PlayArea.publisher}) =>
     playFailure(error, area: area).kind;
 
 void main() {
@@ -50,6 +50,75 @@ void main() {
       expect(console.message, contains('Users and permissions'));
       expect(console.message, contains('access to the app'));
       expect(bucket.message, contains('reports'));
+    });
+
+    DetailedApiRequestError refused(Map<String, Object?> error) =>
+        DetailedApiRequestError(
+          403,
+          'PRIVATE KEY abc',
+          jsonResponse: {'error': error},
+        );
+
+    test('a disabled API is named, with its project', () {
+      final failure = playFailure(
+        refused({
+          'code': 403,
+          'message': 'PRIVATE KEY abc',
+          'status': 'PERMISSION_DENIED',
+          'details': [
+            {
+              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+              'reason': 'SERVICE_DISABLED',
+              'domain': 'googleapis.com',
+              'metadata': {
+                'service': 'playdeveloperreporting.googleapis.com',
+                'consumer': 'projects/123456',
+              },
+            },
+          ],
+        }),
+        area: PlayArea.reporting,
+      );
+      expect(failure.kind, StoreFailure.permission);
+      expect(
+        failure.message,
+        allOf(
+          contains('Google Play Developer Reporting API is not enabled'),
+          contains('project 123456'),
+          contains('APIs & Services'),
+          contains('SERVICE_DISABLED'),
+          isNot(contains('PRIVATE KEY')),
+        ),
+      );
+    });
+
+    test('a refused permission names the grant for the API', () {
+      final denied = {
+        'status': 'PERMISSION_DENIED',
+        'errors': [
+          {'reason': 'permissionDenied', 'message': 'PRIVATE KEY abc'},
+        ],
+      };
+      final reporting = playFailure(refused(denied), area: PlayArea.reporting);
+      final reviews = playFailure(refused(denied), area: PlayArea.reviews);
+      expect(reporting.message, contains('Reporting API'));
+      expect(reporting.message, contains('download bulk reports'));
+      expect(reviews.message, contains('Reply to reviews'));
+      expect(reviews.message, contains('Android Developer API'));
+    });
+
+    test('a reason code that is not a code is not repeated', () {
+      final failure = playFailure(
+        refused({
+          'status': 'PRIVATE KEY abc',
+          'errors': [
+            {'reason': 'token=abc def'},
+          ],
+        }),
+      );
+      expect(failure.message, isNot(contains('PRIVATE')));
+      expect(failure.message, isNot(contains('token')));
+      expect(failure.message, contains('Users and permissions'));
     });
 
     test('token failures are auth, unless Google itself fell over', () {
