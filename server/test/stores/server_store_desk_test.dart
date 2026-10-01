@@ -125,6 +125,62 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
+  group('all-time installs', () {
+    late FakePlayClient play;
+    setUp(() => playFake = play = FakePlayClient([playApp('one')]));
+
+    Reading<InstallTotal>? installs() => desk.view.apps
+        .singleWhere((a) => a.app.store == StoreKind.googlePlay)
+        .allTimeInstalls;
+
+    test('the reports\' exact count stands over the listing band', () async {
+      play
+        ..installs = 1234
+        ..band = '1K+';
+      await connectPlay();
+      final total = installs()!.valueOrNull!;
+      expect(total.count, 1234);
+      expect(total.atLeast, isFalse);
+    });
+
+    test('without the reports the listing band is shown as a floor', () async {
+      play
+        ..installsFailure = const StoreException(
+          StoreFailure.notConfigured,
+          'Add your reports bucket in Settings → Stores.',
+        )
+        ..band = '10K+';
+      await connectPlay();
+      final total = installs()!.valueOrNull!;
+      expect(total.count, 10000);
+      expect(total.atLeast, isTrue);
+      expect(total.band, '10K+');
+      expect(total.note, contains('reports bucket'));
+      expect(
+        desk.view.icons['googlePlay:com.example.one']!.installBand,
+        '10K+',
+      );
+
+      // The page is read daily, not every refresh; its band still stands.
+      await desk.refresh();
+      expect(play.listingCalls, 1);
+      expect(installs()!.valueOrNull!.band, '10K+');
+    });
+
+    test('an app with no public page says so', () async {
+      play
+        ..installsFailure = const StoreException(
+          StoreFailure.notConfigured,
+          'Add your reports bucket in Settings → Stores.',
+        )
+        ..public = false;
+      await connectPlay();
+      final missing = installs()! as ReadingMissing<InstallTotal>;
+      expect(missing.message, startsWith('Not on the public store'));
+      expect(missing.message, contains('reports bucket'));
+    });
+  });
+
   test('a subscriber is greeted with the view, empty at first', () async {
     final greeted = told.whereType<StoresChanged>().single.view;
     expect(greeted.connected, isEmpty);
@@ -403,4 +459,34 @@ class FakeStoreClient implements StoreClient {
 
   @override
   void close() => closed = true;
+}
+
+/// A Play that counts all-time installs and reads its public page.
+class FakePlayClient extends FakeStoreClient
+    implements StoreInstallTotalSource, StoreListingSource {
+  FakePlayClient(List<StoreApp> apps) : super(StoreKind.googlePlay, apps);
+
+  StoreException? installsFailure;
+  int installs = 0;
+  String? band;
+  bool public = true;
+  int listingCalls = 0;
+
+  @override
+  Future<InstallTotal> allTimeInstalls(StoreApp app) async {
+    final failure = installsFailure;
+    if (failure != null) throw failure;
+    return InstallTotal(
+      count: installs,
+      measure: 'user installs',
+      source: InstallTotalSource.reports,
+      since: '2024-03',
+    );
+  }
+
+  @override
+  Future<StoreListing?> listing(StoreApp app) async {
+    listingCalls++;
+    return public ? StoreListing(installBand: band) : null;
+  }
 }

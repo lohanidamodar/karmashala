@@ -169,6 +169,7 @@ class StoreToolSet extends ServerToolSet {
       ),
       'rating': _field(snapshot?.rating, _rating),
       'downloads': _field(snapshot?.downloads, _recentDownloads),
+      ..._allTimeInstalls(snapshot),
       'crashRatePercent': _field(
         snapshot?.vitals,
         (vitals) => _rate(vitals.crashRate, 'crash'),
@@ -213,6 +214,7 @@ class StoreToolSet extends ServerToolSet {
                 ],
               },
       ),
+      ..._allTimeInstalls(snapshot),
       'reviews': _field(
         snapshot?.reviews,
         (reviews) => <String, Object?>{
@@ -508,6 +510,25 @@ Object _recentDownloads(DownloadSeries series) {
   };
 }
 
+/// `allTimeInstalls`; absent for a reading that has none — a store that
+/// counts none, or one read by an older server — and not-read for an app
+/// listed but not read.
+Map<String, Object?> _allTimeInstalls(StoreAppSnapshot? snapshot) {
+  if (snapshot != null && snapshot.allTimeInstalls == null) return const {};
+  return {'allTimeInstalls': _field(snapshot?.allTimeInstalls, _installTotal)};
+}
+
+Map<String, Object?> _installTotal(InstallTotal total) => {
+  'count': total.count,
+  'atLeast': total.atLeast,
+  'measure': total.measure,
+  'source': total.source.name,
+  'band': ?total.band,
+  'since': ?total.since,
+  if (total.through case final through?) 'through': _day(through),
+  'note': ?total.note,
+};
+
 Map<String, Object?> _reviewCounts(List<StoreReview> reviews) => {
   'shown': reviews.length,
   'unanswered': reviews.where((r) => !r.answered).length,
@@ -597,8 +618,16 @@ const List<Map<String, Object?>> storeToolSchemas = [
         'store line then carries its own bundleId). Per store: the live '
         'version, releases in '
         'flight (rejected or halted first), rating, downloads over the last '
-        '14 reported days, crash and ANR rates in percent, and counts of the '
-        'reviews last read. Apps needing attention come first. Data is as of '
+        '14 reported days, allTimeInstalls, crash and ANR rates in percent, '
+        'and counts of the reviews last read. allTimeInstalls is {count, '
+        'atLeast, measure, source, since?, through?, band?, note?}: with '
+        'source "reports" count is exact — Google Play\'s user installs from '
+        'the reports bucket, or App Store first-time downloads from Sales and '
+        'Trends — counted from since (a month 2024-03 or a year 2021; absent '
+        'when it is Play\'s own lifetime figure) to through; with source '
+        '"listing" atLeast is true and count is only the floor of the public '
+        'Play page\'s band ("10K+"), and note says why there is no exact '
+        'count. Apps needing attention come first. Data is as of '
         'the last refresh: every answer carries refreshedAt and ageMinutes. '
         'Pass refresh: true to read the stores first when that is over 10 '
         'minutes old, or call store_refresh. A number a store did not give is '
@@ -623,7 +652,8 @@ const List<Map<String, Object?>> storeToolSchemas = [
     'description':
         'One app in full, as of the last refresh: every release per track '
         '(state, version, build, rollout, date), the rating, the vitals '
-        'window with crash and ANR rates in percent, downloads per day, and '
+        'window with crash and ANR rates in percent, downloads per day, '
+        'allTimeInstalls (as store_apps describes it), and '
         'review counts by star; on Google Play also errorIssues, the most '
         'reported crash and ANR clusters of the last 28 days, the first few '
         'with a sample stack trace. A number a store did not give is '

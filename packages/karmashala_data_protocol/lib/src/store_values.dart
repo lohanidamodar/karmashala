@@ -71,7 +71,13 @@ final class PlayAccountSummary {
 /// cannot read that disk brings [path] over with `files.read`, spelled for
 /// the server's host environment.
 final class StoreAppIcon {
-  const StoreAppIcon({required this.checkedAt, this.url, this.path});
+  const StoreAppIcon({
+    required this.checkedAt,
+    this.url,
+    this.path,
+    this.installBand,
+    this.listingRead = false,
+  });
 
   /// The public image it was fetched from; null when the app has no public
   /// store page (unpublished, a draft) — then there is no icon.
@@ -83,16 +89,26 @@ final class StoreAppIcon {
   /// When the store was last asked.
   final DateTime checkedAt;
 
+  /// The install band the same page showed, `10K+`: Google Play's only.
+  final String? installBand;
+
+  /// Whether the page was read for [installBand] as well; false for one
+  /// kept by an older server, which looked for the icon alone.
+  final bool listingRead;
+
   Map<String, Object?> toJson() => {
     'url': url,
     'path': path,
     'checkedAt': checkedAt.toUtc().toIso8601String(),
+    if (listingRead) 'installBand': installBand,
   };
 
   factory StoreAppIcon.fromJson(Map<String, Object?> json) => StoreAppIcon(
     url: json['url'] as String?,
     path: json['path'] as String?,
     checkedAt: DateTime.parse(json['checkedAt']! as String),
+    installBand: json['installBand'] as String?,
+    listingRead: json.containsKey('installBand'),
   );
 }
 

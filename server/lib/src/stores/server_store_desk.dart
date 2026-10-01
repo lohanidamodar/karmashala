@@ -40,8 +40,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _tell = tell,
        _log = log ?? _silent,
        _now = clock ?? _utcNow,
-       _appleClient = appleClient ?? AppleStoreClient.new,
-       _playClient = playClient ?? PlayStoreClient.new {
+       _appleClient = appleClient,
+       _playClient = playClient {
     _loadSnapshot();
     _loadLinks();
   }
@@ -80,8 +80,14 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   final void Function(List<DataChange> changes) _tell;
   final void Function(String message) _log;
   final DateTime Function() _now;
-  final StoreClient Function(AppleApiKey key) _appleClient;
-  final StoreClient Function(PlayAccount account) _playClient;
+  final StoreClient Function(AppleApiKey key)? _appleClient;
+  final StoreClient Function(PlayAccount account)? _playClient;
+
+  /// The finished report periods the all-time counts are made of, read once
+  /// and kept with the snapshot: a console lasts one refresh, these outlive
+  /// it.
+  var _salesLedger = AppleSalesLedger();
+  var _installMonths = PlayInstallMonths();
 
   final _stores = <StoreKind, Reading<List<StoreApp>>>{};
   final _apps = <String, StoreAppSnapshot>{};
@@ -253,11 +259,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       Future<void> worker() async {
         while (queue.moveNext()) {
           final app = queue.current;
+          StoreAppSnapshot? snapshot;
           try {
-            final snapshot = await console.snapshot(app);
-            if (current(app.store)) {
-              _apps[app.key] = snapshot.carriedFrom(_apps[app.key]);
-            }
+            snapshot = await console.snapshot(app);
           } on Object {
             // A console closed under it: the app keeps what it had.
           }
@@ -265,6 +269,11 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
           // so it is closed with them; bounded by the workers and a budget.
           if (current(app.store) && _iconDue(app)) {
             await _refreshIcon(console, app, current);
+          }
+          if (snapshot != null && current(app.store)) {
+            _apps[app.key] = _withListingInstalls(
+              snapshot.carriedFrom(_apps[app.key]),
+            );
           }
           done++;
           _tell([StoresProgress(done: done, total: apps.length)]);
@@ -316,8 +325,40 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final held = _icons[app.key];
     if (held == null) return true;
     if (now.difference(held.checkedAt) >= iconMaxAge) return true;
+    // Kept by a server that read the page for the icon alone.
+    if (app.store == StoreKind.googlePlay && !held.listingRead) return true;
     final path = held.path;
     return path != null && !File(path).existsSync();
+  }
+
+  /// [snapshot] with its all-time installs from the public listing's band
+  /// when the store's own reports gave no count: a lower bound, said to be
+  /// one, never a guess. The reports' reason stays as the band's note.
+  StoreAppSnapshot _withListingInstalls(StoreAppSnapshot snapshot) {
+    final reading = snapshot.allTimeInstalls;
+    if (reading is! ReadingMissing<InstallTotal>) return snapshot;
+    final listing = _icons[snapshot.app.key];
+    if (listing == null || !listing.listingRead) return snapshot;
+    final band = listing.installBand;
+    final total = band == null
+        ? null
+        : InstallTotal.fromBand(band, note: reading.message);
+    if (total != null) {
+      return snapshot.withAllTimeInstalls(
+        ReadingValue(total, listing.checkedAt),
+      );
+    }
+    if (listing.url == null && reading.expected) {
+      return snapshot.withAllTimeInstalls(
+        ReadingMissing(
+          reading.kind,
+          'Not on the public store, so it shows no install count. '
+          '${reading.message}',
+          reading.checkedAt,
+        ),
+      );
+    }
+    return snapshot;
   }
 
   /// Looks [app]'s icon up and keeps it. Never throws, and never takes more
@@ -327,24 +368,31 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     StoreApp app,
     bool Function(StoreKind store) current,
   ) async {
-    final Reading<StoreIconImage?> reading;
+    final Reading<StoreListing?> reading;
     try {
-      reading = await console.icon(app).timeout(iconBudget);
+      reading = await console.listing(app).timeout(iconBudget);
     } on Object {
       _iconFailedAt[app.key] = _now();
       return;
     }
     if (!current(app.store)) return;
     final checkedAt = _now();
+    final listingRead = app.store == StoreKind.googlePlay;
+    final band = reading.valueOrNull?.installBand;
     switch (reading) {
       case ReadingMissing():
         _iconFailedAt[app.key] = checkedAt;
-      case ReadingValue(value: null):
+      case ReadingValue(value: null) ||
+          ReadingValue(value: StoreListing(icon: null)):
         _iconFailedAt.remove(app.key);
         final old = _icons[app.key]?.path;
-        _icons[app.key] = StoreAppIcon(checkedAt: checkedAt);
+        _icons[app.key] = StoreAppIcon(
+          checkedAt: checkedAt,
+          installBand: band,
+          listingRead: listingRead,
+        );
         if (old != null) await _deleteQuietly(File(old));
-      case ReadingValue(value: final StoreIconImage image):
+      case ReadingValue(value: StoreListing(icon: final StoreIconImage image)):
         final file = File(
           p.join(
             _iconDirectory.path,
@@ -369,6 +417,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
           url: image.source.toString(),
           path: file.path,
           checkedAt: checkedAt,
+          installBand: band,
+          listingRead: listingRead,
         );
         // Another extension than before: the old file is no one's now.
         if (old != null && !p.equals(old, file.path)) {
@@ -414,8 +464,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final apple = _vault.apple;
     final play = _vault.play;
     return _console = StoreConsole([
-      if (apple != null) _appleClient(apple.key),
-      if (play != null) _playClient(play.account),
+      if (apple != null)
+        _appleClient?.call(apple.key) ??
+            AppleStoreClient(apple.key, salesLedger: _salesLedger),
+      if (play != null)
+        _playClient?.call(play.account) ??
+            PlayStoreClient(play.account, installMonths: _installMonths),
     ], now: _now);
   }
 
@@ -489,6 +543,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _dropConsole();
     if (newKeyFile) {
       _generation[store] = _gen(store) + 1;
+      _forgetReports(store);
       _stores.remove(store);
       _apps.removeWhere((_, kept) => kept.app.store == store);
       await _forgetIcons((kept) => kept == store);
@@ -500,6 +555,18 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   }
 
   final _generation = <StoreKind, int>{};
+
+  /// Another key may be another account: what its reports said goes. A new
+  /// object, not a cleared one, so a refresh still running on the old key
+  /// writes into the one dropped.
+  void _forgetReports(StoreKind store) {
+    switch (store) {
+      case StoreKind.appStore:
+        _salesLedger = AppleSalesLedger();
+      case StoreKind.googlePlay:
+        _installMonths = PlayInstallMonths();
+    }
+  }
 
   int _gen(StoreKind store) => _generation[store] ?? 0;
 
@@ -514,6 +581,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   Future<StoresView> _remove(StoreKind store) async {
     await _vault.remove(store);
     _generation[store] = _gen(store) + 1;
+    _forgetReports(store);
     _stores.remove(store);
     _apps.removeWhere((_, kept) => kept.app.store == store);
     await _forgetIcons((kept) => kept == store);
@@ -548,6 +616,22 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       }
       _icons.addAll(kept.icons);
       _refreshedAt = kept.refreshedAt;
+      // Caches: one unreadable is read again from the stores, not fatal.
+      try {
+        if (decoded['salesLedger'] case final Map ledger) {
+          _salesLedger = AppleSalesLedger.fromJson(
+            ledger.cast<String, Object?>(),
+          );
+        }
+        if (decoded['installMonths'] case final Map months) {
+          _installMonths = PlayInstallMonths.fromJson(
+            months.cast<String, Object?>(),
+          );
+        }
+      } on Object {
+        _salesLedger = AppleSalesLedger();
+        _installMonths = PlayInstallMonths();
+      }
       _dropDisconnected();
     } on Object catch (error) {
       _stores.clear();
@@ -566,7 +650,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       ..remove('links')
       ..remove('refreshing');
     final done = _snapshotWrites.then(
-      (_) => _writeSnapshot({'version': _snapshotVersion, 'view': kept}),
+      (_) => _writeSnapshot({
+        'version': _snapshotVersion,
+        'view': kept,
+        'salesLedger': _salesLedger.toJson(),
+        'installMonths': _installMonths.toJson(),
+      }),
     );
     _snapshotWrites = done;
     return done;

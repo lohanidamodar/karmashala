@@ -89,6 +89,16 @@ void main() {
       ),
       read,
     ),
+    allTimeInstalls: ReadingValue(
+      InstallTotal(
+        count: 4321,
+        measure: 'first-time downloads',
+        source: InstallTotalSource.reports,
+        since: '2023',
+        through: DateTime.utc(2026, 9, 29),
+      ),
+      read,
+    ),
   );
 
   final playSnapshot = StoreAppSnapshot(
@@ -127,6 +137,13 @@ void main() {
     ),
     downloads: ReadingValue(
       const DownloadSeries(unit: 'Installs', days: []),
+      read,
+    ),
+    allTimeInstalls: ReadingValue(
+      InstallTotal.fromBand(
+        '10K+',
+        note: 'Add your reports bucket in Settings → Stores.',
+      )!,
       read,
     ),
   );
@@ -243,6 +260,38 @@ void main() {
       expect(pending.last['rolloutPercent'], 20.0);
       expect(android['crashRatePercent'], 1.23);
     });
+
+    test(
+      'all-time installs: exact from reports, a floor from the listing',
+      () async {
+        final notes = appGroup(await call('store_apps'), 'com.popupbits.notes');
+        expect(onStore(notes, 'app_store')['allTimeInstalls'], {
+          'count': 4321,
+          'atLeast': false,
+          'measure': 'first-time downloads',
+          'source': 'reports',
+          'since': '2023',
+          'through': '2026-09-29',
+        });
+        expect(onStore(notes, 'google_play')['allTimeInstalls'], {
+          'count': 10000,
+          'atLeast': true,
+          'measure': 'installs',
+          'source': 'listing',
+          'band': '10K+',
+          'note': 'Add your reports bucket in Settings → Stores.',
+        });
+        // Read without one: absent, not a zero.
+        final lite = appGroup(
+          await call('store_apps'),
+          'com.popupbits.noteslite',
+        );
+        expect(
+          onStore(lite, 'app_store').containsKey('allTimeInstalls'),
+          isFalse,
+        );
+      },
+    );
 
     test('a missing reading is said to be missing, never a zero', () async {
       final notes = appGroup(await call('store_apps'), 'com.popupbits.notes');
