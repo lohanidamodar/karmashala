@@ -108,6 +108,10 @@ class SessionsData extends SessionRowsIndex {
   void markArchived(String id, DateTime at) =>
       _edit(id, SessionPatch.archive(at));
 
+  /// Whether session [id]'s agent may operate Karmashala — the person's act.
+  void setOperatorGranted(String id, bool granted) =>
+      _edit(id, SessionPatch.operator(granted: granted));
+
   void updatePermissionMode(String id, String? mode) =>
       _edit(id, SessionPatch.permissionMode(mode));
 

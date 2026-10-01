@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import '../../sessions/application/session_providers.dart';
 import '../../snippets/application/snippet_insertion.dart';
@@ -55,7 +56,16 @@ SessionOfferOutcome offerToSession(
   WidgetRef ref, {
   required String sessionId,
   required String text,
+}) => offerToSessionWith(ref.read, sessionId: sessionId, text: text);
+
+/// [offerToSession] through any reader — a provider's `ref.read` too: an
+/// agent's `session_draft` arrives as a server intent, with no widget.
+SessionOfferOutcome offerToSessionWith(
+  T Function<T>(ProviderListenable<T> provider) read, {
+  required String sessionId,
+  required String text,
 }) {
+  final ref = _Reader(read);
   final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
   // Answered before the terminals are read at all: a session in no pane has no
   // face to follow, and mounting the controller to find that out would start
@@ -85,6 +95,13 @@ SessionOfferOutcome offerToSession(
   return state.livenessOf(paneId).isLive
       ? SessionOfferOutcome.queuedForComposer
       : SessionOfferOutcome.waitingForAPane;
+}
+
+/// A reader standing in for a ref, so one body serves both kinds.
+class _Reader {
+  const _Reader(this.read);
+
+  final T Function<T>(ProviderListenable<T> provider) read;
 }
 
 /// What the user is offered, said the one way that will not be misread.

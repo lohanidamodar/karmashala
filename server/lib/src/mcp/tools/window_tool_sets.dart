@@ -196,6 +196,90 @@ class SnippetInsertToolSet extends ServerToolSet {
   }
 }
 
+/// **`session_draft`**: a message offered to a session, not sent — the window
+/// the person last used leaves it in that session's message box, or types it
+/// at its prompt without Enter. The person reviews it and sends it, or not.
+class SessionDraftToolSet extends ServerToolSet {
+  SessionDraftToolSet(this._context)
+    : _sessions = SessionDao(_context.database);
+
+  final ServerToolContext _context;
+  final SessionDao _sessions;
+
+  @override
+  List<Map<String, Object?>> get schemas => sessionDraftToolSchemas;
+
+  @override
+  Future<Object?>? call(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) => tool == 'session_draft'
+      ? runTool(
+          () => _draft(
+            targetSessionOf(arguments, callerSessionId),
+            (arguments['text'] as String?) ?? '',
+          ),
+        )
+      : null;
+
+  Object? _draft(String sessionId, String text) {
+    if (text.trim().isEmpty) {
+      throw ArgumentError('text is required and cannot be blank.');
+    }
+    final session = _sessions.getById(sessionId);
+    if (session == null) throw StateError('No session with id $sessionId.');
+    if (!_context.data.tellIntent(
+      DraftForSession(sessionId: sessionId, text: text),
+    )) {
+      throw StateError(_noWindow('Drafting a message for a session'));
+    }
+    return <String, Object?>{
+      'sessionId': sessionId,
+      'title': session.title,
+      'sent': false,
+      'note':
+          'Offered to "${session.title}" in the Karmashala window the person '
+          'last used: left in its message box, or typed at its prompt without '
+          'Enter when its terminal is on screen. It has NOT been sent — the '
+          'person reads it and sends it, edits it, or clears it. A second '
+          'draft before they act is added under the first.',
+    };
+  }
+}
+
+const List<Map<String, Object?>> sessionDraftToolSchemas = [
+  {
+    'name': 'session_draft',
+    'description':
+        'Put a message in a session\'s message box for the PERSON to send — '
+        'it is not sent. Use it to propose what a session should be told '
+        'next and leave the decision to them; session_send is the one that '
+        'sends. Omit sessionId to draft into your own session\'s box.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Which session, from list_sessions. Defaults to you.',
+        },
+        'text': {'type': 'string', 'description': 'The message to offer.'},
+      },
+      'required': ['text'],
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {'type': 'string'},
+        'title': {'type': 'string'},
+        'sent': {'type': 'boolean'},
+        'note': {'type': 'string'},
+      },
+      'required': ['sessionId', 'title', 'sent', 'note'],
+    },
+  },
+];
+
 /// **`select_checkout`** (slice 5b): the server checks the checkout; the
 /// window the person last used points its Explorer, diff view and side panel
 /// at it.

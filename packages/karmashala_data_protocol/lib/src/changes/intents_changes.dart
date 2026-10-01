@@ -28,6 +28,10 @@ DataChange? _intentsChangeFromJson(String name, Map<String, Object?> json) =>
         paneId: json['paneId'] as String?,
       ),
       'openImportedSession' => OpenImportedSession(json['id']! as String),
+      'draftForSession' => DraftForSession(
+        sessionId: json['sessionId']! as String,
+        text: json['text']! as String,
+      ),
       _ => null,
     };
 
@@ -119,6 +123,22 @@ final class InsertSnippet extends ClientIntent {
     'change': 'insertSnippet',
     'snippetId': snippetId,
     'paneId': ?paneId,
+  };
+}
+
+/// Offer [text] to session [sessionId] as a draft: left in its message box,
+/// or typed at its prompt unsent, for the person to send or not.
+final class DraftForSession extends ClientIntent {
+  const DraftForSession({required this.sessionId, required this.text});
+
+  final String sessionId;
+  final String text;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'draftForSession',
+    'sessionId': sessionId,
+    'text': text,
   };
 }
 

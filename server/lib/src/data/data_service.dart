@@ -976,6 +976,10 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   if (denied != null || grants == null) return denied;
   final needed = switch (request) {
     SessionSend() || SessionInterrupt() => Capability.sendPrompt,
+    // Letting an agent operate Karmashala lets it start and send to
+    // sessions: no more than the phone may do itself.
+    SessionEdit(:final patch) when patch.touchesOperatorGrant =>
+      Capability.startSession,
     SessionStart() ||
     SessionResume() ||
     SessionFork() ||

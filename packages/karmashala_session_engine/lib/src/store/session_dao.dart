@@ -20,8 +20,10 @@ class SessionDao implements SessionStatusStore {
       'working_directory_environment_id, working_directory_path, '
       'status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
-      'surface, view, permission_mode, model_id, archived_at, title_by_user) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'surface, view, permission_mode, model_id, archived_at, title_by_user, '
+      'operator_granted) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
+      '?);',
       [
         session.id,
         session.repositoryId,
@@ -44,6 +46,7 @@ class SessionDao implements SessionStatusStore {
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
         intFromBool(session.titleByUser),
+        intFromBool(session.operatorGranted),
       ],
     );
   }
@@ -69,7 +72,8 @@ class SessionDao implements SessionStatusStore {
       'worktree_environment_id = ?, worktree_path = ?, '
       'working_directory_environment_id = ?, working_directory_path = ?, '
       'status = ?, external_session_id = ?, pane_id = ?, view = ?, '
-      'permission_mode = ?, model_id = ?, archived_at = ? WHERE id = ?;',
+      'permission_mode = ?, model_id = ?, archived_at = ?, '
+      'operator_granted = ? WHERE id = ?;',
       [
         session.title,
         intFromBool(session.titleByUser),
@@ -85,6 +89,7 @@ class SessionDao implements SessionStatusStore {
         session.permissionMode,
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
+        intFromBool(session.operatorGranted),
         session.id,
       ],
     );
@@ -453,6 +458,7 @@ class SessionDao implements SessionStatusStore {
           ? null
           : dateFromIso(row['archived_at']),
       titleByUser: boolFromInt(row['title_by_user']),
+      operatorGranted: ((row['operator_granted'] as int?) ?? 0) != 0,
     );
   }
 }

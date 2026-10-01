@@ -8,6 +8,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/data/data_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../explorer/application/checkout_picker.dart';
+import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -57,6 +58,8 @@ class ClientIntents extends Notifier<void> {
           _insertSnippet(snippetId, paneId);
         case OpenImportedSession(:final importedId):
           await _openImported(importedId);
+        case DraftForSession(:final sessionId, :final text):
+          offerToSessionWith(ref.read, sessionId: sessionId, text: text);
       }
     } on Object catch (error, stack) {
       // An intent is a request to show something; one that cannot be shown

@@ -27,6 +27,7 @@ class Session {
     this.modelId,
     this.archivedAt,
     this.titleByUser = false,
+    this.operatorGranted = false,
   });
 
   final String id;
@@ -87,6 +88,12 @@ class Session {
   /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
   final bool titleByUser;
 
+  /// Whether the person let this session's agent **operate Karmashala**: the
+  /// tools that act — start, send to or end sessions, run terminals, restore
+  /// checkpoints, drive devices, builds — beyond reading and its own records.
+  /// Off until granted, per session (owner, 2026-10-01).
+  final bool operatorGranted;
+
   /// The row on the wire, as the server's data API carries it.
   Map<String, Object?> toJson() => {
     'id': id,
@@ -109,6 +116,7 @@ class Session {
     'modelId': ?modelId,
     if (archivedAt case final at?) 'archivedAt': jsonDate(at),
     'titleByUser': titleByUser,
+    if (operatorGranted) 'operatorGranted': true,
   };
 
   /// Throws [FormatException] on a row out of shape. A word this build does
@@ -141,6 +149,8 @@ class Session {
     modelId: jsonOptionalString(json, 'modelId'),
     archivedAt: jsonOptionalDateOf(json, 'archivedAt'),
     titleByUser: jsonBool(json, 'titleByUser'),
+    // Absent from an older server's rows: not granted.
+    operatorGranted: json['operatorGranted'] == true,
   );
 
   bool get isArchived => archivedAt != null;
@@ -173,6 +183,7 @@ class Session {
     String? modelId,
     DateTime? archivedAt,
     bool? titleByUser,
+    bool? operatorGranted,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -193,6 +204,7 @@ class Session {
     modelId: modelId ?? this.modelId,
     archivedAt: archivedAt ?? this.archivedAt,
     titleByUser: titleByUser ?? this.titleByUser,
+    operatorGranted: operatorGranted ?? this.operatorGranted,
   );
 
   @override
@@ -216,7 +228,8 @@ class Session {
       other.permissionMode == permissionMode &&
       other.modelId == modelId &&
       other.archivedAt == archivedAt &&
-      other.titleByUser == titleByUser;
+      other.titleByUser == titleByUser &&
+      other.operatorGranted == operatorGranted;
 
   @override
   int get hashCode => Object.hash(
@@ -239,6 +252,7 @@ class Session {
     modelId,
     archivedAt,
     titleByUser,
+    operatorGranted,
   );
 
   @override

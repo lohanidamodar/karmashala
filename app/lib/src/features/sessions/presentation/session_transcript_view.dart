@@ -62,6 +62,7 @@ import 'chat_transcript.dart';
 import 'end_session_action.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
+import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
@@ -605,6 +606,23 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       .isNotEmpty;
 
   Future<void> _send(String text) async {
+    // `/operator` first: typing it is the person letting this session operate
+    // Karmashala. It is taken off the message; alone, it is the whole act.
+    final afterOperator = textAfterOperatorCommand(text);
+    if (afterOperator != null) {
+      await setOperatorGrant(
+        context,
+        ref,
+        widget.sessionId,
+        granted: true,
+        confirm: false,
+      );
+      if (afterOperator.isEmpty) {
+        _say('This session may now operate Karmashala.');
+        return;
+      }
+      text = '$kOperatorGrantedNote\n\n$afterOperator';
+    }
     if (text != _keyedText) {
       _keyedText = text;
       _sendKey = newSessionInputId();

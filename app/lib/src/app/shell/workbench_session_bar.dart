@@ -284,6 +284,8 @@ class _SessionStatusLine extends StatelessWidget {
         const SizedBox(width: Insets.sm),
         PermissionModeChip(sessionId: sessionId),
         const SizedBox(width: Insets.xs),
+        OperatorChip(sessionId: sessionId),
+        const SizedBox(width: Insets.xs),
         SessionModelChip(
           sessionId: sessionId,
           maxLabelWidth: _sessionModelLabelWidth,
@@ -365,6 +367,8 @@ class _SessionActionRow extends StatelessWidget {
                       children: [
                         PermissionModeChip(sessionId: sessionId),
                         const SizedBox(width: Insets.xs),
+                        OperatorChip(sessionId: sessionId),
+                        const SizedBox(width: Insets.xs),
                         DeliveryStrip(
                           sessionId: sessionId,
                           hostedOnTerminal: true,
@@ -387,6 +391,8 @@ class _SessionActionRow extends StatelessWidget {
           const Spacer()
         else ...[
           PermissionModeChip(sessionId: sessionId),
+          const SizedBox(width: Insets.xs),
+          OperatorChip(sessionId: sessionId),
           const SizedBox(width: Insets.xs),
           // Flexible, and the only control that is: a model name is the one
           // label whose width is unpredictable.

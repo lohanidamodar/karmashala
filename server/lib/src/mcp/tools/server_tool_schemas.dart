@@ -26,6 +26,7 @@ import 'terminal_tool_schemas.dart';
 import 'window_tool_sets.dart'
     show
         openSessionToolSchemas,
+        sessionDraftToolSchemas,
         snippetControlToolSchemas,
         workspaceControlToolSchemas;
 
@@ -62,5 +63,6 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...terminalControlToolSchemas,
   ...recordingControlToolSchemas,
   ...snippetControlToolSchemas,
+  ...sessionDraftToolSchemas,
   ...workspaceControlToolSchemas,
 ];

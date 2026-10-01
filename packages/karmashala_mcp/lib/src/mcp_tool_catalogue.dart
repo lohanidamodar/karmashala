@@ -2,6 +2,49 @@
 /// ours. Hints, never enforcement — and no `automation_*` tool is ever served.
 library;
 
+/// Tools that change something and still need no grant: the records an agent
+/// keeps of its own work, and a draft the person sends or not. Everything
+/// else a session may call that is not read-only acts — on other sessions,
+/// terminals, the working tree, projects, devices, the browser, builds — and
+/// needs the person to have let **that session** operate Karmashala.
+const Set<String> kMcpUngatedWrites = {
+  'checkpoint_capture',
+  'todo_add',
+  'todo_done',
+  'note_add',
+  'decision_record',
+  'review_thread_add',
+  'review_thread_reply',
+  'review_thread_status',
+  'verification_start',
+  'verification_note',
+  'verification_finish',
+  'snippet_add',
+  'session_rename',
+  'session_draft',
+};
+
+/// Whether calling [tool] from a session needs the person's operator grant
+/// for it (`Session.operatorGranted`, owner 2026-10-01). A tool this
+/// catalogue does not know is treated as one that acts.
+bool mcpToolNeedsOperatorGrant(String tool) {
+  final annotations = kMcpToolAnnotations[tool];
+  if (annotations == null) return true;
+  return !annotations.readOnly && !kMcpUngatedWrites.contains(tool);
+}
+
+/// What an agent reads when [tool] is refused for want of the grant: what
+/// happened, what still works, and how the person gives it.
+String mcpOperatorRefusal(String tool) =>
+    '$tool acts on Karmashala beyond this session\'s own records, and the '
+    'person has not let this session operate Karmashala. NOTHING WAS DONE. '
+    'Ask them to turn on "Operate Karmashala" for this session (the session '
+    'bar, or its Session sheet on a phone), or to start their next message '
+    'with /operator. Reading works without it — list_sessions, '
+    'session_transcript, terminal_output and the other read tools — and so '
+    'do your own todos, notes, decisions, verification records, checkpoint '
+    'captures and session_draft.';
+
 /// The behaviour of one tool, as `tools/list` reports it.
 class McpToolAnnotations {
   /// [movesAttention] is required and the other four are not: theirs are the
@@ -106,6 +149,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'session_wait': McpToolAnnotations.read,
   // Text appears in the target's pane; no tab is switched, no pane focused.
   'session_send': McpToolAnnotations(movesAttention: false),
+  // Offered, not sent: the text waits in the target's message box, or at its
+  // prompt, until the person presses send. Nothing runs.
+  'session_draft': McpToolAnnotations(movesAttention: false),
   // Approving grants permission for something that then happens, and
   // nothing un-happens it.
   'session_answer': McpToolAnnotations(
@@ -505,6 +551,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'session_send': McpToolListing(
     McpToolCategory.sessions,
     'Send a message to a session, as typing into its message box would.',
+  ),
+  'session_draft': McpToolListing(
+    McpToolCategory.sessions,
+    'Put a message in a session\'s message box for the person to send.',
   ),
   'session_wait': McpToolListing(
     McpToolCategory.sessions,

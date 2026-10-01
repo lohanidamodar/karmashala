@@ -541,3 +541,17 @@ void _migrateToV59(Database db) {
   db.execute('DROP TABLE IF EXISTS terminal_tabs_backup;');
   db.execute("DELETE FROM app_metadata WHERE key LIKE 'terminal.%';");
 }
+
+/// Whether the person let a session's agent operate Karmashala
+/// (`Session.operatorGranted`). Off for every session, old ones included:
+/// the tools that act were open to every session before, and are not now.
+void _migrateToV60(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(sessions);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('operator_granted')) return;
+  db.execute(
+    'ALTER TABLE sessions ADD COLUMN operator_granted INTEGER NOT NULL '
+    'DEFAULT 0;',
+  );
+}

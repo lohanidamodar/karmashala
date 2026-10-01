@@ -530,7 +530,12 @@ Future<int> runServe(
   );
   flutter.apps.onLooked = () => unawaited(appDiscovery.looked());
   final checkoutRows = CheckoutRows(database);
+  // Which sessions the person let operate Karmashala: read per call, so
+  // a grant given a moment ago counts on the next tool call.
+  final grantRows = SessionDao(database);
   final mcpTools = McpToolRelay(
+    operatorGranted: (sessionId) =>
+        grantRows.getById(sessionId)?.operatorGranted ?? false,
     tools: ServerTools([
       const InstructionsToolSet(),
       InventoryToolSet(tools),
@@ -951,6 +956,7 @@ Future<int> runServe(
     ..add(TerminalToolSet(terminals: terminals, registry: registry, data: data))
     ..add(recordings)
     ..add(SnippetInsertToolSet(tools, terminals: terminals))
+    ..add(SessionDraftToolSet(tools))
     ..add(SelectCheckoutToolSet(tools));
   // A client composes its catalogue from `serverToolSchemas`: a family
   // served here but missing there is a tool no client lists (found once).

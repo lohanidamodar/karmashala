@@ -60,6 +60,11 @@ final class SessionPatch {
         _worktree: worktree == null ? null : _path(worktree),
       });
 
+  /// Whether the person lets this session's agent operate Karmashala — see
+  /// [Session.operatorGranted]. A person's act, never an agent's.
+  SessionPatch.operator({required bool granted})
+    : this._({_operatorGranted: granted});
+
   static const _title = 'title';
   static const _titleByUser = 'titleByUser';
   static const _status = 'status';
@@ -72,6 +77,7 @@ final class SessionPatch {
   static const _externalSessionId = 'externalSessionId';
   static const _useWorktree = 'useWorktree';
   static const _worktree = 'worktree';
+  static const _operatorGranted = 'operatorGranted';
 
   static const _known = {
     _title,
@@ -86,6 +92,7 @@ final class SessionPatch {
     _externalSessionId,
     _useWorktree,
     _worktree,
+    _operatorGranted,
   };
 
   final Map<String, Object?> _fields;
@@ -105,6 +112,10 @@ final class SessionPatch {
   SessionStatus? get status => _fields.containsKey(_status)
       ? SessionStatus.values.asNameMap()[_fields[_status]]
       : null;
+
+  /// Whether this patch changes the operator grant: a person's act, which the
+  /// server takes from a client and never from an agent's tool.
+  bool get touchesOperatorGrant => _fields.containsKey(_operatorGranted);
 
   /// The title this patch sets, or null when it sets none.
   String? get title => _fields[_title] as String?;
@@ -178,6 +189,8 @@ final class SessionPatch {
           ? _dateOf(read<String>(_archivedAt))
           : row.archivedAt,
       titleByUser: read<bool>(_titleByUser) ?? row.titleByUser,
+      operatorGranted:
+          read<bool>(_operatorGranted) ?? row.operatorGranted,
     );
   }
 

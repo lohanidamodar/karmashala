@@ -186,6 +186,7 @@ class _SessionSheet extends StatelessWidget {
               children: [
                 SessionModelChip(sessionId: sessionId),
                 PermissionModeChip(sessionId: sessionId),
+                OperatorChip(sessionId: sessionId),
                 SessionStatsButton(sessionId: sessionId),
                 ScheduledResumeChip(sessionId: sessionId),
               ],
