@@ -395,5 +395,8 @@ class FakeStoreClient implements StoreClient {
       throw const StoreException(StoreFailure.notConfigured, 'Not set up.');
 
   @override
+  Future<StoreIconImage?> icon(StoreApp app) async => null;
+
+  @override
   void close() => closed = true;
 }

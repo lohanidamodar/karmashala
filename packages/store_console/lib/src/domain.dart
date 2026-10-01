@@ -1,6 +1,8 @@
 /// The values every store is translated into.
 library;
 
+import 'dart:typed_data';
+
 enum StoreKind {
   appStore('App Store'),
   googlePlay('Google Play');
@@ -285,6 +287,30 @@ class DownloadSeries {
         ),
     ],
   );
+}
+
+/// An app's icon as its public store page shows it: a small square image,
+/// fetched, not kept — whoever reads it decides where it lives.
+class StoreIconImage {
+  const StoreIconImage({
+    required this.source,
+    required this.bytes,
+    required this.contentType,
+  });
+
+  /// Where the image was fetched from: a public URL, safe to show.
+  final Uri source;
+  final Uint8List bytes;
+
+  /// `image/png`, `image/jpeg` or `image/webp`.
+  final String contentType;
+
+  /// The file extension [contentType] is written with, dot included.
+  String get extension => switch (contentType) {
+    'image/jpeg' || 'image/jpg' => '.jpg',
+    'image/webp' => '.webp',
+    _ => '.png',
+  };
 }
 
 DateTime? _date(Object? value) =>

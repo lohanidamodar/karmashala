@@ -55,5 +55,11 @@ abstract interface class StoreClient {
 
   Future<DownloadSeries> downloads(StoreApp app);
 
+  /// The app's icon from its public store page, about 128 px square; null
+  /// when the app has no public page — unpublished, a draft, or not on the
+  /// storefront asked. Read from public pages only, never through anything a
+  /// release pipeline holds open (a Play edit).
+  Future<StoreIconImage?> icon(StoreApp app);
+
   void close();
 }

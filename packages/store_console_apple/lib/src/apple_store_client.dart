@@ -15,6 +15,9 @@ const _host = 'api.appstoreconnect.apple.com';
 const _downloadDays = 14;
 const _maxPages = 20;
 
+/// An icon is never worth holding a refresh up for.
+const _iconTimeout = Duration(seconds: 10);
+
 /// A day Apple had no report for is asked about again after this long.
 const _absentFor = Duration(minutes: 30);
 
@@ -115,6 +118,50 @@ class AppleStoreClient implements StoreClient {
       'include': 'response',
     }, what: 'reviews'),
   );
+
+  /// From the public lookup: App Store Connect has no icon field. Asked by
+  /// the App Store id on the US storefront, then by bundle id, so an app the
+  /// US store does not sell is still found where the lookup's default
+  /// storefront has it.
+  @override
+  Future<StoreIconImage?> icon(StoreApp app) async {
+    Future<Uri?> lookup(Map<String, String> query) async => parseLookupIcon(
+      await _http.getJson(
+        Uri.https('itunes.apple.com', '/lookup', query),
+        what: 'the icon',
+        authorized: false,
+        timeout: _iconTimeout,
+      ),
+    );
+    final source =
+        await lookup({'id': app.id, 'country': 'us'}) ??
+        (app.bundleId.isEmpty
+            ? null
+            : await lookup({'bundleId': app.bundleId}));
+    if (source == null) return null;
+    final response = await _http.get(
+      source,
+      what: 'the icon',
+      authorized: false,
+      accept: 'image/*',
+      absentOn404: true,
+      timeout: _iconTimeout,
+    );
+    if (response == null) return null;
+    final type = (response.headers['content-type'] ?? '')
+        .split(';')
+        .first
+        .trim()
+        .toLowerCase();
+    if (!type.startsWith('image/') || response.bodyBytes.isEmpty) {
+      throw shapeFailure('the icon');
+    }
+    return StoreIconImage(
+      source: source,
+      bytes: response.bodyBytes,
+      contentType: type,
+    );
+  }
 
   /// The rating on the United States storefront, from the public lookup:
   /// App Store Connect has no rating of its own to give.

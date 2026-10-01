@@ -66,6 +66,36 @@ final class PlayAccountSummary {
       );
 }
 
+/// An app's icon as the server keeps it: fetched from the app's public store
+/// page, at most daily, and written to the server's own disk. A client that
+/// cannot read that disk brings [path] over with `files.read`, spelled for
+/// the server's host environment.
+final class StoreAppIcon {
+  const StoreAppIcon({required this.checkedAt, this.url, this.path});
+
+  /// The public image it was fetched from; null when the app has no public
+  /// store page (unpublished, a draft) — then there is no icon.
+  final String? url;
+
+  /// The copy on the server's disk, as the server's host spells it.
+  final String? path;
+
+  /// When the store was last asked.
+  final DateTime checkedAt;
+
+  Map<String, Object?> toJson() => {
+    'url': url,
+    'path': path,
+    'checkedAt': checkedAt.toUtc().toIso8601String(),
+  };
+
+  factory StoreAppIcon.fromJson(Map<String, Object?> json) => StoreAppIcon(
+    url: json['url'] as String?,
+    path: json['path'] as String?,
+    checkedAt: DateTime.parse(json['checkedAt']! as String),
+  );
+}
+
 /// Everything the Stores tab and an agent are shown, as the server holds it.
 final class StoresView {
   const StoresView({
@@ -73,6 +103,7 @@ final class StoresView {
     this.play,
     this.stores = const {},
     this.apps = const [],
+    this.icons = const {},
     this.refreshedAt,
     this.refreshing = false,
   });
@@ -86,6 +117,9 @@ final class StoresView {
 
   /// What was read about each app, as last read.
   final List<StoreAppSnapshot> apps;
+
+  /// Each app's icon by [StoreApp.key]; an app never looked up is absent.
+  final Map<String, StoreAppIcon> icons;
 
   /// When the stores were last read and at least one answered. Null when
   /// never.
@@ -110,6 +144,9 @@ final class StoresView {
         ),
     },
     'apps': [for (final app in apps) app.toJson()],
+    'icons': {
+      for (final MapEntry(:key, :value) in icons.entries) key: value.toJson(),
+    },
     'refreshedAt': refreshedAt?.toUtc().toIso8601String(),
     'refreshing': refreshing,
   };
@@ -137,6 +174,12 @@ final class StoresView {
         for (final app in (json['apps'] as List?) ?? const [])
           StoreAppSnapshot.fromJson(map(app)),
       ],
+      // Absent from an older server's view.
+      icons: {
+        for (final MapEntry(:key, :value)
+            in ((json['icons'] as Map?) ?? const {}).entries)
+          key as String: StoreAppIcon.fromJson(map(value)),
+      },
       refreshedAt: refreshedAt is String ? DateTime.parse(refreshedAt) : null,
       refreshing: json['refreshing'] as bool? ?? false,
     );

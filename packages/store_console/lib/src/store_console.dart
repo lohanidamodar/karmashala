@@ -127,6 +127,13 @@ class StoreConsole {
     );
   }
 
+  /// [app]'s icon: a value of null when the store has no public page for it,
+  /// missing when it could not be read.
+  Future<Reading<StoreIconImage?>> icon(StoreApp app) {
+    final client = clients.firstWhere((client) => client.store == app.store);
+    return _read(() => client.icon(app));
+  }
+
   void close() {
     for (final client in clients) {
       client.close();

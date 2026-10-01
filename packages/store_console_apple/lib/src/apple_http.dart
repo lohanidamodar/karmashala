@@ -28,6 +28,7 @@ class AppleHttp {
     String accept = 'application/json',
     String? role,
     bool absentOn404 = false,
+    Duration timeout = appleRequestTimeout,
   }) async {
     final token = authorized ? _token() : null;
     final service = authorized ? 'App Store Connect' : 'The App Store';
@@ -41,12 +42,12 @@ class AppleHttp {
               if (token != null) 'Authorization': 'Bearer $token',
             },
           )
-          .timeout(appleRequestTimeout);
+          .timeout(timeout);
     } on TimeoutException {
       throw StoreException(
         StoreFailure.network,
         '$service did not answer within '
-        '${appleRequestTimeout.inSeconds} seconds. Try again.',
+        '${timeout.inSeconds} seconds. Try again.',
       );
     } on Exception {
       // The error's text can carry the request URL, so it is not passed on.
@@ -102,12 +103,14 @@ class AppleHttp {
     required String what,
     bool authorized = true,
     String? role,
+    Duration timeout = appleRequestTimeout,
   }) async {
     final response = await get(
       uri,
       what: what,
       authorized: authorized,
       role: role,
+      timeout: timeout,
     );
     final Object? decoded;
     try {
