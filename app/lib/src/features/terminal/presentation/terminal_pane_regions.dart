@@ -35,7 +35,31 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     );
   }
 
+  /// One pane, and the split target a dragged tab or pane is dropped on. A
+  /// terminal's body carries its own (inside its file drop); every document —
+  /// a device's live preview, an editor, a note — gets the same one here, so
+  /// any tab splits beside any other (owner, 2026-10-01).
   Widget _buildPane(
+    String paneId, {
+    required bool focused,
+    required bool showFocusRing,
+    required bool showing,
+  }) {
+    final body = _buildPaneBody(
+      paneId,
+      focused: focused,
+      showFocusRing: showFocusRing,
+      showing: showing,
+    );
+    if (!isDocumentPane(paneId)) return body;
+    return _PaneDropTarget(
+      paneId: paneId,
+      groupId: widget.groupId,
+      child: body,
+    );
+  }
+
+  Widget _buildPaneBody(
     String paneId, {
     required bool focused,
     required bool showFocusRing,
