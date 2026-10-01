@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -26,6 +23,7 @@ class ServerImports {
     AgentRegistry registry = AgentRegistry.builtIn,
     this.translator = const PathTranslator(),
   }) : _data = data,
+       _registry = registry,
        _stores = stores,
        _detection = CliDetectionService(
          readRows: readRows,
@@ -34,6 +32,7 @@ class ServerImports {
        );
 
   final DataService _data;
+  final AgentRegistry _registry;
   final CliStoreLocator _stores;
   final CliDetectionService _detection;
   final IdGenerator ids;
@@ -159,50 +158,28 @@ class ServerImports {
     await forRepositories([for (final repository in added) repository.id]);
   }
 
-  /// Removes imported Codex rows that are not conversations: `codex exec`
+  /// Removes imported rows that are not conversations — Codex's `codex exec`
   /// runs (and MCP or subagent ones) the import once took, titled by an
   /// injected `<recommended_plugins>` block and never resumable. The import
-  /// skips them now; this clears the ones already recorded. Only a rollout
-  /// this machine can read, and whose opening `session_meta` says so, is
-  /// removed — nothing is taken on a guess. Answers how many went.
+  /// skips them now; this clears the ones already recorded. Each agent's
+  /// adapter says how its records are told apart ([AgentImportAudit]); only a
+  /// record whose own file says so is removed — nothing is taken on a guess.
+  /// Answers how many went.
   Future<int> pruneNonConversations({void Function(String line)? log}) async {
-    var removed = 0;
+    final removedBy = <String, int>{};
     for (final row in _data.importedSessions) {
-      if (row.cli != AgentIds.codex) continue;
-      final source = await _codexSourceOf(row.filePath);
-      if (source == _unread || isInteractiveCodexSource(source)) continue;
+      final audit = _registry.adapterFor(row.cli)?.importAudit;
+      if (audit == null || !await audit.isNotConversation(row.filePath)) {
+        continue;
+      }
       _data.applyAsServer(ImportedDelete(row.id));
-      removed++;
+      removedBy[audit.recordNoun] = (removedBy[audit.recordNoun] ?? 0) + 1;
     }
-    if (removed > 0) {
-      log?.call(
-        'import: removed $removed Codex run(s) that were not conversations',
-      );
-    }
-    return removed;
+    removedBy.forEach((noun, count) {
+      log?.call('import: removed $count $noun(s) that were not conversations');
+    });
+    return removedBy.values.fold<int>(0, (sum, count) => sum + count);
   }
-
-  /// A rollout's `session_meta.source`, or [_unread] when the file is not
-  /// here to read or opens with no `session_meta`.
-  static Future<Object?> _codexSourceOf(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return _unread;
-      final first = await file
-          .openRead()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .first;
-      final json = jsonDecode(first);
-      if (json is! Map || json['type'] != 'session_meta') return _unread;
-      final payload = json['payload'];
-      return payload is Map ? payload['source'] : _unread;
-    } on Object {
-      return _unread;
-    }
-  }
-
-  static const Object _unread = Object();
 
   /// Records each of [sessions] under the checkout [checkoutOf] names (none:
   /// skipped); answers how many were new.

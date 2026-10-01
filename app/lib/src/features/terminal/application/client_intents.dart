@@ -93,12 +93,7 @@ class ClientIntents extends Notifier<void> {
                 title: title,
               ));
     if (row == null || shown == null) return;
-    await launcher.showStarted(
-      SessionStarted(
-        session: row,
-        launch: shown,
-      ),
-    );
+    await launcher.showStarted(SessionStarted(session: row, launch: shown));
   }
 
   void _closeTab(String paneId) {

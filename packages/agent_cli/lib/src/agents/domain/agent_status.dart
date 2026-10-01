@@ -681,6 +681,32 @@ class GridMatcher {
   String toString() => 'GridMatcher($contains)';
 }
 
+/// **How an agent's TUI measures text and takes typed input** — the two
+/// places a terminal drawing or typing for it must do what the agent does, not
+/// what a shell does. Both default to a shell's behaviour, which is right for
+/// an agent nobody has measured.
+class AgentTerminalRules {
+  const AgentTerminalRules({
+    this.clusterWidthFromBase = false,
+    this.pasteBurstFoldsReturn = false,
+    this.evidence,
+  });
+
+  /// Whether the agent lays a grapheme cluster out at its **first code
+  /// point's** width (`string-width`), so an Indic cluster (का, क्ष) takes one
+  /// cell where a terminal's default gives it two. A pane hosting it must
+  /// measure the same way, or the agent's redraws land in the wrong columns.
+  final bool clusterWidthFromBase;
+
+  /// Whether text typed fast is taken as a **paste burst** that folds the
+  /// Return after it into a newline, so typing a message must end the burst
+  /// (`Ctrl+E`) before the Return that sends it.
+  final bool pasteBurstFoldsReturn;
+
+  /// Where the rules were read.
+  final String? evidence;
+}
+
 /// How to read an agent's status off the bottom of its own TUI — Orca's third
 /// source, and the only one available to an agent with neither installed hooks
 /// nor a state file we can parse.

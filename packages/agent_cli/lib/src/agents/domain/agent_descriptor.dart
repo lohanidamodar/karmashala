@@ -56,6 +56,7 @@ class AgentDescriptor {
     this.hooks,
     this.stateFile,
     this.grid = const AgentGridRules(),
+    this.terminal = const AgentTerminalRules(),
     this.approval = const AgentApprovalRules(),
     this.questions,
     this.menus,
@@ -80,6 +81,10 @@ class AgentDescriptor {
   /// screen we have never looked at, which resolves to `unknown` rather than a
   /// guess.
   final AgentGridRules grid;
+
+  /// How the agent's TUI measures text and takes typed input, where that
+  /// differs from a shell's.
+  final AgentTerminalRules terminal;
 
   /// Which keys answer this agent's approval prompt, when it names any.
   ///

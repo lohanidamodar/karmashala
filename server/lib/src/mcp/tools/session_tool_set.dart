@@ -15,7 +15,6 @@ import '../../status/hosted_session_wait.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_tool_schemas.dart';
-import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/stream.dart';
 
 /// **Operating a session that already exists**, by the server — `session_send`,
@@ -473,9 +472,11 @@ class SessionToolSet extends ServerToolSet {
       markersFor: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
       type: (sessionId, text) {
         if (!status.typeAsServer(sessionId, utf8.encode(text))) return false;
-        // Ends Codex's paste burst, which would fold the Return into a
-        // newline — as the app's own typist does.
-        if (prompts.agentOf(sessionId)?.id == AgentIds.codex) {
+        // Ends the paste burst an agent like Codex takes fast typing for,
+        // which would fold the Return into a newline — as the app's own
+        // typist does.
+        if (prompts.agentOf(sessionId)?.terminal.pasteBurstFoldsReturn ??
+            false) {
           status.typeAsServer(sessionId, const [_endOfLineKey]);
         }
         return true;

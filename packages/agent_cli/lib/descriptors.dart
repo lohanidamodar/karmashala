@@ -14,6 +14,7 @@ export 'src/agents/adapter/agent_adapter.dart';
 export 'src/agents/adapter/agent_capability.dart';
 export 'src/agents/adapter/agent_directory_conversations.dart';
 export 'src/agents/adapter/agent_file_changes.dart';
+export 'src/agents/adapter/agent_import_audit.dart';
 export 'src/agents/adapter/agent_media_reader.dart';
 export 'src/agents/adapter/agent_model_lister.dart';
 export 'src/agents/adapter/agent_presentation.dart';

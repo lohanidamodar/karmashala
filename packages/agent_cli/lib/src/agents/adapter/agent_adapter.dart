@@ -5,6 +5,7 @@ import 'agent_accounts.dart';
 import 'agent_chat_protocol.dart';
 import 'agent_directory_conversations.dart';
 import 'agent_file_changes.dart';
+import 'agent_import_audit.dart';
 import 'agent_media_reader.dart';
 import 'agent_model_lister.dart';
 import 'agent_presentation.dart';
@@ -120,6 +121,10 @@ abstract class AgentAdapter {
 
   /// How the CLI reports the models this account may use, or null.
   AgentModelLister? get modelLister => null;
+
+  /// How records an older import took that were not conversations are told
+  /// apart, or null when every record this agent's store keeps is one.
+  AgentImportAudit? get importAudit => null;
 
   @override
   String toString() => 'AgentAdapter($id)';

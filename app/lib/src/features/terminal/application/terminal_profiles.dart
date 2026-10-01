@@ -17,9 +17,6 @@ final terminalProfilesProvider = Provider<List<TerminalProfile>>((ref) {
     for (final environment in environments)
       if (environment.kind == EnvironmentKind.ssh &&
           (environment.sshHostId ?? '').isNotEmpty)
-        TerminalProfile.ssh(
-          environment.sshHostId!,
-          hostName: environment.name,
-        ),
+        TerminalProfile.ssh(environment.sshHostId!, hostName: environment.name),
   ];
 });

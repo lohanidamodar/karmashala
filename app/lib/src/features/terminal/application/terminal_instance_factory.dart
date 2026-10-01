@@ -171,14 +171,20 @@ TerminalInstance _serverPane(
         (ref.read(dataClientProvider).terminals[sessionId]?.shellIntegration ??
             false),
     drawsAtSessionGrid: _drawsAtSessionGrid(ref),
-    // Claude Code lays its screen out with `string-width`, which gives a
-    // Devanagari cluster (का, क्ष) its first code point's width; the grid's
-    // default gives it two cells, so every Devanagari line was wider than
-    // Claude thought and its redraws landed in the wrong columns — garbled
-    // text while typing, scrolling and resizing (owner, 2026-09-30). Its panes
-    // measure the way it does (xterm2 divergence 15). A shell and Codex count
-    // per code point, which the default matches, so they keep it.
-    indicClusterWidthFromBase: agentLaunch?.agentId == AgentIds.claudeCode,
+    // An agent that lays an Indic cluster out at its first code point's width
+    // (Claude Code's `string-width`) gets a pane that measures the same way,
+    // or its redraws land in the wrong columns (owner, 2026-09-30). A shell
+    // keeps the grid's default.
+    indicClusterWidthFromBase: switch (agentLaunch?.agentId) {
+      final agentId? =>
+        ref
+                .read(agentRegistryProvider)
+                .byId(agentId)
+                ?.terminal
+                .clusterWidthFromBase ??
+            false,
+      null => false,
+    },
     closer: () => terminals.close(sessionId),
     opener: attachOnly
         ? null
@@ -202,13 +208,12 @@ TerminalInstance _serverPane(
                 environmentId: agentLaunch == null
                     ? _environmentIdOf(ref, profile)
                     : null,
-                workingDirectory: agentLaunch == null
-                    ? workingDirectory
-                    : null,
+                workingDirectory: agentLaunch == null ? workingDirectory : null,
                 // A profile the server does not offer — a client's default
                 // from another OS — is the server's own default instead.
                 profileId:
-                    agentLaunch == null && offered.any((p) => p.id == profile.id)
+                    agentLaunch == null &&
+                        offered.any((p) => p.id == profile.id)
                     ? profile.id
                     : null,
                 agentLaunch: agentLaunch,

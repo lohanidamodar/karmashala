@@ -682,6 +682,12 @@ const codexDescriptor = AgentDescriptor(
         '\$CODEX_HOME/skills — ~/.codex/skills/.system/<name>/SKILL.md on '
         'disk. Read 2026-09-09.',
   ),
+  terminal: AgentTerminalRules(
+    pasteBurstFoldsReturn: true,
+    evidence:
+        'Codex takes fast typing as a paste burst and folds the Return after '
+        'it into a newline; a typed message ends the burst with Ctrl+E first.',
+  ),
   mcpConfig: AgentMcpConfigSpec.undeclared(
     refusal:
         'Codex keeps its servers in ~/.codex/config.toml, and nothing here '

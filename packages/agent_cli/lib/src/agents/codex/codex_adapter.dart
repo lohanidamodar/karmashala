@@ -5,6 +5,7 @@ import '../adapter/agent_accounts.dart';
 import '../adapter/agent_adapter.dart';
 import '../adapter/agent_chat_protocol.dart';
 import '../adapter/agent_file_changes.dart';
+import '../adapter/agent_import_audit.dart';
 import '../adapter/agent_media_reader.dart';
 import '../adapter/agent_model_lister.dart';
 import '../adapter/agent_presentation.dart';
@@ -18,6 +19,7 @@ import '../adapter/usage_limit_evidence.dart';
 import '../domain/agent_descriptor.dart';
 import 'codex_chat_protocol.dart';
 import 'codex_descriptor.dart';
+import 'codex_import_audit.dart';
 import 'codex_media_reader.dart';
 import 'codex_models_cache.dart';
 import 'codex_one_shot.dart';
@@ -93,4 +95,7 @@ class CodexAdapter extends AgentAdapter {
 
   @override
   AgentModelLister get modelLister => const CodexModelLister();
+
+  @override
+  AgentImportAudit get importAudit => const CodexImportAudit();
 }

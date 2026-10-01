@@ -844,6 +844,14 @@ const claudeCodeDescriptor = AgentDescriptor(
         'Karmashala transcripts, 2026-09: Read tool calls naming .png/.jpg '
         'files, drawn by TranscriptImagePreview from that path',
   ),
+  terminal: AgentTerminalRules(
+    clusterWidthFromBase: true,
+    evidence:
+        'Claude Code lays its screen out with string-width, which gives a '
+        'Devanagari cluster its first code point\'s width; panes measured the '
+        'default way garbled its redraws (owner, 2026-09-30; xterm2 '
+        'divergence 15).',
+  ),
   // WSL keeps `ctrl+v`: Claude Code binds it there as well as `alt+v`, and it
   // is what already worked.
   imagePaste: AgentImagePasteKey(

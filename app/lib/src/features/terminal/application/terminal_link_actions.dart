@@ -45,8 +45,7 @@ class AppTerminalLinkActions implements TerminalLinkActions {
     await _ref.read(openExternalUrlProvider)(url);
   }
 
-  bool get _readsServerDisk =>
-      _ref.read(capabilitiesProvider).readsServerDisk;
+  bool get _readsServerDisk => _ref.read(capabilitiesProvider).readsServerDisk;
 
   @override
   Future<TerminalPathKind?> kindOf(String hostPath) async {

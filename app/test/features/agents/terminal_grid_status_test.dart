@@ -18,7 +18,15 @@ AgentStatusReport? classify(String fixture, double fraction) {
     'test/features/agents/fixtures/$fixture.raw',
   ).readAsStringSync();
   final terminal = Terminal(maxLines: 10000)..resize(120, 30);
-  terminal.write(bytes.substring(0, (bytes.length * fraction).round()));
+  // Never past the capture's own teardown (`Session terminated, killing
+  // shell…`): the agent was gone by then, and the line it prints lands on a
+  // menu row — on the trust prompt, over `Yes, I trust this folder`, which
+  // left a one-option "menu" no reader can call one.
+  final teardown = bytes.indexOf('Session terminated');
+  final cut = (bytes.length * fraction).round();
+  terminal.write(
+    bytes.substring(0, teardown < 0 || cut < teardown ? cut : teardown),
+  );
   final descriptor = AgentRegistry.builtIn.byId(
     fixture.startsWith('codex') ? AgentIds.codex : AgentIds.claudeCode,
   )!;

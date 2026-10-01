@@ -7,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
-import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_device_pane/providers.dart' show devicesProvider;
 import 'package:karmashala_ui/primitives.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../../core/capabilities/capabilities.dart'
     show clientCapabilitiesProvider;
 import '../../../core/data/data_providers.dart';
@@ -33,11 +33,7 @@ import 'local_host_providers.dart';
 import '../data/terminals_client.dart';
 import '../../sessions/data/sessions_client.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show
-        TerminalOpen,
-        TerminalRecord,
-        hostedRunSessionId,
-        terminalSessionId;
+    show TerminalOpen, TerminalRecord, hostedRunSessionId, terminalSessionId;
 import 'package:karmashala_host_protocol/protocol.dart' show boxSessionRef;
 import 'package:karmashala_environments/ssh.dart' show sshEnvironmentId;
 import 'terminal_layout_providers.dart';
