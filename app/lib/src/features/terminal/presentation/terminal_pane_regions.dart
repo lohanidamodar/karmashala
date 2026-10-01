@@ -55,7 +55,7 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     return _PaneDropTarget(
       paneId: paneId,
       groupId: widget.groupId,
-      child: body,
+      child: _DocumentPaneFocus(focused: focused && showing, child: body),
     );
   }
 
@@ -228,4 +228,64 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
       ),
     );
   }
+}
+
+/// Somewhere for the keyboard to be while a document — Settings, Stores, a
+/// device's preview — is the pane in front. A terminal takes focus when it is
+/// shown; a page with no field of its own took none, so focus stayed parked
+/// above the shell and its chords (Ctrl+W, Ctrl+Tab, Ctrl+P) never reached
+/// [ShellShortcuts] (owner, 2026-10-01). Never taken from a field or a
+/// device mirror already holding the keyboard, nor from inside the pane.
+class _DocumentPaneFocus extends StatefulWidget {
+  const _DocumentPaneFocus({required this.focused, required this.child});
+
+  final bool focused;
+  final Widget child;
+
+  @override
+  State<_DocumentPaneFocus> createState() => _DocumentPaneFocusState();
+}
+
+class _DocumentPaneFocusState extends State<_DocumentPaneFocus> {
+  final _node = FocusNode(debugLabel: 'document pane', skipTraversal: true);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focused) _takeAfterFrame();
+  }
+
+  @override
+  void didUpdateWidget(_DocumentPaneFocus oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focused && !oldWidget.focused) _takeAfterFrame();
+  }
+
+  void _takeAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.focused || _node.hasFocus) return;
+      if (keyboardIsSpokenFor()) return;
+      _node.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    focusNode: _node,
+    // A click on the page's background gives it the keyboard back; a click
+    // on a field inside takes it on from there.
+    child: Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        if (!_node.hasFocus) _node.requestFocus();
+      },
+      child: widget.child,
+    ),
+  );
 }

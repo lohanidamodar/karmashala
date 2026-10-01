@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_device_pane/pane.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show keyboardIsSpokenFor;
 import 'package:karmashala_ui/tokens.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/note_edit_dialog.dart';
