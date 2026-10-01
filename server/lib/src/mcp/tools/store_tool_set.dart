@@ -41,7 +41,11 @@ class StoreToolSet extends ServerToolSet {
         ..._header(view),
         'bundleId': group.bundleId,
         'name': group.name,
-        'stores': [for (final entry in entries) _entryDetail(entry)],
+        ..._combined(group),
+        'stores': [
+          for (final entry in entries)
+            {..._entryDetail(entry), ..._ownBundle(group, entry)},
+        ],
       };
     }),
     'store_reviews' => runTool(() => _reviews(arguments)),
@@ -111,7 +115,11 @@ class StoreToolSet extends ServerToolSet {
           'name': group.name,
           'needsAttention': group.needsAttention,
           'inFlight': group.inFlight,
-          'stores': [for (final entry in group.entries) _entrySummary(entry)],
+          ..._combined(group),
+          'stores': [
+            for (final entry in group.entries)
+              {..._entrySummary(entry), ..._ownBundle(group, entry)},
+          ],
         },
     ],
   };
@@ -250,6 +258,7 @@ class StoreToolSet extends ServerToolSet {
       ..._header(view),
       'bundleId': group.bundleId,
       'name': group.name,
+      ..._combined(group),
       'matched': matched.length,
       'reviews': [
         for (final (kind, review) in matched.take(limit))
@@ -305,10 +314,12 @@ class StoreToolSet extends ServerToolSet {
   _Group _match(List<_Group> groups, String query) {
     final lower = query.toLowerCase();
     // Identifiers first, so an app named like another's bundle id cannot win.
+    // A store's own id before a bundle id: an app combined by hand keeps
+    // its bundle id, which the app its id once matched may share.
     final tests = <bool Function(_Group)>[
-      (g) => g.bundleId == query,
       (g) => g.entries.any((e) => e.app.id == query),
-      (g) => g.bundleId.toLowerCase() == lower,
+      (g) => g.entries.any((e) => e.app.bundleId == query),
+      (g) => g.entries.any((e) => e.app.bundleId.toLowerCase() == lower),
       (g) => g.entries.any((e) => e.app.name.toLowerCase() == lower),
       (g) => g.entries.any((e) => e.app.name.toLowerCase().contains(lower)),
     ];
@@ -339,30 +350,47 @@ class StoreToolSet extends ServerToolSet {
         if (connected.contains(key)) ...?value.valueOrNull,
       ...snapshots.keys,
     };
-    final byBundle = <String, List<_Entry>>{};
-    for (final app in apps) {
-      byBundle
-          .putIfAbsent(app.bundleId, () => [])
-          .add(_Entry(app, snapshots[app], view.icons[app.key]?.url));
-    }
     int rank(_Group group) => group.needsAttention
         ? 0
         : group.inFlight
         ? 1
         : 2;
+    // The Stores tab groups with the same function, so the two agree.
     return [
-      for (final MapEntry(:key, :value) in byBundle.entries)
-        _Group(
-          key,
-          value..sort((a, b) => a.app.store.index.compareTo(b.app.store.index)),
-        ),
+      for (final combination in combineStoreApps(apps, links: view.links))
+        _Group(combination.bundleId, combination.combined, [
+          for (final app in combination.apps)
+            _Entry(app, snapshots[app], view.icons[app.key]?.url),
+        ]),
     ]..sort((a, b) {
       final byRank = rank(a).compareTo(rank(b));
       if (byRank != 0) return byRank;
       final byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      return byName != 0 ? byName : a.bundleId.compareTo(b.bundleId);
+      if (byName != 0) return byName;
+      final byBundle = a.bundleId.compareTo(b.bundleId);
+      return byBundle != 0
+          ? byBundle
+          : a.entries.first.app.key.compareTo(b.entries.first.app.key);
     });
   }
+
+  /// How the group's stores came together, when it is on more than one.
+  Map<String, Object?> _combined(_Group group) => switch (group.combined) {
+    StoreCombined.alone => const {},
+    StoreCombined.byId => const {'combined': 'id'},
+    StoreCombined.manually => const {
+      'combined': 'manual',
+      'combinedNote':
+          'Combined by hand in Karmashala: the App Store bundle id and the '
+          'Play package name differ; each store line carries its own.',
+    },
+  };
+
+  /// A store line's own bundle id, where it may differ from the group's.
+  Map<String, Object?> _ownBundle(_Group group, _Entry entry) =>
+      group.combined == StoreCombined.manually
+      ? {'bundleId': entry.app.bundleId}
+      : const {};
 }
 
 /// One app on one store; [snapshot] is null for an app listed but not read.
@@ -387,9 +415,11 @@ class _Entry {
 }
 
 class _Group {
-  const _Group(this.bundleId, this.entries);
+  const _Group(this.bundleId, this.combined, this.entries);
 
+  /// The first entry's; one combined by hand may have another on Play.
   final String bundleId;
+  final StoreCombined combined;
 
   /// App Store first, then Google Play.
   final List<_Entry> entries;
@@ -551,8 +581,12 @@ const List<Map<String, Object?>> storeToolSchemas = [
   {
     'name': 'store_apps',
     'description':
-        'Every app on the App Store and Google Play, one entry per bundle id '
-        'or package name with a line per store: the live version, releases in '
+        'Every app on the App Store and Google Play, one entry per app with a '
+        'line per store. An app on both stores is one entry when its bundle '
+        'id and package name match (combined: "id") or when its owner '
+        'combined the two by hand in Karmashala (combined: "manual"; each '
+        'store line then carries its own bundleId). Per store: the live '
+        'version, releases in '
         'flight (rejected or halted first), rating, downloads over the last '
         '14 reported days, crash and ANR rates in percent, and counts of the '
         'reviews last read. Apps needing attention come first. Data is as of '

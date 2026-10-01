@@ -1,6 +1,7 @@
 /// What an app store says about an app, in one shape for every store.
 library;
 
+export 'src/combining.dart';
 export 'src/domain.dart';
 export 'src/reading.dart';
 export 'src/secret_vault.dart';

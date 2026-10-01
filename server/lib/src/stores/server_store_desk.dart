@@ -34,17 +34,27 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _iconDirectory = Directory(
          p.join(dataDirectory, snapshotDirectoryName, iconDirectoryName),
        ),
+       _linksFile = File(
+         p.join(dataDirectory, snapshotDirectoryName, linksFileName),
+       ),
        _tell = tell,
        _log = log ?? _silent,
        _now = clock ?? _utcNow,
        _appleClient = appleClient ?? AppleStoreClient.new,
        _playClient = playClient ?? PlayStoreClient.new {
     _loadSnapshot();
+    _loadLinks();
   }
 
   static const String snapshotDirectoryName = 'stores';
   static const String snapshotFileName = 'snapshot.json';
   static const int _snapshotVersion = 1;
+
+  /// The apps combined by hand. Beside the snapshot but not in it: the
+  /// snapshot is a cache, dropped when unreadable or of another version;
+  /// these are the owner's word, and outlive a credential being replaced.
+  static const String linksFileName = 'links.json';
+  static const int _linksVersion = 1;
 
   /// How many apps are read at once.
   static const int concurrency = 4;
@@ -66,6 +76,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   final ServerStoreVault _vault;
   final File _snapshotFile;
   final Directory _iconDirectory;
+  final File _linksFile;
   final void Function(List<DataChange> changes) _tell;
   final void Function(String message) _log;
   final DateTime Function() _now;
@@ -80,6 +91,10 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
 
   /// When an app's icon lookup last failed; not kept across starts.
   final _iconFailedAt = <String, DateTime>{};
+
+  /// Kept in [_linksFile]; at most one per app.
+  final _links = <StoreAppLink>[];
+  Future<void> _linkWrites = Future<void>.value();
   DateTime? _refreshedAt;
 
   Future<StoresView>? _running;
@@ -135,6 +150,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         for (final MapEntry(:key, :value) in _icons.entries)
           if (connected.contains(_storeOfKey(key))) key: value,
       },
+      links: List.unmodifiable(_links),
       refreshedAt: _refreshedAt,
       refreshing: _running != null,
     );
@@ -184,6 +200,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final StoreAppleSet r => await _setApple(r),
     final StorePlaySet r => await _setPlay(r),
     StoreCredentialRemove(:final store) => await _remove(store),
+    final StoreAppsLink r => await _link(r),
+    final StoreAppsUnlink r => await _unlink(r),
     _ => throw DataRefused.invalid('${request.kind} is not a store request'),
   };
 
@@ -543,6 +561,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final kept = shown.toJson()
       ..remove('apple')
       ..remove('play')
+      ..remove('links')
       ..remove('refreshing');
     final done = _snapshotWrites.then(
       (_) => _writeSnapshot({'version': _snapshotVersion, 'view': kept}),
@@ -561,6 +580,130 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     } on Object catch (error) {
       // Not kept: the next start shows less until the stores are read again.
       _log('stores: the snapshot was not kept (${error.runtimeType})');
+    }
+  }
+
+  /// [store]'s app [id] as held now — listed, or read before — or null when
+  /// none is, or [store] is not connected.
+  StoreApp? _held(StoreKind store, String id) {
+    if (!_connected.contains(store)) return null;
+    for (final app in [
+      ...?_stores[store]?.valueOrNull,
+      for (final kept in _apps.values) kept.app,
+    ]) {
+      if (app.store == store && app.id == id) return app;
+    }
+    return null;
+  }
+
+  Future<StoresView> _link(StoreAppsLink request) async {
+    final appStoreId = request.appStoreId.trim();
+    final packageName = request.packageName.trim();
+    for (final (store, id) in [
+      (StoreKind.appStore, appStoreId),
+      (StoreKind.googlePlay, packageName),
+    ]) {
+      if (_held(store, id) == null) {
+        throw DataRefused.invalid(
+          _connected.contains(store)
+              ? 'no ${store.label} app "$id" is among the apps read; refresh '
+                    'the stores and try again'
+              : '${store.label} is not connected',
+        );
+      }
+    }
+    final link = StoreAppLink(appStoreId: appStoreId, packageName: packageName);
+    // An app is in one pair at most: a new one replaces what it was in.
+    return _editLinks(
+      (links) => links
+        ..removeWhere(
+          (old) =>
+              old.appStoreId == appStoreId || old.packageName == packageName,
+        )
+        ..add(link),
+    );
+  }
+
+  Future<StoresView> _unlink(StoreAppsUnlink request) {
+    final link = StoreAppLink(
+      appStoreId: request.appStoreId.trim(),
+      packageName: request.packageName.trim(),
+    );
+    return _editLinks((links) {
+      if (!links.remove(link)) {
+        throw const DataRefused.invalid(
+          'those two apps are not combined by hand',
+        );
+      }
+      return links;
+    });
+  }
+
+  /// Applies [edit] to a copy of the links, keeps the result, and only then
+  /// holds it: a link not kept on disk is not shown as made. One edit at a
+  /// time, so two at once cannot each lose the other's.
+  Future<StoresView> _editLinks(
+    List<StoreAppLink> Function(List<StoreAppLink> links) edit,
+  ) {
+    final done = _linkWrites.then((_) async {
+      final next = edit([..._links]);
+      await _writeLinks({
+        'version': _linksVersion,
+        'links': [for (final link in next) link.toJson()],
+      });
+      _links
+        ..clear()
+        ..addAll(next);
+      final now = view;
+      _tell([StoresChanged(now)]);
+      return now;
+    });
+    _linkWrites = done.then<void>((_) {}, onError: (Object _) {});
+    return done;
+  }
+
+  void _loadLinks() {
+    final file = _linksFile;
+    if (!file.existsSync()) return;
+    try {
+      final decoded = (jsonDecode(file.readAsStringSync()) as Map)
+          .cast<String, Object?>();
+      if (decoded['version'] != _linksVersion) {
+        _log('stores: the combined apps are of another version; not read');
+        return;
+      }
+      for (final link in (decoded['links'] as List?) ?? const []) {
+        final read = StoreAppLink.fromJson(
+          (link as Map).cast<String, Object?>(),
+        );
+        _links
+          ..removeWhere(
+            (old) =>
+                old.appStoreId == read.appStoreId ||
+                old.packageName == read.packageName,
+          )
+          ..add(read);
+      }
+    } on Object catch (error) {
+      _links.clear();
+      _log('stores: the combined apps were not read (${error.runtimeType})');
+    }
+  }
+
+  /// Throws when not kept: unlike the snapshot, a lost link is the owner's
+  /// work lost, so the request that made it says so.
+  Future<void> _writeLinks(Map<String, Object?> contents) async {
+    try {
+      final directory = _linksFile.parent;
+      if (!directory.existsSync()) directory.createSync(recursive: true);
+      final temp = File('${_linksFile.path}.tmp');
+      await temp.writeAsString(jsonEncode(contents), flush: true);
+      await temp.rename(_linksFile.path);
+    } on Object catch (error) {
+      _log('stores: the combined apps were not kept (${error.runtimeType})');
+      throw DataRefused.unavailable(
+        'the server could not keep the combined apps (${error.runtimeType})',
+      );
     }
   }
 }
