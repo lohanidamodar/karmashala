@@ -866,6 +866,10 @@ class QuickOpenSources {
       openId: openId,
       imported: imported,
     );
+    // On the desktop the sidebar shows Sessions, where the pick is now
+    // selected, as a project pick shows Projects (owner, 2026-10-01). Before
+    // the detail pane takes focus: showing the sidebar must not take it back.
+    if (phone == null) showShellArea(ref, ShellArea.sessions);
     ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
     // Picking the session already selected moves nothing the shell hears.
     phone?.showWorkbench();
