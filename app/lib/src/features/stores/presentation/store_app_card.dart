@@ -10,6 +10,7 @@ import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
+import 'store_logo.dart';
 import 'stores_format.dart';
 
 /// An app read this much before the newest read is said to be older: its
@@ -217,13 +218,9 @@ class StoreEntryRow extends StatelessWidget {
           children: [
             SizedBox(
               width: scaler.scale(storeColumn),
-              child: Text(
-                storeShortLabel(entry.app.store),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: StoreLogo(entry.app.store, size: scaler.scale(16)),
               ),
             ),
             Expanded(

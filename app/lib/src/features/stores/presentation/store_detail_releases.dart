@@ -7,6 +7,7 @@ import 'package:store_console/store_console.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/store_groups.dart';
 import 'store_badges.dart';
+import 'store_logo.dart';
 import 'stores_format.dart';
 
 /// Whether [release] is history: replaced, expired or removed. Shown only
@@ -139,11 +140,9 @@ class StoreBlock extends StatelessWidget {
           children: [
             Semantics(
               header: true,
-              child: Text(
-                store.label,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: StoreLogo(store, size: 20, color: scheme.onSurface),
               ),
             ),
             const SizedBox(height: Insets.sm),

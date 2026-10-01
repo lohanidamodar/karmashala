@@ -11,6 +11,7 @@ import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import '../application/store_prompts.dart';
 import 'store_badges.dart';
+import 'store_logo.dart';
 import 'stores_format.dart';
 
 /// Reviews shown before "Show more".
@@ -149,7 +150,9 @@ class _StoreReviewsSectionState extends State<StoreReviewsSection> {
         if (withReviews.length > 1) ...[
           for (final store in <StoreKind?>[null, ...StoreKind.values])
             ChoiceChip(
-              label: Text(store == null ? 'Both stores' : store.label),
+              label: store == null
+                  ? const Text('Both stores')
+                  : StoreLogo(store),
               selected: _store == store,
               onSelected: (_) => setState(() {
                 _store = store;
@@ -322,7 +325,6 @@ class _ReviewCard extends ConsumerWidget {
     final now = ref.watch(clockProvider).nowUtc();
     final low = review.rating > 0 && review.rating <= 2;
     final meta = [
-      if (showStore) storeShortLabel(store),
       ?review.author,
       ?review.locale,
       if (review.appVersion case final version?) 'v$version',
@@ -393,7 +395,15 @@ class _ReviewCard extends ConsumerWidget {
                 SelectableText(review.body, style: theme.textTheme.bodyMedium),
               ],
               const SizedBox(height: Insets.xs),
-              Text(meta, style: muted),
+              Row(
+                children: [
+                  if (showStore) ...[
+                    StoreLogo(store, size: 14),
+                    const SizedBox(width: Insets.xs),
+                  ],
+                  Expanded(child: Text(meta, style: muted)),
+                ],
+              ),
               if (review.reply case final reply?) ...[
                 const SizedBox(height: Insets.sm),
                 Container(

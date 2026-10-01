@@ -240,6 +240,22 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// The App Store, where it stands for the store and not a word for it.
+  static const IconData appStoreLogo = IconData(
+    0xe974,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Google Play, likewise.
+  static const IconData googlePlayLogo = IconData(
+    0xe294,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData gitBranch = IconData(
     0xe278,
     fontFamily: 'PhosphorRegular',
