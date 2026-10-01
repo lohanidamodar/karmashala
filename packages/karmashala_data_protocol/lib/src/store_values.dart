@@ -104,6 +104,7 @@ final class StoresView {
     this.stores = const {},
     this.apps = const [],
     this.icons = const {},
+    this.links = const [],
     this.refreshedAt,
     this.refreshing = false,
   });
@@ -120,6 +121,10 @@ final class StoresView {
 
   /// Each app's icon by [StoreApp.key]; an app never looked up is absent.
   final Map<String, StoreAppIcon> icons;
+
+  /// The App Store and Play apps combined by hand, whatever their ids; kept
+  /// by the server, and applied by `combineStoreApps`.
+  final List<StoreAppLink> links;
 
   /// When the stores were last read and at least one answered. Null when
   /// never.
@@ -147,6 +152,7 @@ final class StoresView {
     'icons': {
       for (final MapEntry(:key, :value) in icons.entries) key: value.toJson(),
     },
+    'links': [for (final link in links) link.toJson()],
     'refreshedAt': refreshedAt?.toUtc().toIso8601String(),
     'refreshing': refreshing,
   };
@@ -180,6 +186,11 @@ final class StoresView {
             in ((json['icons'] as Map?) ?? const {}).entries)
           key as String: StoreAppIcon.fromJson(map(value)),
       },
+      // Absent from an older server's view.
+      links: [
+        for (final link in (json['links'] as List?) ?? const [])
+          StoreAppLink.fromJson(map(link)),
+      ],
       refreshedAt: refreshedAt is String ? DateTime.parse(refreshedAt) : null,
       refreshing: json['refreshing'] as bool? ?? false,
     );

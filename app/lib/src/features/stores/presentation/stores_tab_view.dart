@@ -250,10 +250,10 @@ class _Dashboard extends ConsumerWidget {
     final selection = ref.watch(storesSelectionProvider);
     StoreAppGroup? selected;
     for (final group in groups) {
-      if (group.bundleId == selection) selected = group;
+      if (group.has(selection)) selected = group;
     }
-    void select(String? bundleId) =>
-        ref.read(storesSelectionProvider.notifier).select(bundleId);
+    void select(String? appKey) =>
+        ref.read(storesSelectionProvider.notifier).select(appKey);
 
     final scaler = MediaQuery.textScalerOf(context);
     return LayoutBuilder(
@@ -310,7 +310,7 @@ class _Dashboard extends ConsumerWidget {
                 ),
                 child: _CardGrid(
                   groups: groups,
-                  selected: open.bundleId,
+                  selected: open.key,
                   singleColumn: true,
                   onSelect: select,
                 ),
@@ -372,8 +372,8 @@ class _CardGrid extends StatelessWidget {
                         child: i < groups.length
                             ? StoreGroupCard(
                                 group: groups[i],
-                                selected: groups[i].bundleId == selected,
-                                onTap: () => onSelect(groups[i].bundleId),
+                                selected: groups[i].key == selected,
+                                onTap: () => onSelect(groups[i].key),
                               )
                             : const SizedBox.shrink(),
                       ),

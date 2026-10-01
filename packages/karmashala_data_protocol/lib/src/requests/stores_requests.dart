@@ -25,6 +25,14 @@ DataRequest<Object?>? _storesRequestFromJson(String kind, _Arguments args) =>
       StoreCredentialRemove.name => StoreCredentialRemove(
         StoreKind.parse(args.string('store')),
       ),
+      StoreAppsLink.name => StoreAppsLink(
+        appStoreId: args.string('appStoreId'),
+        packageName: args.string('packageName'),
+      ),
+      StoreAppsUnlink.name => StoreAppsUnlink(
+        appStoreId: args.string('appStoreId'),
+        packageName: args.string('packageName'),
+      ),
       _ => null,
     };
 
@@ -144,4 +152,49 @@ final class StoreCredentialRemove extends _StoresViewRequest {
 
   @override
   Map<String, Object?> argumentsToJson() => {'store': store.name};
+}
+
+/// Combines an App Store app and a Google Play app into one, whatever their
+/// bundle id and package name: they show and are read as one app from then
+/// on. Each must be among the apps the server holds. Either one already
+/// combined by hand leaves its old pair. Not a credential: a phone may ask.
+final class StoreAppsLink extends _StoresViewRequest {
+  const StoreAppsLink({required this.appStoreId, required this.packageName});
+
+  static const String name = 'stores.link';
+
+  /// The App Store app's numeric id.
+  final String appStoreId;
+
+  /// The Play app's package name.
+  final String packageName;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'appStoreId': appStoreId,
+    'packageName': packageName,
+  };
+}
+
+/// Separates a pair [StoreAppsLink] combined; each app then joins whatever
+/// its own id matches, or stands alone. Refused when the two are not a pair.
+final class StoreAppsUnlink extends _StoresViewRequest {
+  const StoreAppsUnlink({required this.appStoreId, required this.packageName});
+
+  static const String name = 'stores.unlink';
+
+  final String appStoreId;
+  final String packageName;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'appStoreId': appStoreId,
+    'packageName': packageName,
+  };
 }

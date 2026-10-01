@@ -12,6 +12,7 @@ import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../application/store_groups.dart';
 import 'store_app_card.dart';
 import 'store_app_icon.dart';
+import 'store_combine.dart';
 import 'stores_format.dart';
 
 /// Everything read about one app: per store, its releases, its numbers, its
@@ -70,14 +71,20 @@ class StoreGroupDetail extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium,
                     ),
-                    Text(
-                      group.bundleId,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    // Combined by hand, each store's id on its own line.
+                    for (final id in storeGroupIdLines(group))
+                      Text(
+                        id,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
+                    if (group.combinedManually) ...[
+                      const SizedBox(height: Insets.xs),
+                      const CombinedManuallyChip(),
+                    ],
                   ],
                 ),
               ),
@@ -103,6 +110,10 @@ class StoreGroupDetail extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (group.combined != StoreCombined.byId) ...[
+                      StoreCombineBar(group: group),
+                      const SizedBox(height: Insets.md),
+                    ],
                     for (final entry in group.entries)
                       _EntryDetail(entry: entry),
                   ],

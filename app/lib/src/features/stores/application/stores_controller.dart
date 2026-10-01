@@ -36,8 +36,12 @@ class StoresState {
   DateTime? get refreshedAt => view.refreshedAt;
   bool get refreshing => asking || view.refreshing;
 
-  List<StoreAppGroup> get groups =>
-      groupStoreView(view.stores, view.apps, icons: view.icons);
+  List<StoreAppGroup> get groups => groupStoreView(
+    view.stores,
+    view.apps,
+    icons: view.icons,
+    links: view.links,
+  );
 
   StoresState copyWith({
     StoresView? view,
@@ -229,6 +233,18 @@ class StoresController extends AsyncNotifier<StoresState> {
   /// Forgets [store]'s credential and what was read with it, at the server.
   Future<String?> remove(StoreKind store) =>
       _write(StoreCredentialRemove(store));
+
+  /// Combines [link]'s App Store app and Play app into one, whatever their
+  /// ids; either one's earlier pair is undone. Kept by the server, so every
+  /// client and the agent tools see it.
+  Future<String?> combine(StoreAppLink link) => _write(
+    StoreAppsLink(appStoreId: link.appStoreId, packageName: link.packageName),
+  );
+
+  /// Separates a pair [combine] made.
+  Future<String?> separate(StoreAppLink link) => _write(
+    StoreAppsUnlink(appStoreId: link.appStoreId, packageName: link.packageName),
+  );
 
   Future<String?> _write(StoreRequest<StoresView> request) async {
     try {
