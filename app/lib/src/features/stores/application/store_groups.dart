@@ -1,12 +1,17 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show StoreAppIcon;
 import 'package:store_console/store_console.dart';
 
 /// One app on one store, with what was read about it — null until it has
 /// been read.
 class StoreEntry {
-  const StoreEntry(this.app, this.snapshot);
+  const StoreEntry(this.app, this.snapshot, {this.icon});
 
   final StoreApp app;
   final StoreAppSnapshot? snapshot;
+
+  /// Its icon as the server keeps it; null when never looked up.
+  final StoreAppIcon? icon;
 
   /// The release that most wants looking at: one somebody must act on, else
   /// one on its way.
@@ -31,6 +36,17 @@ class StoreAppGroup {
 
   String get name => entries.first.app.name;
 
+  /// The server's copy of the app's icon: the App Store's, else Google
+  /// Play's. Null when neither store has a public page for it, or it has not
+  /// been looked up yet.
+  StoreAppIcon? get icon {
+    for (final entry in entries) {
+      final icon = entry.icon;
+      if (icon?.path != null) return icon;
+    }
+    return null;
+  }
+
   bool get needsAttention =>
       entries.any((entry) => entry.pending?.state.needsAttention ?? false);
 
@@ -42,13 +58,14 @@ class StoreAppGroup {
 /// those with a release in flight, then by name.
 List<StoreAppGroup> groupStoreApps(
   Iterable<StoreApp> apps,
-  Map<StoreApp, StoreAppSnapshot> snapshots,
-) {
+  Map<StoreApp, StoreAppSnapshot> snapshots, {
+  Map<String, StoreAppIcon> icons = const {},
+}) {
   final byBundle = <String, List<StoreEntry>>{};
   for (final app in {...apps}) {
     byBundle
         .putIfAbsent(app.bundleId, () => [])
-        .add(StoreEntry(app, snapshots[app]));
+        .add(StoreEntry(app, snapshots[app], icon: icons[app.key]));
   }
   int rank(StoreAppGroup group) => group.needsAttention
       ? 0
@@ -74,11 +91,13 @@ List<StoreAppGroup> groupStoreApps(
 /// read before from a store that is not answering.
 List<StoreAppGroup> groupStoreView(
   Map<StoreKind, Reading<List<StoreApp>>> stores,
-  List<StoreAppSnapshot> apps,
-) => groupStoreApps(
+  List<StoreAppSnapshot> apps, {
+  Map<String, StoreAppIcon> icons = const {},
+}) => groupStoreApps(
   [
     for (final reading in stores.values) ...?reading.valueOrNull,
     for (final snapshot in apps) snapshot.app,
   ],
   {for (final snapshot in apps) snapshot.app: snapshot},
+  icons: icons,
 );

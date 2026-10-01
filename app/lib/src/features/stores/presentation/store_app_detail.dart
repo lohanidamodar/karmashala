@@ -11,6 +11,7 @@ import 'package:store_console/store_console.dart';
 import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../application/store_groups.dart';
 import 'store_app_card.dart';
+import 'store_app_icon.dart';
 import 'stores_format.dart';
 
 /// Everything read about one app: per store, its releases, its numbers, its
@@ -52,6 +53,12 @@ class StoreGroupDetail extends StatelessWidget {
                 )
               else
                 const SizedBox(width: Insets.sm),
+              StoreAppIconView(
+                icon: group.icon,
+                name: group.name,
+                size: StoreAppIconView.detailSize(context),
+              ),
+              const SizedBox(width: Insets.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
