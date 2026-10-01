@@ -105,6 +105,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Files dropped on the conversation, for the composer to attach.
   final _dropped = StreamController<List<String>>.broadcast();
 
+  /// Ticks when server files are queued for this session
+  /// ([composerAttachmentsProvider]); the composer then **pulls** them
+  /// through [_takeQueuedFiles] if it can attach them at once, and otherwise
+  /// leaves them queued until it can. Nothing is pushed at a composer that
+  /// might refuse it: a file taken and refused was lost after the user had
+  /// been told it was sent. With no composer — the transcript still loading —
+  /// nobody pulls, and the one that mounts takes what waited.
+  final _filesQueued = ValueNotifier<int>(0);
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -127,6 +136,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// on its way out, and the draft has to be parked exactly then.
   late final ComposerDrafts _drafts;
 
+  /// [_drafts]' twin for files, held for the same reason.
+  late final ComposerAttachments _queuedFiles;
+
   /// Set before the draft is parked, because parking it notifies this widget's
   /// own listener on the same provider and `ref` is dead by then.
   bool _leaving = false;
@@ -135,6 +147,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   void initState() {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
+    _queuedFiles = ref.read(composerAttachmentsProvider.notifier);
   }
 
   @override
@@ -146,6 +159,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       _resolver = null;
       _sendKey = null;
       _keyedText = null;
+      // Another session's queue: the composer looks at it now.
+      _filesQueued.value++;
     }
   }
 
@@ -158,6 +173,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
     _composer.dispose();
     unawaited(_dropped.close());
+    _filesQueued.dispose();
     super.dispose();
   }
 
@@ -181,6 +197,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _composer.selection = TextSelection.collapsed(
       offset: _composer.text.length,
     );
+  }
+
+  /// Takes whatever files were queued for this session, by the path its agent
+  /// reads — called only by the composer, and only when it attaches them in
+  /// the same call ([MessageComposer.takeServerFiles], [_filesQueued]). A
+  /// method tear-off, so the footer built once keeps an equal callback.
+  List<String> _takeQueuedFiles() {
+    if (_leaving) return const [];
+    final queued = _queuedFiles.take(widget.sessionId);
+    if (queued == null) return const [];
+    return [for (final file in queued) file.path];
   }
 
   /// Keeps [message] as a note, word for word, remembering where it was taken
@@ -386,8 +413,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     ref.listen(composerDraftProvider, (_, next) {
       if (next.containsKey(widget.sessionId)) _takeQueuedNote();
     });
+    // Files offered from an open tab: the composer is told, and takes them
+    // when it can attach them ([_filesQueued]).
+    ref.listen(composerAttachmentsProvider, (_, next) {
+      if (!_leaving && next.containsKey(widget.sessionId)) {
+        _filesQueued.value++;
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _takeQueuedNote();
+      if (!mounted) return;
+      _takeQueuedNote();
     });
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
@@ -731,6 +766,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           droppedFiles: _dropped.stream,
+          takeServerFiles: _takeQueuedFiles,
+          serverFilesWaiting: _filesQueued,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,

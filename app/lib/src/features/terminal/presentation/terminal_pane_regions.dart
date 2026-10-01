@@ -111,6 +111,15 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     // Keyed by the file: two editor panes can share one region, and without a
     // key the State of the one leaving is handed the other's path.
     if (editorPanePath(paneId) case final path?) {
+      // An image, a video or an audio file is shown, not refused as binary.
+      if (mediaKindOf(path) != null) {
+        return MediaPane(
+          key: ValueKey(paneId),
+          paneId: paneId,
+          hostPath: path,
+          showing: showing,
+        );
+      }
       return EditorTabView(key: ValueKey(paneId), hostPath: path);
     }
     if (notePaneNoteId(paneId) case final noteId?) {
