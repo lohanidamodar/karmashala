@@ -6,6 +6,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../domain/document_id.dart';
+import '../domain/media_kind.dart';
+import 'media_documents.dart';
 import 'open_documents.dart';
 
 /// Opening a file in a tab of its own, and finding the unsaved work a close
@@ -23,7 +25,12 @@ class EditorTabActions {
     final tabId = _ref
         .read(terminalSessionsControllerProvider.notifier)
         .openEditorTab(id);
-    unawaited(_ref.read(openDocumentsProvider.notifier).open(id));
+    // A media file is shown by the media viewer, never read as text.
+    if (mediaKindOf(id) != null) {
+      unawaited(_ref.read(mediaDocumentsProvider.notifier).open(id));
+    } else {
+      unawaited(_ref.read(openDocumentsProvider.notifier).open(id));
+    }
     if (line != null) {
       _ref.read(editorRevealLineProvider.notifier).reveal(id, line);
     }
@@ -63,8 +70,13 @@ class EditorTabActions {
   /// rather than restoring an edit nobody kept.
   void release(Iterable<String> paths) {
     final documents = _ref.read(openDocumentsProvider.notifier);
+    final media = _ref.read(mediaDocumentsProvider.notifier);
     for (final path in paths) {
-      documents.close(path);
+      if (mediaKindOf(path) != null) {
+        media.close(path);
+      } else {
+        documents.close(path);
+      }
     }
   }
 }

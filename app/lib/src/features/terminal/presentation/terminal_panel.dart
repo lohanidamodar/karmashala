@@ -11,6 +11,8 @@ import '../../notes/presentation/note_edit_dialog.dart';
 import '../../notes/presentation/note_tab_view.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../editor/presentation/editor_tab_view.dart';
+import '../../editor/domain/media_kind.dart';
+import '../../editor/presentation/media/media_pane.dart';
 import '../../files/presentation/files_tab_view.dart';
 import '../../browser/presentation/browser_pane.dart';
 import '../application/browser_document_pane.dart';
@@ -70,11 +72,7 @@ part 'terminal_toolbar.dart';
 /// The terminal's panes: the search bar over the active tab's split tree. Only
 /// [kMountedTabBudget] tabs stay mounted — all of them cost 65 ms a tab switch.
 class TerminalPaneStack extends ConsumerStatefulWidget {
-  const TerminalPaneStack({
-    this.groupId,
-    this.groupFocused = true,
-    super.key,
-  });
+  const TerminalPaneStack({this.groupId, this.groupFocused = true, super.key});
 
   /// The workspace group whose tabs these are, or null while no tab is open.
   final String? groupId;
