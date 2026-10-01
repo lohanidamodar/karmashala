@@ -20,6 +20,16 @@ set DARTEXE=%USERPROFILE%\flutter\bin\cache\dart-sdk\bin\dart.exe
 set RELEASE=app\build\windows\x64\runner\Release
 del /q "%DONE%" 2>nul
 
+rem A one-shot request for the Windows installer alone: the scheduled task
+rem takes no arguments, so this file asks instead, and is consumed here so the
+rem next build is a full one again.
+set WINDOWS_ONLY=
+set WINDOWS_ONLY_FLAG=%USERPROFILE%\karmashala-build.windows-only
+if exist "%WINDOWS_ONLY_FLAG%" (
+  set WINDOWS_ONLY=1
+  del /q "%WINDOWS_ONLY_FLAG%" 2>nul
+)
+
 rem Read the version straight out of app\pubspec.yaml so it cannot drift from what
 rem was built. "version: 1.2.0+12" -> APPVER=1.2.0+12, APPVERSHORT=1.2.0.
 rem If this fails APPVER stays empty and the app logs "version not recorded",
@@ -135,6 +145,11 @@ echo === INSTALLER === >> "%LOG%"
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! app\windows\installer\karmashala.iss >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
+if defined WINDOWS_ONLY (
+  echo === ANDROID SKIPPED: windows-only build requested === >> "%LOG%"
+  goto :done
+)
+
 rem Both APKs are signed by app\android\key.properties when present, else the
 rem debug key. Both builds write app-release.apk, so the companion goes first
 rem and is copied aside.
@@ -154,6 +169,7 @@ set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail
 
+:done
 echo OK > "%DONE%"
 exit /b 0
 :fail
