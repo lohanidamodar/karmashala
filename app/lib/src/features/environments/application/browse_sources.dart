@@ -1,4 +1,5 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_files/values.dart' show FileEntry, FileEntryKind;
 import 'package:karmashala_ui/picking.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -19,47 +20,67 @@ List<BrowseSource> browseSourcesFrom(ProviderContainer container) {
   final readsServerDisk = container.read(capabilitiesProvider).readsServerDisk;
   return [
     for (final environment in container.read(environmentsControllerProvider))
-      if (_browsable(environment))
-        BrowseSource(
-          id: environment.id,
-          label:
-              environmentLabel(environment) ??
-              (_isLocal(environment) ? 'This computer' : environment.name),
-          // This machine's own drives and folders are worth offering as
-          // shortcuts only when the server's disk is this machine's.
-          local: _isLocal(environment) && readsServerDisk,
-          home: () async => (await files.home(environment.id)).path,
-          lister: (path) => _list(files, environment.id, path),
-        ),
+      if (isBrowsableEnvironment(environment))
+        browseSourceFor(files, environment, readsServerDisk: readsServerDisk),
   ];
 }
 
-bool _isLocal(ExecutionEnvironment environment) =>
-    environment.kind == EnvironmentKind.windowsNative ||
-    environment.kind == EnvironmentKind.localPosix;
+/// One machine as a browser's source: listed, resolved and written by the
+/// server. [seen], when given, is told every entry listed, by path — for a
+/// caller whose verbs need the server's own [FileEntry] (the Files tab).
+BrowseSource browseSourceFor(
+  FilesClient files,
+  ExecutionEnvironment environment, {
+  required bool readsServerDisk,
+  void Function(FileEntry entry)? seen,
+}) {
+  final id = environment.id;
+  EnvironmentPath at(String path) =>
+      EnvironmentPath(environmentId: id, path: path);
+  return BrowseSource(
+    id: id,
+    label:
+        environmentLabel(environment) ??
+        (_isLocal(environment) ? 'This computer' : environment.name),
+    // This machine's own drives and folders are worth offering as shortcuts
+    // only when the server's disk is this machine's.
+    local: _isLocal(environment) && readsServerDisk,
+    home: () async => (await files.home(id)).path,
+    lister: (path) async {
+      final entries = await files.list(at(path));
+      if (seen != null) {
+        for (final entry in entries) {
+          seen(entry);
+        }
+      }
+      return [for (final entry in entries) _browsed(entry)];
+    },
+    resolve: (path) async => (await files.resolve(at(path))).path.path,
+    createDirectory: (directory, name) async =>
+        (await files.createDirectory(at(directory), name)).path,
+    createFile: (directory, name) async =>
+        (await files.createFile(at(directory), name)).path,
+  );
+}
 
-bool _browsable(ExecutionEnvironment environment) =>
+BrowsedEntry _browsed(FileEntry entry) => BrowsedEntry(
+  name: entry.name,
+  path: entry.path.path,
+  isDirectory: entry.isDirectory,
+  hidden: entry.isHidden,
+  isLink: entry.kind == FileEntryKind.symlink,
+  sizeBytes: entry.sizeBytes,
+);
+
+/// Whether a file browser can show [environment]: this machine always, a
+/// distribution or host once it names one.
+bool isBrowsableEnvironment(ExecutionEnvironment environment) =>
     switch (environment.kind) {
       EnvironmentKind.windowsNative || EnvironmentKind.localPosix => true,
       EnvironmentKind.wsl => environment.wslDistribution != null,
       EnvironmentKind.ssh => environment.sshHostId != null,
     };
 
-Future<List<BrowsedEntry>> _list(
-  FilesClient files,
-  String environmentId,
-  String path,
-) async {
-  final entries = await files.list(
-    EnvironmentPath(environmentId: environmentId, path: path),
-  );
-  return [
-    for (final entry in entries)
-      BrowsedEntry(
-        name: entry.name,
-        path: entry.path.path,
-        isDirectory: entry.isDirectory,
-        hidden: entry.isHidden,
-      ),
-  ];
-}
+bool _isLocal(ExecutionEnvironment environment) =>
+    environment.kind == EnvironmentKind.windowsNative ||
+    environment.kind == EnvironmentKind.localPosix;

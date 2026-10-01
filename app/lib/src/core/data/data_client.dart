@@ -355,6 +355,23 @@ class DataClient {
   /// The vault's names, whole, each time they change.
   Stream<List<EnvVariableName>> get envChanges => _envChanges.stream;
 
+  /// The folders pinned to every file browser, as last told. A new link
+  /// starts from none: the server greets it only when something is pinned.
+  List<QuickAccessPin> quickAccessPins = const [];
+
+  final _quickAccessChanges = StreamController<List<QuickAccessPin>>.broadcast(
+    sync: true,
+  );
+
+  /// The pins, whole, each time they change — here or on another client.
+  Stream<List<QuickAccessPin>> get quickAccessChanges =>
+      _quickAccessChanges.stream;
+
+  void _setQuickAccess(List<QuickAccessPin> pins) {
+    quickAccessPins = List.unmodifiable(pins);
+    if (!_quickAccessChanges.isClosed) _quickAccessChanges.add(pins);
+  }
+
   /// The app stores as the server holds them, as last told; null until the
   /// server has said. Never a credential: summaries only.
   StoresView? storesView;
@@ -939,6 +956,8 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
+        case QuickAccessChanged(:final pins):
+          _setQuickAccess(pins);
         case StoresChanged(:final view):
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
@@ -980,6 +999,8 @@ class DataClient {
     }
     // Greeted again whole; a reading the new link does not repeat is gone.
     forgeReadings.clear();
+    // Greeted only when something is pinned: silence means none.
+    if (quickAccessPins.isNotEmpty) _setQuickAccess(const []);
   }
 
   Future<void> _attach(DataEndpoint endpoint) async {
@@ -1126,6 +1147,7 @@ class DataClient {
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
     unawaited(_envChanges.close());
+    unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());
     unawaited(_gitChanges.close());

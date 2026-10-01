@@ -11,7 +11,7 @@ import '../../editor/application/editor_tab_actions.dart';
 import '../../files/application/server_file_opening.dart';
 import '../../files/data/files_client.dart';
 import '../../files/presentation/file_delete.dart';
-import '../../files/presentation/file_name_dialog.dart';
+import 'package:karmashala_ui/picking.dart' show FileNameDialog;
 import '../../terminal/application/dropped_paths.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_files/values.dart';
@@ -528,9 +528,7 @@ class _FileEntryActions {
       final local = await ref.read(filesClientProvider).localPathOf(path);
       if (local == null) {
         messenger.showSnackBar(
-          SnackBar(
-            content: Text('${path.path} is not on this machine.'),
-          ),
+          SnackBar(content: Text('${path.path} is not on this machine.')),
         );
         return;
       }

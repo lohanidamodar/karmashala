@@ -15,6 +15,11 @@
 /// asks `dart:io` instead, whose directory listing is asynchronous — so a slow
 /// path costs a spinner rather than the UI thread — and never touches the
 /// shell namespace, COM or Network at all. See docs/SETTLED.md.
+///
+/// The body is [FileBrowserView], driven by a [FileBrowserController]: the
+/// same one the Files tab draws each side with and the phone's Files page
+/// draws whole. This file is the pick around it — a dialog on a wide window,
+/// a page on a narrow one.
 library;
 
 import 'dart:async';
@@ -26,9 +31,9 @@ import 'package:flutter/material.dart';
 import 'app_icons.dart';
 import 'design_tokens.dart';
 import 'desktop_dialog.dart';
+import 'file_browser_controller.dart';
+import 'file_browser_view.dart';
 import 'hidden_files.dart';
-import 'hidden_files_chip.dart';
-import 'inline_spinner.dart';
 
 /// One row of a listed directory.
 @immutable
@@ -38,6 +43,9 @@ class BrowsedEntry {
     required this.path,
     required this.isDirectory,
     this.hidden = false,
+    this.isLink = false,
+    this.sizeBytes,
+    this.readable = true,
   });
 
   final String name;
@@ -47,10 +55,25 @@ class BrowsedEntry {
   /// A leading dot, or the Windows hidden or system attribute. Read once while
   /// listing, so the toggle is a filter rather than a second walk of the disk.
   final bool hidden;
+
+  /// A symbolic link the lister did not follow.
+  final bool isLink;
+
+  /// Null when the lister did not say — never 0 as a stand-in.
+  final int? sizeBytes;
+
+  /// False for a row listed but not statable — a device's `/` does this. The
+  /// name is real, so it is shown, dimmed and inert.
+  final bool readable;
 }
 
 /// Lists one directory. A seam, so a test never touches a real disk.
 typedef DirectoryLister = Future<List<BrowsedEntry>> Function(String path);
+
+/// Makes [name] inside [directory] and answers the new path. Throws with a
+/// sentence a person can be shown when it was refused — a name taken, a
+/// folder that will not be written.
+typedef BrowseCreate = Future<String> Function(String directory, String name);
 
 /// One place the browser can look — this computer, a WSL distribution, a host
 /// over SSH. Every path a source produces is spelled for **its own** machine,
@@ -63,6 +86,10 @@ class BrowseSource {
     required this.home,
     required this.lister,
     this.local = false,
+    this.resolve,
+    this.createDirectory,
+    this.createFile,
+    this.places,
   });
 
   /// The environment id, which is what a caller records alongside the path.
@@ -80,6 +107,18 @@ class BrowseSource {
   /// Whether this machine's own drives and user folders are worth offering as
   /// shortcuts. False for anything reached over a wire.
   final bool local;
+
+  /// A typed path made absolute where it lives — `~` on a host means that
+  /// host's home. Null takes a typed path as it is.
+  final Future<String> Function(String path)? resolve;
+
+  /// New folder and New file; null where this source cannot make them.
+  final BrowseCreate? createDirectory;
+  final BrowseCreate? createFile;
+
+  /// This source's own shortcuts — a device's storage roots — in place of
+  /// this computer's folders and drives.
+  final Future<List<BrowsePlace>> Function()? places;
 }
 
 /// The places this app can browse, as the app knows them.
@@ -157,17 +196,39 @@ Future<String?> showFileBrowser(
 Future<List<BrowsedEntry>> listDirectory(String path) async {
   final entries = <BrowsedEntry>[];
   await for (final entity in Directory(path).list(followLinks: false)) {
-    final name = _leafOf(entity.path);
+    final name = leafOfBrowsedPath(entity.path);
     entries.add(
       BrowsedEntry(
         name: name,
         path: entity.path,
         isDirectory: entity is Directory,
+        isLink: entity is Link,
         hidden: isHiddenEntry(name: name, path: entity.path),
       ),
     );
   }
   return entries;
+}
+
+/// New folder on this computer's own disk, for a browser of it outside any
+/// server. A name already there is refused, never reported made.
+Future<String> createLocalDirectory(String directory, String name) async {
+  final path = joinBrowsedPath(directory, name);
+  if (await FileSystemEntity.type(path) != FileSystemEntityType.notFound) {
+    throw StateError('There is already something called "$name" here.');
+  }
+  await Directory(path).create();
+  return path;
+}
+
+/// [createLocalDirectory] for an empty file.
+Future<String> createLocalFile(String directory, String name) async {
+  final path = joinBrowsedPath(directory, name);
+  if (await FileSystemEntity.type(path) != FileSystemEntityType.notFound) {
+    throw StateError('There is already something called "$name" here.');
+  }
+  await File(path).create(exclusive: true);
+  return path;
 }
 
 Future<bool> _directoryExists(String path) async {
@@ -178,6 +239,8 @@ Future<bool> _directoryExists(String path) async {
   }
 }
 
+/// The picker: [FileBrowserView] with a title and Choose, as a dialog — or,
+/// [fullScreen], as a page with its own app bar and touch-sized rows.
 class FileBrowserDialog extends StatefulWidget {
   const FileBrowserDialog({
     required this.what,
@@ -221,246 +284,54 @@ class FileBrowserDialog extends StatefulWidget {
 }
 
 class _FileBrowserDialogState extends State<FileBrowserDialog> {
-  final _path = TextEditingController();
-  final _filter = TextEditingController();
-  final _listFocus = FocusNode();
-
-  late String _directory;
-  List<BrowsedEntry> _entries = const [];
-  BrowsedEntry? _selected;
-  String? _error;
-  bool _loading = false;
-  List<_Place> _places = const [];
-
-  /// Which of the sources is open. Null when the caller gave none, which is
-  /// this computer read through the widget's own lister.
-  BrowseSource? _source;
-
-  /// The dropdown is dead while a machine is answering: two switches in flight
-  /// would race to say where the browser is standing.
-  bool get _busySwitching => _loading && _entries.isEmpty;
-
-  /// Guards against an earlier, slower listing landing after a later one.
-  int _generation = 0;
-
-  /// Where the browser has been this visit, and where in it we are standing.
-  /// Walking back and opening a new folder from there drops what was ahead,
-  /// the way a browser's own history does.
-  final List<String> _trail = [];
-  int _step = -1;
+  late final FileBrowserController _browser = FileBrowserController(
+    sources: widget.sources,
+    environmentId: widget.environmentId,
+    startAt: widget.startAt,
+    directoriesOnly: widget.directories,
+    acceptedTypeGroups: widget.acceptedTypeGroups,
+    lister: widget.lister,
+    exists: widget.exists,
+    environment: widget.environment,
+  );
 
   @override
   void initState() {
     super.initState();
-    _source = _initialSource();
-    _directory = widget.startAt?.trim().isNotEmpty ?? false
-        ? widget.startAt!.trim()
-        : _homeOf(widget.environment);
-    // A remote source has no start we can guess, so it is asked for one; a
-    // local one opens immediately, because waiting on a round trip we do not
-    // need is the whole complaint this browser exists to answer.
-    if (_source != null && !_source!.local) {
-      unawaited(_openHomeOf(_source!));
-    } else {
-      _open(_directory);
-    }
-    unawaited(_loadPlaces());
-  }
-
-  /// The source to open on: the one the caller named, else the first local one,
-  /// else the first there is.
-  BrowseSource? _initialSource() {
-    if (widget.sources.isEmpty) return null;
-    final named = widget.environmentId;
-    for (final source in widget.sources) {
-      if (source.id == named) return source;
-    }
-    for (final source in widget.sources) {
-      if (source.local) return source;
-    }
-    return widget.sources.first;
-  }
-
-  DirectoryLister get _lister => _source?.lister ?? widget.lister;
-
-  /// Moves to another machine. The trail does not cross: Back into a folder on
-  /// a host you have left would read as this one's.
-  Future<void> _switchTo(BrowseSource source) async {
-    setState(() {
-      _source = source;
-      _trail.clear();
-      _step = -1;
-      _places = const [];
-    });
-    unawaited(_loadPlaces());
-    await _openHomeOf(source);
-  }
-
-  Future<void> _openHomeOf(BrowseSource source) async {
-    final generation = ++_generation;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _entries = const [];
-    });
-    try {
-      final home = await source.home().timeout(kListingPatience);
-      if (!mounted || generation != _generation) return;
-      await _open(home);
-    } on Object catch (error) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _loading = false;
-        _error = '${source.label} could not say where to start — $error';
-      });
-    }
+    unawaited(_browser.start());
   }
 
   @override
   void dispose() {
-    _path.dispose();
-    _filter.dispose();
-    _listFocus.dispose();
+    _browser.dispose();
     super.dispose();
   }
 
-  Future<void> _open(String path, {bool record = true}) async {
-    if (record) {
-      if (_step < _trail.length - 1) {
-        _trail.removeRange(_step + 1, _trail.length);
-      }
-      _trail.add(path);
-      _step = _trail.length - 1;
-    }
-    final generation = ++_generation;
-    setState(() {
-      _directory = path;
-      _path.text = path;
-      _loading = true;
-      _error = null;
-      _selected = null;
-      _filter.clear();
-    });
-    try {
-      final entries = await _lister(path).timeout(kListingPatience);
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _entries = _ordered(entries);
-        _loading = false;
-      });
-    } on TimeoutException {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _entries = const [];
-        _loading = false;
-        _error =
-            'This folder did not answer within '
-            '${kListingPatience.inSeconds} seconds. A disconnected share or a '
-            'stopped WSL distribution reads like this.';
-      });
-    } on Object catch (error) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _entries = const [];
-        _loading = false;
-        _error = _sentenceFor(error, path);
-      });
-    }
-  }
+  Widget _body({required bool touch}) => FileBrowserView(
+    controller: _browser,
+    touch: touch,
+    // On a page the keyboard would cover the listing on arrival.
+    autofocusFilter: !touch,
+    // A "Browse…" asks for a file that exists: an empty one made here would
+    // be chosen and handed to whatever wanted a real one.
+    offerNewFile: false,
+  );
 
-  /// Folders first, then names — the order every file manager uses, so the eye
-  /// does not have to learn a new one.
-  List<BrowsedEntry> _ordered(List<BrowsedEntry> entries) {
-    final kept =
-        [
-          for (final entry in entries)
-            if (entry.isDirectory || _accepts(entry.name)) entry,
-        ]..sort(
-          (a, b) => compareBrowsedRows(
-            aIsDirectory: a.isDirectory,
-            aName: a.name,
-            bIsDirectory: b.isDirectory,
-            bName: b.name,
-          ),
-        );
-    return kept;
-  }
-
-  /// A folder picker shows no files at all; a file picker shows the extensions
-  /// it was given, or everything when it was given none.
-  bool _accepts(String name) {
-    if (widget.directories) return false;
-    final wanted = <String>{
-      for (final group in widget.acceptedTypeGroups)
-        ...?group.extensions?.map((e) => e.toLowerCase().replaceAll('.', '')),
-    };
-    if (wanted.isEmpty) return true;
-    final cut = name.lastIndexOf('.');
-    if (cut <= 0 || cut == name.length - 1) return false;
-    return wanted.contains(name.substring(cut + 1).toLowerCase());
-  }
-
-  Future<void> _loadPlaces() async {
-    // Only this computer's own drives and folders: a drive letter means nothing
-    // on a host reached over SSH, and probing one would stat the wrong machine.
-    final source = _source;
-    if (source != null && !source.local) return;
-    final places = await _shortcuts(widget.environment, widget.exists);
-    if (!mounted) return;
-    setState(() => _places = places);
-  }
-
-  /// One tap opens a folder — the row is the affordance, not a chevron on the
-  /// end of it. A file is selected instead, because opening one is the answer.
-  void _tapped(BrowsedEntry entry) {
-    if (entry.isDirectory) {
-      _open(entry.path);
-    } else {
-      setState(() => _selected = entry);
-    }
-  }
-
-  /// What Choose returns: a folder picker answers with wherever the browser is
-  /// standing — tapping a folder walks into it — and a file picker needs a file.
-  String? get _answer {
-    if (widget.directories) return _directory;
-    final selected = _selected;
-    return selected != null && !selected.isDirectory ? selected.path : null;
-  }
-
-  void _up() {
-    final parent = _parentOf(_directory);
-    if (parent != null) _open(parent);
-  }
-
-  bool get _canGoBack => _step > 0;
-  bool get _canGoForward => _step >= 0 && _step < _trail.length - 1;
-
-  void _back() {
-    if (!_canGoBack) return;
-    _step--;
-    _open(_trail[_step], record: false);
-  }
-
-  void _forward() {
-    if (!_canGoForward) return;
-    _step++;
-    _open(_trail[_step], record: false);
-  }
-
-  List<BrowsedEntry> get _visible {
-    final needle = _filter.text.trim().toLowerCase();
-    return [
-      for (final entry in _entries)
-        if (HiddenFilesPreference.shown || !entry.hidden)
-          if (needle.isEmpty || entry.name.toLowerCase().contains(needle))
-            entry,
-    ];
-  }
-
-  /// How many rows the hidden toggle is currently keeping off screen — said out
-  /// loud, so an empty-looking folder is never a mystery.
-  int get _hiddenCount => _entries.where((entry) => entry.hidden).length;
+  Widget _choose({required bool touch}) => ListenableBuilder(
+    listenable: _browser,
+    builder: (context, _) {
+      final answer = _browser.answer;
+      return FilledButton(
+        style: touch
+            ? FilledButton.styleFrom(minimumSize: const Size(0, Touch.target))
+            : null,
+        onPressed: answer == null
+            ? null
+            : () => Navigator.of(context).pop(answer),
+        child: Text(widget.confirmButtonText ?? 'Choose'),
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -490,9 +361,8 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
                         'are standing in.'
                   : 'Type a path if you already know it.',
             ),
-            // The shortcuts are the first thing to go: the listing is the
-            // dialog.
-            ..._browsing(context, roomForPlaces: width >= 560),
+            const SizedBox(height: Insets.md),
+            Expanded(child: _body(touch: false)),
           ],
         ),
       ),
@@ -501,509 +371,77 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _answer == null
-              ? null
-              : () => Navigator.of(context).pop(_answer),
-          child: Text(widget.confirmButtonText ?? 'Choose'),
-        ),
+        _choose(touch: false),
       ],
     );
   }
 
-  /// The browser as a page of its own: close and Choose in the app bar, and
-  /// the listing given the whole height with no Places column.
-  Widget _page(BuildContext context) {
-    final answer = _answer;
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: Touch.appBarOf(context),
-        leading: IconButton(
-          tooltip: 'Cancel',
-          icon: const Icon(AppIcons.x),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Choose ${widget.what}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: Insets.sm),
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, Touch.target),
-              ),
-              onPressed: answer == null
-                  ? null
-                  : () => Navigator.of(context).pop(answer),
-              child: Text(widget.confirmButtonText ?? 'Choose'),
-            ),
-          ),
-        ],
+  /// The browser as a page of its own: close and Choose in the app bar, the
+  /// listing given the whole height and the shortcuts as a row of chips.
+  Widget _page(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      toolbarHeight: Touch.appBarOf(context),
+      leading: IconButton(
+        tooltip: 'Cancel',
+        icon: const Icon(AppIcons.x),
+        onPressed: () => Navigator.of(context).pop(),
       ),
-      body: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            0,
-            Insets.md,
-            Insets.md,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: _browsing(context, roomForPlaces: false),
-          ),
-        ),
+      title: Text(
+        'Choose ${widget.what}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-    );
-  }
-
-  /// Everything under the title: the source, the path, the listing and the
-  /// filter.
-  List<Widget> _browsing(BuildContext context, {required bool roomForPlaces}) {
-    final page = widget.fullScreen;
-    return [
-      if (widget.sources.length > 1) ...[
-        const SizedBox(height: Insets.md),
-        _SourceBar(
-          sources: widget.sources,
-          current: _source,
-          onChanged: _busySwitching ? null : _switchTo,
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: Insets.sm),
+          child: _choose(touch: true),
         ),
       ],
-      const SizedBox(height: Insets.md),
-      _PathBar(
-        controller: _path,
-        onBack: _canGoBack ? _back : null,
-        onForward: _canGoForward ? _forward : null,
-        onUp: _parentOf(_directory) == null ? null : _up,
-        onRefresh: () => _open(_directory, record: false),
-        onSubmitted: (value) {
-          final trimmed = value.trim();
-          if (trimmed.isNotEmpty) _open(trimmed);
-        },
-      ),
-      const SizedBox(height: Insets.sm),
-      Expanded(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (roomForPlaces) ...[
-              SizedBox(
-                width: 168,
-                child: _Places(
-                  places: _places,
-                  current: _directory,
-                  onTap: _open,
-                ),
-              ),
-              const SizedBox(width: Insets.sm),
-            ],
-            Expanded(child: _listing(context)),
-          ],
-        ),
-      ),
-      const SizedBox(height: Insets.sm),
-      Row(
-        children: [
-          Expanded(
-            child: _FilterField(
-              controller: _filter,
-              onChanged: (_) => setState(() {}),
-              hint: widget.directories
-                  ? 'Filter folders'
-                  : 'Filter this folder',
-              // On a page the keyboard would cover the listing on arrival.
-              autofocus: !page,
-            ),
-          ),
-          const SizedBox(width: Insets.sm),
-          HiddenFilesChip(
-            hiddenCount: _hiddenCount,
-            onChanged: (_) => setState(() {}),
-          ),
-        ],
-      ),
-    ];
-  }
-
-  Widget _listing(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final border = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(Radii.md),
-      side: BorderSide(color: scheme.outlineVariant),
-    );
-
-    final Widget body;
-    if (_loading) {
-      body = const Center(child: InlineSpinner(size: InlineSpinnerSize.large));
-    } else if (_error != null) {
-      body = _Message(icon: AppIcons.warningCircle, text: _error!);
-    } else {
-      final rows = _visible;
-      if (rows.isEmpty) {
-        body = _Message(
-          icon: AppIcons.folder,
-          text: _entries.isEmpty
-              ? (widget.directories
-                    ? 'No folders in here. You can still choose this one.'
-                    : 'Nothing in here matches what is being asked for.')
-              : 'Nothing matches “${_filter.text.trim()}”.',
-        );
-      } else {
-        body = Focus(
-          focusNode: _listFocus,
-          child: ListView.builder(
-            primary: false,
-            itemCount: rows.length,
-            itemBuilder: (context, index) {
-              final entry = rows[index];
-              return _EntryRow(
-                entry: entry,
-                touch: widget.fullScreen,
-                selected: _selected?.path == entry.path,
-                onTap: () => _tapped(entry),
-              );
-            },
-          ),
-        );
-      }
-    }
-
-    return Material(
-      color: scheme.surfaceContainerLowest,
-      shape: border,
-      clipBehavior: Clip.antiAlias,
-      child: body,
-    );
-  }
-}
-
-/// Which machine is being browsed. Drawn only when there is a choice, so a
-/// workspace with nothing but this computer keeps the plain dialog.
-class _SourceBar extends StatelessWidget {
-  const _SourceBar({
-    required this.sources,
-    required this.current,
-    required this.onChanged,
-  });
-
-  final List<BrowseSource> sources;
-  final BrowseSource? current;
-  final ValueChanged<BrowseSource>? onChanged;
-
-  @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(
-    initialValue: current?.id ?? sources.first.id,
-    decoration: const InputDecoration(isDense: true, labelText: 'Look in'),
-    items: [
-      for (final source in sources)
-        DropdownMenuItem(
-          value: source.id,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                source.local ? AppIcons.stack : AppIcons.globe,
-                size: Chrome.icon,
-              ),
-              const SizedBox(width: Insets.sm),
-              Text(source.label),
-            ],
-          ),
-        ),
-    ],
-    onChanged: onChanged == null
-        ? null
-        : (id) {
-            for (final source in sources) {
-              if (source.id == id && source.id != current?.id) {
-                onChanged!(source);
-                return;
-              }
-            }
-          },
-  );
-}
-
-class _PathBar extends StatelessWidget {
-  const _PathBar({
-    required this.controller,
-    required this.onBack,
-    required this.onForward,
-    required this.onUp,
-    required this.onRefresh,
-    required this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback? onBack;
-  final VoidCallback? onForward;
-  final VoidCallback? onUp;
-  final VoidCallback onRefresh;
-  final ValueChanged<String> onSubmitted;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      IconButton(
-        onPressed: onBack,
-        icon: const Icon(AppIcons.caretLeft, size: Chrome.icon),
-        tooltip: 'Back',
-      ),
-      IconButton(
-        onPressed: onForward,
-        icon: const Icon(AppIcons.caretRight, size: Chrome.icon),
-        tooltip: 'Forward',
-      ),
-      IconButton(
-        onPressed: onUp,
-        icon: const Icon(AppIcons.arrowUp, size: Chrome.icon),
-        tooltip: 'Up one folder',
-      ),
-      Expanded(
-        child: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: Platform.isWindows
-                ? r'C:\ or \\wsl.localhost\distro\home\you'
-                : '/ or ~/projects',
-          ),
-          onSubmitted: onSubmitted,
-        ),
-      ),
-      IconButton(
-        onPressed: onRefresh,
-        icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-        tooltip: 'Read this folder again',
-      ),
-    ],
-  );
-}
-
-class _FilterField extends StatelessWidget {
-  const _FilterField({
-    required this.controller,
-    required this.onChanged,
-    required this.hint,
-    required this.autofocus,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final String hint;
-  final bool autofocus;
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    autofocus: autofocus,
-    decoration: InputDecoration(
-      isDense: true,
-      prefixIcon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-      hintText: hint,
     ),
-    onChanged: onChanged,
+    body: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.md),
+        child: _body(touch: true),
+      ),
+    ),
   );
 }
 
-class _EntryRow extends StatelessWidget {
-  const _EntryRow({
-    required this.entry,
-    required this.selected,
-    required this.onTap,
-    required this.touch,
-  });
-
-  final BrowsedEntry entry;
-  final bool selected;
-  final VoidCallback onTap;
-
-  /// A thumb's row: [Touch.target] tall.
-  final bool touch;
-
-  // No double-tap-to-open: a double-tap recognizer makes every *single* tap
-  // wait out its timeout before it resolves, so selecting a file would lag by
-  // 300 ms to save one click on Choose.
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      dense: !touch,
-      minTileHeight: touch ? Touch.target : null,
-      selected: selected,
-      selectedTileColor: StateLayers.selected(scheme),
-      leading: Icon(
-        entry.isDirectory ? AppIcons.folder : AppIcons.article,
-        size: Chrome.icon,
-        color: entry.isDirectory ? scheme.primary : scheme.onSurfaceVariant,
-      ),
-      title: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onTap: onTap,
-      trailing: entry.isDirectory
-          ? Icon(
-              AppIcons.caretRight,
-              size: Chrome.icon,
-              color: scheme.onSurfaceVariant,
-            )
-          : null,
-    );
-  }
-}
-
-class _Places extends StatelessWidget {
-  const _Places({
-    required this.places,
-    required this.current,
-    required this.onTap,
-  });
-
-  final List<_Place> places;
-  final String current;
-  final ValueChanged<String> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(Radii.md),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ListView(
-        primary: false,
-        children: [
-          for (final place in places)
-            ListTile(
-              dense: true,
-              selected: place.path.toLowerCase() == current.toLowerCase(),
-              leading: Icon(place.icon, size: Chrome.icon),
-              title: Text(
-                place.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () => onTap(place.path),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: Chrome.iconHero,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-@immutable
-class _Place {
-  const _Place(this.label, this.path, this.icon);
-  final String label;
-  final String path;
-  final IconData icon;
-}
-
-/// The shortcuts down the left: the user's own folders, then whatever drive
-/// letters answer. **Network is never listed** — reaching it is the cost this
-/// whole browser exists to avoid, and a drive letter is not the Network root.
-Future<List<_Place>> _shortcuts(
-  Map<String, String> environment,
-  DirectoryExists exists,
-) async {
-  final home = _homeOf(environment);
-  final candidates = <_Place>[
-    _Place('Home', home, AppIcons.folderOpen),
-    _Place('Desktop', _join(home, 'Desktop'), AppIcons.folder),
-    _Place('Documents', _join(home, 'Documents'), AppIcons.folder),
-    _Place('Downloads', _join(home, 'Downloads'), AppIcons.folder),
-    if (Platform.isWindows)
-      // A: and B: are floppy letters; probing them spins hardware that is not
-      // there on the machines that still map them.
-      for (
-        var letter = 'C'.codeUnitAt(0);
-        letter <= 'Z'.codeUnitAt(0);
-        letter++
-      )
-        _Place(
-          '${String.fromCharCode(letter)}:',
-          '${String.fromCharCode(letter)}:\\',
-          AppIcons.stack,
-        ),
-  ];
-
-  final answered = await Future.wait([
-    for (final place in candidates)
-      exists(
-        place.path,
-      ).timeout(const Duration(milliseconds: 400), onTimeout: () => false),
-  ]);
-  return [
-    for (var i = 0; i < candidates.length; i++)
-      if (answered[i]) candidates[i],
-  ];
-}
-
-String _homeOf(Map<String, String> environment) =>
+/// The user's home on this machine, or a root when the environment names none.
+String homeOfEnvironment(Map<String, String> environment) =>
     environment['USERPROFILE'] ??
     environment['HOME'] ??
     (Platform.pathSeparator == r'\' ? r'C:\' : '/');
 
-String _join(String directory, String leaf) {
-  final base = directory.replaceAll(RegExp(r'[\\/]+$'), '');
-  return Platform.pathSeparator == r'\' ? '$base\\$leaf' : '$base/$leaf';
+/// [leaf] inside [directory], in the separator [directory] is spelled with —
+/// a POSIX path on a host stays POSIX on a Windows client.
+String joinBrowsedPath(String directory, String leaf) {
+  final base = directory.length > 1
+      ? directory.replaceAll(RegExp(r'[\\/]+$'), '')
+      : directory;
+  final windows =
+      RegExp(r'^[A-Za-z]:|\\').hasMatch(directory) ||
+      (!directory.contains('/') && Platform.pathSeparator == r'\');
+  if (base == '/' || base.isEmpty) return '/$leaf';
+  return windows ? '$base\\$leaf' : '$base/$leaf';
 }
 
-String _leafOf(String path) {
+String leafOfBrowsedPath(String path) {
   final cleaned = path.replaceAll(RegExp(r'[\\/]+$'), '');
   final cut = cleaned.lastIndexOf(RegExp(r'[\\/]'));
   return cut == -1 ? cleaned : cleaned.substring(cut + 1);
 }
 
 /// The parent of [path], or null at a root — a drive, a UNC share or `/`.
-String? _parentOf(String path) {
+String? parentOfBrowsedPath(String path) {
   final trimmed = path.trim().replaceAll(RegExp(r'[\\/]+$'), '');
   if (trimmed.isEmpty) return null;
   if (RegExp(r'^[A-Za-z]:$').hasMatch(trimmed)) return null;
   final cut = trimmed.lastIndexOf(RegExp(r'[\\/]'));
-  if (cut <= 0) return null;
+  if (cut < 0) return null;
+  // `/home` has `/` above it.
+  if (cut == 0) return trimmed.startsWith('/') ? '/' : null;
   // `\\server\share` is a root: its parent would be the Network node.
   if (trimmed.startsWith(r'\\') || trimmed.startsWith('//')) {
     final segments = trimmed
@@ -1016,16 +454,25 @@ String? _parentOf(String path) {
   return RegExp(r'^[A-Za-z]:$').hasMatch(parent) ? '$parent\\' : parent;
 }
 
-/// What went wrong, in the user's words. A path that refused is the ordinary
-/// case and must not read like a crash.
-String _sentenceFor(Object error, String path) {
+/// What went wrong listing [path], in the user's words. A path that refused
+/// is the ordinary case and must not read like a crash.
+String listingFailureSentence(Object error, String path) {
   if (error is PathAccessException) {
     return 'Windows would not let this app read $path.';
   }
   if (error is PathNotFoundException) return 'There is no folder at $path.';
+  if (error is StateError) return '$path could not be read — ${error.message}';
   if (error is FileSystemException) {
     final reason = error.osError?.message ?? error.message;
     return '$path could not be read — $reason.';
   }
   return '$path could not be read — $error.';
 }
+
+/// What went wrong making or changing something, in the user's words.
+String operationFailureSentence(Object error) => switch (error) {
+  StateError(:final message) => message,
+  FileSystemException(:final osError, :final message) =>
+    osError?.message ?? message,
+  _ => '$error',
+};

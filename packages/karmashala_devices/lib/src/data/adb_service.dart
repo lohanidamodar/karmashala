@@ -1119,6 +1119,37 @@ class AdbService {
     );
   }
 
+  /// Makes the directory [path] on the device; its parent must be there.
+  /// `mkdir` refuses a name already taken, which is the refusal wanted.
+  Future<void> makeDirectory(String serial, String path) async {
+    final result = await runner.run(
+      _forDevice(serial, ['shell', 'mkdir ${shellQuote(path)}']),
+    );
+    final combined = '${result.stdout}\n${result.stderr}'.trim();
+    // Silent when it works; output is the failure, as for `rm`.
+    if (!result.ok || combined.isNotEmpty) {
+      final error = DeviceRefusal(
+        'Could not make $path on $serial: '
+        '${combined.isEmpty ? 'mkdir exited ${result.exitCode}.' : cleanAdbError(combined)}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'makeDirectory',
+          serial: serial,
+          summary: 'Make $path',
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(
+      DeviceAction(
+        verb: 'makeDirectory',
+        serial: serial,
+        summary: 'Made $path on $serial',
+      ),
+    );
+  }
+
   /// Copies a path **within** the device — nothing crosses the wire. `cp -p`
   /// keeps timestamp and mode; `-r` is the caller's decision, refused above.
   Future<void> copyPath(

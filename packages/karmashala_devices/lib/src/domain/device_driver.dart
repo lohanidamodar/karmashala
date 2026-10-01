@@ -251,4 +251,8 @@ abstract interface class DeviceDriver {
   /// Removes a file or directory. Not undoable, anywhere, ever. [recursive] is
   /// required for a non-empty directory and refused rather than assumed.
   Future<void> deletePath(String path, {bool recursive});
+
+  /// Makes the directory [path]. Refused when something is already there or
+  /// the parent is missing — never a silent `-p`.
+  Future<void> makeDirectory(String path);
 }
