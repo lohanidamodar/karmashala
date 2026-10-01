@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show exitAfterSocketsSettle;
 import 'package:karmashala_remote/client.dart' show CompanionPairing;
 
 import 'src/app/bootstrap_failure_app.dart';
@@ -160,7 +162,7 @@ Future<void> _bootstrap(AppLogger logger) async {
     final system = lifecycle.systemIntegration;
     if (system != null) return system.quit();
     await lifecycle.shutdown();
-    exit(0);
+    await exitAfterSocketsSettle(0, log: logger.info);
   }
 
   switcher = ServerSwitcher(

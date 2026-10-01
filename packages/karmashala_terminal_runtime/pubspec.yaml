@@ -46,6 +46,9 @@ dependencies:
   # slice 5d a box's sessions are relayed by the server.
   karmashala_host_protocol:
     path: ../karmashala_host_protocol
+  # The host's socket is closed in order on Windows (`OrderlySocket`).
+  karmashala_local_ipc:
+    path: ../local_ipc
   # The preset table's `AppDatabase`, and the row conversions both DAOs use.
   karmashala_store:
     path: ../karmashala_store
