@@ -70,7 +70,9 @@ void main() {
 
     await pump(tester);
     await tester.runAsync(() async {
-      await tester.tap(find.byTooltip('Attach image (or paste with Ctrl+V)'));
+      await tester.tap(
+        find.byTooltip('Attach a file (paste an image with Ctrl+V)'),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
     await tester.pump();

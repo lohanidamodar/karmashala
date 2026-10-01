@@ -53,6 +53,7 @@ import '../../media/application/session_media_providers.dart'
     show sessionImageFetchProvider;
 import '../data/server_transcripts.dart';
 import '../../../core/capabilities/capabilities.dart';
+import '../../../core/file_drop/file_drop_router.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
@@ -100,6 +101,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
   final _composer = TextEditingController();
+
+  /// Files dropped on the conversation, for the composer to attach.
+  final _dropped = StreamController<List<String>>.broadcast();
 
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
@@ -153,7 +157,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final draft = _composer.text;
     if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
     _composer.dispose();
+    unawaited(_dropped.close());
     super.dispose();
+  }
+
+  void _onFilesDropped(List<String> paths) {
+    // No composer while the transcript is still loading or failed to.
+    if (!_dropped.hasListener) {
+      _say('There is no message box to attach them to yet.');
+      return;
+    }
+    _dropped.add(paths);
   }
 
   /// Moves whatever the Notes panel queued for this session into the box.
@@ -393,7 +407,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // state, and the pane's status line — the same in both views — holds the
     // session's controls; a second row of them here was two places for one.
     // Pictures in its rows come through the server when it is elsewhere.
-    return TranscriptImageSource(
+    final body = TranscriptImageSource(
       fetch: ref.watch(sessionImageFetchProvider(widget.sessionId)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -516,6 +530,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             ),
           ),
         ],
+      ),
+    );
+    // Files dropped anywhere on the conversation are attached in the box.
+    return FileDropZone(
+      name: 'chat ${widget.sessionId}',
+      onFiles: _onFilesDropped,
+      builder: (context, hovering) => FileDropHighlight(
+        label: 'Drop to attach',
+        visible: hovering,
+        child: body,
       ),
     );
   }
@@ -706,6 +730,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           snippets: _snippets,
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
+          droppedFiles: _dropped.stream,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,

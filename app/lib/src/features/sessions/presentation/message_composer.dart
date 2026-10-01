@@ -41,6 +41,9 @@ enum _From {
   /// A client temp file, the server being on this machine.
   temp,
 
+  /// This machine's own file, given by its path: the server is here too.
+  local,
+
   /// This device's, uploaded to the server.
   uploaded,
 
@@ -76,13 +79,14 @@ class _Attachment {
   String get where => switch (from) {
     _From.temp =>
       'Saved to a temp folder and sent to the agent as a file path.',
+    _From.local => 'On this machine; the agent is given its path.',
     _From.uploaded => 'Sent to $serverName; the agent is given its path there.',
     _From.server => 'On $serverName; the agent is given its path there.',
   };
 
   /// The same, as a touch chip's second line.
   String get detail => switch (from) {
-    _From.temp => 'On this device',
+    _From.temp || _From.local => 'On this device',
     _From.uploaded => 'From this device → $serverName',
     _From.server => 'On $serverName',
   };
@@ -171,6 +175,7 @@ class MessageComposer extends StatefulWidget {
     this.server,
     this.attaches = true,
     this.camera,
+    this.droppedFiles,
     super.key,
   });
 
@@ -207,6 +212,10 @@ class MessageComposer extends StatefulWidget {
   /// or answering null, offers neither.
   final DevicePhotos? Function()? camera;
 
+  /// Paths on this machine dropped onto whatever hosts the composer, each
+  /// batch attached as if picked from this device.
+  final Stream<List<String>>? droppedFiles;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
 }
@@ -235,7 +244,10 @@ class _MessageComposerState extends State<MessageComposer> {
     // card's border listen for themselves, so neither rebuilds the text field.
     _input = widget.controller ?? TextEditingController();
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
+    _drops = widget.droppedFiles?.listen(_attachDropped);
   }
+
+  StreamSubscription<List<String>>? _drops;
 
   void _onLifecycle(AppLifecycleState state) {
     if (state != AppLifecycleState.hidden &&
@@ -256,10 +268,15 @@ class _MessageComposerState extends State<MessageComposer> {
       }
       _input = widget.controller ?? TextEditingController();
     }
+    if (oldWidget.droppedFiles != widget.droppedFiles) {
+      unawaited(_drops?.cancel());
+      _drops = widget.droppedFiles?.listen(_attachDropped);
+    }
   }
 
   @override
   void dispose() {
+    unawaited(_drops?.cancel());
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -470,7 +487,8 @@ class _MessageComposerState extends State<MessageComposer> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'The image could not be sent to ${server.name}: '
+            '${upload.image ? 'The image' : upload.pick.name} could not be '
+            'sent to ${server.name}: '
             '${server.describe(error)}',
           ),
         ),
@@ -520,9 +538,9 @@ class _MessageComposerState extends State<MessageComposer> {
     return home == null || home.isEmpty ? null : '$home\\Pictures';
   }
 
-  /// Attach at touch density: **any file**, from this device (uploaded, with
-  /// its progress in the chip) or from the server (nothing sent). No clipboard
-  /// read first — a phone's keyboard inserts its images itself.
+  /// Attach: **any file**, from this device (uploaded, with its progress in
+  /// the chip) or from the server (nothing sent). No clipboard read first — a
+  /// phone's keyboard inserts its images itself, and Ctrl+V pastes one.
   Future<void> _attachAnyFile() async {
     final server = widget.server?.call();
     if (server == null) return _attach();
@@ -559,7 +577,7 @@ class _MessageComposerState extends State<MessageComposer> {
               _Attachment(
                 path: file.path,
                 name: pick.name,
-                from: _From.temp,
+                from: _From.local,
                 serverName: server.name,
                 image: image,
                 preview: image ? _previewOf(file.path) : null,
@@ -586,6 +604,66 @@ class _MessageComposerState extends State<MessageComposer> {
 
   ImageProvider _previewOf(String path) =>
       ResizeImage(FileImage(File(path)), width: (_thumbnail * 2).round());
+
+  /// Files dropped from this machine, attached as Attach would take them:
+  /// by path when the server is here, else uploaded (queued until Send on a
+  /// phone). A folder goes by path only — there is no uploading one.
+  Future<void> _attachDropped(List<String> paths) async {
+    if (!mounted || paths.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    void say(String message) =>
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+    if (!widget.attaches) {
+      return say('Files cannot be attached here.');
+    }
+    if (!widget.enabled || _busy) {
+      return say('The message box is not taking anything right now.');
+    }
+    final server = _serverElsewhere();
+    final folders = <String>[];
+    for (final path in paths) {
+      if (!mounted) return;
+      final name = _leafOf(path);
+      final folder = FileSystemEntity.isDirectorySync(path);
+      final image = !folder && _looksLikeImage(name);
+      if (server == null) {
+        setState(
+          () => _attachments.add(
+            _Attachment(
+              path: path,
+              name: name,
+              from: _From.local,
+              serverName: '',
+              image: image,
+              preview: image ? _previewOf(path) : null,
+            ),
+          ),
+        );
+      } else if (folder) {
+        folders.add(name);
+      } else {
+        await _startUpload(
+          DevicePick(XFile(path)),
+          server,
+          image: image,
+          preview: image ? _previewOf(path) : null,
+        );
+      }
+    }
+    if (folders.isNotEmpty && server != null) {
+      say(
+        'A folder cannot be sent to ${server.name}, so ${folders.join(', ')} '
+        '${folders.length == 1 ? 'was' : 'were'} not attached. Drop the files '
+        'in it instead.',
+      );
+    }
+  }
+
+  static String _leafOf(String path) {
+    final trimmed = path.replaceFirst(RegExp(r'[\\/]+$'), '');
+    final cut = trimmed.lastIndexOf(RegExp(r'[\\/]'));
+    return cut < 0 ? trimmed : trimmed.substring(cut + 1);
+  }
 
   /// An image a soft keyboard inserted (Gboard's stickers, GIFs, a copied
   /// photo): taken as a pasted one. There is no Ctrl+V on a phone.
@@ -830,7 +908,7 @@ class _MessageComposerState extends State<MessageComposer> {
                   chips: widget.chips,
                   touch: touch,
                   attaches: widget.attaches,
-                  onAttach: canType ? (touch ? _attachAnyFile : _attach) : null,
+                  onAttach: canType ? _attachAnyFile : null,
                   snippets: snippets == null
                       ? null
                       : _SnippetsButton(
@@ -1035,11 +1113,13 @@ class _AttachmentStrip extends StatelessWidget {
           _AttachmentChip(
             name: attachments[i].name,
             where: attachments[i].where,
+            image: attachments[i].image,
+            preview: attachments[i].preview,
             onRemove: () => onRemove(i),
           ),
         for (var i = 0; i < uploading; i++)
           const _AttachmentChip(
-            name: 'Sending image…',
+            name: 'Sending…',
             where: 'Uploading to the server; Send waits until it is there.',
           ),
       ],
@@ -1051,17 +1131,44 @@ class _AttachmentChip extends StatelessWidget {
   const _AttachmentChip({
     required this.name,
     required this.where,
+    this.image = false,
+    this.preview,
     this.onRemove,
   });
 
   final String name;
   final String where;
+  final bool image;
+
+  /// Drawn in place of the glyph when there is one.
+  final ImageProvider? preview;
 
   /// Null while the image is still being sent: a spinner stands in its place.
   final VoidCallback? onRemove;
 
   /// The pill's height, which the composer's sizing counts.
   static const height = Chrome.control;
+
+  Widget _glyph(Color muted) {
+    final icon = Icon(
+      image ? AppIcons.image : AppIcons.file,
+      size: Chrome.iconSmall,
+      color: muted,
+    );
+    final preview = this.preview;
+    if (preview == null) return icon;
+    const edge = height - 2 * Insets.xs;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Radii.sm),
+      child: Image(
+        image: preview,
+        width: edge,
+        height: edge,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => icon,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1081,7 +1188,7 @@ class _AttachmentChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(AppIcons.image, size: Chrome.iconSmall, color: muted),
+            _glyph(muted),
             const SizedBox(width: Insets.xs),
             ConstrainedBox(
               // A long generated name gives way before the remove button.
@@ -1398,8 +1505,8 @@ class _ComposerToolbar extends StatelessWidget {
           _ToolbarIconButton(
             tooltip: touch
                 ? 'Attach a file'
-                : 'Attach image (or paste with Ctrl+V)',
-            icon: touch ? AppIcons.plus : AppIcons.image,
+                : 'Attach a file (paste an image with Ctrl+V)',
+            icon: AppIcons.plus,
             touch: touch,
             onPressed: onAttach,
           ),
