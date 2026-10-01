@@ -7,9 +7,9 @@ import '../../explorer/application/agent_state_providers.dart';
 import '../application/session_engine_provider.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/session_launcher.dart';
-import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_status_providers.dart';
+import 'session_transcript_view.dart' show sessionTerminalPane;
 
 /// Stops the process behind [sessionId] wherever it runs — this app's engine,
 /// a live terminal pane of ours, or the server's terminal with no pane showing
@@ -42,7 +42,9 @@ Future<bool> endSessionProcess(WidgetRef ref, String sessionId) async {
 /// the engine and host readings are sampled on those rebuilds.
 bool sessionHasLiveProcess(WidgetRef ref, String sessionId) {
   ref.watch(placedSessionIdsProvider);
-  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+  // This window's pane, found by what it runs when the row names another
+  // window's: off the row alone, the × went missing from a running session.
+  final paneId = sessionTerminalPane(ref, sessionId);
   if (paneId != null &&
       ref.watch(terminalPaneLivenessProvider(paneId)).isLive) {
     return true;
