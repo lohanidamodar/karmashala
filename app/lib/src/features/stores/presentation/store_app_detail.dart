@@ -13,6 +13,7 @@ import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import 'store_app_icon.dart';
+import 'store_logo.dart';
 import 'store_badges.dart';
 import 'store_combine.dart';
 import 'store_detail_errors.dart';
@@ -320,8 +321,10 @@ class _Numbers extends ConsumerWidget {
       final snapshot = entry.snapshot;
       if (snapshot == null) continue;
       final store = entry.app.store;
-      String label(String what) =>
-          both ? '$what · ${storeShortLabel(store)}' : what;
+      // Which store a tile is from, when there are two: its logo before the
+      // label, its name for a screen reader (owner, 2026-10-01).
+      final logo = both ? StoreLogo(store, size: 13) : null;
+      String spoken(String what) => both ? '$what · ${store.label}' : what;
 
       switch (snapshot.rating) {
         case ReadingValue(:final value):
@@ -335,7 +338,9 @@ class _Numbers extends ConsumerWidget {
           ];
           tiles.add(
             StatTile(
-              label: label('Rating'),
+              label: 'Rating',
+              leading: logo,
+              semanticLabel: spoken('Rating'),
               value: '${value.average.toStringAsFixed(1)} ★',
               caption: caption.isEmpty ? null : caption.join(' · '),
             ),
@@ -344,7 +349,9 @@ class _Numbers extends ConsumerWidget {
           if (!missing.expected) {
             tiles.add(
               StatTile(
-                label: label('Rating'),
+                label: 'Rating',
+                leading: logo,
+                semanticLabel: spoken('Rating'),
                 value: null,
                 unrecorded: _unavailable,
               ),
@@ -361,7 +368,9 @@ class _Numbers extends ConsumerWidget {
           tiles
             ..add(
               StatTile(
-                label: label('Crash rate'),
+                label: 'Crash rate',
+                leading: logo,
+                semanticLabel: spoken('Crash rate'),
                 value: switch (value.crashRate) {
                   final rate? => formatRate(rate),
                   null => null,
@@ -373,7 +382,9 @@ class _Numbers extends ConsumerWidget {
             )
             ..add(
               StatTile(
-                label: label('ANR rate'),
+                label: 'ANR rate',
+                leading: logo,
+                semanticLabel: spoken('ANR rate'),
                 value: switch (value.anrRate) {
                   final rate? => formatRate(rate),
                   null => null,
@@ -389,7 +400,9 @@ class _Numbers extends ConsumerWidget {
           if (!missing.expected) {
             tiles.add(
               StatTile(
-                label: label('Crash and ANR'),
+                label: 'Crash and ANR',
+                leading: logo,
+                semanticLabel: spoken('Crash and ANR'),
                 value: null,
                 unrecorded: _unavailable,
               ),
@@ -407,7 +420,9 @@ class _Numbers extends ConsumerWidget {
         case ReadingValue(:final value):
           tiles.add(
             StatTile(
-              label: label('${value.unit} 14 d'),
+              label: '${value.unit} 14 d',
+              leading: logo,
+              semanticLabel: spoken('${value.unit} 14 d'),
               value: value.days.isEmpty
                   ? null
                   : formatCompactCount(value.total),
@@ -422,7 +437,9 @@ class _Numbers extends ConsumerWidget {
           if (!missing.expected) {
             tiles.add(
               StatTile(
-                label: label('Downloads'),
+                label: 'Downloads',
+                leading: logo,
+                semanticLabel: spoken('Downloads'),
                 value: null,
                 unrecorded: _unavailable,
               ),
@@ -436,11 +453,9 @@ class _Numbers extends ConsumerWidget {
           );
       }
 
-      final allTimeLabel = label(
-        store == StoreKind.appStore
-            ? 'All-time downloads'
-            : 'All-time installs',
-      );
+      final allTimeLabel = store == StoreKind.appStore
+          ? 'All-time downloads'
+          : 'All-time installs';
       switch (snapshot.allTimeInstalls) {
         case null:
           break;
@@ -448,6 +463,8 @@ class _Numbers extends ConsumerWidget {
           tiles.add(
             StatTile(
               label: allTimeLabel,
+              leading: logo,
+              semanticLabel: spoken(allTimeLabel),
               value: formatInstallFigure(value),
               caption: describeInstallMeasure(value),
               tooltip: describeInstallTotal(value, store, readAt: checkedAt),
@@ -458,6 +475,8 @@ class _Numbers extends ConsumerWidget {
             tiles.add(
               StatTile(
                 label: allTimeLabel,
+                leading: logo,
+                semanticLabel: spoken(allTimeLabel),
                 value: null,
                 unrecorded: _unavailable,
               ),

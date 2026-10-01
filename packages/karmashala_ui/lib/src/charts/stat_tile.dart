@@ -14,10 +14,19 @@ class StatTile extends StatelessWidget {
     this.caption,
     this.unrecorded = 'not recorded',
     this.tooltip,
+    this.leading,
+    this.semanticLabel,
     super.key,
   });
 
   final String label;
+
+  /// Drawn before [label], e.g. the logo of the store a figure is from.
+  final Widget? leading;
+
+  /// What a screen reader says for [label] when [leading] carries meaning
+  /// the words do not — "Rating · Google Play" for a logo and "Rating".
+  final String? semanticLabel;
   final String? value;
   final String? caption;
   final String unrecorded;
@@ -54,7 +63,17 @@ class StatTile extends StatelessWidget {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           );
-    final spoken = [label, value ?? unrecorded, ?caption].join(', ');
+    final spoken = [
+      semanticLabel ?? label,
+      value ?? unrecorded,
+      ?caption,
+    ].join(', ');
+    final labelText = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: muted,
+    );
     Widget tile = DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
@@ -70,12 +89,16 @@ class StatTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: muted,
-            ),
+            if (leading case final leading?)
+              Row(
+                children: [
+                  leading,
+                  const SizedBox(width: Insets.xs),
+                  Flexible(child: labelText),
+                ],
+              )
+            else
+              labelText,
             const SizedBox(height: Insets.xs),
             figure,
             if (caption case final caption?)
