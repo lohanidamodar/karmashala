@@ -131,7 +131,17 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     if (_connected.isEmpty || _closed) return Future.value(view);
     final done = Completer<StoresView>();
     _running = done.future;
-    _run().then(done.complete, onError: done.completeError);
+    // In a guarded zone: Dart's HttpClient raises some failures with no
+    // request to fail — Google answering on an idle pooled connection
+    // ("unsolicited response without request", seen 2026-10-01) — as
+    // uncaught errors, and an uncaught error ends the server. Here one is
+    // logged and the refresh's own calls fail or finish as they would.
+    runZonedGuarded(
+      () => _run().then(done.complete, onError: done.completeError),
+      (error, _) => _log(
+        'stores: set aside a stray network error (${error.runtimeType})',
+      ),
+    );
     return done.future;
   }
 
@@ -214,6 +224,10 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         console.close();
       }
       _retired.clear();
+      // Closed after every refresh, so no idle connection to a store is left
+      // open for minutes for a late answer to land on; the next refresh
+      // builds a new console with the credentials held then.
+      _dropConsole();
       _dropDisconnected();
       await _persist();
       _tell([StoresChanged(view)]);

@@ -94,10 +94,15 @@ class PlayStoreClient implements StoreClient {
                   releasesFromSummaries(track, response.releases ?? const []),
             )
             .catchError(
-              // A track the app has never used is not there to read.
+              // A track the app has never used is not there to read. Google
+              // says so with a 404, or — seen 2026-10-01 on beta and alpha —
+              // with an empty 200, which googleapis' generated `list` casts
+              // to a JSON map and throws a TypeError on. Either is an empty
+              // track; before this, one unused track failed every release.
               (Object _) => const <StoreRelease>[],
               test: (error) =>
-                  error is DetailedApiRequestError && error.status == 404,
+                  (error is DetailedApiRequestError && error.status == 404) ||
+                  error is TypeError,
             ),
     ]);
     return [for (final track in tracks) ...track];
@@ -106,11 +111,21 @@ class PlayStoreClient implements StoreClient {
   /// The API only returns reviews written or changed in the last week, and
   /// only those with text.
   @override
+  ///
+  /// A 404 here is "no reviews to list", not "no such app": Google answered it
+  /// for com.popupbits.karmashala on 2026-10-01 while the same call's
+  /// releases read fine, an app with no public reviews yet. A package that
+  /// truly does not exist is said by its releases, which 404 too.
   Future<List<StoreReview>> reviews(StoreApp app) => playGuarded(() async {
-    final response = await AndroidPublisherApi(
-      await _auth.client(),
-    ).reviews.list(app.id, maxResults: 100);
-    return reviewsFrom(response.reviews ?? const []);
+    try {
+      final response = await AndroidPublisherApi(
+        await _auth.client(),
+      ).reviews.list(app.id, maxResults: 100);
+      return reviewsFrom(response.reviews ?? const []);
+    } on DetailedApiRequestError catch (error) {
+      if (error.status == 404) return const <StoreReview>[];
+      rethrow;
+    }
   }, area: PlayArea.reviews);
 
   @override
