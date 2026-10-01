@@ -152,7 +152,7 @@ class _StoreReviewsSectionState extends State<StoreReviewsSection> {
             ChoiceChip(
               label: store == null
                   ? const Text('Both stores')
-                  : StoreLogo(store),
+                  : StoreLogo.named(store),
               selected: _store == store,
               onSelected: (_) => setState(() {
                 _store = store;

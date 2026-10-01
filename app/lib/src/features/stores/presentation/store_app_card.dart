@@ -197,8 +197,9 @@ class StoreEntryRow extends StatelessWidget {
 
   final StoreEntry entry;
 
-  /// Wide enough for "App Store" at 1x text, so versions line up.
-  static const double storeColumn = 72;
+  /// The store's 16 px logo and a gap, so versions and the pills under
+  /// them line up just past it.
+  static const double storeColumn = 26;
 
   @override
   Widget build(BuildContext context) {

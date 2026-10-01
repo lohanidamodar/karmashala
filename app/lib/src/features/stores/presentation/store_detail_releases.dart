@@ -142,7 +142,14 @@ class StoreBlock extends StatelessWidget {
               header: true,
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: StoreLogo(store, size: 20, color: scheme.onSurface),
+                child: StoreLogo.named(
+                  store,
+                  size: 18,
+                  color: scheme.onSurface,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: Insets.sm),
