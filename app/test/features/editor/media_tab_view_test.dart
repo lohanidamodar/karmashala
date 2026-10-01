@@ -207,5 +207,9 @@ void main() {
       mediaStatusLine(byteCount: 3 * 1024 * 1024, name: 'a.jpg'),
       '3.0 MB · JPEG',
     );
+    expect(
+      mediaStatusLine(byteCount: 3 * 512 * 1024 * 1024, name: 'clip.mp4'),
+      '1.5 GB · MP4',
+    );
   });
 }
