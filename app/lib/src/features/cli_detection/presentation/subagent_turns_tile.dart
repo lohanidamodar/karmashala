@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
+import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../../sessions/presentation/tool_activity_row.dart';
 import '../application/subagent_providers.dart';
 import 'package:agent_cli/read.dart';
@@ -275,7 +276,15 @@ class _SubagentTurn extends StatelessWidget {
                     resolveHostPath: resolveHostPath,
                   )
                 else
-                  MarkdownMessage(message.text, selectable: false),
+                  // A link opens in the system browser, as the chat's do.
+                  Consumer(
+                    builder: (context, ref, _) => MarkdownMessage(
+                      message.text,
+                      selectable: false,
+                      onLinkTap: (href) =>
+                          ref.read(openExternalUrlProvider)(href),
+                    ),
+                  ),
                 // A delegate that delegated. The cap is the guard against an
                 // index that points back at an ancestor.
                 if (reference != null && nesting + 1 < kMaxSubagentNesting)

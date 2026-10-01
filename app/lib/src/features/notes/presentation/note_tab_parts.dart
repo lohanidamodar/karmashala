@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 
 import '../../sessions/application/session_providers.dart';
+import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../../todos/presentation/project_menu.dart';
 import '../application/notes_providers.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
@@ -214,16 +215,16 @@ class NoteMetadata extends ConsumerWidget {
 /// One [SelectionArea] over the whole note, so a drag runs across paragraphs
 /// and select-all takes every block. It holds focus from the moment it shows:
 /// the chords have to work before anything has been clicked.
-class NotePreview extends StatefulWidget {
+class NotePreview extends ConsumerStatefulWidget {
   const NotePreview({required this.body, super.key});
 
   final String body;
 
   @override
-  State<NotePreview> createState() => _NotePreviewState();
+  ConsumerState<NotePreview> createState() => _NotePreviewState();
 }
 
-class _NotePreviewState extends State<NotePreview> {
+class _NotePreviewState extends ConsumerState<NotePreview> {
   final _focus = FocusNode(debugLabel: 'note preview');
 
   @override
@@ -256,7 +257,13 @@ class _NotePreviewState extends State<NotePreview> {
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-            child: MarkdownMessage(widget.body, selectable: false),
+            // A link opens in the system browser. With no handler a tap on
+            // one drew the link and did nothing (owner, 2026-10-01).
+            child: MarkdownMessage(
+              widget.body,
+              selectable: false,
+              onLinkTap: (href) => ref.read(openExternalUrlProvider)(href),
+            ),
           ),
         ),
       ),
