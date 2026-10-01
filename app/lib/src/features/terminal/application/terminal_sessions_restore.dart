@@ -79,10 +79,7 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     final dormant = <String, String>{
       for (final entry in _instances.entries)
         if (entry.value case final DormantTerminalInstance pane)
-          terminalSessionId(
-            paneId: entry.key,
-            agentSessionId: pane.agentLaunch?.sessionId,
-          ): entry.key,
+          _restoredSessionId(entry.key, pane): entry.key,
     };
     if (dormant.isEmpty) return;
 
@@ -111,6 +108,20 @@ extension TerminalLayoutRestore on TerminalSessionsController {
       }
       _attachRestored(paneId);
     }
+  }
+
+  /// The session id the server lists [pane]'s terminal under: a box's is
+  /// `ssh:<hostId>/<id>` (slice 5d), as `_serverPane` names it. Keyed by the
+  /// bare id, an SSH pane never matched and stayed history.
+  String _restoredSessionId(String paneId, DormantTerminalInstance pane) {
+    final own = terminalSessionId(
+      paneId: paneId,
+      agentSessionId: pane.agentLaunch?.sessionId,
+    );
+    final hostId =
+        pane.agentLaunch?.sshHostId ??
+        terminalProfileFromId(pane.profileId)?.sshHostId;
+    return hostId == null ? own : boxSessionRef(hostId, own);
   }
 
   /// Puts restored pane [paneId] back on its server session, attaching only

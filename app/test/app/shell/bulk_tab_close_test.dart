@@ -392,10 +392,9 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    openTabs(2);
+    openTabs(3);
     giveEveryPaneHistory();
     await tester.pumpAndSettle();
-    // Relative to what is open, because `pump` opens a tab of its own.
     final before = openTabIds();
     expect(before, hasLength(3));
 

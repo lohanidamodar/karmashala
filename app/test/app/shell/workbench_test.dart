@@ -1426,10 +1426,8 @@ void main() {
         reason: 'with nothing selected the workbench is the terminal',
       );
       expect(container.read(selectedSessionIdProvider), isNull);
-      // Empty, and left that way. The one automatic open belongs to opening the
-      // app: a workbench that reopened a shell every time the last tab closed
-      // would be one the user could never put down. The panes offer the button
-      // instead — see `_NoTerminalOpen`.
+      // Empty, and left that way: nothing opens a shell unasked. The panes
+      // offer the button instead — see `_NoTerminalOpen`.
       expect(find.byType(TerminalTabChip), findsNothing);
       expect(find.text('No terminal open'), findsOneWidget);
       // With the keys that find everything else, read off the live table.

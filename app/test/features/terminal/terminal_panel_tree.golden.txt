@@ -3095,21 +3095,6 @@ TerminalPaneStack
                                                                                                                                                                   IgnorePointer key=[GlobalKey#…]
                                                                                                                                                                     _TerminalView key=[GlobalKey#…]
 
-== opening ==
-TerminalPaneStack
-  Material
-    AnimatedPhysicalModel
-      PhysicalModel
-        NotificationListener<LayoutChangedNotification>
-          _InkFeatures key=[GlobalKey#… ink renderer]
-            AnimatedDefaultTextStyle
-              DefaultTextStyle
-                Column
-                  Expanded
-                    Center
-                      Text text="Opening terminal…"
-                        RichText
-
 == the pane menu, over a selection in a split ==
 _PopupMenu<String>
   AnimatedBuilder

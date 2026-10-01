@@ -184,6 +184,8 @@ void main() {
     tester,
   ) async {
     final container = await launch(tester);
+    openFirstTerminal(container);
+    await tester.pump();
     final shellTab = container
         .read(terminalSessionsControllerProvider)
         .tabs

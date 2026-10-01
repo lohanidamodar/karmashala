@@ -86,14 +86,6 @@ Future<void> pumpWithToolbar(
 }
 
 void main() {
-  testWidgets('opens one terminal when shown with no tabs', (tester) async {
-    final container = panelContainer();
-
-    await pumpPanel(tester, container);
-
-    expect(container.read(terminalSessionsControllerProvider).tabs.length, 1);
-  });
-
   testWidgets('keeps inactive tabs alive in an IndexedStack', (tester) async {
     final container = panelContainer();
     final controller = container.read(
@@ -352,41 +344,39 @@ void main() {
     );
   });
 
-  testWidgets('an empty panel says so rather than rendering nothing', (
-    tester,
-  ) async {
+  testWidgets('an empty panel offers a way in from its first frame, and '
+      'opens nothing by itself', (tester) async {
     final container = panelContainer();
 
-    // Pump a single frame so the post-frame "open one terminal" has not run.
+    // One frame, then the post-frame work: neither opens a terminal.
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
       ),
     );
+    expect(find.text('No terminal open'), findsOneWidget);
+    await tester.pump();
 
-    expect(find.text('Opening terminal…'), findsOneWidget);
+    expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+    expect(find.text('No terminal open'), findsOneWidget);
   });
 
-  testWidgets('but once the user closes the last tab it offers a way back', (
+  testWidgets('once the user closes the last tab it offers a way back', (
     tester,
   ) async {
-    // The reported bug: the panel sat on "Opening terminal…" for ever. That
-    // message is a promise the panel only keeps once — the automatic open runs
-    // when it mounts and never again — so after a close it described something
-    // that was not happening, beside no control that would make it happen.
+    // The reported bug: the panel sat on "Opening terminal…" for ever, beside
+    // no control that would open one.
     final container = panelContainer();
-    await pumpPanel(tester, container);
     final controller = container.read(
       terminalSessionsControllerProvider.notifier,
     );
-    final opened = container.read(terminalSessionsControllerProvider).tabs;
-    expect(opened, hasLength(1), reason: 'the automatic open has run');
+    final tabId = controller.openTab(TerminalProfile.powerShell);
+    await pumpPanel(tester, container);
 
-    controller.closeTab(opened.single.id);
+    controller.closeTab(tabId);
     await tester.pump();
 
-    expect(find.text('Opening terminal…'), findsNothing);
     expect(find.text('No terminal open'), findsOneWidget);
 
     final button = find.ancestor(

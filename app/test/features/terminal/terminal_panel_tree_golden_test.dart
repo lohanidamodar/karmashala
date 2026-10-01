@@ -216,14 +216,6 @@ void main() {
   String focusedPaneOf(ProviderContainer scope) =>
       scope.read(terminalSessionsControllerProvider).activeTab!.focusedPaneId;
 
-  testWidgets('opening, before the workbench has had its one automatic open', (
-    tester,
-  ) async {
-    final scope = container();
-    await pump(tester, scope, const TerminalPaneStack(autoOpenDone: false));
-    capture(tester, 'opening', stack);
-  });
-
   testWidgets('no terminal open', (tester) async {
     final scope = container();
     await pump(tester, scope, const TerminalPaneStack());

@@ -73,22 +73,15 @@ class TerminalPaneStack extends ConsumerStatefulWidget {
   const TerminalPaneStack({
     this.groupId,
     this.groupFocused = true,
-    this.autoOpenDone = true,
     super.key,
   });
 
-  /// The workspace group whose tabs these are, or null for the one frame
-  /// between launching and the first tab.
+  /// The workspace group whose tabs these are, or null while no tab is open.
   final String? groupId;
 
   /// Only the focused group draws a pane as focused; every group still draws
   /// its own tab.
   final bool groupFocused;
-
-  /// Whether the workbench's one automatic open has had its turn. Owned up
-  /// there: this widget rebuilds whenever the workspace loses its last tab, and
-  /// a flag resetting with it would reopen the terminal just closed.
-  final bool autoOpenDone;
 
   @override
   ConsumerState<TerminalPaneStack> createState() => _TerminalPaneStackState();
@@ -141,17 +134,12 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           if (search.visible && widget.groupFocused) const TerminalSearchBar(),
           Expanded(
             child: openTabs.isEmpty
-                ? widget.autoOpenDone
-                      ? _NoTerminalOpen(
-                          onNewTerminal: () =>
-                              _actions.open(_actions.defaultProfile()),
-                        )
-                      : Center(
-                          child: Text(
-                            'Opening terminal…',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        )
+                // Nothing opens by itself: a terminal starts a shell on a
+                // machine, which only the person may ask for.
+                ? _NoTerminalOpen(
+                    onNewTerminal: () =>
+                        _actions.open(_actions.defaultProfile()),
+                  )
                 : IndexedStack(
                     index: activeIndex < 0 ? 0 : activeIndex,
                     children: [

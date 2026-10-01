@@ -58,6 +58,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    openFirstTerminal(container);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

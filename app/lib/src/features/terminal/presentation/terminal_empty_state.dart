@@ -4,9 +4,8 @@
 
 part of 'terminal_panel.dart';
 
-/// What the panel shows once the user has closed the last terminal: a way back,
-/// rather than a status. "Opening terminal…" is true for one frame and a lie
-/// for as long as the layout stays closed.
+/// What the panel shows with no terminal open — at launch, since nothing opens
+/// by itself, and once the last one is closed: a way in, rather than a status.
 class _NoTerminalOpen extends ConsumerWidget {
   const _NoTerminalOpen({required this.onNewTerminal});
 

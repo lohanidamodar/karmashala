@@ -311,6 +311,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
+      openFirstTerminal(container);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

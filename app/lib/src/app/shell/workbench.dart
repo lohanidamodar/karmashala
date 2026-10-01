@@ -10,7 +10,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/descriptors.dart';
-import '../../core/capabilities/capabilities.dart';
 import '../../features/automations/presentation/scheduled_resume_chip.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/editor/application/editor_tab_actions.dart';
@@ -92,26 +91,12 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// [_followSessionPane] compares against, so an unrelated publish is cheap.
   String? _shownPane;
 
-  /// Whether the one automatic open has had its turn. Owned here, not by the
-  /// pane stack, which is rebuilt when the workspace loses its last tab.
-  bool _autoOpenDone = false;
-
   @override
   void initState() {
     super.initState();
-    // A desktop always has a terminal when the workbench opens. A client that
-    // hosts no server would start a shell on someone else's machine unasked.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final terminal = TerminalActions(ref);
-      if (ref.read(clientCapabilitiesProvider).hostsServer &&
-          ref.read(terminalSessionsControllerProvider).isEmpty) {
-        terminal.open(terminal.defaultProfile());
-      }
-      // Not conditional on having opened anything: it records that the
-      // automatic attempt is over, so an empty workspace offers the button.
-      setState(() => _autoOpenDone = true);
-    });
+    // Nothing is opened here: an empty workspace offers its New terminal
+    // button. Opening one at mount started a new shell on the default
+    // profile's machine — an SSH box — at every launch (owner, 2026-10-01).
     // A session can already be selected when the workbench mounts; the listener
     // in `build` only fires on a *change*, so the mount catches up by hand.
     final selected = ref.read(selectedSessionIdProvider);
@@ -220,6 +205,10 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.listen(terminalSessionsControllerProvider, (_, _) {
       _followSessionPane();
     });
+    // And off what that is derived into: heard on the controller alone, a
+    // listener registered before [paneSessionsProvider]'s own can read the
+    // pane a closed tab held. A rebuild after the first frame used to hide it.
+    ref.listen(paneSessionsProvider, (_, _) => _followSessionPane());
     // Only where sessions live. A row being renamed cannot move the pane the
     // workbench is following, and used to re-run this on every title sync.
     ref.listen(
@@ -276,7 +265,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // Before the first tab there is no tree at all, and one group stands in for
     // it: an empty strip, and no session to put a bar under.
     if (workspace == null) {
-      return _WorkspaceGroup(groupId: null, autoOpenDone: _autoOpenDone);
+      return const _WorkspaceGroup(groupId: null);
     }
     // A phone has room for one group: the focused one, with the others kept
     // mounted behind it so their state is there when the window widens.
@@ -292,7 +281,6 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
             _WorkspaceGroup(
               key: ValueKey(group.id),
               groupId: group.id,
-              autoOpenDone: _autoOpenDone,
             ),
         ],
       );
@@ -306,7 +294,6 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         // and the tabs mounted inside it — to whichever group takes its place.
         key: ValueKey(group.id),
         groupId: group.id,
-        autoOpenDone: _autoOpenDone,
       ),
     );
   }

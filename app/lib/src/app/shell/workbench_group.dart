@@ -3,16 +3,10 @@ part of 'workbench.dart';
 /// One **workspace group**: its own tab strip, surface and status bar. Everything
 /// reads its *own* group; with two groups, "the window's" is somebody else's.
 class _WorkspaceGroup extends ConsumerStatefulWidget {
-  const _WorkspaceGroup({
-    required this.groupId,
-    required this.autoOpenDone,
-    super.key,
-  });
+  const _WorkspaceGroup({required this.groupId, super.key});
 
   /// Null only before the window has a workspace — see [WorkbenchView.build].
   final String? groupId;
-
-  final bool autoOpenDone;
 
   @override
   ConsumerState<_WorkspaceGroup> createState() => _WorkspaceGroupState();
@@ -23,12 +17,20 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   /// opens the conversation — every writer of `false` is a deliberate request.
   void _showChat() {
     final groupId = widget.groupId;
-    if (groupId == null) return;
+    if (groupId == null) {
+      setState(() => _chatWithoutGroup = true);
+      return;
+    }
     _focusThisGroup();
     ref
         .read(terminalSessionsControllerProvider.notifier)
         .showFaceIn(groupId, terminal: false);
   }
+
+  /// The face of the one group a window with **no tab open** has — which
+  /// launch now is, since nothing opens by itself. Faces live per group in
+  /// [terminalFacesProvider], and this group has no id to file one under.
+  bool _chatWithoutGroup = false;
 
   /// Hands this group the keyboard. Cheap to call on every pointer down:
   /// `focusGroup` publishes nothing when the group is already the focused one.
@@ -57,9 +59,10 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     // With nothing to read the group is its terminal. Which of the two faces is
     // up is a property of *this* group, so three agents can show three at once.
     final onTerminal =
-        groupId == null ||
         session == null ||
-        ref.watch(terminalVisibleInGroupProvider(groupId));
+        (groupId == null
+            ? !_chatWithoutGroup
+            : ref.watch(terminalVisibleInGroupProvider(groupId)));
     // Asked for, or let go of — see [workspaceGroupConversationProvider]. Derived
     // here from both inputs, and written back after the frame.
     final conversationFor = _settleConversation(session?.id, onTerminal);
@@ -99,7 +102,6 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                   ? _TerminalSurface(
                       groupId: groupId,
                       groupFocused: focused,
-                      autoOpenDone: widget.autoOpenDone,
                     )
                   : IndexedStack(
                       key: kWorkbenchSurfaces,
@@ -109,7 +111,6 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                           session: session,
                           groupId: groupId,
                           groupFocused: focused,
-                          autoOpenDone: widget.autoOpenDone,
                         ),
                         // Named, never read off a window-wide provider, or a
                         // group could be reading another tab's transcript.
@@ -133,6 +134,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
             onTerminal: onTerminal,
             onChat: _showChat,
             onTerminalView: () {
+              if (_chatWithoutGroup) setState(() => _chatWithoutGroup = false);
               _focusThisGroup();
               showTerminalFor(ref, session?.paneId, session?.id);
             },

@@ -411,3 +411,13 @@ TerminalInstance defaultFakeInstanceFactory({
   adoptTerminal: adoptTerminal,
   shellIntegration: shellIntegration,
 );
+
+/// Opens the one terminal a workbench test acts on. The workbench opens none
+/// by itself (owner, 2026-10-01), so a test about a pane asks for it, as a
+/// person would.
+void openFirstTerminal(ProviderContainer container) {
+  if (!container.read(terminalSessionsControllerProvider).isEmpty) return;
+  container
+      .read(terminalSessionsControllerProvider.notifier)
+      .openTab(TerminalProfile.powerShell);
+}

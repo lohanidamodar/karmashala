@@ -24,7 +24,6 @@ class _TerminalSurface extends StatelessWidget {
     this.session,
     this.groupId,
     this.groupFocused = true,
-    this.autoOpenDone = true,
   });
 
   final _WorkbenchSession? session;
@@ -32,7 +31,6 @@ class _TerminalSurface extends StatelessWidget {
   /// The group whose tabs these panes belong to — see [_WorkspaceGroup].
   final String? groupId;
   final bool groupFocused;
-  final bool autoOpenDone;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +41,6 @@ class _TerminalSurface extends StatelessWidget {
     return TerminalPaneStack(
       groupId: groupId,
       groupFocused: groupFocused,
-      autoOpenDone: autoOpenDone,
     );
   }
 }

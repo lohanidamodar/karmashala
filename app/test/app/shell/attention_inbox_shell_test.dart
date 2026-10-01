@@ -232,9 +232,10 @@ void main() {
 
     expect(container.read(attentionCountProvider), 0);
     // An ask says what it waits for (11b286cc0): this one could not tell,
-    // so "waiting".
+    // so "waiting". Its row's own words: the empty workbench's key hint
+    // also says "waiting for you".
     expect(
-      find.textContaining('waiting', findRichText: true),
+      find.textContaining('waiting  ·', findRichText: true),
       findsOneWidget,
     );
     expect(find.text('Nothing needs you.'), findsNothing);
