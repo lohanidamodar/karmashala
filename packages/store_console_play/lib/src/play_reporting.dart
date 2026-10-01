@@ -195,15 +195,26 @@ class PlayReporting {
   Future<Map<String, Object?>> _read(Future<http.Response> call) async {
     final response = await call;
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw playStatusFailure(response.statusCode);
+      // Only the error's structured fields are read from the body.
+      throw playStatusFailure(
+        response.statusCode,
+        area: PlayArea.reporting,
+        facts: PlayErrorFacts.fromBody(_decoded(response)),
+      );
     }
-    final Object? body;
-    try {
-      body = jsonDecode(utf8.decode(response.bodyBytes));
-    } on FormatException {
-      throw playStatusFailure(null);
+    final body = _decoded(response);
+    if (body is! Map) {
+      throw playStatusFailure(null, area: PlayArea.reporting);
     }
-    if (body is! Map) throw playStatusFailure(null);
     return body.cast<String, Object?>();
+  }
+
+  /// The body as JSON, or null when it is not JSON.
+  static Object? _decoded(http.Response response) {
+    try {
+      return jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+    } on FormatException {
+      return null;
+    }
   }
 }
