@@ -12,7 +12,8 @@ import 'server_tool_set.dart';
 const int kFlutterRunLogRows = 80;
 
 /// `flutter_apps`, `flutter_attach`, `flutter_reload`, `flutter_logs`,
-/// `flutter_pick_widget`, `flutter_run` and `flutter_run_config`, run by the
+/// `flutter_pick_widget`, `flutter_run`, `flutter_run_configs` and
+/// `flutter_run_config`, run by the
 /// server (slice 3d): its hosted runs and the apps it is attached to. Nothing
 /// is handed on.
 class FlutterToolSet extends ServerToolSet {
@@ -49,6 +50,7 @@ class FlutterToolSet extends ServerToolSet {
       'flutter_logs' => _logs(arguments),
       'flutter_pick_widget' => _pick(arguments),
       'flutter_run' => _run(arguments, callerSessionId),
+      'flutter_run_configs' => _listConfigs(arguments),
       'flutter_run_config' => _config(arguments),
       _ => throw ArgumentError('Unknown tool: $tool'),
     },
@@ -263,17 +265,45 @@ class FlutterToolSet extends ServerToolSet {
     };
   }
 
-  // --- flutter_run_config -----------------------------------------------------
+  // --- flutter_run_configs & flutter_run_config -------------------------------
 
-  Future<Object?> _config(Map<String, dynamic> args) async {
+  /// The store and the project [args]' checkout belongs to.
+  (FlutterRunConfigurations, String) _projectConfigs(
+    Map<String, dynamic> args,
+  ) {
     final store =
         configurations ??
         (throw StateError('This server keeps no run configurations.'));
-    final action = (args['action'] as String?)?.trim() ?? '';
     final checkoutId = (args['checkoutId'] as String?)?.trim() ?? '';
     // Validated through the one path that words the refusal.
     projectOfCheckout(rows, {'checkoutId': checkoutId});
-    final projectId = rows.repository(checkoutId)!.projectId;
+    return (store, rows.repository(checkoutId)!.projectId);
+  }
+
+  Future<Object?> _listConfigs(Map<String, dynamic> args) async {
+    final (store, projectId) = _projectConfigs(args);
+    final all = store.list(projectId: projectId);
+    return {
+      'projectId': projectId,
+      'configurations': [
+        for (final configuration in all)
+          {...configuration.toJson(), 'flags': configuration.runArguments()},
+      ],
+      if (all.isEmpty)
+        'summary':
+            'This project has no run configurations. flutter_run_config '
+            'action "save" creates one.',
+    };
+  }
+
+  Future<Object?> _config(Map<String, dynamic> args) async {
+    final action = (args['action'] as String?)?.trim() ?? '';
+    if (action == 'list') {
+      throw ArgumentError(
+        'Listing is flutter_run_configs, which needs no operator grant.',
+      );
+    }
+    final (store, projectId) = _projectConfigs(args);
     String name() {
       final value = (args['name'] as String?)?.trim() ?? '';
       if (value.isEmpty) throw ArgumentError('name is required for $action.');
@@ -281,22 +311,6 @@ class FlutterToolSet extends ServerToolSet {
     }
 
     switch (action) {
-      case 'list':
-        final all = store.list(projectId: projectId);
-        return {
-          'projectId': projectId,
-          'configurations': [
-            for (final configuration in all)
-              {
-                ...configuration.toJson(),
-                'flags': configuration.runArguments(),
-              },
-          ],
-          if (all.isEmpty)
-            'summary':
-                'This project has no run configurations. Save one with '
-                'action "save".',
-        };
       case 'save':
         List<String> strings(String key) => [
           for (final value in (args[key] as List<Object?>? ?? const []))
@@ -345,7 +359,7 @@ class FlutterToolSet extends ServerToolSet {
         store.delete(existing.id);
         return {'deleted': existing.name};
       default:
-        throw ArgumentError('action is list, save or delete.');
+        throw ArgumentError('action is save or delete.');
     }
   }
 

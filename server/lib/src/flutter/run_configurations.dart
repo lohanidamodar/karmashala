@@ -165,7 +165,7 @@ ConfiguredRun resolveConfiguredRun({
         store.named(repository.projectId, wanted) ??
         (throw ArgumentError(
           'No run configuration "$wanted" in this project. '
-          'flutter_run_config with action "list" names the ones there are.',
+          'flutter_run_configs names the ones there are.',
         ));
     if (chosen.projectId != repository.projectId) {
       throw ArgumentError(

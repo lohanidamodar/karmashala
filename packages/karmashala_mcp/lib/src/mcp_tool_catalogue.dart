@@ -456,6 +456,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     openWorld: true,
     movesAttention: true,
   ),
+  'flutter_run_configs': McpToolAnnotations.read,
   // A save replaces a configuration of the same name wholesale and a delete
   // has no undo; both leave the same rows when repeated.
   'flutter_run_config': McpToolAnnotations(
@@ -1069,9 +1070,13 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.flutterApps,
     'Start a project: pub get, launch on a device, and run its gates.',
   ),
-  'flutter_run_config': McpToolListing(
+  'flutter_run_configs': McpToolListing(
     McpToolCategory.flutterApps,
     'Named run setups: flavor, entrypoint, defines, build mode, device.',
+  ),
+  'flutter_run_config': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Save or delete a named run setup; a save replaces it whole.',
   ),
   'project_build': McpToolListing(
     McpToolCategory.appProjects,

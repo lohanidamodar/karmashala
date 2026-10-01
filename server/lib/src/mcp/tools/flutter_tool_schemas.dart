@@ -192,7 +192,7 @@ const List<Map<String, Object?>> flutterRunToolSchemas = <Map<String, Object?>>[
           'type': 'string',
           'description':
               'For "run" only: a run configuration\'s name '
-              '(flutter_run_config lists them). It supplies the build mode, '
+              '(flutter_run_configs lists them). It supplies the build mode, '
               'flavor, target, dart-defines, define files, sub-project and '
               'default device. WHAT YOU PASS EXPLICITLY WINS: deviceId and '
               'projectDirectory replace its own; a build mode, --flavor or '
@@ -204,23 +204,40 @@ const List<Map<String, Object?>> flutterRunToolSchemas = <Map<String, Object?>>[
     },
   },
   {
-    'name': 'flutter_run_config',
+    'name': 'flutter_run_configs',
     'description':
         'The named run configurations of a checkout\'s project — flavor, '
         'entrypoint, build mode, --dart-define and --dart-define-from-file, '
         'sub-project and default device — that flutter_run action "run" '
-        'takes by name. Kept per project, so every worktree of it shares '
-        'them, and the same list the Flutter pane\'s Run menu shows. "list" '
-        'answers each with the exact flags it adds. "save" creates one, or '
-        'REPLACES the one of that name with exactly the fields passed — an '
-        'omitted field is cleared, not kept. "delete" removes it for good. '
-        'Defines are stored in plain text: put secrets in a define file.',
+        'takes by name, each with the exact flags it adds. Kept per project, '
+        'so every worktree of it shares them, and the same list the Flutter '
+        'pane\'s Run menu shows. Reads only.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'checkoutId': {
+          'type': 'string',
+          'description': 'From list_checkouts; names the project.',
+        },
+      },
+      'required': ['checkoutId'],
+    },
+  },
+  {
+    'name': 'flutter_run_config',
+    'description':
+        'Change a checkout\'s project\'s named run configurations, the ones '
+        'flutter_run_configs lists and the Flutter pane\'s Run menu shows. '
+        '"save" creates one, or REPLACES the one of that name with exactly '
+        'the fields passed — an omitted field is cleared, not kept. "delete" '
+        'removes it for good. Defines are stored in plain text: put secrets '
+        'in a define file.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'action': {
           'type': 'string',
-          'enum': ['list', 'save', 'delete'],
+          'enum': ['save', 'delete'],
         },
         'checkoutId': {
           'type': 'string',

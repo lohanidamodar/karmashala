@@ -3486,7 +3486,7 @@
           },
           "configuration": {
             "type": "string",
-            "description": "For \"run\" only: a run configuration's name (flutter_run_config lists them). It supplies the build mode, flavor, target, dart-defines, define files, sub-project and default device. WHAT YOU PASS EXPLICITLY WINS: deviceId and projectDirectory replace its own; a build mode, --flavor or --target in arguments replaces its one; every other argument, an extra --dart-define included, is added after its flags."
+            "description": "For \"run\" only: a run configuration's name (flutter_run_configs lists them). It supplies the build mode, flavor, target, dart-defines, define files, sub-project and default device. WHAT YOU PASS EXPLICITLY WINS: deviceId and projectDirectory replace its own; a build mode, --flavor or --target in arguments replaces its one; every other argument, an extra --dart-define included, is added after its flags."
           }
         },
         "required": [
@@ -3502,15 +3502,37 @@
       }
     },
     {
+      "name": "flutter_run_configs",
+      "description": "The named run configurations of a checkout's project — flavor, entrypoint, build mode, --dart-define and --dart-define-from-file, sub-project and default device — that flutter_run action \"run\" takes by name, each with the exact flags it adds. Kept per project, so every worktree of it shares them, and the same list the Flutter pane's Run menu shows. Reads only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "checkoutId": {
+            "type": "string",
+            "description": "From list_checkouts; names the project."
+          }
+        },
+        "required": [
+          "checkoutId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "flutter_run_config",
-      "description": "The named run configurations of a checkout's project — flavor, entrypoint, build mode, --dart-define and --dart-define-from-file, sub-project and default device — that flutter_run action \"run\" takes by name. Kept per project, so every worktree of it shares them, and the same list the Flutter pane's Run menu shows. \"list\" answers each with the exact flags it adds. \"save\" creates one, or REPLACES the one of that name with exactly the fields passed — an omitted field is cleared, not kept. \"delete\" removes it for good. Defines are stored in plain text: put secrets in a define file.",
+      "description": "Change a checkout's project's named run configurations, the ones flutter_run_configs lists and the Flutter pane's Run menu shows. \"save\" creates one, or REPLACES the one of that name with exactly the fields passed — an omitted field is cleared, not kept. \"delete\" removes it for good. Defines are stored in plain text: put secrets in a define file.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
             "enum": [
-              "list",
               "save",
               "delete"
             ]
@@ -5438,9 +5460,13 @@
       "category": "flutterApps",
       "summary": "Start a project: pub get, launch on a device, and run its gates."
     },
-    "flutter_run_config": {
+    "flutter_run_configs": {
       "category": "flutterApps",
       "summary": "Named run setups: flavor, entrypoint, defines, build mode, device."
+    },
+    "flutter_run_config": {
+      "category": "flutterApps",
+      "summary": "Save or delete a named run setup; a save replaces it whole."
     },
     "project_build": {
       "category": "appProjects",
