@@ -26,6 +26,7 @@ import 'picker_last_visited.dart';
 export 'package:file_selector/file_selector.dart' show XFile, XTypeGroup;
 export 'file_browser.dart'
     show
+        BrowseCreate,
         BrowseSource,
         BrowseSources,
         BrowsedEntry,
