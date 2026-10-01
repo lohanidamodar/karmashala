@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/capabilities/capabilities.dart';
+import '../core/file_drop/file_drop_router.dart';
 import '../core/probe/probe_mode.dart';
 import '../features/settings/application/settings_controller.dart';
 import 'probe_banner.dart';
@@ -81,7 +82,11 @@ class KarmashalaApp extends ConsumerWidget {
       home: _PlayUpdates(
         enabled: !ref.watch(clientCapabilitiesProvider).hostsServer,
         child: const NativeShellMenus(
-          child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+          // One listener for files dropped from the OS, routed to the zone
+          // under the pointer; it listens only where the client takes drops.
+          child: FileDropRouter(
+            child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+          ),
         ),
       ),
     );

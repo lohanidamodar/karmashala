@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/capabilities/capabilities.dart';
+import '../../../core/file_drop/file_drop_router.dart';
 import '../../../core/util/failure_words.dart';
 import '../../files/data/files_client.dart';
 import '../application/dropped_paths.dart';
@@ -19,7 +17,7 @@ import '../application/terminal_sessions_controller.dart';
 /// prompt, spelled for the side the pane runs on, as a native terminal does.
 /// An agent CLI reads a pasted image path as the image. When the server is
 /// on another machine (slice 5e) the files are uploaded to it first and its
-/// paths pasted.
+/// paths pasted. A [FileDropZone]: the app's [FileDropRouter] hears the OS.
 class TerminalFileDrop extends ConsumerStatefulWidget {
   const TerminalFileDrop({
     required this.paneId,
@@ -35,8 +33,6 @@ class TerminalFileDrop extends ConsumerStatefulWidget {
 }
 
 class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
-  bool _over = false;
-
   TerminalInstance? get _instance => ref
       .read(terminalSessionsControllerProvider.notifier)
       .instanceFor(widget.paneId);
@@ -119,78 +115,26 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
     instance.focusNode.requestFocus();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    // The Files panel's rows drag inside the app, which no OS drop sees.
-    final inApp = DragTarget<HostPathDrag>(
-      onAcceptWithDetails: (details) => _drop(details.data.paths),
-      builder: (context, candidates, _) =>
-          _overlaid(theme, over: _over || candidates.isNotEmpty),
-    );
-    if (!ref.watch(capabilitiesProvider.select((c) => c.fileDrop))) {
-      return inApp;
+  void _dropFromOs(List<String> paths) {
+    if (ref.read(capabilitiesProvider).readsServerDisk) {
+      _drop(paths);
+    } else {
+      unawaited(_upload(paths));
     }
-    return DropTarget(
-      onDragEntered: (_) => setState(() => _over = true),
-      onDragExited: (_) => setState(() => _over = false),
-      onDragDone: (details) {
-        setState(() => _over = false);
-        final paths = [for (final file in details.files) file.path];
-        if (ref.read(capabilitiesProvider).readsServerDisk) {
-          _drop(paths);
-        } else {
-          unawaited(_upload(paths));
-        }
-      },
-      child: inApp,
-    );
   }
 
-  Widget _overlaid(ThemeData theme, {required bool over}) => Stack(
-    children: [
-      Positioned.fill(child: widget.child),
-      if (over)
-        Positioned.fill(
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: StateLayers.dropTarget(theme.colorScheme),
-                border: Border.all(color: theme.colorScheme.primary, width: 2),
-              ),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Insets.sm,
-                    vertical: Insets.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    borderRadius: BorderRadius.circular(Radii.sm),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        AppIcons.file,
-                        size: Chrome.iconSmall,
-                        color: theme.colorScheme.onPrimary,
-                      ),
-                      const SizedBox(width: Insets.xs),
-                      Text(
-                        'Drop to paste the path',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-    ],
+  @override
+  Widget build(BuildContext context) => FileDropZone(
+    name: 'terminal pane ${widget.paneId}',
+    onFiles: _dropFromOs,
+    // The Files panel's rows drag inside the app, which no OS drop sees.
+    builder: (context, hovering) => DragTarget<HostPathDrag>(
+      onAcceptWithDetails: (details) => _drop(details.data.paths),
+      builder: (context, candidates, _) => FileDropHighlight(
+        label: 'Drop to paste the path',
+        visible: hovering || candidates.isNotEmpty,
+        child: widget.child,
+      ),
+    ),
   );
 }
