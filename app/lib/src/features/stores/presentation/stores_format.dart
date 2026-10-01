@@ -136,3 +136,83 @@ String storeShortLabel(StoreKind store) => switch (store) {
   StoreKind.appStore => 'App Store',
   StoreKind.googlePlay => 'Play',
 };
+
+/// A page where a store credential is made or found, for Settings → Stores.
+typedef StoreSetupLink = ({String label, String url});
+
+/// App Store Connect's pages for the key and the vendor number. Both are
+/// fixed addresses: the team is the signed-in one.
+const List<StoreSetupLink> appleSetupLinks = [
+  (
+    label: 'API keys',
+    url: 'https://appstoreconnect.apple.com/access/integrations/api',
+  ),
+  (
+    label: 'Users and Access',
+    url: 'https://appstoreconnect.apple.com/access/users',
+  ),
+  (
+    label: 'Payments and Financial Reports',
+    url: 'https://appstoreconnect.apple.com/itc/payments_and_financial_reports',
+  ),
+];
+
+/// Play Console, and the Google Cloud pages for [clientEmail]'s project —
+/// read off the service account's address (`…@PROJECT.iam.gserviceaccount
+/// .com`) — and for [bucket] when one is set. Play Console has no stable
+/// page address without the developer id, so it opens the console itself.
+List<StoreSetupLink> playSetupLinks({String? clientEmail, String? bucket}) {
+  final project = cloudProjectOf(clientEmail);
+  final inProject = project == null
+      ? ''
+      : '?project=${Uri.encodeQueryComponent(project)}';
+  final bucketName = reportsBucketName(bucket);
+  return [
+    (
+      label: 'Play Console',
+      url: 'https://play.google.com/console/u/0/developers',
+    ),
+    (
+      label: 'Play Developer API',
+      url:
+          'https://console.cloud.google.com/apis/library/'
+          'androidpublisher.googleapis.com$inProject',
+    ),
+    (
+      label: 'Play Reporting API',
+      url:
+          'https://console.cloud.google.com/apis/library/'
+          'playdeveloperreporting.googleapis.com$inProject',
+    ),
+    (
+      label: 'Service accounts',
+      url:
+          'https://console.cloud.google.com/iam-admin/serviceaccounts$inProject',
+    ),
+    if (bucketName != null)
+      (
+        label: 'Reports bucket',
+        url:
+            'https://console.cloud.google.com/storage/browser/'
+            '${Uri.encodeComponent(bucketName)}',
+      ),
+  ];
+}
+
+/// The Google Cloud project a service account belongs to, from its address,
+/// or null for an address that is not a service account's.
+String? cloudProjectOf(String? clientEmail) {
+  final match = RegExp(
+    r'^[^@]+@([a-z][a-z0-9-]{4,28}[a-z0-9])\.iam\.gserviceaccount\.com$',
+  ).firstMatch(clientEmail?.trim() ?? '');
+  return match?.group(1);
+}
+
+/// The bucket's name from what was typed: `pubsite_prod_rev_…`, or the
+/// `gs://pubsite_prod_rev_…/stats/…` URI Play Console copies. Null when empty.
+String? reportsBucketName(String? bucket) {
+  var name = bucket?.trim() ?? '';
+  if (name.startsWith('gs://')) name = name.substring(5);
+  name = name.split('/').first;
+  return name.isEmpty ? null : name;
+}

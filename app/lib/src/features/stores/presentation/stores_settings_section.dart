@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show AppleKeySummary, DataRefused, PlayAccountSummary;
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_section.dart';
@@ -269,6 +271,36 @@ class _Problem extends StatelessWidget {
         );
 }
 
+/// Where the credential above is made or found, each opening in the browser.
+class _SetupLinks extends ConsumerWidget {
+  const _SetupLinks(this.links);
+
+  final List<StoreSetupLink> links;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = ref.read(openExternalUrlProvider);
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.xs),
+      child: Wrap(
+        spacing: Insets.xs,
+        runSpacing: Insets.xs,
+        children: [
+          for (final link in links)
+            TextButton.icon(
+              onPressed: () => open(link.url),
+              icon: const Icon(
+                AppIcons.arrowSquareOut,
+                size: Chrome.iconAction,
+              ),
+              label: Text(link.label),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A value the server holds, shown as text: on a phone, and for what a
 /// desktop edits only by replacing the key.
 class _Held extends StatelessWidget {
@@ -374,18 +406,24 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
     await _run(() => _controller.remove(StoreKind.appStore));
   }
 
-  Widget _readOnly(AppleKeySummary? held) => SettingsCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _CardTitle(StoreKind.appStore, importedAt: held?.importedAt),
-        if (held != null) ...[
-          _Held('Key ID', held.keyId),
-          _Held('Issuer ID', held.issuerId),
-          _Held('Vendor number', held.vendorNumber ?? 'Not set'),
-        ],
-      ],
-    ),
+  Widget _readOnly(AppleKeySummary? held) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SettingsCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _CardTitle(StoreKind.appStore, importedAt: held?.importedAt),
+            if (held != null) ...[
+              _Held('Key ID', held.keyId),
+              _Held('Issuer ID', held.issuerId),
+              _Held('Vendor number', held.vendorNumber ?? 'Not set'),
+            ],
+          ],
+        ),
+      ),
+      const _SetupLinks(appleSetupLinks),
+    ],
   );
 
   @override
@@ -475,6 +513,7 @@ class _AppleCardState extends ConsumerState<_AppleCard> {
           'Sales or Finance for downloads. The vendor number is on Payments '
           'and Financial Reports.',
         ),
+        const _SetupLinks(appleSetupLinks),
       ],
     );
   }
@@ -571,21 +610,34 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
     await _run(() => _controller.remove(StoreKind.googlePlay));
   }
 
-  Widget _readOnly(PlayAccountSummary? held) => SettingsCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _CardTitle(StoreKind.googlePlay, importedAt: held?.importedAt),
-        if (held != null) ...[
-          _Held('Account', held.clientEmail ?? 'Not named'),
-          _Held('Reports bucket', held.reportsBucket ?? 'Not set'),
-          _Held(
-            'Extra package names',
-            held.packageNames.isEmpty ? 'None' : held.packageNames.join(', '),
-          ),
-        ],
-      ],
-    ),
+  Widget _readOnly(PlayAccountSummary? held) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SettingsCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _CardTitle(StoreKind.googlePlay, importedAt: held?.importedAt),
+            if (held != null) ...[
+              _Held('Account', held.clientEmail ?? 'Not named'),
+              _Held('Reports bucket', held.reportsBucket ?? 'Not set'),
+              _Held(
+                'Extra package names',
+                held.packageNames.isEmpty
+                    ? 'None'
+                    : held.packageNames.join(', '),
+              ),
+            ],
+          ],
+        ),
+      ),
+      _SetupLinks(
+        playSetupLinks(
+          clientEmail: held?.clientEmail,
+          bucket: held?.reportsBucket,
+        ),
+      ),
+    ],
   );
 
   @override
@@ -685,6 +737,14 @@ class _PlayCardState extends ConsumerState<_PlayCard> {
           'Google Play: the service account is invited in Play Console → '
           'Users and permissions with “View app information”, and “View app '
           'quality information” for crash and ANR rates.',
+        ),
+        // The bucket as saved, not as being typed: a half-typed name would
+        // link to a bucket that does not exist.
+        _SetupLinks(
+          playSetupLinks(
+            clientEmail: imported?.clientEmail,
+            bucket: imported?.reportsBucket,
+          ),
         ),
       ],
     );
