@@ -44,7 +44,8 @@ HostBinarySource serverHostBundles({
       if (folder.trim().isNotEmpty) add(folder.trim());
     }
   }
-  add(p.join(dataDirectory, 'host-bundles'));
+  final dropFolder = p.normalize(p.absolute(dataDirectory, 'host-bundles'));
+  add(dropFolder);
   final self = executable ?? Platform.resolvedExecutable;
   final bin = p.dirname(self);
   if (p.basename(bin) == 'bin') {
@@ -67,5 +68,7 @@ HostBinarySource serverHostBundles({
     if (parent.path == probe.path) break;
     probe = parent;
   }
-  return DirectoryHostBinaries([for (final folder in folders) Directory(folder)]);
+  return DirectoryHostBinaries([
+    for (final folder in folders) Directory(folder),
+  ], dropFolder: dropFolder);
 }

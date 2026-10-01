@@ -122,6 +122,23 @@ class HostDeployer {
       );
     }
     if (greeting.protocolVersion != kProtocolVersion) {
+      final runningPath = await _runningServePath(home);
+      final older = greeting.protocolVersion < kProtocolVersion;
+      // The stale host is this server's own bundle: it was started just now,
+      // or it runs from the path an update would install, at a version older
+      // than this app. Update would put back the same host.
+      final ours = runningPath == null || runningPath == remotePath;
+      final noNewer =
+          older &&
+          ours &&
+          (restarted || compareHostVersions(binary.version, kHostVersion) < 0);
+      final was = HostInstaller._versionOf(runningPath);
+      final why = runningPath == null
+          ? 'A stale `serve` is probably still running.'
+          : runningPath == remotePath
+          ? 'It is still running from files that have since been replaced.'
+          : 'A stale `serve`${was == null ? '' : ' ($was)'} is still '
+                'running; this app\'s ${binary.version} is installed beside it.';
       return HostDeployment(
         status: HostDeploymentStatus.protocolMismatch,
         observedAt: _now(),
@@ -129,9 +146,17 @@ class HostDeployer {
         remotePath: remotePath,
         hostVersion: greeting.hostVersion,
         protocolVersion: greeting.protocolVersion,
-        reason:
-            'The host on ${target.address} speaks protocol ${greeting.protocolVersion}; '
-            'this app speaks $kProtocolVersion. A stale `serve` is probably still running.',
+        noNewerHost: noNewer,
+        offeredVersion: binary.version,
+        bundleFolder: binaries.dropFolder,
+        reason: noNewer
+            ? 'The host on ${target.address} speaks protocol '
+                  '${greeting.protocolVersion}; this app speaks '
+                  '$kProtocolVersion. It is ${binary.version}, the newest '
+                  'host this build carries for ${platform.targetKey}.'
+            : 'The host on ${target.address} speaks protocol '
+                  '${greeting.protocolVersion}; this app speaks '
+                  '$kProtocolVersion. $why',
         restartedByUs: restarted,
       );
     }

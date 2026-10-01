@@ -263,6 +263,15 @@ class HostInstaller {
         : (ours ?? entries.firstOrNull)?.executable;
     final version = _versionOf(inEffect);
     final outdated = offered != null && inEffect != offered;
+    // Older than this app, and nothing newer to put there: no Update to offer.
+    final noNewer =
+        !outdated &&
+        version != null &&
+        compareHostVersions(version, kHostVersion) < 0 &&
+        (binary == null || compareHostVersions(binary.version, version) <= 0);
+    final folder =
+        deployer.binaries.dropFolder ??
+        'the host-bundles folder in the Karmashala server\'s data folder';
     final where = running ? 'running' : 'installed and not running';
     return (
       reading: HostInstallReading(
@@ -285,7 +294,9 @@ class HostInstaller {
             : 'The session host ${version ?? 'unversioned'} on ${host.name} is '
                   '$where'
                   '${held == null || held == 0 ? '' : ', holding $held session(s)'}.'
-                  '${binary == null ? ' This build carries no bundle for ${platform.targetKey}, so it cannot update or reinstall it.' : ''}',
+                  '${noNewer ? ' It is older than this app ($kHostVersion), and this build carries ${binary == null ? 'no host bundle' : 'no newer host'} for ${platform.targetKey}, so there is nothing to update it to. Rebuild or reinstall Karmashala with its host bundles, or put karmashala_host-$kHostVersion-${platform.targetKey}.tar.gz into $folder, then choose Check.' : ''}'
+                  '${!noNewer && binary == null ? ' This build carries no bundle for ${platform.targetKey}, so it cannot update or reinstall it.' : ''}',
+        noNewerHost: noNewer,
       ),
       home: home,
     );

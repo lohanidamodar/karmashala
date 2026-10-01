@@ -15,6 +15,10 @@ abstract class HostBinarySource {
 
   /// Where it looked, in words, for a refusal a person can act on.
   String describeSearch();
+
+  /// The folder an operator puts a bundle into, for a remedy that names one.
+  /// Read on every call, so a bundle put there is found without a restart.
+  String? get dropFolder;
 }
 
 /// Binaries named `karmashala_host-<version>-<os>-<arch>`, with or without a
@@ -26,11 +30,14 @@ abstract class HostBinarySource {
 /// host from before the store and is still accepted, so an installation that
 /// has not been rebuilt keeps working.
 class DirectoryHostBinaries implements HostBinarySource {
-  DirectoryHostBinaries(this.directories);
+  DirectoryHostBinaries(this.directories, {this.dropFolder});
 
   /// Searched in order; the first directory holding a match wins, and within it
   /// the highest version does.
   final List<Directory> directories;
+
+  @override
+  final String? dropFolder;
 
   @override
   String describeSearch() => directories.isEmpty

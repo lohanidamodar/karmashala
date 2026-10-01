@@ -137,6 +137,10 @@ class HostInstallPanel extends ConsumerWidget {
       ];
     }
     final (tone, icon) = switch (reading.state) {
+      HostInstallState.installed when reading.noNewerHost => (
+        SettingsNoticeTone.attention,
+        AppIcons.warningCircle,
+      ),
       HostInstallState.installed when reading.running => (
         SettingsNoticeTone.positive,
         AppIcons.checkCircle,
