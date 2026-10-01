@@ -581,3 +581,33 @@ void _migrateToV65(Database db) {
     'ON check_results (session_id, recorded_at);',
   );
 }
+
+/// Screenshots filed against the checkpoint whose working tree they showed, so
+/// two checkpoints' pictures can be compared. The PNG is a file beside the
+/// store; a checkpoint's deletion takes its rows with it.
+void _migrateToV66(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS checkpoint_screenshots (
+      id            TEXT PRIMARY KEY,
+      checkpoint_id TEXT NOT NULL
+        REFERENCES session_checkpoints (id) ON DELETE CASCADE,
+      session_id    TEXT,
+      source        TEXT NOT NULL,
+      size          TEXT NOT NULL,
+      width         INTEGER NOT NULL,
+      height        INTEGER NOT NULL,
+      subject       TEXT,
+      label         TEXT,
+      path          TEXT NOT NULL,
+      captured_at   TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_checkpoint_screenshots_checkpoint '
+    'ON checkpoint_screenshots (checkpoint_id, captured_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_checkpoint_screenshots_session '
+    'ON checkpoint_screenshots (session_id, captured_at);',
+  );
+}

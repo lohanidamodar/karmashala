@@ -11,6 +11,7 @@ import '../domain/browser_target.dart';
 import '../domain/element_capture.dart';
 import '../domain/found_element.dart';
 import '../domain/untrusted_content.dart';
+import 'browser_viewport_tool.dart';
 
 /// A tool failure whose text is the whole message: the bridge renders a thrown
 /// error as `Error: $e`, and [recovery] rides on [toString] rather than on
@@ -95,6 +96,8 @@ class BrowserTools {
         return _key(args);
       case 'browser_screenshot':
         return _screenshot(args);
+      case 'browser_screenshot_sizes':
+        return browserScreenshotSizes(_service, args);
       case 'browser_capture':
         return _capture(args);
       case 'browser_pick':

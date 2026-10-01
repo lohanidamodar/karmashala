@@ -103,6 +103,14 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'checkpoint_list': McpToolAnnotations.read,
   'checkpoint_diff': McpToolAnnotations.read,
   'checkpoint_capture': McpToolAnnotations(movesAttention: false),
+  // Writes a PNG and a row; its browser capture resizes the page's layout for
+  // a moment and puts it back, and a device is someone's real phone.
+  'checkpoint_screenshot': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'checkpoint_screenshots': McpToolAnnotations.read,
+  'checkpoint_screenshot_compare': McpToolAnnotations.read,
   // The only tool here that can throw away work nobody recorded elsewhere.
   'checkpoint_restore': McpToolAnnotations(
     destructive: true,
@@ -335,6 +343,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Browser. The page is someone's real logged-in session.
   'browser_find': McpToolAnnotations.readOutside,
   'browser_screenshot': McpToolAnnotations.readOutside,
+  // Not read-only: the page is laid out at each width and the window's own
+  // size put back, which a page listening for resizes does see.
+  'browser_screenshot_sizes': McpToolAnnotations(
+    openWorld: true,
+    idempotent: true,
+    movesAttention: false,
+  ),
   'browser_capture': McpToolAnnotations.readOutside,
   // Reads a click out of a person: it fronts their Chrome and blocks for
   // up to two minutes — read-only and the most interrupting tool here.
@@ -701,6 +716,18 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.checkpoints,
     'Put the working tree back to a checkpoint, discarding edits since.',
   ),
+  'checkpoint_screenshot': McpToolListing(
+    McpToolCategory.checkpoints,
+    'File a browser or device screenshot against a checkpoint, at set widths.',
+  ),
+  'checkpoint_screenshots': McpToolListing(
+    McpToolCategory.checkpoints,
+    'The screenshots filed against a checkpoint or a session.',
+  ),
+  'checkpoint_screenshot_compare': McpToolListing(
+    McpToolCategory.checkpoints,
+    'Two checkpoints\' screenshots compared: changed-pixel percent and a diff.',
+  ),
 
   // Notes, todos and the inbox.
   'notes_list': McpToolListing(
@@ -931,6 +958,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'browser_screenshot': McpToolListing(
     McpToolCategory.browser,
     'See the page as an image: the viewport, all of it, or one element.',
+  ),
+  'browser_screenshot_sizes': McpToolListing(
+    McpToolCategory.browser,
+    'See the page at compact, medium and expanded widths in one call.',
   ),
   'browser_capture': McpToolListing(
     McpToolCategory.browser,

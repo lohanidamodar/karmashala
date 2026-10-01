@@ -11,7 +11,8 @@ import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
     show ExecutionEnvironmentDao;
 
-import 'package:karmashala_checkpoints/store.dart' show CheckpointDao;
+import 'package:karmashala_checkpoints/store.dart'
+    show CheckpointDao, CheckpointScreenshotDao;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
@@ -123,6 +124,7 @@ import '../data/hosted_run_intents.dart';
 import '../server/server_config.dart';
 import '../server/server_config_service.dart';
 import '../server/server_data_directory.dart';
+import '../checkpoints/checkpoint_screenshot_tool_set.dart';
 import '../checkpoints/checkpoint_tool_set.dart';
 import '../checkpoints/daemon_checkpoints.dart';
 import '../sessions/daemon_session_sync.dart';
@@ -609,6 +611,16 @@ Future<int> runServe(
   data.checkpointWork = checkpoints.handle;
   checkpoints.start(status.changes);
   mcpTools.tools.add(CheckpointToolSet(checkpoints));
+  // Pictures filed against a checkpoint, and two of them compared.
+  mcpTools.tools.add(
+    CheckpointScreenshotToolSet(
+      checkpoints: checkpoints,
+      screenshots: CheckpointScreenshotDao(database),
+      browser: browser,
+      devices: devices,
+      directory: p.join(dataDirectory, 'checkpoint-screenshots'),
+    ),
+  );
   status.start();
   attention.start();
   final recording = SessionStatusRecording(

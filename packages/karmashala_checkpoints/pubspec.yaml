@@ -16,6 +16,8 @@ dependencies:
   # EnvironmentPath, ExecutionEnvironment and the command runners git runs on.
   agent_cli:
     path: ../agent_cli
+  # Decodes two checkpoint screenshots and draws their pixel diff.
+  image: ^4.8.0
   # Clock and the small utilities the service reads.
   karmashala_core:
     path: ../karmashala_core
