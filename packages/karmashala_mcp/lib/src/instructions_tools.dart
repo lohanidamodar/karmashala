@@ -484,6 +484,16 @@ already up stays up — but `device_launch_app` is not: two launches are two
 starts, and with relaunch they are two *cold* starts, which is a different
 device state from one.
 
+`device_clear_app_data` is first launch again: a signed-in account, a draft,
+anything the app stored is gone, on Android only — a simulator has no such
+command and says so. `device_app_permission` with revoke ends the app's process
+on both platforms. `device_set_state` changes settings the developer also
+lives with on their own phone, and **nothing puts them back by itself**: a
+device left offline, in Arabic, or at twice the font size stays that way until
+somebody changes it back, so say what you changed. Each setting is answered on
+its own, and a refused one means that platform cannot do it, not that you
+should retry.
+
 All of it is open-world. Nothing here is confined to this machine.
 ''',
   ),

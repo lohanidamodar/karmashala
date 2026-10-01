@@ -14,6 +14,7 @@ import 'package:karmashala_devices/karmashala_devices.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_recording_indicator.dart';
+import 'device_state_dialog.dart';
 import 'device_touch_surface.dart';
 
 /// The simulator's picture, when there is one. Draws nothing when nothing is
@@ -187,6 +188,22 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
     await simctl.openUrl(widget.udid, url.trim());
   }
 
+  Future<void> _deviceSettings() async {
+    final simctl = ref.read(simctlServiceProvider);
+    final target = _target;
+    if (simctl == null || target == null) return;
+    final driver = SimulatorDeviceDriver(
+      simctl: simctl,
+      backend: null,
+      target: target,
+    );
+    await showDeviceStateDialog(
+      context,
+      deviceLabel: target.label,
+      apply: driver.changeState,
+    );
+  }
+
   /// The recorder needs the simulator, not only its udid: the file is named
   /// after [DeviceTarget.fileSafeId] and the banner after its label.
   SimulatorTarget? get _target {
@@ -254,6 +271,13 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
             icon: AppIcons.globe,
             onPressed: _openUrl,
             buttonKey: const Key('simulator-open-url'),
+          ),
+          DeviceControl(
+            name: 'Device settings',
+            tooltip: 'Font scale, locale and permissions',
+            icon: AppIcons.gearSix,
+            onPressed: canRecord ? _deviceSettings : null,
+            buttonKey: const Key('simulator-device-settings'),
           ),
           // `simctl io … recordVideo`, not a tee of the picture above: that is
           // WebDriverAgent's MJPEG, screenshots with no encoded video behind it.

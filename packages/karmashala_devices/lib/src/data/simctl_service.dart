@@ -319,6 +319,63 @@ class SimctlService {
     );
   }
 
+  /// The Dynamic Type size, as one of `simctl ui content_size`'s categories.
+  Future<void> setContentSize(String udid, String category) => _act(
+    udid,
+    ['ui', udid, 'content_size', category],
+    verb: 'fontScale',
+    summary: 'Set content size to $category',
+  );
+
+  /// `simctl privacy grant|revoke` [service] for [bundleId].
+  Future<void> setPrivacy(
+    String udid, {
+    required bool grant,
+    required String service,
+    required String bundleId,
+  }) => _act(
+    udid,
+    ['privacy', udid, grant ? 'grant' : 'revoke', service, bundleId],
+    verb: 'permission',
+    summary: '${grant ? 'Granted' : 'Revoked'} $service for $bundleId',
+  );
+
+  /// Writes the global `AppleLanguages` and `AppleLocale` defaults; an app
+  /// reads them at launch, so a running one keeps its old language.
+  Future<void> setLanguage(String udid, String tag) async {
+    final summary = 'Set language to $tag';
+    await _act(
+      udid,
+      [
+        'spawn',
+        udid,
+        'defaults',
+        'write',
+        '-g',
+        'AppleLanguages',
+        '-array',
+        tag,
+      ],
+      verb: 'locale',
+      summary: summary,
+    );
+    await _act(
+      udid,
+      [
+        'spawn',
+        udid,
+        'defaults',
+        'write',
+        '-g',
+        'AppleLocale',
+        '-string',
+        tag.replaceAll('-', '_'),
+      ],
+      verb: 'locale',
+      summary: summary,
+    );
+  }
+
   /// Writes [text] to the simulator's pasteboard. Needs a shell: `simctl pbcopy`
   /// reads stdin and [ProcessHandle] cannot close it, so `pbcopy` never sees EOF.
   Future<void> setClipboard(String udid, String text) => _act(

@@ -4,6 +4,7 @@ import 'package:logging/logging.dart';
 import '../domain/device_driver.dart';
 import '../domain/device_files.dart';
 import '../domain/device_input.dart';
+import '../domain/device_state.dart';
 import '../domain/device_target.dart';
 import '../domain/simulator_backend.dart';
 import 'simctl_service.dart';
@@ -43,6 +44,7 @@ class SimulatorDeviceDriver implements DeviceDriver {
     DeviceCapability.installApp,
     DeviceCapability.appLifecycle,
     DeviceCapability.powerOff,
+    DeviceCapability.deviceState,
     // One decision, not three. They are the same runner: it is installed and
     // launched once, and when it is absent all three go together.
     if (backend != null) ...{
@@ -359,4 +361,110 @@ class SimulatorDeviceDriver implements DeviceDriver {
 
   @override
   Future<void> makeDirectory(String path) async => _noFiles();
+
+  @override
+  Future<String> changeState(DeviceStateChange change) async {
+    final name = target.label;
+    switch (change) {
+      case AppearanceChange(:final dark):
+        await simctl.setAppearance(_udid, dark ? 'dark' : 'light');
+        return '$name is in ${dark ? 'dark' : 'light'} appearance.';
+      case FontScaleChange(:final scale):
+        final (category, size) = iosContentSizeFor(scale);
+        await simctl.setContentSize(_udid, category);
+        return 'iOS has Dynamic Type categories, not a free scale: $name is '
+            'at $category, about ${size.toStringAsFixed(2)}× the default, '
+            'the nearest to $scale.';
+      case LocaleChange(:final tag):
+        await simctl.setLanguage(_udid, tag);
+        return 'Wrote AppleLanguages and AppleLocale ($tag) on $name. An app '
+            'reads them at launch: relaunch it (device_launch_app with '
+            'relaunch: true) to see the change.';
+      case RotationChange():
+        throw DeviceRefusal(
+          'simctl has no way to rotate a simulator; only the Simulator '
+          'window\'s own menu (⌘← / ⌘→) does. $name stays as it is.',
+        );
+      case NetworkChange():
+        throw DeviceRefusal(
+          'A simulator shares the Mac\'s network: simctl can neither cut nor '
+          'throttle it for one simulator. Network Link Conditioner on the Mac '
+          'shapes everything that Mac does, which Karmashala will not touch.',
+        );
+      case PermissionChange(:final appId, :final permission, :final grant):
+        final service = permission.toLowerCase();
+        if (!kSimctlPrivacyServices.contains(service)) {
+          throw DeviceRefusal(
+            'simctl privacy has no "$permission" service. It knows '
+            '${kSimctlPrivacyServices.join(', ')}. The camera and '
+            'notifications are not among them.',
+          );
+        }
+        await simctl.setPrivacy(
+          _udid,
+          grant: grant,
+          service: service,
+          bundleId: appId,
+        );
+        return '${grant ? 'Granted' : 'Revoked'} $service for $appId on '
+            '$name. A revoke ends the app if it is running.';
+      case ClearAppDataChange():
+        throw DeviceRefusal(
+          'simctl has no clear-data command. To start $name\'s app from '
+          'empty, uninstall it and install it again (device_install_app).',
+        );
+      case OpenUrlChange(:final url, :final appId):
+        if (appId != null) {
+          throw DeviceRefusal(
+            'iOS routes a URL by its scheme or associated domain, not by an '
+            'app named in the call. Drop appId; the URL alone decides.',
+          );
+        }
+        await simctl.openUrl(_udid, url);
+        return 'Opened $url on $name. Read the screen to see where it landed.';
+    }
+  }
+}
+
+/// The services `simctl privacy` grants and revokes.
+const List<String> kSimctlPrivacyServices = [
+  'all',
+  'calendar',
+  'contacts-limited',
+  'contacts',
+  'location',
+  'location-always',
+  'photos-add',
+  'photos',
+  'media-library',
+  'microphone',
+  'motion',
+  'reminders',
+  'siri',
+];
+
+/// The `simctl ui content_size` category nearest [scale], and its own scale
+/// (body text size over the default 17 pt).
+(String, double) iosContentSizeFor(double scale) {
+  const categories = <(String, double)>[
+    ('extra-small', 14 / 17),
+    ('small', 15 / 17),
+    ('medium', 16 / 17),
+    ('large', 1.0),
+    ('extra-large', 19 / 17),
+    ('extra-extra-large', 21 / 17),
+    ('extra-extra-extra-large', 23 / 17),
+    ('accessibility-medium', 28 / 17),
+    ('accessibility-large', 33 / 17),
+    ('accessibility-extra-large', 40 / 17),
+    ('accessibility-extra-extra-large', 47 / 17),
+    ('accessibility-extra-extra-extra-large', 53 / 17),
+  ];
+  var best = categories[3];
+  for (final candidate in categories) {
+    if ((candidate.$2 - scale).abs() < (best.$2 - scale).abs()) {
+      best = candidate;
+    }
+  }
+  return best;
 }

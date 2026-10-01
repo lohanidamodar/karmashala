@@ -1,6 +1,7 @@
 import '../domain/device_driver.dart';
 import '../domain/device_files.dart';
 import '../domain/device_input.dart';
+import '../domain/device_state.dart';
 import '../domain/device_target.dart';
 import '../domain/logcat_entry.dart';
 import 'adb_file_parsing.dart';
@@ -37,6 +38,7 @@ class AdbDeviceDriver implements DeviceDriver {
     DeviceCapability.installApp,
     DeviceCapability.appLifecycle,
     DeviceCapability.files,
+    DeviceCapability.deviceState,
     if (target.device.isEmulator) DeviceCapability.powerOff,
   };
 
@@ -425,5 +427,101 @@ class AdbDeviceDriver implements DeviceDriver {
       }
     }
     return null;
+  }
+
+  @override
+  Future<String> changeState(DeviceStateChange change) async {
+    switch (change) {
+      case AppearanceChange(:final dark):
+        await adb.setNightMode(_serial, dark: dark);
+        return 'Night mode is ${dark ? 'on' : 'off'} on $_serial.';
+      case FontScaleChange(:final scale):
+        await adb.setFontScale(_serial, scale);
+        return 'Font scale is $scale on $_serial. A running app picks it up '
+            'as a configuration change; one that pins textScaler ignores it.';
+      case LocaleChange(:final tag, :final appId):
+        if (appId == null) {
+          throw DeviceRefusal(
+            'Android sets the system locale only with root (setprop '
+            'persist.sys.locale, then a restart), which this does not take. '
+            'Pass appId to set one app\'s locale instead (Android 13+).',
+          );
+        }
+        final level = await adb.apiLevel(_serial);
+        if (level != null && level < 33) {
+          throw DeviceRefusal(
+            '$_serial runs API $level. Per-app locales arrived in Android 13 '
+            '(API 33), and the system locale needs root. Change it in the '
+            'device\'s Settings → System → Languages instead.',
+          );
+        }
+        await adb.setAppLocale(_serial, appId, tag);
+        return '$appId now runs in $tag on $_serial; the app restarts to pick '
+            'it up.';
+      case RotationChange(:final rotation):
+        final turns = rotation == DeviceRotation.auto
+            ? null
+            : rotation.index - 1;
+        await adb.setRotation(_serial, turns);
+        return rotation == DeviceRotation.auto
+            ? 'Rotation follows the sensor again on $_serial.'
+            : '$_serial is locked to ${rotation.name}. An app that locks its '
+                  'own orientation stays as it is.';
+      case NetworkChange(:final profile):
+        return _network(profile);
+      case PermissionChange(:final appId, :final permission, :final grant):
+        final name = permission.contains('.')
+            ? permission
+            : 'android.permission.${permission.toUpperCase()}';
+        await adb.setPermission(_serial, appId, name, grant: grant);
+        return grant
+            ? 'Granted $name to $appId on $_serial.'
+            : 'Revoked $name from $appId on $_serial. Android ends the app\'s '
+                  'process when a permission is revoked.';
+      case ClearAppDataChange(:final appId):
+        await adb.clearAppData(_serial, appId);
+        return 'Cleared $appId\'s data on $_serial: its files, databases, '
+            'preferences and caches, and the permissions it had been granted. '
+            'The app was stopped.';
+      case OpenUrlChange(:final url, :final appId):
+        await adb.openUrl(_serial, url, appId: appId);
+        return 'Opened $url on $_serial${appId == null ? '' : ' in $appId'}. '
+            'Read the screen to see where it landed.';
+    }
+  }
+
+  Future<String> _network(NetworkProfile profile) async {
+    final emulator = target.device.isEmulator;
+    if (profile.isThrottle && !emulator) {
+      throw DeviceRefusal(
+        '$_serial is a physical device: adb can only switch its Wi-Fi and '
+        'mobile data on or off (network "offline" or "full"). Throttling to '
+        '${profile.name} needs an emulator.',
+      );
+    }
+    switch (profile) {
+      case NetworkProfile.offline:
+        await adb.setRadios(_serial, on: false);
+        return 'Wi-Fi and mobile data are off on $_serial.';
+      case NetworkProfile.full:
+        await adb.setRadios(_serial, on: true);
+        if (emulator) {
+          await adb.setEmulatorNetwork(_serial, speed: 'full', delay: 'none');
+        }
+        return 'Wi-Fi and mobile data are on${emulator ? ', unthrottled,' : ''} '
+            'on $_serial.';
+      case NetworkProfile.lte ||
+          NetworkProfile.umts ||
+          NetworkProfile.edge ||
+          NetworkProfile.gprs:
+        await adb.setEmulatorNetwork(
+          _serial,
+          speed: profile.name,
+          delay: profile == NetworkProfile.lte ? 'none' : profile.name,
+        );
+        return '$_serial\'s emulated modem is throttled to ${profile.name}. '
+            'Traffic over the emulator\'s virtual Wi-Fi may not be; turn it '
+            'off on the device if the app ignores the throttle.';
+    }
   }
 }
