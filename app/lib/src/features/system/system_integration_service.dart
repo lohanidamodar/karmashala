@@ -10,6 +10,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show exitAfterSocketsSettle, settleUnixSockets;
 import '../../core/lifecycle/app_lifecycle.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../core/probe/probe_mode.dart';
@@ -110,15 +112,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
     Future<void> Function()? onQuitRequested,
     OsQuitRegistrar? registerOsQuit,
     void Function()? endProcess,
+    Future<void> Function()? settleSockets,
     TerminalViewGate? terminalViews,
   }) : _native = adapters ?? NativeAdapters.platform(),
        _terminalViews = terminalViews ?? terminalViewGate,
        _logger = logger ?? AppLogger.named('system'),
        _onQuitRequested = onQuitRequested ?? _noShutdown,
        _registerOsQuit = registerOsQuit ?? registerOsQuitOverChannel,
-       _endProcess = endProcess ?? _exitProcess;
+       _endProcess = endProcess ?? _exitProcess,
+       _socketSettler = settleSockets;
 
-  static void _exitProcess() => exit(0);
+  static void _exitProcess() => unawaited(exitAfterSocketsSettle(0));
+
+  /// Closes this process's unix sockets in order before the window goes
+  /// ([settleUnixSockets] when null). A seam like [_endProcess].
+  final Future<void> Function()? _socketSettler;
 
   /// Ends the process, once the ordered shutdown has run and the window is
   /// gone. A seam so tests can exercise quitting without taking the test
@@ -706,6 +714,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
       // A shutdown step that fails must not strand the user in an app that
       // will not close.
       _logger.warning('system: shutdown before quit failed.', error, stack);
+    }
+    // Before the window: destroying it can end the process on Windows, and an
+    // exit with a unix socket's close pending bugchecks the machine.
+    try {
+      await (_socketSettler?.call() ??
+          settleUnixSockets(log: _logger.info).then((_) {}));
+    } on Object catch (error) {
+      _logger.warning('system: settling unix sockets failed reason=$error');
     }
     // Bracketed, and the two lines are the whole diagnosis for a quit that never
     // finishes: on stdout they are unbuffered, so a missing second line locates it.

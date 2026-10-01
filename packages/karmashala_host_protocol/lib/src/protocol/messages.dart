@@ -1071,4 +1071,5 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.dataStreamClose => DataStreamCloseMessage.decode(frame),
   MessageType.stopCheck => StopCheckMessage.decode(frame),
   MessageType.stopCheckAnswer => StopCheckAnswerMessage.decode(frame),
+  MessageType.stopNow => StopNowMessage.decode(frame),
 };

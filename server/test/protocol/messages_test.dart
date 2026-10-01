@@ -626,6 +626,15 @@ void main() {
       expect(roundTrip(const StopCheckMessage(7)).requestId, 7);
     });
 
+    test('stopNow, byte for byte, and its code sits in the frozen set', () {
+      expect(MessageType.stopNow.code, 0xf2);
+      expect(const StopNowMessage(7).toFrame().encode(), [
+        0xf2, 0, 0, 0, 0, 0, 0, 4, //
+        0, 0, 0, 7,
+      ]);
+      expect(roundTrip(const StopNowMessage(7)).requestId, 7);
+    });
+
     test('stopCheckAnswer, byte for byte', () {
       const answer = StopCheckAnswerMessage(
         requestId: 7,

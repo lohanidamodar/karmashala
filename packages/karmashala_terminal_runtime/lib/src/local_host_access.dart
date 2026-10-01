@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:karmashala_host_protocol/host_paths.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show OrderlySocket;
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
@@ -801,13 +803,13 @@ class LocalHostExecutable {
 /// A [RemoteChannel] over a plain socket — the frames are identical to the ones
 /// an SSH exec channel carries, which is what makes `attach` a byte proxy.
 class SocketRemoteChannel implements RemoteChannel {
-  SocketRemoteChannel(this._socket);
+  SocketRemoteChannel(Socket socket) : _socket = OrderlySocket(socket);
 
-  final Socket _socket;
+  final OrderlySocket _socket;
   final _exit = Completer<int>();
 
   @override
-  Stream<Uint8List> get stdout => _socket;
+  Stream<Uint8List> get stdout => _socket.stream;
 
   /// Nothing writes to this. A socket has one stream, and the host's diagnostics
   /// go to its own log rather than back down the channel.
@@ -820,15 +822,12 @@ class SocketRemoteChannel implements RemoteChannel {
   @override
   Future<int> get exitCode => _exit.future;
 
+  /// Half-closes, then closes — in order on Windows, so neither side is left
+  /// with a disconnect pending (orderly_close.dart).
   @override
   Future<void> close() async {
     if (!_exit.isCompleted) _exit.complete(0);
-    try {
-      await _socket.close();
-    } on SocketException {
-      // The peer hung up first; there is nothing left to close politely.
-    }
-    _socket.destroy();
+    await _socket.close();
   }
 }
 

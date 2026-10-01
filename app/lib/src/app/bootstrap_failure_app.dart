@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show exitAfterSocketsSettle;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -69,7 +71,7 @@ class BootstrapFailureApp extends StatelessWidget {
                         child: const Text('Copy details'),
                       ),
                       OutlinedButton(
-                        onPressed: () => exit(1),
+                        onPressed: () => exitAfterSocketsSettle(1),
                         child: const Text('Quit'),
                       ),
                     ],

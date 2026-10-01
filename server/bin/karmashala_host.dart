@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show exitAfterSocketsSettle;
 
 Future<void> main(List<String> args) async {
   // The one place the real environment is read: the library never does.
@@ -12,8 +14,11 @@ Future<void> main(List<String> args) async {
   // is still open then — a client connection it never hung up, the process
   // worker isolate a checkpoint started, a pty reader — kept the VM alive
   // after SIGTERM until somebody sent SIGKILL (2026-09-25).
+  //
+  // Through the settle, never a bare `exit`: on Windows an exit with a unix
+  // socket's close pending bugchecks the machine (orderly_close.dart).
   if (args.isNotEmpty && (args.first == 'attach' || args.first == 'serve')) {
-    exit(code);
+    await exitAfterSocketsSettle(code);
   }
   exitCode = code;
 }

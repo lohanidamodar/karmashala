@@ -19,6 +19,21 @@ class StopCheckMessage extends HostMessage {
       StopCheckMessage(WireReader(frame.payload).u32());
 }
 
+/// client → host, as the first and only frame: "shut down now". Answered with
+/// [StopCheckAnswerMessage] before the host begins; it then closes every
+/// client in order and exits. Frozen like [StopCheckMessage].
+class StopNowMessage extends HostMessage {
+  const StopNowMessage(this.requestId);
+  final int requestId;
+
+  @override
+  Frame toFrame() =>
+      Frame(MessageType.stopNow, 0, (WireWriter()..u32(requestId)).take());
+
+  static StopNowMessage decode(Frame frame) =>
+      StopNowMessage(WireReader(frame.payload).u32());
+}
+
 /// host → client: its pid, the protocol it speaks for everything else, and
 /// how many sessions it holds that have not ended.
 class StopCheckAnswerMessage extends HostMessage {

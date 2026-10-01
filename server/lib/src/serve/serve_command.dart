@@ -135,6 +135,8 @@ import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
 import '../transport/sealed_transport.dart';
 import '../transport/socket_transport.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
+    show settleUnixSockets;
 import 'package:karmashala_local_ipc/socket_location.dart';
 import 'package:karmashala_host_protocol/host_paths.dart';
 import 'host_server.dart';
@@ -1022,6 +1024,9 @@ Future<int> runServe(
     if (!stopping.isCompleted) stopping.complete(code);
   }
 
+  // `karmashala_host stop` on Windows asks rather than kills (stopNow).
+  server.onStopRequested = () => stop(0);
+
   // Not in the first moments: the probe starts a dozen processes, and a
   // server SIGKILLed while the VM is between fork and exec for one of them
   // can leave that half-born child behind for good, holding the socket —
@@ -1170,6 +1175,11 @@ Future<int> runServe(
   data.conversations.close();
   database.close();
   lock.release();
+  // Last, so clients still hear every session end, and after the lock, so a
+  // client that redials on the hang-up can start the next serve at once.
+  // Each is half-closed and waited for: the exit leaves no disconnect
+  // pending (Windows only, orderly_close.dart).
+  await settleUnixSockets(log: sink.writeln);
   // Bounded: a reader that is there but not reading must not hold the exit.
   await Future.wait([
     sink.flush(),
