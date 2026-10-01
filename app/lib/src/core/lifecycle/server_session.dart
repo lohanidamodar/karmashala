@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
+import 'package:karmashala_files/values.dart' show nameRefusal;
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_remote/client.dart' show CompanionPairing;
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -21,6 +22,7 @@ import '../../features/devices/application/device_bindings.dart';
 import '../../features/environments/application/browse_sources.dart';
 import '../../features/environments/data/environments_data.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
+import '../../features/files/application/quick_access_pins.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/notifications/application/phone_notifications.dart';
 import '../../features/remote/application/machines_providers.dart';
@@ -568,4 +570,8 @@ void installServerSessionStatics() {
   HiddenFilesPreference.write = (value) => _currentContainer()
       .read(settingsControllerProvider.notifier)
       .setShowHiddenFiles(value);
+  // The folders pinned to every browser, kept by the current server.
+  QuickAccess.lookup = () => _currentContainer().read(quickAccessPinsProvider);
+  // One naming rule for every New folder and rename: the server's own.
+  FileNameDialog.rule = nameRefusal;
 }

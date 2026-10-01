@@ -46,6 +46,13 @@ class _OpenedFiles extends EditorTabActions {
   }
 }
 
+/// The name field of the dialog New folder opens — each side has a path field
+/// and a filter of its own besides.
+final nameField = find.descendant(
+  of: find.byType(AlertDialog),
+  matching: find.byType(TextField),
+);
+
 void main() {
   late Directory left;
   late Directory right;
@@ -127,7 +134,7 @@ void main() {
 
     await tester.tap(find.text('New folder').first);
     await settle(tester);
-    await tester.enterText(find.byType(TextField), 'work');
+    await tester.enterText(nameField, 'work');
     await tester.tap(find.text('Create'));
     await settle(tester);
 
@@ -141,7 +148,7 @@ void main() {
 
     await tester.tap(find.text('New folder').first);
     await settle(tester);
-    await tester.enterText(find.byType(TextField), 'a/b');
+    await tester.enterText(nameField, 'a/b');
     await tester.tap(find.text('Create'));
     await settle(tester);
 

@@ -140,6 +140,9 @@ class FakeDataServer {
   final todos = <String, Todo>{};
   final preferences = <String, String>{};
 
+  /// The folders pinned to every file browser.
+  List<QuickAccessPin> quickAccessPins = [];
+
   /// The workspace domain's four tables, shaped like the server's DAOs so a
   /// test seeds them the way the server's store is written. A write here
   /// after a client connected reaches it as another client's change.
@@ -411,6 +414,8 @@ class FakeDataServer {
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;
+        case QuickAccessChanged(:final pins):
+          quickAccessPins = [...pins];
         case StoresChanged() || StoresProgress():
           // Told by [stores] as it changes; a test seeds its view directly.
           break;
@@ -600,6 +605,7 @@ class FakeDataServer {
       final ConversationsRequest<Object?> r => conversations._handle(r),
       final WorktreesRequest<Object?> r => worktreeRows._handle(r, changes),
       final SnippetsRequest<Object?> r => snippetRows._handle(r, changes),
+      final QuickAccessRequest r => _quickAccess(r, changes),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
       final CheckpointWorkRequest<Object?> r => checkpointWork._handle(r),
       final VerificationRequest<Object?> r => verificationRows._handle(
@@ -1145,6 +1151,31 @@ class FakeDataServer {
       changes.add(TodoRemoved(id));
     }
     return going.length;
+  }
+
+  /// The quick-access pins, kept as the server keeps them: in order, one per
+  /// folder, each change told whole.
+  List<QuickAccessPin> _quickAccess(
+    QuickAccessRequest request,
+    List<DataChange> changes,
+  ) {
+    final pins = [...quickAccessPins];
+    switch (request) {
+      case QuickAccessList():
+        return pins;
+      case QuickAccessPinFolder(:final pin):
+        if (!pins.any(pin.sameFolder)) pins.add(pin);
+      case QuickAccessUnpin(:final environmentId, :final path):
+        final at = QuickAccessPin(environmentId: environmentId, path: path);
+        pins.removeWhere(at.sameFolder);
+      case QuickAccessRename(:final environmentId, :final path, :final label):
+        final at = QuickAccessPin(environmentId: environmentId, path: path);
+        final index = pins.indexWhere(at.sameFolder);
+        if (index >= 0) pins[index] = pins[index].withLabel(label);
+    }
+    quickAccessPins = pins;
+    changes.add(QuickAccessChanged(List.unmodifiable(pins)));
+    return pins;
   }
 
   DataAck _setPreference(String key, String? value, List<DataChange> changes) {
