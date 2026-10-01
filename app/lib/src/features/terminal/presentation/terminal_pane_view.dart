@@ -494,38 +494,13 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     return KeyEventResult.handled;
   }
 
+  // No special case for a closed text-input connection: xterm's own key
+  // handler types a printable key-down whether or not one is open
+  // (`TerminalView._handleKeyEvent`, its text fallback). A first key lost
+  // after the window comes back never reached this pane — see
+  // `KeyboardFocusKeeper`.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) =>
-      _typeWithoutConnection(event) ??
-      _handleCopyOrInterrupt(event) ??
-      widget.onKeyEvent(node, event);
-
-  /// **The first letter after the window comes back** (owner, 2026-09-30).
-  /// A printable key reaches the grid through its text-input connection, not
-  /// as a key event: xterm's key handler leaves plain characters to it. The
-  /// window losing focus takes focus from the pane, which closes that
-  /// connection; focus is restored on return, but on Windows the first
-  /// keystroke can land before the connection is open again, and was dropped.
-  /// With no connection, a plain printable key is typed here and the
-  /// connection reopened, so the next one takes the usual road. Anything with
-  /// a modifier, and every key while a connection is up, goes on as before.
-  KeyEventResult? _typeWithoutConnection(KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return null;
-    final view = _viewKey.currentState;
-    if (view == null || view.hasInputConnection) return null;
-    final character = event.character;
-    if (character == null || character.isEmpty) return null;
-    final code = character.codeUnitAt(0);
-    if (code < 0x20 || code == 0x7f) return null;
-    final keyboard = HardwareKeyboard.instance;
-    if (keyboard.isControlPressed ||
-        keyboard.isAltPressed ||
-        keyboard.isMetaPressed) {
-      return null;
-    }
-    widget.instance.terminal.textInput(character);
-    view.requestKeyboard();
-    return KeyEventResult.handled;
-  }
+      _handleCopyOrInterrupt(event) ?? widget.onKeyEvent(node, event);
 
   /// Where the primary button went down, so a drag is not read as a click.
   Offset? _pressedAt;

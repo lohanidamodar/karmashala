@@ -16,6 +16,7 @@ import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
+import 'src/core/lifecycle/keyboard_focus_keeper.dart';
 import 'src/core/lifecycle/link_lifecycle.dart';
 import 'src/core/lifecycle/relaunch.dart';
 import 'src/core/lifecycle/server_session.dart';
@@ -183,6 +184,9 @@ Future<void> _bootstrap(AppLogger logger) async {
   );
 
   links?.attach();
+  // A desktop window loses focus to other apps; the keyboard must come back
+  // with it before the first key, not after (see the class).
+  if (client.systemIntegration) KeyboardFocusKeeper.install();
 
   // A client with no server of its own and no machine chosen opens nothing:
   // the root shows pairing, and the pairing's switch opens the first session.
