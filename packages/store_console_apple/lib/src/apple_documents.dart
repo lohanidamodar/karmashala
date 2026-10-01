@@ -211,6 +211,34 @@ Uri? parseLookupIcon(JsonMap document, {int size = 128}) {
   return https(first['artworkUrl100']) ?? large;
 }
 
+/// The icon of the newest build in [document] that carries one — its
+/// `iconAssetToken` template filled to [size] px, or the asset's own size if
+/// smaller, as a PNG. Null when no build has an icon on https.
+Uri? parseBuildIcon(JsonMap document, {int size = 128}) {
+  for (final build in _data(document, 'the icon')) {
+    final asset = _attributes(build)['iconAssetToken'];
+    if (asset is! Map) continue;
+    final template = asset['templateUrl'];
+    if (template is! String || !template.contains('{w}')) continue;
+    var side = size;
+    for (final edge in [asset['width'], asset['height']]) {
+      if (edge is num && edge >= 1 && edge < side) side = edge.toInt();
+    }
+    final filled = template
+        .trim()
+        .replaceAll('{w}', '$side')
+        .replaceAll('{h}', '$side')
+        .replaceAll('{c}', 'bb')
+        .replaceAll('{f}', 'png');
+    if (filled.contains('{')) continue;
+    final uri = Uri.tryParse(filled);
+    if (uri != null && uri.scheme == 'https' && uri.host.isNotEmpty) {
+      return uri;
+    }
+  }
+  return null;
+}
+
 /// Null when the lookup has no such app, or the app has no ratings yet.
 RatingSummary? parseLookupRating(JsonMap document) {
   final results = document['results'];

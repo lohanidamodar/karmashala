@@ -18,6 +18,13 @@ const _maxPages = 20;
 /// An icon is never worth holding a refresh up for.
 const _iconTimeout = Duration(seconds: 10);
 
+/// The whole icon lookup, every request together; under the server's own
+/// per-icon budget so this client stops its own requests first.
+const _iconBudget = Duration(seconds: 20);
+
+/// A build still processing has no icon yet, so a few are read.
+const _iconBuilds = 5;
+
 /// A day Apple had no report for is asked about again after this long.
 const _absentFor = Duration(minutes: 30);
 
@@ -119,33 +126,47 @@ class AppleStoreClient implements StoreClient {
     }, what: 'reviews'),
   );
 
-  /// From the public lookup: App Store Connect has no icon field. Asked by
-  /// the App Store id on the US storefront, then by bundle id, so an app the
-  /// US store does not sell is still found where the lookup's default
-  /// storefront has it.
+  /// The live version's marketing icon from the public lookup — by App Store
+  /// id on the US storefront, then by bundle id — else, for an app the
+  /// lookup does not know (never released, or not live), the newest build's
+  /// icon from App Store Connect.
   @override
   Future<StoreIconImage?> icon(StoreApp app) async {
+    final clock = Stopwatch()..start();
+    Duration wait() {
+      final left = _iconBudget - clock.elapsed;
+      if (left <= Duration.zero) {
+        throw StoreException(
+          StoreFailure.network,
+          'The icon was not found within ${_iconBudget.inSeconds} seconds.',
+        );
+      }
+      return left < _iconTimeout ? left : _iconTimeout;
+    }
+
     Future<Uri?> lookup(Map<String, String> query) async => parseLookupIcon(
       await _http.getJson(
         Uri.https('itunes.apple.com', '/lookup', query),
         what: 'the icon',
         authorized: false,
-        timeout: _iconTimeout,
+        timeout: wait(),
       ),
     );
     final source =
         await lookup({'id': app.id, 'country': 'us'}) ??
         (app.bundleId.isEmpty
             ? null
-            : await lookup({'bundleId': app.bundleId}));
+            : await lookup({'bundleId': app.bundleId})) ??
+        await _buildIcon(app, wait());
     if (source == null) return null;
+    // Never authorized: the image host is not Apple's API host.
     final response = await _http.get(
       source,
       what: 'the icon',
       authorized: false,
       accept: 'image/*',
       absentOn404: true,
-      timeout: _iconTimeout,
+      timeout: wait(),
     );
     if (response == null) return null;
     final type = (response.headers['content-type'] ?? '')
@@ -161,6 +182,27 @@ class AppleStoreClient implements StoreClient {
       bytes: response.bodyBytes,
       contentType: type,
     );
+  }
+
+  /// Null, not a failure, for a key that may not read builds.
+  Future<Uri?> _buildIcon(StoreApp app, Duration timeout) async {
+    try {
+      return parseBuildIcon(
+        await _http.getJson(
+          Uri.https(_host, '/v1/builds', {
+            'filter[app]': app.id,
+            'sort': '-uploadedDate',
+            'limit': '$_iconBuilds',
+            'fields[builds]': 'iconAssetToken,uploadedDate',
+          }),
+          what: 'the icon',
+          timeout: timeout,
+        ),
+      );
+    } on StoreException catch (error) {
+      if (error.kind == StoreFailure.permission) return null;
+      rethrow;
+    }
   }
 
   /// The rating on the United States storefront, from the public lookup:

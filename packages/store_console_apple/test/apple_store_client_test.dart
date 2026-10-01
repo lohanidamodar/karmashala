@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:store_console/store_console.dart';
+import 'package:store_console_apple/src/apple_documents.dart';
 import 'package:store_console_apple/store_console_apple.dart';
 import 'package:test/test.dart';
 
@@ -275,6 +276,126 @@ void main() {
     expect(reviews.last.answered, isFalse);
     expect(reviews.last.title, isNull);
     expect(reviews.last.author, isNull);
+  });
+
+  group('icon', () {
+    final png = http.Response.bytes(
+      [0x89, 0x50, 0x4E, 0x47],
+      200,
+      headers: {'content-type': 'image/png'},
+    );
+    final noResults = jsonResponse({'resultCount': 0, 'results': <Object>[]});
+    Map<String, Object?> build(String id, {Map<String, Object?>? icon}) => {
+      'type': 'builds',
+      'id': id,
+      'attributes': {
+        'uploadedDate': '2026-09-29T10:00:00Z',
+        'iconAssetToken': icon,
+      },
+    };
+    const template =
+        'https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/ab/AppIcon.png/'
+        '{w}x{h}bb.{f}';
+
+    test('the live version comes from the lookup; no build is asked', () async {
+      final asked = <Uri>[];
+      final client = clientWith((request) async {
+        asked.add(request.url);
+        if (request.url.host == 'itunes.apple.com') {
+          return jsonResponse({
+            'resultCount': 1,
+            'results': [
+              {
+                'artworkUrl512':
+                    'https://is1-ssl.mzstatic.com/image/thumb/x/512x512bb.jpg',
+              },
+            ],
+          });
+        }
+        return png;
+      });
+
+      final icon = await client.icon(testApp);
+
+      expect(icon!.source.path, endsWith('/128x128bb.png'));
+      expect(icon.contentType, 'image/png');
+      expect(asked.map((uri) => uri.host), [
+        'itunes.apple.com',
+        'is1-ssl.mzstatic.com',
+      ]);
+    });
+
+    test('an app the lookup does not know falls back to its newest build '
+        'icon', () async {
+      final asked = <http.Request>[];
+      final client = clientWith((request) async {
+        asked.add(request);
+        if (request.url.host == 'itunes.apple.com') return noResults;
+        if (request.url.path == '/v1/builds') {
+          return jsonResponse({
+            'data': [
+              build('processing'),
+              build(
+                'b1',
+                icon: {'templateUrl': template, 'width': 1024, 'height': 1024},
+              ),
+            ],
+          });
+        }
+        return png;
+      });
+
+      final icon = await client.icon(testApp);
+
+      expect(
+        icon!.source.toString(),
+        'https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/ab/AppIcon.png/'
+        '128x128bb.png',
+      );
+      expect(icon.bytes, [0x89, 0x50, 0x4E, 0x47]);
+      final builds = asked.singleWhere((r) => r.url.path == '/v1/builds');
+      expect(builds.method, 'GET');
+      expect(builds.url.queryParameters, {
+        'filter[app]': testApp.id,
+        'sort': '-uploadedDate',
+        'limit': '5',
+        'fields[builds]': 'iconAssetToken,uploadedDate',
+      });
+      expect(builds.headers['Authorization'], startsWith('Bearer '));
+      final image = asked.last;
+      expect(image.url.host, 'is1-ssl.mzstatic.com');
+      expect(image.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('a smaller build icon is not scaled up', () {
+      final uri = parseBuildIcon({
+        'data': [
+          build(
+            'b1',
+            icon: {'templateUrl': template, 'width': 60, 'height': 60},
+          ),
+        ],
+      });
+      expect(uri!.path, endsWith('/60x60bb.png'));
+    });
+
+    test(
+      'no build icon, or a key that may not read builds, is no icon',
+      () async {
+        final noBuilds = clientWith((request) async {
+          if (request.url.host == 'itunes.apple.com') return noResults;
+          return jsonResponse({
+            'data': [build('processing')],
+          });
+        });
+        final forbidden = clientWith((request) async {
+          if (request.url.host == 'itunes.apple.com') return noResults;
+          return jsonResponse({}, status: 403);
+        });
+        expect(await noBuilds.icon(testApp), isNull);
+        expect(await forbidden.icon(testApp), isNull);
+      },
+    );
   });
 
   test('rating reads the public lookup without the token', () async {
