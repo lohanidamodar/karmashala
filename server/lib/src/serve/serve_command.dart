@@ -12,7 +12,10 @@ import 'package:karmashala_environments/store.dart'
     show ExecutionEnvironmentDao;
 
 import 'package:karmashala_checkpoints/store.dart'
-    show CheckpointDao, CheckpointScreenshotDao;
+    show
+        CheckpointDao,
+        CheckpointScreenshotDao,
+        sweepCheckpointScreenshotFolders;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
@@ -617,13 +620,21 @@ Future<int> runServe(
   checkpoints.start(status.changes);
   mcpTools.tools.add(CheckpointToolSet(checkpoints));
   // Pictures filed against a checkpoint, and two of them compared.
+  final screenshotDirectory = p.join(dataDirectory, 'checkpoint-screenshots');
   mcpTools.tools.add(
     CheckpointScreenshotToolSet(
       checkpoints: checkpoints,
       screenshots: CheckpointScreenshotDao(database),
       browser: browser,
       devices: devices,
-      directory: p.join(dataDirectory, 'checkpoint-screenshots'),
+      directory: screenshotDirectory,
+    ),
+  );
+  // Folders of checkpoints dropped without their files, by any path.
+  unawaited(
+    sweepCheckpointScreenshotFolders(
+      screenshotDirectory,
+      CheckpointDao(database).exists,
     ),
   );
   status.start();

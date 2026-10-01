@@ -3,6 +3,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
 
 import '../domain/checkpoint.dart';
+import 'checkpoint_screenshot_files.dart';
 
 /// Data access for session checkpoints. The rows are an index over git
 /// objects, not a copy: git is authoritative about content (ADR 0004).
@@ -171,17 +172,35 @@ class CheckpointDao {
     [label, id],
   );
 
-  void deleteForSession(String sessionId) => _db.execute(
-    'DELETE FROM session_checkpoints WHERE session_id = ?;',
-    [sessionId],
-  );
+  void deleteForSession(String sessionId) {
+    final ids = [
+      for (final row in _db.query(
+        'SELECT id FROM session_checkpoints WHERE session_id = ?;',
+        [sessionId],
+      ))
+        row['id']! as String,
+    ];
+    final pngs = _screenshotPaths(ids);
+    _db.execute('DELETE FROM session_checkpoints WHERE session_id = ?;', [
+      sessionId,
+    ]);
+    deleteCheckpointScreenshotFolders(pngs, ids.toSet());
+  }
+
+  /// Whether a checkpoint with [id] is recorded.
+  bool exists(String id) => _db.query(
+    'SELECT 1 FROM session_checkpoints WHERE id = ? LIMIT 1;',
+    [id],
+  ).isNotEmpty;
 
   /// Drops [dropIds] and re-points the survivors at their rewritten commits, in
-  /// one transaction so the rows never describe a chain git does not hold.
+  /// one transaction so the rows never describe a chain git does not hold. The
+  /// dropped checkpoints' screenshot files go with them.
   void prune({
     required List<String> dropIds,
     required Map<String, ({String commit, String? parent})> rewritten,
   }) {
+    final pngs = _screenshotPaths(dropIds);
     _db.transaction(() {
       for (final id in dropIds) {
         _db.execute(
@@ -198,6 +217,23 @@ class CheckpointDao {
         );
       }
     });
+    deleteCheckpointScreenshotFolders(pngs, dropIds.toSet());
+  }
+
+  /// Read before the rows go: the cascade takes the paths with it.
+  List<String> _screenshotPaths(List<String> checkpointIds) {
+    try {
+      return [
+        for (final id in checkpointIds)
+          for (final row in _db.query(
+            'SELECT path FROM checkpoint_screenshots WHERE checkpoint_id = ?;',
+            [id],
+          ))
+            row['path']! as String,
+      ];
+    } on Object {
+      return const []; // The startup sweep finds what this misses.
+    }
   }
 
   Checkpoint _withSequence(Checkpoint c, int sequence) => Checkpoint(
