@@ -153,9 +153,10 @@ void main() {
     ) async {
       await pump(tester);
       await hover(tester, find.byType(SessionCard).first);
+      // The neutral hover tone the mockup draws rows with, not an accent wash.
       expect(
         tileColor(tester, find.byType(SessionCard).first),
-        StateLayers.hover(AppTheme.light().colorScheme),
+        SurfaceTones.of(tester.element(find.byType(SessionCard).first)).hover,
       );
       expect(tileColor(tester, find.byType(ProjectCard)), isNull);
     });
@@ -206,9 +207,12 @@ void main() {
     ) async {
       await pump(tester, selected: true);
       final scheme = AppTheme.light().colorScheme;
+      // Neutral, as the mockup draws a chosen row; the accent is the focus ring.
       expect(
         tileColor(tester, find.byType(SessionCard).first),
-        StateLayers.selected(scheme),
+        SurfaceTones.of(
+          tester.element(find.byType(SessionCard).first),
+        ).selected,
       );
       expect(
         find.descendant(

@@ -5,6 +5,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/store_rating.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -12,9 +13,8 @@ import 'settings_section.dart';
 /// someone filing a bug looks in Settings. Read-only: [buildIdentity], the same
 /// line every log starts with, so a pasted log cannot disagree with it.
 ///
-/// Drawn by the settings screen for its page rather than through an anchor:
-/// the anchor table lives in `settings_page_body.dart`, which the responsive
-/// work owns. Move it there as `SettingsAnchor.about` when that settles.
+/// Drawn as [SettingsAnchor.about], under the heading the catalogue gives it,
+/// so search and a link land on it.
 class AboutSection extends StatelessWidget {
   const AboutSection({super.key});
 
@@ -31,7 +31,7 @@ class AboutSection extends StatelessWidget {
       fontFamilyFallback: kMonoFallback,
     );
     return SettingsSection(
-      title: 'KARMASHALA',
+      title: SettingsAnchor.about.heading,
       // Board "Karmashala": flat rows — the version as a value, the build
       // line under its row's label with Copy beside it, then the source and
       // the licences.

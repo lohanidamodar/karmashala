@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/environment_terminals.dart';
 import 'package:karmashala/src/features/explorer/presentation/environment_rows.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -181,19 +182,14 @@ void main() {
       moreOrLessEquals(leftOf(find.text('popubits')), epsilon: 0.5),
       reason: 'the project\'s path hangs at the project\'s name',
     );
+    // A session under a pointer is one line (spec §2.4): its meta is the
+    // title's hover, and its title steps in one indent from the project's
+    // name, as their carets and glyphs do.
+    expect(find.textContaining('Claude Code'), findsNothing);
     expect(
-      leftOf(find.textContaining('Claude Code')),
-      moreOrLessEquals(
-        leftOf(find.text('Benchmark arcade games')),
-        epsilon: 0.5,
-      ),
-      reason: 'the session\'s meta hangs at the session\'s title',
-    );
-    // One indent apart, as their carets and glyphs are.
-    expect(
-      leftOf(find.textContaining('Claude Code')) -
-          leftOf(find.textContaining('popupbits')),
-      ExplorerRow.indent,
+      leftOf(find.text('Benchmark arcade games')) -
+          leftOf(find.text('popubits')),
+      moreOrLessEquals(ExplorerRow.indent, epsilon: 0.5),
     );
   });
 
@@ -211,21 +207,24 @@ void main() {
     expect(carets, hasLength(1));
   });
 
-  testWidgets('a header\'s words start where a project\'s name does', (
-    tester,
-  ) async {
-    await pumpTree(tester);
+  testWidgets(
+    'a header\'s words stand at the label\'s own padding, left of the '
+    'names under it',
+    (tester) async {
+      await pumpTree(tester);
 
-    final label = tester.getTopLeft(find.text('GAME DEV')).dx;
-    final name = tester.getTopLeft(find.text('popubits')).dx;
-    expect(
-      name - label,
-      0,
-      reason:
-          'a header keeps the glyph column for its colour dot, coloured or '
-          'not, so every label and every name start on one edge',
-    );
-  });
+      // The mockup's `.grp`: `padding: 0 10px` from the label's fill, which
+      // stands on the rows' inset (sidebar_chrome.dart, 2026-09-28). An
+      // uncoloured label draws no dot and keeps no column for one.
+      final fill =
+          tester.getTopLeft(find.byType(ExplorerGroupHeader).first).dx +
+          ExplorerRow.inset;
+      final label = tester.getTopLeft(find.text('GAME DEV')).dx;
+      final name = tester.getTopLeft(find.text('popubits')).dx;
+      expect(label - fill, moreOrLessEquals(Sidebar.labelPadX, epsilon: 0.5));
+      expect(label, lessThan(name), reason: 'a label heads its rows');
+    },
+  );
 
   testWidgets('a header and a project put their + in one column on hover', (
     tester,

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
@@ -43,8 +42,8 @@ final explorerProjectsTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
 /// **The Projects area** (spec §4): Project → Session, and deliberately nothing
 /// else; checkout rows were removed for their git cost
 /// (`checkout_scale_cost_test`). Drawn as a sidebar area: the same header as
-/// Sessions and Terminals, a quiet search, the machine pills, then the context
-/// groups — no bands and no rules between them.
+/// Sessions and Terminals, a quiet search, one filter row (the groups, then the
+/// machine), then the context groups — no bands and no rules between them.
 ///
 /// It watches only the tree's shape and its own chrome. Every reading a row
 /// draws is watched by that row, so a session's tick rebuilds one row.
@@ -130,7 +129,6 @@ class ExplorerPanel extends ConsumerWidget {
               search
             else if (hasProjects) ...[
               ExplorerScopeBar(search: search),
-              const ExplorerContextChips(),
             ],
             // Not a stop of its own: it hears keys from the rows and the strip,
             // and never from the search field above it.
@@ -246,9 +244,9 @@ class ExplorerSearchField extends StatelessWidget {
       borderSide: BorderSide.none,
     );
     return Padding(
-      // On the rows' fill edge (6 from the sidebar's side), so the field and
-      // the rows beneath it are one column, not two things that nearly line up.
-      padding: const EdgeInsets.symmetric(horizontal: ExplorerRow.inset + 2),
+      // On the rows' fill edge, so the field and the rows beneath it are one
+      // column, not two things that nearly line up.
+      padding: const EdgeInsets.symmetric(horizontal: Sidebar.fillEdge),
       // `↓` leaves the field for the list under it — the one key of the
       // field's that a single line has no use for. Every other key is its own.
       child: Focus(
@@ -269,7 +267,7 @@ class ExplorerSearchField extends StatelessWidget {
         },
         child: TextField(
           focusNode: links?.searchFocus,
-          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12.5),
+          style: theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.field),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -291,7 +289,7 @@ class ExplorerSearchField extends StatelessWidget {
             ),
             hintText: 'Search projects',
             hintStyle: theme.textTheme.bodyMedium?.copyWith(
-              fontSize: 12.5,
+              fontSize: TypeSizes.field,
               color: scheme.outline,
             ),
             border: quiet,

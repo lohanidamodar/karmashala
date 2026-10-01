@@ -94,7 +94,7 @@ void main() {
     );
     final toggle = find.descendant(
       of: find.ancestor(
-        of: find.text('Project details in the Explorer'),
+        of: find.text('Project details in the sidebar'),
         matching: find.byType(SettingsSwitchRow),
       ),
       matching: find.byType(Switch),
@@ -178,13 +178,13 @@ void main() {
       await tester.enterText(find.byType(TextField).first, query);
       await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(SettingsSearchHitRow, 'Side panel items'),
+        find.widgetWithText(SettingsSearchHitRow, 'Tools in the More menu'),
         findsOneWidget,
         reason: query,
       );
     }
     await tester.tap(
-      find.widgetWithText(SettingsSearchHitRow, 'Side panel items'),
+      find.widgetWithText(SettingsSearchHitRow, 'Tools in the More menu'),
     );
     await tester.pumpAndSettle();
     expect(find.text(SettingsAnchor.sidePanel.heading), findsOneWidget);

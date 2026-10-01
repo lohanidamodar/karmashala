@@ -3,17 +3,19 @@ import 'package:karmashala/src/features/sessions/application/session_resume_prov
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 
-/// A detached pane gives its parsed scrollback back and holds the history as
-/// text instead. What must not change is anything the user can see: the
-/// session's history has to survive a restart, come back when the session does,
-/// and stay readable to the status sources while it is away.
+/// **Scrollback a window holds, and what it lets go of.**
+///
+/// A pane kept with no tab used to go cold: its parsed scrollback given back
+/// and held as text. Since 2026-09-30 there is no such pane — closing a tab
+/// drops it, and the server keeps the terminal and its history — so a closed
+/// tab must hold nothing here: no buffer, no parked text, no stored row. What
+/// a restored tab may not cost (a parse nobody asked for) is unchanged.
 void main() {
   ({ProviderContainer container, TerminalSessionsController controller}) open({
     TerminalLayoutStore? database,
@@ -42,7 +44,7 @@ void main() {
     }
   }
 
-  test('detaching parks the scrollback and keeps the screen', () {
+  test('closing a tab drops its pane and parks nothing', () {
     final app = open();
     final first = app.controller.openTab(TerminalProfile.powerShell);
     app.controller.openTab(TerminalProfile.commandPrompt);
@@ -50,52 +52,32 @@ void main() {
     final instance =
         app.controller.instanceFor(paneId)! as FakeTerminalInstance;
     fill(instance, 200);
-    final linesBefore = instance.terminal.mainBuffer.lines.length;
 
     app.controller.closeTab(first);
 
-    expect(instance.ingestTier, IngestTier.cold);
-    expect(instance.parkedScrollback, contains('output line 199'));
-    expect(instance.terminal.mainBuffer.lines.length, lessThan(linesBefore));
+    expect(app.controller.instanceFor(paneId), isNull);
+    expect(instance.disposed, isTrue);
+    expect(instance.ingestTier, isNot(IngestTier.cold));
+    expect(instance.parkedScrollback, isNull);
   });
 
-  test('a parked pane still reads as a session to the status sources', () {
+  test('a closed tab is not a session the status sources read', () {
     final app = open();
     final first = app.controller.openTab(TerminalProfile.powerShell);
     app.controller.openTab(TerminalProfile.commandPrompt);
     final paneId = onlyPaneOf(app.container, first);
-    final instance = app.controller.instanceFor(paneId)!;
-    fill(instance, 200);
-    instance.terminal.write('Do you want to proceed?\r\n');
+    fill(app.controller.instanceFor(paneId)!, 200);
 
     app.controller.closeTab(first);
 
-    // `terminalTailLines` is the third status source; a background session must
-    // not go dark for it just because nobody has a tab open on it.
-    expect(
-      terminalTailLines(instance.terminal).join('\n'),
-      contains('Do you want to proceed?'),
-    );
+    // The server's reading of that terminal is the status source now; this
+    // window has no pane for it to go dark or stay lit in.
+    final state = app.container.read(terminalSessionsControllerProvider);
+    expect(state.detached, isEmpty);
+    expect(state.liveness, isNot(contains(paneId)));
   });
 
-  test('reattaching brings the recent window back', () {
-    final app = open();
-    final first = app.controller.openTab(TerminalProfile.powerShell);
-    app.controller.openTab(TerminalProfile.commandPrompt);
-    final paneId = onlyPaneOf(app.container, first);
-    final instance = app.controller.instanceFor(paneId)!;
-    fill(instance, 200);
-
-    app.controller.closeTab(first);
-    app.controller.reattachSession(paneId);
-
-    final text = instance.terminal.mainBuffer.getText();
-    expect(text, contains('output line 199'));
-    expect(text, contains('output line 100'));
-    expect((instance as FakeTerminalInstance).parkedScrollback, isNull);
-  });
-
-  test('a detached session keeps its scrollback across a restart', () {
+  test('a closed tab\'s scrollback is not kept across a restart', () {
     final database = TerminalLayoutStore.memory();
     addTearDown(database.close);
 
@@ -105,43 +87,36 @@ void main() {
     final paneId = onlyPaneOf(app.container, first);
     fill(app.controller.instanceFor(paneId)!, 200);
 
-    // Closing the tab detaches; persisting it is what the next launch reads.
     app.controller.closeTab(first);
     app.controller.persistLayout();
     app.container.dispose();
 
     final next = open(database: database);
     final restored = next.container.read(terminalSessionsControllerProvider);
-    expect(restored.detached.single.paneId, paneId);
-    final dormant =
-        next.controller.instanceFor(paneId)! as DormantTerminalInstance;
-    expect(dormant.restoredScrollback, contains('output line 199'));
+    expect(restored.detached, isEmpty);
+    expect(restored.tabs, hasLength(1), reason: 'the tab still open');
+    expect(next.controller.instanceFor(paneId), isNull);
   });
 
-  test(
-    'the autosave stores a parked pane without re-encoding an empty buffer',
-    () {
-      final database = TerminalLayoutStore.memory();
-      addTearDown(database.close);
+  test('the autosave after a close stores nothing for the dropped pane', () {
+    final database = TerminalLayoutStore.memory();
+    addTearDown(database.close);
 
-      final app = open(database: database);
-      final first = app.controller.openTab(TerminalProfile.powerShell);
-      app.controller.openTab(TerminalProfile.commandPrompt);
-      final paneId = onlyPaneOf(app.container, first);
-      fill(app.controller.instanceFor(paneId)!, 200);
+    final app = open(database: database);
+    final first = app.controller.openTab(TerminalProfile.powerShell);
+    app.controller.openTab(TerminalProfile.commandPrompt);
+    final paneId = onlyPaneOf(app.container, first);
+    fill(app.controller.instanceFor(paneId)!, 200);
 
-      app.controller.closeTab(first);
-      // Dirty it again the way the autosave tick would find it.
-      app.controller.saveDirtyScrollback();
-      app.controller.persistLayout();
-      app.container.dispose();
+    app.controller.closeTab(first);
+    // What the autosave tick would find: nothing of that pane is dirty.
+    expect(app.controller.saveDirtyScrollback(), isNot(contains(paneId)));
+    app.controller.persistLayout();
+    app.container.dispose();
 
-      final next = open(database: database);
-      final dormant =
-          next.controller.instanceFor(paneId)! as DormantTerminalInstance;
-      expect(dormant.restoredScrollback, contains('output line 199'));
-    },
-  );
+    final next = open(database: database);
+    expect(next.controller.instanceFor(paneId), isNull);
+  });
 
   test('a restored pane nobody opens never parses its scrollback', () {
     final database = TerminalLayoutStore.memory();
@@ -219,137 +194,34 @@ void main() {
     expect(dormant.bufferBuilt, isFalse);
   });
 
-  test('a detached pane that says something is still heard', () {
+  test('a tab closed and reopened a hundred times holds nothing extra', () {
     final app = open();
-    final first = app.controller.openTab(TerminalProfile.powerShell);
-    app.controller.openTab(TerminalProfile.commandPrompt);
-    final paneId = onlyPaneOf(app.container, first);
-    final instance =
-        app.controller.instanceFor(paneId)! as FakeTerminalInstance;
-    fill(instance, 200);
-    app.controller.closeTab(first);
-
-    // The case the tiers introduced and the one the scale target is made of:
-    // an agent whose tab was closed reaches an approval prompt. Nothing is
-    // watching it draw, and the grid source is exactly what is meant to notice.
-    instance.receive('Do you want to proceed?\r\n');
-
-    expect(
-      terminalTailLines(instance.terminal).join('\n'),
-      contains('Do you want to proceed?'),
-      reason: 'a session with no tab is the session nobody is watching for',
-    );
-    expect(
-      instance.terminal.mainBuffer.lines.length,
-      lessThanOrEqualTo(instance.terminal.viewHeight),
-      reason:
-          'and it cost the screen it already had, not the buffer it gave up',
-    );
-  });
-
-  test('coming back replays what was missed once, not twice', () {
-    final app = open();
-    final first = app.controller.openTab(TerminalProfile.powerShell);
-    app.controller.openTab(TerminalProfile.commandPrompt);
-    final paneId = onlyPaneOf(app.container, first);
-    final instance =
-        app.controller.instanceFor(paneId)! as FakeTerminalInstance;
-    fill(instance, 200);
-    app.controller.closeTab(first);
-    instance.receive('while detached\r\n');
-
-    app.controller.reattachSession(paneId);
-
-    final text = instance.terminal.mainBuffer.getText();
-    expect(
-      'while detached'.allMatches(text).length,
-      1,
-      reason:
-          'the screen refresh and the spool replay are the same bytes; the '
-          'unpark clears the buffer so only one of them survives',
-    );
-    expect(text, contains('output line 199'), reason: 'history came back too');
-  });
-
-  test('a full-screen pane stays current and comes back once, not twice', () {
-    final app = open();
-    final first = app.controller.openTab(TerminalProfile.powerShell);
-    app.controller.openTab(TerminalProfile.commandPrompt);
-    final paneId = onlyPaneOf(app.container, first);
-    final instance =
-        app.controller.instanceFor(paneId)! as FakeTerminalInstance;
-    fill(instance, 200);
-    // The agent CLI case. A full-screen program takes the display, so the park
-    // declines the pane: there is no writing a snapshot back underneath one.
-    instance.terminal.write('\x1b[?1049h');
-    for (var i = 0; i < 10; i++) {
-      instance.terminal.write('the frame it was detached on $i\r\n');
-    }
-
-    app.controller.closeTab(first);
-    expect(instance.ingestTier, IngestTier.cold);
-    expect(instance.parkedScrollback, isNull, reason: 'the park declined it');
-
-    instance.receive('\x1b[2J\x1b[HDo you want to proceed?\r\n');
-    expect(
-      terminalTailLines(instance.terminal).join('\n'),
-      contains('Do you want to proceed?'),
-      reason:
-          'an agent drawing its own UI is the pane an approval prompt matters '
-          'most in, and it was the one that froze',
-    );
-
-    app.controller.reattachSession(paneId);
-
-    expect(
-      'Do you want to proceed?'
-          .allMatches(instance.terminal.buffer.getText())
-          .length,
-      1,
-      reason:
-          'nothing was cleared at reattach, so what the refresh drew stands '
-          'and a spool replay over the top would be a second copy of it',
-    );
-    expect(
-      instance.terminal.mainBuffer.getText(),
-      contains('output line 199'),
-      reason: 'and the history the park could not take was never touched',
-    );
-  });
-
-  test('a pane promoted and demoted a hundred times holds nothing extra', () {
-    final app = open();
-    final first = app.controller.openTab(TerminalProfile.powerShell);
     final second = app.controller.openTab(TerminalProfile.commandPrompt);
-    final paneId = onlyPaneOf(app.container, first);
-    final instance =
-        app.controller.instanceFor(paneId)! as FakeTerminalInstance;
-    fill(instance, 200);
+    final dropped = <FakeTerminalInstance>[];
 
     for (var cycle = 0; cycle < 100; cycle++) {
-      app.controller.closeTab(first);
+      final tab = app.controller.openTab(TerminalProfile.powerShell);
+      final instance =
+          app.controller.instanceFor(onlyPaneOf(app.container, tab))!
+              as FakeTerminalInstance;
+      fill(instance, 200);
       instance.receive('cycle $cycle\r\n');
-      app.controller.reattachSession(paneId);
+      app.controller.closeTab(tab);
       app.controller.activateTab(second);
-      app.controller.activateTab(
-        app.container.read(terminalSessionsControllerProvider).tabs.first.id,
-      );
+      dropped.add(instance);
     }
 
-    expect(instance.spool.length, 0, reason: 'nothing left spooled');
-    expect(instance.coldScreen.pendingBytes, 0);
-    expect(instance.parkedScrollback, isNull, reason: 'it is not cold now');
+    final state = app.container.read(terminalSessionsControllerProvider);
+    expect(state.tabs.single.id, second);
+    expect(state.detached, isEmpty);
     expect(
-      instance.terminal.mainBuffer.lines.length,
-      lessThanOrEqualTo(kColdScrollbackMaxLines + instance.terminal.viewHeight),
-      reason:
-          'each cycle rebuilds a bounded window; a hundred of them must not '
-          'be a hundred windows stacked on each other',
+      dropped.where((instance) => !instance.disposed),
+      isEmpty,
+      reason: 'every closed pane let go of its buffer',
     );
     expect(
-      instance.terminal.mainBuffer.getText(),
-      contains('cycle 99'),
-      reason: 'and the pane is still correct at the end of it',
+      dropped.where((instance) => instance.parkedScrollback != null),
+      isEmpty,
     );
   });
 }

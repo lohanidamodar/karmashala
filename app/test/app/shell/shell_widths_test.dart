@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
@@ -141,7 +142,12 @@ void main() {
       final errors = await pumpAt(tester, Size(width, 800));
 
       expect(errors.map((e) => '${e.exception}'.split('\n').first), isEmpty);
-      expect(find.byType(ExplorerPanel), findsOneWidget);
+      // Under 840 the sidebar folds and opens as a sheet (d828821cd); from
+      // there it is a column beside the workbench.
+      expect(
+        find.byType(ExplorerPanel),
+        ShellWidth.of(width).overlays ? findsNothing : findsOneWidget,
+      );
       expect(
         tester.getSize(find.byType(WorkbenchView)).width,
         greaterThanOrEqualTo(ShellLayout.workbenchFloor),
@@ -149,18 +155,22 @@ void main() {
     });
   }
 
-  testWidgets('the compact pane selector grows with the text', (tester) async {
+  testWidgets('a medium window grows its title bar with the text', (
+    tester,
+  ) async {
+    // The compact pane selector this once measured is gone (d828821cd): at
+    // medium width the sidebar is a sheet. The bar above still must not clip.
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final errors = await pumpAt(tester, const Size(640, 900));
 
-    // The title bar above it ran 23px over at this size until its menus fold.
     expect(errors.map((e) => '${e.exception}'.split('\n').first), isEmpty);
-    final selector = find.byType(SegmentedButton<ShellPane>);
-    expect(selector, findsOneWidget);
-    // A fixed 38px bar squeezed the buttons until their labels hung out.
-    final label = tester.getRect(find.text('Workbench'));
-    expect(label.bottom, lessThanOrEqualTo(tester.getRect(selector).bottom));
+    final bar = find.byType(ShellTitleBar);
+    expect(
+      tester.getSize(bar).height,
+      Chrome.titleBarOf(tester.element(bar)),
+    );
+    expect(tester.getSize(bar).height, greaterThan(Chrome.titleBar));
   });
 
   testWidgets('the minimum window with the widest saved panel does not '

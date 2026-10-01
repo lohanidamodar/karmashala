@@ -764,7 +764,7 @@ class QuickOpenButton extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 12.5,
+                        fontSize: TypeSizes.field,
                         color: muted,
                       ),
                     ),
@@ -813,7 +813,7 @@ class _KeyPill extends StatelessWidget {
         softWrap: false,
         overflow: TextOverflow.clip,
         style: theme.textTheme.labelSmall?.copyWith(
-          fontSize: 11,
+          fontSize: TypeSizes.caption,
           height: 16 / 11,
           fontWeight: FontWeight.w400,
           letterSpacing: 0,

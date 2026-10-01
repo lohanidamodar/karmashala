@@ -255,8 +255,8 @@ void main() {
     expect(started.terminal.mainBuffer.getText(), contains('file_499.dart'));
   });
 
-  test('a parked pane still replays its text, because its buffer is not the '
-      'history', () {
+  test('a closed pane is not started again here: its history is the '
+      "server's", () {
     final app = open();
     final tabId = app.controller.openTab(TerminalProfile.powerShell);
     final paneId = app.container
@@ -270,21 +270,21 @@ void main() {
     pane.terminal.write('${agentHistory(300)}\r\n');
     // A second tab, so closing the first leaves a tab to be active in.
     app.controller.openTab(TerminalProfile.commandPrompt);
-    // Detaching parks the scrollback: the buffer keeps only the screen, and the
-    // history moves into the parked window.
+    // Closing drops the pane — no parked copy of the history stays behind.
     app.controller.closeTab(tabId);
-    expect(pane.parkedScrollback, isNotNull);
-    pane.exitCleanly();
+    expect(app.controller.instanceFor(paneId), isNull);
 
     app.controller.startPane(paneId);
 
-    final started = countingPane(app.controller, paneId);
     expect(
-      started.adopted,
+      app.controller.instanceFor(paneId),
       isNull,
-      reason: 'a parked pane gave its buffer up; the text is the history',
+      reason: 'nothing to start: Sessions opens the session in a new pane',
     );
-    expect(started.terminal.mainBuffer.getText(), contains('file_299.dart'));
+    expect(
+      app.container.read(terminalSessionsControllerProvider).tabs,
+      hasLength(1),
+    );
   });
 }
 

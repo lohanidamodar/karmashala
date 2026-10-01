@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/explorer/presentation/environment_rows.d
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
@@ -18,7 +19,6 @@ import 'package:karmashala/src/features/workspaces/application/workspaces_contro
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala/src/features/workspaces/presentation/context_color_dialog.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -31,9 +31,10 @@ import '../terminal/fake_instance.dart';
 import '../../support/test_machine.dart';
 
 /// **A context is told from a project by more than its capitals.** Every
-/// group header rests on a tinted band with a hairline under it and a gap
-/// above it between groups; a context the owner has coloured wears the dot in
-/// its header's glyph column and on its chip, and the colour is kept.
+/// group header is the sidebar's group label — its own hand, its own column
+/// and the group gap above it, with no band or rule; a context the owner has
+/// coloured wears the dot before its label and on its filter tab, and the
+/// colour is kept.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
@@ -162,40 +163,31 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  group('the band', () {
+  // The band these headers once rested on is gone (46185a97c, the mockup's
+  // sidebar): "no bands and no rules between sections — tone and spacing
+  // only". What tells a context from a project now is the label's own hand,
+  // its column and the space above it, and these pin that.
+  group('the group label', () {
     for (final (name, theme) in [
       ('light', AppTheme.light()),
       ('dark', AppTheme.dark()),
     ]) {
-      testWidgets('is under every header in $name — a context, No context, '
-          'Terminals — one step under the pane, with a hairline beneath, and '
-          'under no other row', (tester) async {
+      testWidgets('rests on the pane\'s own tone in $name — no band and no '
+          'rule, a context and No context alike, as a project does', (
+        tester,
+      ) async {
         await pump(tester, theme: theme);
         final scheme = schemeOf(tester);
 
-        for (final label in [
-          'CLIENT WORK',
-          'GAME DEV',
-          'NO CONTEXT',
-          'TERMINALS',
-        ]) {
+        for (final label in ['CLIENT WORK', 'GAME DEV', 'NO CONTEXT']) {
           final fill = fillOf(tester, header(label));
-          expect(
-            fill.color,
-            ExplorerRow.bandColor(scheme),
-            reason: '$label rests on the band',
-          );
-          expect(fill.color, scheme.surfaceContainerLow);
-          expect(fill.borderRadius, isNull, reason: 'a band has square ends');
-          final border = fill.border! as Border;
-          expect(border.bottom.color, scheme.outlineVariant);
-          expect(border.bottom.width, ExplorerRow.bandHairline);
-          expect(border.top, BorderSide.none);
-          expect(
-            tester.getSize(bandBox(tester, header(label))).width,
-            760,
-            reason: '$label\'s band runs to the pane\'s edges',
-          );
+          expect(fill.color, isNull, reason: '$label wears no band');
+          expect(fill.border, isNull, reason: '$label has no rule under it');
+          // Its words are the group label's hand: small capitals in the
+          // outline ink, not a project's title.
+          final text = tester.widget<Text>(find.text(label));
+          expect(text.style?.color, scheme.outline);
+          expect(text.style?.fontWeight, FontWeight.w600);
         }
         for (final row in find.byType(ExplorerProjectRow).evaluate()) {
           final fill = fillOf(tester, find.byWidget(row.widget));
@@ -205,72 +197,59 @@ void main() {
       });
     }
 
-    testWidgets('keeps the columns: a header\'s label starts where a '
-        'project\'s name does, though its band runs wider than the row', (
+    testWidgets('keeps its column: the label starts the group label\'s '
+        'padding inside the same fill edge a project\'s row has', (
       tester,
     ) async {
       await pump(tester);
-      final label = tester.getTopLeft(find.text('CLIENT WORK')).dx;
-      final name = tester.getTopLeft(find.text('client-0')).dx;
-      expect(label, name);
+      final headerFill = tester
+          .getTopLeft(bandBox(tester, header('CLIENT WORK')))
+          .dx;
+      final projectFill = tester
+          .getTopLeft(
+            find
+                .descendant(
+                  of: find.ancestor(
+                    of: find.text('client-0'),
+                    matching: find.byType(ExplorerProjectRow),
+                  ),
+                  matching: find.byType(DecoratedBox),
+                )
+                .first,
+          )
+          .dx;
+      expect(headerFill, projectFill, reason: 'one fill edge for both');
+      expect(headerFill, Sidebar.fillEdge);
       expect(
-        tester.getTopLeft(bandBox(tester, header('CLIENT WORK'))).dx,
-        0,
-        reason: 'the band starts at the pane\'s edge',
-      );
-      expect(
-        tester
-            .getTopLeft(
-              find
-                  .descendant(
-                    of: find.ancestor(
-                      of: find.text('client-0'),
-                      matching: find.byType(ExplorerProjectRow),
-                    ),
-                    matching: find.byType(DecoratedBox),
-                  )
-                  .first,
-            )
-            .dx,
-        ExplorerRow.inset,
-        reason: 'a project\'s fill keeps its inset',
+        tester.getTopLeft(find.text('CLIENT WORK')).dx,
+        headerFill + Sidebar.labelPadX,
       );
     });
 
-    testWidgets('has a gap above it between groups and none before the '
-        'first', (tester) async {
+    testWidgets('has the group gap above it between groups and none before '
+        'the first', (tester) async {
       await pump(tester);
       double top(Finder f) => tester.getTopLeft(f).dy;
-      double bottom(Finder f) => tester.getBottomLeft(f).dy;
 
-      // The first header: its band starts where its row does.
       expect(
         top(bandBox(tester, header('CLIENT WORK'))),
         top(header('CLIENT WORK')),
       );
-      // The next: the row above ends, one hairline of list gap, then the
-      // band's own gap, then the band.
-      final above = find.ancestor(
-        of: find.text('client-5'),
-        matching: find.byType(ExplorerProjectRow),
-      );
-      expect(
-        top(bandBox(tester, header('GAME DEV'))) - bottom(above),
-        ExplorerRow.bandGap,
-      );
       expect(
         top(bandBox(tester, header('GAME DEV'))) - top(header('GAME DEV')),
-        ExplorerRow.bandGap,
+        Sidebar.groupGap,
+      );
+      expect(
+        tester.getSize(bandBox(tester, header('GAME DEV'))).height,
+        greaterThanOrEqualTo(Sidebar.groupHeight),
       );
     });
 
-    testWidgets('is on the pinned copy too — the same tone and hairline, and '
-        'no gap above, so a header pinning changes nothing about it', (
-      tester,
-    ) async {
+    testWidgets('the pinned copy is the same label — no tone and no rule of '
+        'its own, and no gap above, so a header pinning changes nothing about '
+        'it', (tester) async {
       // Short, so the list has something to scroll.
       await pump(tester, size: const Size(760, 260));
-      final scheme = schemeOf(tester);
       expect(find.byType(ExplorerPinnedHeader), findsOneWidget);
       // Scroll the client group's projects under the top edge.
       await tester.drag(find.byType(ListView), const Offset(0, -60));
@@ -286,15 +265,15 @@ void main() {
         findsOneWidget,
       );
       final fill = fillOf(tester, pinned);
-      expect(fill.color, ExplorerRow.bandColor(scheme));
-      expect((fill.border! as Border).bottom.color, scheme.outlineVariant);
+      expect(fill.color, isNull);
+      expect(fill.border, isNull);
       expect(
         tester.getTopLeft(bandBox(tester, pinned)).dy,
         tester.getTopLeft(find.byType(ExplorerPinnedHeader)).dy,
         reason: 'the pinned copy sits at the edge with no gap',
       );
-      // Nothing but the row's own decoration: the wrapper draws no second
-      // hairline of its own.
+      // The wrapper is the side panel's own tone, so rows passing under it
+      // are covered — and it draws no hairline of its own.
       final wrapper = tester.widget<DecoratedBox>(
         find
             .descendant(
@@ -303,21 +282,21 @@ void main() {
             )
             .first,
       );
-      expect((wrapper.decoration as BoxDecoration).border, isNull);
+      final decoration = wrapper.decoration as BoxDecoration;
+      expect(
+        decoration.color,
+        SurfaceTones.of(tester.element(find.byType(ExplorerPanel))).side,
+      );
+      expect(decoration.border, isNull);
     });
 
-    testWidgets('takes the hover wash over it rather than in its place', (
-      tester,
-    ) async {
+    testWidgets('takes the ladder\'s hover tone under the pointer, as a row '
+        'does', (tester) async {
       await pump(tester);
-      final scheme = schemeOf(tester);
       await hover(tester, find.text('GAME DEV'));
       expect(
         fillOf(tester, header('GAME DEV')).color,
-        Color.alphaBlend(
-          StateLayers.hover(scheme),
-          ExplorerRow.bandColor(scheme),
-        ),
+        SurfaceTones.of(tester.element(find.byType(ExplorerPanel))).hover,
       );
     });
   });
@@ -378,39 +357,33 @@ void main() {
       expect(dotIn(header('CLIENT WORK')), findsNothing);
       final headerDot = tester.widget<ContextHueDot>(dotIn(header('GAME DEV')));
       expect(headerDot.hue, ContextHue.teal);
-      expect(headerDot.size, ContextHueDot.headerSize);
+      // The mockup's label dot: the app's one dot size, on the header and on
+      // the tab alike.
+      expect(headerDot.size, Chrome.dot);
       expect(
         find.bySemanticsLabel(RegExp('Teal context')),
         findsWidgets,
         reason: 'said to a screen reader, merged into the row',
       );
 
-      // In the glyph column: centred where a project's folder glyph is.
-      final folder = tester.getCenter(
-        find.descendant(
-          of: find.ancestor(
-            of: find.text('roguelike'),
-            matching: find.byType(ExplorerProjectRow),
-          ),
-          matching: find.byWidgetPredicate(
-            (w) =>
-                w is Icon &&
-                (w.icon == AppIcons.folder || w.icon == AppIcons.folderOpen),
-          ),
-        ),
+      // Before the label, at the label's padding: the words move over for it.
+      expect(
+        tester.getTopLeft(dotIn(header('GAME DEV'))).dx,
+        tester.getTopLeft(bandBox(tester, header('GAME DEV'))).dx +
+            Sidebar.labelPadX,
       );
       expect(
-        tester.getCenter(dotIn(header('GAME DEV'))).dx,
-        moreOrLessEquals(folder.dx, epsilon: 0.5),
+        tester.getTopRight(dotIn(header('GAME DEV'))).dx,
+        lessThan(tester.getTopLeft(find.text('GAME DEV')).dx),
       );
 
-      // On the chip, before the label, and still when the chip is in force.
+      // On the tab, before the label, and still when the tab is in force.
       final chipRow = find
           .ancestor(of: chip('Game dev'), matching: find.byType(Row))
           .first;
       final chipDot = tester.widget<ContextHueDot>(dotIn(chipRow));
       expect(chipDot.hue, ContextHue.teal);
-      expect(chipDot.size, ContextHueDot.chipSize);
+      expect(chipDot.size, Chrome.dot);
       expect(
         tester.getTopRight(dotIn(chipRow)).dx,
         lessThan(tester.getTopLeft(chip('Game dev')).dx),

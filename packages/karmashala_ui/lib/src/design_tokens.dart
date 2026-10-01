@@ -948,6 +948,37 @@ class MonoStyles {
   static TextStyle get label => _mono(13);
 }
 
+/// **The chrome's type sizes**, named where a size may be named, for the
+/// compact surfaces whose text is set tighter than the Material `TextTheme`
+/// — the sidebar, the settings pages, Quick Open and the toolbar cards. A
+/// widget merges one of these over a theme style rather than writing its
+/// own number; the steps are the mockup's.
+class TypeSizes {
+  const TypeSizes._();
+
+  /// A settings nav section's small capitals.
+  static const double micro = 10.5;
+
+  /// A group label or a key hint: [Chrome.paneLabel]'s size.
+  static const double caption = 11;
+
+  /// A tab, a filter, a card's secondary line: [Chrome.tabLabel]'s size.
+  static const double label = 12;
+
+  /// A quiet field and a nav row.
+  static const double field = 12.5;
+
+  /// A card's body and an area header's title.
+  static const double body = 13;
+
+  /// A palette's input.
+  static const double input = 14;
+
+  /// A settings page title, narrow and wide.
+  static const double title = 16;
+  static const double titleLarge = 19;
+}
+
 /// How long a pause in typing is waited for before work that follows typing
 /// runs again. A latency, not motion, so reduced motion does not shorten it.
 class Latency {

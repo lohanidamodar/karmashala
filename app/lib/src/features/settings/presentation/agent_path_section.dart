@@ -9,9 +9,10 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../files/data/pick_server.dart';
+import '../../files/application/server_file_picking.dart';
 import '../../../core/capabilities/capabilities.dart';
-import 'package:agent_cli/process.dart' show EnvironmentKind;
+import '../../environments/application/environment_values.dart'
+    show EnvironmentKind;
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'path_field_row.dart';

@@ -47,12 +47,17 @@ class Sidebar {
   /// and 8 from its top — the mockup's `padding: 8px 6px`.
   static const listPadding = EdgeInsets.fromLTRB(2, 8, 2, 8);
 
+  /// Where a row's fill lands from the sidebar's side: [listPadding] and
+  /// [ExplorerRow.inset]. The search field and the filter row above a list
+  /// stand on it too, so the three are one column.
+  static const fillEdge = 6.0;
+
   /// Between the rows of a list: one hairline, as [ExplorerRow] keeps.
   static const rowGap = Insets.hair;
 
   /// The label's hand: 11/600, tracked .04em, written uppercase by the caller.
   static const TextStyle groupLabelStyle = TextStyle(
-    fontSize: 11,
+    fontSize: TypeSizes.caption,
     fontWeight: FontWeight.w600,
     letterSpacing: 11 * 0.04,
   );
@@ -120,7 +125,7 @@ class SidebarAreaHeader extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          fontSize: 13,
+                          fontSize: TypeSizes.body,
                           fontWeight: FontWeight.w600,
                           color: scheme.onSurface,
                         ),
@@ -132,7 +137,7 @@ class SidebarAreaHeader extends StatelessWidget {
                         meta,
                         maxLines: 1,
                         style: theme.textTheme.labelSmall?.copyWith(
-                          fontSize: 12,
+                          fontSize: TypeSizes.label,
                           color: scheme.onSurfaceVariant,
                         ),
                       ),
@@ -473,7 +478,7 @@ class SidebarGroupLabel extends StatelessWidget {
 
 /// **A filter chip** (`.pill`): 24px, radius 6, 12px, on the floating hairline;
 /// the one in force is filled with the selected tone and drawn in full ink.
-/// Machines and contexts are both chosen with these.
+/// The History tab's three records are switched with these.
 class SidebarPill extends StatelessWidget {
   const SidebarPill({
     required this.label,
@@ -525,7 +530,7 @@ class SidebarPill extends StatelessWidget {
       softWrap: false,
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.labelSmall?.copyWith(
-        fontSize: 12,
+        fontSize: TypeSizes.label,
         letterSpacing: 0,
         fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
         color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
@@ -572,6 +577,175 @@ class SidebarPill extends StatelessWidget {
       selected: selected,
       label: semanticLabel,
       child: pill,
+    );
+  }
+}
+
+/// **A filter as a quiet tab**: the Explorer's group filter and its machine
+/// menu. No outline — muted words at rest, the hover tone under the pointer,
+/// and the one in force filled with the selected tone in full ink, the way
+/// the app's tabs and the settings nav say "this one". Keyboard focus is the
+/// app's 1px ring, as on every sidebar row.
+class SidebarFilterTab extends StatefulWidget {
+  const SidebarFilterTab({
+    required this.selected,
+    required this.onTap,
+    this.label,
+    this.leading,
+    this.trailing,
+    this.tooltip,
+    this.semanticLabel,
+    this.maxLabelWidth,
+    this.padding = padX,
+    super.key,
+  });
+
+  /// Null for a tab that is its [leading] glyph alone.
+  final String? label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// A dot or glyph before the label.
+  final Widget? leading;
+
+  /// A caret after it, for a tab that opens a menu.
+  final Widget? trailing;
+  final String? tooltip;
+
+  /// What a screen reader hears in the label's place.
+  final String? semanticLabel;
+
+  /// The most the label may take before it is ellipsised.
+  final double? maxLabelWidth;
+
+  /// Each side of the content.
+  final double padding;
+
+  /// A pill's height: the row is the search field's companion, not a strip.
+  static const height = 24.0;
+
+  /// Each side of the label.
+  static const padX = Insets.sm;
+
+  /// Between the leading mark and the label, and the label and the caret.
+  static const gap = Insets.xs;
+
+  static const _radius = BorderRadius.all(Radius.circular(Radii.sm));
+
+  /// The label's hand, at the weight of the tab in force — what a row of tabs
+  /// is measured in, so a click never changes which of them fit.
+  static TextStyle? styleOf(ThemeData theme) => theme.textTheme.labelSmall
+      ?.merge(Chrome.tabLabel)
+      .copyWith(letterSpacing: 0, fontWeight: FontWeight.w500);
+
+  /// What a tab whose label measures [text] takes of a row, with a [lead]
+  /// mark before it and a [trail] after. A hairline is kept back: what is
+  /// drawn is not what was measured to the last fraction.
+  static double widthFor(double text, {double lead = 0, double trail = 0}) =>
+      text +
+      (lead > 0 ? lead + gap : 0) +
+      (trail > 0 ? trail + gap : 0) +
+      padX * 2 +
+      Insets.hair;
+
+  @override
+  State<SidebarFilterTab> createState() => _SidebarFilterTabState();
+}
+
+class _SidebarFilterTabState extends State<SidebarFilterTab> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tones = SurfaceTones.of(context);
+    final selected = widget.selected;
+    final ink = selected ? scheme.onSurface : scheme.onSurfaceVariant;
+    final label = widget.label;
+    final leading = widget.leading;
+    final trailing = widget.trailing;
+    final maxLabelWidth = widget.maxLabelWidth;
+    Widget? text;
+    if (label != null) {
+      text = Text(
+        label,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: SidebarFilterTab.styleOf(theme)?.copyWith(
+          color: ink,
+          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+        ),
+      );
+      if (maxLabelWidth != null) {
+        text = ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxLabelWidth),
+          child: text,
+        );
+      }
+    }
+    Widget glyph(Widget child) => IconTheme.merge(
+      data: IconThemeData(size: Chrome.iconSmall, color: ink),
+      child: child,
+    );
+    Widget body = Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (leading != null) glyph(leading),
+        if (leading != null && text != null)
+          const SizedBox(width: SidebarFilterTab.gap),
+        if (text != null) Flexible(child: text),
+        if (trailing != null) ...[
+          const SizedBox(width: SidebarFilterTab.gap),
+          glyph(trailing),
+        ],
+      ],
+    );
+    if (widget.semanticLabel != null) body = ExcludeSemantics(child: body);
+    Widget tab = DecoratedBox(
+      decoration: BoxDecoration(
+        color: selected
+            ? tones.selected
+            : _hovered
+            ? tones.hover
+            : null,
+        borderRadius: SidebarFilterTab._radius,
+        border: _focused
+            ? Border.all(
+                color: StateLayers.focusRing(scheme),
+                width: StateLayers.focusRingWidth,
+              )
+            : null,
+      ),
+      child: InkWell(
+        onTap: widget.onTap,
+        onHover: (hovered) => setState(() => _hovered = hovered),
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        borderRadius: SidebarFilterTab._radius,
+        // The fill above is the hover and the ring the focus; the ink's own
+        // would stack on them.
+        hoverColor: Colors.transparent,
+        focusColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: SidebarFilterTab.height),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: widget.padding),
+            child: body,
+          ),
+        ),
+      ),
+    );
+    if (widget.tooltip case final message?) {
+      tab = Tooltip(message: message, child: tab);
+    }
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: widget.semanticLabel,
+      child: tab,
     );
   }
 }

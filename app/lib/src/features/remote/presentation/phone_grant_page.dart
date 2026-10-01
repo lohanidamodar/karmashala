@@ -8,10 +8,9 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/bare_app.dart';
 import '../../../core/capabilities/capabilities.dart';
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../../../core/lifecycle/server_switcher.dart';
 import '../../../core/server/remote_server_access.dart';
+import '../../../core/server/server_link.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../application/machines_providers.dart';
 
@@ -73,7 +72,6 @@ class PhoneGrantPage extends ConsumerWidget {
         ? (deviceId ?? '<device>')
         : deviceId.substring(0, 8);
     final command = 'karmashala_host grant $prefix --add=phone';
-    final data = ref.watch(dataClientProvider);
     final switcher = ref.watch(serverSwitcherProvider);
     return SingleChildScrollView(
       child: Column(
@@ -123,14 +121,14 @@ class PhoneGrantPage extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.xl),
-          StreamBuilder<DataConnection>(
-            stream: data.connectionChanges,
-            initialData: data.connection,
-            builder: (context, snapshot) {
-              final checking = snapshot.data?.state == DataLinkState.connecting;
+          Consumer(
+            builder: (context, ref, _) {
+              final checking =
+                  ref.watch(serverLinkProvider).state ==
+                  DataLinkState.connecting;
               return FilledButton(
                 key: const Key('phone-grant-retry'),
-                onPressed: checking ? null : data.retry,
+                onPressed: checking ? null : ref.read(serverLinkRetryProvider),
                 child: Text(checking ? 'Checking…' : 'Try again'),
               );
             },

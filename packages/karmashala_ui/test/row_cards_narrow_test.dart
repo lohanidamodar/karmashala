@@ -127,6 +127,9 @@ void main() {
     await pumpInBox(
       tester,
       width: 360,
+      // The three-line card is the touch one: under a pointer a session is
+      // one line, its branch and diff stat in the title's hover.
+      density: UiDensity.touch,
       child: SessionCard(
         depth: 0,
         selected: false,

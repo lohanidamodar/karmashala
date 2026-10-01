@@ -107,6 +107,14 @@ final browsedWorktreeMissingProvider = Provider.autoDispose<bool>((ref) {
   return !listed.any((w) => Checkout(w.path) == Checkout(pick.path));
 });
 
+/// Reads a checkout's changes once, as `git status` has them now — for a
+/// one-off question such as which file a new diff should show, where the
+/// Changes panel's live reading is not wanted.
+final checkoutChangesReaderProvider =
+    Provider<Future<List<FileChange>> Function(EnvironmentPath checkout)>(
+      (ref) => ref.watch(gitDataProvider).changes,
+    );
+
 /// The working tree the change-reading providers read: the browsed worktree,
 /// falling back to the selected checkout once that worktree has been removed.
 final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>((ref) {

@@ -17,6 +17,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
+import '../terminal/fake_instance.dart';
 
 /// **The Explorer's default view, as a reader perceives it**, frozen: every
 /// semantics node under the panel with its words and its rectangle.
@@ -89,7 +90,9 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        await server.override(),
+        // The session rows ask which pane holds them, which builds the
+        // terminal controller: its fakes, and no real autosave timer.
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(

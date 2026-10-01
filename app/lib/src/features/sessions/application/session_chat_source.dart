@@ -270,3 +270,20 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         await Future<void>.delayed(spent > rest ? spent : rest);
       }
     });
+
+/// How many turns a session's whole record holds, given the [rows]
+/// [sessionChatTranscriptProvider] handed over: through the server, the
+/// held window's total — it sends only the tail — else the rows themselves.
+/// Null while the transcript is still loading.
+final sessionTranscriptTurnsOfProvider =
+    Provider<int? Function(String sessionId, List<TranscriptMessage>? rows)>((
+      ref,
+    ) {
+      final transcripts = ref.watch(serverTranscriptsProvider);
+      return (sessionId, rows) {
+        final window = ref.read(capabilitiesProvider).chatViaServer
+            ? transcripts.windowFor(sessionId, rows)
+            : null;
+        return window?.total ?? rows?.length;
+      };
+    });

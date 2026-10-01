@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
+import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
 import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/temp_directory.dart';
+import '../../support/tool_runs.dart';
 
 /// The owner's first ask: "when the agent reads an image the transcript shows
 /// only a file name" — Claude Code records the read as
@@ -141,9 +143,17 @@ void main() {
       ),
     );
     await tester.pump();
+    // A finished call is folded under its turn's line: open it to its card.
+    await openToolRuns(tester);
 
     expect(find.byType(TranscriptImagePreview), findsOneWidget);
-    expect(find.text(real.path), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ToolActivityBody),
+        matching: find.text(real.path),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a tool row for an ordinary file previews nothing', (
@@ -165,8 +175,15 @@ void main() {
       ),
     );
     await tester.pump();
+    await openToolRuns(tester);
 
     expect(find.byType(TranscriptImagePreview), findsNothing);
-    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ToolActivityBody),
+        matching: find.text('lib/main.dart'),
+      ),
+      findsOneWidget,
+    );
   });
 }

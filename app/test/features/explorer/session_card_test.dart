@@ -60,11 +60,22 @@ void main() {
     });
   });
 
-  Widget host(Widget child, {double width = 320}) => MaterialApp(
-    theme: AppTheme.light(),
-    home: Scaffold(
-      body: SizedBox(width: width, child: child),
-    ),
+  /// Under a pointer by default: the desktop Explorer's one-line row. [touch]
+  /// is the three-line card a thumb gets (spec §2.4 keeps it there).
+  Widget host(Widget child, {double width = 320, bool touch = false}) =>
+      MaterialApp(
+        theme: AppTheme.light().copyWith(
+          platform: touch ? TargetPlatform.android : TargetPlatform.windows,
+        ),
+        builder: (context, inner) => UiDensity.wrap(context, inner!),
+        home: Scaffold(
+          body: SizedBox(width: width, child: child),
+        ),
+      );
+
+  /// The title's hover under a pointer: what the one line no longer draws.
+  Finder hoverSaying(String words) => find.byWidgetPredicate(
+    (widget) => widget is Tooltip && (widget.message ?? '').contains(words),
   );
 
   SessionCard card({
@@ -93,10 +104,9 @@ void main() {
     onMenu: (_) {},
   );
 
-  testWidgets('draws two lines: status, title and age; then who and where', (
-    tester,
-  ) async {
-    // Design direction S2: the work leads, the agent is metadata.
+  testWidgets('under a pointer, one line: status, title and age; who and '
+      'where are the title\'s hover, in the same words', (tester) async {
+    // Spec §2.4: a session under a project is one 28px line.
     await tester.pumpWidget(
       host(
         card(
@@ -109,14 +119,39 @@ void main() {
     const meta =
         'Claude Code  ·  running  ·  monocode/main  ·  '
         'opened in an external terminal';
-    expect(find.text(meta), findsOneWidget);
+    expect(find.text(meta), findsNothing);
+    expect(find.text('6 changed'), findsNothing);
     expect(find.text('22m'), findsOneWidget);
     expect(find.text('Benchmark arcade games'), findsOneWidget);
+    final title = tester.getCenter(find.text('Benchmark arcade games')).dy;
+    expect(tester.getCenter(find.text('22m')).dy, title);
+
+    expect(hoverSaying(meta), findsWidgets);
+    expect(hoverSaying('6 changed'), findsWidgets);
+  });
+
+  testWidgets('under a thumb, three lines: who and when, what, then where '
+      'and what it produced', (tester) async {
+    // Design direction S2: the work leads, the agent is metadata.
+    await tester.pumpWidget(
+      host(
+        card(
+          whereabouts: 'opened in an external terminal',
+          stat: const SessionDiffStat(branch: 'feature/x', changedFiles: 6),
+        ),
+        touch: true,
+      ),
+    );
+
+    const where = 'monocode/main  ·  opened in an external terminal';
+    expect(find.text('Claude Code  ·  running'), findsOneWidget);
+    expect(find.text(where), findsOneWidget);
+    expect(find.text('22m'), findsOneWidget);
     expect(find.text('6 changed'), findsOneWidget);
 
     final title = tester.getCenter(find.text('Benchmark arcade games')).dy;
-    expect(tester.getCenter(find.text('22m')).dy, title);
-    expect(tester.getTopLeft(find.text(meta)).dy, greaterThan(title));
+    expect(tester.getCenter(find.text('22m')).dy, lessThan(title));
+    expect(tester.getTopLeft(find.text(where)).dy, greaterThan(title));
     expect(tester.getCenter(find.text('6 changed')).dy, greaterThan(title));
   });
 
@@ -124,7 +159,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      host(card(stat: const SessionDiffStat(changedFiles: 2))),
+      host(card(stat: const SessionDiffStat(changedFiles: 2)), touch: true),
     );
     final cardRight = tester.getBottomRight(find.byType(SessionCard)).dx;
     expect(
@@ -170,6 +205,7 @@ void main() {
         ),
         // Narrower than the Explorer's own 200px minimum, deliberately.
         width: 190,
+        touch: true,
       ),
     );
     expect(tester.takeException(), isNull);
@@ -189,6 +225,7 @@ void main() {
         card(
           stat: const SessionDiffStat(changedFiles: 6, added: 949, removed: 10),
         ),
+        touch: true,
       ),
     );
     expect(find.text('+949'), findsOneWidget);
@@ -198,16 +235,17 @@ void main() {
 
   testWidgets('commits ahead show beside the change count', (tester) async {
     await tester.pumpWidget(
-      host(card(stat: const SessionDiffStat(changedFiles: 1, commitsAhead: 3))),
+      host(
+        card(stat: const SessionDiffStat(changedFiles: 1, commitsAhead: 3)),
+        touch: true,
+      ),
     );
     expect(find.text('↑3'), findsOneWidget);
     expect(find.text('1 changed'), findsOneWidget);
   });
 
   testWidgets('a third line is drawn only for a sub-path', (tester) async {
-    await tester.pumpWidget(
-      host(card(stat: const SessionDiffStat(changedFiles: 4))),
-    );
+    await tester.pumpWidget(host(card(branch: null), touch: true));
     final twoLines = tester.getSize(find.byType(SessionCard)).height;
 
     await tester.pumpWidget(
@@ -223,6 +261,7 @@ void main() {
           menuItemsBuilder: () => const [],
           onMenu: (_) {},
         ),
+        touch: true,
       ),
     );
     expect(find.text('packages/app'), findsOneWidget);
@@ -235,11 +274,15 @@ void main() {
   testWidgets('the worktree glyph appears only for a worktree session', (
     tester,
   ) async {
-    await tester.pumpWidget(host(card()));
+    await tester.pumpWidget(host(card(), touch: true));
     expect(find.byIcon(AppIcons.treeStructure), findsNothing);
 
-    await tester.pumpWidget(host(card(worktree: true)));
+    await tester.pumpWidget(host(card(worktree: true), touch: true));
     expect(find.byIcon(AppIcons.treeStructure), findsOneWidget);
+
+    // Under a pointer the one line has no room for it; the hover says it.
+    await tester.pumpWidget(host(card(worktree: true)));
+    expect(hoverSaying('Runs in its own worktree'), findsWidgets);
   });
 
   testWidgets('a finished turn nobody has seen is a filled dot, in the unread '

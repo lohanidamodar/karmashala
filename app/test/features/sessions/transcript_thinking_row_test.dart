@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 
+import '../../support/tool_runs.dart';
+
 /// **Where a thinking block is drawn, and why a tool row can carry one.**
 ///
 /// The accordion was an agent-row affair, which is all Claude Code needs: its
@@ -41,6 +43,7 @@ void main() {
         ),
       ]),
     );
+    await openToolRuns(tester);
 
     expect(find.text('Thought'), findsOneWidget);
     await tester.tap(find.text('Thought'));
@@ -58,6 +61,7 @@ void main() {
         ),
       ]),
     );
+    await openToolRuns(tester);
 
     expect(find.textContaining('Thought'), findsNothing);
   });
@@ -78,6 +82,7 @@ void main() {
         ),
       ]),
     );
+    await openToolRuns(tester);
 
     expect(find.textContaining('Thought'), findsNothing);
   });

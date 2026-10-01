@@ -33,7 +33,7 @@ TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? palette) {
         foreground: scheme.onSurface,
         cursor: scheme.primary,
         // Painted under the glyphs, so a translucent tint keeps them legible.
-        selection: scheme.primary.withValues(alpha: 0.30),
+        selection: StateLayers.textSelection(scheme),
       );
   return palette?.applyTo(base) ?? base;
 }

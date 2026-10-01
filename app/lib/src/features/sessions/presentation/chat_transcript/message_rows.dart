@@ -155,10 +155,12 @@ class _UserMessageCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     // A bubble on the right, tinted with the accent (spec §5): the agent's
     // turn is plain text on the left, so whose turn it is reads at a glance.
-    final tint = Color.alphaBlend(
-      scheme.primary.withValues(alpha: _tintAlpha),
+    // A mix of two opaque colours, not a state layer laid over the row.
+    final tint = Color.lerp(
       SurfaceTones.of(context).term,
-    );
+      scheme.primary,
+      _tintAlpha,
+    )!;
     return LayoutBuilder(
       builder: (context, constraints) => _TurnWithMeta(
         alignEnd: true,

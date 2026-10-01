@@ -11,7 +11,6 @@ import '../../../../core/capabilities/capabilities.dart'
     show capabilitiesProvider, kUsageNotGranted;
 import '../../../../core/util/clock_provider.dart';
 import '../../../environments/application/environments_controller.dart';
-import '../../../sessions/data/server_session_stats.dart';
 import '../../application/session_token_totals.dart' show formatTokenCount;
 import '../../application/usage_accounts.dart';
 import '../../application/usage_history.dart';
@@ -326,10 +325,7 @@ class _AccountBody extends ConsumerWidget {
               const InlineSpinner(semanticsLabel: 'Counting tokens')
             else
               TextButton.icon(
-                onPressed: () {
-                  ref.read(serverSessionStatsProvider).forget();
-                  ref.invalidate(usageSessionRowsProvider);
-                },
+                onPressed: () => ref.read(usageRecountProvider)(),
                 icon: const Icon(
                   AppIcons.arrowsClockwise,
                   size: Chrome.iconAction,

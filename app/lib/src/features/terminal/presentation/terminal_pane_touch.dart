@@ -474,6 +474,7 @@ class _LinkConfirm extends StatelessWidget {
             target,
             style: theme.textTheme.bodyMedium?.copyWith(
               fontFamily: kMonoFamily,
+              fontFamilyFallback: kMonoFallback,
             ),
           ),
           const SizedBox(height: Insets.md),

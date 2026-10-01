@@ -4,13 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/app_shell.dart';
+import 'package:karmashala/src/app/shell/activity_strip.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala_ui/icons.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
@@ -37,9 +40,10 @@ void main() {
     commandKeyIsMeta = false;
   });
 
-  // Medium width with the Explorer open: the panel cannot fit beside the
-  // workbench floor.
-  const narrow = Size(800, 700);
+  // The narrowest side-by-side width (840, d828821cd) with the sidebar open:
+  // the panel cannot fit beside the workbench floor. Below it the panel is a
+  // sheet, which has room.
+  const narrow = Size(ShellWidth.mediumBelow, 700);
   const wide = Size(1440, 900);
 
   Future<ProviderContainer> pumpAt(WidgetTester tester, Size size) async {
@@ -59,16 +63,26 @@ void main() {
   }
 
   test('the layout reports whether the panel fits', () {
+    // What the row shares is the window less the activity strip.
     expect(
-      ShellLayout.panelFits(available: narrow.width, explorerColumn: true),
+      ShellLayout.panelFits(
+        available: narrow.width - kActivityStripWidth,
+        explorerColumn: true,
+      ),
       isFalse,
     );
     expect(
-      ShellLayout.panelFits(available: wide.width, explorerColumn: true),
+      ShellLayout.panelFits(
+        available: wide.width - kActivityStripWidth,
+        explorerColumn: true,
+      ),
       isTrue,
     );
     expect(
-      ShellLayout.panelFits(available: narrow.width, explorerColumn: false),
+      ShellLayout.panelFits(
+        available: narrow.width - kActivityStripWidth,
+        explorerColumn: false,
+      ),
       isTrue,
     );
   });
@@ -106,16 +120,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(sidePanelProvider), isNull);
 
-    await tester.tap(find.text('View'));
-    await tester.pumpAndSettle();
-    final item = tester.widget<CheckboxMenuButton>(
-      find.byType(CheckboxMenuButton).at(1),
+    // The menus are behind the title bar's one glyph (5c1fe3f58).
+    await openShellMenu(tester, 'View');
+    // The toggle says why, is not ticked, and does nothing.
+    final row = find.ancestor(
+      of: find.text('Context panel  ·  $kSidePanelNoRoom'),
+      matching: find.byType(MenuItemButton),
     );
-    expect(item.value, isFalse);
-    expect(item.onChanged, isNull, reason: 'disabled while there is no room');
+    final item = tester.widget<MenuItemButton>(row);
+    expect(item.onPressed, isNull, reason: 'disabled while there is no room');
     expect(
-      find.textContaining('Widen the window to open the side panel'),
-      findsOneWidget,
+      find.descendant(of: row, matching: find.byIcon(AppIcons.check)),
+      findsNothing,
+      reason: 'the menu must not say the panel is open',
     );
     final surfaceItem = tester.widget<MenuItemButton>(
       find.ancestor(

@@ -77,8 +77,12 @@ void main() {
                 changes ?? (throw StateError('fatal: not a git repository')),
           ),
           recentCommitsProvider.overrideWith((ref) async => const []),
-          // The pane's other reads are not what these cases count.
+          // The pane's other reads are not what these cases count — the
+          // commit box's "is this a repository" among them (5d6f40eea).
           repositoryFileDiffStatsProvider.overrideWith((ref) async => const {}),
+          checkoutGitPresenceProvider.overrideWith(
+            (ref, _) async => GitPresence.repository,
+          ),
           workingTreeStatusProvider.overrideWith(
             (ref) async => const WorkingTreeStatus(branch: 'work'),
           ),

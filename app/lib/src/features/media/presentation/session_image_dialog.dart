@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
@@ -23,7 +21,7 @@ class SessionImageDialog extends StatelessWidget {
   });
 
   /// Brings the picture from a server elsewhere; null when this disk has it.
-  final Future<File> Function(String path)? fetch;
+  final TranscriptImageFetch? fetch;
 
   /// The text that was clicked, `[Image #6]`, shown as the title — naming it is
   /// what says the right picture was found.

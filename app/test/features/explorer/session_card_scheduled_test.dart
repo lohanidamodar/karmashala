@@ -3,20 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 
-/// The `resumes 14:05` clause of a session row: first on its line, behind a
-/// clock, so it is what survives when the pane is dragged to its minimum.
+/// The `resumes 14:05` clause of a session row. Under a thumb it is first on
+/// the card's where-line, behind a clock, so it is what survives a narrow
+/// screen; under a pointer the row is one line (spec §2.4) and the clause
+/// leads the title's hover instead.
 void main() {
-  Widget host(Widget child, {required double width, double textScale = 1}) =>
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: MediaQuery(
-          data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-          child: Scaffold(
-            body: SizedBox(width: width, child: child),
-          ),
-        ),
-      );
+  Widget host(
+    Widget child, {
+    required double width,
+    double textScale = 1,
+    bool touch = true,
+  }) => MaterialApp(
+    theme: AppTheme.light().copyWith(
+      platform: touch ? TargetPlatform.android : TargetPlatform.windows,
+    ),
+    builder: (context, inner) => UiDensity.wrap(context, inner!),
+    home: MediaQuery(
+      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+      child: Scaffold(
+        body: SizedBox(width: width, child: child),
+      ),
+    ),
+  );
 
   SessionCard card({String? scheduled = 'resumes 14:05'}) => SessionCard(
     depth: 1,
@@ -35,25 +45,42 @@ void main() {
     onMenu: (_) {},
   );
 
-  String metaLine(WidgetTester tester) => tester
+  /// The card's where-line: the branch, and what is due before it.
+  String whereLine(WidgetTester tester) => tester
       .widgetList<Text>(find.byType(Text))
       .map((text) => text.textSpan?.toPlainText() ?? text.data ?? '')
-      .firstWhere((text) => text.contains('Codex CLI'));
+      .firstWhere((text) => text.contains('feature/a-rather'));
 
-  testWidgets('leads the meta line, behind a clock, with the rest after it', (
+  testWidgets('leads the where-line, behind a clock, with the rest after it', (
     tester,
   ) async {
     await tester.pumpWidget(host(card(), width: 320));
     expect(find.byIcon(AppIcons.clock), findsOneWidget);
-    final line = metaLine(tester);
-    expect(line.indexOf('resumes 14:05'), lessThan(line.indexOf('Codex CLI')));
-    expect(find.byTooltip(RegExp('then sends "continue"')), findsOneWidget);
+    final line = whereLine(tester);
+    expect(
+      line.indexOf('resumes 14:05'),
+      lessThan(line.indexOf('feature/a-rather')),
+    );
+    expect(find.byTooltip(RegExp('then sends "continue"')), findsWidgets);
   });
 
   testWidgets('a row with nothing scheduled draws no clock', (tester) async {
     await tester.pumpWidget(host(card(scheduled: null), width: 320));
     expect(find.byIcon(AppIcons.clock), findsNothing);
-    expect(metaLine(tester), isNot(contains('resumes')));
+    expect(whereLine(tester), isNot(contains('resumes')));
+  });
+
+  testWidgets('under a pointer it leads the title\'s hover, and is not drawn', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(card(), width: 320, touch: false));
+    expect(find.byIcon(AppIcons.clock), findsNothing);
+    final hover = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .map((tip) => tip.message ?? '')
+        .firstWhere((message) => message.contains('Codex CLI'));
+    expect(hover, contains('resumes 14:05  ·  Codex CLI  ·  idle'));
+    expect(hover, contains('then sends "continue"'));
   });
 
   for (final width in [200.0, 240.0]) {
@@ -67,7 +94,9 @@ void main() {
           find.byWidgetPredicate(
             (widget) =>
                 widget is Text &&
-                (widget.textSpan?.toPlainText() ?? '').contains('resumes'),
+                (widget.textSpan?.toPlainText() ?? widget.data ?? '').contains(
+                  'resumes',
+                ),
           ),
         );
         expect(text.overflow, TextOverflow.ellipsis);

@@ -72,7 +72,9 @@ void main() {
     // No decision was recorded, and the row says so rather than filling the
     // line with something plausible.
     expect(find.textContaining('Nothing else was recorded'), findsOneWidget);
-    expect(find.text('INBOX  ·  1 NEW'), findsOneWidget);
+    // The area header every sidebar area has: its name, then how many are new.
+    expect(find.text('Inbox'), findsOneWidget);
+    expect(find.text('1 new'), findsOneWidget);
   });
 
   testWidgets('an unfinished check is quoted in the run\'s own words', (
@@ -122,13 +124,14 @@ void main() {
     );
     await pump(tester);
 
-    await tester.tap(find.text('Mark all read'));
+    await tester.tap(find.byTooltip('Mark all read'));
     await tester.pump();
 
     // Still listed — reading a notice is not dealing with it — but no longer
     // counted against the badge.
     expect(find.text('Fix login'), findsOneWidget);
-    expect(find.text('INBOX'), findsOneWidget);
+    expect(find.text('Inbox'), findsOneWidget);
+    expect(find.text('1 new'), findsNothing);
   });
 
   testWidgets('tapping it opens the session it came from', (tester) async {

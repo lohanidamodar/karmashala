@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -22,7 +23,8 @@ import '../../support/test_machine.dart';
 
 /// The terminal's foreground panes, driven by hand so the listener under test
 /// sees a real change rather than a fixed override. The pane is resolved to a
-/// session through the real `placedSessionIdsProvider` and the real row.
+/// session through this window's own panes (`paneSessionsProvider`): a row's
+/// `pane_id` names whichever window opened it last, so it is not believed.
 class _ForegroundPanes extends Notifier<List<String>> {
   @override
   List<String> build() => const [];
@@ -60,6 +62,10 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         foregroundTerminalPaneIdsProvider.overrideWith(
           (ref) => ref.watch(_foregroundProvider),
+        ),
+        // This window holds pane-1, launched for s1.
+        paneSessionsProvider.overrideWithValue(
+          PaneSessions.of(const {'pane-1': 's1'}),
         ),
       ],
     );

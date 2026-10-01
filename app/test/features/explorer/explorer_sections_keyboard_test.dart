@@ -161,7 +161,7 @@ void main() {
         .setCollapsed('section-checks-failing', false);
     await tester.pumpAndSettle();
     expect(find.textContaining('Delivery strip'), findsOneWidget);
-    await focusRow(tester, 'Pinned');
+    await focusRow(tester, 'PINNED');
 
     final seen = [focused()];
     for (var i = 0; i < 7; i++) {
@@ -185,7 +185,7 @@ void main() {
 
   testWidgets('Home and End go to the first and the last row', (tester) async {
     await pump(tester);
-    await focusRow(tester, 'Awaiting input');
+    await focusRow(tester, 'AWAITING INPUT');
 
     await press(tester, LogicalKeyboardKey.end);
     expect(focused(), failedTopDown(tester).last);
@@ -196,7 +196,7 @@ void main() {
   testWidgets('right opens a folded section, then steps into it; left steps '
       'out to it, then folds it', (tester) async {
     await pump(tester, openFailures: false);
-    await focusRow(tester, 'Ended in failure');
+    await focusRow(tester, 'ENDED IN FAILURE');
     expect(find.text('Alpha fix'), findsNothing);
 
     await press(tester, right);
@@ -219,7 +219,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await focusRow(tester, 'Pinned');
+    await focusRow(tester, 'PINNED');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE, character: 'e');
     await tester.pumpAndSettle();

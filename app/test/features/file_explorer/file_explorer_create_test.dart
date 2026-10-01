@@ -79,19 +79,22 @@ void main() {
     );
   });
 
-  testWidgets('a folder the server says changed is listed again', (
+  testWidgets('a folder is listed again on Refresh, and never watched', (
     tester,
   ) async {
     await pump(tester);
     expect(find.text('Empty'), findsOneWidget);
-    expect(server.filesWork.watched, contains(at(tmp.path)));
+    // A folder watch is too heavy over 9p and SSH (70c09be03): the tree asks
+    // for a listing when it is shown and again when told to, never a watch.
+    expect(server.filesWork.watched, isEmpty);
 
-    // An agent wrote a file; the server's watch tells this link.
+    // An agent wrote a file; Refresh lists the folder again.
     File(p.join(tmp.path, 'agent.txt')).writeAsStringSync('x');
-    await tester.runAsync(() => server.filesWork.changed(at(tmp.path)));
+    await tester.tap(find.byTooltip('Refresh'));
     await settle(tester);
 
     expect(find.text('agent.txt'), findsOneWidget);
+    expect(server.filesWork.watched, isEmpty);
   });
 
   testWidgets('a name with a separator is refused in the dialog', (

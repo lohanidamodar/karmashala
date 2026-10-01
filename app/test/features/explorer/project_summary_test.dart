@@ -89,6 +89,19 @@ void main() {
         ),
       );
 
+  /// What the session rows say on hover. Under a pointer a session is one
+  /// line (spec §2.4): its branch and what its checkout produced are the
+  /// title's hover, in the words the card's lower lines used.
+  String sessionHover(WidgetTester tester) => tester
+      .widgetList<Tooltip>(
+        find.descendant(
+          of: find.byType(SessionCard),
+          matching: find.byType(Tooltip),
+        ),
+      )
+      .map((tip) => tip.message ?? '')
+      .join('\n');
+
   Future<void> pump(
     WidgetTester tester, {
     Size size = const Size(360, 800),
@@ -181,20 +194,8 @@ void main() {
     // Once, now that the Explorer lists sessions rather than checkouts: the
     // card is the only row describing this working tree. It states the branch
     // and change count the checkout's one measurement produced.
-    expect(
-      find.descendant(
-        of: find.byType(SessionCard),
-        matching: find.textContaining('feature/cards'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byType(SessionCard),
-        matching: find.text('3 changed'),
-      ),
-      findsOneWidget,
-    );
+    expect(sessionHover(tester), contains('feature/cards'));
+    expect(sessionHover(tester), contains('3 changed'));
     // And the project's own line borrows the same reading, the moment it
     // arrives — it never asks git itself.
     expect(
@@ -244,8 +245,8 @@ void main() {
 
     // The line counts replace the file count, which is what the design asks
     // for.
-    expect(find.text('+949'), findsOneWidget);
-    expect(find.text('−10'), findsOneWidget);
+    expect(sessionHover(tester), contains('+949 −10'));
+    expect(sessionHover(tester), isNot(contains('1 changed')));
     expect(find.text('1 changed'), findsNothing);
     // The cost rule Loop 50 set, restated for the probe that replaced it:
     // however many rows describe this working tree, it is measured once.
@@ -283,7 +284,8 @@ void main() {
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 changed'), findsOneWidget);
+    expect(sessionHover(tester), contains('1 changed'));
+    expect(sessionHover(tester), isNot(contains('+0')));
     expect(find.textContaining('+0'), findsNothing);
   });
 
@@ -381,9 +383,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Its own branch and its own change count — not the repository's.
-    expect(find.textContaining('feature/side'), findsOneWidget);
-    expect(find.text('1 changed'), findsOneWidget);
+    expect(sessionHover(tester), contains('feature/side'));
+    expect(sessionHover(tester), contains('1 changed'));
     // And how far ahead of what the repository has checked out.
-    expect(find.text('↑4'), findsOneWidget);
+    expect(sessionHover(tester), contains('↑4'));
   });
 }

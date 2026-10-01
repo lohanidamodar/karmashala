@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/shell_menu_items.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
@@ -65,27 +67,30 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Opens [menu], reads the label and chord off every item, and closes it.
-  ///
-  /// `CheckboxMenuButton` builds a `MenuItemButton` of its own, so one pass
-  /// over that type covers the View menu's toggles as well.
+  /// Opens [menu] in the title bar's one menu, reads the label and the chord
+  /// it draws off every item, and closes it. A row draws its chord as text,
+  /// the keymap's own label for the command — so the chord is looked up by
+  /// that label among the app's bindings.
   Future<List<(String, SingleActivator)>> chordsIn(
     WidgetTester tester,
     String menu,
   ) async {
-    await tester.tap(find.text(menu));
-    await tester.pumpAndSettle();
+    await openShellMenu(tester, menu);
     final found = <(String, SingleActivator)>[];
-    for (final button in tester.widgetList<MenuItemButton>(
-      find.byType(MenuItemButton),
+    for (final item in tester.widgetList<ShellMenuItem>(
+      find.byType(ShellMenuItem),
     )) {
-      final shortcut = button.shortcut;
-      if (shortcut is! SingleActivator) continue;
-      final label = button.child;
-      found.add((label is Text ? label.data ?? '?' : '?', shortcut));
+      final drawn = item.shortcut;
+      if (drawn == null) continue;
+      final chord = shellChords.where((c) => c.label == drawn).firstOrNull;
+      found.add((
+        item.label,
+        chord?.activator ??
+            // Drawn but in no chord at all: a key no binding can be found for.
+            const SingleActivator(LogicalKeyboardKey.f24),
+      ));
     }
-    await tester.tap(find.text(menu));
-    await tester.pumpAndSettle();
+    await closeShellMenu(tester);
     return found;
   }
 
@@ -108,8 +113,9 @@ void main() {
         checked++;
       }
     }
-    // A sweep that found nothing would pass silently.
-    expect(checked, greaterThanOrEqualTo(8));
+    // A sweep that found nothing would pass silently. The terminal's chords
+    // moved to View › Terminal, a submenu this sweep does not open (5c1fe3f58).
+    expect(checked, greaterThanOrEqualTo(6));
   });
 
   testWidgets('the three the menu used to only pretend to have now work', (
@@ -179,12 +185,16 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
     await pumpShell(tester);
-    final quit = (await chordsIn(
-      tester,
-      'Workspace',
-    )).where((e) => e.$1 == 'Quit').single.$2;
-    expect(quit.trigger, LogicalKeyboardKey.keyQ);
-    expect(quit.meta, isTrue);
-    expect(quit.control, isFalse);
+    await openShellMenu(tester, 'Workspace');
+    final quit = tester
+        .widgetList<ShellMenuItem>(find.byType(ShellMenuItem))
+        .singleWhere((item) => item.label == 'Quit');
+    expect(quit.shortcut, '⌘Q');
+    expect(
+      shellChords.where((c) => c.label == quit.shortcut),
+      isEmpty,
+      reason: 'caught natively, so it is in no chord the engine binds',
+    );
+    await closeShellMenu(tester);
   });
 }

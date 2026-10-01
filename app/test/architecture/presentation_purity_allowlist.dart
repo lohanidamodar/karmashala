@@ -65,5 +65,4 @@ const Set<String> presentationPurityDebt = {
   'lib/src/features/terminal/presentation/terminal_actions.dart',
   'lib/src/features/terminal/presentation/terminal_file_drop.dart',
   'lib/src/features/todos/presentation/project_menu.dart',
-  'lib/src/features/verification/presentation/verification_pane.dart',
 };

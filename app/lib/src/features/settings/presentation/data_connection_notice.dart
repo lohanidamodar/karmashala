@@ -40,7 +40,10 @@ class DataConnectionNotice extends ConsumerWidget {
         ref.watch(dataConnectionProvider).value ?? client.connection;
     final access = ref.watch(serverAccessProvider);
     final remote = access is RemoteServerAccess ? access : null;
-    final message = dataConnectionText(connection, remoteHost: remote?.hostName);
+    final message = dataConnectionText(
+      connection,
+      remoteHost: remote?.hostName,
+    );
     if (message == null) return const SizedBox.shrink();
     if (remote == null) return _notice(ref, client, connection, message);
     // The phone shell's `RemoteResumingStrip` already says "Reconnecting…" or

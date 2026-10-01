@@ -109,9 +109,7 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
                       TextButton(
                         key: const ValueKey('keymap-reload'),
                         onPressed: () => unawaited(
-                          ref
-                              .read(keymapProvider.notifier)
-                              .reload(force: true),
+                          ref.read(keymapProvider.notifier).reload(force: true),
                         ),
                         child: const Text('Reload'),
                       ),
@@ -123,8 +121,7 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
                   'keymap.json has problems.',
                   child: SettingsNotice(
                     tone: SettingsNoticeTone.attention,
-                    message:
-                        'keymap.json is not in use; the last good one is.',
+                    message: 'keymap.json is not in use; the last good one is.',
                     detail: status.problems.join('\n'),
                   ),
                 ),
@@ -134,7 +131,10 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
                   controller: _filter,
                   decoration: const InputDecoration(
                     isDense: true,
-                    prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
+                    prefixIcon: Icon(
+                      AppIcons.magnifyingGlass,
+                      size: Chrome.icon,
+                    ),
                     hintText: 'Filter by what it does, command id or keys',
                   ),
                 ),

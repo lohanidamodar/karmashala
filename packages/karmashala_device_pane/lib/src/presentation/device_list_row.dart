@@ -35,6 +35,11 @@ class DeviceListMetrics {
   /// The widest the list gets: a name and its actions, not a line of prose.
   static const maxWidth = 460.0;
 
+  /// The least share of a row its name keeps beside the actions. Under it the
+  /// actions go on a line of their own under the name, which keeps the row:
+  /// four glyphs beside a name at 240px left it half.
+  static const nameShare = 0.6;
+
   /// The margin a glyph keeps inside its button's square, which is how far the
   /// square may hang past [inset] for the glyph itself to end on it.
   static double glyphMargin(UiDensity density) =>
@@ -106,7 +111,13 @@ class _DeviceRowState extends State<DeviceRow> {
         // of them reads as one paragraph.
         final twoLines =
             widget.subtitle != null || (meta != null && !metaBeside);
-        final gutter = twoLines ? Insets.xs : Insets.hair;
+        // The actions under the name, end-aligned, when beside it they would
+        // leave the name less than its share of the row.
+        final actionsUnder =
+            actions.isNotEmpty &&
+            constraints.maxWidth - taken <
+                constraints.maxWidth * DeviceListMetrics.nameShare;
+        final gutter = twoLines || actionsUnder ? Insets.xs : Insets.hair;
         final name = Text(
           widget.title,
           maxLines: 1,
@@ -151,11 +162,21 @@ class _DeviceRowState extends State<DeviceRow> {
                         overflow: TextOverflow.ellipsis,
                         style: muted,
                       ),
+                    if (actionsUnder)
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actions,
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (actions.isNotEmpty) const SizedBox(width: Insets.xs),
-              ...actions,
+              if (!actionsUnder && actions.isNotEmpty) ...[
+                const SizedBox(width: Insets.xs),
+                ...actions,
+              ],
             ],
           ),
         );

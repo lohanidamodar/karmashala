@@ -80,16 +80,16 @@ void main() {
           imported: false,
         );
         FakeDataServer.of(container.read(dataClientProvider)).attention.apply(
-              InboxUpdate(
-                watched: {watched.key},
-                waiting: [
-                  SessionAttention(
-                    session: watched,
-                    kind: AttentionKind.needsInput,
-                  ),
-                ],
+          InboxUpdate(
+            watched: {watched.key},
+            waiting: [
+              SessionAttention(
+                session: watched,
+                kind: AttentionKind.needsInput,
               ),
-            );
+            ],
+          ),
+        );
         await container.pump();
 
         // ignore: avoid_print

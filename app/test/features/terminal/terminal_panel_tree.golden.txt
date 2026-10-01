@@ -2080,12 +2080,16 @@ TerminalTabChip
                                                                                     Semantics
                                                                                       MouseRegion
                                                                                         StatusGlyph
-                                                                                          Icon icon=IconData(U+0E4E2)
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
+                                                                                          AskGlyph
+                                                                                            AskPulse
+                                                                                              ListenableBuilder
+                                                                                                Opacity
+                                                                                                  Icon icon=IconData(U+0E40A)
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
                                                                   Expanded
                                                                     Text text="claude"
                                                                       RichText
@@ -3133,155 +3137,20 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E1CA)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Copy"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+C"
-                                                                                                                                      RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E198)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Paste"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+V"
-                                                                                                                                      RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E30C)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Find…"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+F"
-                                                                                                                                      RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0EADC)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Create todo from selection"
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E1CA)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Copy"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+C"
                                                                                                                                         RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
@@ -3311,16 +3180,63 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E34C)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Create note from selection"
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E198)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Paste"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+V"
+                                                                                                                                        RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E30C)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Find…"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+F"
                                                                                                                                         RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
@@ -3363,16 +3279,299 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E18A)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Record this pane — GIF only, no MP4 here"
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0EADC)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Create todo from selection"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E34C)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Create note from selection"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E18A)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Record this pane — GIF only, no MP4 here"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E870)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Split pane right"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E874)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Split pane down"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0EAE8)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Move pane to a new tab"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E4F6)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Close pane"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+W"
                                                                                                                                         RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
@@ -3415,202 +3614,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E870)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Split pane right"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E874)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Split pane down"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0EAE8)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Move pane to a new tab"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E4F6)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Close pane"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+W"
-                                                                                                                                      RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E3DA)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="End session"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E3DA)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="End session"
+                                                                                                                                          RichText
 
 == the pane menu, with nothing selected ==
 _PopupMenu<String>
@@ -3680,19 +3695,212 @@ _PopupMenu<String>
                                                                                                                                 Padding
                                                                                                                                   Align
                                                                                                                                     Builder
-                                                                                                                                      Row
-                                                                                                                                        Icon icon=IconData(U+0E1CA)
-                                                                                                                                          Semantics
-                                                                                                                                            ExcludeSemantics
-                                                                                                                                              SizedBox
-                                                                                                                                                Center
-                                                                                                                                                  RichText
-                                                                                                                                        SizedBox
-                                                                                                                                        Expanded
-                                                                                                                                          Text text="Copy"
+                                                                                                                                      _TouchMenuRow
+                                                                                                                                        Row
+                                                                                                                                          Icon icon=IconData(U+0E1CA)
+                                                                                                                                            Semantics
+                                                                                                                                              ExcludeSemantics
+                                                                                                                                                SizedBox
+                                                                                                                                                  Center
+                                                                                                                                                    RichText
+                                                                                                                                          SizedBox
+                                                                                                                                          Expanded
+                                                                                                                                            Text text="Copy"
+                                                                                                                                              RichText
+                                                                                                                                          SizedBox
+                                                                                                                                          Text text="Ctrl+Shift+C"
                                                                                                                                             RichText
-                                                                                                                                        SizedBox
-                                                                                                                                        Text text="Ctrl+Shift+C"
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E198)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Paste"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+V"
+                                                                                                                                        RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E30C)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Find…"
+                                                                                                                                          RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Text text="Ctrl+Shift+F"
+                                                                                                                                        RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E18A)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Record this pane — GIF only, no MP4 here"
+                                                                                                                                          RichText
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuItem<String>
+                                                                                MergeSemantics
+                                                                                  Semantics
+                                                                                    InkWell
+                                                                                      _InkResponseStateWidget
+                                                                                        _ParentInkResponseProvider
+                                                                                          Actions
+                                                                                            _ActionsScope
+                                                                                              Focus
+                                                                                                _FocusInheritedScope
+                                                                                                  Semantics
+                                                                                                    MouseRegion
+                                                                                                      Builder
+                                                                                                        DefaultSelectionStyle
+                                                                                                          Semantics
+                                                                                                            GestureDetector
+                                                                                                              RawGestureDetector
+                                                                                                                Listener
+                                                                                                                  Builder
+                                                                                                                    ListTileTheme
+                                                                                                                      AnimatedDefaultTextStyle
+                                                                                                                        DefaultTextStyle
+                                                                                                                          ConstrainedBox
+                                                                                                                            Padding
+                                                                                                                              Align
+                                                                                                                                Builder
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E870)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Split pane right"
                                                                                                                                           RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
@@ -3722,62 +3930,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E198)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Paste"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+V"
-                                                                                                                                      RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E30C)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Find…"
-                                                                                                                                        RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Text text="Ctrl+Shift+F"
-                                                                                                                                      RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E874)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Split pane down"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuDivider
@@ -3819,160 +3983,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E18A)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Record this pane — GIF only, no MP4 here"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E870)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Split pane right"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E874)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Split pane down"
-                                                                                                                                        RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuItem<String>
-                                                                                MergeSemantics
-                                                                                  Semantics
-                                                                                    InkWell
-                                                                                      _InkResponseStateWidget
-                                                                                        _ParentInkResponseProvider
-                                                                                          Actions
-                                                                                            _ActionsScope
-                                                                                              Focus
-                                                                                                _FocusInheritedScope
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      Builder
-                                                                                                        DefaultSelectionStyle
-                                                                                                          Semantics
-                                                                                                            GestureDetector
-                                                                                                              RawGestureDetector
-                                                                                                                Listener
-                                                                                                                  Builder
-                                                                                                                    ListTileTheme
-                                                                                                                      AnimatedDefaultTextStyle
-                                                                                                                        DefaultTextStyle
-                                                                                                                          ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Align
-                                                                                                                                Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E3DA)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="End session"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E3DA)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="End session"
+                                                                                                                                          RichText
 
 == the search bar open over a pane ==
 TerminalPaneStack
@@ -4529,17 +4551,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E4F6)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Close tab"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E4F6)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Close tab"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>
@@ -4568,17 +4591,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E32C)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Close others"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E32C)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Close others"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>
@@ -4607,17 +4631,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E13A)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Close to the right"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E13A)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Close to the right"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>
@@ -4648,17 +4673,18 @@ _PopupMenu<String>
                                                                                                                                 Padding
                                                                                                                                   Align
                                                                                                                                     Builder
-                                                                                                                                      Row
-                                                                                                                                        Icon icon=IconData(U+0E138)
-                                                                                                                                          Semantics
-                                                                                                                                            ExcludeSemantics
-                                                                                                                                              SizedBox
-                                                                                                                                                Center
-                                                                                                                                                  RichText
-                                                                                                                                        SizedBox
-                                                                                                                                        Expanded
-                                                                                                                                          Text text="Close to the left"
-                                                                                                                                            RichText
+                                                                                                                                      _TouchMenuRow
+                                                                                                                                        Row
+                                                                                                                                          Icon icon=IconData(U+0E138)
+                                                                                                                                            Semantics
+                                                                                                                                              ExcludeSemantics
+                                                                                                                                                SizedBox
+                                                                                                                                                  Center
+                                                                                                                                                    RichText
+                                                                                                                                          SizedBox
+                                                                                                                                          Expanded
+                                                                                                                                            Text text="Close to the left"
+                                                                                                                                              RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>
@@ -4687,17 +4713,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E4F8)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Close all"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E4F8)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Close all"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuDivider
@@ -4739,17 +4766,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0EAE8)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="Save this layout as a preset…"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0EAE8)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="Save this layout as a preset…"
+                                                                                                                                          RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuDivider
@@ -4791,17 +4819,18 @@ _PopupMenu<String>
                                                                                                                             Padding
                                                                                                                               Align
                                                                                                                                 Builder
-                                                                                                                                  Row
-                                                                                                                                    Icon icon=IconData(U+0E3DA)
-                                                                                                                                      Semantics
-                                                                                                                                        ExcludeSemantics
-                                                                                                                                          SizedBox
-                                                                                                                                            Center
-                                                                                                                                              RichText
-                                                                                                                                    SizedBox
-                                                                                                                                    Expanded
-                                                                                                                                      Text text="End session"
-                                                                                                                                        RichText
+                                                                                                                                  _TouchMenuRow
+                                                                                                                                    Row
+                                                                                                                                      Icon icon=IconData(U+0E3DA)
+                                                                                                                                        Semantics
+                                                                                                                                          ExcludeSemantics
+                                                                                                                                            SizedBox
+                                                                                                                                              Center
+                                                                                                                                                RichText
+                                                                                                                                      SizedBox
+                                                                                                                                      Expanded
+                                                                                                                                        Text text="End session"
+                                                                                                                                          RichText
 
 == the toolbar, compact ==
 TerminalToolbar

@@ -83,7 +83,10 @@ class SettingsPageBody extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(page.description, style: SettingsStyles.pageBlurb(context)),
+                Text(
+                  page.description,
+                  style: SettingsStyles.pageBlurb(context),
+                ),
                 ...settingsPageChildren(page),
               ],
             ),

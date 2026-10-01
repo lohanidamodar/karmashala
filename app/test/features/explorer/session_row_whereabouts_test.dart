@@ -114,10 +114,8 @@ void main() {
 
     // The fact comes from the persisted surface, so it survives a restart and
     // costs nothing to know.
-    expect(
-      find.textContaining('opened in an external terminal'),
-      findsOneWidget,
-    );
+    // Said on the title's hover: a session under a pointer is one line.
+    expect(tooltipSaying('opened in an external terminal'), findsOneWidget);
     // …and it is dated, not asserted. The card's corner carries the age as a
     // number and the tooltip carries what the number means, in `describeAge`'s
     // wording so it reads the same here, in Quick Open and on the phone.
@@ -143,15 +141,14 @@ void main() {
 
     await pump(tester);
 
-    expect(
-      find.textContaining('opened in an external terminal'),
-      findsOneWidget,
-    );
+    // Said on the title's hover: a session under a pointer is one line.
+    expect(tooltipSaying('opened in an external terminal'), findsOneWidget);
     // No source could tell us anything. The corner still dates the row — from
     // when the session was *created*, which is a fact we own — but nothing
     // anywhere says "last seen", because we have not seen it.
     expect(find.textContaining('last seen'), findsNothing);
     expect(tooltipSaying('Created'), findsOneWidget);
+    expect(tooltipSaying('last seen'), findsNothing);
   });
 
   testWidgets('an imported row is dated from the agent\'s own file', (

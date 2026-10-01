@@ -174,19 +174,37 @@ void main() {
   Color? colourOf(WidgetTester tester, String label) =>
       tester.widget<Text>(find.text(label)).style?.color;
 
+  /// The theme the toolbar is drawn in: a healthy short window is full ink,
+  /// a healthy long one muted, and only a loud one wears its tone.
+  ColorScheme schemeOf(WidgetTester tester) =>
+      Theme.of(tester.element(find.byType(ToolbarUsageStrip))).colorScheme;
+
+  /// The seeded account's chip, by the key the strip gives it.
+  Finder chipOf() => find.byKey(ValueKey('toolbar-usage-$_claudeAccount'));
+
+  /// The two rings the chip draws before its numbers, when it has numbers.
+  Finder gauge() => find.byWidgetPredicate(
+    (w) =>
+        w is CustomPaint &&
+        w.painter.runtimeType.toString() == '_RingsPainter',
+  );
+
   testWidgets('draws each period as a percent and a countdown', (tester) async {
     answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
 
-    expect(find.text('62% · 2h11m'), findsOneWidget);
-    expect(find.text('1% · 3d'), findsOneWidget);
-    expect(colourOf(tester, '62% · 2h11m'), light.idle);
-    expect(colourOf(tester, '1% · 3d'), light.idle);
+    // The title bar's chip (spec §4): the rings, then each window's number;
+    // the countdowns are in its hover and its sentence.
+    expect(find.text('62%'), findsOneWidget);
+    expect(find.text('1%'), findsOneWidget);
     expect(
-      tester.widget<Icon>(find.byIcon(AppIcons.circleHalf)).color,
-      light.idle,
-      reason: 'the gauge glyph carries the same tone as the number',
+      colourOf(tester, '62%'),
+      light.attention,
+      reason:
+          '62% with 2h11m of the five hours left is on course to run out '
+          'before it resets: amber (spec §4)',
     );
+    expect(gauge(), findsOneWidget, reason: 'a measured account has rings');
 
     final tip = tooltipOf(tester);
     expect(tip, contains('5-hour · 62% · resets in 2h11m'));
@@ -223,21 +241,17 @@ void main() {
     );
     final container = await pumpChip(tester);
 
-    expect(find.text('4% · 1h'), findsOneWidget);
-    expect(find.text('97% · 2d'), findsOneWidget);
+    expect(find.text('4%'), findsOneWidget);
+    expect(find.text('97%'), findsOneWidget);
     expect(
-      tester.getTopLeft(find.text('4% · 1h')).dx,
-      lessThan(tester.getTopLeft(find.text('97% · 2d')).dx),
+      tester.getTopLeft(find.text('4%')).dx,
+      lessThan(tester.getTopLeft(find.text('97%')).dx),
       reason: 'the shorter period is read first',
     );
-    // One tone for the chip, and it is the worse of the two: a 4% that will not
-    // stop anybody must not paint the row calm while the week is spent.
-    expect(colourOf(tester, '4% · 1h'), light.failure);
-    expect(colourOf(tester, '97% · 2d'), light.failure);
-    expect(
-      tester.widget<Icon>(find.byIcon(AppIcons.circleHalf)).color,
-      light.failure,
-    );
+    // Each number wears its own loudness (spec §4): a 4% that will not stop
+    // anybody stays in plain ink, and the spent week is the one in red.
+    expect(colourOf(tester, '4%'), schemeOf(tester).onSurface);
+    expect(colourOf(tester, '97%'), light.failure);
 
     final tip = tooltipOf(tester);
     expect(tip, contains('5-hour · 4% · resets in 1h'));
@@ -271,7 +285,7 @@ void main() {
     );
     final container = await pumpChip(tester);
 
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
     expect(
       find.textContaining('%'),
       findsOneWidget,
@@ -356,7 +370,7 @@ void main() {
     final container = await containerFor(observer: watched);
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
     final one = {...watched.names};
 
     // The server's next reading names both periods.
@@ -364,8 +378,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('62% · 2h11m'), findsOneWidget);
-    expect(find.text('1% · 3d'), findsOneWidget, reason: 'two facts now');
+    expect(find.text('62%'), findsOneWidget);
+    expect(find.text('1%'), findsOneWidget, reason: 'two facts now');
     expect(
       watched.names,
       one,
@@ -380,7 +394,9 @@ void main() {
   });
 
   for (final (percent, tone, expected) in <(double, String, Color)>[
-    (62, 'healthy', SemanticColors.forBrightness(Brightness.light).idle),
+    // Healthy is plain ink — the rings say it is fine; the colour is kept
+    // for a number that needs looking at.
+    (62, 'healthy', Colors.transparent),
     (
       kUsageWarningPercent,
       'warning',
@@ -394,16 +410,24 @@ void main() {
   ]) {
     testWidgets('at ${percent.round()}% the chip reads $tone, and still spells '
         'the number out', (tester) async {
-      answer = usageSnapshot(percent: percent);
+      // Near the window's end, so pace is not what colours it: at 62% with
+      // half an hour left the window finishes well inside its limit.
+      answer = usageSnapshot(
+        percent: percent,
+        resetsIn: const Duration(minutes: 30),
+      );
       final container = await pumpChip(tester);
 
-      final label = '${percent.round()}% · 2h11m';
+      final label = '${percent.round()}%';
       expect(
         find.text(label),
         findsOneWidget,
         reason: 'state is never carried by colour alone',
       );
-      expect(colourOf(tester, label), expected);
+      expect(
+        colourOf(tester, label),
+        expected == Colors.transparent ? schemeOf(tester).onSurface : expected,
+      );
       await quiesce(tester, container);
     });
   }
@@ -418,15 +442,15 @@ void main() {
     answer = antigravitySnapshot();
     final container = await pumpChip(tester, agentId: AgentIds.antigravity);
 
-    expect(find.text('usage —'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget);
     expect(find.textContaining('%'), findsNothing, reason: 'not 0%, not any %');
-    expect(colourOf(tester, 'usage —'), light.neutral);
+    expect(colourOf(tester, '—'), schemeOf(tester).onSurfaceVariant);
     expect(
       find.byIcon(AppIcons.question),
       findsOneWidget,
       reason: 'the glyph claims what the label does: nothing was observed',
     );
-    expect(find.byIcon(AppIcons.circleHalf), findsNothing);
+    expect(gauge(), findsNothing);
 
     // And the tooltip says everything that *is* known.
     final tip = tooltipOf(tester);
@@ -454,7 +478,7 @@ void main() {
 
     expect(find.byType(ToolbarUsageStrip), findsOneWidget);
     expect(
-      find.byIcon(AppIcons.circleHalf),
+      chipOf(),
       findsNothing,
       reason: 'not an error and not a placeholder — nothing at all',
     );
@@ -477,8 +501,8 @@ void main() {
     );
     final container = await pumpChip(tester);
 
-    expect(find.text('usage —'), findsOneWidget);
-    expect(colourOf(tester, 'usage —'), light.neutral);
+    expect(find.text('—'), findsOneWidget);
+    expect(colourOf(tester, '—'), schemeOf(tester).onSurfaceVariant);
     expect(
       find.byIcon(AppIcons.question),
       findsOneWidget,
@@ -486,7 +510,7 @@ void main() {
           'nothing was measured, so the gauge glyph is not drawn — the '
           'same answer HealthLevel.unknown gives one panel over',
     );
-    expect(find.byIcon(AppIcons.circleHalf), findsNothing);
+    expect(gauge(), findsNothing);
     expect(
       tooltipOf(tester),
       'Access token expired. Run the agent once to refresh, then retry.',
@@ -505,7 +529,7 @@ void main() {
   ) async {
     answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
 
     // Offline behaves exactly like any other failed fetch: the server keeps
     // the reading it had and tells the attempt's failure beside it.
@@ -521,11 +545,12 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('62% · 2h8m'),
+      find.text('62%'),
       findsOneWidget,
       reason: 'losing a number you had is worse than an old one that admits it',
     );
     final tip = tooltipOf(tester);
+    expect(tip, contains('5-hour · 62% · resets in 2h8m'));
     expect(tip, contains('Last checked 3m ago'));
     expect(tip, contains('Refresh failed: Could not reach the usage service'));
     expect(find.byType(SnackBar), findsNothing);
@@ -536,7 +561,7 @@ void main() {
       'waiting', (tester) async {
     answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
 
     // What the endpoint actually sent the owner. The server turns it into a
     // wait, in its own words; the chip's job is to keep the number and explain
@@ -555,8 +580,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('62% · 2h8m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
     final tip = tooltipOf(tester);
+    expect(tip, contains('5-hour · 62% · resets in 2h8m'));
     expect(tip, contains('Last checked 3m ago'));
     expect(tip, contains('Rate limited by the usage service'));
     expect(tip, contains('Waiting 1m'));
@@ -585,7 +611,7 @@ void main() {
     final container = await containerFor();
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
 
     // A millisecond, because Riverpod's auto-dispose is scheduled rather than
     // immediate: without it the provider is still alive and the remount proves
@@ -605,11 +631,16 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('62% · 2h6m'),
+      find.text('62%'),
       findsOneWidget,
-      reason: 'the number it read five minutes ago, counted down honestly',
+      reason: 'the number it read five minutes ago',
     );
     final tip = tooltipOf(tester);
+    expect(
+      tip,
+      contains('5-hour · 62% · resets in 2h6m'),
+      reason: 'and its countdown, counted down honestly',
+    );
     expect(tip, contains('Last checked 5m ago'));
     expect(tip, contains('Refresh failed: Could not reach the usage service'));
     expect(find.byIcon(AppIcons.clockCounterClockwise), findsOneWidget);
@@ -633,7 +664,7 @@ void main() {
       await tester.pump();
     }
 
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
     expect(
       server.agentWork.refreshes,
       isEmpty,
@@ -649,7 +680,7 @@ void main() {
     answer = usageSnapshot();
     final container = await pumpChip(tester);
 
-    await tester.tap(find.byIcon(AppIcons.circleHalf));
+    await tester.tap(chipOf());
     await tester.pumpAndSettle();
     expect(find.byType(UsageChipPopover), findsOneWidget);
     expect(
@@ -668,7 +699,7 @@ void main() {
           'decides whether that costs a request',
     );
 
-    await tester.tap(find.text('Usage settings'));
+    await tester.tap(find.byTooltip('Usage settings'));
     await tester.pumpAndSettle();
     expect(find.byType(UsageChipPopover), findsNothing);
     // Settings is a workbench tab now, so the click asks for a **page**
@@ -695,9 +726,9 @@ void main() {
     final container = await pumpChip(tester);
 
     for (var i = 0; i < 5; i++) {
-      await tester.tap(find.byIcon(AppIcons.circleHalf));
+      await tester.tap(chipOf());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Usage settings'));
+      await tester.tap(find.byTooltip('Usage settings'));
       await tester.pumpAndSettle();
       // Nothing to dismiss between clicks: the tab is already open, and the
       // second ask focuses it rather than stacking a second copy.

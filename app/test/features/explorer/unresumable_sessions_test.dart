@@ -550,6 +550,5 @@ void main() {
       await expectLater(notifier.restart(id), throwsA(isA<StateError>()));
       expect(container.read(sessionsDataProvider).getById(id)!.paneId, isNull);
     });
-
   });
 }

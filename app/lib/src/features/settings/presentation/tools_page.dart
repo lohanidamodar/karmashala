@@ -45,58 +45,58 @@ class McpBridgeSection extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-          // A completed handshake, not the file's existence: on 2026-09-03
-          // WSL's interop handler went and a good file would not spawn.
-          _BridgeVerdict(check: bridge, report: report),
-          // An installed bridge says nothing about the server answering it: a
-          // hardening failure withholds its credential, silently.
-          if (tools?.level == HealthLevel.failed) ...[
-            const SizedBox(height: Insets.xs),
-            SettingsNotice(
-              tone: SettingsNoticeTone.danger,
-              message: tools!.summary,
-            ),
-          ],
-          const SizedBox(height: Insets.xs),
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.sm),
-            child: Text(
-              'The Karmashala server serves every agent tool; restarting the '
-              'server restarts them.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          // A skipped environment loses the two states only a hook reports,
-          // and a sweep that has not run yet is `unknown`, not clean (§19).
-          if (!hooks.swept) ...[
-            const SizedBox(height: Insets.sm),
-            const _HookNote.unknown(
-              'Status callbacks are not in place yet — that sweep runs just '
-              'after the window opens. A session started before it lands '
-              'reads the CLI\'s own files until it does, and starts reporting '
-              'as soon as it has.',
-            ),
-          ],
-          // Never observed, so it says so rather than guessing either way.
-          for (final entry in hooks.unknownByEnvironment.entries)
-            _HookNote.unknown(
-              'Status callbacks for '
-              '${ref.watch(environmentLabelForIdProvider(entry.key))} could '
-              'not be confirmed — ${entry.value}. Sessions there may or may '
-              'not report; the next launch checks again.',
-            ),
-          if (hooks.anySkipped) ...[
-            const SizedBox(height: Insets.sm),
-            for (final entry in hooks.skippedByEnvironment.entries)
-              _HookNote.skipped(
-                'No status callbacks from '
-                '${ref.watch(environmentLabelForIdProvider(entry.key))}'
-                ' — '
-                '${entry.value}. Sessions there fall back to reading '
-                'the CLI\'s files, which cannot tell you when an agent '
-                'is waiting for approval or has failed.',
-              ),
-          ],
+                // A completed handshake, not the file's existence: on 2026-09-03
+                // WSL's interop handler went and a good file would not spawn.
+                _BridgeVerdict(check: bridge, report: report),
+                // An installed bridge says nothing about the server answering it: a
+                // hardening failure withholds its credential, silently.
+                if (tools?.level == HealthLevel.failed) ...[
+                  const SizedBox(height: Insets.xs),
+                  SettingsNotice(
+                    tone: SettingsNoticeTone.danger,
+                    message: tools!.summary,
+                  ),
+                ],
+                const SizedBox(height: Insets.xs),
+                Padding(
+                  padding: const EdgeInsets.only(left: Insets.sm),
+                  child: Text(
+                    'The Karmashala server serves every agent tool; restarting the '
+                    'server restarts them.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                // A skipped environment loses the two states only a hook reports,
+                // and a sweep that has not run yet is `unknown`, not clean (§19).
+                if (!hooks.swept) ...[
+                  const SizedBox(height: Insets.sm),
+                  const _HookNote.unknown(
+                    'Status callbacks are not in place yet — that sweep runs just '
+                    'after the window opens. A session started before it lands '
+                    'reads the CLI\'s own files until it does, and starts reporting '
+                    'as soon as it has.',
+                  ),
+                ],
+                // Never observed, so it says so rather than guessing either way.
+                for (final entry in hooks.unknownByEnvironment.entries)
+                  _HookNote.unknown(
+                    'Status callbacks for '
+                    '${ref.watch(environmentLabelForIdProvider(entry.key))} could '
+                    'not be confirmed — ${entry.value}. Sessions there may or may '
+                    'not report; the next launch checks again.',
+                  ),
+                if (hooks.anySkipped) ...[
+                  const SizedBox(height: Insets.sm),
+                  for (final entry in hooks.skippedByEnvironment.entries)
+                    _HookNote.skipped(
+                      'No status callbacks from '
+                      '${ref.watch(environmentLabelForIdProvider(entry.key))}'
+                      ' — '
+                      '${entry.value}. Sessions there fall back to reading '
+                      'the CLI\'s files, which cannot tell you when an agent '
+                      'is waiting for approval or has failed.',
+                    ),
+                ],
               ],
             ),
           ),
@@ -236,71 +236,71 @@ class AgentSkillsSection extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-          if (!report.swept)
-            const _HookNote.unknown(
-              'Not written yet — that sweep runs just after the window opens.',
-            )
-          else ...[
-            for (final row in report.complete)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Insets.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      AppIcons.checkCircle,
-                      size: Chrome.icon,
-                      color: healthColor(context, HealthLevel.healthy),
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        '${row.installed} skills for '
-                        '${registry.displayNameFor(row.agentId)} in '
-                        '${ref.watch(environmentLabelForIdProvider(row.environmentId))}'
-                        '${row.root == null ? '' : ' — ${row.root}'}',
-                        style: theme.textTheme.bodySmall,
+                if (!report.swept)
+                  const _HookNote.unknown(
+                    'Not written yet — that sweep runs just after the window opens.',
+                  )
+                else ...[
+                  for (final row in report.complete)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: Insets.xs),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            AppIcons.checkCircle,
+                            size: Chrome.icon,
+                            color: healthColor(context, HealthLevel.healthy),
+                          ),
+                          const SizedBox(width: Insets.xs),
+                          Expanded(
+                            child: Text(
+                              '${row.installed} skills for '
+                              '${registry.displayNameFor(row.agentId)} in '
+                              '${ref.watch(environmentLabelForIdProvider(row.environmentId))}'
+                              '${row.root == null ? '' : ' — ${row.root}'}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  for (final entry in report.unknownByAgent.entries)
+                    _HookNote.unknown(
+                      'Whether ${registry.displayNameFor(entry.key)} has them could '
+                      'not be confirmed — ${entry.value}.',
+                    ),
+                  for (final entry in report.incompleteByAgent.entries)
+                    _HookNote.skipped(
+                      'No skills for ${registry.displayNameFor(entry.key)} — '
+                      '${entry.value}.',
+                    ),
+                  if (report.complete.isEmpty &&
+                      report.unknownByAgent.isEmpty &&
+                      report.incompleteByAgent.isEmpty)
+                    Text(
+                      'Nothing installed. No agent here has a place for skills.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  if (report.checkedAt case final at?)
+                    Text(
+                      'Read ${describeAge(ref.read(clockProvider).nowUtc().difference(at))}.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+                const SizedBox(height: Insets.xs),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => ref
+                        .read(agentSkillInstallationServiceProvider)
+                        .sweepRemoval(),
+                    icon: const Icon(AppIcons.trash, size: Chrome.icon),
+                    label: const Text('Remove them'),
+                  ),
                 ),
-              ),
-            for (final entry in report.unknownByAgent.entries)
-              _HookNote.unknown(
-                'Whether ${registry.displayNameFor(entry.key)} has them could '
-                'not be confirmed — ${entry.value}.',
-              ),
-            for (final entry in report.incompleteByAgent.entries)
-              _HookNote.skipped(
-                'No skills for ${registry.displayNameFor(entry.key)} — '
-                '${entry.value}.',
-              ),
-            if (report.complete.isEmpty &&
-                report.unknownByAgent.isEmpty &&
-                report.incompleteByAgent.isEmpty)
-              Text(
-                'Nothing installed. No agent here has a place for skills.',
-                style: theme.textTheme.bodySmall,
-              ),
-            if (report.checkedAt case final at?)
-              Text(
-                'Read ${describeAge(ref.read(clockProvider).nowUtc().difference(at))}.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-          ],
-          const SizedBox(height: Insets.xs),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => ref
-                  .read(agentSkillInstallationServiceProvider)
-                  .sweepRemoval(),
-              icon: const Icon(AppIcons.trash, size: Chrome.icon),
-              label: const Text('Remove them'),
-            ),
-          ),
               ],
             ),
           ),
@@ -309,4 +309,3 @@ class AgentSkillsSection extends ConsumerWidget {
     );
   }
 }
-

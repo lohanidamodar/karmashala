@@ -95,9 +95,7 @@ void main() {
   Future<
     ({ProviderContainer container, CountingMachine db, FakeDataServer server})
   >
-  pump(
-    WidgetTester tester,
-  ) async {
+  pump(WidgetTester tester) async {
     // Wide, because the test font is a square per glyph and the branch is
     // kept only beside a path that still fits.
     tester.view.physicalSize = const Size(700, 900);

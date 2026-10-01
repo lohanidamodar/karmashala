@@ -539,7 +539,8 @@ void main() {
       await tester.tap(
         find
             .byTooltip(
-              'Split — open a terminal, a session, Files or Devices beside',
+              'Split — open a terminal, a session, Files, a diff, Devices or '
+              'the browser beside',
             )
             .first,
       );

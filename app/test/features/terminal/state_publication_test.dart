@@ -153,18 +153,20 @@ void main() {
     expect(get$().activeTab!.id, third);
   });
 
-  test('detaching and reattaching republishes the detached list', () {
+  test('closing a tab republishes without it, and with no detached entry', () {
     final first = controller.openTab(TerminalProfile.powerShell);
-    controller.openTab(TerminalProfile.commandPrompt);
+    final second = controller.openTab(TerminalProfile.commandPrompt);
     final pane = onlyPaneOf(first);
     giveShellHistory(controller.instanceFor(pane)!);
+    final before = get$();
 
     controller.closeTab(first);
-    expect(get$().detached.single.paneId, pane);
 
-    controller.reattachSession(pane);
-    expect(get$().detached, isEmpty);
-    expect(controller.instanceFor(pane), isNotNull);
+    final after = get$();
+    expect(identical(after, before), isFalse, reason: 'a new state published');
+    expect(after.tabs.map((tab) => tab.id), [second]);
+    expect(after.detached, isEmpty);
+    expect(controller.instanceFor(pane), isNull);
   });
 
   test('a layout answers "contains" without rebuilding its pane list', () {

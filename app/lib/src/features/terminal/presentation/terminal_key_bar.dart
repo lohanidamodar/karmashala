@@ -212,6 +212,7 @@ class _BarKey extends StatelessWidget {
           label,
           style: theme.textTheme.labelLarge?.copyWith(
             fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
             color: on ? scheme.onPrimaryContainer : scheme.onSurface,
           ),
         ),

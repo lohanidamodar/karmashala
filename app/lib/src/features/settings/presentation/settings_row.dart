@@ -50,9 +50,7 @@ class SettingsRuled extends StatelessWidget {
           child: Padding(
             padding:
                 padding ??
-                const EdgeInsets.symmetric(
-                  vertical: SettingsLayout.rowPadding,
-                ),
+                const EdgeInsets.symmetric(vertical: SettingsLayout.rowPadding),
             child: child,
           ),
         ),

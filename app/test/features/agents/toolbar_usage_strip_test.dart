@@ -99,7 +99,7 @@ void main() {
     expect(chips, findsNWidgets(4), reason: 'Claude is one account');
     final firstKey = '${tester.widget<InkWell>(chips.first).key}';
     expect(firstKey, contains('codex'), reason: 'at 90%, it is nearest');
-    expect(find.text('90% · 2h11m'), findsOneWidget);
+    expect(find.text('90%'), findsOneWidget);
 
     // Each chip wears its agent's mark, as its adapter names it.
     Finder asset(String name) => find.byWidgetPredicate(
@@ -130,7 +130,7 @@ void main() {
     tester,
   ) async {
     final container = await accounts(tester, 1000);
-    await tester.tap(find.text('30% · 2h11m'));
+    await tester.tap(find.text('30%'));
     await tester.pumpAndSettle();
     final card = tester.widget<UsageChipPopover>(find.byType(UsageChipPopover));
     expect(card.environmentIds, unorderedEquals(['windows', 'wsl']));
@@ -150,7 +150,7 @@ void main() {
         kind: UsageFailureKind.unusable,
       ),
     );
-    await tester.tap(find.text('30% · 2h11m'));
+    await tester.tap(find.text('30%'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Refresh'));

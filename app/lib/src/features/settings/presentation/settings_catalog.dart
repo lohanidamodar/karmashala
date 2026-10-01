@@ -730,6 +730,18 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['note', 'idea', 'save for later'],
   ),
   SettingsEntry(
+    'Send notifications',
+    anchor: SettingsAnchor.notifications,
+    description: 'Tell me when an agent needs me or finishes.',
+    keywords: ['alerts', 'toast', 'desktop', 'phone', 'background'],
+  ),
+  SettingsEntry(
+    'Version and build',
+    anchor: SettingsAnchor.about,
+    description: 'The build line every log starts with, to paste into a bug.',
+    keywords: ['version', 'build', 'licences', 'licenses', 'source'],
+  ),
+  SettingsEntry(
     'Theme',
     anchor: SettingsAnchor.themeText,
     description: 'Follow the system, or stay light or dark.',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/shell_menus.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
@@ -147,9 +148,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // The reported bug, stated as a finder: the route covered the window, so
-    // the one row carrying File, Workspace and View went with it.
+    // the title bar carrying the menu went with it.
     expect(find.byType(SettingsScreen), findsOneWidget);
-    expect(find.byType(MenuBar), findsOneWidget);
+    expect(find.byType(ShellMenuButton), findsOneWidget);
   });
 
   testWidgets('a deep link opens the tab on the page it names', (tester) async {

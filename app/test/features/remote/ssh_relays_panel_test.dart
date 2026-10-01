@@ -161,7 +161,7 @@ void main() {
     await pump(tester);
 
     expect(tester.widget<OutlinedButton>(useButton()).onPressed, isNull);
-    expect(find.textContaining('Settings → Environments'), findsOneWidget);
+    expect(find.textContaining('Settings → Machines'), findsOneWidget);
   });
 
   testWidgets('setting one up: pick, port, prove — and the row appears', (

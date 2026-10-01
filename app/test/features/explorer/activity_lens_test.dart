@@ -21,6 +21,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
+import '../terminal/fake_instance.dart';
 import 'explorer_default_view_test.dart' show explorerSemanticsDump;
 
 /// **The by-day lens is a separate view.** It swaps the Explorer's body and
@@ -86,7 +87,9 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        await server.override(),
+        // The rows ask which session a pane holds, which builds the terminal
+        // controller: its fakes, and no real autosave timer.
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(now)),
         commandRunnerFactoryProvider.overrideWithValue(

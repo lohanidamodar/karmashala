@@ -1,4 +1,5 @@
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala/src/app/shell/session_more_button.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -16,6 +17,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
+import '../../support/tool_runs.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -66,9 +69,10 @@ void main() {
     // Message bodies render as (selectable) Markdown, CLI-style.
     expect(find.byType(MarkdownMessage), findsNWidgets(2));
     expect(find.textContaining('Echo: hello'), findsOneWidget);
-    // Role eyebrows are uppercased.
-    expect(find.text('YOU'), findsOneWidget);
-    expect(find.text('AGENT'), findsOneWidget);
+    // No name row over either (board N2): the user's turn is a tinted bubble
+    // and the agent's plain text, and that is what tells them apart.
+    expect(find.text('YOU'), findsNothing);
+    expect(find.text('AGENT'), findsNothing);
     // The input is always usable; when idle it invites continuing the session.
     expect(find.text('Type to continue this session…'), findsOneWidget);
   });
@@ -105,8 +109,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // The finished turn's call is folded under one line, which names it.
+    expect(find.text('Ran 1 command'), findsOneWidget);
+    await openToolRuns(tester);
+    await tester.pumpAndSettle();
     expect(find.text('BASH'), findsOneWidget);
-    expect(find.text('git status --short'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ToolActivityBody),
+        matching: find.text('git status --short'),
+      ),
+      findsOneWidget,
+    );
   });
 
   /// A session run by an agent whose conversation we cannot read (Antigravity
@@ -119,6 +133,7 @@ void main() {
     WidgetTester tester, {
     required bool inAPane,
     List<SystemTerminal> terminals = const [],
+    Widget body = const SessionTranscriptView(sessionId: 's1'),
   }) async {
     final db = TestMachine();
     final server = FakeDataServer()..runsOn(db);
@@ -184,9 +199,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
-        ),
+        child: MaterialApp(home: Scaffold(body: body)),
       ),
     );
     await tester.pumpAndSettle();
@@ -215,6 +228,9 @@ void main() {
           executable: 'wt.exe',
         ),
       ],
+      // The chat view's header is gone (board N2); the button is in the
+      // status line's ⋯ card, which this is the body of.
+      body: const SessionMoreBody(sessionId: 's1'),
     );
 
     await tester.tap(find.byIcon(AppIcons.arrowSquareOut));

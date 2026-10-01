@@ -220,7 +220,7 @@ class SettingsNavGroupHeader extends StatelessWidget {
           style: theme.textTheme.labelSmall
               ?.merge(Chrome.groupLabel)
               .copyWith(
-                fontSize: 10.5,
+                fontSize: TypeSizes.micro,
                 letterSpacing: 0.5,
                 color: theme.colorScheme.outline,
               ),
@@ -332,7 +332,7 @@ class _NavRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 12.5,
+                    fontSize: TypeSizes.field,
                     color: selected
                         ? scheme.onSurface
                         : scheme.onSurfaceVariant,

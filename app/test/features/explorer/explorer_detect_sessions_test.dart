@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter/material.dart';
@@ -60,7 +62,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Detect CLI sessions'));
+    // The Explorer header no longer carries it (46185a97c): the Workspace menu,
+    // the native menu and the quick panel all open it through this one call.
+    unawaited(
+      DetectedProjectsView.show(tester.element(find.byType(ExplorerPanel))),
+    );
     await tester.pumpAndSettle();
 
     // One size for every way in, so the Explorer and the app menu agree.

@@ -16,8 +16,8 @@ import 'scale_harness.dart';
 /// clock except a 20 s autosave tick, which
 /// `quiet_soak_cost_test.dart` already fires 180 times for nothing. It is
 /// **churn**: sessions appearing, printing, being split, being closed while
-/// still running, being reopened from the background list, and finally being
-/// ended. So that is what this compresses — the same cycle, N times, asserting
+/// still running (a disconnect: the server keeps the terminal), and others
+/// being ended for good. So that is what this compresses — the same cycle, N times, asserting
 /// that nothing retained grows with N.
 ///
 /// That is a leak gate, honestly named. It cannot see fragmentation, native
@@ -46,35 +46,38 @@ void main() {
   const scale = [1, 10, 40];
 
   /// Everything a session does over its life, in one turn: it appears, prints,
-  /// gets a split beside it that is then closed, has its own tab closed while
-  /// it is still running (so it detaches rather than dying), is reopened from
-  /// the background list, and is finally ended for good.
+  /// gets a split beside it that is then closed, and has its own tab closed
+  /// while it is still running — which drops the pane, the server keeping the
+  /// terminal. A second session then appears, prints, and is ended for good.
+  /// (Until 2026-09-30 the closed one was kept with no tab and reopened from a
+  /// background list; that list is gone.)
   void cycle(ScaleLayout layout) {
     final controller = layout.controller;
     final pane = layout.openPane();
     layout.fill(pane, lines: 60);
 
-    // A split beside it, used and then closed — the pane lifetime that never
-    // touches the detached list.
+    // A split beside it, used and then closed.
     final slot = controller.splitPane(SplitAxis.horizontal)!;
     final beside = controller.openInSlot(slot, TerminalProfile.commandPrompt)!;
     layout.fill(beside, lines: 20);
     controller.closePane(beside, detach: false);
 
-    // Closed with output on screen, so the detach policy keeps it: this is the
-    // session that survives its tab.
+    // Closed with output on screen and still running: the view goes, and
+    // this window keeps nothing of it.
     final tab = layout.state.tabs
         .firstWhere((tab) => tab.layout.panes.contains(pane))
         .id;
     controller.closeTab(tab, detach: true);
     expect(
-      layout.state.detached.map((session) => session.paneId),
-      contains(pane),
-      reason: 'a busy shell must detach, or this cycle is testing nothing',
+      controller.instanceFor(pane),
+      isNull,
+      reason: 'a closed tab drops its pane, or this cycle is testing nothing',
     );
 
-    controller.reattachSession(pane);
-    controller.endSession(pane);
+    // And one ended outright, the other way a session leaves.
+    final ended = layout.openPane();
+    layout.fill(ended, lines: 60);
+    controller.endSession(ended);
   }
 
   /// Everything this gate watches, in one reading.
@@ -115,8 +118,8 @@ void main() {
 
         expect(
           layout.instancesByPane,
-          hasLength(cycles * 2),
-          reason: 'two panes per cycle were built, or the cycle changed',
+          hasLength(cycles * 3),
+          reason: 'three panes per cycle were built, or the cycle changed',
         );
         expect(
           reading['undisposedPanes'],

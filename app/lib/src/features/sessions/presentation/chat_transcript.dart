@@ -183,13 +183,44 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    FocusManager.instance.addListener(_revealFocused);
   }
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_revealFocused);
     _scroll.dispose();
     _tappedTurn.dispose();
     super.dispose();
+  }
+
+  /// Shows the whole of a row the keyboard focused. Traversal only keeps the
+  /// edge it moves towards in view, so Tab into a list pinned to its newest
+  /// message landed on the topmost row — scrolled out above, and left there,
+  /// focused and unseen.
+  void _revealFocused() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (!mounted || context == null || !_scroll.hasClients) return;
+    if (FocusManager.instance.highlightMode !=
+        FocusHighlightMode.traditional) {
+      return;
+    }
+    if (context.findAncestorStateOfType<_ChatTranscriptViewState>() != this) {
+      return;
+    }
+    if (context.findRenderObject()?.attached != true) return;
+    // The far edge first, then the near one: a row taller than the view
+    // shows its start.
+    for (final policy in const [
+      ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    ]) {
+      Scrollable.ensureVisible(context, alignmentPolicy: policy);
+    }
+    // A reveal a few pixels short of the end still leaves it: the slack
+    // [_onScroll] allows a reader would have the row pinned straight back out.
+    final pos = _scroll.position;
+    _stickToBottom = pos.pixels >= pos.maxScrollExtent;
   }
 
   void _onScroll() {
@@ -229,8 +260,13 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   bool _onMetrics(ScrollMetricsNotification notification) {
     if (notification.depth != 0 || !_stickToBottom) return false;
     final pos = _scroll.hasClients ? _scroll.position : null;
-    // Never under a finger or a fling: the reader is leaving the bottom.
-    if (pos == null || pos.userScrollDirection != ScrollDirection.idle) {
+    // Never under a finger or a fling, nor while any scroll is moving — a
+    // selection dragged past the top edge scrolls the list a step at a time,
+    // and each step built rows that re-measured the end: the reader is
+    // leaving the bottom.
+    if (pos == null ||
+        pos.userScrollDirection != ScrollDirection.idle ||
+        pos.isScrollingNotifier.value) {
       return false;
     }
     if (pos.pixels < pos.maxScrollExtent) _jumpToBottom();

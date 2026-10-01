@@ -254,7 +254,6 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
         // Excluded from semantics: the label below already carries it.
         child: Tooltip(
           message: '$name\n${view.tooltip}',
-          waitDuration: const Duration(milliseconds: 400),
           excludeFromSemantics: true,
           child: Semantics(
             button: true,

@@ -252,8 +252,8 @@ void main() {
         final container = await pump(tester, db);
 
         // The four seeded sections are all there, folded shut.
-        expect(find.text('Pinned'), findsOneWidget);
-        expect(find.text('Ended in failure'), findsOneWidget);
+        expect(find.text('PINNED'), findsOneWidget);
+        expect(find.text('ENDED IN FAILURE'), findsOneWidget);
         db.reset();
 
         // ignore: avoid_print
@@ -292,7 +292,7 @@ void main() {
       final container = await pump(tester, db);
       db.reset();
 
-      await tester.tap(find.text('Ended in failure'));
+      await tester.tap(find.text('ENDED IN FAILURE'));
       await tester.pumpAndSettle();
 
       return (
@@ -440,9 +440,9 @@ void main() {
         off[count] = result.sweeps;
         // Every seeded section is there, folded shut and saying nothing about
         // what it holds — the shape this feature shipped in.
-        expect(find.text('Pinned'), findsOneWidget);
-        expect(find.text('Checks failing'), findsOneWidget);
-        expect(find.text('Ended in failure'), findsOneWidget);
+        expect(find.text('PINNED'), findsOneWidget);
+        expect(find.text('CHECKS FAILING'), findsOneWidget);
+        expect(find.text('ENDED IN FAILURE'), findsOneWidget);
       });
 
       testWidgets('over $count sessions, filter on', (tester) async {
@@ -452,10 +452,10 @@ void main() {
         // A third of the workspace failed, so exactly one seeded section has
         // anything in it — and the filter really did take the other three off
         // the sidebar rather than merely being switched on.
-        expect(find.text('Ended in failure'), findsOneWidget);
-        expect(find.text('Checks failing'), findsNothing);
-        expect(find.text('Awaiting input'), findsNothing);
-        expect(find.text('Pinned'), findsNothing);
+        expect(find.text('ENDED IN FAILURE'), findsOneWidget);
+        expect(find.text('CHECKS FAILING'), findsNothing);
+        expect(find.text('AWAITING INPUT'), findsNothing);
+        expect(find.text('PINNED'), findsNothing);
         expect(
           result.cards,
           0,

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/panes.dart';
@@ -7,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import '../../sessions/presentation/transcript_image_preview.dart';
+import '../application/session_media_providers.dart' show SessionMediaFetch;
 import 'package:agent_cli/read.dart' show SessionMediaItem, SessionMediaOrigin;
 
 /// How tall a thumbnail draws in the panel. Not the transcript's 220: in a
@@ -32,7 +31,7 @@ class SessionMediaList extends StatelessWidget {
   final String? Function(String path)? resolveHostPath;
 
   /// Brings an item from a server elsewhere; null when this disk has it.
-  final Future<File> Function(SessionMediaItem item)? fetch;
+  final SessionMediaFetch? fetch;
 
   /// The instant ages are measured against. Injected so tests are deterministic.
   final DateTime? now;
@@ -74,7 +73,7 @@ class SessionMediaTile extends StatelessWidget {
 
   final SessionMediaItem item;
   final String? Function(String path)? resolveHostPath;
-  final Future<File> Function(SessionMediaItem item)? fetch;
+  final SessionMediaFetch? fetch;
   final DateTime? now;
 
   @override

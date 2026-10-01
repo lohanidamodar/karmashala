@@ -19,6 +19,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_environments/ssh.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 
@@ -319,11 +320,22 @@ void main() {
     );
   });
 
-  testWidgets('with project details off there is no branch to draw, and no '
-      'file is read for one', (tester) async {
+  testWidgets('with project details off the one line still names its branch, '
+      'from the same reading, and no git runs for it', (tester) async {
     await pump(tester, details: false);
 
-    expect(find.widgetWithText(ProjectCard, 'app'), findsOneWidget);
-    expect(reads(), isEmpty);
+    // With details off a project is the sidebar's one line (board A2):
+    // folder, name, branch and sessions — so its branch is read as a card's
+    // is, once per row, from `HEAD`.
+    expect(find.byType(ProjectCard), findsNothing);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ProjectLine, 'app'),
+        matching: find.text('main'),
+      ),
+      findsOneWidget,
+    );
+    expect(headReads('/w/app'), ['/w/app']);
+    expect(gitRan(), isEmpty, reason: 'git was asked for a branch');
   });
 }

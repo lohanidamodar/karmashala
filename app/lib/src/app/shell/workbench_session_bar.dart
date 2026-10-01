@@ -12,6 +12,10 @@ const double _sessionBarNarrowWidth = 560;
 /// Below this the facts line scrolls rather than being squeezed illegible.
 const double _sessionFactsScrollWidth = 240;
 
+/// What the status line keeps for its facts — about the stage's one word —
+/// before the controls beside them give way.
+const double _sessionStatusFactsFloor = 96;
+
 /// The most a model name may take before it ends.
 const double _sessionModelLabelWidth = 72;
 
@@ -264,41 +268,66 @@ class _SessionStatusLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final toggle = this.toggle;
-    return Row(
-      children: [
-        // One line, whatever the branch is called: the facts slide under the
-        // controls rather than wrapping the bar to a second row. The resume
-        // chip rides with them: it is nothing, and no width, until armed.
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                DeliveryStateLine(sessionId: sessionId),
-                ScheduledResumeChip(sessionId: sessionId),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        children: [
+          // One line, whatever the branch is called: the facts slide under the
+          // controls rather than wrapping the bar to a second row. The resume
+          // chip rides with them: it is nothing, and no width, until armed.
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  DeliveryStateLine(sessionId: sessionId),
+                  ScheduledResumeChip(sessionId: sessionId),
+                ],
+              ),
             ),
           ),
-        ),
-        SessionStatsButton(sessionId: sessionId),
-        const SizedBox(width: Insets.sm),
-        PermissionModeChip(sessionId: sessionId),
-        const SizedBox(width: Insets.xs),
-        OperatorChip(sessionId: sessionId),
-        const SizedBox(width: Insets.xs),
-        SessionModelChip(
-          sessionId: sessionId,
-          maxLabelWidth: _sessionModelLabelWidth,
-        ),
-        const SizedBox(width: Insets.sm),
-        DeliveryStrip(
-          sessionId: sessionId,
-          hostedOnTerminal: true,
-          folded: true,
-        ),
-        SessionMoreButton(sessionId: sessionId),
-        if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
-      ],
+          // The controls at their own width while it fits beside the facts'
+          // floor; past it they scroll rather than overflow, as the narrow
+          // row's do — anchored at the end, so the next step, Ship ▾ and the
+          // view toggle stay in view and the chips before them slide under.
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(
+                0,
+                constraints.maxWidth - _sessionStatusFactsFloor,
+              ),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                children: [
+                  SessionStatsButton(sessionId: sessionId),
+                  const SizedBox(width: Insets.sm),
+                  PermissionModeChip(sessionId: sessionId),
+                  const SizedBox(width: Insets.xs),
+                  OperatorChip(sessionId: sessionId),
+                  const SizedBox(width: Insets.xs),
+                  SessionModelChip(
+                    sessionId: sessionId,
+                    maxLabelWidth: _sessionModelLabelWidth,
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  DeliveryStrip(
+                    sessionId: sessionId,
+                    hostedOnTerminal: true,
+                    folded: true,
+                  ),
+                  SessionMoreButton(sessionId: sessionId),
+                  if (toggle != null) ...[
+                    const SizedBox(width: Insets.sm),
+                    toggle,
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -392,10 +421,10 @@ class _SessionActionRow extends StatelessWidget {
         else ...[
           PermissionModeChip(sessionId: sessionId),
           const SizedBox(width: Insets.xs),
-          OperatorChip(sessionId: sessionId),
+          // Its qualifier gives way before the row overflows.
+          Flexible(child: OperatorChip(sessionId: sessionId)),
           const SizedBox(width: Insets.xs),
-          // Flexible, and the only control that is: a model name is the one
-          // label whose width is unpredictable.
+          // A model name is the label whose width is least predictable.
           Flexible(
             child: SessionModelChip(
               sessionId: sessionId,

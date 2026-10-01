@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -25,6 +27,7 @@ import '../../features/file_explorer/explorer_fixture.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/desktop_client.dart';
 import '../../support/window_matrix.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -192,11 +195,19 @@ void main() {
       expect(find.text('NOTES'), findsOneWidget);
     });
 
-    testWidgets('Inbox', (tester) async {
+    testWidgets('Inbox wears the header every sidebar area has, not a pane '
+        'header', (tester) async {
+      // The inbox is a sidebar area now (830e4ad1a): its name, then its verbs.
       await tester.pumpWidget(scoped(const AttentionInboxView()));
       await tester.pumpAndSettle();
-      expectHouseHeader(tester, 'Inbox');
-      expect(find.text('INBOX'), findsOneWidget);
+      expect(find.byType(PaneHeader), findsNothing);
+      final header = find.byType(SidebarAreaHeader);
+      expect(header, findsOneWidget);
+      expect(tester.getSize(header).height, Sidebar.headerHeight);
+      expect(
+        find.descendant(of: header, matching: find.text('Inbox')),
+        findsOneWidget,
+      );
     });
   });
 
@@ -207,9 +218,13 @@ void main() {
       ..environmentRows.upsert(
         localHostEnvironment(FixedClock(testTime).nowUtc()),
       );
-    final container = fakeTerminalContainer(
-      machine: db,
-      data: await server.override(),
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
+        // The desktop's header: flutter_test's Android would read touch, and a
+        // touch header is as tall as its close button's 48dp target.
+        clientCapabilitiesProvider.overrideWithValue(desktopClient()),
+      ],
     );
     addTearDown(container.dispose);
     tester.view.physicalSize = const Size(1440, 900);

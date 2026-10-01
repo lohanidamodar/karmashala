@@ -13,6 +13,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/test_machine.dart';
 
@@ -75,13 +76,10 @@ void main() {
     matching: find.bySemanticsLabel(label),
   );
 
+  // By what it says to a reader: where the labels do not fit (the test font
+  // is twice the shipped one's width) every tab is its glyph alone.
   Future<void> openMore(WidgetTester tester) async {
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ContextTabs),
-        matching: find.textContaining('▾'),
-      ),
-    );
+    await tester.tap(tab('More ▾'));
     await tester.pumpAndSettle();
   }
 
@@ -179,9 +177,7 @@ void main() {
     );
   });
 
-  testWidgets('More lists the rest, and keeps its own name', (
-    tester,
-  ) async {
+  testWidgets('More lists the rest, and keeps its own name', (tester) async {
     final container = await pumpApp(tester);
     container.read(sidePanelProvider.notifier).expand();
     await tester.pumpAndSettle();
@@ -226,8 +222,8 @@ void main() {
     testWidgets('still opens from the View menu', (tester) async {
       final container = await pumpApp(tester, hidden: ['media']);
 
-      await tester.tap(find.text('View'));
-      await tester.pumpAndSettle();
+      // The menus are behind the title bar's one glyph (5c1fe3f58).
+      await openShellMenu(tester, 'View');
       await tester.tap(find.text('More'));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -240,7 +236,8 @@ void main() {
 
       expect(container.read(visibleSidePanelProvider), SidePanelSurface.media);
       expect(stored(), ['media'], reason: 'opening it does not unhide it');
-      expect(tab('Media ▾'), findsOneWidget);
+      // More says what it is, never the open panel's name (8e59e76f6).
+      expect(tab('More ▾'), findsOneWidget);
     });
 
     testWidgets('still opens from quick open', (tester) async {

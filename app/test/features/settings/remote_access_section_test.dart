@@ -220,19 +220,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PairingDialog), findsOneWidget);
-    // Every capability this build knows is offered — which is why the count
-    // is pinned to the enum rather than to a number — a phone's granted by
-    // default, the desktop grants (slice 5e) only when ticked.
-    expect(find.byType(FilterChip), findsNWidgets(Capability.values.length));
-    final chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    // It starts from the Phone preset (99b2b0598): every capability a phone
+    // may hold is offered and granted — pinned to the enum rather than to a
+    // number — and the desktop grants (slice 5e) are not offered at all.
+    expect(
+      find.byType(FilterChip),
+      findsNWidgets(Capability.values.where((c) => !c.privileged).length),
+    );
+    var chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
     expect(
       chips.where((chip) => chip.selected),
       hasLength(CapabilitySet.all.granted.length),
     );
+    expect(chips.where((chip) => !chip.selected), isEmpty);
+
+    // The Desktop preset offers the privileged chips, and ticks only the
+    // desktop client among them: admin and SSH prompts are granted on purpose.
+    await tester.tap(find.text('Desktop'));
+    await tester.pumpAndSettle();
+    chips = tester.widgetList<FilterChip>(find.byType(FilterChip));
+    expect(chips, hasLength(Capability.values.length - 1));
     expect(
       chips.where((chip) => !chip.selected),
-      hasLength(Capability.values.where((c) => c.privileged).length),
+      hasLength(
+        Capability.values
+            .where((c) => c.privileged && c != Capability.desktopClient)
+            .length,
+      ),
     );
+    await tester.tap(find.text('Phone'));
+    await tester.pumpAndSettle();
     expect(
       find.byWidgetPredicate(
         (widget) => widget is CustomPaint && widget.painter is QrPainter,

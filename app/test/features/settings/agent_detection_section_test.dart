@@ -86,7 +86,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('Detect agents'), findsOneWidget);
+    expect(find.text('Rescan'), findsOneWidget);
     expect(find.textContaining('Not scanned yet'), findsOneWidget);
   });
 
@@ -118,7 +118,7 @@ void main() {
     db.server.agentWork.onRepair = (_) =>
         AgentPathRepairReport(checkedAt: testTime, scan: report(found: 1));
     await pump(tester);
-    await tester.tap(find.text('Detect agents'));
+    await tester.tap(find.text('Rescan'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('1 agent'), findsOneWidget);
@@ -131,7 +131,7 @@ void main() {
     db.server.agentWork.onRepair = (_) =>
         AgentPathRepairReport(checkedAt: testTime, scan: report(found: 0));
     await pump(tester);
-    await tester.tap(find.text('Detect agents'));
+    await tester.tap(find.text('Rescan'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('No agents'), findsOneWidget);
@@ -141,14 +141,14 @@ void main() {
     db.server.agentWork.onRepair = (_) =>
         AgentPathRepairReport(checkedAt: testTime, scan: report(found: 1));
     await pump(tester);
-    await tester.tap(find.text('Detect agents'));
+    await tester.tap(find.text('Rescan'));
     await tester.pumpAndSettle();
 
     db.server.agentWork.onRepair = (_) => AgentPathRepairReport(
       checkedAt: testTime,
       scan: report(found: 2, added: 1),
     );
-    await tester.tap(find.text('Detect agents'));
+    await tester.tap(find.text('Rescan'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('2 agents'), findsOneWidget);

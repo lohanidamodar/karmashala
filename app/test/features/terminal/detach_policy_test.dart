@@ -14,6 +14,10 @@ import 'fake_instance.dart';
 /// a PowerShell running with no tab, a row in the layout and (since the
 /// tiering work) a spool. Multiplied by a working day, that is a background
 /// session list nobody asked for and a slower restore every morning.
+///
+/// The background list itself is gone (2026-09-30): the server runs every
+/// terminal whether a pane shows it or not, so the controller drops the pane
+/// on close. The rule stays a pure function; the controller cases pin the drop.
 void main() {
   group('the rule', () {
     test('a dead pane is released — there is nothing to keep', () {
@@ -186,28 +190,26 @@ void main() {
       expect(tabId, isNull);
     });
 
-    test('closing a used shell parks it, as it always did', () {
+    // Since 2026-09-30 the rule above no longer decides a close: the server
+    // keeps every terminal whether a pane shows it or not, so closing a tab
+    // drops the pane — a disconnect — and parks nothing in this window. What
+    // a used shell or an agent is owed (not being killed) is the server's
+    // (`end_hosted_session_test.dart`).
+    test('closing a used shell drops its pane and parks nothing', () {
       final pane = openPane();
-      giveShellHistory(controller.instanceFor(pane)!);
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
+      giveShellHistory(instance);
 
       controller.closeTab(
         container.read(terminalSessionsControllerProvider).activeTabId!,
       );
 
-      expect(
-        container
-            .read(terminalSessionsControllerProvider)
-            .detached
-            .single
-            .paneId,
-        pane,
-      );
-      expect(controller.instanceFor(pane), isNotNull);
+      expect(container.read(terminalSessionsControllerProvider).detached, []);
+      expect(controller.instanceFor(pane), isNull);
+      expect(instance.disposed, isTrue);
     });
 
-    test('closing an agent pane parks it even with an empty buffer', () {
-      // An agent that has printed nothing yet is an agent that has just been
-      // started, which is the worst possible moment to kill it.
+    test('closing an agent pane drops it too, whatever it printed', () {
       final opened = controller.openAgentTab(
         const AgentPaneLaunch(
           agentId: 'claude',
@@ -218,14 +220,8 @@ void main() {
 
       controller.closeTab(opened.tabId);
 
-      expect(
-        container
-            .read(terminalSessionsControllerProvider)
-            .detached
-            .single
-            .paneId,
-        opened.paneId,
-      );
+      expect(container.read(terminalSessionsControllerProvider).detached, []);
+      expect(controller.instanceFor(opened.paneId), isNull);
     });
 
     test('a shell with a multi-line prompt is not parked by its redraws', () {
@@ -249,7 +245,7 @@ void main() {
       expect(controller.instanceFor(pane), isNull);
     });
 
-    test('and is still parked once it has printed something', () {
+    test('and is dropped the same once it has printed something', () {
       final pane = openPane();
       final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
       instance.greetingLines = 2;
@@ -260,14 +256,8 @@ void main() {
         container.read(terminalSessionsControllerProvider).activeTabId!,
       );
 
-      expect(
-        container
-            .read(terminalSessionsControllerProvider)
-            .detached
-            .single
-            .paneId,
-        pane,
-      );
+      expect(container.read(terminalSessionsControllerProvider).detached, []);
+      expect(controller.instanceFor(pane), isNull);
     });
 
     test('a released pane leaves no layout row behind', () {

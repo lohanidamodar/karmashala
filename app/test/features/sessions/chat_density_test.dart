@@ -179,8 +179,8 @@ void main() {
       'first answer',
       'second question',
       'second answer',
-      'git status',
-      'git log -1',
+      // The two calls are one settled run: board N2 folds it to one line.
+      'Ran 2 commands',
     ];
 
     for (final size in sizes) {
@@ -261,7 +261,8 @@ void main() {
             .length;
         expect(
           tiles,
-          conversation.length,
+          // The run of two calls is one row, its fold line, on the same margin.
+          conversation.length - 1,
           reason:
               'every message tile carries the one shared margin; a role that '
               'invents its own is how the rhythm came apart',
@@ -298,4 +299,4 @@ void main() {
 /// The one margin every message tile is expected to carry, spelled out here
 /// rather than imported: `_ChatMessageTile._tileMargin` is private, and a test
 /// that read it through some accessor could not notice it changing.
-const _expectedTileMargin = EdgeInsets.symmetric(vertical: Insets.xs);
+const _expectedTileMargin = EdgeInsets.symmetric(vertical: Insets.sm);

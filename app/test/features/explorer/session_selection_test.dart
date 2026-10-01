@@ -123,7 +123,7 @@ void main() {
   }
 
   Future<void> enterSelection(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Select'));
+    await tester.tap(find.byTooltip('Select several'));
     await tester.pumpAndSettle();
   }
 
@@ -232,7 +232,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(sessionSelectionProvider).ids, {'n0'});
 
-      await tester.tap(find.byTooltip('Leave selection'));
+      await tester.tap(find.byTooltip('Done selecting'));
       await tester.pumpAndSettle();
 
       final selection = container.read(sessionSelectionProvider);
@@ -534,7 +534,7 @@ void main() {
         warmUp: (tester) async {
           await tester.tap(find.text('Hub'));
           await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Select'));
+          await tester.tap(find.byTooltip('Select several'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('One'));
           await tester.pumpAndSettle();
@@ -547,24 +547,24 @@ void main() {
   });
 }
 
-ProviderContainer _container(
-  TestMachine db,
-  DataClient data,
-) => ProviderContainer(
-  overrides: [
-    ...fakeTerminalOverrides(machine: db),
-    dataClientProvider.overrideWithValue(data),
-    clockProvider.overrideWithValue(FixedClock(testTime)),
-    idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
-    commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
-    availableSystemTerminalsProvider.overrideWith(
-      (ref) async => const <SystemTerminal>[],
-    ),
-    autoImportRunnerProvider.overrideWithValue(
-      (_) async => const ImportSummary(),
-    ),
-    agentSessionStatusProvider.overrideWith(
-      (ref, id) => const Stream<AgentStatusReport>.empty(),
-    ),
-  ],
-);
+ProviderContainer _container(TestMachine db, DataClient data) =>
+    ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(machine: db),
+        dataClientProvider.overrideWithValue(data),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(),
+        ),
+        availableSystemTerminalsProvider.overrideWith(
+          (ref) async => const <SystemTerminal>[],
+        ),
+        autoImportRunnerProvider.overrideWithValue(
+          (_) async => const ImportSummary(),
+        ),
+        agentSessionStatusProvider.overrideWith(
+          (ref, id) => const Stream<AgentStatusReport>.empty(),
+        ),
+      ],
+    );

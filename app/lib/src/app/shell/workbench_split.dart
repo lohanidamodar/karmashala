@@ -10,7 +10,6 @@ import '../../core/capabilities/capabilities.dart';
 import '../../features/files/application/files_tab_actions.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/git/application/diff_tab_actions.dart';
-import '../../features/git/data/git_data.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/browser_document_pane.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
@@ -111,7 +110,7 @@ Future<DiffTarget?> _pickChangedFile(
   }
   final List<FileChange> changes;
   try {
-    changes = await ref.read(gitDataProvider).changes(checkout);
+    changes = await ref.read(checkoutChangesReaderProvider)(checkout);
   } on Object {
     say('Could not read the changes in ${checkout.path}.');
     return null;

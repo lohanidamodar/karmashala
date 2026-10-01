@@ -246,7 +246,7 @@ class QuickOpenSearchField extends StatelessWidget {
       child: TextField(
         controller: controller,
         autofocus: true,
-        style: theme.textTheme.bodyLarge?.copyWith(fontSize: 14),
+        style: theme.textTheme.bodyLarge?.copyWith(fontSize: TypeSizes.input),
         decoration: InputDecoration(
           filled: false,
           prefixIcon: Icon(

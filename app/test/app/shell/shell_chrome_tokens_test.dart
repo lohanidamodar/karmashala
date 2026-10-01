@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/shell_menus.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
@@ -50,7 +52,8 @@ void main() {
 
     expect(tester.getSize(find.byType(QuickOpenButton)).height, Chrome.control);
     // Settings moved to the foot of the activity strip (UI overhaul §4).
-    expect(tester.getSize(find.text('Workspace')).height, lessThan(30));
+    // The board's one menu glyph took the menu titles' place.
+    expect(tester.getSize(find.byType(ShellMenuButton)).height, Chrome.control);
   });
 
   testWidgets('clearing and re-importing confirms with a destructive button', (
@@ -58,8 +61,7 @@ void main() {
   ) async {
     await pumpApp(tester);
 
-    await tester.tap(find.text('Workspace'));
-    await tester.pumpAndSettle();
+    await openShellMenu(tester, 'Workspace');
     await tester.tap(find.text('Clear projects and re-import'));
     await tester.pumpAndSettle();
 

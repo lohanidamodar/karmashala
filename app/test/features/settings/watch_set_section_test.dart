@@ -25,10 +25,7 @@ void main() {
     rotationPeriod: Duration(seconds: 8),
   );
 
-  Future<void> pumpPage(
-    WidgetTester tester,
-    WatchCoverage? coverage,
-  ) async {
+  Future<void> pumpPage(WidgetTester tester, WatchCoverage? coverage) async {
     final container = ProviderContainer(
       overrides: [
         diagnosticsProvider.overrideWithValue(

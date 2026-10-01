@@ -22,6 +22,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
+import '../terminal/fake_instance.dart';
 
 /// **The Agents entry and the page it opens**, drawn: the count appears only
 /// above zero, the page groups by state in its order with its folds, and
@@ -80,7 +81,9 @@ void main() {
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
-        await server.override(),
+        // The rows ask which session a pane holds, which builds the terminal
+        // controller: its fakes, and no real autosave timer.
+        ...fakeTerminalOverrides(machine: db, data: await server.override()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -98,7 +101,18 @@ void main() {
           home: const Scaffold(
             body: Row(
               children: [
-                SizedBox(width: 360, child: ExplorerPanel()),
+                // The panel stopped drawing the entry itself (46185a97c: the
+                // Sessions area lists every session by what it needs), so it
+                // is mounted over the panel here, where it was.
+                SizedBox(
+                  width: 360,
+                  child: Column(
+                    children: [
+                      AgentsEntryRow(),
+                      Expanded(child: ExplorerPanel()),
+                    ],
+                  ),
+                ),
                 Expanded(child: SizedBox.shrink()),
               ],
             ),

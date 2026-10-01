@@ -168,7 +168,8 @@ void main() {
 
       expect(
         linesOn(records, 'sessions.actions'),
-        contains('Continued ${launched.session.id}: typed into its pane'),
+        // The server types it now (Stage 2 step 2), into whichever pane holds it.
+        contains('Continued ${launched.session.id}: typed into it'),
       );
     });
   });

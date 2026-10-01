@@ -83,7 +83,8 @@ class StatusSpinnerClock extends ChangeNotifier {
   @override
   void addListener(VoidCallback listener) {
     super.addListener(listener);
-    if (_subscribers++ == 0) {
+    _subscribers++;
+    if (_timer == null) {
       debugTimerStarts++;
       _timer = Timer.periodic(
         Motion.statusPeriod ~/ Motion.statusSteps,
@@ -95,10 +96,15 @@ class StatusSpinnerClock extends ChangeNotifier {
   @override
   void removeListener(VoidCallback listener) {
     super.removeListener(listener);
-    if (--_subscribers == 0) {
+    if (--_subscribers > 0) return;
+    // Stopped once the frame's work is done, not on the spot: a ring whose
+    // painter changes (a theme mid-animation lerps its colour) leaves the
+    // clock and joins it again in one step, and that must not restart it.
+    scheduleMicrotask(() {
+      if (_subscribers > 0) return;
       _timer?.cancel();
       _timer = null;
-    }
+    });
   }
 
   void _tick() {

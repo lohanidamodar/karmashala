@@ -70,7 +70,9 @@ void main() {
     await tester.tap(find.text(SidePanelSurface.media.label).last);
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('Media ▾'), findsOneWidget);
+    // More keeps saying what it is; the open panel is named by its header.
+    expect(find.bySemanticsLabel('More ▾'), findsOneWidget);
+    expect(find.bySemanticsLabel('Media ▾'), findsNothing);
     expect(container.read(sidePanelProvider), SidePanelSurface.media);
     expect(find.byType(SessionMediaPanel), findsOneWidget);
     // With nothing on screen there is nothing to list, and the panel says which

@@ -207,8 +207,9 @@ class MemoryFootprintSection extends ConsumerWidget {
             label: 'Resident memory',
             help: 'The whole process, not only this app\'s Dart objects.',
             control: SettingsValue(
-              label: '${_mib(census.residentBytes)} · peak '
-              '${_mib(census.peakResidentBytes)}',
+              label:
+                  '${_mib(census.residentBytes)} · peak '
+                  '${_mib(census.peakResidentBytes)}',
               mono: true,
             ),
           ),
@@ -216,8 +217,9 @@ class MemoryFootprintSection extends ConsumerWidget {
             label: 'Terminal panes',
             help: 'Unparsed panes hold their history as text.',
             control: SettingsValue(
-              label: '${census.panes} (${census.detachedPanes} detached, '
-              '${census.unparsedPanes} unparsed)',
+              label:
+                  '${census.panes} (${census.detachedPanes} detached, '
+                  '${census.unparsedPanes} unparsed)',
               mono: true,
             ),
           ),
@@ -225,8 +227,9 @@ class MemoryFootprintSection extends ConsumerWidget {
             label: 'Scrollback held',
             help: 'Parsed rows, and history held as text.',
             control: SettingsValue(
-              label: '${census.scrollbackRows} rows · '
-              '${census.heldScrollbackChars} chars',
+              label:
+                  '${census.scrollbackRows} rows · '
+                  '${census.heldScrollbackChars} chars',
               mono: true,
             ),
           ),
@@ -234,7 +237,8 @@ class MemoryFootprintSection extends ConsumerWidget {
             label: 'Sessions watched',
             help: 'Sessions with a status, and log lines in memory.',
             control: SettingsValue(
-              label: '${census.watchedSessions} · ${census.logLinesHeld} log lines',
+              label:
+                  '${census.watchedSessions} · ${census.logLinesHeld} log lines',
               mono: true,
             ),
           ),

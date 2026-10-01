@@ -48,8 +48,7 @@ class ServerFileOpening {
   /// program — running it.
   Future<RevealOutcome> openWithDefaultApp(EnvironmentPath path) async {
     try {
-      final local =
-          await files.localPathOf(path) ?? await _download(path);
+      final local = await files.localPathOf(path) ?? await _download(path);
       return await revealer.revealHostPath(local);
     } on FilesException catch (error) {
       return RevealOutcome.failed(error.message);

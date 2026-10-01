@@ -315,7 +315,7 @@ void main() {
       );
     });
 
-    testWidgets('Close, keep running detaches them instead', (tester) async {
+    testWidgets('Close, keep running closes only the tabs', (tester) async {
       openTabs(3);
       await pump(tester);
       giveEveryPaneHistory();
@@ -328,14 +328,16 @@ void main() {
       expect(openTabIds(), hasLength(1));
       expect(
         container.read(terminalSessionsControllerProvider).detached,
-        hasLength(2),
-        reason: 'the old behaviour is still one click away',
+        isEmpty,
+        reason:
+            'the server keeps running what they showed; this window keeps '
+            'no background list of them (300eb7a97)',
       );
     });
 
     testWidgets('closing one tab still never asks', (tester) async {
       // The rule the bulk closes are the exception to: the X, and the single
-      // row above them, detach without a word.
+      // row above them, close the view without a word.
       openTabs(3);
       await pump(tester);
       giveEveryPaneHistory();
@@ -348,7 +350,8 @@ void main() {
       expect(openTabIds(), hasLength(2));
       expect(
         container.read(terminalSessionsControllerProvider).detached,
-        hasLength(1),
+        isEmpty,
+        reason: 'closing a tab drops its pane; nothing is parked (300eb7a97)',
       );
     });
   });
@@ -385,7 +388,7 @@ void main() {
   /// It lives on [WorkbenchTabChip], which both strips share, so a window
   /// split into groups behaves the same in every one of them — a gesture that
   /// worked in one strip and not its neighbour would be worse than none.
-  testWidgets('a middle click closes the tab and parks its session', (
+  testWidgets('a middle click closes the tab, and parks nothing', (
     tester,
   ) async {
     await pump(tester);
@@ -409,8 +412,10 @@ void main() {
     );
     expect(
       container.read(terminalSessionsControllerProvider).detached,
-      hasLength(1),
-      reason: 'parked, not killed — it comes back through the status bar count',
+      isEmpty,
+      reason:
+          'the pane is dropped; the server keeps the session, and Sessions '
+          'opens it again (300eb7a97)',
     );
   });
 }

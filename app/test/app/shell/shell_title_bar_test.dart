@@ -11,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import '../../support/window_matrix.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
@@ -67,8 +68,7 @@ void main() {
   ) async {
     await pumpAt(tester, const Size(1440, 900));
 
-    await tester.tap(find.text('Workspace'));
-    await tester.pumpAndSettle();
+    await openShellMenu(tester, 'Workspace');
     await tester.tap(find.text('Detect CLI sessions'));
     await tester.pumpAndSettle();
 
@@ -124,7 +124,11 @@ void main() {
     expect(find.byType(DetectedProjectsView), findsOneWidget);
   });
 
-  testWidgets('a row with room keeps the menu titles', (tester) async {
+  // The board's title bar: one menu glyph at every width, never a row of
+  // menu titles (b2063bc4d).
+  testWidgets('a row with room still has the one menu glyph, not titles', (
+    tester,
+  ) async {
     for (final (size, scale) in [
       (const Size(1440, 900), 1.0),
       (const Size(720, 560), 1.0),
@@ -133,8 +137,8 @@ void main() {
     ]) {
       tester.platformDispatcher.textScaleFactorTestValue = scale;
       await pumpAt(tester, size);
-      expect(find.byType(MenuBar), findsOneWidget, reason: '$size @ $scale');
-      expect(find.byTooltip('Menu'), findsNothing, reason: '$size @ $scale');
+      expect(find.byType(MenuBar), findsNothing, reason: '$size @ $scale');
+      expect(find.byTooltip('Menu'), findsOneWidget, reason: '$size @ $scale');
     }
     tester.platformDispatcher.clearTextScaleFactorTestValue();
   });

@@ -35,7 +35,7 @@ void main() {
   ChatMessage said(String text) => ChatMessage(role: 'agent', text: text);
 
   group('grouping', () {
-    test('a run of three calls is one row; two stay flat', () {
+    test('a settled run is one row, however short (board N2)', () {
       final rows = transcriptRows([
         said('working'),
         tool('Read'),
@@ -50,11 +50,28 @@ void main() {
         (0, 1),
         (1, 4),
         (4, 5),
-        (5, 6),
-        (6, 7),
+        (5, 7),
       ]);
       expect(rows[1].isBatch, isTrue);
       expect(rows[1].live, isFalse);
+      expect(rows[3].isBatch, isTrue, reason: 'two calls fold too');
+
+      final one = transcriptRows([said('look'), tool('Read'), said('done')]);
+      expect(one[1].isBatch, isTrue, reason: 'and so does one');
+    });
+
+    test('a live run of two stays flat: folding would save one row', () {
+      final rows = transcriptRows([
+        said('working'),
+        tool('Read'),
+        tool('Read'),
+      ], turn: TranscriptTurn.working);
+
+      expect(rows.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 1, false),
+        (1, 2, false),
+        (2, 3, false),
+      ]);
     });
 
     test('anything that is not a tool call ends a run', () {
@@ -70,17 +87,26 @@ void main() {
         const ChatMessage(role: 'user', text: 'hi'),
       ]);
 
-      expect(rows.every((r) => !r.isBatch), isTrue);
+      expect(rows.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 2, true),
+        (2, 3, false),
+        (3, 4, true),
+        (4, 5, false),
+        (5, 6, true),
+        (6, 7, false),
+        (7, 8, true),
+        (8, 9, false),
+      ]);
     });
 
-    test('a failure stays in its run but is pinned, not hidden', () {
+    test('in a live run a failure stays in it but is pinned, not hidden', () {
       final rows = transcriptRows([
         tool('Read'),
         tool('Read'),
         tool('Bash', isError: true),
         tool('Read'),
         tool('Read'),
-      ]);
+      ], turn: TranscriptTurn.working);
 
       expect(rows, hasLength(1));
       expect(rows.single.length, 5);
@@ -88,14 +114,27 @@ void main() {
       expect(rows.single.hidden, 4);
     });
 
-    test('the threshold counts the rows a fold hides, not the calls', () {
+    test('a settled run pins nothing: its failure is counted on the line', () {
+      final rows = transcriptRows([
+        tool('Read'),
+        tool('Bash', isError: true),
+        tool('Grep', thinking: 'where does this get called'),
+      ], turn: TranscriptTurn.idle);
+
+      expect(rows.single.isBatch, isTrue);
+      expect(rows.single.pinned, isEmpty);
+      expect(rows.single.hidden, 3);
+    });
+
+    test('in a live run the threshold counts the rows a fold hides, not the '
+        'calls', () {
       // Three calls, but the failure is drawn either way: folding would take
       // two rows off screen, which is not worth a line.
       final three = transcriptRows([
         tool('Read'),
         tool('Read'),
         tool('Bash', isError: true),
-      ]);
+      ], turn: TranscriptTurn.working);
       expect(three.every((r) => !r.isBatch), isTrue);
 
       final four = transcriptRows([
@@ -103,23 +142,24 @@ void main() {
         tool('Bash', isError: true),
         tool('Read'),
         tool('Read'),
-      ]);
+      ], turn: TranscriptTurn.working);
       expect(four.single.isBatch, isTrue);
       expect(four.single.hidden, 3);
     });
 
-    test('a call the model reasoned its way to is pinned', () {
+    test('in a live run a call the model reasoned its way to is pinned', () {
       final rows = transcriptRows([
         tool('Read'),
         tool('Read'),
         tool('Grep', thinking: 'where does this get called'),
         tool('Read'),
-      ]);
+      ], turn: TranscriptTurn.working);
 
       expect(rows.single.pinned, [2]);
     });
 
-    test('an unanswered call in a settled run is pinned', () {
+    test('an unanswered call in a settled run is no longer waiting on anyone',
+        () {
       final rows = transcriptRows([
         tool('Read'),
         tool('Read'),
@@ -129,7 +169,8 @@ void main() {
       ], turn: TranscriptTurn.working);
 
       expect(rows.first.live, isFalse);
-      expect(rows.first.pinned, [3]);
+      expect(rows.first.isBatch, isTrue);
+      expect(rows.first.pinned, isEmpty);
     });
 
     test('an empty answer is not a pending call', () {
@@ -183,15 +224,17 @@ void main() {
     });
 
     test('an idle turn has no live run, whatever is pending', () {
-      // The unanswered call is pinned, which leaves two to hide: flat.
+      // Settled, the run folds whole: the unanswered call waits on nobody.
       final rows = transcriptRows(run, turn: TranscriptTurn.idle);
-      expect(rows.any((r) => r.live || r.isBatch), isFalse);
+      expect(rows.any((r) => r.live), isFalse);
+      expect(rows.last.isBatch, isTrue);
+      expect(rows.last.pinned, isEmpty);
       final longer = transcriptRows([
         tool('Read'),
         ...run.skip(1),
       ], turn: TranscriptTurn.idle);
       expect(longer.single.live, isFalse);
-      expect(longer.single.pinned, [3]);
+      expect(longer.single.pinned, isEmpty);
     });
 
     test('with no status, an unanswered call is the evidence', () {
@@ -356,22 +399,26 @@ void main() {
       expect(shown('flutter analyze'), findsNothing);
     });
 
-    testWidgets('a failure is drawn while its run is folded', (tester) async {
-      await tester.pumpWidget(
-        view([
-          tool('Read', subject: 'lib/one.dart'),
-          tool('Bash', subject: 'flutter test', isError: true),
-          tool('Read', subject: 'lib/two.dart'),
-          tool('Read', subject: 'lib/three.dart'),
-          said('done'),
-        ]),
-      );
+    testWidgets('a settled run counts its failure on the line; a live run '
+        'draws it under the line', (tester) async {
+      final calls = [
+        tool('Read', subject: 'lib/one.dart'),
+        tool('Bash', subject: 'flutter test', isError: true),
+        tool('Read', subject: 'lib/two.dart'),
+        tool('Read', subject: 'lib/three.dart'),
+      ];
+      await tester.pumpWidget(view([...calls, said('done')]));
       await tester.pumpAndSettle();
 
       expect(
         find.text('Read 3 files, ran 1 command · 1 failed'),
         findsOneWidget,
       );
+      expect(shown('flutter test'), findsNothing);
+      expect(shown('lib/two.dart'), findsNothing);
+
+      await tester.pumpWidget(view(calls, turn: TranscriptTurn.working));
+      await tester.pumpAndSettle();
       expect(shown('flutter test'), findsWidgets);
       expect(find.text('FAILED'), findsOneWidget);
       expect(shown('lib/two.dart'), findsNothing);

@@ -73,7 +73,7 @@ void main() {
     // name — the OS title bar carries those).
     expect(find.byType(ShellTitleBar), findsOneWidget);
     expect(tester.getSize(find.byType(ShellTitleBar)).height, Chrome.titleBar);
-    expect(find.text('EXPLORER'), findsOneWidget);
+    expect(find.byType(ExplorerPanel), findsOneWidget);
     // The terminal is the content area now, not a dock under it.
     expect(find.byType(WorkbenchView), findsOneWidget);
     expect(find.byType(SidePanel), findsOneWidget);
@@ -115,10 +115,12 @@ void main() {
         findsOneWidget,
       );
     }
+    // By what it says to a reader: where the labels do not fit every tab is
+    // its glyph alone.
     await tester.tap(
       find.descendant(
         of: find.byType(ContextTabs),
-        matching: find.textContaining('▾'),
+        matching: find.bySemanticsLabel('More ▾'),
       ),
     );
     await tester.pumpAndSettle();
@@ -189,32 +191,39 @@ void main() {
     );
   });
 
-  testWidgets('narrow layout shows a single pane with a selector', (
-    tester,
-  ) async {
-    final container = await pumpApp(tester, size: const Size(640, 900));
+  testWidgets('at medium width the sidebar folds and opens as a sheet over '
+      'the workbench', (tester) async {
+    // Spec §5 (d828821cd): 600–839 keeps the strip, folds the sidebar, and
+    // opens it over the workbench rather than beside it. The old compact pane
+    // selector is gone.
+    final container = await pumpApp(tester, size: const Size(700, 900));
 
     expect(find.byType(ShellTitleBar), findsOneWidget);
-    expect(find.byType(SegmentedButton<ShellPane>), findsOneWidget);
-    // Explorer first, workbench on request — one pane at a time.
-    expect(find.byType(ExplorerPanel), findsOneWidget);
-    expect(find.byType(WorkbenchView), findsNothing);
-
-    container
-        .read(shellControllerProvider.notifier)
-        .focusPane(ShellPane.detail);
-    await tester.pumpAndSettle();
-    expect(find.byType(ExplorerPanel), findsNothing);
     expect(find.byType(WorkbenchView), findsOneWidget);
-    // The tools stay reachable at this width: the rail is all the panel keeps.
-    expect(find.byType(SidePanel), findsOneWidget);
+    expect(find.byType(ExplorerPanel), findsNothing, reason: 'folded');
+
+    container.read(shellControllerProvider.notifier).toggleExplorerPane();
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerPanel), findsOneWidget);
+    expect(
+      find.byType(WorkbenchView),
+      findsOneWidget,
+      reason: 'a sheet over the workbench, not in its place',
+    );
+    expect(
+      tester.getTopLeft(find.byType(ExplorerPanel)).dx,
+      lessThan(tester.getTopRight(find.byType(WorkbenchView)).dx),
+    );
   });
 
   testWidgets('ShellWidth names the three breakpoints', (tester) async {
+    // The UI overhaul spec's (§5): compact under 600, medium 600–839,
+    // expanded from 840 (d828821cd; was 760 and 1180).
     expect(ShellWidth.of(390), ShellWidth.compact);
-    expect(ShellWidth.of(759), ShellWidth.compact);
-    expect(ShellWidth.of(760), ShellWidth.medium);
-    expect(ShellWidth.of(1179), ShellWidth.medium);
+    expect(ShellWidth.of(599), ShellWidth.compact);
+    expect(ShellWidth.of(600), ShellWidth.medium);
+    expect(ShellWidth.of(839), ShellWidth.medium);
+    expect(ShellWidth.of(840), ShellWidth.expanded);
     expect(ShellWidth.of(1440), ShellWidth.expanded);
   });
 

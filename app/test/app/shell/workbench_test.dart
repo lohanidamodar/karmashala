@@ -612,12 +612,12 @@ void main() {
     });
   });
 
-  testWidgets('the strip draws no active tab while that conversation is up', (
+  testWidgets('the tab stays lit while its own conversation is up', (
     tester,
   ) async {
-    // The strip may only mark a tab active while panes are what the workbench
-    // is showing. With nothing selected that used to be unconditional, because
-    // nothing selected meant there was no second surface to be on.
+    // The chat view is the active tab's own session drawn as a conversation,
+    // so the tab stays lit (owner, 2026-09-28, b2fdee21e: an unlit tab in chat
+    // view was confusing). Only a session with no tab of its own unlights it.
     seedSessionInAPane();
     await pump(tester);
     expect(
@@ -630,8 +630,8 @@ void main() {
 
     expect(
       tester.widget<TerminalTabChip>(find.byType(TerminalTabChip)).selected,
-      isFalse,
-      reason: 'no terminal tab is on screen, so none of them may say it is',
+      isTrue,
+      reason: 'the conversation on screen is this tab\'s',
     );
   });
 
@@ -899,6 +899,8 @@ void main() {
       final scheme = Theme.of(
         tester.element(find.byType(PermissionModeChip)),
       ).colorScheme;
+      // Every action is a hairline pill with no fill; the next step is the
+      // accent's ink and weight (the mockup's pills, 03b078b67).
       Color? fillBehind(String label) {
         final box = tester.widget<Container>(
           find
@@ -908,8 +910,13 @@ void main() {
         return (box.decoration! as BoxDecoration).color;
       }
 
-      expect(fillBehind('Commit'), scheme.primaryContainer);
+      Color? ink(String label) =>
+          tester.widget<Text>(inTheBar(label)).style?.color;
+
+      expect(fillBehind('Commit'), isNull);
       expect(fillBehind('Ship ▾'), isNull);
+      expect(ink('Commit'), scheme.primary);
+      expect(ink('Ship ▾'), isNot(scheme.primary));
     });
 
     testWidgets('below its width the facts are a caption over the controls', (
@@ -980,18 +987,35 @@ void main() {
     agentWaiting = AgentWaitKind.approval;
   }
 
-  testWidgets('a pending approval docks above the pane\'s status line', (
-    tester,
-  ) async {
-    // The ask dock (UI overhaul spec §5). It was dropped on 2026-09-02 as a
-    // second copy of the prompt the terminal draws; the approved redesign
-    // brings it back as the amber "this session is blocked on you" with the
-    // answers one click away, and without the way to a terminal it is under.
+  testWidgets('on the terminal a pending approval docks nothing: the prompt '
+      'is on screen to answer there', (tester) async {
+    // The ask dock is the chat's (owner, 2026-09-30). A second copy under the
+    // terminal's own prompt says the same thing twice.
     seedAPendingApproval();
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
+    expect(find.byType(TerminalPaneStack), findsOneWidget);
+    expect(find.byType(ApprovalRequestCard), findsNothing);
+  });
+
+  testWidgets('the chat docks the ask above the pane\'s status line', (
+    tester,
+  ) async {
+    // The ask dock (UI overhaul spec §5): the amber "this session is blocked
+    // on you" with the answers one click away.
+    seedAPendingApproval();
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+
+    // The pane's status bar is the same in both views (owner, 2026-09-28), so
+    // the ask docks over it — one card, not a second copy in the chat. The
+    // way back to the terminal is the bar's own view switch.
     final card = find.byType(ApprovalRequestCard);
     expect(card, findsOneWidget);
     expect(
@@ -1000,37 +1024,11 @@ void main() {
     );
     expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
-    // Under the panes, not over them: the terminal keeps its own prompt.
-    expect(
-      tester.getTopLeft(card).dy,
-      greaterThanOrEqualTo(
-        tester.getBottomLeft(find.byType(TerminalPaneStack)).dy,
-      ),
-    );
-  });
-
-  testWidgets('the chat shows the same docked ask as the terminal', (
-    tester,
-  ) async {
-    seedAPendingApproval();
-    seedSessionInAPane();
-    container.read(selectedSessionIdProvider.notifier).select('s1');
-    await pump(tester);
-    expect(find.byType(ApprovalRequestCard), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Chat view'));
-    await tester.pumpAndSettle();
-
-    // The pane's status bar is the same in both views (owner, 2026-09-28), so
-    // the ask docks in it here too — one card, not a second copy in the chat.
-    // The way back to the terminal is the bar's own view switch.
-    expect(find.byType(ApprovalRequestCard), findsOneWidget);
-    expect(
-      find.textContaining('Do you want to make this edit'),
-      findsOneWidget,
-    );
-    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
     expect(find.byTooltip('Terminal view'), findsOneWidget);
+    expect(
+      tester.getBottomLeft(card).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.byType(PermissionModeChip)).dy),
+    );
   });
 
   testWidgets('the terminal surface survives the window matrix without it', (

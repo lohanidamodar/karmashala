@@ -11,6 +11,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/settings/presentation/claude_accounts_section.dart';
 import 'package:karmashala/src/features/settings/presentation/codex_accounts_section.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fake_data_server.dart';
@@ -228,7 +229,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('CODEX ACCOUNTS'), findsOneWidget);
+    expect(find.text(SettingsAnchor.codexAccounts.heading), findsOneWidget);
     expect(find.text('owner@example.com'), findsNWidgets(2));
     expect(find.text('pro'), findsNWidgets(2));
     expect(find.text('Capture current'), findsOneWidget);

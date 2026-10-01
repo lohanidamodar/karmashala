@@ -6,6 +6,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_stats_providers.dart';
+import '../../sessions/data/server_session_stats.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'agent_providers.dart';
 import 'session_token_totals.dart' show kTokenTotalsMaxSessions;
@@ -202,6 +203,15 @@ final usageSessionRowsProvider =
       }
       return rows;
     });
+
+/// The Usage tab's Refresh: drops the counts the server's stats are held
+/// under, then reads [usageSessionRowsProvider] again, so it counts afresh.
+final usageRecountProvider = Provider<void Function()>(
+  (ref) => () {
+    ref.read(serverSessionStatsProvider).forget();
+    ref.invalidate(usageSessionRowsProvider);
+  },
+);
 
 /// The agent's name as the tab writes it.
 String usageAgentName(String agentId) =>

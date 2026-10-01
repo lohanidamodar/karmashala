@@ -1,5 +1,4 @@
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -156,6 +155,17 @@ void main() {
     }
   }
 
+  /// What the row titled [title] says on its title's hover. A session under a
+  /// project is one line (8ef105afc): its sub-path, branch, change count,
+  /// worktree and lineage are that hover now, in the words the card's second
+  /// and third lines used.
+  String hoverOf(WidgetTester tester, String title) => tester
+      .widgetList<Tooltip>(
+        find.ancestor(of: find.text(title), matching: find.byType(Tooltip)),
+      )
+      .map((tip) => tip.message ?? '')
+      .firstWhere((message) => message.startsWith(title), orElse: () => '');
+
   group('the hub case', () {
     testWidgets('every clone\'s sessions list under the one project header', (
       tester,
@@ -181,10 +191,11 @@ void main() {
       expect(find.text('On app'), findsOneWidget);
       expect(find.text('On lib'), findsOneWidget);
 
-      // The owner's question, answered on the card itself: this agent is
+      // The owner's question, answered on the row itself: this agent is
       // working in `projects/app`, not merely "somewhere in Hub".
-      expect(find.textContaining('projects/app'), findsOneWidget);
-      expect(find.textContaining('projects/lib'), findsOneWidget);
+      expect(hoverOf(tester, 'On app'), contains('In projects/app'));
+      expect(hoverOf(tester, 'On lib'), contains('In projects/lib'));
+      expect(hoverOf(tester, 'On the hub'), isNot(contains('In ')));
     });
 
     testWidgets('a session at the project root shows no sub-path', (
@@ -223,8 +234,8 @@ void main() {
 
       expect(find.text('In an unknown checkout'), findsOneWidget);
       expect(
-        find.textContaining('projects/app/vendor/pinned'),
-        findsOneWidget,
+        hoverOf(tester, 'In an unknown checkout'),
+        contains('In projects/app/vendor/pinned'),
         reason: 'the whole sub-path, not the recorded repository above it',
       );
     });
@@ -276,8 +287,15 @@ void main() {
       // Its sub-path is the worktree, not the repository it belongs to — and
       // the glyph that says "this has a checkout of its own" is on that card
       // alone, so the two sessions cannot be confused for each other.
-      expect(find.textContaining('wt-side'), findsOneWidget);
-      expect(find.byTooltip('Runs in its own worktree'), findsOneWidget);
+      expect(hoverOf(tester, 'Side work'), contains('In wt-side'));
+      expect(
+        hoverOf(tester, 'Side work'),
+        contains('Runs in its own worktree'),
+      );
+      expect(
+        hoverOf(tester, 'Main work'),
+        isNot(contains('Runs in its own worktree')),
+      );
     });
   });
 
@@ -297,7 +315,10 @@ void main() {
 
       expect(find.text('The original'), findsOneWidget);
       expect(find.text('The fork'), findsOneWidget);
-      expect(find.byIcon(AppIcons.gitMerge), findsOneWidget);
+      expect(
+        hoverOf(tester, 'The fork'),
+        contains('forked from "The original"'),
+      );
       // Indented past its parent, which is what says it hangs off it.
       final parentX = tester.getTopLeft(find.text('The original')).dx;
       final childX = tester.getTopLeft(find.text('The fork')).dx;
@@ -314,7 +335,7 @@ void main() {
         minutes: 5,
       );
       await pump(tester);
-      expect(find.byIcon(AppIcons.paperPlaneRight), findsOneWidget);
+      expect(hoverOf(tester, 'After'), contains('handed off from "Before"'));
     });
 
     testWidgets('a chain that does not terminate says so', (tester) async {
@@ -323,10 +344,12 @@ void main() {
       addSession('b', title: 'Ring B', parent: 'a', link: SessionLink.fork);
       await pump(tester);
 
-      expect(
-        find.textContaining('lineage cannot be established'),
-        findsNWidgets(2),
-      );
+      for (final title in ['Ring A', 'Ring B']) {
+        expect(
+          hoverOf(tester, title),
+          contains('Lineage cannot be established'),
+        );
+      }
       // Both at the same depth: neither is drawn beneath the other.
       expect(
         tester.getTopLeft(find.text('Ring A')).dx,
@@ -527,7 +550,7 @@ void main() {
       await pump(tester, size: const Size(304, 900));
 
       expect(tester.takeException(), isNull);
-      expect(find.text('3 changed'), findsOneWidget);
+      expect(hoverOf(tester, 'Counted'), contains('3 changed'));
     });
 
     testWidgets('and the branch joins the sub-path when the pane is wider', (
@@ -544,8 +567,8 @@ void main() {
       expect(tester.takeException(), isNull);
       // The branch is on line two with the agent; the sub-path, when there is
       // one, is line three.
-      expect(find.textContaining('main'), findsOneWidget);
-      expect(find.text('projects/app'), findsOneWidget);
+      expect(hoverOf(tester, 'Wide'), contains('main'));
+      expect(hoverOf(tester, 'Wide'), contains('In projects/app'));
     });
 
     testWidgets('the header does not overflow at the width it opens at', (
@@ -594,8 +617,8 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('projects/very/deeply/nested/clone'),
-        findsOneWidget,
+        hoverOf(tester, 'a-session-title-far-longer-than-any-pane-is-wide'),
+        contains('In projects/very/deeply/nested/clone'),
       );
     });
   });

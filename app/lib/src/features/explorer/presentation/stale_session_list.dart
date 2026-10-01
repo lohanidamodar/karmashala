@@ -6,9 +6,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../../../core/server/remote_server_access.dart';
+import '../../../core/server/server_link.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../remote/presentation/use_auto_button.dart';
@@ -44,7 +43,7 @@ class _StaleSessionListState extends ConsumerState<StaleSessionList>
     with SingleTickerProviderStateMixin {
   late final _shake = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 420),
+    duration: Motion.emphasisIn,
   );
   final _opened = <AgentState>{};
 
@@ -153,27 +152,26 @@ class _StaleStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final client = ref.watch(dataClientProvider);
-    final connection =
-        ref.watch(dataConnectionProvider).value ?? client.connection;
+    final retry = ref.watch(serverLinkRetryProvider);
+    final connection = ref.watch(serverLinkProvider);
     // Dialling — the first dial, a redial after the app came back — or the
     // link held for a resume, is still reconnecting.
     final dialling = connection.state != DataLinkState.unavailable;
     final reason = connection.reason;
     final access = ref.watch(serverAccessProvider);
     if (access is! RemoteServerAccess) {
-      return _strip(context, client, dialling, reason);
+      return _strip(context, retry, dialling, reason);
     }
     return ValueListenableBuilder<bool>(
       valueListenable: access.resuming,
       builder: (context, held, _) =>
-          _strip(context, client, dialling || held, reason),
+          _strip(context, retry, dialling || held, reason),
     );
   }
 
   Widget _strip(
     BuildContext context,
-    DataClient client,
+    VoidCallback retry,
     bool dialling,
     String? reason,
   ) {
@@ -235,10 +233,7 @@ class _StaleStrip extends ConsumerWidget {
                 ),
                 const UseAutoButton(),
                 if (!dialling)
-                  TextButton(
-                    onPressed: client.retry,
-                    child: const Text('Try again'),
-                  ),
+                  TextButton(onPressed: retry, child: const Text('Try again')),
               ],
             ),
           ),

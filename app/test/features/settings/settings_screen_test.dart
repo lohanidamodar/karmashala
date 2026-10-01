@@ -123,15 +123,15 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(find.text('IN-APP EDITOR'), findsOneWidget);
+    expect(find.text('NOTIFICATIONS'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(find.text('DEFAULT TERMINAL'), findsOneWidget);
+    expect(find.text('KEYBOARD'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
-    expect(find.text('IN-APP EDITOR'), findsOneWidget);
+    expect(find.text('NOTIFICATIONS'), findsOneWidget);
   });
 
   testWidgets('the filter narrows the nav to matching sections', (
@@ -142,43 +142,60 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'known hosts');
     await tester.pumpAndSettle();
 
-    // Only Environments mentions known hosts — the SSH page was folded into
-    // it, hosts and all — and the rest of the rail is gone.
-    expect(find.text('Environments'), findsOneWidget);
-    expect(find.text('Permissions'), findsNothing);
+    // Only Machines mentions known hosts — the SSH page was folded into it,
+    // hosts and all — and the rest of the list is gone.
+    expect(find.text('Machines'), findsOneWidget);
+    expect(find.text('Tools and reach'), findsNothing);
 
-    await tester.tap(find.text('Environments'));
+    await tester.tap(find.text('Machines'));
     await tester.pumpAndSettle();
     expect(find.text('TRUSTED HOST KEYS'), findsOneWidget);
   });
 
   testWidgets('a deep link lands on the requested section', (tester) async {
     await pump(tester, section: SettingsSectionId.agents);
-    expect(find.text('DEFAULT AGENT'), findsOneWidget);
+    expect(find.text('DEFAULTS'), findsOneWidget);
     expect(find.text('STARTUP & WINDOW'), findsNothing);
   });
 
-  testWidgets('phone: the nav is the page, sections drill in and back out', (
-    tester,
-  ) async {
+  testWidgets('phone: a page under a sticky picker; the picker switches pages '
+      'and Search opens the list', (tester) async {
+    // Spec §6 (6bb8a9813): under the compact width the page shows at once,
+    // under a picker naming its group and page — not list, then page, then
+    // back.
     await pump(tester, size: const Size(390, 844));
 
-    // The list first, grouped — no section content yet.
-    expect(find.text('STARTUP & WINDOW'), findsNothing);
-    expect(find.text('Appearance'), findsOneWidget);
-    expect(find.text('WORKSPACE'), findsOneWidget);
-
-    await tester.tap(find.text('Terminal'));
-    await tester.pumpAndSettle();
-    expect(find.text('DEFAULT TERMINAL'), findsOneWidget);
-    expect(find.text('Settings · Terminal'), findsOneWidget);
+    expect(find.byType(SettingsCategoryPicker), findsOneWidget);
+    expect(find.text('STARTUP & WINDOW'), findsOneWidget);
     expect(find.byType(SettingsNav), findsNothing);
 
-    // Back returns to the list, not out of Settings.
-    await tester.tap(find.byType(BackButton));
+    Finder inMenu(String label) => find.descendant(
+      of: find.byWidgetPredicate((w) => w is PopupMenuEntry),
+      matching: find.text(label),
+    );
+    // The picker lists every page by group; choosing one opens it.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SettingsCategoryPicker),
+        matching: find.text('General'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(inMenu('WORK'), findsOneWidget);
+    await tester.tap(inMenu('Terminal'));
+    await tester.pumpAndSettle();
+    expect(find.text('DEFAULT TERMINAL'), findsOneWidget);
+    expect(find.text('STARTUP & WINDOW'), findsNothing);
+
+    // Search is the whole list, grouped; a row in it opens its page again.
+    await tester.tap(find.byTooltip('Search settings'));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsNav), findsOneWidget);
     expect(find.text('DEFAULT TERMINAL'), findsNothing);
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    expect(find.text('THEME & TEXT'), findsOneWidget);
+    expect(find.byType(SettingsNav), findsNothing);
   });
 
   testWidgets('the terminal font size row steps, resets and persists', (

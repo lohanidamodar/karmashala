@@ -354,10 +354,13 @@ void main() {
       }
     });
 
-    test('a screen reading never can: a spinner redraws while a turn hangs', () {
-      expect(quietAt(report(AgentStatusSource.terminalGrid)), isNull);
-      expect(quietAt(report(AgentStatusSource.none)), isNull);
-    });
+    test(
+      'a screen reading never can: a spinner redraws while a turn hangs',
+      () {
+        expect(quietAt(report(AgentStatusSource.terminalGrid)), isNull);
+        expect(quietAt(report(AgentStatusSource.none)), isNull);
+      },
+    );
 
     test('only a working session goes quiet', () {
       for (final status in [

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/shell_menu.dart';
 import '../../support/test_machine.dart';
 import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
@@ -45,8 +46,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Workspace'));
-    await tester.pumpAndSettle();
+    await openShellMenu(tester, 'Workspace');
   }
 
   testWidgets('the Workspace menu offers Quit', (tester) async {

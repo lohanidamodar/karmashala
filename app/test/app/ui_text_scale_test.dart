@@ -1,5 +1,6 @@
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/app_shell.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -56,7 +57,7 @@ void main() {
       data = await server.override();
     });
 
-    testWidgets('a menu-bar label follows the setting', (tester) async {
+    testWidgets('a title-bar label follows the setting', (tester) async {
       final container = fakeTerminalContainer(machine: db, data: data);
       addTearDown(container.dispose);
       tester.view.physicalSize = const Size(1440, 900);
@@ -71,7 +72,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final before = tester.getSize(find.text('Workspace'));
+      // The menu titles went behind one glyph (b2063bc4d); the quick panel
+      // field's words are the title bar's text now.
+      Finder label() => find
+          .descendant(
+            of: find.byType(QuickOpenButton),
+            matching: find.byType(Text),
+          )
+          .first;
+      final before = tester.getSize(label());
       expect(
         tester.getSize(find.byType(ShellTitleBar)).height,
         Chrome.titleBar,
@@ -81,16 +90,17 @@ void main() {
       container.read(settingsControllerProvider.notifier).setUiTextScale(1.5);
       await tester.pumpAndSettle();
 
-      final after = tester.getSize(find.text('Workspace'));
+      final after = tester.getSize(label());
       expect(
         after.height,
         greaterThan(before.height * 1.3),
-        reason: 'the menu label must scale with the UI text size setting',
+        reason:
+            'the title bar\'s label must scale with the UI text size setting',
       );
       expect(
         tester.getSize(find.byType(ShellTitleBar)).height,
         greaterThan(Chrome.titleBar),
-        reason: 'the title bar grows so the scaled menus are not clipped',
+        reason: 'the title bar grows so the scaled label is not clipped',
       );
     });
   });

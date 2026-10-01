@@ -210,7 +210,7 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      await tester.tap(find.byTooltip('Select'));
+      await tester.tap(find.byTooltip('Select several'));
       await tester.pumpAndSettle();
       Focus.of(tester.element(find.text('Session 3'))).requestFocus();
       await tester.pumpAndSettle();

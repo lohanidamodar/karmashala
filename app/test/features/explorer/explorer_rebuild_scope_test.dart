@@ -10,7 +10,7 @@ import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
@@ -35,7 +35,8 @@ import '../terminal/fake_instance.dart';
 /// **A session's own tick repaints that session's row, not the Explorer.**
 ///
 /// Identity is the probe, as in `explorer_rebuild_triggers_test.dart`: a
-/// rebuilt widget is a new instance. The panel's [PaneScaffold] stands for the
+/// rebuilt widget is a new instance. The panel's [SidebarAreaHeader] — its
+/// header, built in the panel's own build since 46185a97c — stands for the
 /// panel, and every other [SessionCard] for the siblings.
 class _PinnedSettings extends SettingsController {
   @override
@@ -174,7 +175,7 @@ void main() {
   };
 
   int panel(WidgetTester tester) =>
-      identityHashCode(tester.widget(find.byType(PaneScaffold)));
+      identityHashCode(tester.widget(find.byType(SidebarAreaHeader)));
 
   List<String> rebuilt(Map<String, int> before, Map<String, int> after) => [
     for (final entry in after.entries)

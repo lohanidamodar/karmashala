@@ -87,7 +87,11 @@ void main() {
 
     test('finds the side panel checklist by what VS Code calls it', () {
       for (final query in ['activity bar', 'rail', 'hide', 'side panel']) {
-        expect(labels(query), contains('Side panel items'), reason: query);
+        expect(
+          labels(query),
+          contains('Tools in the More menu'),
+          reason: query,
+        );
       }
       expect(
         searchSettings('activity bar').single.page,
@@ -223,7 +227,13 @@ void main() {
     expect(SettingsSectionId.projects.matches('worktree'), isTrue);
     expect(SettingsSectionId.accounts.matches('usage'), isTrue);
     expect(SettingsSectionId.permissions.matches('browser consent'), isTrue);
-    expect(SettingsSectionId.tools.matches('browser consent'), isFalse);
+    // Spec §6 merged Permissions into Tools and reach: one page, so the
+    // consent is found there and nowhere else.
+    expect(SettingsSectionId.permissions, SettingsSectionId.tools);
+    expect(
+      SettingsSectionId.values.where((p) => p.matches('browser consent')),
+      [SettingsSectionId.tools],
+    );
   });
 
   test('browser consent sits with the permissions, where its refusals send '

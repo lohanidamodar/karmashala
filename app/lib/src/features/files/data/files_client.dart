@@ -264,7 +264,9 @@ class FilesClient {
     final pending = BytesBuilder(copy: false);
     Future<void> flush() async {
       final bytes = pending.takeBytes();
-      await _send(FilesUploadChunk(environmentId, id, offset: sent, bytes: bytes));
+      await _send(
+        FilesUploadChunk(environmentId, id, offset: sent, bytes: bytes),
+      );
       sent += bytes.length;
     }
 
@@ -291,10 +293,9 @@ class FilesClient {
       // until the link closes.
       if (_abortsUploads()) {
         unawaited(
-          _send(FilesUploadAbort(environmentId, id)).then<void>(
-            (_) {},
-            onError: (Object _) {},
-          ),
+          _send(
+            FilesUploadAbort(environmentId, id),
+          ).then<void>((_) {}, onError: (Object _) {}),
         );
       }
       rethrow;

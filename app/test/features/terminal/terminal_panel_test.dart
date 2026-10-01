@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/pane_layout_view.dart';
+import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_search_bar.dart';
 import 'package:flutter/material.dart';
@@ -38,8 +39,7 @@ Future<void> pumpPanel(WidgetTester tester, ProviderContainer container) async {
 
 /// The workbench **with the window chrome over it**, for the controls that
 /// belong to the window rather than to a workspace group: the restored-session
-/// and background-session badges, and focus mode. They used to sit at the right
-/// end of the one tab strip; every group has a strip of its own now.
+/// badge, usage and Zen.
 Future<void> pumpWindowChrome(
   WidgetTester tester,
   ProviderContainer container,
@@ -49,6 +49,36 @@ Future<void> pumpWindowChrome(
       container: container,
       child: const MaterialApp(
         home: Scaffold(appBar: ShellTitleBar(), body: WorkbenchView()),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+/// The workbench **under the group toolbar** ([TerminalToolbar]): split,
+/// find and new terminal for the focused group. The title bar carried these
+/// until it was cut to usage, one New and Zen (5c1fe3f58); the toolbar is
+/// where the buttons — and the room check that disables one — still live.
+Future<void> pumpWithToolbar(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TerminalToolbar(),
+              ),
+              Expanded(child: WorkbenchView()),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -162,8 +192,13 @@ void main() {
 
     await pumpPanel(tester, container);
 
-    expect(find.text('PowerShell'), findsOneWidget);
-    expect(find.text('Command Prompt'), findsOneWidget);
+    // On the strip: the shown pane's status line names its profile too.
+    Finder chip(String title) => find.descendant(
+      of: find.byType(WorkbenchTabChip),
+      matching: find.text(title),
+    );
+    expect(chip('PowerShell'), findsOneWidget);
+    expect(chip('Command Prompt'), findsOneWidget);
 
     await tester.tap(
       find.byTooltip('Close tab (the session keeps running)').last,
@@ -206,8 +241,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    // The window chrome, because that is where the two split buttons are now.
-    await pumpWindowChrome(tester, container);
+    await pumpWithToolbar(tester, container);
     await tester.tap(
       find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
     );
@@ -225,7 +259,7 @@ void main() {
     container
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
-    await pumpWindowChrome(tester, container);
+    await pumpWithToolbar(tester, container);
 
     await tester.tap(
       find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
@@ -255,7 +289,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await pumpWindowChrome(tester, container);
+    await pumpWithToolbar(tester, container);
 
     final refused = find.byTooltip('This group is too narrow to split again');
     expect(refused, findsOneWidget);
@@ -300,7 +334,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    await pumpWindowChrome(tester, container);
+    await pumpWithToolbar(tester, container);
     expect(find.byType(TerminalSearchBar), findsNothing);
 
     await tester.tap(find.byTooltip('Find in scrollback (Ctrl+Shift+F)'));

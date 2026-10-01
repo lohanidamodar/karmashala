@@ -206,6 +206,10 @@ class _FilterMenuFieldState<T> extends State<FilterMenuField<T>> {
                         ),
                       )
                     : ListView.builder(
+                        // The panel inherits the anchor's surroundings, and on
+                        // a phone a list adopts the primary controller — the
+                        // dialog's, whose scrollbar then sees two positions.
+                        primary: false,
                         itemExtent: extent,
                         itemCount: matches.length,
                         itemBuilder: (context, i) => _row(context, matches[i]),

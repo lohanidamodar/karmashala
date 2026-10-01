@@ -1,12 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/phone_notifications.dart';
-import '../../notifications/data/phone_notification_presenter.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -15,9 +13,8 @@ import 'settings_section.dart';
 /// [notificationSettingsControllerProvider] the tray toggles, so the two can
 /// never disagree.
 ///
-/// Drawn by the settings screen for its page rather than through an anchor:
-/// the anchor table lives in `settings_page_body.dart`, which the responsive
-/// work owns. Move it there as `SettingsAnchor.notifications` when that settles.
+/// Drawn as [SettingsAnchor.notifications], under the heading the catalogue
+/// gives it, so search and a link land on it.
 class NotificationsSection extends ConsumerWidget {
   const NotificationsSection({super.key});
 
@@ -31,7 +28,7 @@ class NotificationsSection extends ConsumerWidget {
       notificationSettingsControllerProvider.notifier,
     );
     return SettingsSection(
-      title: 'DESKTOP NOTIFICATIONS',
+      title: SettingsAnchor.notifications.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -93,7 +90,7 @@ class _PhoneNotificationsSection extends ConsumerWidget {
     final blocked =
         ref.watch(phoneNotificationPermissionProvider).value == false;
     return SettingsSection(
-      title: 'NOTIFICATIONS',
+      title: SettingsAnchor.notifications.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -104,12 +101,7 @@ class _PhoneNotificationsSection extends ConsumerWidget {
                   'The phone blocks them, so nothing below is sent. Allow '
                   'them in the phone’s settings.',
               control: TextButton(
-                onPressed: () {
-                  final presenter = ref.read(notificationPresenterProvider);
-                  if (presenter is PhoneNotificationPresenter) {
-                    unawaited(presenter.openSystemSettings());
-                  }
-                },
+                onPressed: () => openPhoneNotificationSettings(ref),
                 child: const Text('Open settings'),
               ),
             ),

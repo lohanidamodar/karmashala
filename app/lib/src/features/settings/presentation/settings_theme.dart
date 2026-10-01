@@ -9,18 +9,16 @@ import 'settings_layout.dart';
 /// here instead of guessing at a `textTheme` role.
 abstract final class SettingsStyles {
   /// A row's label (board `.t1`: 13, medium).
-  static TextStyle? rowLabel(BuildContext context) =>
-      Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        height: 1.35,
-      );
+  static TextStyle? rowLabel(BuildContext context) => Theme.of(context)
+      .textTheme
+      .bodyMedium
+      ?.copyWith(fontSize: TypeSizes.body, fontWeight: FontWeight.w500, height: 1.35);
 
   /// The quiet sentence under a label (board `.t2`: 12 on a 17 line, muted).
   static TextStyle? rowHelp(BuildContext context) {
     final theme = Theme.of(context);
     return theme.textTheme.bodySmall?.copyWith(
-      fontSize: 12,
+      fontSize: TypeSizes.label,
       height: 17 / 12,
       color: theme.colorScheme.onSurfaceVariant,
     );
@@ -38,12 +36,12 @@ abstract final class SettingsStyles {
   /// Text on a control: a value pill, a button (board: 12.5).
   static TextStyle? control(BuildContext context) => Theme.of(
     context,
-  ).textTheme.bodyMedium?.copyWith(fontSize: 12.5, height: 1.2);
+  ).textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.field, height: 1.2);
 
   /// The page's title (board: 19, semibold) — a step down on a narrow page.
   static TextStyle? pageTitle(BuildContext context, {required bool narrow}) =>
       Theme.of(context).textTheme.titleLarge?.copyWith(
-        fontSize: narrow ? 16 : 19,
+        fontSize: narrow ? TypeSizes.title : TypeSizes.titleLarge,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.2,
       );
@@ -52,7 +50,7 @@ abstract final class SettingsStyles {
   static TextStyle? pageBlurb(BuildContext context) {
     final theme = Theme.of(context);
     return theme.textTheme.bodySmall?.copyWith(
-      fontSize: 12.5,
+      fontSize: TypeSizes.field,
       height: 18 / 12.5,
       color: theme.colorScheme.onSurfaceVariant,
     );
@@ -208,9 +206,7 @@ class SettingsControlsTheme extends StatelessWidget {
           shadowColor: Colors.transparent,
           elevation: 0,
           margin: EdgeInsets.zero,
-          shape: Border(
-            top: BorderSide(color: SettingsStyles.rule(context)),
-          ),
+          shape: Border(top: BorderSide(color: SettingsStyles.rule(context))),
         ),
       ),
       child: child,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_devices/karmashala_devices.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import 'device_app_controls.dart';
 
@@ -22,7 +23,10 @@ class DeviceAppsDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Apps on ${device.displayName}'),
     contentPadding: EdgeInsets.zero,
-    content: SizedBox(width: 480, child: DeviceAppControls(device: device)),
+    content: SizedBox(
+      width: DialogWidth.regular,
+      child: DeviceAppControls(device: device),
+    ),
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(),

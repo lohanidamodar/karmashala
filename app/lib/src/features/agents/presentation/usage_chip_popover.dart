@@ -83,9 +83,9 @@ class UsageChipPopover extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: 13);
+    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.body);
     final meta = theme.textTheme.bodySmall?.copyWith(
-      fontSize: 12,
+      fontSize: TypeSizes.label,
       color: scheme.onSurfaceVariant,
     );
     final now = ref.watch(clockProvider).nowUtc();
@@ -198,7 +198,7 @@ class UsageChipPopover extends ConsumerWidget {
             boxShadow: Shadows.floating,
           ),
           child: DefaultTextStyle(
-            style: body13 ?? const TextStyle(fontSize: 13),
+            style: body13 ?? const TextStyle(fontSize: TypeSizes.body),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(_pad, _pad, _pad, Insets.xs),
               child: Column(

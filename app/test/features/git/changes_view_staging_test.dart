@@ -99,7 +99,8 @@ void main() {
     await pump(tester, files: const [modified, stagedAdd]);
 
     expect(find.text('STAGED CHANGES  1'), findsOneWidget);
-    expect(find.text('CHANGES  1'), findsOneWidget);
+    // Not "Changes": the panel sits under the Changes tab (8e59e76f6).
+    expect(find.text('UNSTAGED CHANGES  1'), findsOneWidget);
     expect(find.text('main.dart'), findsOneWidget);
     expect(find.text('new.dart'), findsOneWidget);
   });

@@ -214,12 +214,26 @@ void main() {
   });
 
   group('narrow windows', () {
-    for (final width in const [390.0, 720.0]) {
-      testWidgets('at ${width.round()}px the rail is the page, grouped', (
-        tester,
-      ) async {
+    // Spec §6 (6bb8a9813): under the compact width a page shows at once,
+    // under a sticky picker; its Search opens the list, grouped.
+    Finder picked(String page) => find.descendant(
+      of: find.byType(SettingsCategoryPicker),
+      matching: find.text(page),
+    );
+
+    // Both under ShellWidth.compactBelow; at 720 the list stands beside the
+    // page, as the desktop's does.
+    for (final width in const [390.0, 560.0]) {
+      testWidgets('at ${width.round()}px the page sits under the picker, and '
+          'Search is the list, grouped', (tester) async {
         await pump(tester, const SettingsScreen(), size: Size(width, 844));
 
+        expect(find.byType(SettingsCategoryPicker), findsOneWidget);
+        expect(find.byType(SettingsPageBody), findsOneWidget);
+        expect(find.byType(SettingsNav), findsNothing);
+
+        await tester.tap(find.byTooltip('Search settings'));
+        await tester.pumpAndSettle();
         expect(find.byType(SettingsNav), findsOneWidget);
         expect(find.byType(SettingsPageBody), findsNothing);
         expect(
@@ -227,23 +241,25 @@ void main() {
           findsNWidgets(SettingsGroup.values.length),
         );
 
-        await tester.tap(find.text('Editor & files'));
+        await tester.tap(find.text('Projects and files'));
         await tester.pumpAndSettle();
         expect(find.byType(SettingsNav), findsNothing);
-        expect(find.text('Settings · Editor & files'), findsOneWidget);
+        expect(picked('Projects and files'), findsOneWidget);
         expect(find.text('IN-APP EDITOR'), findsOneWidget);
       });
     }
 
     testWidgets('a search hit opens its page full width', (tester) async {
       await pump(tester, const SettingsScreen(), size: const Size(390, 844));
+      await tester.tap(find.byTooltip('Search settings'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'quota');
       await tester.pumpAndSettle();
       await tester.tap(
         find.widgetWithText(SettingsSearchHitRow, 'Usage & limits'),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Settings · Accounts & usage'), findsOneWidget);
+      expect(picked('Agents and accounts'), findsOneWidget);
       expect(find.text('USAGE & LIMITS'), findsOneWidget);
     });
   });

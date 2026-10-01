@@ -11,7 +11,8 @@ import '../../../app/widgets/full_screen_form.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/process.dart' show EnvironmentPath;
+import '../../environments/application/environment_values.dart'
+    show EnvironmentPath;
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_git/git.dart';
 import '../../explorer/application/explorer_actions.dart';
@@ -908,32 +909,59 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           if (canStart) start();
         },
       },
-      child: AlertDialog(
-        title: const DesktopDialogTitle(
-          icon: AppIcons.chatCircleDots,
-          title: 'New session',
-          subtitle: 'Choose where and how the coding agent should run.',
-        ),
-        // The whole dialog scrolls, title included: with only the body scrolling,
-        // Tab left the title field above the window at 1.3x text.
-        scrollable: true,
-        // One width whatever the agent cards hold, so the dialog does not
-        // resize as they load; it still gives way to a narrower window.
-        // AlertDialog sizes its body by intrinsics, so nothing in it may be
-        // a LayoutBuilder.
-        content: SizedBox(width: DialogWidth.narrow, child: body),
-        actions: [
-          TextButton(onPressed: cancel, child: const Text('Cancel')),
-          Tooltip(
-            message: 'Start the session (Ctrl+Enter)',
-            child: FilledButton(
-              onPressed: canStart ? start : null,
-              child: _busy
-                  ? const InlineSpinner(size: InlineSpinnerSize.medium)
-                  : const LabelWithChord(label: 'Start', chord: 'Ctrl+Enter'),
+      // Tab walks the title, then the body, then the actions — three groups
+      // in that order, each in reading order inside. One reading order over
+      // the whole dialog measured the body as it scrolled under the pinned
+      // actions: at the minimum window Tab put the last fields after Start
+      // and circled the bottom four stops without returning to the top.
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: AlertDialog(
+          title: FocusTraversalOrder(
+            order: const NumericFocusOrder(0),
+            child: FocusTraversalGroup(
+              child: const DesktopDialogTitle(
+                icon: AppIcons.chatCircleDots,
+                title: 'New session',
+                subtitle: 'Choose where and how the coding agent should run.',
+              ),
             ),
           ),
-        ],
+          // The whole dialog scrolls, title included: with only the body scrolling,
+          // Tab left the title field above the window at 1.3x text.
+          scrollable: true,
+          // One width whatever the agent cards hold, so the dialog does not
+          // resize as they load; it still gives way to a narrower window.
+          // AlertDialog sizes its body by intrinsics, so nothing in it may be
+          // a LayoutBuilder.
+          content: FocusTraversalOrder(
+            order: const NumericFocusOrder(1),
+            child: FocusTraversalGroup(
+              child: SizedBox(width: DialogWidth.narrow, child: body),
+            ),
+          ),
+          actions: [
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: TextButton(onPressed: cancel, child: const Text('Cancel')),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(3),
+              child: Tooltip(
+                message: 'Start the session (Ctrl+Enter)',
+                child: FilledButton(
+                  onPressed: canStart ? start : null,
+                  child: _busy
+                      ? const InlineSpinner(size: InlineSpinnerSize.medium)
+                      : const LabelWithChord(
+                          label: 'Start',
+                          chord: 'Ctrl+Enter',
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

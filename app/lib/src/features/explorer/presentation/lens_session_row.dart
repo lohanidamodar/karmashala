@@ -120,7 +120,6 @@ class LensSessionRow extends ConsumerWidget {
     ].where((line) => line.isNotEmpty).join('\n');
     Widget hover(Widget child) => Tooltip(
       message: hoverText,
-      waitDuration: const Duration(milliseconds: 400),
       child: child,
     );
 

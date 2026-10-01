@@ -412,9 +412,7 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       });
 
-      testWidgets('needs-you keeps its warning glyph and its count', (
-        tester,
-      ) async {
+      testWidgets('needs-you keeps its shield and its count', (tester) async {
         await pump(
           tester,
           width: 400,
@@ -426,7 +424,8 @@ void main() {
           ),
         );
         expect(
-          inBadge('1 needs you', find.byIcon(AppIcons.warningCircle)),
+          // The one needs-you glyph every row wears (spec 5): the shield.
+          inBadge('1 needs you', find.byType(AskGlyph)),
           findsOneWidget,
         );
         await tester.pumpWidget(const SizedBox());

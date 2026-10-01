@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 
+import '../../support/tool_runs.dart';
 import '../../support/window_matrix.dart';
 
 /// An MCP tool's raw name is longer than a narrow pane; it must give way
@@ -44,6 +45,8 @@ void main() {
       matrix: cells,
       checkFocus: false,
       build: build,
+      // A finished turn folds its calls: the row is what opening it draws.
+      warmUp: openToolRuns,
     );
   });
 
@@ -55,6 +58,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(build());
     await tester.pumpAndSettle();
+    await openToolRuns(tester);
 
     expect(
       find.byWidgetPredicate(

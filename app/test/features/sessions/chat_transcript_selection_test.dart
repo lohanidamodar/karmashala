@@ -373,6 +373,27 @@ void main() {
         (tester) async {
           await pumpLong(tester);
           final list = tester.getRect(find.byType(ListView));
+          // The topmost turn wholly on screen before the drag: crossing past
+          // it is what scrolling means, however tall a turn is drawn.
+          final onScreen = [
+            for (var i = 0; i < 40; i++)
+              if (find
+                      .textContaining('turn $i first', findRichText: true)
+                      .evaluate()
+                      .isNotEmpty &&
+                  tester
+                          .getRect(
+                            find
+                                .textContaining(
+                                  'turn $i first',
+                                  findRichText: true,
+                                )
+                                .first,
+                          )
+                          .top >=
+                      list.top)
+                i,
+          ].first;
           final from = pointIn(tester, 'turn 39 second', end: true);
           final gesture = await tester.startGesture(
             from,
@@ -389,7 +410,11 @@ void main() {
 
           final turns = turnsIn(copied.last);
           expect(turns.last, 39);
-          expect(turns.first, lessThan(25), reason: 'the drag never scrolled');
+          expect(
+            turns.first,
+            lessThan(onScreen - 1),
+            reason: 'the drag never scrolled: turn $onScreen was on screen',
+          );
           expect(turns, [for (var i = turns.first; i <= 39; i++) i]);
         },
         variant: TargetPlatformVariant.desktop(),

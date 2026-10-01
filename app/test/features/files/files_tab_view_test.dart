@@ -204,7 +204,17 @@ void main() {
     await tester.tap(find.text('Delete').first);
     await settle(tester);
 
-    expect(find.text('Delete "gone.txt"?'), findsOneWidget);
+    // A drive path on Windows goes to the Recycle Bin; any other path has
+    // none here, and the question says the delete is permanent (defdfcf74).
+    final toBin = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(left.path);
+    expect(
+      find.text(
+        toBin
+            ? 'Move "gone.txt" to the Recycle Bin?'
+            : 'Permanently delete "gone.txt"?',
+      ),
+      findsOneWidget,
+    );
     expect(
       File(p.join(left.path, 'gone.txt')).existsSync(),
       isTrue,
@@ -214,7 +224,9 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text('Delete'),
+        matching: find.text(
+          toBin ? 'Move to Recycle Bin' : 'Delete permanently',
+        ),
       ),
     );
     await settle(tester);

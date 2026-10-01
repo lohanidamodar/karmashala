@@ -339,7 +339,8 @@ void main() {
     ) async {
       seed();
       final container = await pump(tester);
-      await focusRow(tester, 'TERMINALS');
+      // The group is drawn by its machine's name alone (46185a97c).
+      await focusRow(tester, 'WINDOWS');
 
       await press(tester, right);
       expect(container.read(explorerExpandedTerminalsProvider), {'windows'});
@@ -507,8 +508,13 @@ void main() {
           : tester.getRect(header).bottom;
     }
 
-    Rect focusedRect(WidgetTester tester) =>
-        tester.getRect(find.byWidget(focusedTreeRow()!));
+    // The focused row's own box, as it is drawn: a group label's hairline gap
+    // below it (46185a97c) is spacing between rows, not row, and the reveal
+    // rightly leaves it under the edge.
+    Rect focusedRect(WidgetTester tester) {
+      expect(focusedTreeRow(), isNotNull);
+      return FocusManager.instance.primaryFocus!.rect;
+    }
 
     void expectInView(WidgetTester tester) {
       final list = tester.getRect(find.byType(ListView));
@@ -683,7 +689,7 @@ void main() {
 
       expect(expandedOf('alpha'), Tristate.isFalse);
       expect(expandedOf('CLIENT WORK'), Tristate.isTrue);
-      expect(expandedOf('TERMINALS'), Tristate.isFalse);
+      expect(expandedOf('WINDOWS'), Tristate.isFalse);
 
       container.read(explorerExpandedProjectsProvider.notifier).open('p1');
       await tester.pumpAndSettle();

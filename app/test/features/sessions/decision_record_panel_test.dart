@@ -134,7 +134,7 @@ void main() {
     expect(SidePanel.iconFor(SidePanelSurface.decisions).fontPackage, 'picons');
   });
 
-  testWidgets('the More menu opens it and lists the record, oldest first', (
+  testWidgets('the History tab opens it and lists the record, oldest first', (
     tester,
   ) async {
     seed();
@@ -142,7 +142,8 @@ void main() {
 
     container.read(sidePanelProvider.notifier).show(SidePanelSurface.changes);
     await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('More ▾'));
+    // Checkpoints · Decisions · Plan are one tab, switched in its header.
+    await tester.tap(find.bySemanticsLabel(ContextTab.history.label));
     await tester.pumpAndSettle();
     await tester.tap(find.text(SidePanelSurface.decisions.label).last);
     await tester.pumpAndSettle();

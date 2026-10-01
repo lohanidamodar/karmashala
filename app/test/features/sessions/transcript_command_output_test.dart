@@ -3,6 +3,8 @@ import 'package:karmashala/src/features/sessions/presentation/chat_transcript.da
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/tool_runs.dart';
+
 /// The owner's third ask: command results were not visible in the conversation
 /// at all. Claude Code answers every `tool_use` with a `tool_result` in the
 /// next `user` entry, so the output was always there and was simply dropped.
@@ -30,6 +32,8 @@ void main() {
       ),
     );
     await tester.pump();
+    // A finished call is folded under its turn's line: open it to its card.
+    await openToolRuns(tester);
   }
 
   testWidgets('a short result is simply shown', (tester) async {

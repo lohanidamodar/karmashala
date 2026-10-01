@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 
+import '../../support/tool_runs.dart';
 import '../../support/window_matrix.dart';
 
 /// Every role's header — glyph, name, age, actions — shares one row shape, and
@@ -51,12 +52,15 @@ void main() {
       matrix: cells,
       checkFocus: false,
       build: build,
+      // The finished call folds under its turn's line; the header is in its card.
+      warmUp: openToolRuns,
     );
   });
 
   testWidgets('each header keeps its age and actions', (tester) async {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle();
+    await openToolRuns(tester);
 
     // Only the conversation's own turns are dated; tool rows repeat too often.
     expect(find.text('42m'), findsNWidgets(2));

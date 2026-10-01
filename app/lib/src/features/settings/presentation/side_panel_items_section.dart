@@ -66,18 +66,19 @@ class SidePanelItemsSection extends ConsumerWidget {
             'Listed under the context panel’s More menu. A tool left out '
             'still opens from the View menu and quick open.',
             child: _CheckGrid(
-            children: [
-              for (final surface in surfaces)
-                SidePanelSurfaceCheckRow(
-                  surface: surface,
-                  visible: !hidden.contains(surface),
-                  onChanged: (visible) => controller.setSidePanelSurfaceHidden(
-                    surface.name,
-                    hidden: !visible,
+              children: [
+                for (final surface in surfaces)
+                  SidePanelSurfaceCheckRow(
+                    surface: surface,
+                    visible: !hidden.contains(surface),
+                    onChanged: (visible) =>
+                        controller.setSidePanelSurfaceHidden(
+                          surface.name,
+                          hidden: !visible,
+                        ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
           ),
         ],
       ),

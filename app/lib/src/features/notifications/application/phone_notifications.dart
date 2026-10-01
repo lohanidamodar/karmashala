@@ -156,3 +156,12 @@ final phoneNotificationPermissionProvider = FutureProvider.autoDispose<bool?>((
   if (presenter is! PhoneNotificationPresenter) return null;
   return presenter.permissionGranted();
 });
+
+/// Opens the phone's own notification settings for this app, where a blocked
+/// permission is given back. Nothing off a phone.
+void openPhoneNotificationSettings(WidgetRef ref) {
+  final presenter = ref.read(notificationPresenterProvider);
+  if (presenter is PhoneNotificationPresenter) {
+    unawaited(presenter.openSystemSettings());
+  }
+}

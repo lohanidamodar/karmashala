@@ -240,30 +240,36 @@ void main() {
       find.ancestor(of: find.byTooltip(tip), matching: find.byType(IconButton)),
     );
 
-    testWidgets('the + opens the default terminal, the caret offers the rest', (
-      tester,
-    ) async {
+    testWidgets('New offers the default terminal first, and every profile '
+        'under it', (tester) async {
       // Reported: "plus button with new terminal tab should open new default
       // terminal, there should be another button to open different terminal
-      // like vs code provides". The + used to only ever open a menu.
+      // like vs code provides". The title bar's one New (5c1fe3f58) holds
+      // both: New terminal (the default, with its own chord) and each profile.
       openTabs(1);
       await pump(tester, chrome: true);
 
-      await tester.tap(find.byTooltip(RegExp(r'^New terminal \(')));
+      await tester.tap(find.byTooltip(RegExp(r'^New session, terminal')));
       await tester.pumpAndSettle();
-      expect(
-        find.byType(PopupMenuItem<TerminalProfile>),
-        findsNothing,
-        reason: 'the common case must not cost a choice',
-      );
-      expect(
-        container.read(terminalSessionsControllerProvider).tabs,
-        hasLength(2),
-      );
+      await tester.tap(find.text('New terminal'));
+      await tester.pumpAndSettle();
+      final tabs = container.read(terminalSessionsControllerProvider).tabs;
+      expect(tabs, hasLength(2));
 
-      await tester.tap(find.byTooltip('New terminal with a different profile'));
+      await tester.tap(find.byTooltip(RegExp(r'^New session, terminal')));
       await tester.pumpAndSettle();
-      expect(find.byType(PopupMenuItem<TerminalProfile>), findsWidgets);
+      for (final profile in [
+        TerminalProfile.powerShell,
+        TerminalProfile.commandPrompt,
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byWidgetPredicate((w) => w is PopupMenuEntry),
+            matching: find.text(profile.label),
+          ),
+          findsOneWidget,
+        );
+      }
 
       // Dismissed before the tree goes: a menu route torn down with a focus
       // change still in flight takes the focus manager with it, and the next
@@ -474,7 +480,7 @@ void main() {
       await pump(tester, size: const Size(720, 560), chrome: true);
 
       expect(overflowButton(100), findsOneWidget);
-      expect(find.byTooltip(RegExp(r'^New terminal \(')), findsOneWidget);
+      expect(find.byTooltip(RegExp(r'^New session, terminal')), findsOneWidget);
       // Virtualised: a hundred tabs are not a hundred built chips.
       expect(find.textContaining('src/').evaluate().length, lessThan(100));
 

@@ -326,7 +326,7 @@ void main() {
       // its project is right below.
       expect(find.text('Failed 0'), findsNothing);
 
-      await tester.tap(find.text('Ended in failure'));
+      await tester.tap(find.text('ENDED IN FAILURE'));
       await tester.pumpAndSettle();
 
       expect(find.text('Failed 0'), findsOneWidget);
@@ -336,15 +336,24 @@ void main() {
         reason: 'the rule is the whole point',
       );
       // A section crosses projects, so a row in one has to say where it is —
-      // the tree never has to, because its header already did.
-      expect(find.textContaining('Demo/app'), findsWidgets);
+      // the tree never has to, because its header already did. A row is one
+      // line (8ef105afc), so where it is is said on its title's hover.
+      final hover = tester
+          .widgetList<Tooltip>(
+            find.ancestor(
+              of: find.text('Failed 0'),
+              matching: find.byType(Tooltip),
+            ),
+          )
+          .map((tip) => tip.message ?? '');
+      expect(hover, contains(contains('Demo/app')));
     });
 
     testWidgets('an open, empty section explains itself', (tester) async {
       final db = seed(failed: 0);
       await pump(tester, db, hideEmpty: false);
 
-      await tester.tap(find.text('Checks failing'));
+      await tester.tap(find.text('CHECKS FAILING'));
       await tester.pumpAndSettle();
 
       // Not a blank space. "No failing checks" and "nobody has asked about
@@ -359,11 +368,11 @@ void main() {
       final db = seed();
       await pump(tester, db);
 
-      await tester.tap(find.text('Ended in failure'));
+      await tester.tap(find.text('ENDED IN FAILURE'));
       await tester.pumpAndSettle();
       expect(find.text('Failed 0'), findsOneWidget);
 
-      await tester.tap(find.text('Ended in failure'));
+      await tester.tap(find.text('ENDED IN FAILURE'));
       await tester.pumpAndSettle();
       expect(find.text('Failed 0'), findsNothing);
     });
@@ -417,10 +426,10 @@ void main() {
 
       // One failed session, so exactly one of the four seeded sections has
       // anything to say. The other three cost nothing at all.
-      expect(find.text('Ended in failure'), findsOneWidget);
-      expect(find.text('Checks failing'), findsNothing);
-      expect(find.text('Awaiting input'), findsNothing);
-      expect(find.text('Pinned'), findsNothing);
+      expect(find.text('ENDED IN FAILURE'), findsOneWidget);
+      expect(find.text('CHECKS FAILING'), findsNothing);
+      expect(find.text('AWAITING INPUT'), findsNothing);
+      expect(find.text('PINNED'), findsNothing);
     });
 
     testWidgets('says how many it is holding back, and gives them back', (
@@ -442,9 +451,9 @@ void main() {
       await tester.tap(find.text('Show 3 empty sections'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Pinned'), findsOneWidget);
-      expect(find.text('Checks failing'), findsOneWidget);
-      expect(find.text('Ended in failure'), findsOneWidget);
+      expect(find.text('PINNED'), findsOneWidget);
+      expect(find.text('CHECKS FAILING'), findsOneWidget);
+      expect(find.text('ENDED IN FAILURE'), findsOneWidget);
       expect(
         container.read(settingsControllerProvider).hideEmptySections,
         isFalse,
@@ -457,7 +466,7 @@ void main() {
     ) async {
       final db = seed();
       final container = await pump(tester, db);
-      expect(find.text('Pinned'), findsNothing);
+      expect(find.text('PINNED'), findsNothing);
 
       container
           .read(settingsControllerProvider.notifier)
@@ -465,7 +474,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Pinned'),
+        find.text('PINNED'),
         findsOneWidget,
         reason: 'hidden is a filter over live membership, not a deletion',
       );
@@ -485,7 +494,7 @@ void main() {
           .setCollapsed('section-checks-failing', false);
       await tester.pumpAndSettle();
 
-      expect(find.text('Checks failing'), findsOneWidget);
+      expect(find.text('CHECKS FAILING'), findsOneWidget);
       expect(find.textContaining('Delivery strip'), findsOneWidget);
     });
   });

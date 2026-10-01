@@ -78,9 +78,9 @@ class SessionStatsPopover extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: 13);
+    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.body);
     final meta = theme.textTheme.bodySmall?.copyWith(
-      fontSize: 12,
+      fontSize: TypeSizes.label,
       color: scheme.onSurfaceVariant,
     );
 
@@ -151,7 +151,7 @@ class SessionStatsPopover extends ConsumerWidget {
             boxShadow: Shadows.floating,
           ),
           child: DefaultTextStyle(
-            style: body13 ?? const TextStyle(fontSize: 13),
+            style: body13 ?? const TextStyle(fontSize: TypeSizes.body),
             child: Padding(
               padding: const EdgeInsets.all(_pad),
               child: Column(

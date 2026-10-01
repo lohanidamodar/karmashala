@@ -210,11 +210,12 @@ class _DeviceList extends ConsumerWidget {
                     onPressed: () => DeviceFilesDialog.show(context, device),
                   ),
                 // Install, launch, stop — on this row's device, whichever one
-                // a preview is showing.
+                // a preview is showing. The apps as a stack, not the package
+                // glyph: that is Install's own, inside the dialog this opens.
                 if (device.isReady)
                   DeviceRowAction(
                     key: Key('apps-${device.serial}'),
-                    icon: AppIcons.package,
+                    icon: AppIcons.stack,
                     tooltip: 'Install or launch an app',
                     onPressed: () => DeviceAppsDialog.show(context, device),
                   ),

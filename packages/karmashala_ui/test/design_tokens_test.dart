@@ -28,12 +28,12 @@ void main() {
     );
     expect(light.failureSurface, light.failure.withValues(alpha: 0.08));
     expect(light.workingSurface, light.working.withValues(alpha: 0.08));
-    expect(light.unread, const Color(0xFF1F7A3D));
+    expect(light.unread, const Color(0xFF2A7C44));
 
     final dark = SemanticColors.forBrightness(Brightness.dark);
     expect(dark.failureSurface, dark.failure.withValues(alpha: 0.16));
     expect(dark.workingSurface, dark.working.withValues(alpha: 0.14));
-    expect(dark.unread, const Color(0xFF6BCF87));
+    expect(dark.unread, const Color(0xFF5FB37C));
 
     // The new roles travel through a theme animation like the old ones.
     expect(light.lerp(dark, 1).unread, dark.unread);
@@ -256,8 +256,10 @@ void main() {
         ),
       );
       final fills = _rowDecorations(tester).map((d) => d.color).toList();
-      // Design direction S3: under a pointer a row rests transparent.
-      expect(fills, contains(StateLayers.selected(scheme)));
+      // Design direction S3: under a pointer a row rests transparent, and a
+      // chosen one takes the ladder's neutral selected tone — the accent is
+      // kept for the focus ring.
+      expect(fills, contains(SurfaceTones.forBrightness(brightness).selected));
     });
 
     testWidgets('keyboard focus is an inset ring, not a second fill '
@@ -278,7 +280,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final fill = _rowDecorations(tester).firstWhere((d) => d.border != null);
-      expect(fill.color, StateLayers.selected(scheme));
+      expect(fill.color, SurfaceTones.forBrightness(brightness).selected);
       final side = (fill.border! as Border).top;
       expect(side.color, StateLayers.focusRing(scheme));
       expect(side.width, 1.0);

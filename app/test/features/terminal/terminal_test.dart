@@ -1,7 +1,6 @@
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
-import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,7 +85,7 @@ void main() {
       );
     });
 
-    test('closing the active tab detaches its panes and activates another', () {
+    test('closing the active tab drops its panes and activates another', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -102,19 +101,19 @@ void main() {
           .panes
           .single;
       final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
-      // A pane worth detaching: an idle plain shell is released on close.
+      // Busy or not: there is no background list to keep it in any more.
       giveShellHistory(instance);
 
       controller.closeTab(second);
 
       final state = container.read(terminalSessionsControllerProvider);
-      // The view is gone; the process is not.
+      // The view is gone, and with it the pane: dropping it is a disconnect,
+      // and the server keeps the session (`end_hosted_session_test.dart`).
       expect(state.tabs.length, 1);
       expect(state.activeTabId, first);
-      expect(instance.disposed, isFalse);
-      expect(controller.instanceFor(pane), same(instance));
-      expect(state.detached.map((s) => s.paneId), [pane]);
-      expect(state.livenessOf(pane), PaneLiveness.live);
+      expect(instance.disposed, isTrue);
+      expect(controller.instanceFor(pane), isNull);
+      expect(state.detached, isEmpty);
     });
 
     test('splitting adds a pane to the active tab and focuses it', () {
@@ -168,8 +167,8 @@ void main() {
 
       final state = container.read(terminalSessionsControllerProvider);
       final tab = state.activeTab!;
-      expect(instance.disposed, isFalse, reason: 'closing a pane detaches it');
-      expect(state.detached.map((s) => s.paneId), [second]);
+      expect(instance.disposed, isTrue, reason: 'closing a pane drops it');
+      expect(state.detached, isEmpty);
       expect(tab.layout.panes.length, 1);
       expect(tab.focusedPaneId, tab.layout.panes.single);
     });

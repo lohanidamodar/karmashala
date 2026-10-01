@@ -3,6 +3,7 @@ import 'package:karmashala/src/features/sessions/presentation/chat_transcript.da
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/tool_runs.dart';
 import '../../support/window_matrix.dart';
 
 /// The tool row is the densest thing in the conversation — an eyebrow, a
@@ -46,7 +47,12 @@ void main() {
   );
 
   testWidgets('a tool row survives the window matrix', (tester) async {
-    await expectSurvivesWindowMatrix(tester, build: build);
+    // A finished turn folds its calls: the rows are what opening it draws.
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: build,
+      warmUp: openToolRuns,
+    );
   });
 
   testWidgets('...and so does everything it can unfold', (tester) async {
@@ -54,6 +60,7 @@ void main() {
       tester,
       build: build,
       warmUp: (tester) async {
+        await openToolRuns(tester);
         await tester.tap(find.byTooltip('Show the whole command'));
         await tester.pump();
         await tester.tap(find.byTooltip('Show the whole output'));

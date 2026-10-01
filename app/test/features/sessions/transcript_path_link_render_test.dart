@@ -1,8 +1,11 @@
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
+import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/tool_runs.dart';
 
 /// What the reader actually sees: which tokens are underlined, and what a click
 /// on one reports. The false-positive list is the point of the exercise — an
@@ -141,23 +144,27 @@ void main() {
   });
 
   group('tool rows', () {
-    Future<void> pumpTool(WidgetTester tester, String subject) =>
-        tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: ChatTranscriptView(
-                messages: [
-                  ChatMessage(
-                    role: 'tool',
-                    text: 'Read($subject)',
-                    tool: ToolActivity(name: 'Read', subject: subject),
-                  ),
-                ],
-                onPathTap: tapped.add,
-              ),
+    Future<void> pumpTool(WidgetTester tester, String subject) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatTranscriptView(
+              messages: [
+                ChatMessage(
+                  role: 'tool',
+                  text: 'Read($subject)',
+                  tool: ToolActivity(name: 'Read', subject: subject),
+                ),
+              ],
+              onPathTap: tapped.add,
             ),
           ),
-        );
+        ),
+      );
+      await tester.pump();
+      // A finished call is folded under its turn's line: open it to its card.
+      await openToolRuns(tester);
+    }
 
     testWidgets('the file a Read touched is a link', (tester) async {
       await pumpTool(tester, 'lib/src/features/sessions/session.dart');
@@ -171,7 +178,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(links(tester), isEmpty);
-      expect(find.text('git status --short'), findsOneWidget);
+      // In the card; the run's index line above it names the call too.
+      expect(
+        find.descendant(
+          of: find.byType(ToolActivityBody),
+          matching: find.text('git status --short'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a path inside a command is clickable', (tester) async {

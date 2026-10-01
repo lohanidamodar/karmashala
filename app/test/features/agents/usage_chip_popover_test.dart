@@ -34,14 +34,14 @@ void main() {
 
   List<Override> overrides() => [data, clockProvider.overrideWithValue(clock)];
 
-  void seedHistory() {
+  void seedHistory({String label = '5-hour'}) {
     final dao = db.server.usageRows;
     for (var i = 0; i < 6; i++) {
       dao.insert(
         UsageSample(
           accountKey: 'claudeCode@windows',
-          windowLabel: '5-hour',
-          span: kUsageFiveHourWindow,
+          windowLabel: label,
+          span: label == '5-hour' ? kUsageFiveHourWindow : kUsageSevenDayWindow,
           percent: 10.0 * i,
           recordedAt: testTime.subtract(Duration(minutes: 30 * (6 - i))),
         ),
@@ -65,18 +65,18 @@ void main() {
     addTearDown(container.dispose);
     await tester.pumpWidget(strip(container));
     await tester.pump();
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62%'), findsOneWidget);
     expect(find.byType(UsageChipPopover), findsNothing);
 
     // A hover opens nothing: the toolbar stays quiet under a passing pointer.
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);
-    await mouse.moveTo(tester.getCenter(find.text('62% · 2h11m')));
+    await mouse.moveTo(tester.getCenter(find.text('62%')));
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(UsageChipPopover), findsNothing);
 
-    await tester.tap(find.text('62% · 2h11m'));
+    await tester.tap(find.text('62%'));
     await tester.pumpAndSettle();
 
     expect(find.byType(UsageChipPopover), findsOneWidget);
@@ -86,7 +86,7 @@ void main() {
     expect(find.text('owner@example.com'), findsOneWidget);
     expect(find.text('Checked just now'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
-    expect(find.text('Usage settings'), findsOneWidget);
+    expect(find.byTooltip('Usage settings'), findsOneWidget);
 
     container.read(windowFocusedProvider.notifier).set(false);
     await tester.pump(const Duration(seconds: 1));
@@ -131,8 +131,12 @@ void main() {
     ),
   );
 
-  testWidgets('history becomes a sparkline beside the pace', (tester) async {
-    seedHistory();
+  testWidgets('the week\'s history is a chart under the windows', (
+    tester,
+  ) async {
+    // Spec §5's card: the last 7 days of the week-long window, with the Usage
+    // tab's forecast — no longer a sparkline per window.
+    seedHistory(label: '7-day');
     final view = usageChipViewFor(
       AsyncValue.data(usageSnapshot(percent: 62)),
       testTime,
@@ -140,9 +144,15 @@ void main() {
     await tester.pumpWidget(popover(view));
     // The history is asked of the server; its answer is a frame later.
     await tester.pump();
-    final sparks = tester.widgetList<Sparkline>(find.byType(Sparkline));
-    expect(sparks, hasLength(1), reason: 'only the 5-hour window has history');
-    expect(sparks.single.values, [0, 10, 20, 30, 40, 50, 62]);
+    final charts = tester.widgetList<TimeSeriesChart>(
+      find.byType(TimeSeriesChart),
+    );
+    expect(charts, hasLength(1), reason: 'one chart: the week');
+    expect(
+      [for (final point in charts.single.points) point.value],
+      [0, 10, 20, 30, 40, 50],
+    );
+    expect(find.textContaining(RegExp('last 7 days', caseSensitive: false)), findsOneWidget);
   });
 
   testWidgets('nothing read yet: the card is the sentence', (tester) async {

@@ -55,6 +55,11 @@ void main() {
   }
 
   Future<void> pumpDialog(WidgetTester tester) async {
+    // A desktop window (PROJECT.md §11): the form has grown past the 600px
+    // default surface, and the context field sits under its fold there.
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

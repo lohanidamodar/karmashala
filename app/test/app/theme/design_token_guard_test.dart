@@ -71,11 +71,15 @@ void main() {
 
   test('no literal millisecond duration in presentation code', () {
     // Not motion, so not Motion's: a repaint interval, a filesystem probe's
-    // patience and a watched file's settle. Tooltip wait is named in the theme
-    // itself.
+    // patience, a watched file's settle, a typing pause before a folder is
+    // read, a touch gesture's timeouts and a poll for a prompt to close.
+    // Tooltip wait is named in the theme itself.
     const notMotion = {
       'lib/src/app/shell/keymap_controller.dart',
       'lib/src/app/shell/logs_panel.dart',
+      'lib/src/features/projects/presentation/new_project_dialog.dart',
+      'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
+      'lib/src/features/sessions/presentation/approval_request_card/tool_ask_answers.dart',
       '../packages/karmashala_ui/lib/src/file_browser.dart',
       '../packages/karmashala_ui/lib/src/app_theme.dart',
     };
@@ -88,9 +92,11 @@ void main() {
 
   test('every mono family carries the mono fallback', () {
     // A terminal grid and a rendered cast take a family name only; xterm and
-    // the renderer bring their own fallback lists.
+    // the renderer bring their own fallback lists. The touch pane measures
+    // with the grid's own `TerminalStyle`, so it takes the same.
     const familyOnly = {
       'lib/src/features/terminal/presentation/terminal_pane_view.dart',
+      'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
       'lib/src/features/terminal/application/terminal_recording_controller.dart',
     };
     final family = RegExp(r'fontFamily:\s*kMonoFamily');

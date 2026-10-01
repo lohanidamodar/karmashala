@@ -129,22 +129,22 @@ void main() {
       );
     });
 
-    test('a renamed session survives a detach and reattach', () {
+    test('a renamed session keeps its name when its tab is opened again', () {
       container.read(sessionsDataProvider).insert(session(title: 'Work'));
-      final opened = controller.openAgentTab(
-        const AgentPaneLaunch(
-          agentId: 'claude',
-          executable: 'claude',
-          sessionId: 's1',
-        ),
+      const launch = AgentPaneLaunch(
+        agentId: 'claude',
+        executable: 'claude',
+        sessionId: 's1',
       );
+      final opened = controller.openAgentTab(launch);
       container.read(sessionsDataProvider).updateTitle('s1', 'Renamed');
       container.read(sessionsRevisionProvider.notifier).bump();
 
+      // Closing drops the pane; Sessions opens the session again in a new one.
       controller.closeTab(opened.tabId);
-      final reattached = controller.reattachSession(opened.paneId)!;
+      final reopened = controller.openAgentTab(launch);
 
-      expect(controller.titleForTab(reattached), 'Renamed');
+      expect(controller.titleForTab(reopened.tabId), 'Renamed');
     });
 
     test('an agent pane with no session keeps its launch title', () {

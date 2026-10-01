@@ -180,14 +180,14 @@ void main() {
           // Tall enough that the list is not what is being measured.
           await _pump(tester, size: Size(width, 900), textScale: scale);
 
-          // The emulator's row: Live preview, Files and Stop. As a ListTile
+          // The emulator's row: Live view, Files, Apps and Stop. As a ListTile
           // with a Row of buttons trailing it, the name was squeezed to a
           // few pixels, then the tile threw and no row was laid out at all.
           final name = find.text('sdk_gphone64_arm64');
           expect(name, findsOneWidget);
-          // Either whole, or cut with most of the row to itself: its three
-          // actions are glyphs in fixed slots and take the same 72px at any
-          // width.
+          // Either whole, or cut with most of the row to itself: its actions
+          // are glyphs in fixed slots, beside the name while it keeps its
+          // share and on a line under it where it would not.
           final whole = !tester
               .renderObject<RenderParagraph>(name)
               .didExceedMaxLines;
@@ -200,9 +200,11 @@ void main() {
           for (final key in [
             'preview-$_emulator',
             'files-$_emulator',
+            'apps-$_emulator',
             'stop-emulator-$_emulator',
             'preview-$_phoneSerial',
             'files-$_phoneSerial',
+            'apps-$_phoneSerial',
           ]) {
             final action = find.byKey(Key(key));
             await tester.ensureVisible(action);

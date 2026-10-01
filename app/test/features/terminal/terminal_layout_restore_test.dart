@@ -160,8 +160,8 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       final tabId = controller.openTab(TerminalProfile.powerShell);
-      // A shell with history: an idle one would be released on close, and this
-      // test is about what a *detached* session does to the stored layout.
+      // A shell with history: once that kept it stored as a background
+      // session. Closing drops the pane now, whatever it printed.
       giveShellHistory(
         controller.instanceFor(
           container
@@ -175,18 +175,10 @@ void main() {
       controller.persistLayout();
       expect(db.query('SELECT id FROM terminal_tabs;'), isNotEmpty);
 
-      // Closing the tab detaches the session, so it is still stored — as a
-      // background session rather than a tab.
       controller.closeTab(tabId);
       controller.persistLayout();
-      expect(
-        db.query('SELECT detached FROM terminal_tabs;').single['detached'],
-        1,
-      );
-
-      // Ending it is what actually clears the layout.
-      controller.endAllDetached();
       expect(db.query('SELECT id FROM terminal_tabs;'), isEmpty);
+      expect(db.query('SELECT id FROM terminal_panes;'), isEmpty);
     });
 
     test('autosave writes only the panes whose buffers changed', () {

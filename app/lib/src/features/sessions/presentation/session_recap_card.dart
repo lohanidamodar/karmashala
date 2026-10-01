@@ -9,8 +9,6 @@ import 'package:agent_cli/descriptors.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_providers.dart';
 import '../application/session_recap_service.dart';
-import '../../../core/capabilities/capabilities.dart';
-import '../data/server_transcripts.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/resume.dart';
 
@@ -79,10 +77,10 @@ class SessionRecapCard extends ConsumerWidget {
         .watch(sessionChatTranscriptProvider(sessionId))
         .asData
         ?.value;
-    final window = ref.read(capabilitiesProvider).chatViaServer
-        ? ref.read(serverTranscriptsProvider).windowFor(sessionId, rows)
-        : null;
-    final turnsNow = window?.total ?? rows?.length;
+    final turnsNow = ref.read(sessionTranscriptTurnsOfProvider)(
+      sessionId,
+      rows,
+    );
     final stale = turnsNow != null && recap.isStaleAgainst(turnsNow);
 
     final header = Row(

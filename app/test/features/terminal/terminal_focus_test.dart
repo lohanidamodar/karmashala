@@ -1,4 +1,5 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -7,6 +8,7 @@ import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import 'fake_instance.dart';
 import '../../support/test_machine.dart';
@@ -19,9 +21,36 @@ import '../../support/test_machine.dart';
 /// is what the owner reported after switching tabs. These tests cover every way
 /// a pane becomes the active one.
 void main() {
-  ProviderContainer panelContainer() {
+  /// This machine's client, at [density]. `flutter_test` reports Android as
+  /// the platform, so the measured density is touch, where the controller
+  /// leaves focus to a tap on the grid; the cases here are a pointer's.
+  ClientCapabilities clientAt(UiDensity density) {
+    final measured = ClientCapabilities.measure();
+    return ClientCapabilities(
+      systemIntegration: measured.systemIntegration,
+      osToasts: measured.osToasts,
+      localNotifications: measured.localNotifications,
+      localDevices: measured.localDevices,
+      externalApps: measured.externalApps,
+      fileDrop: measured.fileDrop,
+      relaunch: measured.relaunch,
+      density: density,
+      hostsServer: measured.hostsServer,
+      multicastLock: measured.multicastLock,
+      mediaPlayback: measured.mediaPlayback,
+      deviceName: measured.deviceName,
+      camera: measured.camera,
+    );
+  }
+
+  ProviderContainer panelContainer({UiDensity density = UiDensity.pointer}) {
     final database = TestMachine();
-    final container = fakeTerminalContainer(machine: database);
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(machine: database),
+        clientCapabilitiesProvider.overrideWithValue(clientAt(density)),
+      ],
+    );
     addTearDown(container.dispose);
     return container;
   }

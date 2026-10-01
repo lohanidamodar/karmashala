@@ -16,7 +16,7 @@ import 'fake_instance.dart';
 /// cannot bring back.
 void main() {
   group('keep-alive', () {
-    test('a detached session can be re-attached to a new tab', () {
+    test('closing a tab drops its pane: there is nothing to re-attach', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -29,19 +29,19 @@ void main() {
           .layout
           .panes
           .single;
-      final instance = controller.instanceFor(pane)!;
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
       giveShellHistory(instance);
 
       controller.closeTab(tabId);
-      final reattached = controller.reattachSession(pane);
 
+      // The server keeps the terminal (`end_hosted_session_test.dart`);
+      // Sessions or the machine's terminals open it again, as a new pane.
       final state = container.read(terminalSessionsControllerProvider);
       expect(state.detached, isEmpty);
-      expect(state.tabs.single.id, reattached);
-      expect(state.tabs.single.layout.panes, [pane]);
-      // The same object, so nothing had to be recreated and no output was lost.
-      expect(controller.instanceFor(pane), same(instance));
-      expect(state.livenessOf(pane), PaneLiveness.live);
+      expect(state.tabs, isEmpty);
+      expect(instance.disposed, isTrue);
+      expect(controller.instanceFor(pane), isNull);
+      expect(controller.reattachSession(pane), isNull);
     });
 
     test('re-attaching an unknown pane does nothing', () {
@@ -99,7 +99,7 @@ void main() {
       expect(state.detached, isEmpty);
     });
 
-    test('endAllDetached clears every background session', () {
+    test('closing every tab leaves no background session to end', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -111,17 +111,25 @@ void main() {
           in container.read(terminalSessionsControllerProvider).tabs) {
         giveShellHistory(controller.instanceFor(tab.layout.panes.single)!);
       }
+      final panes = [
+        for (final tab
+            in container.read(terminalSessionsControllerProvider).tabs)
+          tab.layout.panes.single,
+      ];
       controller
         ..closeTab(first)
         ..closeTab(second);
-      expect(
-        container.read(terminalSessionsControllerProvider).detached.length,
-        2,
-      );
+      expect(container.read(terminalSessionsControllerProvider).detached, []);
+      for (final pane in panes) {
+        expect(controller.instanceFor(pane), isNull);
+      }
 
+      // Nothing for the escape hatch to do, and nothing it may break.
       controller.endAllDetached();
 
-      expect(container.read(terminalSessionsControllerProvider).detached, []);
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.detached, []);
+      expect(state.tabs, isEmpty);
     });
 
     test('a pane with no process left is dropped, not detached', () {
@@ -375,7 +383,8 @@ void main() {
       expect(started.restored, contains('yesterday'));
     });
 
-    test('a dormant pane left in the background comes back as a tab', () {
+    test('a closed agent tab is not restored: resuming it opens a pane of '
+        'its own', () {
       final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
@@ -397,26 +406,24 @@ void main() {
       final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
+      final before = next.read(terminalSessionsControllerProvider);
+      expect(before.detached, isEmpty);
+      expect(before.tabs, isEmpty);
+      expect(restored.instanceFor(opened.paneId), isNull);
+
+      // The pane is not there, so the caller opens its own.
       expect(
-        next.read(terminalSessionsControllerProvider).detached,
-        hasLength(1),
-      );
-
-      final tabId = restored.startAgentInPane(
-        opened.paneId,
-        const AgentPaneLaunch(
-          agentId: 'sharing',
-          executable: 'sharing',
-          arguments: ['--resume', 'ext-1'],
-          sessionId: 'sess-1',
+        restored.startAgentInPane(
+          opened.paneId,
+          const AgentPaneLaunch(
+            agentId: 'sharing',
+            executable: 'sharing',
+            arguments: ['--resume', 'ext-1'],
+            sessionId: 'sess-1',
+          ),
         ),
+        isNull,
       );
-
-      final state = next.read(terminalSessionsControllerProvider);
-      expect(state.detached, isEmpty);
-      expect(state.tabs.single.id, tabId);
-      expect(state.activeTabId, tabId);
-      expect(state.tabs.single.layout.panes, [opened.paneId]);
     });
 
     test('a pane that is not there refuses, so the caller opens its own', () {
@@ -467,7 +474,7 @@ void main() {
   });
 
   group('restore', () {
-    test('detached sessions come back as background sessions, not tabs', () {
+    test('only open tabs come back; a closed one is not restored', () {
       final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
@@ -498,20 +505,17 @@ void main() {
       final state = next.read(terminalSessionsControllerProvider);
 
       expect(state.tabs.single.id, kept, reason: 'only the open tab is a tab');
-      expect(state.detached.map((s) => s.paneId), [backgroundPane]);
-      // A reboot ended the process, so it comes back as history, not a session.
-      expect(state.livenessOf(backgroundPane), PaneLiveness.restored);
+      expect(state.detached, isEmpty);
+      // The server has the build; this window kept no copy of its pane.
       expect(
-        (next
-                    .read(terminalSessionsControllerProvider.notifier)
-                    .instanceFor(backgroundPane)!
-                as DormantTerminalInstance)
-            .restoredScrollback,
-        contains('a long build'),
+        next
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(backgroundPane),
+        isNull,
       );
     });
 
-    test('a restored background session can be reopened as a tab', () {
+    test('after a restart a closed tab has nothing to re-attach', () {
       final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
@@ -535,11 +539,10 @@ void main() {
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
 
-      expect(restored.reattachSession(pane), isNotNull);
+      expect(restored.reattachSession(pane), isNull);
       final state = next.read(terminalSessionsControllerProvider);
-      expect(state.tabs.single.layout.panes, [pane]);
+      expect(state.tabs, isEmpty);
       expect(state.detached, isEmpty);
-      expect(state.livenessOf(pane), PaneLiveness.restored);
     });
 
     test('opening and splitting persist without waiting for a close', () {

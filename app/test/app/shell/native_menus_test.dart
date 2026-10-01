@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/shell_menus.dart';
 import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala_host_protocol/host_access.dart'
@@ -94,7 +95,11 @@ void main() {
       // No Tools: Settings and About are the app menu's on a Mac.
       ['Karmashala', 'Workspace', 'View', 'Window'],
     );
-    expect(find.text('Workspace'), findsNothing, reason: 'no in-window bar');
+    expect(
+      find.byType(ShellMenuButton),
+      findsNothing,
+      reason: 'no in-window menu',
+    );
     final labels = [for (final item in _all(captured.menus)) item.label];
     for (final label in [
       'About Karmashala',
@@ -163,7 +168,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Workspace'), findsOneWidget);
+    // The title bar's one menu glyph, which opens Workspace, View and Tools.
+    expect(find.byType(ShellMenuButton), findsOneWidget);
     expect(captured.menus, isEmpty);
   });
 

@@ -219,7 +219,8 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      await focusRow(tester, 'TERMINALS');
+      // The Terminals group, drawn by its machine's name alone (46185a97c).
+      await focusRow(tester, 'WINDOWS');
       await tester.sendKeyEvent(LogicalKeyboardKey.f2);
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);

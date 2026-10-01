@@ -144,18 +144,29 @@ void main() {
     expect(find.textContaining('need you'), findsNothing);
   });
 
-  testWidgets("the strip badge is the inbox's count", (tester) async {
+  testWidgets("the strip badge is the inbox's count of asks", (tester) async {
     await pump(tester);
-    queue();
+    queue(approval: true);
     await tester.pumpAndSettle();
 
     expect(stripInbox(), findsOneWidget);
     expect(container.read(attentionCountProvider), 1);
   });
 
-  testWidgets("the strip's Inbox opens the inbox", (tester) async {
+  testWidgets('an unread update is a neutral mark, never a count that needs '
+      'you', (tester) async {
+    // The badge counts only the asks (02dfe77a8): a finished turn is news.
     await pump(tester);
     queue();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp('Inbox, .* need you')), findsNothing);
+    expect(find.bySemanticsLabel('Inbox, new updates'), findsOneWidget);
+  });
+
+  testWidgets("the strip's Inbox opens the inbox", (tester) async {
+    await pump(tester);
+    queue(approval: true);
     await tester.pumpAndSettle();
 
     await tester.tap(stripInbox());
@@ -215,11 +226,17 @@ void main() {
     await tester.pumpAndSettle();
     await pressInboxShortcut(tester);
 
-    await tester.tap(find.text('Mark all read'));
+    // The area header's verb is a glyph, named by its tooltip (830e4ad1a).
+    await tester.tap(find.byTooltip('Mark all read'));
     await tester.pumpAndSettle();
 
     expect(container.read(attentionCountProvider), 0);
-    expect(find.textContaining('Needs approval'), findsOneWidget);
+    // An ask says what it waits for (11b286cc0): this one could not tell,
+    // so "waiting".
+    expect(
+      find.textContaining('waiting', findRichText: true),
+      findsOneWidget,
+    );
     expect(find.text('Nothing needs you.'), findsNothing);
   });
 }

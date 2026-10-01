@@ -361,7 +361,6 @@ class SessionCard extends StatelessWidget {
                 ? titleText
                 : Tooltip(
                     message: details,
-                    waitDuration: const Duration(milliseconds: 400),
                     child: titleText,
                   ),
           ),

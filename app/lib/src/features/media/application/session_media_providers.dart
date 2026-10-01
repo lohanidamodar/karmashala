@@ -145,13 +145,13 @@ final sessionImageFetchProvider = Provider.autoDispose
       );
     });
 
+/// Brings one listed item's file from a server elsewhere.
+typedef SessionMediaFetch = Future<File> Function(SessionMediaItem item);
+
 /// How an item the server listed for [sessionId] is brought here, or null
 /// when its paths open on this disk as they are.
 final sessionMediaFetchProvider = Provider.autoDispose
-    .family<Future<File> Function(SessionMediaItem item)?, String>((
-      ref,
-      sessionId,
-    ) {
+    .family<SessionMediaFetch?, String>((ref, sessionId) {
       final caps = ref.watch(capabilitiesProvider);
       if (caps.readsServerDisk || !caps.mediaViaServer) return null;
       final agentEnvironment = ref.watch(

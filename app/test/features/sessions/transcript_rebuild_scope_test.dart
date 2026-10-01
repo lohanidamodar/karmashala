@@ -97,7 +97,11 @@ void main() {
     testWidgets('loading earlier turns keeps the rows it already drew', (
       tester,
     ) async {
-      roomy(tester);
+      // Short enough that the first page scrolls: board N2's rows have no
+      // name line, and forty of them fit a roomy window whole.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(view(conversation(45)));
       await tester.pumpAndSettle();
 

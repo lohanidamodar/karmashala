@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
+import '../../support/tool_runs.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
@@ -191,6 +192,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // The finished turn folds its calls: open them to their cards.
+    await openToolRuns(tester);
 
     // Collapsed: the row says what the delegate was asked to do — a fan-out of
     // ten of these must not bury the conversation that spawned them.
@@ -217,6 +220,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // The finished turn folds its calls: open them to their cards.
+    await openToolRuns(tester);
 
     expect(reads, isEmpty, reason: 'the row is collapsed; nothing to read yet');
 
@@ -238,6 +243,7 @@ void main() {
     roomy(tester);
     await tester.pumpWidget(build(messages: transcript()));
     await tester.pumpAndSettle();
+    await openToolRuns(tester);
 
     expect(find.text('TASK'), findsOneWidget);
     expect(find.textContaining('survey the readers'), findsWidgets);
@@ -275,6 +281,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // The finished turn folds its calls: open them to their cards.
+    await openToolRuns(tester);
 
     await tester.tap(find.byTooltip('Show what this subagent did'));
     await tester.pumpAndSettle();
@@ -324,6 +332,7 @@ void main() {
         turns: {ref.filePath: delegateTurns},
       ),
       warmUp: (tester) async {
+        await openToolRuns(tester);
         await tester.tap(find.byTooltip('Show what this subagent did'));
         await tester.pumpAndSettle();
       },

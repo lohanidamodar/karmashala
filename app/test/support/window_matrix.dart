@@ -196,6 +196,8 @@ final _overflowPattern = RegExp(
   r'A (\w+) overflowed by ([\d.]+) pixels on the (\w+)',
 );
 
+final _creatorPattern = RegExp(r'\w+:file://\S*?/(lib/\S+?\.dart:\d+:\d+)');
+
 List<MatrixFinding> _overflowFindings(
   WindowCell cell,
   List<FlutterErrorDetails> captured,
@@ -205,10 +207,13 @@ List<MatrixFinding> _overflowFindings(
   for (final details in captured.where(_isOverflow)) {
     final message = '${details.exception}';
     final match = _overflowPattern.firstMatch(message);
+    // Where: the error-causing widget's source line, so a finding names the
+    // row to fix rather than only how far it ran over.
+    final where = _creatorPattern.firstMatch('$details')?.group(1);
     final detail = match == null
         ? _firstLine(message)
         : '${match.group(1)} overflowed by ${match.group(2)}px '
-              'on the ${match.group(3)}';
+              'on the ${match.group(3)}${where == null ? '' : ' at $where'}';
     if (seen.add(detail)) findings.add(MatrixFinding(cell, 'overflow', detail));
   }
   return findings;
@@ -273,7 +278,9 @@ Future<List<MatrixFinding>> _focusFindings(
             cell,
             'focus',
             'tab revisits a stop before completing the ring — '
-                '${visited.length} stops seen',
+                '${visited.length} stops seen; back at stop '
+                '${visited.indexWhere((seen) => identical(seen, node)) + 1}, '
+                '${_stopKey(node)}',
           ),
         );
       }

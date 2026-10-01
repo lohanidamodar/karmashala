@@ -25,6 +25,12 @@ class PaneSessions {
     return PaneSessions._(byPane, bySession, livenessOf);
   }
 
+  /// This window's panes as [launched] says them — pane id to the session it
+  /// runs — every one live. For a test that has panes and no controller.
+  @visibleForTesting
+  factory PaneSessions.of(Map<String, String> launched) =>
+      PaneSessions._of(launched, const {}, (_) => PaneLiveness.live);
+
   final Map<String, String> _sessionByPane;
   final Map<String, List<String>> _panesBySession;
   final PaneLiveness Function(String paneId) _livenessOf;

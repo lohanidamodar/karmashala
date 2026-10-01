@@ -4,11 +4,10 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart' show WidthClass;
+import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
 
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../../../core/server/remote_server_access.dart';
+import '../../../core/server/server_link.dart';
 import '../../remote/presentation/use_auto_button.dart';
 import '../../settings/presentation/session_host_status_line.dart'
     show sessionHostRestartLabel, sessionHostStatusText;
@@ -180,9 +179,7 @@ class _ResumingStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     DataConnection? down;
     if (whenDown) {
-      final client = ref.watch(dataClientProvider);
-      final connection =
-          ref.watch(dataConnectionProvider).value ?? client.connection;
+      final connection = ref.watch(serverLinkProvider);
       if (connection.state == DataLinkState.unavailable) down = connection;
     }
     return ValueListenableBuilder<bool>(
@@ -209,7 +206,7 @@ class _ResumingStrip extends ConsumerWidget {
                     ),
                   )
                 else
-                  Icon(AppIcons.warningCircle, size: 16, color: fore),
+                  Icon(AppIcons.warningCircle, size: Chrome.icon, color: fore),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -240,7 +237,7 @@ class _ResumingStrip extends ConsumerWidget {
                   TextButton(
                     key: const ValueKey('remote_resuming_retry'),
                     style: TextButton.styleFrom(foregroundColor: fore),
-                    onPressed: ref.read(dataClientProvider).retry,
+                    onPressed: ref.read(serverLinkRetryProvider),
                     child: const Text('Try again'),
                   ),
               ],

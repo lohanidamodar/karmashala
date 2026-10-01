@@ -179,18 +179,13 @@ void main() {
     expect(highlightsIn(1), 0);
   });
 
-  test('a detached session is searched too — it is still a live pane', () {
-    // Closing a tab detaches its pane rather than killing it, which is the
-    // whole point of keep-alive; a build still running in the background is
-    // exactly the thing worth finding.
+  test('a closed tab is not searched — its pane was dropped', () {
+    // Closing a tab drops its pane (the server keeps the terminal), so what
+    // it printed is no longer this window's to find.
     giveShellHistory(layout.sessions.instanceFor(pane(2))!);
     layout.write(pane(2), 'in-the-background\r\n');
     layout.sessions.closeTab(layout.tabOf(pane(2)));
-    expect(
-      layout.container.read(terminalSessionsControllerProvider).detached,
-      hasLength(1),
-      reason: 'the pane really was kept alive, not released',
-    );
+    expect(layout.sessions.instanceFor(pane(2)), isNull);
 
     layout.search
       ..open(pane(0))
@@ -198,8 +193,7 @@ void main() {
       ..setQuery('in-the-background');
     layout.schedule.drain();
 
-    expect(layout.state.matchCount, 1);
-    expect(layout.state.currentPaneId, pane(2));
+    expect(layout.state.matchCount, 0);
   });
 
   test('regex composes with cross-pane', () {

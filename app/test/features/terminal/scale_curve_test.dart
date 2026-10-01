@@ -170,14 +170,14 @@ void main() {
   });
 
   group('memory: a layout holds a floor per pane, not a buffer per pane', () {
-    /// Deep enough that the parked window is real history rather than the
-    /// screen, and that closing the tab detaches rather than releases an idle
-    /// shell.
+    /// Deep enough that a held buffer is real history rather than a screen.
     const linesPerPane = 200;
 
-    test('a detached pane keeps its screen and nothing above it', () {
+    // A closed tab used to keep its pane cold, holding the screen and its
+    // history as text. Since 2026-09-30 closing drops the pane (the server
+    // keeps the terminal), so the floor for a closed tab is nothing at all.
+    test('a closed tab holds nothing, however many were closed', () {
       final resident = <int, int>{};
-      final perPane = <int, int>{};
 
       for (final n in scale) {
         final container = fakeTerminalContainer();
@@ -208,49 +208,36 @@ void main() {
         }
 
         var lines = 0;
-        var detachedLines = 0;
-        var detached = 0;
+        var held = 0;
         for (final paneId in panes) {
-          final instance = controller.instanceFor(paneId)!;
-          final held = instance.terminal.mainBuffer.lines.length;
-          lines += held;
-          if (instance case final FakeTerminalInstance fake
-              when fake.ingestTier == IngestTier.cold) {
-            detached++;
-            detachedLines += held;
-            expect(
-              fake.parkedScrollback,
-              contains('output line ${linesPerPane - 1}'),
-              reason: 'the history is held as text, not thrown away',
-            );
-          }
+          final instance = controller.instanceFor(paneId);
+          if (instance == null) continue;
+          held++;
+          lines += instance.terminal.mainBuffer.lines.length;
         }
+        expect(held, 1, reason: 'only the open tab keeps a pane, at N=$n');
+        expect(
+          container.read(terminalSessionsControllerProvider).detached,
+          isEmpty,
+        );
         resident[n] = lines;
-        perPane[n] = detached == 0 ? 0 : detachedLines ~/ detached;
         container.dispose();
       }
 
       // ignore: avoid_print
-      print('N panes | parsed lines | per detached pane');
+      print('N panes | parsed lines');
       for (final n in scale) {
         // ignore: avoid_print
         print(
-          '${n.toString().padLeft(7)} | ${resident[n]!.toString().padLeft(12)} | '
-          '${perPane[n]}',
+          '${n.toString().padLeft(7)} | ${resident[n]!.toString().padLeft(12)}',
         );
       }
 
-      expect(perPane[1], 0, reason: 'nothing was detached');
       expect(
-        perPane[100],
-        perPane[10],
-        reason:
-            'the floor is the viewport, and a viewport does not grow with '
-            'the number of panes beside it',
+        resident[100],
+        resident[1],
+        reason: 'the closed ninety-nine cost nothing',
       );
-      // The whole hundred cost less parsed scrollback than ten live panes did
-      // before they were detached — which is the point of the tier.
-      expect(resident[100]! - resident[10]!, lessThan(linesPerPane * 90));
     });
   });
 

@@ -105,16 +105,22 @@ class _EnvironmentToolchains extends ConsumerWidget {
                   style: SettingsStyles.rowLabel(context),
                 ),
               ),
-              Text(
-                running
-                    ? 'asking…'
-                    // Never "nothing found": a machine nobody asked has said
-                    // nothing at all, and the two read differently (§19).
-                    : readAt == null
-                    ? 'never checked'
-                    : 'checked ${describeAge(now.difference(readAt))}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              // Gives way before the button does, at the narrowest window
+              // with large text.
+              Flexible(
+                child: Text(
+                  running
+                      ? 'asking…'
+                      // Never "nothing found": a machine nobody asked has said
+                      // nothing at all, and the two read differently (§19).
+                      : readAt == null
+                      ? 'never checked'
+                      : 'checked ${describeAge(now.difference(readAt))}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               const SizedBox(width: Insets.xs),

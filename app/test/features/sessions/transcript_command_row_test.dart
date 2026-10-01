@@ -1,7 +1,10 @@
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
+import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/tool_runs.dart';
 
 /// The owner's second report: "when commands are run, and when expanded, it
 /// feels like the command is printed twice."
@@ -35,6 +38,8 @@ void main() {
       ),
     );
     await tester.pump();
+    // Finished calls are folded under their turn's line: open them to cards.
+    await openToolRuns(tester);
   }
 
   const multiline =
@@ -42,6 +47,13 @@ void main() {
       '  --author=me \\\n'
       '  --since=yesterday';
   const firstLine = 'git log --oneline -20 \\';
+
+  // In the card. The opened run lists every call above its card by its first
+  // line, as a folded turn's index does; what must not repeat is the card.
+  Finder inCard(String text) => find.descendant(
+    of: find.byType(ToolActivityBody),
+    matching: find.text(text),
+  );
 
   testWidgets('two different commands are not the same row twice', (
     tester,
@@ -51,8 +63,8 @@ void main() {
       ToolActivity(name: 'Bash', subject: 'git log -1'),
     ]);
 
-    expect(find.text('git status --short'), findsOneWidget);
-    expect(find.text('git log -1'), findsOneWidget);
+    expect(inCard('git status --short'), findsOneWidget);
+    expect(inCard('git log -1'), findsOneWidget);
     // The words that used to be the whole row, twice over.
     expect(find.textContaining('tool: Bash'), findsNothing);
   });
@@ -62,8 +74,8 @@ void main() {
       ToolActivity(name: 'Bash', subject: multiline),
     ]);
 
-    expect(find.text(firstLine), findsOneWidget);
-    expect(find.text(multiline), findsNothing);
+    expect(inCard(firstLine), findsOneWidget);
+    expect(inCard(multiline), findsNothing);
   });
 
   testWidgets('...and once — not twice — when it is expanded', (tester) async {
@@ -75,8 +87,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // The whole point: expanding replaces the head, it does not repeat it.
-    expect(find.text(multiline), findsOneWidget);
-    expect(find.text(firstLine), findsNothing);
+    expect(inCard(multiline), findsOneWidget);
+    expect(inCard(firstLine), findsNothing);
   });
 
   testWidgets('a one-line command has nothing to expand', (tester) async {

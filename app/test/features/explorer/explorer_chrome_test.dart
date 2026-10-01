@@ -1,13 +1,9 @@
-import 'dart:ui' show Tristate;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -15,6 +11,7 @@ import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
@@ -41,14 +38,12 @@ import '../../support/fixtures.dart';
 /// with the menu row that set it.
 ///
 /// **The chrome is measured because it is taken from the list.** Two rows sit
-/// above the tree — the pane header and the search field, which a fourth
-/// machine's menu shares rather than adding to. Two or three machines are a
-/// strip on a row of its own under the field — it shared the field's row at
-/// first and the owner's screenshot of that was a crush — costing exactly
-/// [Chrome.control] and a gap. The context chips are one more, drawn only
-/// while there are contexts; they came back on 2026-09-17 in exchange for
-/// three levels of the tree (SETTLED, "The Explorer is two levels"), and they
-/// are ratcheted here like the others.
+/// above the tree — the area header and the search field. The filters are one
+/// more, drawn only while there is something to filter by: the groups as
+/// quiet tabs from the left, and with a second machine its menu at the same
+/// row's end. They were two rows of outlined pills — the machines centred, the
+/// groups under them, "All" twice — and the owner's screenshot of that said
+/// they did not play with the rest of the chrome; one row is ratcheted here.
 void main() {
   late FakeDataServer server;
 
@@ -117,39 +112,42 @@ void main() {
 
   group('the chrome above the list', () {
     // §6's proof obligation: the two sizes, plus the smallest window the app
-    // supports, where the same 109px is five times the share of the column.
+    // supports, where the same chrome is the largest share of the column.
     for (final cell in const [
       ('desktop 1440x900', Size(1440, 900), 304.0),
       ('phone 390x844', Size(390, 844), 390.0),
       ('minimum window 720x560', Size(720, 560), 240.0),
     ]) {
       final (label, window, paneWidth) = cell;
-      testWidgets('is two rows and 83px at $label', (tester) async {
+      testWidgets('is two rows — the area header and the search field — at '
+          '$label', (tester) async {
         await pumpPanel(tester, window: window, paneWidth: paneWidth);
 
-        // The header is its row plus the hairline it owns.
-        expect(heightOf(tester, find.byType(PaneHeader)), Chrome.tabStrip + 1);
-
-        final chrome =
-            heightOf(tester, find.byType(PaneHeader)) +
-            heightOf(tester, searchBlock());
         expect(
-          chrome,
-          lessThanOrEqualTo(83),
+          heightOf(tester, find.byType(SidebarAreaHeader)),
+          Sidebar.headerHeight,
+        );
+        expect(heightOf(tester, searchBlock()), ExplorerSearchField.height);
+        expect(
+          heightOf(tester, find.byType(ExplorerScopeBar)),
+          ExplorerSearchField.height,
           reason:
-              'the rows above the tree cost a project row already — a third '
-              'row, or a taller one, has to be argued for',
+              'with no contexts and one machine there is nothing to filter '
+              'by, and no row for it',
         );
       });
     }
 
-    testWidgets('with no contexts the chips take nothing', (tester) async {
+    testWidgets('with no contexts and one machine the filter row takes '
+        'nothing', (tester) async {
       await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(find.byType(ExplorerContextChips), findsOneWidget);
-      expect(heightOf(tester, find.byType(ExplorerContextChips)), 0);
+      expect(find.byType(ExplorerFilterRow), findsOneWidget);
+      expect(heightOf(tester, find.byType(ExplorerFilterRow)), 0);
     });
 
-    testWidgets('the context chips are one more row, and 27px', (tester) async {
+    testWidgets('the groups are one more row: its gap and a tab', (
+      tester,
+    ) async {
       final c = await container();
       await createContext(c, 'Game dev');
       await pumpPanel(
@@ -159,65 +157,45 @@ void main() {
         scope: c,
       );
       expect(
-        heightOf(tester, find.byType(ExplorerContextChips)),
-        lessThanOrEqualTo(27),
+        heightOf(tester, find.byType(ExplorerFilterRow)),
+        Sidebar.headerGap + SidebarFilterTab.height,
       );
     });
 
-    testWidgets('a second machine adds its strip on a row of its own under '
-        'the search field — never beside it, however wide the pane — and '
-        'the row costs one control and its gap', (tester) async {
+    testWidgets('a second machine is that same row — its menu at the end of '
+        'the groups, never a row of its own, at any pane width', (
+      tester,
+    ) async {
       server.environmentRows.upsert(sshEnvFixture());
-      // 520 is where `All · Windows · build-box` once fit beside the field
-      // whole; it is a row of its own there too now.
+      final c = await container();
+      await createContext(c, 'Game dev');
       for (final paneWidth in [520.0, 304.0, 240.0]) {
         await pumpPanel(
           tester,
           window: const Size(1440, 900),
           paneWidth: paneWidth,
+          scope: c,
         );
-        final strip = find.byType(ExplorerEnvironmentStrip);
-        expect(strip, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        final menu = find.byType(ExplorerEnvironmentSwitcher);
+        expect(menu, findsOneWidget);
         expect(
           heightOf(tester, find.byType(ExplorerScopeBar)),
-          heightOf(tester, searchBlock()) + Chrome.control + Insets.xs,
-          reason: 'at $paneWidth: one row more, and only the strip and its gap',
+          ExplorerSearchField.height +
+              Sidebar.headerGap +
+              SidebarFilterTab.height,
+          reason: 'at $paneWidth: the field and one filter row, no more',
         );
-        expect(heightOf(tester, strip), Chrome.control);
         expect(
-          tester.getTopLeft(strip).dy,
+          tester.getTopLeft(menu).dy,
           greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
         );
         expect(
-          tester.getSize(strip).width,
-          paneWidth - Insets.xs * 2,
-          reason: 'it spans the column the field and the rows share',
-        );
-        expect(
           tester.getSize(find.byType(TextField)).width,
-          paneWidth - Insets.xs * 2,
+          paneWidth - Sidebar.fillEdge * 2,
           reason: 'the field keeps its whole row',
         );
       }
-      // Three containers were mounted in turn; the last is taken down here,
-      // where its providers' dispose tick can run, not in the teardown.
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 1));
-    });
-
-    testWidgets('a fourth machine folds the strip into a menu on the search '
-        'row', (tester) async {
-      server.environmentRows
-        ..upsert(sshEnvFixture())
-        ..upsert(wslEnv())
-        ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
-      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
-      expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);
-      expect(
-        heightOf(tester, find.byType(ExplorerScopeBar)),
-        heightOf(tester, searchBlock()),
-      );
     });
 
     testWidgets('leaves the list the rest of the column', (tester) async {
@@ -225,27 +203,21 @@ void main() {
       // Nothing else may quietly take a slice: chrome plus list is the column.
       final list = heightOf(tester, find.byType(ListView));
       final chrome =
-          heightOf(tester, find.byType(PaneHeader)) +
-          heightOf(tester, find.byType(AgentsEntryRow)) +
-          heightOf(tester, searchBlock());
+          heightOf(tester, find.byType(SidebarAreaHeader)) +
+          heightOf(tester, find.byType(ExplorerScopeBar));
       expect(chrome + list, 900);
     });
 
-    // The third row, argued for: the owner approved a global Agents entry
-    // (2026-09-21) because "who is blocked on me" is the first question across
-    // forty projects. It is held to one row, and its count costs no width
-    // until something is waiting.
-    testWidgets('the Agents entry is one row, and 27px', (tester) async {
+    // The Agents entry the owner approved on 2026-09-21 left with the
+    // mockup's sidebar (46185a97c): the Sessions area is every session by
+    // what it needs, one click away on the strip.
+    testWidgets('there is no Agents entry row above the list', (tester) async {
       await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(
-        heightOf(tester, find.byType(AgentsEntryRow)),
-        lessThanOrEqualTo(Chrome.row + 1),
-      );
-      expect(find.byKey(const ValueKey('agents-needs-you-pill')), findsNothing);
+      expect(find.byType(AgentsEntryRow), findsNothing);
     });
   });
 
-  group('the pane name', () {
+  group('the area name', () {
     /// Whether the header's title is being ellipsised at [paneWidth].
     Future<bool> clipsAt(WidgetTester tester, double paneWidth) async {
       await pumpPanel(
@@ -254,37 +226,38 @@ void main() {
         paneWidth: paneWidth,
       );
       return tester
-          .renderObject<RenderParagraph>(find.text('EXPLORER'))
+          .renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byType(SidebarAreaHeader),
+              matching: find.text('Projects'),
+            ),
+          )
           .didExceedMaxLines;
     }
 
-    // It used to clip below 280px — inside the range the pane is routinely
-    // dragged to — because 150px of a ~300px row is five icon buttons and a
-    // glyph took 21 more. The glyph is gone (see [PaneHeader.icon]) and the
-    // word now survives to 259.
     testWidgets('fits at the default pane width', (tester) async {
       expect(await clipsAt(tester, 304), isFalse);
     });
 
-    testWidgets('fits well below the default pane width', (tester) async {
-      expect(await clipsAt(tester, 260), isFalse);
+    testWidgets('fits at the pane\'s smallest width', (tester) async {
+      expect(await clipsAt(tester, 240), isFalse);
     });
   });
 
   group('the glyph vocabulary', () {
-    testWidgets('the pane header no longer repeats the surface mark', (
+    testWidgets('the area header does not repeat the surface mark', (
       tester,
     ) async {
       await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
       final inHeader = find.descendant(
-        of: find.byType(PaneHeader),
+        of: find.byType(SidebarAreaHeader),
         matching: find.byType(Icon),
       );
       for (final icon in tester.widgetList<Icon>(inHeader)) {
         expect(
           icon.icon,
           isNot(AppIcons.treeStructure),
-          reason: 'the title-bar toggle draws it 30px above, same column',
+          reason: 'the title-bar toggle draws it above, same column',
         );
       }
     });
@@ -297,53 +270,9 @@ void main() {
         if (icon.icon case final IconData data) data,
     ];
 
-    testWidgets('every segment wears the mark of what it is, and the one in '
-        'scope is the one marked', (tester) async {
+    testWidgets('the machine menu wears the mark of what is in scope, then '
+        'its caret', (tester) async {
       server.environmentRows.upsert(sshEnvFixture());
-      final c = await container();
-      // Wide enough that `build-box` — nine squares in the test font — fits
-      // beside a glyph; narrower, the strip rightly drops the glyphs for
-      // whole names (explorer_scope_test pins where).
-      await pumpPanel(
-        tester,
-        window: const Size(1440, 900),
-        paneWidth: 520,
-        scope: c,
-      );
-      expect(
-        glyphs(tester, find.byType(ExplorerEnvironmentStrip)),
-        [AppIcons.stack, AppIcons.terminal, AppIcons.globe],
-        reason:
-            'every machine together is a stack of them; a local one is a '
-            'terminal, a box a globe',
-      );
-      String chosen() {
-        final segments = find.bySemanticsLabel(RegExp('^Environment: '));
-        return [
-              for (var i = 0; i < segments.evaluate().length; i++)
-                tester.getSemantics(segments.at(i)),
-            ]
-            .singleWhere(
-              (node) => node.flagsCollection.isSelected == Tristate.isTrue,
-            )
-            .label;
-      }
-
-      expect(chosen(), 'Environment: All environments');
-
-      c
-          .read(settingsControllerProvider.notifier)
-          .setExplorerEnvironmentScope('windows');
-      await tester.pumpAndSettle();
-      expect(chosen(), 'Environment: Windows');
-    });
-
-    testWidgets('as a menu, the machine in scope wears the mark of what it '
-        'is', (tester) async {
-      server.environmentRows
-        ..upsert(sshEnvFixture())
-        ..upsert(wslEnv())
-        ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
       final c = await container();
       await pumpPanel(
         tester,
@@ -351,26 +280,30 @@ void main() {
         paneWidth: 304,
         scope: c,
       );
-      expect(
-        glyphs(tester, find.byType(ExplorerEnvironmentSwitcher)),
-        contains(AppIcons.stack),
-        reason: 'every machine together is a stack of them',
-      );
+      final menu = find.byType(ExplorerEnvironmentSwitcher);
+      expect(glyphs(tester, menu), [
+        AppIcons.stack,
+        AppIcons.caretDown,
+      ], reason: 'every machine together is a stack of them');
 
-      c
-          .read(settingsControllerProvider.notifier)
-          .setExplorerEnvironmentScope('windows');
+      final settings = c.read(settingsControllerProvider.notifier);
+      settings.setExplorerEnvironmentScope('windows');
       await tester.pumpAndSettle();
-      expect(
-        glyphs(tester, find.byType(ExplorerEnvironmentSwitcher)),
-        contains(AppIcons.terminal),
-        reason: 'this machine is a local one, and the switcher says so',
-      );
+      expect(glyphs(tester, menu), [
+        AppIcons.terminal,
+        AppIcons.caretDown,
+      ], reason: 'a local machine is a terminal');
+
+      settings.setExplorerEnvironmentScope('ssh:h1');
+      await tester.pumpAndSettle();
+      expect(glyphs(tester, menu), [
+        AppIcons.globe,
+        AppIcons.caretDown,
+      ], reason: 'a box is a globe');
     });
 
-    testWidgets('a context is a label over its projects, with no glyph', (
-      tester,
-    ) async {
+    testWidgets('a context is a label over its projects, with no glyph at '
+        'rest', (tester) async {
       final c = await container();
       final games = await createContext(c, 'Game dev');
       await c
@@ -384,9 +317,13 @@ void main() {
       );
 
       expect(find.text('GAME DEV'), findsOneWidget);
-      expect(glyphs(tester, find.byType(ExplorerContextHeader).first), [
-        AppIcons.caretDown,
-      ], reason: 'a header is words and a caret; the stack is in the menus');
+      expect(
+        glyphs(tester, find.byType(ExplorerContextHeader).first),
+        isEmpty,
+        reason:
+            'a header is words; its caret comes with the pointer or the '
+            'fold, and the stack is in the menus',
+      );
     });
   });
 }

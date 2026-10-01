@@ -9,6 +9,8 @@ import 'package:karmashala/src/features/agents/application/agent_hook_intake.dar
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_rebind_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart'
+    show PaneSessions, paneSessionsProvider;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_session/session.dart';
@@ -30,6 +32,9 @@ void main() {
   late AgentHookReports reports;
   late FakeDataServer server;
   ProviderContainer? current;
+  // This window's panes, as its pane index knows them: the session each one
+  // was launched for. A row's own pane_id is another window's word.
+  late Map<String, String> panes;
 
   /// The rows as the app sees them — the last container's copy, where a
   /// rebind lands at once — or, before any container, as the server has them.
@@ -45,17 +50,20 @@ void main() {
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
     current = null;
+    panes = {};
     reports = AgentHookReports();
   });
 
   /// A row in a pane the app launched, on conversation `cli-<id>`.
-  void launched(String id, {required String paneId}) =>
-      server.sessionRows.insert(
-        session(
-          id: id,
-          status: SessionStatus.running,
-        ).copyWith(externalSessionId: 'cli-$id', paneId: paneId),
-      );
+  void launched(String id, {required String paneId}) {
+    server.sessionRows.insert(
+      session(
+        id: id,
+        status: SessionStatus.running,
+      ).copyWith(externalSessionId: 'cli-$id', paneId: paneId),
+    );
+    panes[paneId] = id;
+  }
 
   void heardFrom(String conversationId, DateTime at, {bool ended = false}) =>
       reports.record(
@@ -80,6 +88,7 @@ void main() {
         await server.override(),
         clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
         agentHookReportsProvider.overrideWithValue(reports),
+        paneSessionsProvider.overrideWithValue(PaneSessions.of(panes)),
         adoptablePanesProvider.overrideWithValue(
           () => [
             for (final paneId in livePaneIds)

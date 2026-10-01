@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_project_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -62,6 +63,18 @@ class _Inbox extends AttentionInboxController {
         kind: InboxItemKind.finished,
         at: testTime,
       ),
+      // An ask: what a project's "needs you" counts (c14758d4f). A finished
+      // turn nobody has seen is unread, not waiting on anyone.
+      InboxItem(
+        session: const WatchedSession(
+          key: AgentSessionKey('claude-code', 'waiting'),
+          label: 'Waiting session',
+          openId: 's-wait',
+          imported: false,
+        ),
+        kind: InboxItemKind.needsApproval,
+        at: testTime,
+      ),
     ],
   );
 }
@@ -89,6 +102,7 @@ void main() {
       ('s-unk', 'Unknown session', SessionStatus.unknown),
       ('s-done', 'Finished session', SessionStatus.completed),
       ('s-unread', 'Unread session', SessionStatus.completed),
+      ('s-wait', 'Waiting session', SessionStatus.idle),
     ]) {
       db.server.sessionRows.insert(
         session(id: id, title: title, status: status),
@@ -223,10 +237,19 @@ void main() {
       'nothing', (tester) async {
     await pumpExplorer(tester);
 
-    final header = centreX(
-      tester,
-      chevronIn(rowOf(ExplorerContextHeader).first),
+    // A header is the sidebar's group label (46185a97c): its words stand
+    // `Sidebar.labelPadX` into the rows' fill and nothing steps them in; its
+    // caret follows the words, so the first caret column is a project's.
+    expect(
+      tester.getTopLeft(find.text('GAME DEV')).dx,
+      moreOrLessEquals(Sidebar.fillEdge + Sidebar.labelPadX, epsilon: 0.5),
     );
+    // Depth zero: the first caret column from the pane's edge, inside the
+    // list's own padding.
+    final depthZero =
+        Sidebar.listPadding.left +
+        ExplorerRow.contentStartOf(UiDensity.pointer) +
+        ExplorerRow.disclosureSlot / 2;
     final project = centreX(
       tester,
       chevronIn(
@@ -245,17 +268,8 @@ void main() {
         ),
       ),
     );
-    expect(project, moreOrLessEquals(header, epsilon: 0.5));
-    expect(loose, moreOrLessEquals(header, epsilon: 0.5));
-    expect(
-      header,
-      moreOrLessEquals(
-        ExplorerRow.contentStartOf(UiDensity.pointer) +
-            ExplorerRow.disclosureSlot / 2,
-        epsilon: 0.5,
-      ),
-      reason: 'depth zero: the first caret column from the pane\'s edge',
-    );
+    expect(project, moreOrLessEquals(depthZero, epsilon: 0.5));
+    expect(loose, moreOrLessEquals(depthZero, epsilon: 0.5));
     const step = ExplorerRow.indent;
 
     // A session's one glyph sits one step right of its project's folder glyph.
@@ -321,7 +335,7 @@ void main() {
     expect(line, isNot(contains('/Users/me')), reason: 'home is written ~');
     // Words, not a bare number with its meaning in a tooltip.
     expect(
-      find.descendant(of: row, matching: find.text('4 sessions')),
+      find.descendant(of: row, matching: find.text('5 sessions')),
       findsOneWidget,
     );
     expect(
@@ -359,9 +373,23 @@ void main() {
     expect(path.dx, moreOrLessEquals(name.dx, epsilon: 0.5));
     expect(path.dy, greaterThan(name.dy));
 
-    // A session's own second line hangs one step further in, like its glyph.
-    final title = tester.getTopLeft(find.text('Running session')).dx;
-    expect(title - name.dx, moreOrLessEquals(ExplorerRow.indent, epsilon: 0.5));
+    // A session is one line now (8ef105afc): its status glyph is what hangs
+    // one step in from its project's folder glyph, and its title follows the
+    // glyph and the agent's mark.
+    final folder = tester
+        .getCenter(
+          find.descendant(of: row, matching: find.byIcon(AppIcons.folderOpen)),
+        )
+        .dx;
+    final glyph = statusGlyphsIn(sessionRow('Running session')).first;
+    expect(
+      tester.getCenter(glyph).dx - folder,
+      moreOrLessEquals(ExplorerRow.indent, epsilon: 0.5),
+    );
+    expect(
+      tester.getTopLeft(find.text('Running session')).dx,
+      greaterThan(tester.getTopRight(glyph).dx),
+    );
 
     // Line two's state ends on the edge the counts and ages end on.
     final column = metaRight(tester, sessionRow('Running session'));
@@ -382,8 +410,8 @@ void main() {
     expect(tester.takeException(), isNull);
 
     final row = projectRow();
-    expect(find.text('4 sessions'), findsNothing);
-    expect(find.descendant(of: row, matching: find.text('4')), findsOneWidget);
+    expect(find.text('5 sessions'), findsNothing);
+    expect(find.descendant(of: row, matching: find.text('5')), findsOneWidget);
     expect(
       find.descendant(of: row, matching: find.byType(ProjectStateBadge)),
       findsNWidgets(2),
@@ -445,12 +473,14 @@ void main() {
     expect(tester.getSize(find.text(_long)).width, greaterThanOrEqualTo(150));
   });
 
-  testWidgets('rows are flat at rest, a header is its band, and both fill '
-      'under the pointer', (tester) async {
+  testWidgets('rows and headers are flat at rest, and both take the hover '
+      'tone under the pointer', (tester) async {
     await pumpExplorer(tester);
-    final scheme = Theme.of(
+    // No bands and no rules between sections (46185a97c): a header is set
+    // apart by its hand and the space above it, and lights as a row does.
+    final hover = SurfaceTones.of(
       tester.element(find.byType(ExplorerContextHeader).first),
-    ).colorScheme;
+    ).hover;
 
     for (final row in [
       sessionRow('Running session'),
@@ -458,9 +488,11 @@ void main() {
     ]) {
       expect(fillsIn(tester, row), isEmpty, reason: '$row is tinted at rest');
     }
-    expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), [
-      ExplorerRow.bandColor(scheme),
-    ], reason: 'a header rests on its band and nothing else');
+    expect(
+      fillsIn(tester, rowOf(ExplorerContextHeader).first),
+      isEmpty,
+      reason: 'a header rests on the pane, with no band',
+    );
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
@@ -468,11 +500,12 @@ void main() {
     await gesture.moveTo(tester.getCenter(find.text('GAME DEV')));
     await tester.pumpAndSettle();
     expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), [
-      Color.alphaBlend(
-        StateLayers.hover(scheme),
-        ExplorerRow.bandColor(scheme),
-      ),
-    ], reason: 'the hover wash is laid over the band, not in its place');
+      hover,
+    ], reason: 'the ladder\'s hover tone, as a row\'s');
+
+    await gesture.moveTo(tester.getCenter(find.text('Finished session')));
+    await tester.pumpAndSettle();
+    expect(fillsIn(tester, sessionRow('Finished session')), [hover]);
   });
 }
 

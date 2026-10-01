@@ -21,11 +21,11 @@ import 'explorer_context_actions.dart';
 import 'explorer_tree_rows.dart';
 import 'sidebar_chrome.dart';
 
-/// **Which machine the Explorer lists.** The machine used to be the tree's top
-/// level; it is a choice above the list now, so a project stands at depth zero.
-/// Not drawn with one machine: there is nothing to choose between. Up to
-/// [ExplorerEnvironmentStrip.most] machines are a strip of segments, one click
-/// each; more than that are this menu.
+/// **Which machine the Explorer lists**: one small menu at the end of the
+/// filter row — the secondary filter, after the groups. The machine used to be
+/// the tree's top level; it is a choice above the list now, so a project
+/// stands at depth zero. Not drawn with one machine: there is nothing to
+/// choose between.
 class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   const ExplorerEnvironmentSwitcher({super.key});
 
@@ -33,14 +33,10 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   static const _terminal = 'terminal:';
   static const _pairPhone = 'pair-phone:';
 
-  /// Under this a machine's button is its glyph and caret, and the name its
-  /// tooltip.
-  static const nameFloor = 260.0;
-
-  /// Every machine at once, and what the button says of it where that does not
-  /// fit — a whole word either way, never an ellipsised one.
+  /// Every machine at once — in the menu, on the face where it fits, and to a
+  /// screen reader. Where it does not fit the face is its glyph: a second
+  /// "All" beside the groups' own would read as one filter said twice.
   static const allLabel = 'All environments';
-  static const allShortLabel = 'All';
 
   /// What a machine's line in a menu says under its name.
   static String detailOf(EnvironmentChoice choice) => choice.environment == null
@@ -114,359 +110,157 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
     // screen reader.
     final label = current?.label ?? allLabel;
     final total = environments.fold(0, (sum, e) => sum + e.projectCount);
+    final icon = current == null
+        ? AppIcons.stack
+        : environmentGlyph(current.kind);
 
-    return PopupMenuButton<String>(
-      tooltip: current == null
-          ? 'Showing every environment'
-          : 'Showing $label only',
-      padding: EdgeInsets.zero,
-      position: PopupMenuPosition.under,
-      onSelected: (value) => run(context, ref, value, current),
-      itemBuilder: (context) => [
-        DesktopMenuDetailItem(
-          value: _all,
-          label: allLabel,
-          detail: projectCountWords(total),
-          icon: AppIcons.stack,
-          selected: current == null,
-        ),
-        const DesktopMenuDivider(),
-        for (final choice in environments)
-          DesktopMenuDetailItem(
-            value: choice.environmentId,
-            label: choice.label,
-            detail: detailOf(choice),
-            icon: environmentGlyph(choice.kind),
-            selected: choice.environmentId == current?.environmentId,
-          ),
-        if (current != null) ...actionsOf(ref, current),
-      ],
-      child: _SwitcherFace(
-        icon: current == null ? AppIcons.stack : environmentGlyph(current.kind),
-        label: label,
-        shortLabel: current == null ? allShortLabel : null,
-      ),
-    );
-  }
-}
-
-/// **The machines as pills** (spec §4, board A2) — `All · Windows · do-box` —
-/// for a workspace with two or three, so a switch is one click and the choice
-/// in force is always in view. A row of its own under the search field, each
-/// pill as wide as its name, wrapping onto a second line rather than cutting a
-/// name. Each pill's right-click carries what the menu's entry for that
-/// machine did: its count, a terminal on it, pairing.
-class ExplorerEnvironmentStrip extends ConsumerWidget {
-  const ExplorerEnvironmentStrip({super.key});
-
-  /// The most machines the pills hold; above it the switcher is a menu.
-  static const most = 3;
-
-  /// Between two pills (the mockup's `gap: 4px`).
-  static const gap = Insets.xs;
-
-  // The equal-share segment geometry the strip used before it was pills.
-  // Nothing draws with it now; it is kept only so `explorer_scope_test.dart`
-  // compiles until that test is rewritten for content-sized pills.
-
-  /// Under this width per segment a segment was its glyph alone.
-  static const labelFloor = 64.0;
-
-  /// What a segment [share] wide left its name beside its glyph.
-  static double labelRoomOf(double share) =>
-      share - Insets.sm * 2 - Chrome.icon - Insets.sm;
-
-  /// What a segment [share] wide left its name on its own.
-  static double nameRoomOf(double share) => share - Insets.sm * 2;
-
-  /// A segment's width when [count] of them shared [width].
-  static double shareOf(double width, int count) =>
-      (width - gap * (count - 1)) / count;
-
-  /// The most of the row one machine's name may take before it is ellipsised.
-  static const nameMax = 120.0;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scope = ref.watch(explorerEnvironmentScopeProvider);
-    final environments = scope.environments;
-    if (environments.length < 2 || environments.length > most) {
-      return const SizedBox.shrink();
-    }
-    final total = environments.fold(0, (sum, e) => sum + e.projectCount);
-    final segments = [
-      _Segment(
-        value: ExplorerEnvironmentSwitcher._all,
-        icon: AppIcons.stack,
-        label: ExplorerEnvironmentSwitcher.allShortLabel,
-        name: ExplorerEnvironmentSwitcher.allLabel,
+    List<PopupMenuEntry<String>> items() => [
+      DesktopMenuDetailItem(
+        value: _all,
+        label: allLabel,
         detail: projectCountWords(total),
-        selected: scope.environmentId == null,
-        choice: null,
+        icon: AppIcons.stack,
+        selected: current == null,
       ),
+      const DesktopMenuDivider(),
       for (final choice in environments)
-        _Segment(
-          value: choice.environmentId,
-          icon: environmentGlyph(choice.kind),
-          label: choice.label,
-          name: choice.label,
-          detail: ExplorerEnvironmentSwitcher.detailOf(choice),
-          selected: choice.environmentId == scope.environmentId,
-          choice: choice,
-        ),
-    ];
-    return Wrap(
-      spacing: gap,
-      runSpacing: gap,
-      children: [
-        for (final segment in segments) _SegmentButton(segment: segment),
-      ],
-    );
-  }
-}
-
-class _Segment {
-  const _Segment({
-    required this.value,
-    required this.icon,
-    required this.label,
-    required this.name,
-    required this.detail,
-    required this.selected,
-    required this.choice,
-  });
-
-  final String value;
-
-  /// The machine's glyph, for its menu entry. The pill itself is words only.
-  final IconData icon;
-
-  /// On the pill.
-  final String label;
-
-  /// In full, for the tooltip, the menu and a screen reader.
-  final String name;
-  final String detail;
-  final bool selected;
-
-  /// Null for *All*.
-  final EnvironmentChoice? choice;
-}
-
-class _SegmentButton extends ConsumerWidget {
-  const _SegmentButton({required this.segment});
-
-  final _Segment segment;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final choice = segment.choice;
-    final button = SidebarPill(
-      label: segment.label,
-      selected: segment.selected,
-      // The label names the pill in full; its short word would only be read
-      // out twice.
-      semanticLabel: 'Environment: ${segment.name}',
-      tooltip: '${segment.name} · ${segment.detail}',
-      maxLabelWidth: MediaQuery.textScalerOf(
-        context,
-      ).scale(ExplorerEnvironmentStrip.nameMax),
-      onTap: () =>
-          ExplorerEnvironmentSwitcher.run(context, ref, segment.value, choice),
-    );
-    return ContextMenuRegion(
-      itemBuilder: () => [
         DesktopMenuDetailItem(
-          value: segment.value,
-          label: segment.name,
-          detail: segment.detail,
-          icon: segment.icon,
-          selected: segment.selected,
+          value: choice.environmentId,
+          label: choice.label,
+          detail: detailOf(choice),
+          icon: environmentGlyph(choice.kind),
+          selected: choice.environmentId == current?.environmentId,
         ),
-        if (choice != null)
-          ...ExplorerEnvironmentSwitcher.actionsOf(ref, choice),
-      ],
-      onSelected: (value) =>
-          ExplorerEnvironmentSwitcher.run(context, ref, value, choice),
-      child: button,
-    );
-  }
-}
+      if (current != null) ...actionsOf(ref, current),
+    ];
 
-class _SwitcherFace extends StatelessWidget {
-  const _SwitcherFace({
-    required this.icon,
-    required this.label,
-    this.shortLabel,
-  });
-
-  final IconData icon;
-  final String label;
-
-  /// Said in [label]'s place where that does not fit. With one the face is
-  /// measured and says a whole word or none; without, a machine's name is
-  /// ellipsised, and dropped under [ExplorerEnvironmentSwitcher.nameFloor].
-  final String? shortLabel;
-
-  @override
-  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final density = UiDensity.of(context);
-    final style = density.rowTitle(theme, strong: true);
-    final short = shortLabel;
+    final style = SidebarFilterTab.styleOf(theme);
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
-    final roomy =
-        (ExplorerScopeBar.widthOf(context) ?? double.infinity) >=
-        ExplorerEnvironmentSwitcher.nameFloor;
-    return Semantics(
-      button: true,
-      label: 'Environment: $label',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Chrome.control),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              var text = roomy ? label : null;
-              if (short != null) {
-                final room =
-                    constraints.maxWidth -
-                    Chrome.icon -
-                    density.glyphGap * 1.5 -
-                    Chrome.iconSmall;
-                final painter = TextPainter(
-                  textDirection: direction,
-                  textScaler: scaler,
-                  maxLines: 1,
-                );
-                try {
-                  text = [label, short]
-                      .where(
-                        (candidate) =>
-                            (painter
-                                  ..text = TextSpan(
-                                    text: candidate,
-                                    style: style,
-                                  )
-                                  ..layout())
-                                .width <=
-                            room,
-                      )
-                      .firstOrNull;
-                } finally {
-                  painter.dispose();
-                }
-              }
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: Chrome.icon, color: scheme.onSurfaceVariant),
-                  if (text != null) ...[
-                    SizedBox(width: density.glyphGap),
-                    Flexible(
-                      child: Text(
-                        text,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: style,
-                      ),
-                    ),
-                  ],
-                  SizedBox(width: density.glyphGap / 2),
-                  Icon(
-                    AppIcons.caretDown,
-                    size: Chrome.iconSmall,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A whole name or none: under its room the face is the machine's glyph
+        // and the caret, and the name is in the tooltip and to a reader.
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        final double natural;
+        try {
+          natural = (painter..layout()).width;
+        } finally {
+          painter.dispose();
+        }
+        final fits =
+            SidebarFilterTab.widthFor(
+              natural,
+              lead: Chrome.iconSmall,
+              trail: Chrome.iconSmall,
+            ) <=
+            constraints.maxWidth;
+        return Builder(
+          builder: (anchor) => SidebarFilterTab(
+            label: fits ? label : null,
+            // A machine in force is a filter in force: filled, like a group's.
+            selected: current != null,
+            leading: Icon(icon),
+            trailing: const Icon(AppIcons.caretDown),
+            tooltip: current == null
+                ? 'Showing every environment'
+                : 'Showing $label only',
+            semanticLabel: 'Environment: $label',
+            onTap: () async {
+              final picked = await showDesktopMenuUnder<String>(
+                anchor,
+                items(),
               );
+              if (picked != null && context.mounted) {
+                run(context, ref, picked, current);
+              }
             },
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-/// The rows above the list: [search], and the machine when there is more than
-/// one. Two or three machines are a strip on a row of its own under the field
-/// — never beside it, where the two crowded each other; four or more are a
-/// menu on the left of the field's row, in what a menu's face needs.
-class ExplorerScopeBar extends ConsumerWidget {
-  const ExplorerScopeBar({required this.search, super.key});
+/// **The one filter row above the list**: the groups as quiet tabs from the
+/// left — the primary filter — and, with more than one machine, the machine
+/// menu at the row's end. Nothing is drawn when there is neither to choose.
+/// On the rows' fill edge, as the search field above it is, so the field, the
+/// row and the list are one column.
+class ExplorerFilterRow extends ConsumerWidget {
+  const ExplorerFilterRow({super.key});
 
-  final Widget search;
-
-  /// The most of the row the machine's name may take, as a menu.
+  /// The most of the row the machine menu may take; the groups have the rest.
   static const switcherShare = 0.42;
-
-  /// The bar's width, for the switcher to decide whether its name fits.
-  static double? widthOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ScopeBarWidth>()?.width;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The machines, not which is chosen: a switch redraws the strip and the
-    // list, and this row — with the search field in it — stays as it is.
-    final environments = ref
-        .watch(
-          explorerEnvironmentScopeProvider.select(
-            (scope) => ExplorerEnvironmentScope(scope.environments, null),
-          ),
-        )
-        .environments;
-    if (environments.length < 2) return search;
-    if (environments.length > ExplorerEnvironmentStrip.most) {
-      return LayoutBuilder(
-        builder: (context, constraints) => _ScopeBarWidth(
-          width: constraints.maxWidth,
-          child: Row(
-            children: [
+    // Whether there is anything to choose, never what is chosen: a switch
+    // redraws the tabs or the menu, not this row.
+    final contexts = ref.watch(
+      workspacesControllerProvider.select((all) => all.isNotEmpty),
+    );
+    final machines = ref.watch(
+      explorerEnvironmentScopeProvider.select(
+        (scope) => scope.environments.length > 1,
+      ),
+    );
+    if (!contexts && !machines) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Sidebar.fillEdge,
+        Sidebar.headerGap,
+        Sidebar.fillEdge,
+        0,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: contexts
+                  ? const ExplorerContextChips()
+                  : const SizedBox.shrink(),
+            ),
+            if (machines) ...[
+              const SizedBox(width: Insets.xs),
               ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: constraints.maxWidth * switcherShare,
                 ),
-                child: const Padding(
-                  padding: EdgeInsets.only(left: Insets.xs),
-                  child: ExplorerEnvironmentSwitcher(),
-                ),
+                child: const ExplorerEnvironmentSwitcher(),
               ),
-              Expanded(child: search),
             ],
-          ),
+          ],
         ),
-      );
-    }
-    return Column(
-      children: [
-        search,
-        const Padding(
-          // On the rows' fill edge, as the field above is; the space above
-          // is the only thing between the two.
-          padding: EdgeInsets.fromLTRB(6, Sidebar.headerGap, 6, 0),
-          child: ExplorerEnvironmentStrip(),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _ScopeBarWidth extends InheritedWidget {
-  const _ScopeBarWidth({required this.width, required super.child});
+/// The rows above the list: [search], then the [ExplorerFilterRow]. It
+/// watches nothing, so a filter switch leaves the field as it is.
+class ExplorerScopeBar extends StatelessWidget {
+  const ExplorerScopeBar({required this.search, super.key});
 
-  final double width;
+  final Widget search;
 
   @override
-  bool updateShouldNotify(_ScopeBarWidth old) => old.width != width;
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [search, const ExplorerFilterRow()],
+  );
 }
 
-/// **Which context the Explorer lists**: `All`, one chip per context, and the
-/// projects in none — one at a time. It draws [workspaceScopeProvider], the
-/// same scope Quick Open switches, so the two cannot disagree. Nothing is
-/// drawn while there are no contexts.
+/// **Which context the Explorer lists**: `All`, one tab per context, and the
+/// projects in none — one at a time — then `…` with every one of them. It
+/// draws [workspaceScopeProvider], the same scope Quick Open switches, so the
+/// two cannot disagree. Nothing is drawn while there are no contexts.
 class ExplorerContextChips extends ConsumerWidget {
   const ExplorerContextChips({super.key});
 
@@ -474,7 +268,7 @@ class ExplorerContextChips extends ConsumerWidget {
   static const _manage = 'chips:manage';
   static const _scopePrefix = 'scope:';
 
-  /// The most one chip's name may take before it is ellipsised.
+  /// The most one tab's name may take before it is ellipsised.
   static const chipMax = 132.0;
 
   @override
@@ -521,140 +315,133 @@ class ExplorerContextChips extends ConsumerWidget {
     void select(WorkspaceScope target) =>
         ref.read(workspaceScopeProvider.notifier).select(target);
 
-    final theme = Theme.of(context);
-    // Measured in the pill's own hand, at the weight of the one in force, so
-    // a click never changes which chips fit.
-    final style = theme.textTheme.labelSmall?.copyWith(
-      fontSize: 12,
-      letterSpacing: 0,
-      fontWeight: FontWeight.w500,
-    );
+    final style = SidebarFilterTab.styleOf(Theme.of(context));
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
 
-    return Padding(
-      // On the rows' fill edge, under the machine pills: the same pills, the
-      // same column.
-      padding: const EdgeInsets.fromLTRB(6, Sidebar.headerGap, 6, 0),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final painter = TextPainter(
-            textDirection: direction,
-            textScaler: scaler,
-            maxLines: 1,
-          );
-          final List<double> widths;
-          try {
-            widths = [
-              for (final entry in entries)
-                _ScopeChip.widthFor(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        final List<double> widths;
+        try {
+          widths = [
+            for (final entry in entries)
+              SidebarFilterTab.widthFor(
+                math.min(
                   (painter
                         ..text = TextSpan(text: entry.label, style: style)
                         ..layout())
                       .width,
-                  scaler,
-                  dot: entry.hue != null,
+                  scaler.scale(chipMax),
                 ),
-            ];
-          } finally {
-            painter.dispose();
-          }
-          final visible = _fitting(
-            widths,
-            selected: entries.indexWhere((entry) => entry.scope == scope),
-            room: constraints.maxWidth - _OverflowButton.width - Insets.xs,
-          );
-          final chips = Row(
-            children: [
-              for (final index in visible) ...[
-                Flexible(
-                  // The chip in force is drawn whether or not it fits, so it
-                  // is the one that gives — under the narrowest panes at the
-                  // largest text. Alone in flexing, it has all the spare room.
-                  flex: entries[index].scope == scope ? 1 : 0,
-                  child: _ScopeChip(
-                    entry: entries[index],
-                    selected: entries[index].scope == scope,
-                    onTap: () => select(entries[index].scope),
-                    menuItems: index == 0
-                        ? null
-                        : () => contextMenuItems(
-                            workspace: entries[index].workspace,
-                            scope: ref.read(workspaceScopeProvider),
-                          ),
-                    onMenu: (action) => runContextAction(
-                      ref,
-                      context,
-                      action,
-                      entries[index].workspace,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: Insets.xs),
-              ],
-            ],
-          );
-          return Row(
-            children: [
-              Expanded(child: chips),
-              _OverflowButton(
-                hidden: entries.length - visible.length,
-                itemBuilder: () => [
-                  for (final entry in entries)
-                    DesktopMenuDetailItem(
-                      value: '$_scopePrefix${entry.scope.stored}',
-                      label: entry.label,
-                      detail:
-                          entry.workspace?.description ??
-                          projectCountWords(entry.count),
-                      detailMaxLines: 1,
-                      icon: entry.workspace == null
-                          ? (entry.scope.isAll
-                                ? AppIcons.folders
-                                : AppIcons.minusCircle)
-                          : AppIcons.stack,
-                      selected: entry.scope == scope,
-                    ),
-                  const DesktopMenuDivider(),
-                  DesktopMenuItem(
-                    value: _newContext,
-                    label: 'New context…',
-                    icon: AppIcons.folderPlus,
-                  ),
-                  DesktopMenuItem(
-                    value: _manage,
-                    label: 'Manage contexts…',
-                    icon: AppIcons.stack,
-                  ),
-                ],
-                onSelected: (value) {
-                  if (value.startsWith(_scopePrefix)) {
-                    select(
-                      WorkspaceScope.parse(
-                        value.substring(_scopePrefix.length),
-                      ),
-                    );
-                  } else {
-                    runContextAction(
-                      ref,
-                      context,
-                      value == _newContext
-                          ? contextActionNew
-                          : contextActionManage,
-                      null,
-                    );
-                  }
-                },
+                lead: entry.hue == null ? 0 : Chrome.dot,
               ),
-            ],
-          );
-        },
-      ),
+          ];
+        } finally {
+          painter.dispose();
+        }
+        final visible = _fitting(
+          widths,
+          selected: entries.indexWhere((entry) => entry.scope == scope),
+          room: constraints.maxWidth - _OverflowButton.width - Insets.xs,
+        );
+        // The tabs and `…` hug the left, from the field's edge; the room
+        // after them is the row's, not a gap inside it.
+        return Row(
+          children: [
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final index in visible) ...[
+                    Flexible(
+                      // The tab in force is drawn whether or not it fits, so
+                      // it is the one that gives — under the narrowest panes
+                      // at the largest text. Alone in flexing, it has all the
+                      // spare room.
+                      flex: entries[index].scope == scope ? 1 : 0,
+                      child: _ScopeChip(
+                        entry: entries[index],
+                        selected: entries[index].scope == scope,
+                        onTap: () => select(entries[index].scope),
+                        menuItems: index == 0
+                            ? null
+                            : () => contextMenuItems(
+                                workspace: entries[index].workspace,
+                                scope: ref.read(workspaceScopeProvider),
+                              ),
+                        onMenu: (action) => runContextAction(
+                          ref,
+                          context,
+                          action,
+                          entries[index].workspace,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Insets.xs),
+                  ],
+                ],
+              ),
+            ),
+            _OverflowButton(
+              hidden: entries.length - visible.length,
+              itemBuilder: () => [
+                for (final entry in entries)
+                  DesktopMenuDetailItem(
+                    value: '$_scopePrefix${entry.scope.stored}',
+                    label: entry.label,
+                    detail:
+                        entry.workspace?.description ??
+                        projectCountWords(entry.count),
+                    detailMaxLines: 1,
+                    icon: entry.workspace == null
+                        ? (entry.scope.isAll
+                              ? AppIcons.folders
+                              : AppIcons.minusCircle)
+                        : AppIcons.stack,
+                    selected: entry.scope == scope,
+                  ),
+                const DesktopMenuDivider(),
+                DesktopMenuItem(
+                  value: _newContext,
+                  label: 'New context…',
+                  icon: AppIcons.folderPlus,
+                ),
+                DesktopMenuItem(
+                  value: _manage,
+                  label: 'Manage contexts…',
+                  icon: AppIcons.stack,
+                ),
+              ],
+              onSelected: (value) {
+                if (value.startsWith(_scopePrefix)) {
+                  select(
+                    WorkspaceScope.parse(value.substring(_scopePrefix.length)),
+                  );
+                } else {
+                  runContextAction(
+                    ref,
+                    context,
+                    value == _newContext
+                        ? contextActionNew
+                        : contextActionManage,
+                    null,
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
-  /// Which chips fit [room], by index and in order. `All` and the [selected]
-  /// chip always do — a filter in force is never folded into a menu.
+  /// Which tabs fit [room], by index and in order. `All` and the [selected]
+  /// tab always do — a filter in force is never folded into a menu.
   static List<int> _fitting(
     List<double> widths, {
     required int selected,
@@ -708,29 +495,18 @@ class _ScopeChip extends StatelessWidget {
   final List<PopupMenuEntry<String>> Function()? menuItems;
   final ValueChanged<String> onMenu;
 
-  /// What a chip whose text measures [text] takes of the row, with its colour
-  /// [dot] when it wears one.
-  static double widthFor(double text, TextScaler scaler, {bool dot = false}) =>
-      math.min(text, scaler.scale(ExplorerContextChips.chipMax)) +
-      (dot ? Chrome.dot + SidebarPill.leadGap : 0) +
-      SidebarPill.padX * 2 +
-      // The border, and a pixel kept back: what is drawn is not what was
-      // measured to the last fraction.
-      3;
-
-  /// A context is chosen with the same pill a machine is (board A2 `.pill`).
   @override
   Widget build(BuildContext context) {
     final hue = entry.hue;
-    final chip = SidebarPill(
+    final chip = SidebarFilterTab(
       label: entry.label,
       selected: selected,
       tooltip: entry.workspace?.description ?? projectCountWords(entry.count),
       maxLabelWidth: MediaQuery.textScalerOf(
         context,
       ).scale(ExplorerContextChips.chipMax),
-      // The dot stays whether or not the chip is the one in force: the
-      // colour is the context's, not the filter's.
+      // The dot stays whether or not the tab is the one in force: the colour
+      // is the context's, not the filter's.
       leading: hue == null ? null : ContextHueDot(hue: hue, size: Chrome.dot),
       onTap: onTap,
     );
@@ -745,7 +521,7 @@ class _ScopeChip extends StatelessWidget {
   }
 }
 
-/// `…` at the row's end: every context, including the ones that did not fit,
+/// `…` after the tabs: every context, including the ones that did not fit,
 /// and the two verbs that are about contexts rather than about one of them.
 class _OverflowButton extends StatelessWidget {
   const _OverflowButton({
@@ -758,23 +534,26 @@ class _OverflowButton extends StatelessWidget {
   final List<PopupMenuEntry<String>> Function() itemBuilder;
   final ValueChanged<String> onSelected;
 
-  static const width = Chrome.control;
+  /// Square, a tab's height.
+  static const width = SidebarFilterTab.height;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
-    height: SidebarPill.height,
-    child: PopupMenuButton<String>(
-      tooltip: hidden == 0 ? 'Contexts' : 'Contexts — $hidden more',
-      padding: EdgeInsets.zero,
-      iconSize: Chrome.icon,
-      position: PopupMenuPosition.under,
-      icon: Icon(
-        AppIcons.dotsThree,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+    child: Builder(
+      builder: (anchor) => SidebarFilterTab(
+        selected: false,
+        padding: 0,
+        leading: const Icon(AppIcons.dotsThree, size: Chrome.icon),
+        tooltip: hidden == 0 ? 'Contexts' : 'Contexts — $hidden more',
+        onTap: () async {
+          final picked = await showDesktopMenuUnder<String>(
+            anchor,
+            itemBuilder(),
+          );
+          if (picked != null) onSelected(picked);
+        },
       ),
-      onSelected: onSelected,
-      itemBuilder: (_) => itemBuilder(),
     ),
   );
 }

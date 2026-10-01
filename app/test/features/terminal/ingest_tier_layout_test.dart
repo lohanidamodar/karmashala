@@ -72,43 +72,37 @@ void main() {
     }
   });
 
-  test('a detached session goes cold — no tab, no parsing', () {
+  // Cold was the tier of a pane kept with no tab. Since 2026-09-30 a closed
+  // tab drops its pane — the server keeps the terminal — so nothing in this
+  // window is ever cold; these pin that nothing lingers to be.
+  test('a closed tab\'s pane is dropped, not kept cold', () {
     final first = controller.openTab(TerminalProfile.powerShell);
     controller.openTab(TerminalProfile.commandPrompt);
-    final detachedPane = onlyPaneOf(first);
-    final instance = pane(detachedPane);
-    // A pane worth detaching: an idle plain shell is released on close.
+    final closedPane = onlyPaneOf(first);
+    final instance = pane(closedPane);
     giveShellHistory(instance);
 
     controller.closeTab(first);
 
-    expect(
-      container.read(terminalSessionsControllerProvider).detached.single.paneId,
-      detachedPane,
-    );
-    expect(instance.ingestTier, IngestTier.cold);
+    expect(container.read(terminalSessionsControllerProvider).detached, []);
+    expect(controller.instanceFor(closedPane), isNull);
+    expect(instance.disposed, isTrue);
+    expect(instance.ingestTier, isNot(IngestTier.cold));
   });
 
-  test('reattaching brings it back hot, in one step', () {
+  test('reopening is a tab again, hot in one step', () {
     final first = controller.openTab(TerminalProfile.powerShell);
     controller.openTab(TerminalProfile.commandPrompt);
-    final detachedPane = onlyPaneOf(first);
-    final instance = pane(detachedPane);
-    giveShellHistory(instance);
+    final closed = pane(onlyPaneOf(first));
+    giveShellHistory(closed);
     controller.closeTab(first);
-    expect(instance.ingestTier, IngestTier.cold);
 
-    controller.reattachSession(detachedPane);
+    final reopened = controller.openTab(TerminalProfile.powerShell);
 
-    expect(instance.ingestTier, IngestTier.hot);
-    // Warm when the second tab took the front, cold when its own tab closed,
-    // hot again when it came back — three transitions and no others, because
-    // the tier is derived from the layout rather than stepped through.
-    expect(instance.tierHistory, [
-      IngestTier.warm,
-      IngestTier.cold,
-      IngestTier.hot,
-    ]);
+    expect(pane(onlyPaneOf(reopened)).ingestTier, IngestTier.hot);
+    // Warm when the second tab took the front, and no step after it: the tier
+    // is derived from the layout, and a dropped pane is in none.
+    expect(closed.tierHistory, [IngestTier.warm]);
   });
 
   test('one pane is hot however many tabs are open', () {

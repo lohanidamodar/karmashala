@@ -16,7 +16,6 @@ import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
 
 void main() {
-
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 

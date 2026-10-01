@@ -105,7 +105,10 @@ class _PairMachineCodeScreenState extends State<PairMachineCodeScreen> {
           : TextCapitalization.none,
       inputFormatters: widget.byAddress ? [_UpperCase()] : null,
       onSubmitted: (_) => _pair(),
-      style: theme.textTheme.bodyLarge?.copyWith(fontFamily: kMonoFamily),
+      style: theme.textTheme.bodyLarge?.copyWith(
+        fontFamily: kMonoFamily,
+        fontFamilyFallback: kMonoFallback,
+      ),
       decoration: InputDecoration(
         labelText: widget.byAddress ? 'Pairing code' : 'Code or payload',
         hintText: 'K7QM-3X2W-…',

@@ -220,7 +220,9 @@ void main() {
     );
   });
 
-  testWidgets('the session header grows with the text scale', (tester) async {
+  testWidgets('at 2x text the conversation fits, with no header to clip', (
+    tester,
+  ) async {
     await run(
       tester,
       matrix: const [
@@ -228,21 +230,11 @@ void main() {
       ],
       busy: false,
       check: (tester) async {
-        // A cross-axis clip reports no overflow, so the label's own height is
-        // compared with the row that holds it.
-        final label = tester.renderObject<RenderBox>(
-          find
-              .descendant(
-                of: find.byType(AgentStatusBadge),
-                matching: find.byType(RichText),
-              )
-              .last,
-        );
-        final header = tester.getRect(find.byType(Divider).first).top;
-        expect(
-          label.getMaxIntrinsicHeight(double.infinity),
-          lessThanOrEqualTo(header),
-        );
+        // The header that had to grow with the text is gone (board N2): the
+        // tab carries the title and state, the pane's status line the rest.
+        // What is left is the list over the footer, which the matrix holds.
+        expect(find.byType(AgentStatusBadge), findsNothing);
+        expect(find.byType(ListView), findsOneWidget);
       },
     );
   });

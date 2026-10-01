@@ -231,7 +231,7 @@ void main() {
       }
     });
 
-    test('a detached session is not started — it is in no tab at all', () {
+    test('a closed tab is not started — it is not restored at all', () {
       final db = TerminalLayoutStore.memory();
       addTearDown(db.close);
 
@@ -239,7 +239,7 @@ void main() {
       _closeWith(db, (container, controller) {
         final tabId = controller.openTab(TerminalProfile.powerShell);
         paneId = _panesOfTab(container, tabId).single;
-        // Only a pane with history is kept alive by `shouldDetachOnClose`.
+        // History once kept it alive with no tab; closing drops it now.
         giveShellHistory(controller.instanceFor(paneId)!);
         controller.closeTab(tabId);
       });
@@ -247,8 +247,14 @@ void main() {
       final next = fakeTerminalContainer(layoutStore: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
-      expect(restored.detached.map((s) => s.paneId), [paneId]);
-      expect(restored.livenessOf(paneId), PaneLiveness.restored);
+      expect(restored.detached, isEmpty);
+      expect(restored.liveness, isNot(contains(paneId)));
+      expect(
+        next
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(paneId),
+        isNull,
+      );
     });
   });
 

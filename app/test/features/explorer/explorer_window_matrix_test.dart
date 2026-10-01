@@ -13,6 +13,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
+import 'package:karmashala/src/features/explorer/presentation/sidebar_chrome.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:karmashala_files/values.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -26,7 +27,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fake_command_runner.dart';
@@ -53,7 +53,9 @@ class _Inbox extends AttentionInboxController {
           openId: 's1',
           imported: false,
         ),
-        kind: InboxItemKind.finished,
+        // An ask: since c14758d4f a finished turn is unseen, not waiting on
+        // you, and only what waits on you is the needs-you badge.
+        kind: InboxItemKind.needsApproval,
         at: testTime,
       ),
     ],
@@ -261,9 +263,9 @@ void main() {
     });
   }
 
-  // Three machines is the strip at its widest — four segments, one of them
-  // named longer than the column — on a row of its own under the field,
-  // glyphs alone when the segments are under the floor, up to 2x text.
+  // Three machines, one of them named longer than the column: the machine
+  // menu at the end of the filter row, its face a glyph where no name fits,
+  // up to 2x text.
   for (final width in [200.0, 240.0]) {
     testWidgets('the Explorer at ${width.toInt()}px with three machines, up '
         'to 2x text', (tester) async {
@@ -277,15 +279,37 @@ void main() {
         ],
         warmUp: (tester) async {
           await openProject(tester);
-          expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+          final menu = find.byType(ExplorerEnvironmentSwitcher);
+          expect(menu, findsOneWidget);
+          expect(tester.getTopRight(menu).dx, lessThanOrEqualTo(width));
+          // One row: its gap and its tallest tab, which grows with the text.
+          final tallest = [
+            for (final tab
+                in find
+                    .descendant(
+                      of: find.byType(ExplorerFilterRow),
+                      matching: find.byType(SidebarFilterTab),
+                    )
+                    .evaluate())
+              tester.getSize(find.byWidget(tab.widget)).height,
+          ].reduce((a, b) => a > b ? a : b);
           expect(
-            find.bySemanticsLabel(RegExp('^Environment: $_longHost\$')),
-            findsOneWidget,
-            reason: 'the long name is a segment, whole to a screen reader',
+            tester.getSize(find.byType(ExplorerFilterRow)).height,
+            Sidebar.headerGap + tallest,
+            reason: 'one filter row, however many machines',
           );
-          final strip = tester.getSize(find.byType(ExplorerEnvironmentStrip));
-          expect(strip.width, lessThanOrEqualTo(width));
-          expect(strip.height, Chrome.control);
+          await tester.tap(menu);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: find.byWidgetPredicate((w) => w is PopupMenuEntry),
+              matching: find.text(_longHost),
+            ),
+            findsOneWidget,
+            reason: 'the long name is in the menu, whole',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
         },
       );
     });

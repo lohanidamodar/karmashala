@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:agent_cli/process.dart';
+import '../../environments/application/environment_values.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_files/values.dart';
@@ -8,7 +8,7 @@ import 'package:karmashala_ui/dialogs.dart';
 
 import '../../editor/application/open_documents.dart';
 import '../../editor/domain/document_id.dart';
-import '../data/files_client.dart';
+import '../application/file_deletion.dart';
 
 /// What a delete did: the entries that went, and a sentence for each that
 /// did not.
@@ -18,7 +18,7 @@ typedef FileDeleteOutcome = ({List<FileEntry> deleted, List<String> failures});
 /// the Split browser's toolbar: asks first, naming the item (and what a
 /// folder holds), then has the server do it where the file is.
 ///
-/// To the recycle bin where the machine has one ([FilesClient.canTrash]: a
+/// To the recycle bin where the machine has one ([FileDeletion.canTrash]: a
 /// drive path on Windows); otherwise — a WSL distribution, an SSH host — a
 /// permanent delete, and the question says "permanently" before anyone
 /// agrees. With [within], anything that is [within] itself or outside it is
@@ -50,21 +50,19 @@ Future<FileDeleteOutcome> confirmAndDeleteFiles(
   // The container, not the row's ref: the row can be gone (its folder
   // re-listed) before the answer comes back.
   final container = ProviderScope.containerOf(context, listen: false);
-  final files = container.read(filesClientProvider);
+  final files = container.read(fileDeletionProvider);
   final toBin = entries.every((entry) => files.canTrash(entry.path));
   final one = entries.length == 1 ? entries.single : null;
 
   String? inside;
   if (one != null && one.isDirectory) {
-    try {
-      final count = (await files.list(one.path)).length;
-      inside = count == 0
-          ? 'The folder is empty.'
-          : 'The ${count == 1 ? 'item' : '$count items'} inside '
-                '${count == 1 ? 'goes' : 'go'} with it.';
-    } on FilesException {
-      inside = 'Anything inside goes with it.';
-    }
+    final count = await files.countIn(one.path);
+    inside = count == null
+        ? 'Anything inside goes with it.'
+        : count == 0
+        ? 'The folder is empty.'
+        : 'The ${count == 1 ? 'item' : '$count items'} inside '
+              '${count == 1 ? 'goes' : 'go'} with it.';
   } else if (entries.any((entry) => entry.isDirectory)) {
     inside = 'Anything inside the folders goes with them.';
   }
@@ -91,15 +89,11 @@ Future<FileDeleteOutcome> confirmAndDeleteFiles(
   final deleted = <FileEntry>[];
   final failures = <String>[];
   for (final entry in entries) {
-    try {
-      if (toBin) {
-        await files.trash(entry.path);
-      } else {
-        await files.delete(entry.path, recursive: entry.isDirectory);
-      }
+    final failed = await files.remove(entry, toBin: toBin);
+    if (failed == null) {
       deleted.add(entry);
-    } on FilesException catch (error) {
-      failures.add('Could not delete "${entry.name}": ${error.message}');
+    } else {
+      failures.add('Could not delete "${entry.name}": $failed');
     }
   }
   if (deleted.isNotEmpty) {
