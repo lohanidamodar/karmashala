@@ -9,6 +9,7 @@ import 'play_auth.dart';
 import 'play_error_issues.dart';
 import 'play_errors.dart';
 import 'play_icon.dart';
+import 'play_installs.dart';
 import 'play_mapping.dart';
 import 'play_reporting.dart';
 import 'play_reports_bucket.dart';
@@ -16,20 +17,38 @@ import 'play_reports_bucket.dart';
 const int _downloadDays = 14;
 
 /// Google Play, read-only.
-class PlayStoreClient implements StoreClient, StoreErrorIssueSource {
+class PlayStoreClient
+    implements
+        StoreClient,
+        StoreErrorIssueSource,
+        StoreInstallTotalSource,
+        StoreListingSource {
   /// [httpClient] is the transport the token and every call go through; a
-  /// test hands in a fake.
+  /// test hands in a fake. [installMonths] is what was read of the monthly
+  /// installs reports before; whoever outlives this client hands it in so a
+  /// month is read once.
   PlayStoreClient(
     PlayAccount account, {
     http.Client? httpClient,
     DateTime Function()? now,
-  }) : this._(account, httpClient ?? http.Client(), now ?? DateTime.now);
+    PlayInstallMonths? installMonths,
+  }) : this._(
+         account,
+         httpClient ?? http.Client(),
+         now ?? DateTime.now,
+         installMonths ?? PlayInstallMonths(),
+       );
 
-  PlayStoreClient._(this.account, http.Client transport, this._now)
-    : _transport = transport,
+  PlayStoreClient._(
+    this.account,
+    http.Client transport,
+    this._now,
+    this._installMonths,
+  ) : _transport = transport,
       _auth = PlayAuth(account, transport);
 
   final PlayAccount account;
+  final PlayInstallMonths _installMonths;
 
   /// The plain transport under [_auth]: the public store page is read
   /// through it, so no request there carries the account's token. Closed
@@ -236,8 +255,24 @@ class PlayStoreClient implements StoreClient, StoreErrorIssueSource {
         return sampled;
       }, area: PlayArea.reporting);
 
+  /// Every monthly installs overview in the bucket, listed once a call; a
+  /// month already read at its file's current generation is not read again.
+  @override
+  Future<InstallTotal> allTimeInstalls(StoreApp app) => playGuarded(
+    () async => readAllTimeInstalls(
+      await _bucket('for exact all-time installs.'),
+      app.id,
+      _installMonths,
+    ),
+    area: PlayArea.bucket,
+  );
+
   @override
   Future<StoreIconImage?> icon(StoreApp app) => playIcon(_transport, app.id);
+
+  @override
+  Future<StoreListing?> listing(StoreApp app) =>
+      playListing(_transport, app.id);
 
   @override
   void close() => _auth.close();

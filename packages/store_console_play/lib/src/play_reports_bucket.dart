@@ -48,7 +48,7 @@ double? latestAverageRating(ReportTable table) {
   DateTime? newest;
   double? average;
   for (final row in table.rows) {
-    final day = _day(ReportTable.cell(row, date));
+    final day = reportDay(ReportTable.cell(row, date));
     final value = double.tryParse(ReportTable.cell(row, rating) ?? '');
     if (day == null || value == null) continue;
     if (newest == null || !day.isBefore(newest)) {
@@ -78,7 +78,7 @@ Map<DateTime, int> dailyInstalls(
   }
   final days = <DateTime, int>{};
   for (final row in table.rows) {
-    final day = _day(ReportTable.cell(row, date));
+    final day = reportDay(ReportTable.cell(row, date));
     final count = int.tryParse(ReportTable.cell(row, installs) ?? '');
     if (day == null || count == null) continue;
     if (day.isBefore(from) || day.isAfter(to)) continue;
@@ -87,7 +87,8 @@ Map<DateTime, int> dailyInstalls(
   return days;
 }
 
-DateTime? _day(String? text) {
+/// A report's `2026-09-30` date as midnight UTC, or null.
+DateTime? reportDay(String? text) {
   final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(text ?? '');
   if (match == null) return null;
   return DateTime.utc(
@@ -97,12 +98,41 @@ DateTime? _day(String? text) {
   );
 }
 
+/// One file in the bucket, with the generation that changes whenever its
+/// contents do.
+typedef BucketObject = ({String name, String generation});
+
 /// Reads report files out of the Play Console bucket.
 class PlayReportsBucket {
   PlayReportsBucket(this._storage, this.bucket);
 
   final storage.StorageApi _storage;
   final String bucket;
+
+  /// A bound on paging: a few thousand files, decades of monthly reports.
+  static const int _maxPages = 20;
+
+  /// Every file whose name starts with [prefix].
+  Future<List<BucketObject>> list(String prefix) async {
+    final found = <BucketObject>[];
+    String? token;
+    for (var page = 0; page < _maxPages; page++) {
+      final listed = await _storage.objects.list(
+        bucket,
+        prefix: prefix,
+        pageToken: token,
+        $fields: 'items(name,generation),nextPageToken',
+      );
+      for (final item in listed.items ?? const <storage.Object>[]) {
+        final name = item.name;
+        if (name == null) continue;
+        found.add((name: name, generation: item.generation ?? ''));
+      }
+      token = listed.nextPageToken;
+      if (token == null || token.isEmpty) break;
+    }
+    return found;
+  }
 
   /// The report at [object], or null when the bucket has no such file.
   Future<ReportTable?> read(String object) async {

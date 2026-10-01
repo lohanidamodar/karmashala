@@ -25,6 +25,15 @@ Future<StoreIconImage?> playIcon(
   http.Client client,
   String packageName, {
   int size = 128,
+}) async => (await playListing(client, packageName, size: size))?.icon;
+
+/// What a published app's public Play page says, in one read of it: the icon,
+/// as [playIcon] has it, and the install band the page shows. Null when the
+/// app has no public page.
+Future<StoreListing?> playListing(
+  http.Client client,
+  String packageName, {
+  int size = 128,
 }) async {
   final page = await _fetch(
     client,
@@ -36,18 +45,17 @@ Future<StoreIconImage?> playIcon(
     what: 'its store page',
   );
   if (page == null) return null;
-  final source = playIconUrl(
-    utf8.decode(page.bytes, allowMalformed: true),
-    size: size,
-  );
-  if (source == null) return null;
+  final html = utf8.decode(page.bytes, allowMalformed: true);
+  final band = playInstallBand(html);
+  final source = playIconUrl(html, size: size);
+  if (source == null) return StoreListing(installBand: band);
   final image = await _fetch(
     client,
     source,
     maxBytes: _maxImageBytes,
     what: 'its icon',
   );
-  if (image == null) return null;
+  if (image == null) return StoreListing(installBand: band);
   final type = image.contentType;
   if (!type.startsWith('image/')) {
     throw const StoreException(
@@ -55,7 +63,40 @@ Future<StoreIconImage?> playIcon(
       'Google Play answered the icon with something other than an image.',
     );
   }
-  return StoreIconImage(source: source, bytes: image.bytes, contentType: type);
+  return StoreListing(
+    icon: StoreIconImage(source: source, bytes: image.bytes, contentType: type),
+    installBand: band,
+  );
+}
+
+final _bandText = RegExp(r'>\s*([0-9][0-9.,]*\s*[KMB]?\+)\s*<');
+final _bandData = RegExp(
+  r'\["[0-9][0-9,]*\+",\d+,\d+,"([0-9][0-9.]*[KMB]?\+)"\]',
+);
+
+/// How far before the word "Downloads" its figure may sit in the page.
+const int _bandReach = 400;
+
+/// The install band an English Play page shows, `10K+`: the figure just
+/// before the word "Downloads", else the short form in the page's data.
+/// Null when neither is there, or is not a band [installBandFloor] reads —
+/// a page in another language, or one Google has reshaped.
+String? playInstallBand(String html) {
+  String? valid(String? band) {
+    final trimmed = band?.replaceAll(RegExp(r'\s+'), '');
+    return trimmed != null && installBandFloor(trimmed) != null
+        ? trimmed
+        : null;
+  }
+
+  for (final label in RegExp(r'>\s*Downloads\s*<').allMatches(html)) {
+    final from = label.start > _bandReach ? label.start - _bandReach : 0;
+    final before = html.substring(from, label.start + 1);
+    final figures = _bandText.allMatches(before).toList();
+    if (figures.isEmpty) continue;
+    if (valid(figures.last.group(1)) case final band?) return band;
+  }
+  return valid(_bandData.firstMatch(html)?.group(1));
 }
 
 final _ogImage = RegExp(
