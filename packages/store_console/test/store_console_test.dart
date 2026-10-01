@@ -214,4 +214,71 @@ void main() {
     StoreConsole([client]).close();
     expect(client.closed, isTrue);
   });
+
+  group('all-time installs', () {
+    test('a store that counts none leaves the reading null', () async {
+      final snapshot = await StoreConsole([
+        _FakeClient(),
+      ], now: () => now).snapshot(_app);
+      expect(snapshot.allTimeInstalls, isNull);
+      expect(snapshot.toJson().containsKey('allTimeInstalls'), isFalse);
+    });
+
+    test('a store that counts them is read, and survives JSON', () async {
+      final snapshot = await StoreConsole([
+        _InstallsClient(),
+      ], now: () => now).snapshot(_app);
+      final back = StoreAppSnapshot.fromJson(
+        (jsonDecode(jsonEncode(snapshot.toJson())) as Map)
+            .cast<String, Object?>(),
+      );
+      final total = back.allTimeInstalls!.valueOrNull!;
+      expect(total.count, 1234);
+      expect(total.measure, 'user installs');
+      expect(total.since, '2024-03');
+      expect(total.through, DateTime.utc(2026, 9, 29));
+      expect(total.atLeast, isFalse);
+    });
+
+    test('a reading from before it existed reads as null', () async {
+      final snapshot = await StoreConsole([
+        _FakeClient(),
+      ], now: () => now).snapshot(_app);
+      final json = snapshot.toJson()..remove('allTimeInstalls');
+      expect(StoreAppSnapshot.fromJson(json).allTimeInstalls, isNull);
+    });
+
+    test('a listing band is a floor', () {
+      final band = InstallTotal.fromBand('10K+', note: 'No bucket.')!;
+      expect(band.count, 10000);
+      expect(band.atLeast, isTrue);
+      expect(band.band, '10K+');
+      expect(InstallTotal.fromJson(band.toJson()).note, 'No bucket.');
+      expect(installBandFloor('1.5M+'), 1500000);
+      expect(installBandFloor('10,000+'), 10000);
+      expect(installBandFloor('500+'), 500);
+      expect(installBandFloor('1 B+'), 1000000000);
+      expect(installBandFloor('Downloads'), isNull);
+      expect(InstallTotal.fromBand('viele'), isNull);
+    });
+
+    test('listing wraps a plain icon for a store without a page', () async {
+      final reading = await StoreConsole([
+        _FakeClient(),
+      ], now: () => now).listing(_app);
+      expect(reading, isA<ReadingValue<StoreListing?>>());
+      expect(reading.valueOrNull, isNull);
+    });
+  });
+}
+
+class _InstallsClient extends _FakeClient implements StoreInstallTotalSource {
+  @override
+  Future<InstallTotal> allTimeInstalls(StoreApp app) async => InstallTotal(
+    count: 1234,
+    measure: 'user installs',
+    source: InstallTotalSource.reports,
+    since: '2024-03',
+    through: DateTime.utc(2026, 9, 29),
+  );
 }

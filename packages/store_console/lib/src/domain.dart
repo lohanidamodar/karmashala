@@ -373,6 +373,113 @@ class DownloadSeries {
   );
 }
 
+/// Where an [InstallTotal] was read.
+enum InstallTotalSource {
+  /// The store's own reports: an exact count.
+  reports('store reports'),
+
+  /// The install band the public store page shows: a lower bound.
+  listing('store listing');
+
+  const InstallTotalSource(this.label);
+  final String label;
+
+  static InstallTotalSource parse(String? name) =>
+      values.firstWhere((source) => source.name == name, orElse: () => reports);
+}
+
+/// Every install or download an app has had, as one source counts them.
+class InstallTotal {
+  const InstallTotal({
+    required this.count,
+    required this.measure,
+    required this.source,
+    this.since,
+    this.through,
+    this.band,
+    this.note,
+  });
+
+  /// The listing's [band] as a lower bound; null when it is not one this
+  /// reads, such as a localised word.
+  static InstallTotal? fromBand(String band, {String? note}) {
+    final floor = installBandFloor(band);
+    if (floor == null) return null;
+    return InstallTotal(
+      count: floor,
+      measure: 'installs',
+      source: InstallTotalSource.listing,
+      band: band.trim(),
+      note: note,
+    );
+  }
+
+  /// Exact from [InstallTotalSource.reports]; the band's floor from the
+  /// listing.
+  final int count;
+
+  /// What is counted, as a person says it: `user installs`, `device
+  /// installs`, `first-time downloads`, `installs`.
+  final String measure;
+
+  final InstallTotalSource source;
+
+  /// The first period counted, `2024-03` or `2021`; null when the store
+  /// gave its own lifetime figure or a band.
+  final String? since;
+
+  /// The newest report day counted, midnight UTC; null for a band.
+  final DateTime? through;
+
+  /// The band as the listing shows it: `10K+`.
+  final String? band;
+
+  /// Why there is no exact count, when this is a band.
+  final String? note;
+
+  /// Whether [count] is a floor rather than the count.
+  bool get atLeast => source == InstallTotalSource.listing;
+
+  Map<String, Object?> toJson() => {
+    'count': count,
+    'measure': measure,
+    'source': source.name,
+    'since': since,
+    'through': through?.toUtc().toIso8601String(),
+    'band': band,
+    'note': note,
+  };
+
+  factory InstallTotal.fromJson(Map<String, Object?> json) => InstallTotal(
+    count: (json['count']! as num).toInt(),
+    measure: json['measure'] as String? ?? 'installs',
+    source: InstallTotalSource.parse(json['source'] as String?),
+    since: json['since'] as String?,
+    through: _date(json['through']),
+    band: json['band'] as String?,
+    note: json['note'] as String?,
+  );
+}
+
+/// The least a store's install band says: `10K+` is 10000, `1.5M+` is
+/// 1500000, `10,000+` is 10000. Null for anything else.
+int? installBandFloor(String band) {
+  final match = RegExp(
+    r'^([0-9][0-9,]*(?:\.[0-9]+)?)\s*([KMB])?\s*\+?$',
+    caseSensitive: false,
+  ).firstMatch(band.trim());
+  if (match == null) return null;
+  final number = double.tryParse(match.group(1)!.replaceAll(',', ''));
+  if (number == null) return null;
+  final scale = switch (match.group(2)?.toUpperCase()) {
+    'K' => 1e3,
+    'M' => 1e6,
+    'B' => 1e9,
+    _ => 1.0,
+  };
+  return (number * scale).round();
+}
+
 /// An app's icon as its public store page shows it: a small square image,
 /// fetched, not kept — whoever reads it decides where it lives.
 class StoreIconImage {
@@ -395,6 +502,17 @@ class StoreIconImage {
     'image/webp' => '.webp',
     _ => '.png',
   };
+}
+
+/// What one read of an app's public store page gave.
+class StoreListing {
+  const StoreListing({this.icon, this.installBand});
+
+  final StoreIconImage? icon;
+
+  /// The install band the page shows, as it shows it: `10K+`. Null when it
+  /// shows none, or the store has none.
+  final String? installBand;
 }
 
 DateTime? _date(Object? value) =>

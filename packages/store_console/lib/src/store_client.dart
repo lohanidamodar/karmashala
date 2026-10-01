@@ -70,3 +70,16 @@ abstract interface class StoreErrorIssueSource {
   /// reported first; a few carry a sample stack trace.
   Future<List<StoreErrorIssue>> errorIssues(StoreApp app);
 }
+
+/// A store whose own reports count every install or download an app has had.
+abstract interface class StoreInstallTotalSource {
+  /// The all-time count from the store's reports; throws [StoreException]
+  /// when they cannot say, never answers a guess.
+  Future<InstallTotal> allTimeInstalls(StoreApp app);
+}
+
+/// A store whose public page says more than the icon, read in the same
+/// request. Null when the app has no public page.
+abstract interface class StoreListingSource {
+  Future<StoreListing?> listing(StoreApp app);
+}

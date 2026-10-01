@@ -12,6 +12,7 @@ class StoreAppSnapshot {
     required this.vitals,
     required this.downloads,
     this.errorIssues,
+    this.allTimeInstalls,
   });
 
   final StoreApp app;
@@ -23,6 +24,23 @@ class StoreAppSnapshot {
 
   /// Null for a store that does not group its crashes into issues.
   final Reading<List<StoreErrorIssue>>? errorIssues;
+
+  /// Every install or download the app has had. Null for a store that
+  /// counts none, and in a reading kept before it was read.
+  final Reading<InstallTotal>? allTimeInstalls;
+
+  /// This reading with [allTimeInstalls] replaced.
+  StoreAppSnapshot withAllTimeInstalls(Reading<InstallTotal>? installs) =>
+      StoreAppSnapshot(
+        app: app,
+        releases: releases,
+        reviews: reviews,
+        rating: rating,
+        vitals: vitals,
+        downloads: downloads,
+        errorIssues: errorIssues,
+        allTimeInstalls: installs,
+      );
 
   /// What a user has: the first live release, else one rolling out, else a
   /// halted one — a paused phased release is still on sale.
@@ -83,6 +101,7 @@ class StoreAppSnapshot {
       vitals: vitals,
       downloads: downloads,
       errorIssues: errorIssues,
+      allTimeInstalls: allTimeInstalls,
     );
   }
 
@@ -101,6 +120,8 @@ class StoreAppSnapshot {
       'errorIssues': issues.toJson(
         (value) => [for (final issue in value) issue.toJson()],
       ),
+    if (allTimeInstalls case final installs?)
+      'allTimeInstalls': installs.toJson((value) => value.toJson()),
   };
 
   factory StoreAppSnapshot.fromJson(Map<String, Object?> json) {
@@ -135,6 +156,13 @@ class StoreAppSnapshot {
           : Reading.fromJson(
               map(json['errorIssues']),
               (value) => maps(value).map(StoreErrorIssue.fromJson).toList(),
+            ),
+      // Absent from an older server's reading.
+      allTimeInstalls: json['allTimeInstalls'] == null
+          ? null
+          : Reading.fromJson(
+              map(json['allTimeInstalls']),
+              (value) => InstallTotal.fromJson(map(value)),
             ),
     );
   }
@@ -177,6 +205,12 @@ class StoreConsole {
       ),
       _ => null,
     };
+    final allTimeInstalls = switch (client) {
+      final StoreInstallTotalSource source => _read(
+        () => source.allTimeInstalls(app),
+      ),
+      _ => null,
+    };
     return StoreAppSnapshot(
       app: app,
       releases: await releases,
@@ -185,6 +219,7 @@ class StoreConsole {
       vitals: await vitals,
       downloads: await downloads,
       errorIssues: await errorIssues,
+      allTimeInstalls: await allTimeInstalls,
     );
   }
 
@@ -193,6 +228,20 @@ class StoreConsole {
   Future<Reading<StoreIconImage?>> icon(StoreApp app) {
     final client = clients.firstWhere((client) => client.store == app.store);
     return _read(() => client.icon(app));
+  }
+
+  /// [app]'s public page, read once for its icon and whatever else the
+  /// store's page says; a store that reads only the icon gives just that.
+  /// A value of null when the app has no public page.
+  Future<Reading<StoreListing?>> listing(StoreApp app) {
+    final client = clients.firstWhere((client) => client.store == app.store);
+    return _read(() async {
+      if (client case final StoreListingSource source) {
+        return source.listing(app);
+      }
+      final icon = await client.icon(app);
+      return icon == null ? null : StoreListing(icon: icon);
+    });
   }
 
   void close() {
