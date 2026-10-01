@@ -29,11 +29,16 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
 
 /// Opens [device]'s live preview as a workbench tab, or brings forward the
 /// one already open: one tab per device, so a second click is not a second
-/// stream of the same phone.
+/// stream of the same phone. A new one opens **on the side** — beside the
+/// work, in the group other previews are in — so the phone is watched next
+/// to what drives it, not instead of it (owner, 2026-10-01).
 void openDevicePreviewTab(WidgetRef ref, AndroidDevice device) {
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
-      .openDocumentTab(devicePreviewPaneId(device.serial));
+      .openDocumentBeside(
+        devicePreviewPaneId(device.serial),
+        sharesGroup: isDevicePreviewPane,
+      );
   activateTerminalTab(ref, tabId);
 }
 

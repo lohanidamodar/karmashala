@@ -112,6 +112,44 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return true;
   }
 
+  /// Opens document [paneId] in a tab **beside** the work rather than over
+  /// it: into the group already holding a tab whose pane [sharesGroup]
+  /// accepts, else a new group split off to the right of the focused one. One
+  /// already open is brought forward where it is; with nothing else open, the
+  /// tab simply fills the window.
+  String openDocumentBeside(
+    String paneId, {
+    required bool Function(String paneId) sharesGroup,
+  }) {
+    final open = _tabContaining(paneId);
+    if (open != null) {
+      activateTab(open.id);
+      return open.id;
+    }
+    final tabId = openDocumentTab(paneId);
+    final here = groupOfTab(tabId);
+    if (here == null) return tabId;
+    String? home;
+    for (final group in _workspace?.groups ?? const <WorkspaceGroup>[]) {
+      final holdsOne = group.panes.any(
+        (id) =>
+            id != tabId &&
+            (_tabById(id)?.layout.panes.any(sharesGroup) ?? false),
+      );
+      if (holdsOne) {
+        home = group.id;
+        break;
+      }
+    }
+    if (home == here) return tabId;
+    if (home != null) {
+      moveTabToGroup(tabId, home);
+    } else {
+      moveTabBesideGroup(tabId, here, SplitAxis.horizontal);
+    }
+    return tabId;
+  }
+
   /// Whether [tabId] could be dropped on an edge of group [groupId] to make a
   /// new group beside it.
   bool canMoveTabBesideGroup(String tabId, String groupId) {
