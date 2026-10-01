@@ -165,6 +165,15 @@ StoreException playStatusFailure(
   final bucket = area == PlayArea.bucket;
   return switch (status) {
     401 => _refused,
+    // Google refusing the question, not the account: it says which rule in
+    // its reason codes, which are all that is safe to repeat.
+    400 => StoreException(
+      StoreFailure.shape,
+      'The ${area.api} refused the request as invalid (HTTP 400'
+      '${facts.reasons.isEmpty ? '' : '; Google: ${(facts.reasons.toList()..sort()).join(', ')}'}). '
+      'Refresh later; if it stays, it is likely Karmashala\'s fault — please '
+      'report it.',
+    ),
     403 => StoreException(StoreFailure.permission, _refusal(area, facts)),
     404 => StoreException(
       StoreFailure.notConfigured,

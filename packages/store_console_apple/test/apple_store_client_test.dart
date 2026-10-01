@@ -185,7 +185,7 @@ void main() {
     expect(releases[0].date, DateTime.utc(2026, 9, 1, 17));
     expect(releases[4].state, ReleaseState.testing);
     expect(releases[4].build, '50');
-    expect(releases[5].state, ReleaseState.superseded);
+    expect(releases[5].state, ReleaseState.expired);
     expect(releases[5].rawState, 'EXPIRED');
   });
 

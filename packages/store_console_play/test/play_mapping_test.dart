@@ -17,12 +17,30 @@ void main() {
     test('published is live on production, newest build first', () {
       final releases = releasesFromSummaries('production', [
         summary('PUBLISHED', [190], name: '1.9.0'),
+      ]);
+      expect(releases.single.state, ReleaseState.live);
+      expect(releases.single.version, '1.9.0');
+    });
+
+    test('a second published release is a staged rollout of the newer', () {
+      final releases = releasesFromSummaries('production', [
+        summary('PUBLISHED', [190], name: '1.9.0'),
         summary('PUBLISHED', [200, 201], name: '2.0.0'),
       ]);
       expect([for (final r in releases) r.build], ['201', '190']);
-      expect(releases.first.state, ReleaseState.live);
+      expect(releases.first.state, ReleaseState.rollingOut);
       expect(releases.first.version, '2.0.0');
       expect(releases.first.rolloutFraction, isNull);
+      expect(releases.last.state, ReleaseState.live);
+    });
+
+    test('Play\'s default release name gives the version name alone', () {
+      final release = releaseFromSummary(
+        'production',
+        summary('PUBLISHED', [3], name: '3 (1.2.0)'),
+      );
+      expect(release.version, '1.2.0');
+      expect(release.build, '3');
     });
 
     test('published elsewhere is testing', () {

@@ -6,7 +6,10 @@ import 'package:store_console/store_console.dart';
 const List<String> playTracks = ['production', 'beta', 'alpha', 'internal'];
 
 /// One track's releases, newest build first. The summaries carry no rollout
-/// share and do not tell a halted rollout from a running one.
+/// share and do not tell a halted rollout from a running one; but a track
+/// holds a second published release only while a staged rollout of the newer
+/// one is under way, so production's newer one is shown as rolling out, with
+/// no share.
 List<StoreRelease> releasesFromSummaries(
   String track,
   List<ReleaseSummary> summaries,
@@ -15,8 +18,27 @@ List<StoreRelease> releasesFromSummaries(
     for (final summary in summaries) releaseFromSummary(track, summary),
   ];
   int build(StoreRelease release) => int.tryParse(release.build ?? '') ?? -1;
-  return releases..sort((a, b) => build(b).compareTo(build(a)));
+  releases.sort((a, b) => build(b).compareTo(build(a)));
+  final live = [
+    for (var i = 0; i < releases.length; i++)
+      if (releases[i].state == ReleaseState.live) i,
+  ];
+  if (live.length > 1) {
+    final newest = releases[live.first];
+    releases[live.first] = StoreRelease(
+      track: newest.track,
+      version: newest.version,
+      build: newest.build,
+      state: ReleaseState.rollingOut,
+      rawState: newest.rawState,
+    );
+  }
+  return releases;
 }
+
+/// Play names a release `<versionCode> (<versionName>)` unless told
+/// otherwise; the code is already the build.
+final RegExp _defaultReleaseName = RegExp(r'^(\d+) \((.+)\)$');
 
 StoreRelease releaseFromSummary(String track, ReleaseSummary summary) {
   final raw = summary.releaseLifecycleState ?? '';
@@ -29,14 +51,18 @@ StoreRelease releaseFromSummary(String track, ReleaseSummary summary) {
     'NOT_SENT_FOR_REVIEW' || 'DRAFT' => ReleaseState.draft,
     _ => ReleaseState.unknown,
   };
+  final build = _highest([
+    for (final artifact in summary.activeArtifacts ?? const <ArtifactSummary>[])
+      ?artifact.versionCode,
+  ]);
+  final name = summary.releaseName ?? '';
+  final named = _defaultReleaseName.firstMatch(name);
   return StoreRelease(
     track: track,
-    version: summary.releaseName ?? '',
-    build: _highest([
-      for (final artifact
-          in summary.activeArtifacts ?? const <ArtifactSummary>[])
-        ?artifact.versionCode,
-    ]),
+    version: named != null && (build == null || named.group(1) == build)
+        ? named.group(2)!
+        : name,
+    build: build ?? named?.group(1),
     state: state,
     rawState: raw,
   );

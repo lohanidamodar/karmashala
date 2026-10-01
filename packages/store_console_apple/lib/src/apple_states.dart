@@ -54,7 +54,7 @@ double? phasedFraction(int? day) {
 }
 
 ReleaseState buildState(String? processingState, {required bool expired}) {
-  if (expired) return ReleaseState.superseded;
+  if (expired) return ReleaseState.expired;
   return switch (processingState) {
     'PROCESSING' => ReleaseState.processing,
     'VALID' => ReleaseState.testing,

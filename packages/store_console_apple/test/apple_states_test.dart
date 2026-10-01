@@ -75,7 +75,7 @@ void main() {
   test('build states', () {
     expect(buildState('PROCESSING', expired: false), ReleaseState.processing);
     expect(buildState('VALID', expired: false), ReleaseState.testing);
-    expect(buildState('VALID', expired: true), ReleaseState.superseded);
+    expect(buildState('VALID', expired: true), ReleaseState.expired);
     expect(buildState('FAILED', expired: false), ReleaseState.rejected);
     expect(buildState('INVALID', expired: false), ReleaseState.rejected);
     expect(buildState(null, expired: false), ReleaseState.unknown);

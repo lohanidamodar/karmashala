@@ -20,27 +20,66 @@ class StoreAppSnapshot {
   final Reading<VitalsSummary> vitals;
   final Reading<DownloadSeries> downloads;
 
-  /// What a user has: the first live or rolling-out release, else a halted
-  /// one — a paused phased release is still on sale.
+  /// What a user has: the first live release, else one rolling out, else a
+  /// halted one — a paused phased release is still on sale.
   StoreRelease? get live {
     final all = releases.valueOrNull ?? const <StoreRelease>[];
-    for (final release in all) {
-      if (release.state == ReleaseState.live ||
-          release.state == ReleaseState.rollingOut) {
-        return release;
+    for (final state in const [
+      ReleaseState.live,
+      ReleaseState.rollingOut,
+      ReleaseState.halted,
+    ]) {
+      for (final release in all) {
+        if (release.state == state) return release;
       }
-    }
-    for (final release in all) {
-      if (release.state == ReleaseState.halted) return release;
     }
     return null;
   }
 
-  /// Releases somebody is waiting on or has to act on.
-  List<StoreRelease> get pending => [
-    for (final release in releases.valueOrNull ?? const <StoreRelease>[])
-      if (release.state.inFlight || release.state.needsAttention) release,
-  ];
+  /// Releases somebody is waiting on or has to act on, those to act on first.
+  /// One a newer release on its track has gone live past is history, not
+  /// work: a rejected 1.0 under a live 1.1 is not stuck.
+  List<StoreRelease> get pending {
+    final all = releases.valueOrNull ?? const <StoreRelease>[];
+    bool overtaken(StoreRelease release) => all.any(
+      (other) =>
+          other.track == release.track &&
+          (other.state == ReleaseState.live ||
+              other.state == ReleaseState.rollingOut) &&
+          other.isNewerThan(release),
+    );
+    final open = [
+      for (final release in all)
+        if ((release.state.inFlight || release.state.needsAttention) &&
+            !overtaken(release))
+          release,
+    ];
+    return [
+      ...open.where((release) => release.state.needsAttention),
+      ...open.where((release) => !release.state.needsAttention),
+    ];
+  }
+
+  /// This reading with what [previous] knew that a store does not say again:
+  /// the rating's history.
+  StoreAppSnapshot carriedFrom(StoreAppSnapshot? previous) {
+    final rating = this.rating;
+    if (rating is! ReadingValue<RatingSummary>) return this;
+    return StoreAppSnapshot(
+      app: app,
+      releases: releases,
+      reviews: reviews,
+      rating: ReadingValue(
+        rating.value.carriedFrom(
+          previous?.rating.valueOrNull,
+          rating.checkedAt,
+        ),
+        rating.checkedAt,
+      ),
+      vitals: vitals,
+      downloads: downloads,
+    );
+  }
 
   Map<String, Object?> toJson() => {
     'app': app.toJson(),

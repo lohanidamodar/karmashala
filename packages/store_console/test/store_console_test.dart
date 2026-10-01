@@ -156,6 +156,59 @@ void main() {
     expect(readings.single.apps.valueOrNull, const [_app]);
   });
 
+  test('a rejection a newer live release overtook is not pending', () {
+    StoreAppSnapshot withReleases(List<StoreRelease> releases) =>
+        StoreAppSnapshot(
+          app: _app,
+          releases: ReadingValue(releases, now),
+          reviews: ReadingValue(const [], now),
+          rating: ReadingValue(const RatingSummary(average: 4), now),
+          vitals: ReadingMissing(StoreFailure.notSupported, '', now),
+          downloads: ReadingMissing(StoreFailure.notSupported, '', now),
+        );
+    const live = StoreRelease(
+      track: 'production',
+      version: '1.1',
+      build: '20',
+      state: ReleaseState.live,
+      rawState: '',
+    );
+    const old = StoreRelease(
+      track: 'production',
+      version: '1.0',
+      build: '10',
+      state: ReleaseState.rejected,
+      rawState: '',
+    );
+    const next = StoreRelease(
+      track: 'production',
+      version: '1.2',
+      build: '30',
+      state: ReleaseState.rejected,
+      rawState: '',
+    );
+    expect(withReleases([live, old]).pending, isEmpty);
+    expect(withReleases([live, old, next]).pending, [next]);
+  });
+
+  test('a rating carries its history and says its trend', () {
+    var rating = const RatingSummary(average: 4.0);
+    for (var day = 1; day <= 9; day++) {
+      rating = RatingSummary(
+        average: 4.0 + day / 100,
+      ).carriedFrom(rating, DateTime.utc(2026, 9, day, 10));
+    }
+    expect(rating.history, hasLength(9));
+    final trend = rating.trend!;
+    expect(trend.since, DateTime.utc(2026, 9, 2));
+    expect(trend.change, closeTo(0.07, 1e-9));
+
+    final first = const RatingSummary(
+      average: 4.2,
+    ).carriedFrom(null, DateTime.utc(2026, 9, 1));
+    expect(first.trend, isNull);
+  });
+
   test('close closes every client', () {
     final client = _FakeClient();
     StoreConsole([client]).close();

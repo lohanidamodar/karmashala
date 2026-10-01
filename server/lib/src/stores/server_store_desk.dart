@@ -255,7 +255,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
           final app = queue.current;
           try {
             final snapshot = await console.snapshot(app);
-            if (current(app.store)) _apps[app.key] = snapshot;
+            if (current(app.store)) {
+              _apps[app.key] = snapshot.carriedFrom(_apps[app.key]);
+            }
           } on Object {
             // A console closed under it: the app keeps what it had.
           }

@@ -73,6 +73,7 @@ enum ReleaseState {
   halted('Halted'),
   removed('Removed'),
   superseded('Replaced'),
+  expired('Expired'),
   testing('In testing'),
   unknown('Unknown');
 
@@ -123,6 +124,15 @@ class StoreRelease {
 
   /// When the store says it was created or released, when it says.
   final DateTime? date;
+
+  /// Whether this came after [other] on the same track, by date when both
+  /// have one, else by build number; false when neither says.
+  bool isNewerThan(StoreRelease other) {
+    final (mine, theirs) = (date, other.date);
+    if (mine != null && theirs != null) return mine.isAfter(theirs);
+    final (a, b) = (int.tryParse(build ?? ''), int.tryParse(other.build ?? ''));
+    return a != null && b != null && a > b;
+  }
 
   Map<String, Object?> toJson() => {
     'track': track,
@@ -204,7 +214,11 @@ class StoreReview {
 }
 
 class RatingSummary {
-  const RatingSummary({required this.average, this.count});
+  const RatingSummary({
+    required this.average,
+    this.count,
+    this.history = const [],
+  });
 
   /// 0..5.
   final double average;
@@ -212,11 +226,81 @@ class RatingSummary {
   /// How many ratings it is the average of, when the store says.
   final int? count;
 
-  Map<String, Object?> toJson() => {'average': average, 'count': count};
+  /// The average as read on earlier days, oldest first, one point a day.
+  /// Neither store gives this; whoever keeps the readings carries it over
+  /// with [carriedFrom].
+  final List<RatingPoint> history;
+
+  /// How many days of [history] are kept.
+  static const int historyDays = 35;
+
+  /// The window [trend] compares over.
+  static const Duration trendWindow = Duration(days: 7);
+
+  /// The change since about [trendWindow] ago: the newest point at least that
+  /// old, else the oldest point from an earlier day. Null with no such point.
+  ({double change, DateTime since})? get trend {
+    if (history.isEmpty) return null;
+    final today = history.last.day;
+    RatingPoint? base;
+    for (final point in history) {
+      if (today.difference(point.day) >= trendWindow) base = point;
+    }
+    base ??= history.first.day.isBefore(today) ? history.first : null;
+    if (base == null) return null;
+    return (change: average - base.average, since: base.day);
+  }
+
+  /// This reading at [at], with [previous]'s history carried over and today's
+  /// point set to this average.
+  RatingSummary carriedFrom(RatingSummary? previous, DateTime at) {
+    final utc = at.toUtc();
+    final day = DateTime.utc(utc.year, utc.month, utc.day);
+    final oldest = day.subtract(const Duration(days: historyDays));
+    return RatingSummary(
+      average: average,
+      count: count,
+      history: [
+        for (final point in previous?.history ?? const <RatingPoint>[])
+          if (point.day.isAfter(oldest) && point.day.isBefore(day)) point,
+        RatingPoint(day, average),
+      ],
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'average': average,
+    'count': count,
+    if (history.isNotEmpty)
+      'history': [for (final point in history) point.toJson()],
+  };
 
   factory RatingSummary.fromJson(Map<String, Object?> json) => RatingSummary(
     average: (json['average']! as num).toDouble(),
     count: (json['count'] as num?)?.toInt(),
+    history: [
+      for (final point in (json['history'] as List?) ?? const [])
+        RatingPoint.fromJson((point as Map).cast<String, Object?>()),
+    ],
+  );
+}
+
+/// The average rating as read on one day.
+class RatingPoint {
+  const RatingPoint(this.day, this.average);
+
+  /// Midnight UTC.
+  final DateTime day;
+  final double average;
+
+  Map<String, Object?> toJson() => {
+    'day': day.toUtc().toIso8601String(),
+    'average': average,
+  };
+
+  factory RatingPoint.fromJson(Map<String, Object?> json) => RatingPoint(
+    DateTime.parse(json['day']! as String),
+    (json['average']! as num).toDouble(),
   );
 }
 

@@ -405,13 +405,7 @@ class _Entry {
   final String? iconUrl;
 
   /// In flight or needing someone, those needing someone first.
-  List<StoreRelease> get pending {
-    final all = snapshot?.pending ?? const <StoreRelease>[];
-    return [
-      ...all.where((r) => r.state.needsAttention),
-      ...all.where((r) => !r.state.needsAttention),
-    ];
-  }
+  List<StoreRelease> get pending => snapshot?.pending ?? const [];
 }
 
 class _Group {
@@ -474,6 +468,8 @@ Object _rate(double? fraction, String what) => fraction == null
 Map<String, Object?> _rating(RatingSummary rating) => {
   'average': _round2(rating.average),
   'count': rating.count,
+  if (rating.trend case final trend?)
+    'trend': {'change': _round2(trend.change), 'since': _day(trend.since)},
 };
 
 const Map<String, Object?> _noDownloads = {
