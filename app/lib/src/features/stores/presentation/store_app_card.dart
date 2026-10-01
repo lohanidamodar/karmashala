@@ -10,6 +10,7 @@ import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
+import 'store_installs.dart';
 import 'store_logo.dart';
 import 'stores_format.dart';
 
@@ -231,6 +232,17 @@ class StoreEntryRow extends StatelessWidget {
             if (downloads != null && downloads.days.length > 1) ...[
               const SizedBox(width: Insets.sm),
               _Downloads(series: downloads),
+            ],
+            if (snapshot?.allTimeInstalls case ReadingValue(
+              :final value,
+              :final checkedAt,
+            )) ...[
+              const SizedBox(width: Insets.sm),
+              AllTimeInstallsFigure(
+                total: value,
+                store: entry.app.store,
+                readAt: checkedAt,
+              ),
             ],
             if (rating != null) ...[
               const SizedBox(width: Insets.md),

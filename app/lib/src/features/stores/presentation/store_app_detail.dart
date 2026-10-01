@@ -18,6 +18,7 @@ import 'store_combine.dart';
 import 'store_detail_errors.dart';
 import 'store_detail_releases.dart';
 import 'store_detail_reviews.dart';
+import 'store_installs.dart';
 import 'stores_format.dart';
 
 /// Everything read about one app: what wants a look, its releases per store
@@ -430,6 +431,43 @@ class _Numbers extends ConsumerWidget {
           notes.add(
             MissingReadingLine(
               what: '${store.label} downloads',
+              reading: missing,
+            ),
+          );
+      }
+
+      final allTimeLabel = label(
+        store == StoreKind.appStore
+            ? 'All-time downloads'
+            : 'All-time installs',
+      );
+      switch (snapshot.allTimeInstalls) {
+        case null:
+          break;
+        case ReadingValue(:final value, :final checkedAt):
+          tiles.add(
+            StatTile(
+              label: allTimeLabel,
+              value: formatInstallFigure(value),
+              caption: describeInstallMeasure(value),
+              tooltip: describeInstallTotal(value, store, readAt: checkedAt),
+            ),
+          );
+        case final ReadingMissing<InstallTotal> missing:
+          if (!missing.expected) {
+            tiles.add(
+              StatTile(
+                label: allTimeLabel,
+                value: null,
+                unrecorded: _unavailable,
+              ),
+            );
+          }
+          notes.add(
+            MissingReadingLine(
+              what:
+                  '${store.label} all-time '
+                  '${store == StoreKind.appStore ? 'downloads' : 'installs'}',
               reading: missing,
             ),
           );
