@@ -842,6 +842,23 @@ class AdbService {
     return result.ok ? result.stdout : '';
   }
 
+  /// The removable volumes mounted now — an SD card, a USB drive — as `sm`
+  /// reports them, falling back to the volume-id directories under `/storage`
+  /// where `sm` will not answer. Empty when there are none.
+  Future<List<RemovableVolume>> removableVolumes(String serial) async {
+    final listed = await runner.run(
+      _forDevice(serial, const ['shell', 'sm', 'list-volumes', 'public']),
+    );
+    if (listed.ok) {
+      final volumes = parsePublicVolumes(listed.stdout);
+      if (volumes.isNotEmpty) return volumes;
+    }
+    final storage = await runner.run(
+      _forDevice(serial, const ['shell', 'ls', '/storage']),
+    );
+    return storage.ok ? parseStorageVolumeIds(storage.stdout) : const [];
+  }
+
   /// The device's process table with full command lines.
   Future<String> processList(String serial) async {
     final result = await runner.run(
@@ -1330,3 +1347,49 @@ class _DeviceText {
   /// when nothing had to be worked around.
   final String? note;
 }
+
+/// A removable volume: its mount point and what kind of drive it is.
+class RemovableVolume {
+  const RemovableVolume({required this.path, required this.kind});
+
+  /// `/storage/<volume id>`, e.g. `/storage/9016-4EF8`.
+  final String path;
+
+  /// "SD card", "USB drive", or "Removable storage" when the block device
+  /// does not say.
+  final String kind;
+}
+
+/// A volume id as Android names a FAT or exFAT volume (`9016-4EF8`), or a
+/// full UUID for other filesystems.
+final _volumeId = RegExp(
+  r'^(?:[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$',
+);
+
+/// The mounted volumes in `sm list-volumes public` output, one per line:
+/// `public:179:1 mounted 9016-4EF8`. The block device's major number says
+/// what the drive is: 179 is an MMC/SD card, 8 a SCSI disk (a USB drive).
+List<RemovableVolume> parsePublicVolumes(String output) => [
+  for (final line in output.split('\n'))
+    if (line.trim().split(RegExp(r'\s+')) case [
+      final id,
+      'mounted',
+      final uuid,
+    ] when id.startsWith('public:') && _volumeId.hasMatch(uuid))
+      RemovableVolume(
+        path: '/storage/$uuid',
+        kind: switch (id.split(':').elementAtOrNull(1)) {
+          '179' => 'SD card',
+          '8' => 'USB drive',
+          _ => 'Removable storage',
+        },
+      ),
+];
+
+/// The volume-id directories in `ls /storage`: everything that is not the
+/// emulated (internal) storage, `self`, or a vendor link.
+List<RemovableVolume> parseStorageVolumeIds(String output) => [
+  for (final name in output.split(RegExp(r'\s+')))
+    if (_volumeId.hasMatch(name))
+      RemovableVolume(path: '/storage/$name', kind: 'Removable storage'),
+];

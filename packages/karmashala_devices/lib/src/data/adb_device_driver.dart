@@ -185,19 +185,40 @@ class AdbDeviceDriver implements DeviceDriver {
   Future<void> terminateApp(String appId) =>
       adb.forceStopPackage(_serial, appId);
 
-  /// Three places, and the list is short on purpose: a root earns a row only if
-  /// it cannot be reached from another one, or its rules differ. An app's own
-  /// directory is deliberately not one — it needs `run-as` on a debuggable build.
+  /// Three places, plus each SD card or USB drive mounted now, and the list is
+  /// short on purpose: a root earns a row only if it cannot be reached from
+  /// another one, or its rules differ. A removable volume is reachable from
+  /// `/` only by knowing its id, so it earns one (owner, 2026-10-01). An app's
+  /// own directory is deliberately not one — it needs `run-as` on a
+  /// debuggable build.
   @override
-  Future<List<DeviceFileRoot>> fileRoots() async => const [
-    DeviceFileRoot(
-      path: '/sdcard',
-      label: 'Shared storage',
-      description:
-          'Photos, Downloads, and anything an app wrote where you can see it. '
-          'Readable and writable.',
-      writable: true,
-    ),
+  Future<List<DeviceFileRoot>> fileRoots() async {
+    final volumes = await adb.removableVolumes(_serial);
+    return [
+      _sharedStorage,
+      for (final volume in volumes)
+        DeviceFileRoot(
+          path: volume.path,
+          label: volume.kind,
+          description:
+              '${volume.path}: the removable card or drive, separate from '
+              'shared storage. Readable and writable.',
+          writable: true,
+        ),
+      ..._fixedRoots,
+    ];
+  }
+
+  static const _sharedStorage = DeviceFileRoot(
+    path: '/sdcard',
+    label: 'Shared storage',
+    description:
+        'Photos, Downloads, and anything an app wrote where you can see it. '
+        'Readable and writable.',
+    writable: true,
+  );
+
+  static const _fixedRoots = [
     DeviceFileRoot(
       path: '/data/local/tmp',
       label: 'Shell scratch space',
