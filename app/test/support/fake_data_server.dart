@@ -44,7 +44,13 @@ import 'package:karmashala_git/git.dart'
         WorkingTreeStatus,
         WorktreeCreationRecord;
 import 'package:karmashala_git/github.dart'
-    show BranchProtection, GitHubService, MergeStateStatus, kUnknownForgePolicy;
+    show
+        BranchProtection,
+        GitHubService,
+        MergeStateStatus,
+        WorkflowRun,
+        boundRunLog,
+        kUnknownForgePolicy;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:karmashala_session/delivery.dart' show SessionDelivery;

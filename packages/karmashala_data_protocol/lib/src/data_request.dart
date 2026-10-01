@@ -42,6 +42,7 @@ import 'package:karmashala_git/git.dart'
         WorkingTreeStatus,
         WorktreeSetup,
         WorktreeSetupReport;
+import 'package:karmashala_git/github.dart' show WorkflowRun, WorkflowRunLog;
 import 'package:karmashala_files/values.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show SessionSummary;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -48,7 +50,8 @@ void draftInFocusedSession(
 }
 
 /// A button offering [prompt] to an agent: a new session, or a draft in the
-/// focused one. [prompt] is built only when a choice is made.
+/// focused one. [prompt] is built only when a choice is made, and may be
+/// fetched then: a failure to build it is said, and nothing is offered.
 class HandToSessionButton extends ConsumerWidget {
   const HandToSessionButton({
     required this.label,
@@ -60,7 +63,7 @@ class HandToSessionButton extends ConsumerWidget {
   });
 
   final String label;
-  final String Function() prompt;
+  final FutureOr<String> Function() prompt;
   final String? title;
   final SessionDestination? destination;
 
@@ -73,20 +76,25 @@ class HandToSessionButton extends ConsumerWidget {
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(AppIcons.plusCircle, size: 16),
-          onPressed: () => startSessionWith(
+          onPressed: () => _withPrompt(
             context,
-            prompt: prompt(),
-            title: title,
-            destination: destination,
+            (text) => startSessionWith(
+              context,
+              prompt: text,
+              title: title,
+              destination: destination,
+            ),
           ),
           child: const Text('New session…'),
         ),
         MenuItemButton(
           leadingIcon: const Icon(AppIcons.paperPlaneRight, size: 16),
-          // Read as the menu opens, not watched: the button is on every row.
-          onPressed: ref.read(focusedSessionIdProvider) == null
+          onPressed: ref.watch(focusedSessionIdProvider) == null
               ? null
-              : () => draftInFocusedSession(context, ref, prompt: prompt()),
+              : () => _withPrompt(
+                  context,
+                  (text) => draftInFocusedSession(context, ref, prompt: text),
+                ),
           child: const Text('Draft in the focused session'),
         ),
       ],
@@ -106,5 +114,22 @@ class HandToSessionButton extends ConsumerWidget {
               );
       },
     );
+  }
+
+  Future<void> _withPrompt(
+    BuildContext context,
+    void Function(String text) offer,
+  ) async {
+    final String text;
+    try {
+      text = await prompt();
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text('Could not prepare it: $error')));
+      return;
+    }
+    if (context.mounted) offer(text);
   }
 }

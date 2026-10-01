@@ -73,7 +73,9 @@ class GitData {
       GitHubOverviewOf() ||
       GitHubPullRequest() ||
       GitHubMarkReady() ||
-      GitHubCreatePr() => true,
+      GitHubCreatePr() ||
+      GitHubRuns() ||
+      GitHubRunLog() => true,
       _ => false,
     };
     final folders = switch (request) {
@@ -428,6 +430,16 @@ class GitData {
     required String title,
     String body = '',
   }) => _ask(GitHubCreatePr(_at(repo), title: title, body: body));
+
+  Future<List<WorkflowRun>> workflowRuns(
+    EnvironmentPath repo, {
+    String? branch,
+  }) => _ask(GitHubRuns(_at(repo), branch: branch));
+
+  Future<WorkflowRunLog> failedRunLog(
+    EnvironmentPath repo, {
+    required int runId,
+  }) => _ask(GitHubRunLog(_at(repo), runId: runId));
 }
 
 final gitDataProvider = Provider<GitData>((ref) {

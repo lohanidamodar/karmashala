@@ -340,6 +340,8 @@ does both at once, and it is honest about the same gap:
       'list_projects',
       'list_checkouts',
       'delivery_status',
+      'github_runs',
+      'github_run_log',
       'project_rescan',
       'select_checkout',
     ],

@@ -143,6 +143,15 @@ DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
         title: args.string('title'),
         body: args.optionalString('body') ?? '',
       ),
+      GitHubRuns.name => GitHubRuns(
+        args._checkout(),
+        branch: args.optionalString('branch'),
+        limit: args.optionalInt('limit') ?? 10,
+      ),
+      GitHubRunLog.name => GitHubRunLog(
+        args._checkout(),
+        runId: args.integer('runId'),
+      ),
       _ => null,
     };
 
@@ -1184,4 +1193,59 @@ final class GitHubCreatePr extends _CheckoutString {
     'title': title,
     'body': body,
   };
+}
+
+/// The newest GitHub Actions runs, on [branch] when given.
+final class GitHubRuns extends CheckoutRequest<List<WorkflowRun>> {
+  const GitHubRuns(super.checkout, {this.branch, this.limit = 10});
+
+  static const String name = 'github.runs';
+
+  final String? branch;
+  final int limit;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    ..._checkoutJson,
+    'branch': ?branch,
+    'limit': limit,
+  };
+
+  @override
+  Object? resultToJson(List<WorkflowRun> result) => [
+    for (final run in result) run.toJson(),
+  ];
+
+  @override
+  List<WorkflowRun> resultFromJson(Object? json) => _decode(
+    kind,
+    () => [
+      for (final item in _objects(json, kind)) ?WorkflowRun.fromJson(item),
+    ],
+  );
+}
+
+/// The failed steps' log of run [runId], bounded; read-only.
+final class GitHubRunLog extends CheckoutRequest<WorkflowRunLog> {
+  const GitHubRunLog(super.checkout, {required this.runId});
+
+  static const String name = 'github.runLog';
+
+  final int runId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {..._checkoutJson, 'runId': runId};
+
+  @override
+  Object? resultToJson(WorkflowRunLog result) => result.toJson();
+
+  @override
+  WorkflowRunLog resultFromJson(Object? json) =>
+      _decode(kind, () => WorkflowRunLog.fromJson(_object(json, kind)));
 }

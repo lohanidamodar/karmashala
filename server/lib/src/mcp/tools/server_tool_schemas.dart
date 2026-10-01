@@ -6,6 +6,7 @@ import '../../checkpoints/checkpoint_tool_set.dart';
 import 'decision_tool_set.dart';
 import 'project_tool_set.dart';
 import 'verification_tool_schemas.dart';
+import 'github_run_tool_set.dart';
 import 'workspace_tool_set.dart';
 import 'worktree_tool_set.dart';
 import 'fanout_tool_set.dart';
@@ -45,6 +46,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...snippetToolSchemas,
   ...fanOutToolSchemas,
   ...workspaceToolSchemas,
+  ...gitHubRunToolSchemas,
   ...projectToolSchemas,
   ...worktreeToolSchemas,
   ...verificationToolSchemas,

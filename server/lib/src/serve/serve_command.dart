@@ -102,6 +102,7 @@ import '../mcp/tools/project_tool_set.dart';
 import '../mcp/tools/server_verification_runs.dart';
 import '../mcp/tools/session_liveness.dart';
 import '../mcp/tools/verification_tool_set.dart';
+import '../mcp/tools/github_run_tool_set.dart';
 import '../mcp/tools/workspace_tool_set.dart';
 import '../mcp/tools/worktree_tool_set.dart';
 import '../mcp/tools/decision_tool_set.dart';
@@ -565,6 +566,7 @@ Future<int> runServe(
         worktreesOf: worktrees.list,
         liveness: liveness,
       ),
+      GitHubRunToolSet(tools, reach: reach),
       ProjectToolSet(tools, reach: reach, folders: folders),
       WorktreeToolSet(
         tools,

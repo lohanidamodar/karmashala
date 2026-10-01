@@ -338,6 +338,10 @@ class FakeGitWork {
         return const DataAck();
       case GitHubCreatePr():
         return 'https://github.com/o/r/pull/1';
+      case GitHubRuns():
+        return const <WorkflowRun>[];
+      case GitHubRunLog(:final runId):
+        return boundRunLog(runId, '');
     }
   }
 }

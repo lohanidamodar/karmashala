@@ -113,6 +113,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'list_projects': McpToolAnnotations.read,
   'list_checkouts': McpToolAnnotations.read,
   'delivery_status': McpToolAnnotations.read,
+  // gh reads GitHub; nothing is re-run, cancelled or commented on.
+  'github_runs': McpToolAnnotations.readOutside,
+  'github_run_log': McpToolAnnotations.readOutside,
   // Adds a project and discovers what is under it. Not idempotent: asked
   // twice with the same folder it files the workspace with two of them.
   'project_add': McpToolAnnotations(movesAttention: false),
@@ -673,6 +676,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'delivery_status': McpToolListing(
     McpToolCategory.workspace,
     'What a checkout still owes: ahead, behind, dirty, unpushed, its PR.',
+  ),
+  'github_runs': McpToolListing(
+    McpToolCategory.workspace,
+    'The newest GitHub Actions runs on a checkout\'s branch, through gh.',
+  ),
+  'github_run_log': McpToolListing(
+    McpToolCategory.workspace,
+    'A failed Actions run\'s log: its last 300 lines and its error lines.',
   ),
   'worktree_create': McpToolListing(
     McpToolCategory.workspace,
