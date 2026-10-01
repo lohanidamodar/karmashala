@@ -693,8 +693,13 @@ class AdbService {
 
   /// Opens a URL, or a custom scheme to reach a deep link. An intent nothing can
   /// handle still **exits 0**, so this is not shaped as ok-or-throw.
-  Future<void> openUrl(String serial, String url) async {
+  Future<void> openUrl(String serial, String url, {String? appId}) async {
     final summary = 'Opened $url';
+    // `adb shell` hands the words to the device's shell, where an unquoted `&`
+    // in a query string ends the command.
+    final data = RegExp(r'''[\s&;|<>()$`'"\\*?#~!{}\[\]]''').hasMatch(url)
+        ? shellQuote(url)
+        : url;
     final result = await runner.run(
       _forDevice(serial, [
         'shell',
@@ -703,7 +708,8 @@ class AdbService {
         '-a',
         'android.intent.action.VIEW',
         '-d',
-        url,
+        data,
+        ?appId,
       ]),
     );
     if (!result.ok || result.stderr.contains('Error:')) {
@@ -721,6 +727,147 @@ class AdbService {
       throw error;
     }
     _report(DeviceAction(verb: 'openUrl', serial: serial, summary: summary));
+  }
+
+  /// The device's API level, or null when it will not say.
+  Future<int?> apiLevel(String serial) async {
+    final result = await runner.run(
+      _forDevice(serial, const ['shell', 'getprop', 'ro.build.version.sdk']),
+    );
+    return result.ok ? int.tryParse(result.stdout.trim()) : null;
+  }
+
+  /// `settings put system font_scale`: what the app reads as its text scale.
+  Future<void> setFontScale(String serial, double scale) => _change(
+    serial,
+    ['shell', 'settings', 'put', 'system', 'font_scale', '$scale'],
+    verb: 'fontScale',
+    summary: 'Set font scale to $scale',
+  );
+
+  /// Locks the screen at Android's `user_rotation` [quarterTurns], or hands
+  /// it back to the sensor when null.
+  Future<void> setRotation(String serial, int? quarterTurns) async {
+    final summary = quarterTurns == null
+        ? 'Unlocked rotation'
+        : 'Rotated to $quarterTurns quarter turns';
+    await _change(
+      serial,
+      [
+        'shell',
+        'settings',
+        'put',
+        'system',
+        'accelerometer_rotation',
+        quarterTurns == null ? '1' : '0',
+      ],
+      verb: 'rotation',
+      summary: summary,
+    );
+    if (quarterTurns == null) return;
+    await _change(
+      serial,
+      ['shell', 'settings', 'put', 'system', 'user_rotation', '$quarterTurns'],
+      verb: 'rotation',
+      summary: summary,
+    );
+  }
+
+  /// One app's locale (Android 13+, `cmd locale set-app-locales`). The system
+  /// locale needs root, which this does not take.
+  Future<void> setAppLocale(String serial, String appId, String tag) => _change(
+    serial,
+    ['shell', 'cmd', 'locale', 'set-app-locales', appId, '--locales', tag],
+    verb: 'locale',
+    summary: 'Set $appId\'s locale to $tag',
+  );
+
+  /// `pm grant` or `pm revoke` a runtime permission. Revoking one kills the
+  /// app's process, as Android always does.
+  Future<void> setPermission(
+    String serial,
+    String appId,
+    String permission, {
+    required bool grant,
+  }) => _change(
+    serial,
+    ['shell', 'pm', grant ? 'grant' : 'revoke', appId, permission],
+    verb: 'permission',
+    summary: '${grant ? 'Granted' : 'Revoked'} $permission for $appId',
+  );
+
+  /// `pm clear`: the app's data, caches and granted permissions, gone. It
+  /// prints "Failed" with exit 0 for an unknown package, so the output decides.
+  Future<void> clearAppData(String serial, String appId) => _change(
+    serial,
+    ['shell', 'pm', 'clear', appId],
+    verb: 'clearAppData',
+    summary: 'Cleared $appId\'s data',
+    succeeded: (output) => output.contains('Success'),
+  );
+
+  /// Turns Wi-Fi and mobile data on or off with `svc`.
+  Future<void> setRadios(String serial, {required bool on}) async {
+    final state = on ? 'enable' : 'disable';
+    for (final radio in const ['wifi', 'data']) {
+      await _change(
+        serial,
+        ['shell', 'svc', radio, state],
+        verb: 'network',
+        summary: '${on ? 'Enabled' : 'Disabled'} $radio',
+      );
+    }
+  }
+
+  /// An emulator's modem speed and latency (`emu network speed|delay`).
+  /// The emulator console only: a handset has no such thing.
+  Future<void> setEmulatorNetwork(
+    String serial, {
+    required String speed,
+    required String delay,
+  }) async {
+    for (final (setting, value) in [('speed', speed), ('delay', delay)]) {
+      await _change(
+        serial,
+        ['emu', 'network', setting, value],
+        verb: 'network',
+        summary: 'Set emulator network $setting to $value',
+        succeeded: (output) => !output.contains('KO'),
+      );
+    }
+  }
+
+  /// Runs one device command that changes state and reports it either way.
+  /// [succeeded] reads the output for commands that exit 0 on failure.
+  Future<void> _change(
+    String serial,
+    List<String> arguments, {
+    required String verb,
+    required String summary,
+    bool Function(String output)? succeeded,
+  }) async {
+    final result = await runner.run(_forDevice(serial, arguments));
+    final output = '${result.stdout}\n${result.stderr}';
+    final failed =
+        !result.ok ||
+        output.contains('Exception') ||
+        output.contains('Error:') ||
+        (succeeded != null && !succeeded(output));
+    if (failed) {
+      final complaint = result.stderr.trim().isEmpty
+          ? result.stdout.trim()
+          : result.stderr.trim();
+      final error = StateError('$summary failed on $serial: $complaint');
+      _report(
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
   /// The pids [packageName] is running under, empty when it is not running.

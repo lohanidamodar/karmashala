@@ -4,6 +4,7 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import '../../flutter/attached_apps.dart';
 import '../../flutter/checkout_project.dart';
 import '../../flutter/flutter_loop.dart';
+import '../../flutter/run_configurations.dart';
 import 'flutter_tool_schemas.dart';
 import 'server_tool_set.dart';
 
@@ -11,18 +12,23 @@ import 'server_tool_set.dart';
 const int kFlutterRunLogRows = 80;
 
 /// `flutter_apps`, `flutter_attach`, `flutter_reload`, `flutter_logs`,
-/// `flutter_pick_widget` and `flutter_run`, run by the server (slice 3d):
-/// its hosted runs and the apps it is attached to. Nothing is handed on.
+/// `flutter_pick_widget`, `flutter_run` and `flutter_run_config`, run by the
+/// server (slice 3d): its hosted runs and the apps it is attached to. Nothing
+/// is handed on.
 class FlutterToolSet extends ServerToolSet {
   const FlutterToolSet({
     required this.apps,
     required this.loop,
     required this.rows,
+    this.configurations,
   });
 
   final ServerAttachedApps apps;
   final ServerFlutterLoop loop;
   final CheckoutRows rows;
+
+  /// The named run configurations; null on a server that keeps none.
+  final FlutterRunConfigurations? configurations;
 
   @override
   List<Map<String, Object?>> get schemas => [
@@ -43,6 +49,7 @@ class FlutterToolSet extends ServerToolSet {
       'flutter_logs' => _logs(arguments),
       'flutter_pick_widget' => _pick(arguments),
       'flutter_run' => _run(arguments, callerSessionId),
+      'flutter_run_config' => _config(arguments),
       _ => throw ArgumentError('Unknown tool: $tool'),
     },
   );
@@ -199,6 +206,13 @@ class FlutterToolSet extends ServerToolSet {
 
   Future<Object?> _run(Map<String, dynamic> args, String? caller) async {
     final action = (args['action'] as String?)?.trim() ?? '';
+    final configured = (args['configuration'] as String?)?.trim() ?? '';
+    if (configured.isNotEmpty && action != 'run') {
+      throw ArgumentError(
+        'configuration applies to action "run" only; $action takes its flags '
+        'in arguments.',
+      );
+    }
     return switch (action) {
       'run' => _launch(args, caller),
       'stop' => _stop(args),
@@ -217,23 +231,122 @@ class FlutterToolSet extends ServerToolSet {
   }
 
   Future<Object?> _launch(Map<String, dynamic> args, String? caller) async {
-    final project = projectOfCheckout(rows, args);
-    final device = (args['deviceId'] as String?)?.trim() ?? '';
+    final resolved = resolveConfiguredRun(
+      rows: rows,
+      configurations: configurations,
+      checkoutId: (args['checkoutId'] as String?)?.trim() ?? '',
+      configuration: args['configuration'] as String?,
+      projectDirectory: args['projectDirectory'] as String?,
+      deviceId: args['deviceId'] as String?,
+      explicit: _arguments(args),
+    );
+    final device = resolved.deviceId ?? '';
     if (device.isEmpty) {
       throw ArgumentError(
         'deviceId is required for action "run" — the id "flutter devices" '
         'prints, which is an adb serial for a phone and a word like "windows", '
         '"macos" or "chrome" for the others. list_devices has the attached '
-        'ones.',
+        'ones${resolved.configuration == null ? '' : '; configuration '
+                  '"${resolved.configuration!.name}" names no default device'}.',
       );
     }
     final outcome = await loop.run(
-      project: project,
+      project: resolved.project,
       deviceId: device,
       sessionId: caller,
-      extraArguments: _arguments(args),
+      extraArguments: resolved.arguments,
     );
-    return _answer(outcome.preflight, outcome.run);
+    return {
+      ..._answer(outcome.preflight, outcome.run),
+      if (resolved.configuration case final configuration?)
+        'configuration': configuration.name,
+    };
+  }
+
+  // --- flutter_run_config -----------------------------------------------------
+
+  Future<Object?> _config(Map<String, dynamic> args) async {
+    final store =
+        configurations ??
+        (throw StateError('This server keeps no run configurations.'));
+    final action = (args['action'] as String?)?.trim() ?? '';
+    final checkoutId = (args['checkoutId'] as String?)?.trim() ?? '';
+    // Validated through the one path that words the refusal.
+    projectOfCheckout(rows, {'checkoutId': checkoutId});
+    final projectId = rows.repository(checkoutId)!.projectId;
+    String name() {
+      final value = (args['name'] as String?)?.trim() ?? '';
+      if (value.isEmpty) throw ArgumentError('name is required for $action.');
+      return value;
+    }
+
+    switch (action) {
+      case 'list':
+        final all = store.list(projectId: projectId);
+        return {
+          'projectId': projectId,
+          'configurations': [
+            for (final configuration in all)
+              {
+                ...configuration.toJson(),
+                'flags': configuration.runArguments(),
+              },
+          ],
+          if (all.isEmpty)
+            'summary':
+                'This project has no run configurations. Save one with '
+                'action "save".',
+        };
+      case 'save':
+        List<String> strings(String key) => [
+          for (final value in (args[key] as List<Object?>? ?? const []))
+            if (value != null && '$value'.trim().isNotEmpty) '$value'.trim(),
+        ];
+        String? text(String key) {
+          final value = (args[key] as String?)?.trim();
+          return value == null || value.isEmpty ? null : value;
+        }
+
+        final existing = store.named(projectId, name());
+        final mode = text('buildMode');
+        final saved = store.save(
+          FlutterRunConfiguration(
+            id: existing?.id ?? '',
+            projectId: projectId,
+            name: name(),
+            projectDirectory: text('projectDirectory'),
+            target: text('target'),
+            flavor: text('flavor'),
+            buildMode: mode == null
+                ? FlutterBuildMode.debug
+                : FlutterBuildMode.fromName(mode) ??
+                      (throw ArgumentError(
+                        'buildMode is debug, profile or release.',
+                      )),
+            dartDefines: strings('dartDefines'),
+            dartDefineFiles: strings('dartDefineFiles'),
+            deviceId: text('deviceId'),
+          ),
+        );
+        return {
+          'saved': saved.toJson(),
+          'flags': saved.runArguments(),
+          'summary': existing == null
+              ? 'Saved "${saved.name}". Run it with flutter_run action "run" '
+                    'and configuration "${saved.name}".'
+              : 'Replaced "${saved.name}" with exactly these fields.',
+        };
+      case 'delete':
+        final existing =
+            store.named(projectId, name()) ??
+            (throw StateError(
+              'No run configuration "${name()}" in this project.',
+            ));
+        store.delete(existing.id);
+        return {'deleted': existing.name};
+      default:
+        throw ArgumentError('action is list, save or delete.');
+    }
   }
 
   Future<Object?> _start(

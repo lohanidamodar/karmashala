@@ -31,6 +31,18 @@ DataRequest<Object?>? _flutterRequestFromJson(String kind, _Arguments args) =>
         args.string('environmentId'),
         force: args.boolean('force', orElse: false),
       ),
+      FlutterRunConfigs.name => FlutterRunConfigs(
+        projectId: args.optionalString('projectId'),
+      ),
+      FlutterRunConfigSave.name => FlutterRunConfigSave(
+        args.value('configuration', FlutterRunConfiguration.fromJson),
+      ),
+      FlutterRunConfigDelete.name => FlutterRunConfigDelete(args.string('id')),
+      FlutterRunStart.name => FlutterRunStart(
+        args.string('checkoutId'),
+        configurationId: args.optionalString('configurationId'),
+        deviceId: args.optionalString('deviceId'),
+      ),
       _ => null,
     };
 
@@ -208,4 +220,112 @@ final class FlutterSdk extends FlutterWorkRequest<FlutterSdkReading> {
   @override
   FlutterSdkReading resultFromJson(Object? json) =>
       _decode(kind, () => flutterSdkReadingFromJson(_object(json, kind)));
+}
+
+/// [projectId]'s named run configurations, or every project's when null.
+final class FlutterRunConfigs
+    extends FlutterWorkRequest<List<FlutterRunConfiguration>> {
+  const FlutterRunConfigs({this.projectId});
+
+  static const String name = 'flutter.runConfigs';
+
+  final String? projectId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'projectId': ?projectId};
+
+  @override
+  Object? resultToJson(List<FlutterRunConfiguration> result) => [
+    for (final configuration in result) configuration.toJson(),
+  ];
+
+  @override
+  List<FlutterRunConfiguration> resultFromJson(Object? json) => _decode(
+    kind,
+    () => [
+      for (final item in _objects(json, kind))
+        FlutterRunConfiguration.fromJson(item),
+    ],
+  );
+}
+
+/// Saves [configuration]: a new one when its id is empty. Refused for a name
+/// the project already uses, or a define that is not KEY=VALUE.
+final class FlutterRunConfigSave
+    extends FlutterWorkRequest<FlutterRunConfiguration> {
+  const FlutterRunConfigSave(this.configuration);
+
+  static const String name = 'flutter.runConfigSave';
+
+  final FlutterRunConfiguration configuration;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'configuration': configuration.toJson(),
+  };
+
+  @override
+  Object? resultToJson(FlutterRunConfiguration result) => result.toJson();
+
+  @override
+  FlutterRunConfiguration resultFromJson(Object? json) => _decode(
+    kind,
+    () => FlutterRunConfiguration.fromJson(_object(json, kind)),
+  );
+}
+
+final class FlutterRunConfigDelete extends FlutterWorkRequest<DataAck> {
+  const FlutterRunConfigDelete(this.id);
+
+  static const String name = 'flutter.runConfigDelete';
+
+  final String id;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'id': id};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// `flutter run` in checkout [checkoutId] with [configurationId]'s flags, on
+/// [deviceId] or the configuration's own device. Answers the sentence saying
+/// where it runs; a preflight that blocks is refused in its own words.
+final class FlutterRunStart extends FlutterWorkRequest<String> {
+  const FlutterRunStart(this.checkoutId, {this.configurationId, this.deviceId});
+
+  static const String name = 'flutter.runStart';
+
+  final String checkoutId;
+  final String? configurationId;
+  final String? deviceId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'checkoutId': checkoutId,
+    'configurationId': ?configurationId,
+    'deviceId': ?deviceId,
+  };
+
+  @override
+  Object? resultToJson(String result) => result;
+
+  @override
+  String resultFromJson(Object? json) =>
+      json is String ? json : _badAnswer(kind);
 }

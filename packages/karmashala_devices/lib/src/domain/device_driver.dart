@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'device_files.dart';
 import 'device_input.dart';
+import 'device_state.dart';
 import 'device_target.dart';
 import 'ui_node.dart';
 
@@ -37,6 +38,10 @@ enum DeviceCapability {
   /// Reaching the device's storage: listing, and moving files both ways. One
   /// capability for six methods — they are one transport and break together.
   files,
+
+  /// What the system tells an app — appearance, font scale, locale, rotation,
+  /// network, permissions, its data, a link. Each change refuses on its own.
+  deviceState,
 }
 
 /// A device refusing, by name, with the reason. Its own type so a refusal reads
@@ -255,4 +260,8 @@ abstract interface class DeviceDriver {
   /// Makes the directory [path]. Refused when something is already there or
   /// the parent is missing — never a silent `-p`.
   Future<void> makeDirectory(String path);
+
+  /// Applies [change] and answers one sentence saying what was done, or throws
+  /// [DeviceRefusal] for a change this platform cannot make.
+  Future<String> changeState(DeviceStateChange change);
 }

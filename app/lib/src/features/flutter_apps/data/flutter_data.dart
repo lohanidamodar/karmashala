@@ -49,6 +49,28 @@ class FlutterData {
   Future<FlutterSdkReading> sdk(String environmentId, {bool force = false}) =>
       _ask(FlutterSdk(environmentId, force: force));
 
+  Future<List<FlutterRunConfiguration>> runConfigs(String projectId) =>
+      _ask(FlutterRunConfigs(projectId: projectId));
+
+  Future<FlutterRunConfiguration> saveRunConfig(
+    FlutterRunConfiguration configuration,
+  ) => _ask(FlutterRunConfigSave(configuration));
+
+  Future<void> deleteRunConfig(String id) => _ask(FlutterRunConfigDelete(id));
+
+  /// Starts `flutter run` on the server; answers where it is running.
+  Future<String> runStart(
+    String checkoutId, {
+    String? configurationId,
+    String? deviceId,
+  }) => _ask(
+    FlutterRunStart(
+      checkoutId,
+      configurationId: configurationId,
+      deviceId: deviceId,
+    ),
+  );
+
   /// [appId]'s console, its backlog first, then live.
   Stream<DataStreamItems> console(String appId) =>
       _client.openStream(kFlutterLogsStream, appId);

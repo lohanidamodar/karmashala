@@ -331,6 +331,27 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     openWorld: true,
     movesAttention: false,
   ),
+  // Not idempotent: two opens are two navigations on the app's back stack.
+  'device_open_url': McpToolAnnotations(openWorld: true, movesAttention: false),
+  // Every setting it changes can be set back, and setting it twice is once.
+  'device_set_state': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // A revoke ends the app's process on both platforms.
+  'device_app_permission': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_clear_app_data': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
 
   // Browser. The page is someone's real logged-in session.
   'browser_find': McpToolAnnotations.readOutside,
@@ -411,6 +432,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     destructive: true,
     openWorld: true,
     movesAttention: true,
+  ),
+  // A save replaces a configuration of the same name wholesale and a delete
+  // has no undo; both leave the same rows when repeated.
+  'flutter_run_config': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    movesAttention: false,
   ),
   // A build overwrites the artifact with no undo and resolves dependencies
   // from the network; only "build" opens and focuses a tab.
@@ -835,6 +863,22 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.devices,
     'Force-stop a running app on a device. One session drives at a time.',
   ),
+  'device_open_url': McpToolListing(
+    McpToolCategory.devices,
+    'Open a link or deep link on a device. One session drives at a time.',
+  ),
+  'device_set_state': McpToolListing(
+    McpToolCategory.devices,
+    'Set appearance, font scale, locale, rotation or network on a device.',
+  ),
+  'device_app_permission': McpToolListing(
+    McpToolCategory.devices,
+    'Grant or revoke an app\'s permission; a revoke ends the app.',
+  ),
+  'device_clear_app_data': McpToolListing(
+    McpToolCategory.devices,
+    'Wipe an Android app back to first launch. No undo.',
+  ),
   'device_screenshot': McpToolListing(
     McpToolCategory.devices,
     'Capture the current screen as a PNG.',
@@ -964,6 +1008,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_run': McpToolListing(
     McpToolCategory.flutterApps,
     'Start a project: pub get, launch on a device, and run its gates.',
+  ),
+  'flutter_run_config': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Named run setups: flavor, entrypoint, defines, build mode, device.',
   ),
   'project_build': McpToolListing(
     McpToolCategory.appProjects,

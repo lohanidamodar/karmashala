@@ -82,6 +82,19 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     await adb.openUrl(target.serial, url.trim());
   }
 
+  Future<void> _deviceSettings() async {
+    final target = widget.device;
+    final adb = _adb;
+    if (target == null || adb == null) return;
+    if (!await _mayAct(target, 'device settings') || !mounted) return;
+    final driver = AdbDeviceDriver(adb: adb, target: AndroidTarget(target));
+    await showDeviceStateDialog(
+      context,
+      deviceLabel: target.displayName,
+      apply: driver.changeState,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final target = widget.device;
@@ -149,6 +162,15 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
             icon: AppIcons.globe,
             onPressed: canReach ? _openUrl : null,
             buttonKey: const Key('android-open-url'),
+          ),
+          DeviceControl(
+            name: 'Device settings',
+            tooltip: target == null
+                ? idle
+                : 'Font scale, rotation, network, locale, permissions, app data',
+            icon: AppIcons.gearSix,
+            onPressed: canReach ? _deviceSettings : null,
+            buttonKey: const Key('android-device-settings'),
           ),
           // Gated on the live view, not adb: a recording is written from the
           // picture's frames. MP4 opens anywhere, MPEG-TS survives a rotation.

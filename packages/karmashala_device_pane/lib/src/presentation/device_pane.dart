@@ -24,6 +24,7 @@ import 'device_files_dialog.dart';
 import 'device_hold.dart';
 import 'device_list_row.dart';
 import 'device_section_header.dart';
+import 'device_state_dialog.dart';
 import 'device_start_options.dart';
 import 'device_controls.dart';
 import 'device_app_controls.dart';

@@ -21,6 +21,7 @@ import 'flutter_loop.dart';
 import 'flutter_sdk_readings.dart';
 import 'hosted_runs.dart';
 import 'project_builds.dart';
+import 'run_configurations.dart';
 
 /// Where the server's runs write their `--vmservice-out-file`, under its data
 /// directory.
@@ -106,6 +107,7 @@ class ServerFlutterWork implements FlutterWork {
       runners: runners,
     );
     logs = FlutterLogsSource(apps);
+    configurations = FlutterRunConfigurations(database, clock: now, newId: ids);
     _rows = rows;
   }
 
@@ -114,6 +116,7 @@ class ServerFlutterWork implements FlutterWork {
   late final ServerAttachedApps apps;
   late final ServerFlutterLoop loop;
   late final ServerProjectBuilds builds;
+  late final FlutterRunConfigurations configurations;
 
   /// Registered under `kFlutterLogsStream`.
   late final FlutterLogsSource logs;
@@ -131,6 +134,48 @@ class ServerFlutterWork implements FlutterWork {
         error.message,
       );
     }
+  }
+
+  /// The run-configuration requests' own refusals, in their own words.
+  static T _refusing<T>(T Function() action) {
+    try {
+      return action();
+    } on FlutterRunConfigurationInvalid catch (error) {
+      throw DataRefused.invalid(error.message);
+    } on ArgumentError catch (error) {
+      throw DataRefused.invalid('${error.message}');
+    } on StateError catch (error) {
+      throw DataRefused.notFound(error.message);
+    }
+  }
+
+  /// A run the app's Run button asked for, with the configuration's flags.
+  Future<String> _runConfigured(FlutterRunStart request) async {
+    final resolved = _refusing(
+      () => resolveConfiguredRun(
+        rows: _rows,
+        configurations: configurations,
+        checkoutId: request.checkoutId,
+        configuration: request.configurationId,
+        deviceId: request.deviceId,
+      ),
+    );
+    final device =
+        resolved.deviceId ??
+        (throw const DataRefused.invalid(
+          'No device: this configuration names none, so pick one to run on.',
+        ));
+    final outcome = await loop.run(
+      project: resolved.project,
+      deviceId: device,
+      extraArguments: resolved.arguments,
+    );
+    final run = outcome.run;
+    if (run == null) {
+      throw DataRefused(DataRefusalCode.failed, outcome.preflight.reason);
+    }
+    return 'flutter run${resolved.configuration == null ? '' : ' (${resolved.configuration!.name})'} '
+        'is starting on $device in session ${run.paneId}.';
   }
 
   Future<Object?> _handle(FlutterWorkRequest<Object?> request) async {
@@ -174,6 +219,15 @@ class ServerFlutterWork implements FlutterWork {
               'no environment "$environmentId" is recorded',
             ));
         return sdk.readFor(environment, force: force);
+      case FlutterRunConfigs(:final projectId):
+        return configurations.list(projectId: projectId);
+      case FlutterRunConfigSave(:final configuration):
+        return _refusing(() => configurations.save(configuration));
+      case FlutterRunConfigDelete(:final id):
+        configurations.delete(id);
+        return const DataAck();
+      case final FlutterRunStart start:
+        return _runConfigured(start);
     }
   }
 

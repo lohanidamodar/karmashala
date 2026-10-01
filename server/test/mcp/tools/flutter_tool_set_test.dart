@@ -17,6 +17,7 @@ void main() {
     apps: fixture.work.apps,
     loop: fixture.work.loop,
     rows: CheckoutRows(fixture.database),
+    configurations: fixture.work.configurations,
   );
 
   Future<Map<String, Object?>> run(Map<String, dynamic> args) async =>
@@ -27,7 +28,7 @@ void main() {
           as String;
 
   group('the surface', () {
-    test('serves the six tools, each an object schema', () {
+    test('serves the seven tools, each an object schema', () {
       final names = [for (final s in tools().schemas) s['name']];
       expect(names, [
         'flutter_apps',
@@ -36,6 +37,7 @@ void main() {
         'flutter_logs',
         'flutter_pick_widget',
         'flutter_run',
+        'flutter_run_config',
       ]);
       for (final schema in tools().schemas) {
         expect((schema['inputSchema']! as Map)['type'], 'object');

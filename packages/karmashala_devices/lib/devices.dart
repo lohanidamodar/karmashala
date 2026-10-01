@@ -44,6 +44,7 @@ export 'src/domain/device_geometry.dart';
 export 'src/domain/device_input.dart';
 export 'src/domain/device_keyboard.dart';
 export 'src/domain/device_recording.dart';
+export 'src/domain/device_state.dart';
 export 'src/domain/device_target.dart';
 export 'src/domain/host_clipboard.dart';
 export 'src/domain/ios_simulator.dart';

@@ -4,6 +4,7 @@ import 'device_drive_tools.dart';
 import 'device_file_tools.dart';
 import 'device_inventory_tools.dart';
 import 'device_observe_tools.dart';
+import 'device_state_tools.dart';
 import 'server_tool_set.dart';
 
 // The policy is quoted by tests and by anything explaining the two taps, and
@@ -59,6 +60,12 @@ class DeviceToolSet extends ServerToolSet {
         callerSessionId: callerSessionId,
       ).call(tool, arguments);
     }
+    if (DeviceStateTools.handles(tool)) {
+      return DeviceStateTools(
+        devices,
+        callerSessionId: callerSessionId,
+      ).call(tool, arguments);
+    }
     throw ArgumentError('Unknown tool: $tool');
   });
 }
@@ -83,4 +90,8 @@ const List<Map<String, Object?>> deviceToolSchemas = [
   deviceUiDumpSchema,
   deviceFindElementsSchema,
   deviceTapElementSchema,
+  deviceOpenUrlSchema,
+  deviceSetStateSchema,
+  deviceAppPermissionSchema,
+  deviceClearAppDataSchema,
 ];

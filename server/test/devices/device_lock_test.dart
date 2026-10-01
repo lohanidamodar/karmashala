@@ -116,6 +116,17 @@ void main() {
         ('device_key', {'key': 'back'}),
         ('device_launch_app', {'appId': 'com.example.app'}),
         ('device_terminate_app', {'appId': 'com.example.app'}),
+        ('device_open_url', {'url': 'myapp://orders/42'}),
+        ('device_set_state', {'appearance': 'dark'}),
+        (
+          'device_app_permission',
+          {
+            'appId': 'com.example.app',
+            'permission': 'CAMERA',
+            'action': 'grant',
+          },
+        ),
+        ('device_clear_app_data', {'appId': 'com.example.app'}),
       ]) {
         final refused = await callAs('s2', call.$1, call.$2);
         expect(

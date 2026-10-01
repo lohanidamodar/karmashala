@@ -555,3 +555,26 @@ void _migrateToV60(Database db) {
     'DEFAULT 0;',
   );
 }
+
+/// Named `flutter run` configurations, per project so every checkout and
+/// worktree of it shares them. Lists are JSON arrays of strings.
+void _migrateToV61(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS flutter_run_configurations (
+      id                TEXT PRIMARY KEY,
+      project_id        TEXT NOT NULL
+        REFERENCES projects (id) ON DELETE CASCADE,
+      name              TEXT NOT NULL,
+      project_directory TEXT,
+      target            TEXT,
+      flavor            TEXT,
+      build_mode        TEXT NOT NULL DEFAULT 'debug',
+      dart_defines      TEXT NOT NULL DEFAULT '[]',
+      dart_define_files TEXT NOT NULL DEFAULT '[]',
+      device_id         TEXT,
+      created_at        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      UNIQUE (project_id, name)
+    );
+  ''');
+}
