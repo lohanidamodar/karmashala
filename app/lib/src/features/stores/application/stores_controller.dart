@@ -36,7 +36,8 @@ class StoresState {
   DateTime? get refreshedAt => view.refreshedAt;
   bool get refreshing => asking || view.refreshing;
 
-  List<StoreAppGroup> get groups => groupStoreView(view.stores, view.apps);
+  List<StoreAppGroup> get groups =>
+      groupStoreView(view.stores, view.apps, icons: view.icons);
 
   StoresState copyWith({
     StoresView? view,

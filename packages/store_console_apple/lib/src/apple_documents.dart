@@ -182,6 +182,35 @@ List<StoreReview> parseReviews(JsonMap document) {
   return reviews;
 }
 
+final _artworkSize = RegExp(r'/\d+x\d+bb\.(?:jpg|jpeg|png|webp)$');
+
+/// The icon the public lookup names, sized to [size] px as a PNG: its
+/// `artworkUrl512` with the size Apple's image host reads from the last path
+/// segment rewritten, else `artworkUrl100` as it is. Null when the lookup
+/// has no such app or names no artwork on https.
+Uri? parseLookupIcon(JsonMap document, {int size = 128}) {
+  final results = document['results'];
+  if (results is! List) throw shapeFailure('the icon');
+  if (results.isEmpty) return null;
+  final first = results.first;
+  if (first is! Map) throw shapeFailure('the icon');
+  Uri? https(Object? value) {
+    if (value is! String) return null;
+    final uri = Uri.tryParse(value.trim());
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty
+        ? uri
+        : null;
+  }
+
+  final large = https(first['artworkUrl512']);
+  if (large != null && _artworkSize.hasMatch(large.path)) {
+    return large.replace(
+      path: large.path.replaceFirst(_artworkSize, '/${size}x${size}bb.png'),
+    );
+  }
+  return https(first['artworkUrl100']) ?? large;
+}
+
 /// Null when the lookup has no such app, or the app has no ratings yet.
 RatingSummary? parseLookupRating(JsonMap document) {
   final results = document['results'];

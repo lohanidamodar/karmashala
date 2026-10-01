@@ -79,6 +79,9 @@ class _FakeClient implements StoreClient {
   );
 
   @override
+  Future<StoreIconImage?> icon(StoreApp app) async => null;
+
+  @override
   void close() => closed = true;
 }
 

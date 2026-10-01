@@ -7,6 +7,7 @@ import 'package:store_console/store_console.dart';
 import 'play_account.dart';
 import 'play_auth.dart';
 import 'play_errors.dart';
+import 'play_icon.dart';
 import 'play_mapping.dart';
 import 'play_reporting.dart';
 import 'play_reports_bucket.dart';
@@ -18,13 +19,21 @@ class PlayStoreClient implements StoreClient {
   /// [httpClient] is the transport the token and every call go through; a
   /// test hands in a fake.
   PlayStoreClient(
-    this.account, {
+    PlayAccount account, {
     http.Client? httpClient,
     DateTime Function()? now,
-  }) : _auth = PlayAuth(account, httpClient ?? http.Client()),
-       _now = now ?? DateTime.now;
+  }) : this._(account, httpClient ?? http.Client(), now ?? DateTime.now);
+
+  PlayStoreClient._(this.account, http.Client transport, this._now)
+    : _transport = transport,
+      _auth = PlayAuth(account, transport);
 
   final PlayAccount account;
+
+  /// The plain transport under [_auth]: the public store page is read
+  /// through it, so no request there carries the account's token. Closed
+  /// with [_auth].
+  final http.Client _transport;
   final PlayAuth _auth;
   final DateTime Function() _now;
 
@@ -195,6 +204,9 @@ class PlayStoreClient implements StoreClient {
       ],
     );
   }, area: PlayArea.bucket);
+
+  @override
+  Future<StoreIconImage?> icon(StoreApp app) => playIcon(_transport, app.id);
 
   @override
   void close() => _auth.close();

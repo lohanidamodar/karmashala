@@ -31,6 +31,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _snapshotFile = File(
          p.join(dataDirectory, snapshotDirectoryName, snapshotFileName),
        ),
+       _iconDirectory = Directory(
+         p.join(dataDirectory, snapshotDirectoryName, iconDirectoryName),
+       ),
        _tell = tell,
        _log = log ?? _silent,
        _now = clock ?? _utcNow,
@@ -46,8 +49,23 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   /// How many apps are read at once.
   static const int concurrency = 4;
 
+  /// Where each app's icon is kept: `<store>-<app id><ext>`.
+  static const String iconDirectoryName = 'icons';
+
+  /// An icon is looked up again after this long; until then the kept one,
+  /// or the known absence of one, stands.
+  static const Duration iconMaxAge = Duration(days: 1);
+
+  /// A lookup that failed is tried again after this long, keeping what it
+  /// had meanwhile.
+  static const Duration iconRetry = Duration(hours: 1);
+
+  /// The most one app's icon may add to a refresh.
+  static const Duration iconBudget = Duration(seconds: 25);
+
   final ServerStoreVault _vault;
   final File _snapshotFile;
+  final Directory _iconDirectory;
   final void Function(List<DataChange> changes) _tell;
   final void Function(String message) _log;
   final DateTime Function() _now;
@@ -56,6 +74,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
 
   final _stores = <StoreKind, Reading<List<StoreApp>>>{};
   final _apps = <String, StoreAppSnapshot>{};
+
+  /// By [StoreApp.key]; kept with the snapshot.
+  final _icons = <String, StoreAppIcon>{};
+
+  /// When an app's icon lookup last failed; not kept across starts.
+  final _iconFailedAt = <String, DateTime>{};
   DateTime? _refreshedAt;
 
   Future<StoresView>? _running;
@@ -107,6 +131,10 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         for (final app in _apps.values)
           if (connected.contains(app.app.store)) app,
       ],
+      icons: {
+        for (final MapEntry(:key, :value) in _icons.entries)
+          if (connected.contains(_storeOfKey(key))) key: value,
+      },
       refreshedAt: _refreshedAt,
       refreshing: _running != null,
     );
@@ -193,6 +221,14 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
             answered.contains(kept.app.store) &&
             !apps.contains(kept.app),
       );
+      final listedKeys = {for (final app in apps) app.key};
+      _icons.removeWhere((key, _) {
+        final store = _storeOfKey(key);
+        return store != null &&
+            current(store) &&
+            answered.contains(store) &&
+            !listedKeys.contains(key);
+      });
 
       var done = 0;
       final queue = apps.iterator;
@@ -204,6 +240,11 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
             if (current(app.store)) _apps[app.key] = snapshot;
           } on Object {
             // A console closed under it: the app keeps what it had.
+          }
+          // In the same guarded zone and the same console as the snapshot,
+          // so it is closed with them; bounded by the workers and a budget.
+          if (current(app.store) && _iconDue(app)) {
+            await _refreshIcon(console, app, current);
           }
           done++;
           _tell([StoresProgress(done: done, total: apps.length)]);
@@ -233,6 +274,118 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       _tell([StoresChanged(view)]);
     }
     return view;
+  }
+
+  static StoreKind? _storeOfKey(String key) {
+    final cut = key.indexOf(':');
+    if (cut <= 0) return null;
+    final name = key.substring(0, cut);
+    for (final store in StoreKind.values) {
+      if (store.name == name) return store;
+    }
+    return null;
+  }
+
+  /// Whether [app]'s icon is to be looked up now: never looked up, looked
+  /// up over [iconMaxAge] ago, or its kept file gone — and no failed lookup
+  /// within [iconRetry].
+  bool _iconDue(StoreApp app) {
+    final now = _now();
+    final failed = _iconFailedAt[app.key];
+    if (failed != null && now.difference(failed) < iconRetry) return false;
+    final held = _icons[app.key];
+    if (held == null) return true;
+    if (now.difference(held.checkedAt) >= iconMaxAge) return true;
+    final path = held.path;
+    return path != null && !File(path).existsSync();
+  }
+
+  /// Looks [app]'s icon up and keeps it. Never throws, and never takes more
+  /// than [iconBudget]; a failure keeps the icon held before.
+  Future<void> _refreshIcon(
+    StoreConsole console,
+    StoreApp app,
+    bool Function(StoreKind store) current,
+  ) async {
+    final Reading<StoreIconImage?> reading;
+    try {
+      reading = await console.icon(app).timeout(iconBudget);
+    } on Object {
+      _iconFailedAt[app.key] = _now();
+      return;
+    }
+    if (!current(app.store)) return;
+    final checkedAt = _now();
+    switch (reading) {
+      case ReadingMissing():
+        _iconFailedAt[app.key] = checkedAt;
+      case ReadingValue(value: null):
+        _iconFailedAt.remove(app.key);
+        final old = _icons[app.key]?.path;
+        _icons[app.key] = StoreAppIcon(checkedAt: checkedAt);
+        if (old != null) await _deleteQuietly(File(old));
+      case ReadingValue(value: final StoreIconImage image):
+        final file = File(
+          p.join(
+            _iconDirectory.path,
+            '${app.store.name}-${_safeName(app.id)}${image.extension}',
+          ),
+        );
+        try {
+          if (!_iconDirectory.existsSync()) {
+            _iconDirectory.createSync(recursive: true);
+          }
+          final temp = File('${file.path}.tmp');
+          await temp.writeAsBytes(image.bytes, flush: true);
+          await temp.rename(file.path);
+        } on Object catch (error) {
+          _iconFailedAt[app.key] = checkedAt;
+          _log('stores: an icon was not kept (${error.runtimeType})');
+          return;
+        }
+        _iconFailedAt.remove(app.key);
+        final old = _icons[app.key]?.path;
+        _icons[app.key] = StoreAppIcon(
+          url: image.source.toString(),
+          path: file.path,
+          checkedAt: checkedAt,
+        );
+        // Another extension than before: the old file is no one's now.
+        if (old != null && !p.equals(old, file.path)) {
+          await _deleteQuietly(File(old));
+        }
+    }
+  }
+
+  /// [id] as a file name: a package name or a number already is one.
+  static String _safeName(String id) =>
+      id.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+
+  static Future<void> _deleteQuietly(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } on Object {
+      // Left behind: a stale icon is overwritten by the next one.
+    }
+  }
+
+  /// Forgets the icons of each store [gone] names, and deletes their files.
+  Future<void> _forgetIcons(bool Function(StoreKind store) gone) async {
+    final dropped = <String>[];
+    _icons.removeWhere((key, icon) {
+      final store = _storeOfKey(key);
+      if (store == null || !gone(store)) return false;
+      final path = icon.path;
+      if (path != null) dropped.add(path);
+      return true;
+    });
+    _iconFailedAt.removeWhere((key, _) {
+      final store = _storeOfKey(key);
+      return store == null || gone(store);
+    });
+    for (final path in dropped) {
+      await _deleteQuietly(File(path));
+    }
   }
 
   StoreConsole _consoleNow() {
@@ -318,6 +471,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       _generation[store] = _gen(store) + 1;
       _stores.remove(store);
       _apps.removeWhere((_, kept) => kept.app.store == store);
+      await _forgetIcons((kept) => kept == store);
       await _persist();
     }
     _tell([StoresChanged(view)]);
@@ -342,6 +496,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _generation[store] = _gen(store) + 1;
     _stores.remove(store);
     _apps.removeWhere((_, kept) => kept.app.store == store);
+    await _forgetIcons((kept) => kept == store);
     _dropConsole();
     await _persist();
     final now = view;
@@ -354,6 +509,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final connected = _connected;
     _stores.removeWhere((store, _) => !connected.contains(store));
     _apps.removeWhere((_, kept) => !connected.contains(kept.app.store));
+    _icons.removeWhere((key, _) => !connected.contains(_storeOfKey(key)));
   }
 
   void _loadSnapshot() {
@@ -370,11 +526,13 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       for (final app in kept.apps) {
         _apps[app.app.key] = app;
       }
+      _icons.addAll(kept.icons);
       _refreshedAt = kept.refreshedAt;
       _dropDisconnected();
     } on Object catch (error) {
       _stores.clear();
       _apps.clear();
+      _icons.clear();
       _refreshedAt = null;
       _log('stores: the kept snapshot was not read (${error.runtimeType})');
     }

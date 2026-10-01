@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 import '../application/store_groups.dart';
+import 'store_app_icon.dart';
 import 'stores_format.dart';
 
 /// One app on the dashboard: its name, and a row per store it is on.
@@ -47,19 +48,37 @@ class StoreGroupCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  group.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
-                ),
-                Text(
-                  group.bundleId,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+                Row(
+                  children: [
+                    StoreAppIconView(
+                      icon: group.icon,
+                      name: group.name,
+                      size: StoreAppIconView.listSize(context),
+                    ),
+                    const SizedBox(width: Insets.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            group.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          Text(
+                            group.bundleId,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 for (final entry in group.entries) ...[
                   const SizedBox(height: Insets.md),

@@ -134,6 +134,7 @@ class StoreToolSet extends ServerToolSet {
       'store': _storeName(entry.app.store),
       'id': entry.app.id,
       'name': entry.app.name,
+      'iconUrl': entry.iconUrl,
       ..._readAge(snapshot),
       'live': _field(snapshot?.releases, (_) {
         final live = snapshot!.live;
@@ -178,6 +179,7 @@ class StoreToolSet extends ServerToolSet {
       'store': _storeName(entry.app.store),
       'id': entry.app.id,
       'name': entry.app.name,
+      'iconUrl': entry.iconUrl,
       ..._readAge(snapshot),
       'releases': _field(snapshot?.releases, _byTrack),
       'rating': _field(snapshot?.rating, _rating),
@@ -341,7 +343,7 @@ class StoreToolSet extends ServerToolSet {
     for (final app in apps) {
       byBundle
           .putIfAbsent(app.bundleId, () => [])
-          .add(_Entry(app, snapshots[app]));
+          .add(_Entry(app, snapshots[app], view.icons[app.key]?.url));
     }
     int rank(_Group group) => group.needsAttention
         ? 0
@@ -365,10 +367,14 @@ class StoreToolSet extends ServerToolSet {
 
 /// One app on one store; [snapshot] is null for an app listed but not read.
 class _Entry {
-  const _Entry(this.app, this.snapshot);
+  const _Entry(this.app, this.snapshot, this.iconUrl);
 
   final StoreApp app;
   final StoreAppSnapshot? snapshot;
+
+  /// The public image of the app's icon; null when it has none or was not
+  /// looked up yet.
+  final String? iconUrl;
 
   /// In flight or needing someone, those needing someone first.
   List<StoreRelease> get pending {
