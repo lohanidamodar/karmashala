@@ -147,6 +147,7 @@ class ProjectCheckRunner {
               results: results,
               startedAt: run.firedAt,
               sessionId: run.sessionId,
+              directory: directory?.path,
             );
       final recorded = await _recorder.recordOne(
         title: '${check.name} · ${directory!.path}',
@@ -222,6 +223,7 @@ class ProjectCheckRunner {
                   results: results,
                   startedAt: session.createdAt,
                   sessionId: session.id,
+                  directory: directory?.path,
                 ),
         ),
       );
@@ -268,6 +270,7 @@ class ProjectCheckRunner {
             results: reading.results,
             startedAt: session.createdAt,
             sessionId: session.id,
+            directory: reading.directory,
             excludingId: reading.id,
           ),
         ),
@@ -290,6 +293,7 @@ class ProjectCheckRunner {
     required CheckResults results,
     required DateTime startedAt,
     required String? sessionId,
+    required String? directory,
     int? excludingId,
   }) {
     final records = _results;
@@ -300,6 +304,7 @@ class ProjectCheckRunner {
       checkName: checkName,
       current: results,
       sessionStartedAt: startedAt,
+      directory: directory,
       sessionId: sessionId,
     );
   }
@@ -380,11 +385,13 @@ class _Excluding implements CheckResultRecords {
     required String repositoryId,
     required String checkName,
     required DateTime before,
+    String? directory,
     String? excludingSessionId,
   }) => _records.latestBefore(
     repositoryId: repositoryId,
     checkName: checkName,
     before: before,
+    directory: directory,
     excludingSessionId: excludingSessionId,
   );
 }
