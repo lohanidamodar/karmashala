@@ -25,6 +25,7 @@ import 'flutter_tool_schemas.dart';
 import 'continuation_tool_set.dart' show sessionHandoffToolSchemas;
 import 'recording_tool_schemas.dart';
 import 'terminal_tool_schemas.dart';
+import 'dev_server_tool_set.dart';
 import 'window_tool_sets.dart'
     show
         openSessionToolSchemas,
@@ -65,6 +66,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...openSessionToolSchemas,
   ...sessionHandoffToolSchemas,
   ...terminalControlToolSchemas,
+  ...devServerToolSchemas,
   ...recordingControlToolSchemas,
   ...snippetControlToolSchemas,
   ...sessionDraftToolSchemas,

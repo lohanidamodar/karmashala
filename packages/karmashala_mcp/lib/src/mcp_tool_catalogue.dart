@@ -179,6 +179,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Terminal.
   'terminal_list': McpToolAnnotations.read,
   'terminal_output': McpToolAnnotations.read,
+  // Lists processes and sockets on this machine; changes nothing.
+  'terminal_ports': McpToolAnnotations.read,
   // The new tab becomes active, its group activated, its pane focused.
   'terminal_open': McpToolAnnotations(movesAttention: true),
   // Whether the command is destructive is its business, not this tool's, and
@@ -623,6 +625,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'terminal_output': McpToolListing(
     McpToolCategory.terminals,
     'Read a pane\'s recent output — the screen as it stands, not a log.',
+  ),
+  'terminal_ports': McpToolListing(
+    McpToolCategory.terminals,
+    'The ports dev servers started in Karmashala\'s panes listen on.',
   ),
   'terminal_close': McpToolListing(
     McpToolCategory.terminals,
