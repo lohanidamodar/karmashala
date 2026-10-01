@@ -248,37 +248,46 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
       ],
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: kToolbarUsageChipWidth),
-        child: Semantics(
-          button: true,
-          label: '$name usage: ${view.tooltip}',
-          excludeSemantics: true,
-          child: InkWell(
-            key: ValueKey('toolbar-usage-${account.latest.accountKey}'),
-            borderRadius: BorderRadius.circular(Radii.sm),
-            onTap: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.sm,
-                vertical: Insets.xs,
-              ),
-              // Spec §4: the agent's mark, the short window's number, the
-              // long window's dimmed after it. The resets, the account and
-              // the reading's age are in the card a click opens.
-              // Shrinks rather than clips at a large text size: the numbers
-              // are the chip.
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AgentLogo(
-                      agentId: account.agentId,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: Insets.sm),
-                    ..._facts(context, view, colour),
-                  ],
+        // Hovered, the chip says what the click card says in full: each
+        // window's share, how long until it resets and the exact time it
+        // does, the account and how old the reading is (owner, 2026-10-01).
+        // Excluded from semantics: the label below already carries it.
+        child: Tooltip(
+          message: '$name\n${view.tooltip}',
+          waitDuration: const Duration(milliseconds: 400),
+          excludeFromSemantics: true,
+          child: Semantics(
+            button: true,
+            label: '$name usage: ${view.tooltip}',
+            excludeSemantics: true,
+            child: InkWell(
+              key: ValueKey('toolbar-usage-${account.latest.accountKey}'),
+              borderRadius: BorderRadius.circular(Radii.sm),
+              onTap: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.sm,
+                  vertical: Insets.xs,
+                ),
+                // Spec §4: the agent's mark, the short window's number, the
+                // long window's dimmed after it. The resets, the account and
+                // the reading's age are in the card a click opens.
+                // Shrinks rather than clips at a large text size: the numbers
+                // are the chip.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AgentLogo(
+                        agentId: account.agentId,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: Insets.sm),
+                      ..._facts(context, view, colour),
+                    ],
+                  ),
                 ),
               ),
             ),
