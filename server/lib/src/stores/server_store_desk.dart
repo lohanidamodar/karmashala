@@ -120,7 +120,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final running = _running;
     if (running != null) return running;
     final at = _refreshedAt;
-    if (maxAge != null && at != null && _now().difference(at) < maxAge) {
+    // A store connected since is never fresh, whatever the others' age.
+    final unread = _connected.any((store) => !_stores.containsKey(store));
+    if (maxAge != null &&
+        at != null &&
+        !unread &&
+        _now().difference(at) < maxAge) {
       return Future.value(view);
     }
     if (_connected.isEmpty || _closed) return Future.value(view);

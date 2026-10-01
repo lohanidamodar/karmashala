@@ -79,7 +79,8 @@ List<StoreApp> parseApps(JsonMap document) => [
     ),
 ];
 
-/// The newest [shownVersions] versions, unordered.
+/// Every current and in-flight version, then the newest of the rest up to
+/// [shownVersions] in all, newest first.
 List<StoreRelease> parseVersions(JsonMap document) {
   const what = 'versions';
   final included = _included(document);

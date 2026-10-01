@@ -63,6 +63,9 @@ String storeRefusalSentence(DataRefused refusal) => switch (refusal.code) {
   _ => refusal.message,
 };
 
+String _unexpected(Object error) =>
+    'The Karmashala server could not be asked (${error.runtimeType}).';
+
 String? _optional(String? typed) {
   final value = typed?.trim() ?? '';
   return value.isEmpty ? null : value;
@@ -137,6 +140,9 @@ class StoresController extends AsyncNotifier<StoresState> {
       _settle(null);
     } on DataRefused catch (refusal) {
       _settle(storeRefusalSentence(refusal));
+    } on Object catch (error) {
+      // Anything else must still end the spinner, and says only its type.
+      _settle(_unexpected(error));
     }
   }
 
@@ -229,6 +235,8 @@ class StoresController extends AsyncNotifier<StoresState> {
       return null;
     } on DataRefused catch (refusal) {
       return storeRefusalSentence(refusal);
+    } on Object catch (error) {
+      return _unexpected(error);
     }
   }
 }
