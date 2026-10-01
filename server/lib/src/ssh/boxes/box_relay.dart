@@ -65,8 +65,17 @@ class _RelayClient implements BoxRelayClient {
         screenGrid: screenGrid,
       );
     } on BoxUnavailable catch (e) {
+      // Nothing there holds it: the pane shows its session ended. Anything
+      // else — a box not reached — is said, short, with its detail.
       _peer.send(
-        ErrorMessage(message.requestId, ProtocolErrorCode.unknownSession, '$e'),
+        ErrorMessage(
+          message.requestId,
+          e.nothingThere
+              ? ProtocolErrorCode.unknownSession
+              : ProtocolErrorCode.internal,
+          e.message,
+          detail: e.detail,
+        ),
       );
       return;
     } on BoxLinkException catch (e) {
@@ -176,6 +185,7 @@ class _RelayClient implements BoxRelayClient {
               ? e.code!
               : ProtocolErrorCode.unknownSession,
           '$e',
+          detail: e is BoxUnavailable ? e.detail : null,
         ),
       );
     }

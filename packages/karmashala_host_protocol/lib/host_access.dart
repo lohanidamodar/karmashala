@@ -5,6 +5,7 @@
 library;
 
 export 'src/access/box_readings.dart';
+export 'src/access/explained_failure.dart';
 export 'src/access/host_deploy_explanation.dart';
 export 'src/access/host_deployment.dart';
 export 'src/access/host_client_link.dart';

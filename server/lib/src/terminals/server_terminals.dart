@@ -260,7 +260,11 @@ class ServerTerminals implements TerminalWork, PaneSource {
       );
       opened = (session: started.session, adopted: started.adopted);
     } on RemoteSessionRefused catch (error) {
-      throw DataRefused(DataRefusalCode.failed, error.message);
+      throw DataRefused(
+        DataRefusalCode.failed,
+        error.message,
+        detail: error.detail,
+      );
     }
     final directory = agent?.workingDirectory ?? request.workingDirectory;
     if (directory != null) _launchDirectory[ref] = directory;

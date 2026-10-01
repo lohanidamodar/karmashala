@@ -192,9 +192,15 @@ TerminalInstance _serverPane(
         // (its row, its mode, its tools — slice 5b) and the pane attaches.
         : rowId != null
         ? (columns, rows) async {
-            final started = await ref
-                .read(sessionsClientProvider)
-                .resume(rowId, columns: columns, rows: rows);
+            final SessionStarted started;
+            try {
+              started = await ref
+                  .read(sessionsClientProvider)
+                  .resume(rowId, columns: columns, rows: rows);
+            } on StateError catch (refused) {
+              // The sessions client's refusal, in the server's own words.
+              throw TerminalRefused(refused.message);
+            }
             return (
               sessionId: named(started.hostSessionId),
               adopted: started.adopted,

@@ -21,11 +21,13 @@ abstract interface class RemoteSession implements ScreenSession {
   bool type(List<int> bytes);
 }
 
-/// A box that cannot be used right now, in a person's words.
+/// A box that cannot be used right now: [message] in a person's few words,
+/// [detail] the technical account behind them.
 class RemoteSessionRefused implements Exception {
-  const RemoteSessionRefused(this.message);
+  const RemoteSessionRefused(this.message, {this.detail});
 
   final String message;
+  final String? detail;
 
   @override
   String toString() => message;

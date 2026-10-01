@@ -89,6 +89,18 @@ abstract interface class HostedTerminalInstance {
   Future<void> endHostedSession();
 }
 
+/// A [TerminalInstance] that says why it stopped in a short line in its
+/// terminal, and keeps the whole technical account for the pane's Details.
+abstract interface class ExplainedTerminalInstance {
+  /// The full account of why this pane is not running — folders searched,
+  /// addresses, versions — or null when there is nothing more to say.
+  String? get failureDetail;
+
+  /// Whether it never reached its session — refused, or the server not
+  /// reached — rather than had one that ended: its button is Retry.
+  bool get didNotStart;
+}
+
 /// A [TerminalInstance] whose output ingestion answers to how visible it is.
 /// The controller sets the tier from the layout; a pane never chooses its own.
 abstract interface class TieredTerminalInstance {

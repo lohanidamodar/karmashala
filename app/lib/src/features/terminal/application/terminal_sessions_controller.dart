@@ -33,7 +33,12 @@ import 'local_host_providers.dart';
 import '../data/terminals_client.dart';
 import '../../sessions/data/sessions_client.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show TerminalOpen, TerminalRecord, hostedRunSessionId, terminalSessionId;
+    show
+        SessionStarted,
+        TerminalOpen,
+        TerminalRecord,
+        hostedRunSessionId,
+        terminalSessionId;
 import 'package:karmashala_host_protocol/protocol.dart' show boxSessionRef;
 import 'package:karmashala_environments/ssh.dart' show sshEnvironmentId;
 import 'terminal_layout_providers.dart';

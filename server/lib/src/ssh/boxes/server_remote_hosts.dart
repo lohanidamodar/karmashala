@@ -9,14 +9,26 @@ import '../../domain/write_token.dart';
 import 'box_screen.dart';
 import 'remote_sessions.dart';
 
-/// A box the server cannot use right now, in a person's words.
+/// A box the server cannot use right now: [message] short enough for a pane,
+/// [detail] the technical account behind it, for the log and Details.
 class BoxUnavailable implements Exception {
-  const BoxUnavailable(this.message, {this.deployment});
+  const BoxUnavailable(
+    this.message, {
+    this.detail,
+    this.deployment,
+    this.nothingThere = false,
+  });
 
   final String message;
+  final String? detail;
 
   /// The deploy that did not end ready, when that is why.
   final HostDeployment? deployment;
+
+  /// Nothing on the box can hold the session asked for: no host runs there
+  /// (and none was started, since only looking was allowed), or the box is
+  /// not one this server uses. A pane attaching shows its session ended.
+  final bool nothingThere;
 
   @override
   String toString() => message;
@@ -107,7 +119,10 @@ class ServerRemoteHosts implements RemoteSessions {
 
   SshHost _host(String hostId) =>
       _hostOf(hostId) ??
-      (throw BoxUnavailable('No SSH host is saved as $hostId.'));
+      (throw BoxUnavailable(
+        'No SSH machine is saved as $hostId.',
+        nothingThere: true,
+      ));
 
   /// The deploy-and-greet access for [hostId]: one per box, its reading
   /// shared by every caller until the connection drops.
@@ -130,16 +145,50 @@ class ServerRemoteHosts implements RemoteSessions {
   /// This box's login shell, for a shell pane's argv.
   Future<String?> loginShell(String hostId) => accessOf(hostId).loginShell();
 
-  /// The one link to [hostId]'s host, deployed first if need be. Throws
-  /// [BoxUnavailable] in words when the box cannot run it.
+  /// The one link to [hostId]'s host, deployed — installed, started — first
+  /// if need be: for an explicit start (`terminals.open`, a launch, a run).
+  /// Throws [BoxUnavailable] in words when the box cannot run it.
   Future<BoxLink> link(String hostId) {
-    if (refusal case final why?) return Future.error(BoxUnavailable(why));
-    if (_closed) {
-      return Future.error(const BoxUnavailable('The server is stopping.'));
-    }
+    if (_unusable() case final why?) return Future.error(why);
+    final existing = _links[hostId];
+    if (existing == null) return _register(hostId, _openLink(hostId));
+    if (!_looking.contains(existing)) return existing;
+    // A look in flight may find nothing running; a start deploys then.
+    return existing.catchError((Object _) {
+      if (identical(_links[hostId], existing)) _links.remove(hostId);
+      return link(hostId);
+    });
+  }
+
+  /// The link to [hostId]'s host **only if it already runs** — never
+  /// deployed, installed or started: what attaching to a session (a restored
+  /// pane, a reconnect) and adopting the box's sessions may do. Throws
+  /// [BoxUnavailable] ([BoxUnavailable.nothingThere] when no host runs).
+  Future<BoxLink> looked(String hostId) {
+    if (_unusable() case final why?) return Future.error(why);
     final existing = _links[hostId];
     if (existing != null) return existing;
-    final opening = _openLink(hostId);
+    final looking = _lookLink(hostId);
+    _looking.add(looking);
+    looking.then(
+      (_) => _looking.remove(looking),
+      onError: (Object _) => _looking.remove(looking),
+    );
+    return _register(hostId, looking);
+  }
+
+  /// The links in [_links] that only look.
+  final _looking = <Future<BoxLink>>{};
+
+  BoxUnavailable? _unusable() {
+    if (refusal case final why?) {
+      return BoxUnavailable(why, nothingThere: true);
+    }
+    if (_closed) return const BoxUnavailable('The server is stopping.');
+    return null;
+  }
+
+  Future<BoxLink> _register(String hostId, Future<BoxLink> opening) {
     _links[hostId] = opening;
     opening.then(
       (link) => link.closed.then((why) => _linkLost(hostId, link, why)),
@@ -148,6 +197,32 @@ class ServerRemoteHosts implements RemoteSessions {
       },
     );
     return opening;
+  }
+
+  BoxUnavailable _unreachable(SshHost host, Object error) => BoxUnavailable(
+    "Can't reach ${host.name}. Check that it's online, then Retry.",
+    detail: '${host.address}: ${describeSshFailure(error)}',
+  );
+
+  Future<BoxLink> _lookLink(String hostId) async {
+    final host = _host(hostId);
+    final access = accessOf(hostId);
+    final String? running;
+    try {
+      running = await access.runningHost();
+    } on Object catch (error) {
+      throw _unreachable(host, error);
+    }
+    if (running == null) {
+      throw BoxUnavailable(
+        'No Karmashala host is running on ${host.name}.',
+        detail:
+            'No Karmashala host is running on ${host.address}, so it holds no '
+            'session. Attaching only looks: nothing was started there.',
+        nothingThere: true,
+      );
+    }
+    return _connect(hostId, host, access, running);
   }
 
   Future<BoxLink> _openLink(String hostId) async {
@@ -159,20 +234,32 @@ class ServerRemoteHosts implements RemoteSessions {
     } on BoxUnavailable {
       rethrow;
     } on Object catch (error) {
-      throw BoxUnavailable(
-        'Could not reach ${host.name}: ${describeSshFailure(error)}',
-      );
+      throw _unreachable(host, error);
     }
     final remotePath = reading.remotePath;
     if (!reading.isReady || remotePath == null) {
       // Not kept: a Retry opens again, and what stopped this one — a bundle
       // not on the server yet, a box that could not unpack — may be fixed.
       access.forgetReading();
+      final failure = HostDeployFailure(
+        hostName: host.name,
+        deployment: reading,
+      );
       throw BoxUnavailable(
-        HostDeployFailure(hostName: host.name, deployment: reading).toString(),
+        failure.inShort,
+        detail: '$failure',
         deployment: reading,
       );
     }
+    return _connect(hostId, host, access, remotePath);
+  }
+
+  Future<BoxLink> _connect(
+    String hostId,
+    SshHost host,
+    SshHostSessionAccess access,
+    String remotePath,
+  ) async {
     final BoxLink link;
     try {
       link = await BoxLink.connect(
@@ -182,7 +269,13 @@ class ServerRemoteHosts implements RemoteSessions {
       );
     } on BoxLinkException catch (error) {
       access.forgetReading();
-      throw BoxUnavailable('The Karmashala host on ${host.name}: $error');
+      throw BoxUnavailable(
+        "Can't open a terminal on ${host.name}: its Karmashala host did not "
+        'answer. Retry.',
+        detail: 'The Karmashala host on ${host.address} ($remotePath): $error',
+      );
+    } on Object catch (error) {
+      throw _unreachable(host, error);
     }
     link.events.listen((message) {
       switch (message) {
@@ -240,8 +333,11 @@ class ServerRemoteHosts implements RemoteSessions {
         route = await link.attach(sessionId: sessionId);
         adopted = true;
       } else {
+        final host = _host(hostId);
         throw BoxUnavailable(
-          '${_host(hostId).name} would not start it: $error',
+          "Can't open a terminal on ${host.name}: its Karmashala host would "
+          'not start it.',
+          detail: '${host.address} would not start $sessionId: $error',
         );
       }
     }
@@ -271,9 +367,10 @@ class ServerRemoteHosts implements RemoteSessions {
   }
 
   /// Keeps a copy of every session still running on [hostId] — after the
-  /// server restarted, the box kept them. Throws [BoxUnavailable].
+  /// server restarted, the box kept them. Only looks: a box whose host is not
+  /// running is left as it is. Throws [BoxUnavailable].
   Future<int> adoptRunning(String hostId) async {
-    final link = await this.link(hostId);
+    final link = await looked(hostId);
     var adopted = 0;
     for (final summary in await link.list()) {
       if (summary.lifecycle.hasEnded) continue;
@@ -300,13 +397,22 @@ class ServerRemoteHosts implements RemoteSessions {
     return hostId == null ? null : (hostId: hostId, sessionId: sessionId);
   }
 
+  /// Attaches to [sessionId] on [hostId]. **Only looks** ([looked]): a box
+  /// whose host is not running holds no session, and attaching starts
+  /// nothing — only an explicit open may deploy or start the host.
   Future<BoxRoute> attach({
     required String hostId,
     required String sessionId,
     required int sinceOffset,
     (int, int)? screenGrid,
   }) async {
-    final link = await this.link(hostId);
+    final BoxLink link;
+    try {
+      link = await looked(hostId);
+    } on BoxUnavailable catch (error) {
+      _said(error);
+      rethrow;
+    }
     final route = await link.attach(
       sessionId: sessionId,
       sinceOffset: sinceOffset,
@@ -340,15 +446,25 @@ class ServerRemoteHosts implements RemoteSessions {
       _screens[boxSessionRef(hostId, sessionId)]?.grid;
 
   /// Ends [sessionId] on [hostId] for good; its exit code, when it had one.
+  /// Only looks: a box whose host is not running holds nothing to end, and
+  /// is not started to be told so.
   Future<int?> closeOn(
     String hostId,
     String sessionId, {
     int signal = 15,
   }) async {
-    final code = await (await link(
-      hostId,
-    )).closeSession(sessionId, signal: signal);
     final ref = boxSessionRef(hostId, sessionId);
+    final BoxLink link;
+    try {
+      link = await looked(hostId);
+    } on BoxUnavailable catch (error) {
+      if (error.nothingThere) {
+        _screens[ref]?.endedWithoutWord('the host on the box is not running');
+        _tokens.remove(ref);
+      }
+      rethrow;
+    }
+    final code = await link.closeSession(sessionId, signal: signal);
     _screens[ref]?.endedWithoutWord('closed on request');
     _tokens.remove(ref);
     return code;
@@ -416,7 +532,19 @@ class ServerRemoteHosts implements RemoteSessions {
         if (waiting.isEmpty) return;
         final BoxLink link;
         try {
-          link = await this.link(hostId);
+          // Only looks: a host that went with the box rebooting took its
+          // sessions, and starting a fresh one brings none of them back.
+          link = await looked(hostId);
+        } on BoxUnavailable catch (error) {
+          if (error.nothingThere) {
+            for (final screen in waiting) {
+              screen.endedWithoutWord('the host on the box is not running');
+            }
+            _log('$hostId: ${error.detail ?? error.message}');
+            return;
+          }
+          _log('$hostId: not linked again yet (${error.detail ?? error})');
+          continue;
         } on Object catch (error) {
           _log('$hostId: not linked again yet ($error)');
           continue;
@@ -487,9 +615,14 @@ class ServerRemoteHosts implements RemoteSessions {
       );
       return (session: opened.screen as RemoteSession, adopted: opened.adopted);
     } on BoxUnavailable catch (error) {
-      throw RemoteSessionRefused(error.message);
+      _said(error);
+      throw RemoteSessionRefused(error.message, detail: error.detail);
     }
   }
+
+  /// Logs [error]'s whole account: a pane shows only its short words.
+  void _said(BoxUnavailable error) =>
+      _log('ssh: ${error.message}${error.detail == null ? '' : ' (${error.detail})'}');
 
   @override
   RemoteSession? byId(String sessionId) => screenById(sessionId);
@@ -506,7 +639,7 @@ class ServerRemoteHosts implements RemoteSessions {
     try {
       return await closeOn(box.hostId, box.sessionId);
     } on BoxUnavailable catch (error) {
-      throw RemoteSessionRefused(error.message);
+      throw RemoteSessionRefused(error.message, detail: error.detail);
     } on BoxLinkException catch (error) {
       throw RemoteSessionRefused(error.message);
     }

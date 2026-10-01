@@ -1,3 +1,6 @@
+import 'package:karmashala_host_protocol/host_access.dart'
+    show ExplainedFailure;
+
 /// Why a server would not do what a data request asked.
 enum DataRefusalCode {
   /// The request is malformed or breaks a rule (a blank todo, a taken id).
@@ -27,9 +30,11 @@ enum DataRefusalCode {
       .firstWhere((code) => code.name == name, orElse: () => failed);
 }
 
-/// A data request the server refused, with its reason in words.
-class DataRefused implements Exception {
-  const DataRefused(this.code, this.message);
+/// A data request the server refused, with its reason in words — short
+/// enough for where it is shown — and, when there is more to it, the whole
+/// technical account in [detail].
+class DataRefused implements ExplainedFailure {
+  const DataRefused(this.code, this.message, {this.detail});
 
   const DataRefused.invalid(String message)
     : this(DataRefusalCode.invalid, message);
@@ -44,13 +49,21 @@ class DataRefused implements Exception {
     : this(DataRefusalCode.denied, message);
 
   final DataRefusalCode code;
+  @override
   final String message;
+  @override
+  final String? detail;
 
-  Map<String, Object?> toJson() => {'code': code.name, 'message': message};
+  Map<String, Object?> toJson() => {
+    'code': code.name,
+    'message': message,
+    'detail': ?detail,
+  };
 
   static DataRefused fromJson(Map<String, Object?> json) => DataRefused(
     DataRefusalCode.parse(json['code']),
     json['message'] as String? ?? 'refused',
+    detail: json['detail'] as String?,
   );
 
   @override

@@ -263,6 +263,42 @@ void main() {
     expect(client.hungUp, isTrue);
   });
 
+  test('a client attaching to a box whose host is not running is told the '
+      'session is unknown — the box is looked at, never started', () async {
+    final idle = BoxWorld();
+    addTearDown(idle.close);
+    idle.box.serving = false;
+    final server = HostServer(
+      registry: SessionRegistry(launcher: FakePtyLauncher()),
+      ptyLibrary: 'fake',
+    )..boxes = idle.ssh.relay;
+    final client = _Client(server, 'window-a');
+    addTearDown(client.close);
+    await client.hello();
+    client.send(
+      const AttachMessage(
+        requestId: 99,
+        sessionId: 'ssh:h1/karmashala_local_p1',
+        sinceOffset: 0,
+        claimWrite: true,
+      ),
+    );
+    await until(
+      () => client.messages.any((m) => m is ErrorMessage && m.requestId == 99),
+    );
+    final refused = client.messages.whereType<ErrorMessage>().singleWhere(
+      (m) => m.requestId == 99,
+    );
+    expect(refused.code, ProtocolErrorCode.unknownSession);
+    expect(refused.message.length, lessThan(80));
+    expect(idle.box.uploads, isEmpty);
+    expect(
+      idle.box.commands.where((c) => c.contains('setsid nohup')),
+      isEmpty,
+    );
+    expect(idle.box.ptys, isEmpty);
+  });
+
   test('a session no box holds is unknown, in the host\'s own code', () async {
     final client = _Client(local, 'window-a');
     addTearDown(client.close);

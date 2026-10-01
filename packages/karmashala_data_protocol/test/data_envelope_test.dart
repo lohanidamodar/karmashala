@@ -318,7 +318,35 @@ void main() {
       throwsA(
         isA<DataRefused>()
             .having((r) => r.code, 'code', DataRefusalCode.notFound)
-            .having((r) => r.message, 'message', 'no todo x'),
+            .having((r) => r.message, 'message', 'no todo x')
+            .having((r) => r.detail, 'detail', isNull),
+      ),
+    );
+  });
+
+  test('a refusal carries its whole account apart from its short words', () {
+    expect(
+      () => DataEnvelope.readAnswer(
+        overTheWire(
+          DataEnvelope.refusal(
+            5,
+            const DataRefused(
+              DataRefusalCode.failed,
+              "Can't open a terminal on DO.",
+              detail: 'dev@203.0.113.9:22 is linux-x64; looked in /srv/b',
+            ),
+          ),
+        ),
+        const TodosList(),
+      ),
+      throwsA(
+        isA<DataRefused>()
+            .having((r) => r.message, 'message', "Can't open a terminal on DO.")
+            .having(
+              (r) => r.detail,
+              'detail',
+              'dev@203.0.113.9:22 is linux-x64; looked in /srv/b',
+            ),
       ),
     );
   });

@@ -781,10 +781,18 @@ class ErrorMessage extends HostMessage {
     this.code,
     this.message, {
     this.sessionRef = 0,
+    this.detail,
   });
   final int requestId;
   final ProtocolErrorCode code;
+
+  /// Short and plain: what a pane shows.
   final String message;
+
+  /// The whole technical account behind [message], for the log and a pane's
+  /// Details; null when [message] says it all. Trailing, so a frame without
+  /// one reads the same.
+  final String? detail;
 
   /// The attachment a refusal is about (a write refused on one ref of a
   /// connection carrying many); 0 for the connection itself.
@@ -797,17 +805,24 @@ class ErrorMessage extends HostMessage {
     (WireWriter()
           ..u32(requestId)
           ..u32(code.code)
-          ..str(message))
+          ..str(message)
+          ..str(detail ?? ''))
         .take(),
   );
 
   static ErrorMessage decode(Frame frame) {
     final r = WireReader(frame.payload);
+    final requestId = r.u32();
+    final code = ProtocolErrorCode.fromCode(r.u32());
+    final message = r.str();
+    // Absent from a host of another protocol, whose refusal is still read.
+    final detail = r.remaining > 0 ? r.str() : '';
     return ErrorMessage(
-      r.u32(),
-      ProtocolErrorCode.fromCode(r.u32()),
-      r.str(),
+      requestId,
+      code,
+      message,
       sessionRef: frame.sessionRef,
+      detail: detail.isEmpty ? null : detail,
     );
   }
 }

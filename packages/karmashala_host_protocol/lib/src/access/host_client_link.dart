@@ -3,12 +3,22 @@ import 'dart:typed_data';
 
 import '../protocol/frame.dart';
 import '../protocol/messages.dart';
+import 'explained_failure.dart';
 import 'remote_channel.dart';
 
 /// A link that would not open, or that closed under a request.
-class HostLinkException implements Exception {
-  const HostLinkException(this.message, {this.timedOut = false, this.code});
+class HostLinkException implements ExplainedFailure {
+  const HostLinkException(
+    this.message, {
+    this.timedOut = false,
+    this.code,
+    this.detail,
+  });
+  @override
   final String message;
+
+  @override
+  final String? detail;
 
   /// The host's refusal code, when the host said something at all.
   final ProtocolErrorCode? code;
@@ -205,8 +215,14 @@ class HostClientLink {
     if (id != null) {
       final waiting = _pending.remove(id);
       if (waiting != null) {
-        if (message case ErrorMessage(:final code, message: final text)) {
-          waiting.completeError(HostLinkException(text, code: code));
+        if (message case ErrorMessage(
+          :final code,
+          message: final text,
+          :final detail,
+        )) {
+          waiting.completeError(
+            HostLinkException(text, code: code, detail: detail),
+          );
         } else {
           waiting.complete(message);
         }

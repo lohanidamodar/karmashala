@@ -40,6 +40,20 @@ typedef TerminalOpening = ({
 typedef TerminalOpener =
     Future<TerminalOpening> Function(int columns, int rows);
 
+/// What a pane shows for [error], a refusal of its terminal: the server's own
+/// words when it sent short ones, a plain line otherwise — and the whole
+/// account, for the pane's Details and the log.
+({String said, String detail}) paneRefusalOf(Object error) {
+  const plain = "Couldn't open this terminal. See Details.";
+  if (error is ExplainedFailure) {
+    final said = error.message.trim();
+    final detail = error.detail ?? said;
+    final short = said.isNotEmpty && said.length <= 160 && !said.contains('\n');
+    return (said: short ? said : plain, detail: detail.isEmpty ? plain : detail);
+  }
+  return (said: plain, detail: '$error');
+}
+
 /// How long a pane waits before each attempt to reach its host again after the
 /// link closed. Bounded: a host that stays away is said so, not polled for.
 const List<Duration> kHostRedialDelays = [
@@ -66,7 +80,8 @@ class HostTerminalInstance
         AdoptableTerminalInstance,
         RecordableTerminalInstance,
         PromptTypingTerminalInstance,
-        HostedTerminalInstance {
+        HostedTerminalInstance,
+        ExplainedTerminalInstance {
   HostTerminalInstance({
     required this.id,
     required this.title,
@@ -215,6 +230,16 @@ class HostTerminalInstance
   int? _greetingLines;
   @override
   int? get greetingLines => _greetingLines;
+
+  String? _failureDetail;
+  var _didNotStart = false;
+
+  /// The whole account of why this pane stopped; its terminal says it short.
+  @override
+  String? get failureDetail => _failureDetail;
+
+  @override
+  bool get didNotStart => _didNotStart;
 
   late final PtyOutputCoalescer _coalescer;
   late final ColdIngest _cold;
@@ -474,32 +499,51 @@ class HostTerminalInstance
       deployment = await access.deployment();
     } on Object catch (e) {
       _fail(
-        'Could not ask the session host on ${access.address} about itself: $e',
+        "Can't reach the Karmashala server. Retry in a moment.",
+        detail: 'Could not ask the session host on ${access.address} about '
+            'itself: $e',
+        didNotStart: true,
       );
       return;
     }
     if (_disposed) return;
     if (!deployment.isReady) {
-      _fail('The session host is not available: ${deployment.reason}');
+      _fail(
+        _serverUnavailable(deployment),
+        detail: 'The session host on ${access.address} is not available: '
+            '${deployment.reason}',
+        didNotStart: true,
+      );
       return;
     }
 
     // A host we had to start ourselves is a host that was not running. It still
     // holds what it recorded — a pane reattaching gets its scrollback and the
-    // reason its process is gone — but nothing is running in it.
-    if (deployment.restartedByUs) _sayRestarted();
+    // reason its process is gone — but nothing is running in it. Said in the
+    // log only: the pane says so itself if its session is gone.
+    if (deployment.restartedByUs) {
+      _logger.info(
+        'pane $id: the session host on ${access.address} was not running and '
+        'has been started; any session it held before is no longer running',
+      );
+    }
 
     await _dial(deployment);
   }
 
+  /// What a pane says when this machine's server cannot be used.
+  static String _serverUnavailable(HostDeployment reading) =>
+      switch (reading.status) {
+        HostDeploymentStatus.protocolMismatch =>
+          'The Karmashala server is another version. Restart Karmashala.',
+        HostDeploymentStatus.noBinary =>
+          "Karmashala's server is missing. Reinstall Karmashala.",
+        _ => "The Karmashala server isn't available. Retry in a moment.",
+      };
+
   void _sayAdopted() => _note(
     '\x1b[90m[the host had already started this session; attached to it '
     'rather than starting a second]\x1b[0m\r\n',
-  );
-
-  void _sayRestarted() => _note(
-    '\x1b[33m[the session host was not running and has been started; any '
-    'session it held before is no longer running]\x1b[0m\r\n',
   );
 
   /// Reaches the host again after the link closed. The session lives only as
@@ -542,10 +586,13 @@ class HostTerminalInstance
       if (await _dial(deployment, redialing: true)) return;
     }
     if (_disposed || _exited) return;
+    _logger.info(
+      'pane $id could not reach the session host on ${access.address} again; '
+      'it reattaches from byte $_lastOffset when the server is back',
+    );
     _emit(
-      '\r\n\x1b[33m[could not reach the session host again. The session may '
-      'still be there; this pane reattaches from byte $_lastOffset when the '
-      'server is back.]\x1b[0m\r\n',
+      "\r\n\x1b[33m[Lost the Karmashala server. This pane reconnects when it's "
+      'back.]\x1b[0m\r\n',
     );
     // A server on another machine comes back when this client's link to it
     // does (the data client keeps dialling it): reattach then.
@@ -560,8 +607,20 @@ class HostTerminalInstance
     unawaited(_redial());
   }
 
-  static const _hostStopped =
-      'the session host stopped, and this session ended with it';
+  static const _hostStopped = (
+    said: 'Session ended: the Karmashala server stopped.',
+    detail:
+        'The session host stopped, and this session ended with it; there is '
+        'no exit code.',
+  );
+
+  static const _sessionGone = (
+    said: 'This session is no longer running.',
+    detail:
+        'The server no longer holds this session — it ended, or the host that '
+        'ran it was stopped — so there is no exit code. Nothing was started '
+        'in its place.',
+  );
 
   /// Whether [reading] says nothing listens on this machine's socket.
   static bool _nobodyThere(HostDeployment reading) =>
@@ -570,11 +629,13 @@ class HostTerminalInstance
           !reading.hostUnresponsive);
 
   /// Ends the pane because its session is gone with no code to report.
-  void _endedWithHost(String why) {
+  void _endedWithHost(({String said, String detail}) why) {
     if (_exited || _disposed) return;
     _exited = true;
     _exitCode = null;
-    _emit('\r\n\x1b[90m[$why; no exit code]\x1b[0m\r\n');
+    _failureDetail = why.detail;
+    _logger.info('pane $id: ${why.detail}');
+    _emit('\r\n\x1b[90m[${why.said}]\x1b[0m\r\n');
     _liveness.value = PaneLiveness.exited;
   }
 
@@ -700,7 +761,7 @@ class HostTerminalInstance
     } on _SessionGone {
       _link = null;
       if (link != null) unawaited(link.close().catchError((Object _) {}));
-      _endedWithHost('the session host no longer holds this session');
+      _endedWithHost(_sessionGone);
       return true;
     } on Object catch (e) {
       _link = null;
@@ -709,8 +770,11 @@ class HostTerminalInstance
         _logger.debug('pane $id could not redial its host: $e');
         return false;
       }
-      _logger.error('The Karmashala server refused pane $id: $e');
-      _fail('The Karmashala server could not start this pane: $e');
+      final refusal = paneRefusalOf(e);
+      _logger.error(
+        'The Karmashala server refused pane $id: ${refusal.detail}',
+      );
+      _fail(refusal.said, detail: refusal.detail, didNotStart: true);
       return false;
     }
   }
@@ -825,11 +889,17 @@ class HostTerminalInstance
     _exited = true;
     if (_disposed) return;
     _exitCode = end.exitCode;
+    if (end.exitCode == null) {
+      // Why is for Details and the log: the host's words name its own
+      // workings.
+      final reason = end.reason.endsWith('.') ? end.reason : '${end.reason}.';
+      _failureDetail = 'The session ended with no exit code: $reason';
+      _logger.info('pane $id: ${_failureDetail!}');
+    }
     _emit(
       end.exitCode == null
           // Never a zero: a code the host could not collect is not a success.
-          ? '\r\n\x1b[90m[the session ended; exit code unknown '
-                '(${end.reason})]\x1b[0m\r\n'
+          ? '\r\n\x1b[90m[Session ended; exit code unknown.]\x1b[0m\r\n'
           : '\r\n\x1b[90m[process exited with code ${end.exitCode}]\x1b[0m\r\n',
     );
     _liveness.value = PaneLiveness.exited;
@@ -841,9 +911,14 @@ class HostTerminalInstance
     }
   }
 
-  void _fail(String message) {
+  /// Ends the pane with [message] — a line or two a person can act on — in
+  /// its terminal, and [detail] behind its Details and in the log.
+  void _fail(String message, {String? detail, bool didNotStart = false}) {
     _exited = true;
     _exitCode = null;
+    _failureDetail = detail;
+    _didNotStart = didNotStart;
+    if (detail != null) _logger.info('pane $id: $detail');
     _emit('\r\n\x1b[31m[$message]\x1b[0m\r\n');
     _liveness.value = PaneLiveness.exited;
   }

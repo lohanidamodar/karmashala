@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -15,6 +16,8 @@ class PaneStatusBar extends StatelessWidget {
     required this.liveness,
     required this.onStart,
     this.resumes = false,
+    this.didNotStart = false,
+    this.onDetails,
     this.workingDirectory,
     super.key,
   });
@@ -27,6 +30,14 @@ class PaneStatusBar extends StatelessWidget {
   /// word, and *Start* was what made re-running the opening prompt look correct.
   final bool resumes;
 
+  /// Whether the pane never reached its session (refused, or the server not
+  /// reached) rather than had one that ended: its button is Retry.
+  final bool didNotStart;
+
+  /// Shows the whole account behind the pane's short line; no Details button
+  /// when null.
+  final VoidCallback? onDetails;
+
   final VoidCallback onStart;
 
   @override
@@ -34,9 +45,26 @@ class PaneStatusBar extends StatelessWidget {
     final restored = liveness == PaneLiveness.restored;
     final label = restored
         ? 'Restored history — nothing is running here'
+        : didNotStart
+        ? "Couldn't start"
         : 'Session ended';
-    final action = restored ? (resumes ? 'Resume' : 'Start') : 'Restart';
+    final action = restored
+        ? (resumes ? 'Resume' : 'Start')
+        : didNotStart
+        ? 'Retry'
+        : 'Restart';
     final where = workingDirectory;
+    final buttonStyle = TextButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      textStyle: Theme.of(context).textTheme.labelMedium,
+    );
+    final start = TextButton.icon(
+      onPressed: onStart,
+      icon: const Icon(AppIcons.play, size: Chrome.iconAction),
+      label: Text(action),
+      style: buttonStyle,
+    );
+    final details = onDetails;
 
     return Semantics(
       container: true,
@@ -45,16 +73,62 @@ class PaneStatusBar extends StatelessWidget {
         icon: restored ? AppIcons.clockCounterClockwise : AppIcons.stopCircle,
         message: where == null ? label : '$label · $where',
         maxLines: 1,
-        action: TextButton.icon(
-          onPressed: onStart,
-          icon: const Icon(AppIcons.play, size: Chrome.iconAction),
-          label: Text(action),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            textStyle: Theme.of(context).textTheme.labelMedium,
+        action: details == null
+            ? start
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: details,
+                    style: buttonStyle,
+                    child: const Text('Details'),
+                  ),
+                  start,
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+/// The whole account behind a pane's short line — folders searched,
+/// addresses, versions — selectable, with a Copy.
+class PaneFailureDetailsDialog extends StatelessWidget {
+  const PaneFailureDetailsDialog({required this.detail, super.key});
+
+  final String detail;
+
+  static Future<void> show(BuildContext context, String detail) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => PaneFailureDetailsDialog(detail: detail),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Details'),
+      scrollable: true,
+      content: SizedBox(
+        width: 520,
+        child: SelectableText(
+          detail,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Clipboard.setData(ClipboardData(text: detail)),
+          child: const Text('Copy'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

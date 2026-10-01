@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host_protocol/host_access.dart'
+    show ExplainedFailure;
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -8,11 +10,16 @@ import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
 import '../../environments/application/environments_controller.dart';
 
-/// A terminal the server would not start, or close, in its own words.
-class TerminalRefused implements Exception {
-  const TerminalRefused(this.message);
+/// A terminal the server would not start, or close, in its own short words;
+/// [detail] is the technical account behind them, for the pane's Details.
+class TerminalRefused implements ExplainedFailure {
+  const TerminalRefused(this.message, {this.detail});
 
+  @override
   final String message;
+
+  @override
+  final String? detail;
 
   @override
   String toString() => message;
@@ -31,7 +38,7 @@ class TerminalsClient {
     try {
       return (await _client.send(request)).value;
     } on DataRefused catch (refusal) {
-      throw TerminalRefused(refusal.message);
+      throw TerminalRefused(refusal.message, detail: refusal.detail);
     }
   }
 
@@ -52,7 +59,7 @@ class TerminalsClient {
       await _client.send(TerminalClose(sessionId));
     } on DataRefused catch (refusal) {
       if (refusal.code == DataRefusalCode.notFound) return;
-      throw TerminalRefused(refusal.message);
+      throw TerminalRefused(refusal.message, detail: refusal.detail);
     }
   }
 

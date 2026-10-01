@@ -229,6 +229,15 @@ class HostDeployer {
     );
   }
 
+  /// The executable of the `serve` already running on the machine, or null
+  /// when none is. **Only looks**: nothing is uploaded, installed or started
+  /// — what a restored pane's attach may do, where [deploy] may not run.
+  Future<String?> runningHost() async {
+    final home = await resolveHome();
+    if (home == null) return null;
+    return _runningServePath(home);
+  }
+
   /// Null for a machine the host runs on; otherwise why it does not.
   HostDeployment? _unsupported(HostPlatform platform) {
     if (platform.libc == HostLibc.musl) {

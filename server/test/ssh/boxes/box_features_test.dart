@@ -83,6 +83,48 @@ void main() {
     expect(terminals.records, isEmpty);
   });
 
+  test('a terminal the box cannot run is refused in a short line naming the '
+      'machine; the whole account rides along as its detail', () async {
+    final none = BoxWorld(bundles: FakeBundles(const []));
+    addTearDown(none.close);
+    final refusing = ServerTerminals(
+      registry: SessionRegistry(launcher: FakePtyLauncher()),
+      environments: () => none.data.environments,
+      tell: (_) {},
+      windows: false,
+      remote: none.ssh.remote,
+      settle: Duration.zero,
+    );
+    await expectLater(
+      refusing.openAnywhere(
+        const TerminalOpen(
+          paneId: 'p1',
+          environmentId: 'ssh:h1',
+          columns: 90,
+          rows: 30,
+        ),
+      ),
+      throwsA(
+        isA<DataRefused>()
+            .having(
+              (e) => e.message,
+              'message',
+              "Can't open a terminal on do-box: this Karmashala has no host "
+                  'for linux-x64. Update Karmashala, then Retry.',
+            )
+            .having(
+              (e) => e.detail,
+              'detail',
+              allOf(
+                contains('dev@203.0.113.9:22'),
+                contains('/srv/karmashala/host-bundles'),
+              ),
+            ),
+      ),
+    );
+    expect(none.box.uploads, isEmpty);
+  });
+
   test('an agent on the box runs its own command under its session\'s id, '
       'told its session id', () async {
     final opened = await terminals.openAnywhere(

@@ -82,6 +82,12 @@ class SshHostSessionAccess implements HostSessionAccess {
         );
   }
 
+  /// The executable of the host already running on the box, or null — read
+  /// without deploying, installing or starting anything
+  /// ([HostDeployer.runningHost]).
+  Future<String?> runningHost() =>
+      deployer().runningHost().timeout(const Duration(seconds: 30));
+
   /// Drops the shared reading, so the next caller deploys — and reads — again.
   /// For after an explicit install or remove, and for Retry: a reading that
   /// said `noBinary` is otherwise kept for the life of the connection.

@@ -152,7 +152,8 @@ class BoxAdmin {
     } on DataRefused {
       rethrow;
     } on BoxUnavailable catch (error) {
-      throw DataRefused(DataRefusalCode.failed, error.message);
+      // Settings › Machines has room for the whole account; a pane does not.
+      throw DataRefused(DataRefusalCode.failed, error.detail ?? error.message);
     } on BoxLinkException catch (error) {
       throw DataRefused(DataRefusalCode.failed, error.message);
     } on Object catch (error) {

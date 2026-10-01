@@ -487,8 +487,36 @@ void main() {
         );
         expect(decoded.code, ProtocolErrorCode.protocolMismatch);
         expect(decoded.message, 'host speaks 1, client 99');
+        expect(decoded.detail, isNull);
       },
     );
+
+    test('error carries its whole account apart from its short words, and a '
+        'frame without one still reads', () {
+      final decoded = roundTrip(
+        const ErrorMessage(
+          4,
+          ProtocolErrorCode.internal,
+          "Can't reach DO.",
+          detail: 'dev@203.0.113.9:22: connection refused',
+        ),
+      );
+      expect(decoded.message, "Can't reach DO.");
+      expect(decoded.detail, 'dev@203.0.113.9:22: connection refused');
+
+      final bare = Frame(
+        MessageType.error,
+        0,
+        (WireWriter()
+              ..u32(5)
+              ..u32(ProtocolErrorCode.protocolMismatch.code)
+              ..str('host speaks protocol 17'))
+            .take(),
+      );
+      final read = ErrorMessage.decode(bare);
+      expect(read.message, 'host speaks protocol 17');
+      expect(read.detail, isNull);
+    });
 
     test('an error code this build has never heard of reads as internal', () {
       expect(ProtocolErrorCode.fromCode(9999), ProtocolErrorCode.internal);

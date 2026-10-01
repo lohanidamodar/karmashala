@@ -26,6 +26,54 @@ void main() {
     observedAt: DateTime.utc(2026, 9, 17),
   );
 
+  group('what a pane says, in short', () {
+    test('names the machine and what to do — never its address or the '
+        'folders searched', () {
+      final said = hostDeploymentInShort(
+        reading(
+          HostDeploymentStatus.noBinary,
+          platform: arm,
+          reason: 'dev@203.0.113.9:22 is linux-arm64 … it looked in /srv/b',
+        ),
+        hostName: 'DO',
+      );
+      expect(
+        said,
+        "Can't open a terminal on DO: this Karmashala has no host for "
+        'linux-arm64. Update Karmashala, then Retry.',
+      );
+    });
+
+    test('every status is one or two short sentences', () {
+      for (final status in HostDeploymentStatus.values) {
+        final said = hostDeploymentInShort(
+          reading(
+            status,
+            platform: arm,
+            reason: 'a long account that mentions /srv/b and 203.0.113.9',
+          ),
+          hostName: 'DO',
+        );
+        expect(said.length, lessThan(160), reason: status.name);
+        expect(said, isNot(contains('203.0.113.9')), reason: status.name);
+        expect(said, isNot(contains('/srv/b')), reason: status.name);
+      }
+    });
+
+    test('a failure keeps the whole account as its text', () {
+      final failure = HostDeployFailure(
+        hostName: 'DO',
+        deployment: reading(
+          HostDeploymentStatus.noBinary,
+          platform: arm,
+          reason: 'it looked in /srv/b',
+        ),
+      );
+      expect(failure.inShort, startsWith("Can't open a terminal on DO"));
+      expect('$failure', contains('/srv/b'));
+    });
+  });
+
   group('no bundle for the machine', () {
     test('says the deployer\'s own words, and where the server wants the '
         'bundle put (slice 5d)', () {

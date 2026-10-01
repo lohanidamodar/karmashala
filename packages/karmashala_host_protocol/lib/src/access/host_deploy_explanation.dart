@@ -136,6 +136,45 @@ HostDeployExplanation explainHostDeployment(
   }
 }
 
+/// [deployment] in one or two short sentences for a pane: that a terminal
+/// cannot open on [hostName], and what to do about it. Everything else —
+/// addresses, folders searched, protocol versions — is the deployment's
+/// `reason`, for the log and the pane's Details. Settings › Machines keeps
+/// [explainHostDeployment]'s full account.
+String hostDeploymentInShort(
+  HostDeployment deployment, {
+  required String hostName,
+}) {
+  final cannot = "Can't open a terminal on $hostName";
+  final target = deployment.platform?.targetKey;
+  switch (deployment.status) {
+    case HostDeploymentStatus.ready:
+      return '$hostName is ready.';
+    case HostDeploymentStatus.noBinary:
+      return '$cannot: this Karmashala has no host for ${target ?? 'it'}. '
+          'Update Karmashala, then Retry.';
+    case HostDeploymentStatus.unsupportedPlatform:
+      return '$cannot: Karmashala runs only on glibc Linux and macOS.';
+    case HostDeploymentStatus.cannotInstall:
+      return deployment.privileged == null
+          ? '$cannot: Karmashala could not be installed there. See Details, '
+                'then Retry.'
+          : '$cannot: it needs a package installed first. See Details.';
+    case HostDeploymentStatus.cannotStart:
+      return "$cannot: Karmashala's host there would not start. See Details, "
+          'then Retry.';
+    case HostDeploymentStatus.protocolMismatch:
+      return deployment.noNewerHost
+          ? '$cannot: its Karmashala host is out of date, and this Karmashala '
+                'has no newer one. Update Karmashala, then Retry.'
+          : '$cannot: its Karmashala host is another version. Stop it in '
+                'Settings › Machines, then Retry.';
+    case HostDeploymentStatus.unknown:
+      return "$cannot: it could not be reached. Check that it's online, then "
+          'Retry.';
+  }
+}
+
 /// What builds the bundle a debug run is missing, into a place the server
 /// looks (`server/build`), run from the repository root. From macOS or Linux
 /// — a bundle cross-built on Windows cannot open a store (PROJECT.md §22).
@@ -161,6 +200,9 @@ class HostDeployFailure implements Exception {
 
   HostDeployExplanation explain({bool debugRun = false}) =>
       explainHostDeployment(deployment, hostName: hostName, debugRun: debugRun);
+
+  /// What a pane says: [hostDeploymentInShort].
+  String get inShort => hostDeploymentInShort(deployment, hostName: hostName);
 
   @override
   String toString() {

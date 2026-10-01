@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/ssh/boxes/box_screen.dart';
+import 'package:karmashala_host/src/ssh/boxes/server_remote_hosts.dart';
+import 'package:karmashala_ssh_host/host.dart' show BoxLinkException;
 import 'package:karmashala_host/src/ssh/ssh_domain.dart';
 import 'package:test/test.dart';
 
@@ -146,19 +148,26 @@ void main() {
         rows: 24,
       ),
       throwsA(
-        isA<RemoteSessionRefused>().having(
-          (e) => e.message,
-          'message',
-          allOf(contains('musl'), contains('glibc Linux and macOS only')),
-        ),
+        isA<RemoteSessionRefused>()
+            .having(
+              (e) => e.message,
+              'message',
+              "Can't open a terminal on do-box: Karmashala runs only on glibc "
+                  'Linux and macOS.',
+            )
+            .having(
+              (e) => e.detail,
+              'detail',
+              allOf(contains('musl'), contains('glibc Linux and macOS only')),
+            ),
       ),
     );
     expect(world.box.uploads, isEmpty);
     expect(world.box.ptys, isEmpty);
   });
 
-  test('a box with no bundle on the server is refused, naming where the '
-      'server looked', () async {
+  test('a box with no bundle on the server is refused in a short line naming '
+      'the machine; where the server looked is in the detail', () async {
     final none = BoxWorld(bundles: FakeBundles(const []));
     addTearDown(none.close);
     await expectLater(
@@ -169,16 +178,122 @@ void main() {
         rows: 24,
       ),
       throwsA(
-        isA<RemoteSessionRefused>().having(
-          (e) => e.message,
-          'message',
-          allOf(
-            contains('linux-x64'),
-            contains('/srv/karmashala/host-bundles'),
-          ),
-        ),
+        isA<RemoteSessionRefused>()
+            .having(
+              (e) => e.message,
+              'message',
+              "Can't open a terminal on do-box: this Karmashala has no host "
+                  'for linux-x64. Update Karmashala, then Retry.',
+            )
+            .having(
+              (e) => e.detail,
+              'detail',
+              allOf(
+                contains('dev@203.0.113.9:22'),
+                contains('linux-x64'),
+                contains('/srv/karmashala/host-bundles'),
+              ),
+            ),
       ),
     );
+  });
+
+  group('attaching only looks (a restored pane, a reconnect)', () {
+    bool started(FakeBox box) =>
+        box.commands.any((c) => c.contains('setsid nohup'));
+
+    test('a box whose host is not running holds nothing: refused as such, '
+        'and nothing is deployed, installed or started there', () async {
+      world.box.serving = false;
+      await expectLater(
+        world.ssh.boxes.attach(
+          hostId: BoxWorld.hostId,
+          sessionId: 'karmashala_local_p1',
+          sinceOffset: 0,
+        ),
+        throwsA(
+          isA<BoxUnavailable>().having(
+            (e) => e.nothingThere,
+            'nothingThere',
+            isTrue,
+          ),
+        ),
+      );
+      expect(world.box.uploads, isEmpty);
+      expect(started(world.box), isFalse);
+      expect(world.box.ptys, isEmpty);
+    });
+
+    // The host is started only after the deployer's hello finds nobody,
+    // which waits out its bound.
+    test('an explicit open after it deploys and starts the host', timeout: const Timeout(Duration(minutes: 1)), () async {
+      world.box.serving = false;
+      await expectLater(
+        world.ssh.boxes.attach(
+          hostId: BoxWorld.hostId,
+          sessionId: 'karmashala_local_p1',
+          sinceOffset: 0,
+        ),
+        throwsA(isA<BoxUnavailable>()),
+      );
+      final opened = await world.ssh.remote.open(
+        world.environment,
+        sessionId: 'karmashala_local_p1',
+        columns: 80,
+        rows: 24,
+      );
+      expect(opened.adopted, isFalse);
+      expect(world.box.uploads, hasLength(1));
+      expect(started(world.box), isTrue);
+      expect(world.box.ptys, hasLength(1));
+    });
+
+    test('a running host that no longer holds the session says so in its '
+        'own code, and nothing is started in its place', () async {
+      // A host put there by an earlier open, then a server that restarted.
+      await world.ssh.remote.open(
+        world.environment,
+        sessionId: 'karmashala_local_other',
+        columns: 80,
+        rows: 24,
+      );
+      await world.ssh.close();
+      final second = ServerSshDomain(
+        data: world.data,
+        database: world.db,
+        dataDirectory: '/nonexistent-data-dir',
+        bundles: FakeBundles(),
+        targetFor: (_) => world.box,
+      );
+      addTearDown(second.close);
+      final before = world.box.commands.length;
+      await expectLater(
+        second.boxes.attach(
+          hostId: BoxWorld.hostId,
+          sessionId: 'karmashala_local_gone',
+          sinceOffset: 0,
+        ),
+        throwsA(
+          isA<BoxLinkException>().having(
+            (e) => e.code,
+            'code',
+            ProtocolErrorCode.unknownSession,
+          ),
+        ),
+      );
+      final since = world.box.commands.sublist(before);
+      expect(since.where((c) => c.contains('setsid nohup')), isEmpty);
+      expect(world.box.uploads, hasLength(1), reason: 'the first open only');
+      expect(world.box.ptys, hasLength(1), reason: 'the first open only');
+    });
+
+    test('a restarted server adopts nothing from a box whose host is not '
+        'running, and does not start it', () async {
+      world.box.serving = false;
+      expect(await world.ssh.adoptRunning(BoxWorld.hostId), 0);
+      expect(world.box.uploads, isEmpty);
+      expect(started(world.box), isFalse);
+    });
   });
 
   test('a bundle put on the server after a refusal is deployed by the Retry, '

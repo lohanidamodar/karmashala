@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/terminal/data/terminals_client.dart'
+    show TerminalRefused;
 import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -86,27 +88,65 @@ void main() {
     expect(pane.liveness.value, PaneLiveness.live);
   });
 
-  test('a refusal from the server ends the pane in its words', () async {
-    final access = PaneAccess(readyDeployment());
+  HostTerminalInstance refusedPane(PaneAccess access, Object refusal) {
     final pane = HostTerminalInstance(
       id: 'p1',
-      title: 'Local',
-      profileId: 'powershell',
+      title: 'SSH: DO',
+      profileId: 'ssh:h1',
       access: access,
-      sessionId: 'karmashala_local_p1',
-      opener: (_, _) async =>
-          throw StateError('this server does not offer the shell "cmd"'),
+      sessionId: 'ssh:h1/karmashala_local_p1',
+      opener: (_, _) async => throw refusal,
     );
     addTearDown(pane.dispose);
     pane.terminal.resize(120, 40);
+    return pane;
+  }
+
+  test('a refusal from the server ends the pane in its short words; the '
+      'whole account is behind Details, not in the terminal', () async {
+    const long =
+        'dev@198.51.100.7:22 is linux-x64, and the Karmashala server has '
+        'no host bundle for it (it looked in /Users/me/.karmashala/'
+        'host-bundles, /Users/me/server/build). Nothing was put on the '
+        'machine.';
+    final access = PaneAccess(readyDeployment());
+    final pane = refusedPane(
+      access,
+      const TerminalRefused(
+        "Can't open a terminal on DO: this Karmashala has no host for "
+        'linux-x64. Update Karmashala, then Retry.',
+        detail: long,
+      ),
+    );
+    await settle();
+
+    expect(pane.liveness.value, PaneLiveness.exited);
+    expect(pane.didNotStart, isTrue);
+    final screen = screenOf(pane).replaceAll('\n', '');
+    expect(screen, contains("Can't open a terminal on DO"));
+    expect(screen, contains('Update Karmashala, then Retry.'));
+    expect(screen, isNot(contains('198.51.100.7')));
+    expect(screen, isNot(contains('host-bundles')));
+    expect(screen, isNot(contains('could not start this pane')));
+    expect(pane.failureDetail, long);
+    expect(access.channels.single.all<AttachMessage>(), isEmpty);
+  });
+
+  test('a refusal with no short words of its own says a plain line; what '
+      'was thrown is the detail', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = refusedPane(
+      access,
+      StateError('this server does not offer the shell "cmd"'),
+    );
     await settle();
 
     expect(pane.liveness.value, PaneLiveness.exited);
     expect(
       screenOf(pane).replaceAll('\n', ''),
-      contains('does not offer the shell "cmd"'),
+      contains("Couldn't open this terminal. See Details."),
     );
-    expect(access.channels.single.all<AttachMessage>(), isEmpty);
+    expect(pane.failureDetail, contains('does not offer the shell "cmd"'));
   });
 
   group('a run the server hosts (attach only, slice 3d)', () {
@@ -144,6 +184,62 @@ void main() {
       expect(access.channels.single.all<OpenMessage>(), isEmpty);
       expect(pane.liveness.value, PaneLiveness.exited);
       expect(pane.exitCode, isNull);
+    });
+  });
+
+  group('a restored SSH-box pane (attach only)', () {
+    HostTerminalInstance restoredBoxPane(PaneAccess access) {
+      final instance = HostTerminalInstance(
+        id: 'p1',
+        title: 'SSH: DO',
+        profileId: 'ssh:h1',
+        access: access,
+        sessionId: 'ssh:h1/karmashala_local_p1',
+        restoredScrollback: 'dev@do:~\$ make deploy\r\nshipped\r\n',
+      );
+      instance.terminal.resize(120, 40);
+      addTearDown(instance.dispose);
+      return instance;
+    }
+
+    test('whose session is gone shows it ended over its history: nothing is '
+        'opened, and Start is left to the person', () async {
+      // The server only looked at the box: no host runs there, so it holds
+      // nothing, and nothing was started to find out.
+      final access = PaneAccess(readyDeployment());
+      final pane = restoredBoxPane(access);
+      await settle();
+
+      expect(pane.attachOnly, isTrue);
+      final channel = access.channels.single;
+      expect(channel.only<AttachMessage>().sessionId, 'ssh:h1/karmashala_local_p1');
+      expect(channel.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.exited);
+      expect(pane.didNotStart, isFalse, reason: 'ended, so its button starts');
+      expect(pane.exitCode, isNull);
+      final screen = screenOf(pane);
+      expect(screen, contains('shipped'), reason: 'its restored history');
+      expect(screen, contains('This session is no longer running.'));
+      expect(screen, isNot(contains('has been started')));
+      expect(pane.failureDetail, contains('Nothing was started'));
+    });
+
+    test('whose box cannot be reached says so in short, the address behind '
+        'Details', () async {
+      final access = PaneAccess(readyDeployment())
+        ..attachRefusal = ProtocolErrorCode.internal
+        ..attachRefusalMessage = "Can't reach DO. Check that it's online, then "
+            'Retry.'
+        ..attachRefusalDetail = 'dev@203.0.113.9:22: connection refused';
+      final pane = restoredBoxPane(access);
+      await settle();
+
+      expect(access.channels.single.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.exited);
+      final screen = screenOf(pane).replaceAll('\n', '');
+      expect(screen, contains("Can't reach DO."));
+      expect(screen, isNot(contains('203.0.113.9')));
+      expect(pane.failureDetail, 'dev@203.0.113.9:22: connection refused');
     });
   });
 
@@ -206,7 +302,12 @@ void main() {
 
     expect(pane.exitCode, isNull);
     expect(screenOf(pane), contains('exit code unknown'));
-    expect(screenOf(pane), contains('the host stopped while it was running'));
+    // The host's own account is for Details, not the terminal.
+    expect(
+      screenOf(pane),
+      isNot(contains('the host stopped while it was running')),
+    );
+    expect(pane.failureDetail, contains('the host stopped while it was running'));
   });
 
   test(
@@ -228,21 +329,26 @@ void main() {
         reason: 'there is no fallback to slide into',
       );
       expect(pane.liveness.value, PaneLiveness.exited);
+      expect(screenOf(pane), contains("Karmashala's server is missing."));
       expect(
         screenOf(pane),
+        isNot(contains('No karmashala_host.exe beside this app.')),
+      );
+      expect(
+        pane.failureDetail,
         contains('No karmashala_host.exe beside this app.'),
       );
     },
   );
 
   test(
-    'a host we had to start says the earlier session is not running',
+    'a host we had to start is said in the log, never in the pane',
     () async {
       final access = PaneAccess(readyDeployment(restarted: true));
       final pane = paneOn(access);
       await settle();
-      expect(screenOf(pane), contains('has been started'));
-      expect(screenOf(pane), contains('no longer running'));
+      expect(screenOf(pane), isNot(contains('has been started')));
+      expect(pane.liveness.value, PaneLiveness.live);
     },
   );
 
@@ -463,7 +569,10 @@ void main() {
 
       expect(access.channels, hasLength(1));
       expect(access.deploymentAsks, 4, reason: 'one per bounded attempt');
-      expect(screenOf(pane).replaceAll('\n', ''), contains('could not reach'));
+      expect(
+        screenOf(pane).replaceAll('\n', ''),
+        contains("Lost the Karmashala server. This pane reconnects when it's"),
+      );
     });
 
     test('a host that died and was replaced ends the pane with no code, and '
@@ -489,7 +598,7 @@ void main() {
       expect(pane.exitCode, isNull, reason: 'never a zero');
       expect(
         screenOf(pane).replaceAll('\n', ''),
-        contains('the session host stopped'),
+        contains('Session ended: the Karmashala server stopped.'),
       );
       expect(screenOf(pane), contains('working'), reason: 'what it showed');
     });
@@ -512,7 +621,7 @@ void main() {
       expect(pane.exitCode, isNull);
       expect(
         screenOf(pane).replaceAll('\n', ''),
-        contains('no longer holds this session'),
+        contains('This session is no longer running.'),
       );
     });
 

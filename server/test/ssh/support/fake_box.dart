@@ -79,6 +79,15 @@ class FakeBox implements HostDeployTarget {
       serving = false;
       return const RemoteRun(0, 'karmashala-stopped\n', '');
     }
+    if (command.contains('ps -o args=')) {
+      // The running `serve`, by its lock: one of ours only once one is
+      // installed.
+      final running = serving && installed.isNotEmpty
+          ? '/home/dev/.karmashala/bin/${installed.first}/bin/karmashala_host '
+                'serve --companion --bind=0.0.0.0\n'
+          : '';
+      return RemoteRun(0, running, '');
+    }
     if (command.contains('wc -c <')) return const RemoteRun(0, 'missing\n', '');
     return const RemoteRun(0, '', '');
   }

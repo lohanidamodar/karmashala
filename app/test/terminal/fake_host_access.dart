@@ -28,6 +28,10 @@ class PaneAccess implements HostSessionAccess {
   /// What the host answers an attach with instead of looking the session up.
   ProtocolErrorCode? attachRefusal;
 
+  /// The short words and whole account of [attachRefusal], when set.
+  String? attachRefusalMessage;
+  String? attachRefusalDetail;
+
   /// A host built before `openWithout`: it cannot read that frame, answers
   /// request 0 with `badRequest` and hangs up, as an older `serve` does.
   var predatesWithholding = false;
@@ -64,6 +68,8 @@ class PaneAccess implements HostSessionAccess {
       endedSessions: endedSessions,
       resumedTotalBytes: resumedTotalBytes,
       attachRefusal: attachRefusal,
+      attachRefusalMessage: attachRefusalMessage,
+      attachRefusalDetail: attachRefusalDetail,
       predatesWithholding: predatesWithholding,
       hostPid: hostPid,
       grids: grids,
@@ -87,6 +93,8 @@ class ScriptedHostChannel implements RemoteChannel {
     Set<String>? endedSessions,
     this.resumedTotalBytes = 0,
     this.attachRefusal,
+    this.attachRefusalMessage,
+    this.attachRefusalDetail,
     this.predatesWithholding = false,
     this.hostPid = 11,
     Map<String, (int, int)>? grids,
@@ -101,6 +109,8 @@ class ScriptedHostChannel implements RemoteChannel {
   final Set<String> endedSessions;
 
   final ProtocolErrorCode? attachRefusal;
+  final String? attachRefusalMessage;
+  final String? attachRefusalDetail;
   final bool predatesWithholding;
 
   /// The host starts an opened session but its reply never arrives.
@@ -191,7 +201,8 @@ class ScriptedHostChannel implements RemoteChannel {
               ErrorMessage(
                 requestId,
                 attachRefusal!,
-                'refused: ${attachRefusal!.name}',
+                attachRefusalMessage ?? 'refused: ${attachRefusal!.name}',
+                detail: attachRefusalDetail,
               ),
             );
             break;

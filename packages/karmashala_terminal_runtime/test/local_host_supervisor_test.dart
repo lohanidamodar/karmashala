@@ -8,7 +8,6 @@ import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 /// The app keeps this machine's host up while it is open — against **real**
 /// hosts in this process on a real unix socket, as the access's own tests do.
@@ -640,9 +639,6 @@ void main() {
       return pane;
     }
 
-    String screenOf(HostTerminalInstance pane) =>
-        terminalTailLines(pane.terminal, lines: 50).join('\n');
-
     Future<void> ended(HostTerminalInstance pane) async {
       if (pane.liveness.value == PaneLiveness.exited) return;
       final done = Completer<void>();
@@ -677,7 +673,7 @@ void main() {
       await ended(pane);
 
       expect(pane.exitCode, isNull);
-      expect(screenOf(pane), contains('the session host stopped'));
+      expect(pane.failureDetail, contains('session host stopped'));
     });
 
     test('meeting a new host in its place, ends with no code and never opens '
@@ -696,7 +692,7 @@ void main() {
       await ended(pane);
 
       expect(pane.exitCode, isNull);
-      expect(screenOf(pane), contains('the session host stopped'));
+      expect(pane.failureDetail, contains('session host stopped'));
       expect(second.launcher.started, isEmpty, reason: 'a fresh empty session');
       expect(second.registry.sessions, isEmpty);
     });

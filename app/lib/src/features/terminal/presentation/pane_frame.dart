@@ -72,6 +72,12 @@ class PaneLivenessBar extends ConsumerWidget {
     // The pane's *current* instance: a restart replaces it, and a bar quoting
     // the released one would name the directory of the session before last.
     final live = ref.watch(terminalPaneInstanceProvider(paneId)) ?? fallback;
+    // Set before the pane leaves live, so read once it has.
+    final explained = switch (live) {
+      final ExplainedTerminalInstance pane => pane,
+      _ => null,
+    };
+    final detail = explained?.failureDetail;
     return PaneStatusBar(
       liveness: liveness,
       workingDirectory: live.workingDirectory,
@@ -79,6 +85,10 @@ class PaneLivenessBar extends ConsumerWidget {
         liveness: liveness,
         isAgentPane: live.agentLaunch != null,
       ),
+      didNotStart: explained?.didNotStart ?? false,
+      onDetails: detail == null
+          ? null
+          : () => PaneFailureDetailsDialog.show(context, detail),
       onStart: onStart,
     );
   }

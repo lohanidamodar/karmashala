@@ -75,6 +75,46 @@ void main() {
       expect(find.text('Resume'), findsOneWidget);
       expect(find.text('Start'), findsNothing);
     });
+
+    testWidgets('a pane that could not start offers Retry, and its Details '
+        'show the whole account the terminal left out', (tester) async {
+      const long =
+          'dev@198.51.100.7:22 is linux-x64, and the Karmashala server '
+          'has no host bundle for it (it looked in /Users/me/.karmashala/'
+          'host-bundles). Nothing was put on the machine.';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => PaneStatusBar(
+                liveness: PaneLiveness.exited,
+                didNotStart: true,
+                onDetails: () => PaneFailureDetailsDialog.show(context, long),
+                onStart: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining("Couldn't start"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Restart'), findsNothing);
+      expect(find.textContaining('198.51.100.7'), findsNothing);
+
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(find.text(long), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text(long), findsNothing);
+    });
+
+    testWidgets('with nothing more to say there is no Details', (tester) async {
+      await pump(tester, PaneLiveness.exited);
+      expect(find.text('Details'), findsNothing);
+    });
   });
 
   group('describeAge', () {
