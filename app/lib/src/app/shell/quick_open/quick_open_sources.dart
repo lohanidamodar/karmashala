@@ -53,6 +53,7 @@ import 'package:karmashala_ui/tokens.dart' show WidthClass;
 import '../context_sheet.dart';
 import '../karmashala_about_dialog.dart';
 import '../phone_routes.dart';
+import '../shell_area.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
 import '../side_panel_state.dart';
@@ -144,13 +145,29 @@ class QuickOpenSources {
     };
   }
 
-  /// [action], then the phone's Projects tab, which draws what it picked.
+  /// [action], then the Projects area that draws what it picked: the phone's
+  /// Projects tab, or the desktop sidebar switched to Projects (and opened if
+  /// it was hidden) — a selection made out of sight is no jump at all
+  /// (owner, 2026-10-01). Resolved now, since it runs after the palette has
+  /// closed.
   VoidCallback _inProjects(VoidCallback action) {
     final phone = this.phone;
-    if (phone == null) return action;
+    if (phone != null) {
+      return () {
+        action();
+        phone.showProjects();
+      };
+    }
+    if (!shellAreaShown(ref, ShellArea.projects)) return action;
+    final area = ref.read(shellAreaProvider.notifier);
+    final shell = ref.read(shellControllerProvider.notifier);
+    final sidebarHidden = !ref
+        .read(shellControllerProvider)
+        .explorerPaneVisible;
     return () {
       action();
-      phone.showProjects();
+      area.select(ShellArea.projects);
+      if (sidebarHidden) shell.toggleExplorerPane();
     };
   }
 
@@ -830,10 +847,7 @@ class QuickOpenSources {
     ];
   }
 
-  String? _cheapWhereabouts(
-    Session session,
-    PaneSessions panes,
-  ) {
+  String? _cheapWhereabouts(Session session, PaneSessions panes) {
     if (panes.paneOf(session.id, where: (liveness) => liveness.isLive) !=
         null) {
       return 'running here';
