@@ -22,6 +22,10 @@ enum QuickOpenGroup {
   agents('Agents'),
   snippets('Command snippets'),
   presets('Terminal presets'),
+
+  /// Settings' pages, sections and options, from its own catalogue. Only
+  /// once something is typed: a hundred of them would bury the work.
+  settings('Settings'),
   commands('Commands'),
 
   /// What a step (`QuickOpenStep`) offers to do with the thing it is about;
@@ -46,6 +50,10 @@ enum QuickOpenGroup {
     QuickOpenGroup.presets => '~',
     _ => null,
   };
+
+  /// Whether the group is left out of an empty, unrestricted box — listed only
+  /// once a query asks for it.
+  bool get onlyWhenSearched => this == QuickOpenGroup.settings;
 }
 
 /// One findable thing. [onSelect] is a closure because every jump already has
@@ -177,6 +185,9 @@ List<QuickOpenSection> rankQuickOpen(
   final byGroup = <QuickOpenGroup, List<QuickOpenResult>>{};
   for (final item in items) {
     if (query.only != null && item.group != query.only) continue;
+    if (query.isEmpty && query.only == null && item.group.onlyWhenSearched) {
+      continue;
+    }
     final result = query.isEmpty
         ? QuickOpenResult(
             item: item,

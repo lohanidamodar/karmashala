@@ -42,6 +42,8 @@ import 'package:karmashala_git/repositories.dart' show Repository;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import '../../../features/files/application/files_tab_actions.dart';
 import '../../../features/settings/application/settings_controller.dart';
+import '../../../features/settings/presentation/settings_catalog.dart'
+    show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/snippets/application/snippet_insertion.dart';
 import '../../../features/snippets/application/snippet_providers.dart';
@@ -85,6 +87,15 @@ const _githubWeight = 10.0;
 const _branchWeight = 8.0;
 const _agentWeight = 4.0;
 const _commandWeight = 2.0;
+
+/// Settings rows are listed only once something is typed, so these only order
+/// them against other matches: over a command or an agent that matches as
+/// well — "theme" means the setting before a verb — and under anything that is
+/// work. A page over its sections over its options, so the broader place wins
+/// a tie.
+const _settingsPageWeight = 6.0;
+const _settingsWeight = 5.0;
+const _settingsEntryWeight = 4.5;
 
 /// The user's own text, so it outranks an app verb — by a hair only.
 const _snippetWeight = 3.0;
@@ -210,6 +221,7 @@ class QuickOpenSources {
     ..._files(files, changedPaths),
     ..._repoFacts(),
     ..._agents(),
+    ..._settings(),
     ..._snippets(),
     ..._presets(),
   ];
@@ -1311,6 +1323,85 @@ class QuickOpenSources {
             () => openSettingsTab(ref, section: SettingsSectionId.agents),
           ),
         ),
+    ];
+  }
+
+  // --- settings ------------------------------------------------------------
+
+  /// Every Settings page, section and option this client shows, read from the
+  /// catalogue Settings' own page list and search read, and opened the way
+  /// they open them. A row titled like an earlier one on the same page — the
+  /// Keyboard page and its Keyboard section, the Skills section and its Skills
+  /// option — is folded into the earlier, broader one, its words with it.
+  List<QuickOpenItem> _settings() {
+    final caps = ref.read(capabilitiesProvider);
+    final rows = <String, QuickOpenItem Function(List<String> keywords)>{};
+    final words = <String, Set<String>>{};
+    void add(
+      SettingsSectionId page,
+      String id,
+      String title,
+      double weight,
+      Iterable<String> keywords,
+      VoidCallback open,
+    ) {
+      final key = '${page.name}/${title.toLowerCase()}';
+      (words[key] ??= {}).addAll(keywords);
+      rows.putIfAbsent(
+        key,
+        () =>
+            (keywords) => QuickOpenItem(
+              id: 'settings/$id',
+              group: QuickOpenGroup.settings,
+              title: title,
+              subtitle: id.startsWith('page/')
+                  ? 'Settings'
+                  : 'Settings · ${page.label}',
+              icon: page.icon,
+              keywords: keywords,
+              weight: weight,
+              onSelect: () => dismiss(open),
+            ),
+      );
+    }
+
+    for (final page in SettingsSectionId.values) {
+      if (!page.shownWith(caps)) continue;
+      add(
+        page,
+        'page/${page.name}',
+        page.label,
+        _settingsPageWeight,
+        page.aliases,
+        () => openSettingsTab(ref, section: page),
+      );
+    }
+    for (final anchor in SettingsAnchor.values) {
+      if (!anchor.shownWith(caps)) continue;
+      add(
+        anchor.page,
+        'anchor/${anchor.name}',
+        anchor.title,
+        _settingsWeight,
+        anchor.keywords,
+        () => openSettingsTab(ref, anchor: anchor),
+      );
+    }
+    for (final entry in settingsEntries) {
+      if (!entry.anchor.shownWith(caps)) continue;
+      add(
+        entry.page,
+        'entry/${entry.anchor.name}/${entry.label}',
+        entry.label,
+        _settingsEntryWeight,
+        entry.keywords,
+        // As a hit in Settings' own search opens it: its section, scrolled to.
+        () => openSettingsTab(ref, anchor: entry.anchor),
+      );
+    }
+    return [
+      for (final MapEntry(:key, value: build) in rows.entries)
+        build(words[key]!.toList()),
     ];
   }
 

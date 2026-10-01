@@ -755,7 +755,8 @@ void main() {
       );
       await type(tester, 'scheduled resume');
       expect(find.text('Change scheduled resume…'), findsOneWidget);
-      expect(find.text('Scheduled resumes'), findsOneWidget);
+      // The command, and Settings' own section of the same name under it.
+      expect(find.text('Scheduled resumes'), findsWidgets);
       expect(find.text('1 waiting'), findsOneWidget);
 
       await tester.tap(find.text('Cancel scheduled resume'));
