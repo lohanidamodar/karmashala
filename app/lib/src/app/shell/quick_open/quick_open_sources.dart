@@ -738,7 +738,7 @@ class QuickOpenSources {
     final workspace = ref.read(workspaceDataProvider);
     final installations = ref.read(agentInstallationsDataProvider);
     final registry = ref.read(agentRegistryProvider);
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    final panes = ref.read(paneSessionsProvider);
     final selectedRepository = ref.read(selectedRepositoryIdProvider);
     final lastActiveOf = ref.read(sessionLastActiveProvider);
     final now = ref.read(clockProvider).nowUtc();
@@ -757,7 +757,7 @@ class QuickOpenSources {
           final agent = registry.displayNameFor(
             installations.getById(session.agentInstallationId)?.agentId ?? '',
           );
-          final note = _cheapWhereabouts(session, terminals);
+          final note = _cheapWhereabouts(session, panes);
           final lastActive = lastActiveOf(session.id);
           entries.add((
             order: (lastActive: lastActive, createdAt: session.createdAt),
@@ -832,11 +832,10 @@ class QuickOpenSources {
 
   String? _cheapWhereabouts(
     Session session,
-    TerminalSessionsController terminals,
+    PaneSessions panes,
   ) {
-    final paneId = session.paneId;
-    if (paneId != null &&
-        (terminals.instanceFor(paneId)?.liveness.value.isLive ?? false)) {
+    if (panes.paneOf(session.id, where: (liveness) => liveness.isLive) !=
+        null) {
       return 'running here';
     }
     if (session.surface == SessionSurface.external) {
@@ -986,13 +985,10 @@ class QuickOpenSources {
     final terminals = ref.read(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final shell = ref.read(shellControllerProvider.notifier);
-    final sessionPanes = {
-      for (final record in ref.read(sessionsDataProvider).getAll())
-        ?record.paneId,
-    };
+    final panes = ref.read(paneSessionsProvider);
     return [
       for (final tab in terminals.tabs)
-        if (!sessionPanes.contains(tab.focusedPaneId))
+        if (panes.sessionOf(tab.focusedPaneId) == null)
           QuickOpenItem(
             id: 'tab/${tab.id}',
             group: QuickOpenGroup.tabs,

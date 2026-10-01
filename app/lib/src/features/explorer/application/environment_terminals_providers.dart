@@ -36,9 +36,9 @@ String? environmentIdOfProfile(String profileId, {required String? localId}) {
 
 /// Every open pane, filed under the machine it runs on.
 ///
-/// The agent panes are resolved through their sessions in **one** indexed
-/// query rather than one per pane; a pane whose machine cannot be established
-/// is left out rather than guessed at.
+/// The agent panes are resolved through the session each runs here
+/// ([PaneSessions]); a pane whose machine cannot be established is left out
+/// rather than guessed at.
 final panesByEnvironmentProvider =
     Provider<Map<String, List<EnvironmentTerminal>>>((ref) {
       final state = ref.watch(terminalSessionsControllerProvider);
@@ -85,11 +85,13 @@ final panesByEnvironmentProvider =
           for (final repository in ref.read(workspaceDataProvider).repositories)
             repository.id: repository.path.environmentId,
         };
-        for (final session
-            in ref.read(sessionsDataProvider).getByPaneIds(unresolved)) {
-          final environmentId = repositories[session.repositoryId];
-          final paneId = session.paneId;
-          if (environmentId == null || paneId == null) continue;
+        final panes = ref.read(paneSessionsProvider);
+        final rows = ref.read(sessionsDataProvider);
+        for (final paneId in unresolved) {
+          final sessionId = panes.sessionOf(paneId);
+          final session = sessionId == null ? null : rows.getById(sessionId);
+          final environmentId = repositories[session?.repositoryId];
+          if (environmentId == null) continue;
           file(environmentId, paneId);
         }
       }

@@ -8,9 +8,10 @@ import 'package:riverpod/riverpod.dart';
 import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
 import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
-import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart'
+    show paneSessionsProvider;
 import 'notification_providers.dart';
 
 final _log = AppLogger.named('notifications.inbox');
@@ -139,8 +140,11 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     if (imported != null) looking.add(imported);
     final panes = ref.read(foregroundTerminalPaneIdsProvider);
     if (panes.isNotEmpty) {
-      for (final row in ref.read(sessionsDataProvider).getByPaneIds(panes)) {
-        looking.add(row.id);
+      final sessions = ref.read(paneSessionsProvider);
+      for (final paneId in panes) {
+        if (sessions.sessionOf(paneId) case final sessionId?) {
+          looking.add(sessionId);
+        }
       }
     }
     return looking;

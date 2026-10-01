@@ -19,6 +19,7 @@ import '../../editor/domain/document_id.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
@@ -50,6 +51,7 @@ import 'browser_document_pane.dart';
 part 'terminal_sessions_state.dart';
 part 'terminal_instance_factory.dart';
 part 'terminal_sessions_providers.dart';
+part 'terminal_pane_sessions.dart';
 part 'terminal_sessions_tabs.dart';
 part 'terminal_sessions_groups.dart';
 part 'terminal_sessions_regions.dart';
@@ -99,6 +101,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   List<DetachedSession>? _detachedView;
   Map<String, PaneLiveness>? _livenessView;
   Map<String, String?>? _directoriesView;
+  Map<String, String?>? _launchesView;
   Map<String, int>? _tabIndexById;
   Map<String, String>? _tabIdByPane;
 
@@ -249,6 +252,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         for (final entry in _instances.entries)
           entry.key: entry.value.workingDirectory,
       }),
+      launchedSessions: _launchesView ??= Map.unmodifiable({
+        for (final entry in _instances.entries)
+          entry.key: entry.value.agentLaunch?.sessionId,
+      }),
       titleRevision: _titleRevision,
     );
   }
@@ -337,6 +344,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// leaves the tab list, the detached list and every pane's liveness alone.
   void _directoriesMutated() => _directoriesView = null;
 
+  /// Drops the pane → launched session projection: a pane was adopted or
+  /// released. Never on a liveness change, so the index is not rebuilt per exit.
+  void _panesMutated() => _launchesView = null;
+
   Map<String, int> get _tabIndex =>
       _tabIndexById ??= {for (var i = 0; i < _tabs.length; i++) _tabs[i].id: i};
 
@@ -393,29 +404,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _detachedMutated();
     _livenessMutated();
     _directoriesMutated();
+    _panesMutated();
     return reaping;
   }
 
   /// The live terminal behind [paneId], or `null` once it has been closed.
   TerminalInstance? instanceFor(String paneId) => _instances[paneId];
-
-  /// A pane of this window whose agent is session [sessionId] and is [where],
-  /// or `null`. The session's row names only the pane that last opened it, and
-  /// every window writes its own there — a phone opening the session left the
-  /// desktop unable to find its tab, so each click attached another (owner,
-  /// 2026-09-30).
-  String? paneRunningSession(
-    String sessionId,
-    bool Function(PaneLiveness) where,
-  ) {
-    for (final MapEntry(key: paneId, value: instance) in _instances.entries) {
-      if (instance.agentLaunch?.sessionId == sessionId &&
-          where(instance.liveness.value)) {
-        return paneId;
-      }
-    }
-    return null;
-  }
 
   /// What the panes are holding, for the memory census. O(panes), and every
   /// term is a length or a field read, so a pane with a megabyte of history

@@ -173,7 +173,7 @@ void main() {
       final subscriber = HostLifecycleSubscriber(
         source: feedOnly,
         sessions: dao,
-        hasLivePane: (paneId) => paneId == 'pane-1',
+        runsInLivePane: (sessionId) => sessionId == 'in-app',
       );
       addTearDown(subscriber.dispose);
       subscriber.start();

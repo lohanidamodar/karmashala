@@ -17,7 +17,7 @@ class HostLifecycleSubscriber {
   HostLifecycleSubscriber({
     required this.source,
     required this.sessions,
-    required this.hasLivePane,
+    required this.runsInLivePane,
     this.onHook,
     this.onAgentStatuses,
     this.onAgentStatus,
@@ -34,9 +34,9 @@ class HostLifecycleSubscriber {
   /// The rows, read to tell the host which ones this app's panes run.
   final SessionReads sessions;
 
-  /// A live pane of this app's own runs its row, so the host is told to leave
-  /// that row alone.
-  final bool Function(String paneId) hasLivePane;
+  /// Whether a live pane of this app's own runs session [String], so the host
+  /// is told to leave that row alone.
+  final bool Function(String sessionId) runsInLivePane;
 
   /// Each hook once: a snapshot hook already applied on an earlier link is not
   /// applied again.
@@ -208,11 +208,10 @@ class HostLifecycleSubscriber {
     _scheduleRetry();
   }
 
-  /// Rows still claiming to run whose pane is live in this app.
+  /// Rows still claiming to run that a live pane of this app runs.
   List<String> _runByThisApp() => [
     for (final session in sessions.getClaimingLive())
-      if (session.paneId case final paneId? when hasLivePane(paneId))
-        session.id,
+      if (runsInLivePane(session.id)) session.id,
   ];
 
   void _scheduleRetry() {

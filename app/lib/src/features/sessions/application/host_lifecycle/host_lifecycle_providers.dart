@@ -42,15 +42,12 @@ hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((ref) {
   final subscriber = HostLifecycleSubscriber(
     source: source,
     sessions: ref.watch(sessionsDataProvider),
-    hasLivePane: (paneId) =>
+    runsInLivePane: (sessionId) =>
         ref.exists(terminalSessionsControllerProvider) &&
-        (ref
-                .read(terminalSessionsControllerProvider.notifier)
-                .instanceFor(paneId)
-                ?.liveness
-                .value
-                .isLive ??
-            false),
+        ref
+                .read(paneSessionsProvider)
+                .paneOf(sessionId, where: (liveness) => liveness.isLive) !=
+            null,
     onHook: (hook) => applyHostRelayedAgentHook(
       ref.container,
       agentId: hook.agentId,
@@ -112,7 +109,8 @@ final sessionFollowsHostFactsProvider = Provider<bool Function(Session)>(
     final subscriber = ref.read(hostLifecycleSubscriberProvider);
     if (subscriber == null) return false;
     if (subscriber.knows(session.id)) return true;
-    final paneId = session.paneId;
+    if (!ref.exists(terminalSessionsControllerProvider)) return false;
+    final paneId = ref.read(paneSessionsProvider).paneOf(session.id);
     return paneId != null && _isLocalHostPane(ref, paneId);
   },
 );
@@ -126,7 +124,6 @@ final sessionRunningOnHostProvider = Provider<bool Function(String)>(
 );
 
 bool _isLocalHostPane(Ref ref, String paneId) {
-  if (!ref.exists(terminalSessionsControllerProvider)) return false;
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)
       .instanceFor(paneId);

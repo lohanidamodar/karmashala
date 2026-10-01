@@ -352,10 +352,10 @@ List<ExplorerNode> _sessionNodes(
   return [for (final entry in entries) ...entry.rows];
 }
 
-/// Whether a pane of ours runs [session] now. A session with no pane recorded
-/// cannot be live, so it costs no watch at all.
+/// Whether a pane of ours runs [session] now. A session with no pane here
+/// cannot be live, so it costs no liveness watch at all.
 bool _hasLivePane(Ref ref, Session session) {
-  final paneId = session.paneId;
+  final paneId = ref.watch(paneOfSessionProvider(session.id));
   if (paneId == null) return false;
   return ref.watch(terminalPaneLivenessProvider(paneId)).isLive;
 }

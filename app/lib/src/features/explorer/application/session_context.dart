@@ -17,19 +17,12 @@ import 'picked_checkouts.dart';
 /// the *tab on screen*: the focused pane first, then the rest of its tab, since
 /// splitting focuses a new shell and emptied the session's whole bottom bar.
 final activePaneSessionIdProvider = Provider<String?>((ref) {
-  // Which tab is active and what is in it, not the whole state: this walks
-  // every session row, and was re-running on any pane's liveness moving —
-  // ten scans over a thousand rows for ten background processes exiting.
+  // Which tab is active and what is in it, not the whole state: a pane's
+  // liveness moving must not re-answer this.
   final tab = ref.watch(
     terminalSessionsControllerProvider.select((s) => s.activeTab),
   );
-  // Adopting a pane, or launching into one, rewrites `pane_id`, and that is the
-  // only session fact this reads — a title sync must not re-answer it.
-  ref.watchSessionKinds(const {
-    SessionChangeKind.membership,
-    SessionChangeKind.placement,
-  });
-  return sessionInTab(ref, tab);
+  return sessionInTab(ref.watch(paneSessionsProvider), tab);
 });
 
 /// The session a context-panel surface describes: the one **on screen**, and
@@ -49,12 +42,9 @@ final workspaceGroupSessionIdProvider = Provider.autoDispose
         terminalSessionsControllerProvider.select((s) => s.tabs),
       );
       final tabId = ref.watch(workspaceGroupActiveTabProvider(groupId));
-      ref.watchSessionKinds(const {
-        SessionChangeKind.membership,
-        SessionChangeKind.placement,
-      });
+      final panes = ref.watch(paneSessionsProvider);
       for (final tab in tabs) {
-        if (tab.id == tabId) return sessionInTab(ref, tab);
+        if (tab.id == tabId) return sessionInTab(panes, tab);
       }
       return null;
     });
@@ -74,32 +64,14 @@ final selectionHostGroupProvider =
     );
 
 /// The session [tab] is running: the focused pane's, and failing that the
-/// oldest pane in the tab that has one — a shell opened *beside* a session is
+/// first pane in the tab that has one — a shell opened *beside* a session is
 /// still beside it.
-String? sessionInTab(Ref ref, TerminalTab? tab) {
+String? sessionInTab(PaneSessions panes, TerminalTab? tab) {
   if (tab == null) return null;
-  final siblings = tab.layout.panes.toSet();
-  // The indexed query returns only sessions belonging to this tab. The focused
-  // pane still wins; the oldest sibling is the deterministic fallback.
-  String? fallback;
-  for (final record in ref.read(sessionsDataProvider).getByPaneIds(siblings)) {
-    final paneId = record.paneId;
-    if (paneId == null) continue;
-    if (paneId == tab.focusedPaneId) return record.id;
-    if (fallback == null && siblings.contains(paneId)) fallback = record.id;
-  }
-  if (fallback != null) return fallback;
-  // No row names these panes: a row keeps only the pane that last opened it,
-  // and another window (a phone) writes its own there. The pane still knows
-  // which session it was opened for, so the panels keep following it.
-  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-  String? launchedIn(String? paneId) => paneId == null
-      ? null
-      : terminals.instanceFor(paneId)?.agentLaunch?.sessionId;
-  final focused = launchedIn(tab.focusedPaneId);
+  final focused = panes.sessionOf(tab.focusedPaneId);
   if (focused != null) return focused;
   for (final paneId in tab.layout.panes) {
-    final sessionId = launchedIn(paneId);
+    final sessionId = panes.sessionOf(paneId);
     if (sessionId != null) return sessionId;
   }
   return null;

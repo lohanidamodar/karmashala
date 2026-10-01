@@ -66,10 +66,14 @@ SessionOfferOutcome offerToSessionWith(
   required String text,
 }) {
   final ref = _Reader(read);
-  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-  // Answered before the terminals are read at all: a session in no pane has no
-  // face to follow, and mounting the controller to find that out would start
-  // the pane machinery for a panel that never needed it.
+  // Answered before the terminals are read at all: a session no window ever
+  // opened in a pane has no face to follow, and mounting the controller to
+  // find that out would start the pane machinery for a panel that never
+  // needed it. The row only says *whether*; this window's pane is the index's.
+  final placed = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+  final paneId = placed == null
+      ? null
+      : ref.read(paneSessionsProvider).paneOf(sessionId);
   if (paneId == null) {
     ref.read(composerDraftProvider.notifier).queue(sessionId, text);
     return SessionOfferOutcome.waitingForAPane;

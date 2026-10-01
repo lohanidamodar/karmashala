@@ -53,10 +53,7 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
 final sessionHostedPaneProvider =
     Provider<HostedTerminalInstance? Function(String)>(
       (ref) => (sessionId) {
-        final paneId = ref
-            .read(sessionsDataProvider)
-            .getById(sessionId)
-            ?.paneId;
+        final paneId = ref.read(paneSessionsProvider).paneOf(sessionId);
         if (paneId == null) return null;
         final instance = ref
             .read(terminalSessionsControllerProvider.notifier)
