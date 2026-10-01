@@ -66,8 +66,9 @@ void main() {
   );
 
   /// The host end echoes every byte back, so the test reads its own writes.
-  Future<void> start() async {
+  Future<void> start({Duration linkResumeGrace = kHostLinkResumeGrace}) async {
     service = RemoteHostService(
+      linkResumeGrace: linkResumeGrace,
       devices: dao,
       hostId: _hostId,
       bindings: FakeRemoteBindings().bindings,
@@ -144,14 +145,21 @@ void main() {
     expect(await echo(link, [1, 2, 3]), [1, 2, 3]);
   });
 
-  test('a phone\'s pairing may not switch: refused in words, no link '
-      'served', () async {
-    await pair(CapabilitySet.all);
+  // A phone's pairing ("all") holds phone_client and switches at the phone
+  // tier; one with neither client grant may not.
+  test('a pairing with neither client grant may not switch: refused in '
+      'words, no link served', () async {
+    await pair(
+      CapabilitySet.of([
+        for (final grant in CapabilitySet.all.granted)
+          if (grant != Capability.phoneClient) grant,
+      ]),
+    );
     await start();
     await expectLater(
-      DesktopServerDialer(store: InMemoryCompanionStore()).dial(
-        await record(direct: '127.0.0.1:${service.lanPortBound}'),
-      ),
+      DesktopServerDialer(
+        store: InMemoryCompanionStore(),
+      ).dial(await record(direct: '127.0.0.1:${service.lanPortBound}')),
       throwsA(
         isA<DesktopConnectException>()
             .having((e) => e.refused, 'refused', isTrue)
@@ -161,10 +169,10 @@ void main() {
     expect(links, isEmpty);
   });
 
-  test('a dropped socket ends the byte stream at both ends, and the next '
-      'dial is served on the next generation', () async {
+  test('a dropped socket is held for a resume, then ends the byte stream at '
+      'both ends, and the next dial is served on the next generation', () async {
     await pair(CapabilitySet.of([Capability.desktopClient]));
-    await start();
+    await start(linkResumeGrace: const Duration(milliseconds: 300));
     final store = InMemoryCompanionStore();
     final dialer = DesktopServerDialer(store: store);
     final first = await dialer.dial(
@@ -172,6 +180,7 @@ void main() {
     );
     expect(await echo(first, [7]), [7]);
     first.close('gone');
+    // Suspended for a `link.resume` first; nobody resumes, so the grace ends it.
     await links.single.done.timeout(const Duration(seconds: 10));
 
     final again = (await CompanionPairing.load(store))!;

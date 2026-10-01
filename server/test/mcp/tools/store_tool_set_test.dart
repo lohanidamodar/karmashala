@@ -283,10 +283,16 @@ void main() {
       expect(answer['refreshedAt'], read.toIso8601String());
       expect(answer['ageMinutes'], 25);
       expect(list(answer['stores']), [
-        {'store': 'app_store', 'label': 'App Store', 'apps': 2},
+        {
+          'store': 'app_store',
+          'label': 'App Store',
+          'checkedAt': read.toUtc().toIso8601String(),
+          'apps': 2,
+        },
         {
           'store': 'google_play',
           'label': 'Google Play',
+          'checkedAt': read.toUtc().toIso8601String(),
           'missing': 'network',
           'message': 'Google Play did not answer.',
         },

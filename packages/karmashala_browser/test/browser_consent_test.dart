@@ -120,7 +120,7 @@ void main() {
       expect(decision.reason, contains('Karmashala'));
       // The refusal has to be actionable by the agent's *user*, so it names
       // both the place to say yes and the tools that work meanwhile.
-      expect(decision.reason, contains('Settings → Permissions → Browser'));
+      expect(decision.reason, contains('Settings → Tools and reach → Browser'));
       expect(decision.reason, contains('browser_find'));
     });
 

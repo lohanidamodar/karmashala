@@ -192,6 +192,9 @@ void main() {
         'attachment.begin',
         'attachment.chunk',
         'stream.ack',
+        // The keepalive and the resume of a dropped switched link (Stage 0).
+        'link.ping',
+        'link.resume',
         'host.attach',
         'session.options',
         'session.configure',

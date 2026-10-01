@@ -568,10 +568,8 @@ void main() {
       expect(await runDevices(const [], out: listed, paths: server.paths), 0);
       expect(listed.text.toString(), contains('Test phone'));
       expect(listed.text.toString(), contains('active'));
-      expect(
-        listed.text.toString(),
-        contains('2 of ${Capability.values.length}'),
-      );
+      // A partial grant is listed by name; only a full one is counted.
+      expect(listed.text.toString(), contains('view_sessions,approve'));
 
       final deviceId = RegExp(
         r'^([0-9a-f]{8,})\s+Test phone',

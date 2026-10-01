@@ -1,13 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 import 'package:karmashala_ssh_host/host.dart';
 import 'package:test/test.dart';
 
 import 'host_deployer_test.dart' show FakeBinaries, FakeTarget;
 
 const _bin = '/home/fake/.karmashala/bin';
-const _this = 'karmashala_host-0.1.0-linux-x64.d';
+const _this = 'karmashala_host-$kHostVersion-linux-x64.d';
 const _older = 'karmashala_host-0.0.9-linux-x64.d';
 const _token = '0123456789abcdef0123456789abcdef';
 
@@ -110,7 +111,7 @@ void main() {
 
       expect(reading.state, HostInstallState.notInstalled);
       expect(reading.label, 'not installed');
-      expect(reading.offeredVersion, '0.1.0');
+      expect(reading.offeredVersion, kHostVersion);
       // Where it would go, and that it needs no root.
       expect(reading.reason, contains('/home/fake/.karmashala'));
       expect(reading.reason, contains('no root'));
@@ -127,7 +128,7 @@ void main() {
       final reading = await installer().check();
 
       expect(reading.state, HostInstallState.installed);
-      expect(reading.label, 'installed 0.1.0 (running)');
+      expect(reading.label, 'installed $kHostVersion (running)');
       expect(reading.sessionsHeld, 2);
       expect(reading.reason, contains('holding 2 session'));
       expect(reading.remotePath, _exe(_this));
@@ -138,7 +139,7 @@ void main() {
 
       final reading = await installer().check();
 
-      expect(reading.label, 'installed 0.1.0 (stopped)');
+      expect(reading.label, 'installed $kHostVersion (stopped)');
       expect(reading.sessionsHeld, isNull);
     });
 
@@ -150,14 +151,17 @@ void main() {
       final reading = await installer().check();
 
       expect(reading.state, HostInstallState.outdated);
-      expect(reading.label, 'older than the server\'s (0.0.9 → 0.1.0), running');
+      expect(
+        reading.label,
+        'older than the server\'s (0.0.9 → $kHostVersion), running',
+      );
       expect(reading.reason, contains('Update'));
     });
 
     test('a host newer than this app is not called older, nor "updated" '
         'downwards by that name', () async {
       // An app that was downgraded, or a second desktop on a newer build.
-      const newer = 'karmashala_host-0.2.0-linux-x64.d';
+      const newer = 'karmashala_host-99.0.0-linux-x64.d';
       box
         ..installed.add(newer)
         ..runningServe = _exe(newer);
@@ -168,10 +172,10 @@ void main() {
       expect(reading.hostIsNewer, isTrue);
       expect(
         reading.label,
-        'newer than the server\'s (0.2.0; the server carries 0.1.0), running',
+        'newer than the server\'s (99.0.0; the server carries $kHostVersion), running',
       );
       expect(reading.reason, isNot(contains('Update')));
-      expect(reading.reason, contains('0.1.0'));
+      expect(reading.reason, contains(kHostVersion));
     });
 
     test(
@@ -233,8 +237,13 @@ void main() {
       final reading = await installer().check();
 
       expect(reading.state, HostInstallState.installed);
-      expect(reading.label, 'installed 0.0.9 (stopped)');
-      expect(reading.reason, contains('carries no bundle for linux-arm64'));
+      // Older than this app, and nothing newer carried to put there.
+      expect(reading.label, 'installed 0.0.9 (stopped; older than this app)');
+      expect(reading.noNewerHost, isTrue);
+      expect(
+        reading.reason,
+        contains('carries no host bundle for linux-arm64'),
+      );
       expect(reading.canInstall, isFalse);
     });
   });
@@ -246,7 +255,7 @@ void main() {
         final reading = await installer().install();
 
         expect(reading.state, HostInstallState.installed);
-        expect(reading.label, 'installed 0.1.0 (running)');
+        expect(reading.label, 'installed $kHostVersion (running)');
         expect(
           reading.deployment,
           isNull,
@@ -254,7 +263,7 @@ void main() {
         );
         expect(
           box.uploads.single.$1,
-          '$_bin/karmashala_host-0.1.0-linux-x64.tar.gz',
+          '$_bin/karmashala_host-$kHostVersion-linux-x64.tar.gz',
         );
         final argv = box.commands;
         expect(argv.any((c) => c.contains('tar -xzf')), isTrue);
@@ -277,7 +286,7 @@ void main() {
 
         final reading = await installer().install();
 
-        expect(reading.label, 'installed 0.1.0 (running)');
+        expect(reading.label, 'installed $kHostVersion (running)');
         expect(box.runningServe, _exe(_this));
       },
     );
@@ -307,7 +316,7 @@ void main() {
       final reading = await installer().install(reinstall: true);
 
       expect(box.uploads, hasLength(1));
-      expect(reading.label, 'installed 0.1.0 (running)');
+      expect(reading.label, 'installed $kHostVersion (running)');
       // Holding nothing, so it was restarted onto the fresh files.
       expect(
         box.commands.where((c) => c.contains('setsid nohup')),
@@ -350,7 +359,7 @@ void main() {
 
         final reading = await installer().start();
 
-        expect(reading.label, 'installed 0.1.0 (running)');
+        expect(reading.label, 'installed $kHostVersion (running)');
         expect(reading.reason, contains('does not come back by itself'));
         expect(
           box.commands.singleWhere((c) => c.contains('setsid nohup')),
@@ -378,7 +387,7 @@ void main() {
 
       final reading = await installer().stop();
 
-      expect(reading.label, 'installed 0.1.0 (stopped)');
+      expect(reading.label, 'installed $kHostVersion (stopped)');
       expect(reading.reason, contains('2 session(s) it held have ended'));
     });
 

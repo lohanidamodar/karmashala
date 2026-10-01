@@ -24,7 +24,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 59);
+    expect(db.schemaVersion, 60);
   });
 
   test('v23 gives a session an append-only decision record', () {

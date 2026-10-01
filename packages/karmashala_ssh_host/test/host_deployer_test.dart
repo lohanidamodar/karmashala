@@ -35,7 +35,7 @@ class FakeTarget implements HostDeployTarget {
   HostMessage? Function(HelloMessage hello)? greet = (_) => WelcomeMessage(
     requestId: 1,
     protocolVersion: kProtocolVersion,
-    hostVersion: '0.1.0',
+    hostVersion: kHostVersion,
     operatingSystem: 'linux',
     architecture: 'x64',
     ptyLibrary: 'libc.so.6',
@@ -63,7 +63,7 @@ class FakeTarget implements HostDeployTarget {
   /// The executable the running `serve` was started from. Null is a machine
   /// that would not say; the default is the build this deploy installs.
   String? runningServe =
-      '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64';
+      '/home/fake/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64';
 
   @override
   Future<RemoteRun> run(String command) async {
@@ -222,10 +222,10 @@ class FakeBinaries implements HostBinarySource {
         reads++;
         return Uint8List(size);
       },
-      version: '0.1.0',
+      version: kHostVersion,
       isBundleArchive: isBundleArchive,
       source:
-          'fake/karmashala_host-0.1.0-${platform.targetKey}'
+          'fake/karmashala_host-$kHostVersion-${platform.targetKey}'
           '${isBundleArchive ? '.tar.gz' : ''}',
     );
   }
@@ -331,7 +331,7 @@ void main() {
         expect(deployment.status, HostDeploymentStatus.ready);
         expect(
           target.uploads.single.$1,
-          '/Users/dlohani/.karmashala/bin/karmashala_host-0.1.0-macos-arm64',
+          '/Users/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-macos-arm64',
         );
       },
     );
@@ -362,11 +362,11 @@ void main() {
       expect(deployment.status, HostDeploymentStatus.ready);
       expect(
         target.uploads.single.$1,
-        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+        '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64',
       );
       expect(
         deployment.remotePath,
-        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+        '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64',
       );
       expect(
         target.commands.where((c) => c.contains(r'$HOME')),
@@ -450,12 +450,12 @@ void main() {
         // The tarball lands beside the directory, not on top of the executable.
         expect(
           target.uploads.single.$1,
-          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.tar.gz',
+          '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64.tar.gz',
         );
         // `../lib` has to resolve, so the executable cannot be flattened.
         expect(
           deployment.remotePath,
-          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d/bin/karmashala_host',
+          '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64.d/bin/karmashala_host',
         );
       },
     );
@@ -475,7 +475,7 @@ void main() {
         expect(
           unpack,
           contains(
-            "-C '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d'",
+            "-C '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64.d'",
           ),
         );
       },
@@ -542,7 +542,7 @@ void main() {
 
         expect(
           deployment.remotePath,
-          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+          '/home/dlohani/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64',
         );
         expect(target.commands.any((c) => c.contains('tar -xzf')), isFalse);
       },
@@ -557,14 +557,14 @@ void main() {
       expect(deployment.status, HostDeploymentStatus.ready);
       expect(
         target.uploads.single.$1,
-        contains('karmashala_host-0.1.0-linux-x64'),
+        contains('karmashala_host-$kHostVersion-linux-x64'),
       );
       expect(target.uploads.single.$2, 1024);
       expect(
         deployment.remotePath,
-        '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+        '/home/fake/.karmashala/bin/karmashala_host-$kHostVersion-linux-x64',
       );
-      expect(deployment.hostVersion, '0.1.0');
+      expect(deployment.hostVersion, kHostVersion);
       expect(deployment.protocolVersion, kProtocolVersion);
       expect(deployment.observedAt, DateTime.utc(2026, 9, 8, 14, 0));
       expect(target.commands.any((c) => c.contains('chmod +x')), isTrue);
@@ -651,7 +651,7 @@ void main() {
               : WelcomeMessage(
                   requestId: 1,
                   protocolVersion: kProtocolVersion,
-                  hostVersion: '0.1.0',
+                  hostVersion: kHostVersion,
                   operatingSystem: 'linux',
                   architecture: 'x64',
                   ptyLibrary: 'libc.so.6',
@@ -814,7 +814,7 @@ void main() {
               : WelcomeMessage(
                   requestId: 1,
                   protocolVersion: kProtocolVersion,
-                  hostVersion: '0.1.0',
+                  hostVersion: kHostVersion,
                   operatingSystem: 'linux',
                   architecture: 'x64',
                   ptyLibrary: 'libc.so.6',
@@ -891,8 +891,23 @@ void main() {
         expect(deployment.status, HostDeploymentStatus.protocolMismatch);
         expect(deployment.protocolVersion, 7);
         expect(deployment.reason, contains('speaks protocol 7'));
-        expect(deployment.reason, contains('stale `serve`'));
+        // It runs from the path this deploy installs, so the files under it
+        // were replaced; this build's bundle is this app's, so there is newer.
+        expect(
+          deployment.reason,
+          contains('running from files that have since been replaced'),
+        );
+        expect(deployment.noNewerHost, isFalse);
         expect(deployment.isReady, isFalse);
+
+        // From another bundle, it is a stale `serve` beside this app's.
+        final beside = FakeTarget()
+          ..runningServe =
+              '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64'
+          ..greet = target.greet;
+        final stale = await deployerFor(beside).deploy();
+        expect(stale.status, HostDeploymentStatus.protocolMismatch);
+        expect(stale.reason, contains('stale `serve` (0.0.9)'));
       },
     );
 

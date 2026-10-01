@@ -186,13 +186,26 @@ void main() {
     await data.close();
   });
 
-  test('a desktop client from another machine is served, but a phone\'s '
-      'pairing is refused the switch', () async {
-    await pairDesktop(CapabilitySet.all.granted.toList());
+  test('a pairing with neither client grant is refused the switch', () async {
+    await pairDesktop([
+      for (final grant in CapabilitySet.all.granted)
+        if (grant != Capability.phoneClient) grant,
+    ]);
     await expectLater(
       dial(record(direct: lan())),
       throwsA(isA<DesktopConnectException>()),
     );
+  });
+
+  test('a phone\'s pairing ("all", so phone_client) is switched at the phone '
+      'tier, never as admin even with the bit', () async {
+    await pairDesktop([...CapabilitySet.all.granted, Capability.serverAdmin]);
+    final link = await dial(record(direct: lan()));
+    final call = await link.request<ServerResultMessage>(
+      (id) => ServerCallMessage(requestId: id, method: 'server.info'),
+      const Duration(seconds: 10),
+    );
+    expect(call.ok, isFalse);
   });
 }
 

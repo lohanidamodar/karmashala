@@ -12,7 +12,7 @@ import 'package:karmashala_store/database.dart';
 import '../domain/host_session.dart';
 import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
-import '../ssh/boxes/remote_sessions.dart';
+import '../ssh/ssh_domain.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 

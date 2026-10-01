@@ -219,7 +219,11 @@ void main() {
       ]);
       expect(request.environment[kSessionIdEnvironmentVariable], 's1');
       expect(request.environment['API_TOKEN'], 's3cret');
-      expect(request.removedEnvironment, {'ANTHROPIC_API_KEY'});
+      expect(request.removedEnvironment, {
+        ...kInheritedColourOptOuts,
+        ...kInheritedAgentMarkers,
+        'ANTHROPIC_API_KEY',
+      });
     });
 
     test('a process that will not start is refused, and nothing is kept', () {

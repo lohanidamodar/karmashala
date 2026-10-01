@@ -49,7 +49,20 @@ void main() {
       );
       expect(console.message, contains('Users and permissions'));
       expect(console.message, contains('access to the app'));
-      expect(bucket.message, contains('reports'));
+      // With no reason given, the refusal names the API that refused.
+      expect(bucket.message, contains(PlayArea.bucket.api));
+      // A permission refusal names the grant: the bucket's is the reports.
+      final denied = playFailure(
+        DetailedApiRequestError(
+          403,
+          null,
+          jsonResponse: {
+            'error': {'status': 'PERMISSION_DENIED'},
+          },
+        ),
+        area: PlayArea.bucket,
+      );
+      expect(denied.message, contains('reports'));
     });
 
     DetailedApiRequestError refused(Map<String, Object?> error) =>
@@ -237,18 +250,29 @@ void main() {
       play.close();
     });
 
-    test('typed packages are listed when the key cannot search', () async {
-      final play = client(
-        const PlayAccount(
-          serviceAccountJson: '{}',
-          packageNames: ['com.zeta', ' com.alpha ', ''],
-        ),
-      );
-      final apps = await play.listApps();
-      expect([for (final app in apps) app.id], ['com.alpha', 'com.zeta']);
-      expect(apps.first.name, 'com.alpha');
-      expect(apps.first.store, StoreKind.googlePlay);
-      play.close();
-    });
+    // Typed packages stand in only for a search the account may not make (a
+    // permission refusal); a key that cannot be read is said even then.
+    test(
+      'a key that cannot be read is said though packages were typed',
+      () async {
+        final play = client(
+          const PlayAccount(
+            serviceAccountJson: '{}',
+            packageNames: ['com.zeta', ' com.alpha ', ''],
+          ),
+        );
+        await expectLater(
+          play.listApps(),
+          throwsA(
+            isA<StoreException>().having(
+              (e) => e.kind,
+              'kind',
+              StoreFailure.auth,
+            ),
+          ),
+        );
+        play.close();
+      },
+    );
   });
 }

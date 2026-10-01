@@ -195,11 +195,8 @@ void main() {
       ).read(home, 'windows');
 
       expect(overProtocol.single.preview, 'the real question');
-      expect(
-        overFiles.single.preview,
-        startsWith('<recommended_plugins>'),
-        reason: 'this is the defect: the walk reads an injected preamble',
-      );
+      // The walk passes over the injected preamble too, so both agree.
+      expect(overFiles.single.preview, 'the real question');
     },
   );
 

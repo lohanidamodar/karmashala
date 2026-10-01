@@ -42,7 +42,9 @@ void main() {
     () async {
       final home = temporaryHome('karmashala-status-live');
       final dataDir = Directory('${home.path}/data');
-      seedStore(dataDir);
+      // The caller of session_answer below acts on another session, so the
+      // person has let it operate Karmashala.
+      seedStore(dataDir, seededSessionOperates: true);
       final host = await LocalHost.start(home);
       addTearDown(host.kill);
       final hooks = HookEndpoint.read(host.paths.hookEndpointPath);

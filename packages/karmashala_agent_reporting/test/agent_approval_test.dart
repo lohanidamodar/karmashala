@@ -18,12 +18,12 @@ void main() {
 
   group('the grid source quotes the screen it read', () {
     // A Claude Code permission modal as it is actually drawn: the question, the
-    // choices, then the footer the matcher fires on.
+    // choices with the highlight on one, then the footer the matcher fires on.
     const modal = [
       'Claude wants to run:',
       '  rm -rf build/',
       '',
-      '  1. Yes',
+      '❯ 1. Yes',
       '  2. Yes, and do not ask again',
       '  3. No, tell Claude what to do differently',
       '                                            ',

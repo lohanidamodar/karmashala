@@ -39,8 +39,9 @@ String fakeAgentPath(Directory dataDir) => '${dataDir.parent.path}/fake-agent';
 /// session rows not yet started, agent installations (one a stand-in script),
 /// a note and a todo — and closes it again before the host opens the file.
 /// Its `server.json` has remote access on, as the desktop's switch leaves it
-/// (on loopback, no beacon: a test multicasts nothing).
-void seedStore(Directory dataDir) {
+/// (on loopback, no beacon: a test multicasts nothing). The seeded plain row
+/// may operate Karmashala only when [seededSessionOperates].
+void seedStore(Directory dataDir, {bool seededSessionOperates = false}) {
   dataDir.createSync(recursive: true);
   File(
     '${dataDir.path}/server.json',
@@ -73,6 +74,7 @@ void seedStore(Directory dataDir) {
         useWorktree: false,
         status: SessionStatus.created,
         createdAt: t0,
+        operatorGranted: seededSessionOperates,
       ),
     );
     // This machine, as agent discovery records it.

@@ -252,11 +252,15 @@ void main() {
   test('a changed credential builds the console again', () async {
     await connectApple();
     expect(appleKeysBuilt, hasLength(1));
-    await desk.refresh();
-    expect(appleKeysBuilt, hasLength(1));
-    await ask(const StoreAppleSet(keyId: 'KEY123', issuerId: 'issuer-2'));
+    // A refresh closes its console when it ends, so the next one builds anew
+    // with the credentials held then.
+    expect(appleFake.closed, isTrue);
     await desk.refresh();
     expect(appleKeysBuilt, hasLength(2));
+    expect(appleKeysBuilt.last.issuerId, 'issuer-1');
+    await ask(const StoreAppleSet(keyId: 'KEY123', issuerId: 'issuer-2'));
+    await desk.refresh();
+    expect(appleKeysBuilt, hasLength(3));
     expect(appleKeysBuilt.last.issuerId, 'issuer-2');
     // Kept the held key file and when it came in.
     expect(appleKeysBuilt.last.privateKeyPem, pem);

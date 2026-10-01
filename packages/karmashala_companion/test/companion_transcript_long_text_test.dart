@@ -38,6 +38,9 @@ void main() {
   Future<void> unfold(WidgetTester tester) async {
     final thought = find.textContaining('Thought');
     if (thought.evaluate().isEmpty) return;
+    // Code wraps under a thumb, so a long turn can start above the fold.
+    await tester.ensureVisible(thought.first);
+    await tester.pump();
     await tester.tap(thought.first);
     await tester.pump();
     expect(find.textContaining('a1b2c3d4'), findsWidgets);

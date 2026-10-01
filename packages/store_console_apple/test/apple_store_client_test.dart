@@ -435,14 +435,16 @@ void main() {
           ],
         }, status: 401);
       });
-      await expectLater(
-        client.listApps(),
-        throwsA(
-          isA<StoreException>()
-              .having((e) => e.kind, 'kind', StoreFailure.auth)
-              .having((e) => e.message, 'message', isNot(contains(token!))),
-        ),
+      // The token exists only once the request is made, so the message is
+      // checked after the call rather than in a matcher built before it.
+      final refused = await client.listApps().then<StoreException?>(
+        (_) => null,
+        onError: (Object e) => e is StoreException ? e : throw e,
       );
+      expect(refused, isNotNull);
+      expect(refused!.kind, StoreFailure.auth);
+      expect(token, isNotNull);
+      expect(refused.message, isNot(contains(token!)));
     });
 
     test('403 is a permission failure with Apple\'s detail', () async {

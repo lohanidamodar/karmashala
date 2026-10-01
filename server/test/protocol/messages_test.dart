@@ -254,15 +254,18 @@ void main() {
     });
 
     test('a welcome from a host that predates builds reads as no build', () {
-      // What an older host sends: every field up to `observedAt`, then nothing.
+      // What an older host sends: every field up to `observedAt`, then nothing
+      // — neither the build ('x', length-prefixed) nor the features after it
+      // (an empty list, its count alone).
       final full = welcome(build: 'x').toFrame().payload;
       final older = Frame(
         MessageType.welcome,
         0,
-        Uint8List.sublistView(full, 0, full.length - 4 - 1),
+        Uint8List.sublistView(full, 0, full.length - (4 + 1) - 4),
       );
       final decoded = WelcomeMessage.decode(older);
       expect(decoded.build, isNull);
+      expect(decoded.features, isEmpty);
       expect(decoded.hostVersion, kHostVersion);
     });
 

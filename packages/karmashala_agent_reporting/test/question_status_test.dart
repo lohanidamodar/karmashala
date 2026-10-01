@@ -176,6 +176,7 @@ void main() {
         const [
           '←  ☐ Colours  ☐ Size  ✔ Submit  →',
           '❯ 1. [ ] Red',
+          '  2. [ ] Blue',
           'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
         ],
         now,
@@ -187,7 +188,13 @@ void main() {
     test('a permission modal is still an approval', () {
       final report = source.read(
         claude,
-        const ['Do you want to proceed?', 'Esc to cancel · Tab to amend'],
+        // With no composer drawn, a prompt draws its choices.
+        const [
+          'Do you want to proceed?',
+          '❯ 1. Yes',
+          '  2. No',
+          'Esc to cancel · Tab to amend',
+        ],
         now,
         sessionId: 's1',
       )!;
