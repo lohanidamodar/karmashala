@@ -1417,7 +1417,12 @@ TerminalPaneStack
                                   _PaneDropTarget
                                     DragTarget<TerminalDrag>
                                       MetaData
-                                        SizedBox
+                                        _DocumentPaneFocus
+                                          Focus
+                                            _FocusInheritedScope
+                                              Semantics
+                                                Listener
+                                                  SizedBox
                         _VisibilityScope
                           ExcludeFocus
                             Focus
