@@ -399,3 +399,99 @@ class StoreIconImage {
 
 DateTime? _date(Object? value) =>
     value is String ? DateTime.tryParse(value) : null;
+
+/// What kind of failure an [StoreErrorIssue] groups.
+enum StoreErrorKind {
+  crash('Crash'),
+  anr('ANR');
+
+  const StoreErrorKind(this.label);
+  final String label;
+
+  static StoreErrorKind? parse(String? name) {
+    for (final kind in values) {
+      if (kind.name == name) return kind;
+    }
+    return null;
+  }
+}
+
+/// One cluster of crashes or ANRs the store grouped together, with a sample
+/// report's stack trace when one could be read.
+class StoreErrorIssue {
+  const StoreErrorIssue({
+    required this.id,
+    required this.kind,
+    required this.cause,
+    required this.location,
+    this.reportCount,
+    this.distinctUsers,
+    this.lastSeen,
+    this.firstVersionCode,
+    this.lastVersionCode,
+    this.consoleUrl,
+    this.sampleTrace,
+    this.sampleAt,
+    this.sampleVersionCode,
+  });
+
+  final String id;
+  final StoreErrorKind kind;
+
+  /// The exception or signal for a crash; the reason for an ANR.
+  final String cause;
+
+  /// The likely method for a crash; the unresponsive component for an ANR.
+  final String location;
+
+  /// Over the window the store was asked about.
+  final int? reportCount;
+  final int? distinctUsers;
+  final DateTime? lastSeen;
+  final String? firstVersionCode;
+  final String? lastVersionCode;
+
+  /// The issue in the store's own console.
+  final String? consoleUrl;
+
+  /// One report's full text, cut to [sampleTraceLimit] characters.
+  final String? sampleTrace;
+  final DateTime? sampleAt;
+  final String? sampleVersionCode;
+
+  static const int sampleTraceLimit = 12000;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'kind': kind.name,
+    'cause': cause,
+    'location': location,
+    'reportCount': reportCount,
+    'distinctUsers': distinctUsers,
+    'lastSeen': lastSeen?.toUtc().toIso8601String(),
+    'firstVersionCode': firstVersionCode,
+    'lastVersionCode': lastVersionCode,
+    'consoleUrl': consoleUrl,
+    'sampleTrace': sampleTrace,
+    'sampleAt': sampleAt?.toUtc().toIso8601String(),
+    'sampleVersionCode': sampleVersionCode,
+  };
+
+  factory StoreErrorIssue.fromJson(
+    Map<String, Object?> json,
+  ) => StoreErrorIssue(
+    id: json['id']! as String,
+    kind: StoreErrorKind.parse(json['kind'] as String?) ?? StoreErrorKind.crash,
+    cause: json['cause'] as String? ?? '',
+    location: json['location'] as String? ?? '',
+    reportCount: (json['reportCount'] as num?)?.toInt(),
+    distinctUsers: (json['distinctUsers'] as num?)?.toInt(),
+    lastSeen: _date(json['lastSeen']),
+    firstVersionCode: json['firstVersionCode'] as String?,
+    lastVersionCode: json['lastVersionCode'] as String?,
+    consoleUrl: json['consoleUrl'] as String?,
+    sampleTrace: json['sampleTrace'] as String?,
+    sampleAt: _date(json['sampleAt']),
+    sampleVersionCode: json['sampleVersionCode'] as String?,
+  );
+}

@@ -14,6 +14,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show BrowserStatus;
 import 'browser_console.dart';
 import 'browser_viewport_shot.dart';
+import 'dev_server_menu.dart';
 
 /// The browser pane: attach to the Chrome the developer already has open,
 /// drive it, and point at an element to send it to an agent.
@@ -177,6 +178,7 @@ class _AddressBar extends StatelessWidget {
           icon: const Icon(AppIcons.caretRight),
           onPressed: enabled ? onSubmit : null,
         ),
+        DevServerMenuButton(enabled: enabled),
       ],
     ),
   );

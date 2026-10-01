@@ -85,6 +85,11 @@ class FakeTerminalsWork {
         final record = records[sessionId];
         if (record == null) throw DataRefused.notFound('no terminal $sessionId');
         seed(record.copyWith(title: title));
+      case TerminalsListeningPorts():
+        return ListeningPortsReading(
+          ports: const [],
+          checkedAt: _server._now(),
+        );
     }
     return const DataAck();
   }

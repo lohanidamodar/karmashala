@@ -16,6 +16,7 @@ import '../pty/pty.dart';
 import '../sessions/pane_facts.dart';
 import '../sessions/pane_source.dart';
 import '../ssh/ssh_domain.dart' show RemoteSessionRefused, RemoteSessions;
+import 'listening_ports.dart';
 
 /// What every terminal this server starts on its own machine is told about the
 /// screen it draws on. The pane is an xterm with 24-bit colour, and ConPTY
@@ -73,7 +74,9 @@ class ServerTerminals implements TerminalWork, PaneSource {
     DateTime Function()? clock,
     this.settle = const Duration(milliseconds: 250),
     this.remote,
-  }) : _environments = environments,
+    ListeningPortProbe? ports,
+  }) : _ports = ports ?? ListeningPortProbe(windows: windows),
+       _environments = environments,
        _tell = tell,
        _overlay = overlay ?? (() => const {}),
        _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -82,6 +85,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
        _now = clock ?? _utcNow;
 
   final SessionRegistry registry;
+  final ListeningPortProbe _ports;
 
   /// Sessions on SSH boxes (the ssh domain's); null opens none there.
   final RemoteSessions? remote;
@@ -173,7 +177,46 @@ class ServerTerminals implements TerminalWork, PaneSource {
           sessionId,
           title,
         ),
+        TerminalsListeningPorts() => await listeningPorts(),
       };
+
+  /// The TCP ports processes under each live local pane listen on, read now.
+  /// A pane on an SSH box, or whose root is `wsl.exe`, is named as unread:
+  /// its processes are not this machine's to list.
+  Future<ListeningPortsReading> listeningPorts() async {
+    final roots = <PaneRoot>[];
+    final unread = <String>[];
+    for (final record in _records.values) {
+      final title = _renamed[record.sessionId] ?? record.title;
+      if (parseBoxSessionRef(record.sessionId) != null) {
+        unread.add('"$title" runs on an SSH machine; its ports are not read.');
+        continue;
+      }
+      final session = registry.find(record.sessionId);
+      if (session == null || session.lifecycle.hasEnded || session.pid <= 0) {
+        continue;
+      }
+      roots.add((
+        pid: session.pid,
+        paneId: record.paneId,
+        terminalSessionId: record.sessionId,
+        title: title,
+        agentSessionId: _agentSessionOf(record.sessionId),
+      ));
+    }
+    return _ports.read(roots, unreadPanes: unread);
+  }
+
+  /// `karmashala_<session id>` names an agent pane; `karmashala_local_…` a
+  /// plain one (`terminalSessionId`).
+  static String? _agentSessionOf(String terminalSessionId) {
+    const agent = 'karmashala_';
+    if (!terminalSessionId.startsWith(agent) ||
+        terminalSessionId.startsWith('${agent}local_')) {
+      return null;
+    }
+    return terminalSessionId.substring(agent.length);
+  }
 
   /// The shells this machine opens, spelled for its own OS.
   List<TerminalProfile> profiles() {

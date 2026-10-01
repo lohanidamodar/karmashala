@@ -52,6 +52,10 @@ class TerminalsClient {
   /// Every terminal the server holds, running or ended and kept.
   Future<List<TerminalRecord>> list() => _send(const TerminalsList());
 
+  /// The ports processes under the server's panes listen on, read now.
+  Future<ListeningPortsReading> listeningPorts() =>
+      _send(const TerminalsListeningPorts());
+
   /// Ends [sessionId] for good. One the server no longer holds is already
   /// ended.
   Future<void> close(String sessionId) async {

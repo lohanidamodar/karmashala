@@ -346,6 +346,8 @@ does both at once, and it is honest about the same gap:
       'list_projects',
       'list_checkouts',
       'delivery_status',
+      'github_runs',
+      'github_run_log',
       'project_rescan',
       'select_checkout',
     ],
@@ -418,6 +420,9 @@ nothing about what it did is visible in the browser pane. It is refused until
 the developer grants "Run JavaScript in the page" for this project under
 Settings → Tools and reach → Browser. That grant is per project, recorded with
 when it was made, and revocable in the same place.
+
+`browser_audit` runs Karmashala's own audit script in the same origin, so it
+needs the same grant; it changes nothing on the page unless `reload` is asked.
 
 A refusal for consent is not a transient failure. Do not retry it. Ask, say
 what you want to run and why, and in the meantime use `browser_find`,

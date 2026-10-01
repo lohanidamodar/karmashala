@@ -7,6 +7,7 @@ import '../domain/issue.dart';
 import '../domain/merge_strategies.dart';
 import '../domain/pull_request.dart';
 import '../domain/pull_request_snapshot.dart';
+import '../domain/workflow_run.dart';
 
 /// Why `gh` itself could not answer, as opposed to GitHub or the repository
 /// refusing. The two states need different words and different remedies, so
@@ -519,6 +520,43 @@ class GitHubService {
           : BranchProtection.unknown;
     }
     return parseBranchProtection(result.stdout, branch: branch);
+  }
+
+  /// The newest GitHub Actions runs, on [branch] when given — a pull
+  /// request's Actions checks are runs on its head branch.
+  Future<List<WorkflowRun>> listWorkflowRuns(
+    EnvironmentPath repo, {
+    String? branch,
+    int limit = 10,
+  }) async {
+    final result = await _gh(repo, [
+      'run',
+      'list',
+      if (branch != null) ...['--branch', branch],
+      '--limit',
+      '$limit',
+      '--json',
+      WorkflowRun.jsonFields,
+    ]);
+    if (!result.ok) {
+      throw GitHubException('gh run list failed: ${result.stderr.trim()}');
+    }
+    return parseGhRuns(result.stdout);
+  }
+
+  /// The failed steps' log of run [runId], bounded by [boundRunLog]. Read
+  /// only: nothing is re-run.
+  Future<WorkflowRunLog> failedRunLog(
+    EnvironmentPath repo, {
+    required int runId,
+  }) async {
+    final result = await _gh(repo, ['run', 'view', '$runId', '--log-failed']);
+    if (!result.ok) {
+      throw GitHubException(
+        'gh run view --log-failed failed: ${result.stderr.trim()}',
+      );
+    }
+    return boundRunLog(runId, result.stdout);
   }
 
   /// Takes a pull request out of draft (`gh pr ready`). The number is passed

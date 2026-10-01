@@ -8,6 +8,7 @@ import '../../checkpoints/checkpoint_tool_set.dart';
 import 'decision_tool_set.dart';
 import 'project_tool_set.dart';
 import 'verification_tool_schemas.dart';
+import 'github_run_tool_set.dart';
 import 'workspace_tool_set.dart';
 import 'worktree_tool_set.dart';
 import 'fanout_tool_set.dart';
@@ -26,6 +27,7 @@ import 'flutter_tool_schemas.dart';
 import 'continuation_tool_set.dart' show sessionHandoffToolSchemas;
 import 'recording_tool_schemas.dart';
 import 'terminal_tool_schemas.dart';
+import 'dev_server_tool_set.dart';
 import 'window_tool_sets.dart'
     show
         openSessionToolSchemas,
@@ -47,6 +49,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...snippetToolSchemas,
   ...fanOutToolSchemas,
   ...workspaceToolSchemas,
+  ...gitHubRunToolSchemas,
   ...projectToolSchemas,
   ...worktreeToolSchemas,
   ...verificationToolSchemas,
@@ -66,6 +69,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...openSessionToolSchemas,
   ...sessionHandoffToolSchemas,
   ...terminalControlToolSchemas,
+  ...devServerToolSchemas,
   ...recordingControlToolSchemas,
   ...snippetControlToolSchemas,
   ...sessionDraftToolSchemas,

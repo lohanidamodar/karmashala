@@ -308,6 +308,16 @@ class ServerGit implements GitWork {
               title: title,
               body: body,
             ),
+        GitHubRuns(:final checkout, :final branch, :final limit) => checkouts
+            .gitHubFor(checkout)
+            .listWorkflowRuns(
+              checkouts.pathOf(checkout),
+              branch: branch,
+              limit: limit.clamp(1, 50),
+            ),
+        GitHubRunLog(:final checkout, :final runId) => checkouts
+            .gitHubFor(checkout)
+            .failedRunLog(checkouts.pathOf(checkout), runId: runId),
       };
 
   /// The three parts read side by side, each failing on its own: one `.wait`

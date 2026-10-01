@@ -103,6 +103,8 @@ import '../mcp/tools/project_tool_set.dart';
 import '../mcp/tools/server_verification_runs.dart';
 import '../mcp/tools/session_liveness.dart';
 import '../mcp/tools/verification_tool_set.dart';
+import '../mcp/tools/dev_server_tool_set.dart';
+import '../mcp/tools/github_run_tool_set.dart';
 import '../mcp/tools/workspace_tool_set.dart';
 import '../mcp/tools/worktree_tool_set.dart';
 import '../mcp/tools/decision_tool_set.dart';
@@ -567,6 +569,7 @@ Future<int> runServe(
         worktreesOf: worktrees.list,
         liveness: liveness,
       ),
+      GitHubRunToolSet(tools, reach: reach),
       ProjectToolSet(tools, reach: reach, folders: folders),
       WorktreeToolSet(
         tools,
@@ -979,6 +982,7 @@ Future<int> runServe(
     ..add(OpenSessionToolSet(tools, launches: launches))
     ..add(ContinuationToolSet(tools, continuations: continuations))
     ..add(TerminalToolSet(terminals: terminals, registry: registry, data: data))
+    ..add(DevServerToolSet(terminals))
     ..add(recordings)
     ..add(SnippetInsertToolSet(tools, terminals: terminals))
     ..add(SessionDraftToolSet(tools))

@@ -11,6 +11,7 @@ class StoreAppSnapshot {
     required this.rating,
     required this.vitals,
     required this.downloads,
+    this.errorIssues,
   });
 
   final StoreApp app;
@@ -19,6 +20,9 @@ class StoreAppSnapshot {
   final Reading<RatingSummary> rating;
   final Reading<VitalsSummary> vitals;
   final Reading<DownloadSeries> downloads;
+
+  /// Null for a store that does not group its crashes into issues.
+  final Reading<List<StoreErrorIssue>>? errorIssues;
 
   /// What a user has: the first live release, else one rolling out, else a
   /// halted one — a paused phased release is still on sale.
@@ -78,6 +82,7 @@ class StoreAppSnapshot {
       ),
       vitals: vitals,
       downloads: downloads,
+      errorIssues: errorIssues,
     );
   }
 
@@ -92,6 +97,10 @@ class StoreAppSnapshot {
     'rating': rating.toJson((value) => value.toJson()),
     'vitals': vitals.toJson((value) => value.toJson()),
     'downloads': downloads.toJson((value) => value.toJson()),
+    if (errorIssues case final issues?)
+      'errorIssues': issues.toJson(
+        (value) => [for (final issue in value) issue.toJson()],
+      ),
   };
 
   factory StoreAppSnapshot.fromJson(Map<String, Object?> json) {
@@ -121,6 +130,12 @@ class StoreAppSnapshot {
         map(json['downloads']),
         (value) => DownloadSeries.fromJson(map(value)),
       ),
+      errorIssues: json['errorIssues'] == null
+          ? null
+          : Reading.fromJson(
+              map(json['errorIssues']),
+              (value) => maps(value).map(StoreErrorIssue.fromJson).toList(),
+            ),
     );
   }
 }
@@ -156,6 +171,12 @@ class StoreConsole {
     final rating = _read(() => client.rating(app));
     final vitals = _read(() => client.vitals(app));
     final downloads = _read(() => client.downloads(app));
+    final errorIssues = switch (client) {
+      final StoreErrorIssueSource source => _read(
+        () => source.errorIssues(app),
+      ),
+      _ => null,
+    };
     return StoreAppSnapshot(
       app: app,
       releases: await releases,
@@ -163,6 +184,7 @@ class StoreConsole {
       rating: await rating,
       vitals: await vitals,
       downloads: await downloads,
+      errorIssues: await errorIssues,
     );
   }
 

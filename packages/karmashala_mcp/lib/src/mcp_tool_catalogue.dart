@@ -121,6 +121,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'list_projects': McpToolAnnotations.read,
   'list_checkouts': McpToolAnnotations.read,
   'delivery_status': McpToolAnnotations.read,
+  // gh reads GitHub; nothing is re-run, cancelled or commented on.
+  'github_runs': McpToolAnnotations.readOutside,
+  'github_run_log': McpToolAnnotations.readOutside,
   // Adds a project and discovers what is under it. Not idempotent: asked
   // twice with the same folder it files the workspace with two of them.
   'project_add': McpToolAnnotations(movesAttention: false),
@@ -184,6 +187,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Terminal.
   'terminal_list': McpToolAnnotations.read,
   'terminal_output': McpToolAnnotations.read,
+  // Lists processes and sockets on this machine; changes nothing.
+  'terminal_ports': McpToolAnnotations.read,
   // The new tab becomes active, its group activated, its pane focused.
   'terminal_open': McpToolAnnotations(movesAttention: true),
   // Whether the command is destructive is its business, not this tool's, and
@@ -415,6 +420,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     openWorld: true,
     movesAttention: false,
   ),
+  // Reads the DOM with Karmashala's own script; `reload` reloads the page,
+  // which is why it is not read-only.
+  'browser_audit': McpToolAnnotations(openWorld: true, movesAttention: false),
 
   // Open-world for the same reason the device tools are: the app is a
   // process on a desktop, a phone or a simulator.
@@ -662,6 +670,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.terminals,
     'Read a pane\'s recent output — the screen as it stands, not a log.',
   ),
+  'terminal_ports': McpToolListing(
+    McpToolCategory.terminals,
+    'The ports dev servers started in Karmashala\'s panes listen on.',
+  ),
   'terminal_close': McpToolListing(
     McpToolCategory.terminals,
     'Close a tab; a busy pane detaches and keeps running unless killed.',
@@ -717,6 +729,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'delivery_status': McpToolListing(
     McpToolCategory.workspace,
     'What a checkout still owes: ahead, behind, dirty, unpushed, its PR.',
+  ),
+  'github_runs': McpToolListing(
+    McpToolCategory.workspace,
+    'The newest GitHub Actions runs on a checkout\'s branch, through gh.',
+  ),
+  'github_run_log': McpToolListing(
+    McpToolCategory.workspace,
+    'A failed Actions run\'s log: its last 300 lines and its error lines.',
   ),
   'worktree_create': McpToolListing(
     McpToolCategory.workspace,
@@ -1018,6 +1038,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'browser_evaluate': McpToolListing(
     McpToolCategory.browser,
     'Run JavaScript in the page. Needs a one-time grant, per project.',
+  ),
+  'browser_audit': McpToolListing(
+    McpToolCategory.browser,
+    'Accessibility and quality checks of the page; evaluate\'s grant.',
   ),
 
   // Flutter: starting a project, and the app once it is running.

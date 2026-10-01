@@ -9,6 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/presentation/remote_link.dart';
 import '../application/github_providers.dart';
+import 'workflow_runs_part.dart';
 
 /// **The selected checkout on GitHub**, as a section of the Repository pane:
 /// the repository's page, its open pull requests and open issues, read through
@@ -33,7 +34,9 @@ class GitHubSection extends ConsumerWidget {
       children: [
         _SectionTitle(
           refresh: reach.kind == GitHubReachKind.gitHub
-              ? () => ref.invalidate(githubOverviewProvider)
+              ? () => ref
+                  ..invalidate(githubOverviewProvider)
+                  ..invalidate(githubWorkflowRunsProvider)
               : null,
         ),
         switch (reach) {
@@ -118,6 +121,8 @@ class _GitHubDetails extends ConsumerWidget {
             subtitle: Text(issue.state),
           ),
         ),
+        const _PartTitle(icon: AppIcons.playCircle, label: 'Workflow runs'),
+        const WorkflowRunsPart(),
       ],
     );
   }

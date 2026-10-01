@@ -118,3 +118,35 @@ final githubIssuesProvider = FutureProvider.autoDispose<List<Issue>>((
   }
   return overview.issues;
 }, retry: _theServersAnswer);
+
+/// The newest Actions runs on the selected checkout's branch — a pull
+/// request's Actions checks are runs on its head branch — or the
+/// repository's newest when detached. Read when the section shows and on
+/// refresh; nothing polls.
+final githubWorkflowRunsProvider =
+    FutureProvider.autoDispose<List<WorkflowRun>>((ref) async {
+      final id = ref.watch(selectedRepositoryIdProvider);
+      final remoteRead = ref.watch(repoRemoteUrlProvider.future);
+      final branchRead = ref.watch(currentBranchProvider.future);
+      final git = ref.read(gitDataProvider);
+      final repo = id == null
+          ? null
+          : ref.read(workspaceDataProvider).repository(id);
+      if (repo == null) return const [];
+      final String? remote;
+      try {
+        remote = await remoteRead;
+      } on Object {
+        return const [];
+      }
+      if (gitHubReachOf(remote).kind != GitHubReachKind.gitHub) {
+        return const [];
+      }
+      String? branch;
+      try {
+        branch = await branchRead;
+      } on Object {
+        branch = null;
+      }
+      return git.workflowRuns(repo.path, branch: branch);
+    }, retry: _theServersAnswer);

@@ -12,6 +12,7 @@ import '../domain/element_capture.dart';
 import '../domain/found_element.dart';
 import '../domain/untrusted_content.dart';
 import 'browser_viewport_tool.dart';
+import 'page_audit.dart';
 
 /// A tool failure whose text is the whole message: the bridge renders a thrown
 /// error as `Error: $e`, and [recovery] rides on [toString] rather than on
@@ -51,6 +52,8 @@ class BrowserTools {
   static const Map<String, BrowserCapability> gatedTools =
       <String, BrowserCapability>{
         'browser_evaluate': BrowserCapability.evaluate,
+        // Runs script in the authenticated origin, so it is evaluate's grant.
+        'browser_audit': BrowserCapability.evaluate,
       };
 
   Future<Object?> call(String tool, Map<String, dynamic> args) async {
@@ -104,6 +107,8 @@ class BrowserTools {
         return _pick(args);
       case 'browser_tabs':
         return _tabs(args);
+      case 'browser_audit':
+        return runPageAudit(_service, reload: args['reload'] == true);
       default:
         throw BrowserToolException('Unknown browser tool: $tool');
     }

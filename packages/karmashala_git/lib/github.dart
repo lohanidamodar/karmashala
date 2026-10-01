@@ -14,3 +14,4 @@ export 'src/github/domain/issue.dart';
 export 'src/github/domain/merge_strategies.dart';
 export 'src/github/domain/pull_request.dart';
 export 'src/github/domain/pull_request_snapshot.dart';
+export 'src/github/domain/workflow_run.dart';

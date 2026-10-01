@@ -32,6 +32,7 @@ DataRequest<Object?>? _terminalsRequestFromJson(String kind, _Arguments args) =>
         args.string('sessionId'),
         args.string('title'),
       ),
+      TerminalsListeningPorts.name => const TerminalsListeningPorts(),
       _ => null,
     };
 
@@ -199,4 +200,26 @@ final class TerminalRename extends TerminalWorkRequest<DataAck> {
 
   @override
   DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// The TCP ports processes under each server-run pane listen on, read now —
+/// one process listing and one socket listing; nothing polls.
+final class TerminalsListeningPorts
+    extends TerminalWorkRequest<ListeningPortsReading> {
+  const TerminalsListeningPorts();
+
+  static const String name = 'terminals.listeningPorts';
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => const {};
+
+  @override
+  Object? resultToJson(ListeningPortsReading result) => result.toJson();
+
+  @override
+  ListeningPortsReading resultFromJson(Object? json) =>
+      _decode(kind, () => ListeningPortsReading.fromJson(_object(json, kind)));
 }
