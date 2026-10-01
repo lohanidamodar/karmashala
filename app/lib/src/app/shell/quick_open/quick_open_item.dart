@@ -22,7 +22,14 @@ enum QuickOpenGroup {
   agents('Agents'),
   snippets('Command snippets'),
   presets('Terminal presets'),
-  commands('Commands');
+  commands('Commands'),
+
+  /// What a step (`QuickOpenStep`) offers to do with the thing it is about;
+  /// never in the full list.
+  actions('Actions'),
+
+  /// A project's repositories, each a step of its own; never in the full list.
+  repositories('Repositories');
 
   const QuickOpenGroup(this.label);
 

@@ -200,11 +200,14 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
   }
 }
 
-/// Opens a shell on [environment], in the terminal pane. [showWorkbench] is
-/// the phone's ([phoneWorkbenchOpener]): the new tab is brought up to be seen.
+/// Opens a shell on [environment], in the terminal pane — in
+/// [workingDirectory], written as [environment] writes it, when one is given.
+/// [showWorkbench] is the phone's ([phoneWorkbenchOpener]): the new tab is
+/// brought up to be seen.
 void openTerminalOn(
   WidgetRef ref,
   ExecutionEnvironment environment, {
+  String? workingDirectory,
   VoidCallback? showWorkbench,
 }) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
@@ -219,7 +222,7 @@ void openTerminalOn(
       wslDistribution: distro,
     ),
     _ => _machineShell(ref),
-  });
+  }, workingDirectory: workingDirectory);
   controller.showTerminalHere();
   showWorkbench?.call();
 }

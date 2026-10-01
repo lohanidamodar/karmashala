@@ -32,6 +32,14 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/launch.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
+import '../../../features/sessions/presentation/session_destination_picker.dart'
+    show SessionDestination;
+import '../../../features/environments/application/environment_providers.dart';
+import '../../../features/explorer/presentation/explorer_tree_rows.dart'
+    show openTerminalOn;
+import 'package:agent_cli/process.dart' show EnvironmentPath;
+import 'package:karmashala_git/repositories.dart' show Repository;
+import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import '../../../features/files/application/files_tab_actions.dart';
 import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -61,7 +69,9 @@ import '../tab_picker.dart';
 import '../workbench.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
+import 'quick_open_step.dart';
 import 'repo_file_index.dart';
+import 'typed_command_runner.dart' show commandDefaultCheckout;
 
 /// Per-group priors, added to every match in that group. Small on purpose: a
 /// large one would let a weak session match outrank an exact command match.
@@ -117,6 +127,7 @@ class QuickOpenSources {
     required this.ref,
     required this.context,
     required this.dismiss,
+    required this.push,
     this.phone,
   });
 
@@ -126,6 +137,10 @@ class QuickOpenSources {
   /// Closes the surface before acting, so a dialog opened from here is not
   /// stacked underneath it.
   final void Function(VoidCallback action) dismiss;
+
+  /// Goes down a level, the palette staying open: a project lists what can be
+  /// done with it rather than jumping to it (owner, 2026-10-01).
+  final void Function(QuickOpenStep step) push;
 
   /// The phone shell, when it is the one on screen: what lands in the
   /// workbench or the side panel is then brought up where the phone shows it,
@@ -711,13 +726,7 @@ class QuickOpenSources {
           icon: AppIcons.folder,
           keywords: [project.root.path],
           weight: _workspaceWeight,
-          onSelect: () => dismiss(
-            _inProjects(
-              () => ref
-                  .read(selectedProjectIdProvider.notifier)
-                  .select(project.id),
-            ),
-          ),
+          onSelect: () => push(projectStep(project)),
         ),
       );
       for (final repository in workspace.repositoriesOf(project.id)) {
@@ -730,14 +739,12 @@ class QuickOpenSources {
             icon: AppIcons.gitBranch,
             keywords: [repository.path.path],
             weight: _workspaceWeight,
-            onSelect: () => dismiss(
-              _inProjects(() {
-                ref.read(selectedProjectIdProvider.notifier).select(project.id);
-                ref
-                    .read(selectedRepositoryIdProvider.notifier)
-                    .select(repository.id);
-              }),
-            ),
+            // Through the project's step, so the breadcrumb and Backspace are
+            // what drilling in from the project gives.
+            onSelect: () {
+              push(projectStep(project));
+              push(repositoryStep(project, repository));
+            },
           ),
         );
       }
@@ -745,11 +752,172 @@ class QuickOpenSources {
     return items;
   }
 
+  // --- a project's and a repository's own steps ----------------------------
+
+  /// What can be done with [project]: a new session first, so project → Enter
+  /// → Enter starts one; its sessions; a terminal and the files there; its
+  /// repositories, each a step; and the sidebar jump picking it used to make.
+  QuickOpenStep projectStep(Project project) => QuickOpenStep(
+    id: 'project/${project.id}',
+    title: project.name,
+    hintText: 'Act on ${project.name}, or find one of its sessions',
+    items: () {
+      final repositories = ref
+          .read(workspaceDataProvider)
+          .repositoriesOf(project.id);
+      final id = 'project/${project.id}';
+      return [
+        _newSessionIn(
+          id,
+          subtitle: project.name,
+          // Read when picked, not listed: the checkout the Explorer's `+` and
+          // the typed `start` would choose.
+          destination: () => SessionDestination(
+            projectId: project.id,
+            checkout: commandDefaultCheckout(
+              ProviderScope.containerOf(context, listen: false),
+              project.id,
+            ),
+          ),
+        ),
+        ..._sessions(projectId: project.id),
+        // The project's folder, or each repository's when there are several:
+        // a parent folder of three clones is rarely where the work is.
+        if (repositories.length <= 1)
+          ?_terminalIn(id, project.root)
+        else
+          for (final repository in repositories)
+            ?_terminalIn(
+              'repository/${repository.id}',
+              repository.path,
+              title: 'Open a terminal in ${repository.name}',
+            ),
+        _filesIn(id, project.root),
+        _showInSidebar(
+          id,
+          () => ref.read(selectedProjectIdProvider.notifier).select(project.id),
+        ),
+        // One repository is the project again; drilling into it says nothing.
+        if (repositories.length > 1)
+          for (final repository in repositories)
+            QuickOpenItem(
+              id: '$id/repository/${repository.id}',
+              group: QuickOpenGroup.repositories,
+              title: repository.name,
+              subtitle: repository.path.path,
+              icon: AppIcons.gitBranch,
+              keywords: const ['repository'],
+              onSelect: () => push(repositoryStep(project, repository)),
+            ),
+      ];
+    },
+  );
+
+  /// [projectStep] for one checkout: everything there is scoped to it.
+  QuickOpenStep repositoryStep(
+    Project project,
+    Repository repository,
+  ) => QuickOpenStep(
+    id: 'repository/${repository.id}',
+    title: repository.name,
+    hintText: 'Act on ${repository.name}, or find one of its sessions',
+    items: () {
+      final id = 'repository/${repository.id}';
+      return [
+        _newSessionIn(
+          id,
+          subtitle: '${project.name} · ${repository.name}',
+          destination: () =>
+              SessionDestination(projectId: project.id, checkout: repository),
+        ),
+        ..._sessions(repositoryId: repository.id),
+        ?_terminalIn(id, repository.path),
+        _filesIn(id, repository.path),
+        _showInSidebar(id, () {
+          ref.read(selectedProjectIdProvider.notifier).select(project.id);
+          ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
+        }),
+      ];
+    },
+  );
+
+  /// The New-session dialog, opened on [destination] rather than on whatever
+  /// the app is pointed at; nothing is selected until its Start.
+  QuickOpenItem _newSessionIn(
+    String id, {
+    required String subtitle,
+    required SessionDestination Function() destination,
+  }) => QuickOpenItem(
+    id: '$id/new-session',
+    group: QuickOpenGroup.sessions,
+    title: 'New session…',
+    subtitle: subtitle,
+    icon: AppIcons.chatCircleDots,
+    keywords: const ['start', 'agent'],
+    onSelect: () {
+      final where = destination();
+      dismiss(() => NewSessionDialog.show(context, destination: where));
+    },
+  );
+
+  /// A shell on [where]'s machine, started in [where] — the Explorer's own
+  /// "open a terminal on" — or nothing when that machine is no longer recorded.
+  QuickOpenItem? _terminalIn(
+    String id,
+    EnvironmentPath where, {
+    String title = 'Open a terminal',
+  }) {
+    final environment = ref
+        .read(environmentsDataProvider)
+        .getById(where.environmentId);
+    if (environment == null) return null;
+    return QuickOpenItem(
+      id: '$id/terminal',
+      group: QuickOpenGroup.actions,
+      title: title,
+      subtitle: where.path,
+      icon: AppIcons.terminal,
+      keywords: const ['shell', 'terminal', 'console'],
+      onSelect: () => dismiss(
+        _seen(
+          () => openTerminalOn(ref, environment, workingDirectory: where.path),
+        ),
+      ),
+    );
+  }
+
+  /// The file browser, this machine on the left and [where] on the right.
+  QuickOpenItem _filesIn(String id, EnvironmentPath where) => QuickOpenItem(
+    id: '$id/files',
+    group: QuickOpenGroup.actions,
+    title: 'Browse files',
+    subtitle: where.path,
+    icon: AppIcons.folderOpen,
+    keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
+    onSelect: () => dismiss(
+      _seen(() => openFilesTabOn(ref, where.environmentId, path: where.path)),
+    ),
+  );
+
+  /// What picking a project or repository did before it opened a step: [select]
+  /// it, and bring up the Projects area that draws the selection.
+  QuickOpenItem _showInSidebar(String id, VoidCallback select) => QuickOpenItem(
+    id: '$id/show',
+    group: QuickOpenGroup.actions,
+    title: _onPhone ? 'Show in Projects' : 'Show in sidebar',
+    subtitle: _onPhone ? 'The Projects tab' : 'The Projects sidebar',
+    icon: AppIcons.treeStructure,
+    keywords: const ['select', 'reveal', 'explorer', 'projects'],
+    onSelect: () => dismiss(_inProjects(select)),
+  );
+
   // --- sessions ------------------------------------------------------------
 
   /// Native and imported sessions, most recently active first. Only *free*
-  /// whereabouts: a transcript stat per session would be a disk sweep.
-  List<QuickOpenItem> _sessions() {
+  /// whereabouts: a transcript stat per session would be a disk sweep. A step
+  /// narrows them to one [projectId] or one [repositoryId]; the rows are the
+  /// full list's own, so picking one does exactly what it does there.
+  List<QuickOpenItem> _sessions({String? projectId, String? repositoryId}) {
     final sessionDao = ref.read(sessionsDataProvider);
     final importedDao = ref.read(importedSessionsProvider);
     final workspace = ref.read(workspaceDataProvider);
@@ -764,7 +932,9 @@ class QuickOpenSources {
         <({SessionActivityOrder order, QuickOpenItem Function(double) make})>[];
 
     for (final project in ref.read(sortedProjectsProvider)) {
+      if (projectId != null && project.id != projectId) continue;
       for (final repository in workspace.repositoriesOf(project.id)) {
+        if (repositoryId != null && repository.id != repositoryId) continue;
         final where = '${project.name} · ${repository.name}';
         final here = repository.id == selectedRepository
             ? _selectedRepoBoost

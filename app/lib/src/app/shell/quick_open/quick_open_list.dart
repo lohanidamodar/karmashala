@@ -222,6 +222,8 @@ class QuickOpenSearchField extends StatelessWidget {
     required this.onChanged,
     required this.hintText,
     this.shortcut,
+    this.breadcrumb = const [],
+    this.onBreadcrumbTap,
     super.key,
   });
 
@@ -233,50 +235,120 @@ class QuickOpenSearchField extends StatelessWidget {
   /// the way back in is learned on the way out. Null draws none.
   final String? shortcut;
 
+  /// The steps the list has gone down, outermost first — `Karmashala ›` —
+  /// drawn between the magnifier and the query. Empty draws none.
+  final List<String> breadcrumb;
+
+  /// Goes back one step: the touch way to what Backspace on an empty box does.
+  final VoidCallback? onBreadcrumbTap;
+
+  /// The most of the field the breadcrumb may take before it ellipsises: the
+  /// query is what is being typed, and it keeps the room.
+  static const _breadcrumbShare = 0.45;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     const none = OutlineInputBorder(borderSide: BorderSide.none);
+    final magnifier = Icon(
+      AppIcons.magnifyingGlass,
+      size: Chrome.icon,
+      color: muted,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.xs,
         vertical: Insets.xs,
       ),
-      child: TextField(
-        controller: controller,
-        autofocus: true,
-        style: theme.textTheme.bodyLarge?.copyWith(fontSize: TypeSizes.input),
-        decoration: InputDecoration(
-          filled: false,
-          prefixIcon: Icon(
-            AppIcons.magnifyingGlass,
-            size: Chrome.icon,
-            color: muted,
+      child: LayoutBuilder(
+        builder: (context, constraints) => TextField(
+          controller: controller,
+          autofocus: true,
+          style: theme.textTheme.bodyLarge?.copyWith(fontSize: TypeSizes.input),
+          decoration: InputDecoration(
+            filled: false,
+            prefixIcon: breadcrumb.isEmpty
+                ? magnifier
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: Chrome.control + Insets.sm,
+                        child: Center(child: magnifier),
+                      ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth * _breadcrumbShare,
+                        ),
+                        child: _Breadcrumb(
+                          steps: breadcrumb,
+                          onTap: onBreadcrumbTap,
+                        ),
+                      ),
+                      const SizedBox(width: Insets.sm),
+                    ],
+                  ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: Chrome.control + Insets.sm,
+              minHeight: Chrome.control,
+            ),
+            suffixIcon: shortcut == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(right: Insets.sm),
+                    child: QuickOpenKeyChip(shortcut!),
+                  ),
+            suffixIconConstraints: const BoxConstraints(
+              minHeight: Chrome.control,
+            ),
+            hintText: hintText,
+            hintStyle: TextStyle(color: muted),
+            hintMaxLines: 1,
+            border: none,
+            enabledBorder: none,
+            focusedBorder: none,
+            contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+            isDense: true,
           ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: Chrome.control + Insets.sm,
-            minHeight: Chrome.control,
-          ),
-          suffixIcon: shortcut == null
-              ? null
-              : Padding(
-                  padding: const EdgeInsets.only(right: Insets.sm),
-                  child: QuickOpenKeyChip(shortcut!),
-                ),
-          suffixIconConstraints: const BoxConstraints(
-            minHeight: Chrome.control,
-          ),
-          hintText: hintText,
-          hintStyle: TextStyle(color: muted),
-          hintMaxLines: 1,
-          border: none,
-          enabledBorder: none,
-          focusedBorder: none,
-          contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
-          isDense: true,
+          onChanged: onChanged,
         ),
-        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// Where a stepped list is, as one line: each step's name and a `›` after it,
+/// muted like the placeholder so it reads as context, not as typed text.
+class _Breadcrumb extends StatelessWidget {
+  const _Breadcrumb({required this.steps, this.onTap});
+
+  final List<String> steps;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = Text(
+      '${steps.join('  ›  ')}  ›',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodyLarge?.copyWith(
+        fontSize: TypeSizes.input,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+    final tap = onTap;
+    if (tap == null) return text;
+    return Tooltip(
+      message: 'Back',
+      child: InkWell(
+        onTap: tap,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        // Never focusable: the keyboard stays in the box, where Backspace
+        // already goes back.
+        canRequestFocus: false,
+        child: text,
       ),
     );
   }

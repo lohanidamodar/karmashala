@@ -19,6 +19,7 @@ import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'quick_open_list.dart';
 import 'quick_open_sources.dart';
+import 'quick_open_step.dart';
 import 'repo_file_index.dart';
 import 'typed_command.dart';
 import 'typed_command_catalog.dart';
@@ -48,6 +49,22 @@ class _CommandRow {
   final String? history;
   final bool enabled;
   final SessionDot? dot;
+}
+
+/// A [QuickOpenStep] the palette is in, with its rows as last built and what
+/// the level above had — so going back finds the query and the highlight as
+/// they were.
+class _StepFrame {
+  _StepFrame(
+    this.step, {
+    required this.queryBefore,
+    required this.selectedBefore,
+  });
+
+  final QuickOpenStep step;
+  final String queryBefore;
+  final int selectedBefore;
+  List<QuickOpenItem> items = const [];
 }
 
 /// Bumped when something outside the widget tree asks for quick open — today
@@ -123,6 +140,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   /// The command section's rows by item id; empty when there is none.
   final Map<String, _CommandRow> _commandRows = {};
 
+  /// The steps gone down into, innermost last; empty is the full list.
+  final List<_StepFrame> _steps = [];
+
   @override
   void initState() {
     super.initState();
@@ -174,7 +194,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   /// The server answered a conversation search: draw it.
   void _onConversationAnswer() {
-    if (!mounted) return;
+    // A step lists no conversations; going back searches again.
+    if (!mounted || _steps.isNotEmpty) return;
     setState(() {
       _searchConversations(force: true);
       _rerank();
@@ -211,6 +232,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         navigator.pop();
         action();
       },
+      push: _push,
       phone: ref.read(phoneShellRouterProvider).current,
     );
   }
@@ -221,7 +243,55 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       files: root == null ? const [] : _index.cached(root),
       changedPaths: _changedPaths(),
     );
+    final step = _steps.lastOrNull;
+    if (step != null) step.items = step.step.items();
     _rerank();
+  }
+
+  // --- steps -----------------------------------------------------------------
+
+  /// Goes down into [step]: the box empties and the highlight is on its first
+  /// row, which the step put first because it is what Enter should do.
+  void _push(QuickOpenStep step) {
+    if (!mounted) return;
+    setState(() {
+      _steps.add(
+        _StepFrame(
+          step,
+          queryBefore: _controller.text,
+          selectedBefore: _selected,
+        )..items = step.items(),
+      );
+      _controller.clear();
+      _selected = 0;
+      _rerank();
+    });
+    _revealSelectedAfterLayout();
+  }
+
+  /// Back up one step, to the query and highlight the level above had. False
+  /// when already at the full list.
+  bool _back() {
+    if (_steps.isEmpty) return false;
+    final frame = _steps.removeLast();
+    _controller.value = TextEditingValue(
+      text: frame.queryBefore,
+      selection: TextSelection.collapsed(offset: frame.queryBefore.length),
+    );
+    setState(() {
+      // Rebuilt rather than kept: the level above may be the full list, whose
+      // rows moved on while the step was open.
+      _rebuildItems();
+      if (_steps.isEmpty) {
+        _searchConversations(force: true);
+        _rerank();
+      }
+      _selected = _flat.isEmpty
+          ? 0
+          : frame.selectedBefore.clamp(0, _flat.length - 1);
+    });
+    _revealSelectedAfterLayout();
+    return true;
   }
 
   /// Runs the conversation search for the query as typed: a ranked page from
@@ -246,6 +316,18 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 
   void _rerank() {
+    final step = _steps.lastOrNull;
+    if (step != null) {
+      // A step's rows are its own: no typed commands, no history, no sigils.
+      _commandRows.clear();
+      _sections = step.step.filter(_controller.text, step.items);
+      _flat = [
+        for (final section in _sections)
+          for (final result in section.results) result,
+      ];
+      if (_selected >= _flat.length) _selected = 0;
+      return;
+    }
     final query = _query;
     // The command section leads when there is one; the search below it is the
     // same search as ever, so a verb typed by accident hides nothing.
@@ -531,15 +613,16 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   /// against whatever is cached now, and start the re-walk if one is due.
   void _onIndexChanged(EnvironmentPath root) {
     if (!mounted || root != ref.read(quickOpenFileRootProvider)) return;
-    if (!_query.isEmpty) _ensureFileIndex();
+    if (_steps.isEmpty && !_query.isEmpty) _ensureFileIndex();
     setState(_rebuildItems);
   }
 
   void _onQueryChanged(String _) {
-    if (!_query.isEmpty) _ensureFileIndex();
+    final inStep = _steps.isNotEmpty;
+    if (!inStep && !_query.isEmpty) _ensureFileIndex();
     setState(() {
       _selected = 0;
-      _searchConversations();
+      if (!inStep) _searchConversations();
       _rerank();
     });
     _revealSelectedAfterLayout();
@@ -600,6 +683,14 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    // Backspace on an empty box goes back a step. A press, not a repeat: a held
+    // key that has just emptied the query must not carry on up the stack.
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _controller.text.isEmpty &&
+        _back()) {
+      return KeyEventResult.handled;
+    }
     // Tab completes only while there is a command section to complete from;
     // otherwise it goes where it always went.
     if (event is KeyDownEvent &&
@@ -621,6 +712,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   @override
   Widget build(BuildContext context) {
     final count = _flat.length;
+    final step = _steps.lastOrNull?.step;
     return QuickOpenFrame(
       // Wide enough for a path and its shortcut on one row, narrow enough that
       // the eye does not travel from a title to a chip across the window.
@@ -630,12 +722,15 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       searchField: QuickOpenSearchField(
         controller: _controller,
         onChanged: _onQueryChanged,
-        hintText: 'Jump to a session, project, file or command',
+        hintText:
+            step?.hintText ?? 'Jump to a session, project, file or command',
         // Whatever the keymap binds today, so the hint is never a lie.
         shortcut: shellCommandLabel('quickOpen.show'),
+        breadcrumb: [for (final frame in _steps) frame.step.title],
+        onBreadcrumbTap: _back,
       ),
       body: _flat.isEmpty
-          ? _Empty(query: _query)
+          ? _Empty(query: _query, step: step)
           : ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.zero,
@@ -647,7 +742,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('$count result${count == 1 ? '' : 's'}'),
-            if (_walking != null && !_indexed) ...[
+            if (step == null && _walking != null && !_indexed) ...[
               const SizedBox(width: Insets.sm),
               const Text('· indexing files…'),
             ],
@@ -655,7 +750,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         ),
         // The sigils are a hint, not a control: at a narrow width they
         // ellipsise rather than push the result count off the row.
-        hint: _commandRows.isNotEmpty && _controller.text.trim().isNotEmpty
+        hint: step != null
+            ? 'Enter  open   ·   Backspace  back   ·   Esc  close'
+            : _commandRows.isNotEmpty && _controller.text.trim().isNotEmpty
             ? 'Tab  complete   ·   Enter  run   ·   Esc  close'
             : r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
                   r'/  files   ·   $  snippets   ·   ~  presets',
@@ -878,18 +975,24 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _Empty extends StatelessWidget {
-  const _Empty({required this.query});
+  const _Empty({required this.query, this.step});
 
   final QuickOpenQuery query;
+
+  /// The step the box is in, whose own rows are all that was searched.
+  final QuickOpenStep? step;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final group = query.only;
+    final step = this.step;
     return Padding(
       padding: const EdgeInsets.all(Insets.xl),
       child: Text(
-        group == null
+        step != null
+            ? 'Nothing in ${step.title} matches.'
+            : group == null
             ? 'Nothing matches.'
             : 'Nothing in ${group.label.toLowerCase()} matches.',
         style: theme.textTheme.bodySmall?.copyWith(

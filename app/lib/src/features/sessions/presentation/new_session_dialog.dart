@@ -59,13 +59,17 @@ bool _isBranchName(String name) =>
 /// Creates a session **where you say**. Browsing and cancelling leaves the
 /// app's selection alone; pressing Start moves it, it being no longer a guess.
 class NewSessionDialog extends ConsumerStatefulWidget {
-  const NewSessionDialog({this.targetPaneId, super.key});
+  const NewSessionDialog({this.targetPaneId, this.destination, super.key});
 
   /// Opens the session flow, optionally placing an in-app session in an empty
   /// split instead of creating another workbench tab.
   /// A phone not granted `start_session` is told so instead: every way in
   /// comes through here.
-  static Future<void> show(BuildContext context, {String? targetPaneId}) {
+  static Future<void> show(
+    BuildContext context, {
+    String? targetPaneId,
+    SessionDestination? destination,
+  }) {
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.read(capabilitiesProvider).mayStart) {
       ScaffoldMessenger.maybeOf(
@@ -75,11 +79,20 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     }
     return showFormDialog<void>(
       context: context,
-      builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
+      builder: (_) => NewSessionDialog(
+        targetPaneId: targetPaneId,
+        destination: destination,
+      ),
     );
   }
 
   final String? targetPaneId;
+
+  /// Where the dialog opens pointed, when the caller already named a project
+  /// or a checkout — quick open's project step. Null is whatever the app is
+  /// pointed at ([defaultSessionDestinationProvider]). Either way the
+  /// selection is left alone until Start.
+  final SessionDestination? destination;
 
   @override
   ConsumerState<NewSessionDialog> createState() => _NewSessionDialogState();
@@ -135,7 +148,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     super.initState();
     // Taken once, never overwriting the picker's own choice — but still
     // listened to, so a project added from the empty state below is picked up.
-    _destination = ref.read(defaultSessionDestinationProvider);
+    _destination =
+        widget.destination ?? ref.read(defaultSessionDestinationProvider);
     _afterDestinationChanged();
     ref.listenManual(defaultSessionDestinationProvider, (_, next) {
       if (_destination == null && next != null) {
