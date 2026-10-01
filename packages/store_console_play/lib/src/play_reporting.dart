@@ -137,6 +137,26 @@ Map<String, Object?> _dayJson(DateTime day) => {
   'timeZone': {'id': _dailyZone},
 };
 
+/// The error searches' interval as query parameters: they default to the last
+/// 24 hours and take only hour-aligned UTC bounds.
+Map<String, String> errorInterval({
+  required DateTime start,
+  required DateTime end,
+}) {
+  Map<String, String> bound(String name, DateTime at) {
+    final utc = at.toUtc();
+    return {
+      'interval.$name.year': '${utc.year}',
+      'interval.$name.month': '${utc.month}',
+      'interval.$name.day': '${utc.day}',
+      'interval.$name.hours': '${utc.hour}',
+      'interval.$name.timeZone.id': 'UTC',
+    };
+  }
+
+  return {...bound('startTime', start), ...bound('endTime', end)};
+}
+
 Iterable<Map<Object?, Object?>> _maps(Object? list) =>
     list is List ? list.whereType<Map<Object?, Object?>>() : const [];
 
@@ -187,6 +207,47 @@ class PlayReporting {
     );
     return parseVitalsRate(json, metric);
   }
+
+  /// One page of `errorIssues:search`, most reported first.
+  Future<Map<String, Object?>> searchErrorIssues(
+    String packageName, {
+    required DateTime start,
+    required DateTime end,
+    required int pageSize,
+  }) => _read(
+    _client.get(
+      _errors(packageName, 'errorIssues').replace(
+        queryParameters: {
+          ...errorInterval(start: start, end: end),
+          'pageSize': '$pageSize',
+          'filter': 'errorIssueType = CRASH OR errorIssueType = ANR',
+          'orderBy': 'errorReportCount desc',
+        },
+      ),
+    ),
+  );
+
+  /// The newest report of issue [issueId], or an empty page.
+  Future<Map<String, Object?>> searchErrorReports(
+    String packageName,
+    String issueId, {
+    required DateTime start,
+    required DateTime end,
+  }) => _read(
+    _client.get(
+      _errors(packageName, 'errorReports').replace(
+        queryParameters: {
+          ...errorInterval(start: start, end: end),
+          'pageSize': '1',
+          'filter': 'errorIssueId = $issueId',
+        },
+      ),
+    ),
+  );
+
+  Uri _errors(String packageName, String collection) => Uri.parse(
+    '$_root/apps/${Uri.encodeComponent(packageName)}/$collection:search',
+  );
 
   Uri _metricSet(String packageName, VitalsMetric metric) => Uri.parse(
     '$_root/apps/${Uri.encodeComponent(packageName)}/${metric.metricSet}',

@@ -15,6 +15,7 @@ import '../application/store_groups.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
 import 'store_combine.dart';
+import 'store_detail_errors.dart';
 import 'store_detail_releases.dart';
 import 'store_detail_reviews.dart';
 import 'stores_format.dart';
@@ -85,6 +86,10 @@ class StoreGroupDetail extends StatelessWidget {
                           when charts.isNotEmpty) ...[
                         const _Section('Downloads'),
                         ...charts,
+                      ],
+                      if (hasErrorIssues(group)) ...[
+                        const _Section('Crashes and ANRs'),
+                        StoreErrorIssuesSection(group: group),
                       ],
                     ],
                     const _Section('Reviews'),

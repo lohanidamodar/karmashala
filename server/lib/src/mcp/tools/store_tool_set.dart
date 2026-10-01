@@ -223,6 +223,19 @@ class StoreToolSet extends ServerToolSet {
           },
         },
       ),
+      // Only Google Play groups crashes into issues; absent, not missing,
+      // for a store that has none to give.
+      if (snapshot?.errorIssues case final issues?)
+        'errorIssues': _field(
+          issues,
+          (list) => [
+            for (final issue in list)
+              {
+                ...issue.toJson()..removeWhere((_, value) => value == null),
+                'kind': issue.kind.label,
+              },
+          ],
+        ),
     };
   }
 
@@ -611,7 +624,9 @@ const List<Map<String, Object?>> storeToolSchemas = [
         'One app in full, as of the last refresh: every release per track '
         '(state, version, build, rollout, date), the rating, the vitals '
         'window with crash and ANR rates in percent, downloads per day, and '
-        'review counts by star. A number a store did not give is '
+        'review counts by star; on Google Play also errorIssues, the most '
+        'reported crash and ANR clusters of the last 28 days, the first few '
+        'with a sample stack trace. A number a store did not give is '
         '{"missing": kind, "message": why}, never a zero. Downloads lag a day '
         'or more. store_refresh reads the stores again.',
     'inputSchema': {

@@ -6,8 +6,10 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../sessions/presentation/hand_to_session.dart';
 import '../application/store_attention.dart';
 import '../application/store_groups.dart';
+import '../application/store_prompts.dart';
 import 'store_badges.dart';
 import 'stores_format.dart';
 
@@ -106,6 +108,9 @@ class _StoreReviewsSectionState extends State<StoreReviewsSection> {
         for (final (store, review, readAt) in shown.take(_shown))
           _ReviewCard(
             store: store,
+            app: widget.group.entries
+                .firstWhere((entry) => entry.app.store == store)
+                .app,
             review: review,
             fresh: readAt.difference(review.createdAt) <= kNewReviewWindow,
             showStore: widget.group.entries.length > 1,
@@ -291,12 +296,14 @@ class _Spread extends StatelessWidget {
 class _ReviewCard extends ConsumerWidget {
   const _ReviewCard({
     required this.store,
+    required this.app,
     required this.review,
     required this.fresh,
     required this.showStore,
   });
 
   final StoreKind store;
+  final StoreApp app;
   final StoreReview review;
 
   /// Written in the week before it was read.
@@ -354,6 +361,13 @@ class _ReviewCard extends ConsumerWidget {
                     StatusPill(label: 'New', color: semantic.unread),
                   ],
                   const Spacer(),
+                  HandToSessionButton(
+                    label: 'Start a session from this review',
+                    dense: true,
+                    title: 'Review: ${app.name}',
+                    prompt: () => reviewPrompt(app, review),
+                  ),
+                  const SizedBox(width: Insets.xs),
                   if (!review.answered)
                     Text('Not answered', style: muted)
                   else

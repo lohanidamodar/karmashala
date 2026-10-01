@@ -6,6 +6,7 @@ import 'package:store_console/store_console.dart';
 
 import 'play_account.dart';
 import 'play_auth.dart';
+import 'play_error_issues.dart';
 import 'play_errors.dart';
 import 'play_icon.dart';
 import 'play_mapping.dart';
@@ -15,7 +16,7 @@ import 'play_reports_bucket.dart';
 const int _downloadDays = 14;
 
 /// Google Play, read-only.
-class PlayStoreClient implements StoreClient {
+class PlayStoreClient implements StoreClient, StoreErrorIssueSource {
   /// [httpClient] is the transport the token and every call go through; a
   /// test hands in a fake.
   PlayStoreClient(
@@ -204,6 +205,36 @@ class PlayStoreClient implements StoreClient {
       ],
     );
   }, area: PlayArea.bucket);
+
+  @override
+  Future<List<StoreErrorIssue>> errorIssues(StoreApp app) =>
+      playGuarded(() async {
+        final reporting = PlayReporting(await _auth.client());
+        final now = _now().toUtc();
+        final end = DateTime.utc(now.year, now.month, now.day, now.hour);
+        final start = end.subtract(errorIssueWindow);
+        final issues = parseErrorIssues(
+          await reporting.searchErrorIssues(
+            app.id,
+            start: start,
+            end: end,
+            pageSize: errorIssueCount,
+          ),
+        );
+        // A sample that cannot be read leaves its issue without a trace; it
+        // does not take the list with it.
+        final sampled = await Future.wait([
+          for (final (i, issue) in issues.indexed)
+            if (i >= errorSampleCount)
+              Future.value(issue)
+            else
+              reporting
+                  .searchErrorReports(app.id, issue.id, start: start, end: end)
+                  .then((page) => withSampleReport(issue, page))
+                  .catchError((Object _) => issue),
+        ]);
+        return sampled;
+      }, area: PlayArea.reporting);
 
   @override
   Future<StoreIconImage?> icon(StoreApp app) => playIcon(_transport, app.id);

@@ -62,3 +62,11 @@ abstract interface class StoreClient {
 
   void close();
 }
+
+/// A store that groups its crash and ANR reports into issues. Apart from
+/// [StoreClient] so a store without them, and every fake, need not say so.
+abstract interface class StoreErrorIssueSource {
+  /// The most reported crash and ANR clusters over the last weeks, most
+  /// reported first; a few carry a sample stack trace.
+  Future<List<StoreErrorIssue>> errorIssues(StoreApp app);
+}

@@ -59,7 +59,13 @@ bool _isBranchName(String name) =>
 /// Creates a session **where you say**. Browsing and cancelling leaves the
 /// app's selection alone; pressing Start moves it, it being no longer a guess.
 class NewSessionDialog extends ConsumerStatefulWidget {
-  const NewSessionDialog({this.targetPaneId, this.destination, super.key});
+  const NewSessionDialog({
+    this.targetPaneId,
+    this.destination,
+    this.firstPrompt,
+    this.title,
+    super.key,
+  });
 
   /// Opens the session flow, optionally placing an in-app session in an empty
   /// split instead of creating another workbench tab.
@@ -69,6 +75,8 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     BuildContext context, {
     String? targetPaneId,
     SessionDestination? destination,
+    String? firstPrompt,
+    String? title,
   }) {
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.read(capabilitiesProvider).mayStart) {
@@ -82,11 +90,20 @@ class NewSessionDialog extends ConsumerStatefulWidget {
       builder: (_) => NewSessionDialog(
         targetPaneId: targetPaneId,
         destination: destination,
+        firstPrompt: firstPrompt,
+        title: title,
       ),
     );
   }
 
   final String? targetPaneId;
+
+  /// Filled into the first prompt for the person to read, edit and start:
+  /// a review, a crash or a failed run handed over is never sent unseen.
+  final String? firstPrompt;
+
+  /// The session title the dialog opens with, in place of the default.
+  final String? title;
 
   /// Where the dialog opens pointed, when the caller already named a project
   /// or a checkout — quick open's project step. Null is whatever the app is
@@ -146,6 +163,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.firstPrompt case final prompt?) _promptController.text = prompt;
+    if (widget.title case final title?) _titleController.text = title;
     // Taken once, never overwriting the picker's own choice — but still
     // listened to, so a project added from the empty state below is picked up.
     _destination =
