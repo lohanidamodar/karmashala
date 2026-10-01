@@ -114,7 +114,12 @@ class _Upload {
   /// Bumped per attempt, so a dead attempt's late answer is ignored.
   int attempt = 0;
 
-  bool get running => failure == null;
+  /// Picked on a phone and waiting for Send: nothing has gone to the server.
+  /// A phone uploads only what is actually sent (owner, 2026-10-01) — a file
+  /// picked and then dropped costs no data and leaves nothing on the server.
+  bool queued = false;
+
+  bool get running => !queued && failure == null;
 }
 
 const _imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
@@ -378,8 +383,29 @@ class _MessageComposerState extends State<MessageComposer> {
       image: image,
       preview: preview,
     );
+    if (_touch) {
+      setState(() => _uploads.add(upload..queued = true));
+      return;
+    }
     setState(() => _uploads.add(upload));
     await _runUpload(upload);
+  }
+
+  /// Whether Send may go: nothing uploading and nothing failed. Files still
+  /// queued are fine — Send is what uploads them.
+  bool get _readyToSend => _uploads.every((upload) => upload.queued);
+
+  /// Uploads every queued file, one at a time, each landing as an attachment.
+  /// True when all of them landed; a failure stays on its chip, with the
+  /// message, for *Try again* and another Send.
+  Future<bool> _uploadQueued() async {
+    for (final upload in [..._uploads]) {
+      if (!mounted) return false;
+      if (!upload.queued || upload.cancelled) continue;
+      setState(() => upload.queued = false);
+      await _runUpload(upload);
+    }
+    return mounted && _uploads.isEmpty;
   }
 
   Future<void> _runUpload(_Upload upload) async {
@@ -615,9 +641,16 @@ class _MessageComposerState extends State<MessageComposer> {
   Future<void> _send() async {
     // A file still on its way, or one that stopped, would go missing from
     // the message.
-    if (_busy || !widget.enabled || _uploads.isNotEmpty) return;
+    if (_busy || !widget.enabled || !_readyToSend) return;
     final text = _input.text.trim();
-    if (text.isEmpty && _attachments.isEmpty) return;
+    if (text.isEmpty && _attachments.isEmpty && _uploads.isEmpty) return;
+    if (_uploads.isNotEmpty) {
+      setState(() => _busy = true);
+      final landed = await _uploadQueued();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!landed) return;
+    }
 
     final buffer = StringBuffer(text);
     void list(String heading, Iterable<_Attachment> attached) {
@@ -763,7 +796,12 @@ class _MessageComposerState extends State<MessageComposer> {
                     ? (i) => setState(() => _attachments.removeAt(i))
                     : null,
                 onCancel: _cancelUpload,
-                onRetry: (upload) => unawaited(_runUpload(upload)),
+                // Queued again, not uploaded: Send uploads it.
+                onRetry: (upload) => setState(
+                  () => upload
+                    ..failure = null
+                    ..queued = true,
+                ),
               )
             else if (_attachments.isNotEmpty || _uploading > 0)
               _AttachmentStrip(
@@ -805,7 +843,8 @@ class _MessageComposerState extends State<MessageComposer> {
                     attachments: _attachments,
                     busy: _busy,
                     touch: touch,
-                    onSend: canType && _uploads.isEmpty ? _send : null,
+                    queued: _uploads.isNotEmpty,
+                    onSend: canType && _readyToSend ? _send : null,
                   ),
                 ),
               ),
@@ -903,7 +942,8 @@ class _MessageComposerState extends State<MessageComposer> {
                 attachments: _attachments,
                 busy: _busy,
                 touch: true,
-                onSend: canType && _uploads.isEmpty ? _send : null,
+                queued: _uploads.isNotEmpty,
+                onSend: canType && _readyToSend ? _send : null,
               ),
             ],
           ),
@@ -1145,6 +1185,23 @@ class _TouchAttachmentList extends StatelessWidget {
             icon: AppIcons.arrowClockwise,
             onPressed: () => onRetry(upload),
           ),
+          _RowAction(
+            tooltip: 'Remove',
+            icon: AppIcons.x,
+            onPressed: () => onCancel(upload),
+          ),
+        ],
+      );
+    }
+    if (upload.queued) {
+      return _TouchAttachmentRow(
+        name: upload.pick.name,
+        detail: size == null
+            ? 'Uploaded to ${upload.server.name} when you send'
+            : '${formatBytes(size)} · uploaded when you send',
+        image: upload.image,
+        preview: upload.preview,
+        actions: [
           _RowAction(
             tooltip: 'Remove',
             icon: AppIcons.x,
@@ -1534,7 +1591,11 @@ class _SendButton extends StatelessWidget {
     required this.busy,
     required this.onSend,
     required this.touch,
+    this.queued = false,
   });
+
+  /// Files picked on a phone and waiting to be uploaded by this press.
+  final bool queued;
 
   /// Board N2's 30px circle; a thumb's 48dp at touch density, where it is the
   /// only way to send — a soft keyboard's Enter is a new line.
@@ -1558,7 +1619,7 @@ class _SendButton extends StatelessWidget {
       builder: (context, value, _) {
         final ready =
             onSend != null &&
-            (value.text.trim().isNotEmpty || attachments.isNotEmpty);
+            (value.text.trim().isNotEmpty || attachments.isNotEmpty || queued);
         return IconButton.filled(
           // Named, because it is icon-only and Narrator reads the semantics
           // tree. The chord is in the label as the only place that says so.
