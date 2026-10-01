@@ -582,7 +582,7 @@ void _migrateToV61(Database db) {
 /// Each project check's output read as data — analyzer diagnostics or test
 /// results — so a later run of the same check can be compared with it. No
 /// foreign keys: a reading outlives the session and the run that made it.
-void _migrateToV65(Database db) {
+void _migrateToV62(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS check_results (
       id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -608,7 +608,7 @@ void _migrateToV65(Database db) {
 /// Screenshots filed against the checkpoint whose working tree they showed, so
 /// two checkpoints' pictures can be compared. The PNG is a file beside the
 /// store; a checkpoint's deletion takes its rows with it.
-void _migrateToV66(Database db) {
+void _migrateToV63(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS checkpoint_screenshots (
       id            TEXT PRIMARY KEY,
