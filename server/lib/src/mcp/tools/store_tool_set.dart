@@ -96,6 +96,8 @@ class StoreToolSet extends ServerToolSet {
     return <String, Object?>{
       'store': _storeName(kind),
       'label': kind.label,
+      if (reading != null)
+        'checkedAt': reading.checkedAt.toUtc().toIso8601String(),
       ...(state! as Map<String, Object?>),
     };
   }
@@ -114,12 +116,25 @@ class StoreToolSet extends ServerToolSet {
     ],
   };
 
+  /// When this app was itself read: a store that failed since keeps its
+  /// older reading, which the view's refreshedAt does not date.
+  Map<String, Object?> _readAge(StoreAppSnapshot? snapshot) {
+    final at = snapshot?.releases.checkedAt;
+    if (at == null) return const {};
+    final minutes = _clock().toUtc().difference(at.toUtc()).inMinutes;
+    return {
+      'readAt': at.toUtc().toIso8601String(),
+      'readMinutesAgo': minutes < 0 ? 0 : minutes,
+    };
+  }
+
   Map<String, Object?> _entrySummary(_Entry entry) {
     final snapshot = entry.snapshot;
     return <String, Object?>{
       'store': _storeName(entry.app.store),
       'id': entry.app.id,
       'name': entry.app.name,
+      ..._readAge(snapshot),
       'live': _field(snapshot?.releases, (_) {
         final live = snapshot!.live;
         return live == null
@@ -163,6 +178,7 @@ class StoreToolSet extends ServerToolSet {
       'store': _storeName(entry.app.store),
       'id': entry.app.id,
       'name': entry.app.name,
+      ..._readAge(snapshot),
       'releases': _field(snapshot?.releases, _byTrack),
       'rating': _field(snapshot?.rating, _rating),
       'vitals': _field(

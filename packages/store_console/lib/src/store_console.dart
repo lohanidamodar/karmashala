@@ -20,13 +20,18 @@ class StoreAppSnapshot {
   final Reading<VitalsSummary> vitals;
   final Reading<DownloadSeries> downloads;
 
-  /// What a user has: the first live or rolling-out release.
+  /// What a user has: the first live or rolling-out release, else a halted
+  /// one — a paused phased release is still on sale.
   StoreRelease? get live {
-    for (final release in releases.valueOrNull ?? const <StoreRelease>[]) {
+    final all = releases.valueOrNull ?? const <StoreRelease>[];
+    for (final release in all) {
       if (release.state == ReleaseState.live ||
           release.state == ReleaseState.rollingOut) {
         return release;
       }
+    }
+    for (final release in all) {
+      if (release.state == ReleaseState.halted) return release;
     }
     return null;
   }

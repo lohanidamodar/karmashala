@@ -71,20 +71,28 @@ class PlayStoreClient implements StoreClient {
   });
 
   @override
+  // Never through an edit: opening one invalidates an edit a release
+  // pipeline has open under the same service account.
   Future<List<StoreRelease>> releases(StoreApp app) => playGuarded(() async {
-    final edits = AndroidPublisherApi(await _auth.client()).edits;
-    final editId = (await edits.insert(AppEdit(), app.id)).id;
-    if (editId == null) throw playStatusFailure(null);
-    try {
-      final tracks = await edits.tracks.list(app.id, editId);
-      return releasesFromTracks(tracks.tracks ?? const []);
-    } finally {
-      try {
-        await edits.delete(app.id, editId);
-      } on Object {
-        // An edit left behind expires by itself.
-      }
-    }
+    final releases = AndroidPublisherApi(
+      await _auth.client(),
+    ).applications.tracks.releases;
+    final tracks = await Future.wait([
+      for (final track in playTracks)
+        releases
+            .list('applications/${app.id}/tracks/$track')
+            .then(
+              (response) =>
+                  releasesFromSummaries(track, response.releases ?? const []),
+            )
+            .catchError(
+              // A track the app has never used is not there to read.
+              (Object _) => const <StoreRelease>[],
+              test: (error) =>
+                  error is DetailedApiRequestError && error.status == 404,
+            ),
+    ]);
+    return [for (final track in tracks) ...track];
   });
 
   /// The API only returns reviews written or changed in the last week, and
@@ -121,8 +129,12 @@ class PlayStoreClient implements StoreClient {
     final crash = _vitals(reporting, app.id, VitalsMetric.crash);
     final anr = _vitals(reporting, app.id, VitalsMetric.anr);
     final (crashed, notResponding) = (await crash, await anr);
+    // A null rate means the store had too little data; a failed call must not
+    // be read as that, so it is said instead.
+    final failure = crashed.failure ?? notResponding.failure;
+    if (failure != null) throw failure;
     final window = crashed.window ?? notResponding.window;
-    if (window == null) throw crashed.failure ?? notResponding.failure!;
+    if (window == null) throw playStatusFailure(null);
     return VitalsSummary(
       from: window.from,
       to: window.to,

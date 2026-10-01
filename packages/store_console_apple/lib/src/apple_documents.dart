@@ -115,7 +115,18 @@ List<StoreRelease> parseVersions(JsonMap document) {
   // The endpoint has no sort of its own.
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   releases.sort((a, b) => (b.date ?? epoch).compareTo(a.date ?? epoch));
-  return releases.take(shownVersions).toList();
+  // Every platform's current and in-flight versions stay, however old; the
+  // limit trims history only.
+  bool current(StoreRelease release) =>
+      release.state == ReleaseState.live ||
+      release.state == ReleaseState.halted ||
+      release.state.inFlight ||
+      release.state.needsAttention;
+  final kept = releases.where(current).toList();
+  final history = releases.where((release) => !current(release));
+  final room = shownVersions - kept.length;
+  return [...kept, ...history.take(room < 0 ? 0 : room)]
+    ..sort((a, b) => (b.date ?? epoch).compareTo(a.date ?? epoch));
 }
 
 List<StoreRelease> parseBuilds(JsonMap document) {

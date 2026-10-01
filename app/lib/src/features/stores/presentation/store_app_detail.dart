@@ -321,7 +321,7 @@ class _DownloadsChart extends StatelessWidget {
     if (days.length < 2) {
       return Text(
         '${formatCompactCount(series.total)} ${series.unit.toLowerCase()} on '
-        '${formatDay(days.single.day)}.',
+        '${formatReportDay(days.single.day)}.',
         style: muted,
       );
     }
@@ -337,7 +337,7 @@ class _DownloadsChart extends StatelessWidget {
       color: theme.colorScheme.primary,
       semanticsLabel: '${series.unit} per day',
       valueLabel: (value) => formatCompactCount(value.round()),
-      timeLabel: formatDay,
+      timeLabel: formatReportDay,
     );
   }
 }

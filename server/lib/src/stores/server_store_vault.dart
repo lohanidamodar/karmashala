@@ -65,30 +65,38 @@ class ServerStoreVault {
   HeldAppleKey? get apple => _apple;
   HeldPlayAccount? get play => _play;
 
-  Future<void> setApple(HeldAppleKey held) => _change(() => _apple = held);
+  Future<void> setApple(HeldAppleKey held) =>
+      _change((_, play) => (held, play));
 
-  Future<void> setPlay(HeldPlayAccount held) => _change(() => _play = held);
+  Future<void> setPlay(HeldPlayAccount held) =>
+      _change((apple, _) => (apple, held));
 
-  Future<void> remove(StoreKind store) => _change(() {
-    switch (store) {
-      case StoreKind.appStore:
-        _apple = null;
-      case StoreKind.googlePlay:
-        _play = null;
-    }
-  });
+  Future<void> remove(StoreKind store) => _change(
+    (apple, play) => switch (store) {
+      StoreKind.appStore => (null, play),
+      StoreKind.googlePlay => (apple, null),
+    },
+  );
 
-  Future<void> _change(void Function() apply) async {
-    _refuseUnreadable();
-    final before = (_apple, _play);
-    apply();
-    try {
-      await _save();
-    } on Object {
-      _apple = before.$1;
-      _play = before.$2;
-      rethrow;
-    }
+  /// One change at a time, each worked out from the last one that reached
+  /// the disk and taken into memory only once it has, so two overlapping
+  /// imports can never leave memory and file disagreeing.
+  Future<void> _change(
+    (HeldAppleKey?, HeldPlayAccount?) Function(
+      HeldAppleKey? apple,
+      HeldPlayAccount? play,
+    )
+    next,
+  ) {
+    final done = _writes.then((_) async {
+      _refuseUnreadable();
+      final (apple, play) = next(_apple, _play);
+      await _write(_contents(apple, play));
+      _apple = apple;
+      _play = play;
+    });
+    _writes = done.catchError((Object _) {});
+    return done;
   }
 
   void _refuseUnreadable() {
@@ -132,26 +140,20 @@ class ServerStoreVault {
     }
   }
 
-  Future<void> _save() {
-    final apple = _apple;
-    final play = _play;
-    final contents = {
-      'version': _version,
-      if (apple != null)
-        'apple': {
-          'key': apple.key.encode(),
-          'importedAt': apple.importedAt.toUtc().toIso8601String(),
-        },
-      if (play != null)
-        'play': {
-          'account': play.account.encode(),
-          'importedAt': play.importedAt.toUtc().toIso8601String(),
-        },
-    };
-    final done = _writes.then((_) => _write(contents));
-    _writes = done.catchError((Object _) {});
-    return done;
-  }
+  Map<String, Object?> _contents(HeldAppleKey? apple, HeldPlayAccount? play) =>
+      {
+        'version': _version,
+        if (apple != null)
+          'apple': {
+            'key': apple.key.encode(),
+            'importedAt': apple.importedAt.toUtc().toIso8601String(),
+          },
+        if (play != null)
+          'play': {
+            'account': play.account.encode(),
+            'importedAt': play.importedAt.toUtc().toIso8601String(),
+          },
+      };
 
   Future<void> _write(Map<String, Object?> contents) async {
     try {

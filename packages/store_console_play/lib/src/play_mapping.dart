@@ -1,63 +1,50 @@
 import 'package:googleapis/androidpublisher/v3.dart';
 import 'package:store_console/store_console.dart';
 
-const List<String> _trackOrder = ['production', 'beta', 'alpha', 'internal'];
+/// The tracks read, in the order shown. The read-only releases API needs a
+/// track named, and listing custom tracks would take an edit.
+const List<String> playTracks = ['production', 'beta', 'alpha', 'internal'];
 
-int _trackRank(String track) {
-  final rank = _trackOrder.indexOf(track);
-  return rank < 0 ? _trackOrder.length : rank;
+/// One track's releases, newest build first. The summaries carry no rollout
+/// share and do not tell a halted rollout from a running one.
+List<StoreRelease> releasesFromSummaries(
+  String track,
+  List<ReleaseSummary> summaries,
+) {
+  final releases = [
+    for (final summary in summaries) releaseFromSummary(track, summary),
+  ];
+  int build(StoreRelease release) => int.tryParse(release.build ?? '') ?? -1;
+  return releases..sort((a, b) => build(b).compareTo(build(a)));
 }
 
-/// Every release on every track, production first, then open, closed,
-/// internal and custom tracks.
-List<StoreRelease> releasesFromTracks(List<Track> tracks) {
-  final ordered = [
-    for (final (index, track) in tracks.indexed) (index: index, track: track),
-  ];
-  ordered.sort((a, b) {
-    final byRank = _trackRank(
-      a.track.track ?? '',
-    ).compareTo(_trackRank(b.track.track ?? ''));
-    return byRank != 0 ? byRank : a.index.compareTo(b.index);
-  });
-  return [
-    for (final entry in ordered)
-      for (final release in entry.track.releases ?? const <TrackRelease>[])
-        releaseFromTrack(entry.track.track ?? '', release),
-  ];
-}
-
-StoreRelease releaseFromTrack(String track, TrackRelease release) {
-  final status = release.status ?? '';
-  final state = switch (status) {
-    'completed' =>
+StoreRelease releaseFromSummary(String track, ReleaseSummary summary) {
+  final raw = summary.releaseLifecycleState ?? '';
+  final state = switch (raw.replaceFirst('RELEASE_LIFECYCLE_STATE_', '')) {
+    'PUBLISHED' =>
       track == 'production' ? ReleaseState.live : ReleaseState.testing,
-    'inProgress' => ReleaseState.rollingOut,
-    'halted' => ReleaseState.halted,
-    'draft' => ReleaseState.draft,
+    'IN_REVIEW' => ReleaseState.inReview,
+    'APPROVED_NOT_PUBLISHED' => ReleaseState.pendingRelease,
+    'NOT_APPROVED' => ReleaseState.rejected,
+    'NOT_SENT_FOR_REVIEW' || 'DRAFT' => ReleaseState.draft,
     _ => ReleaseState.unknown,
   };
   return StoreRelease(
     track: track,
-    version: release.name ?? '',
-    build: _highest(release.versionCodes ?? const []),
+    version: summary.releaseName ?? '',
+    build: _highest([
+      for (final artifact
+          in summary.activeArtifacts ?? const <ArtifactSummary>[])
+        ?artifact.versionCode,
+    ]),
     state: state,
-    rawState: status,
-    rolloutFraction: state == ReleaseState.rollingOut
-        ? release.userFraction
-        : null,
+    rawState: raw,
   );
 }
 
-String? _highest(List<String> versionCodes) {
-  if (versionCodes.isEmpty) return null;
-  int? highest;
-  for (final code in versionCodes) {
-    final value = int.tryParse(code);
-    if (value != null && (highest == null || value > highest)) highest = value;
-  }
-  return highest?.toString() ?? versionCodes.last;
-}
+String? _highest(List<int> versionCodes) => versionCodes.isEmpty
+    ? null
+    : versionCodes.reduce((a, b) => a > b ? a : b).toString();
 
 /// Newest first. A review with no user comment is left out.
 List<StoreReview> reviewsFrom(List<Review> reviews) =>

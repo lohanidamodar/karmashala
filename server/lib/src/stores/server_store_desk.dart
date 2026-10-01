@@ -156,6 +156,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
 
   Future<StoresView> _run() async {
     _tell([StoresChanged(view)]);
+    // What a store said with a key since replaced is not written back.
+    final started = {for (final store in StoreKind.values) store: _gen(store)};
+    bool current(StoreKind store) => _gen(store) == started[store];
     try {
       final console = _consoleNow();
       final listed = await console.listApps();
@@ -165,13 +168,15 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       };
       final apps = [for (final reading in listed) ...?reading.apps.valueOrNull];
       for (final reading in listed) {
-        _stores[reading.store] = reading.apps;
+        if (current(reading.store)) _stores[reading.store] = reading.apps;
       }
       // An app a store no longer lists goes; one from a store that did not
       // answer stays as last read.
       _apps.removeWhere(
         (_, kept) =>
-            answered.contains(kept.app.store) && !apps.contains(kept.app),
+            current(kept.app.store) &&
+            answered.contains(kept.app.store) &&
+            !apps.contains(kept.app),
       );
 
       var done = 0;
@@ -180,7 +185,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         while (queue.moveNext()) {
           final app = queue.current;
           try {
-            _apps[app.key] = await console.snapshot(app);
+            final snapshot = await console.snapshot(app);
+            if (current(app.store)) _apps[app.key] = snapshot;
           } on Object {
             // A console closed under it: the app keeps what it had.
           }
@@ -253,7 +259,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     await _vault.setApple(
       HeldAppleKey(key, pem == null ? held!.importedAt : _now()),
     );
-    return _credentialChanged(newKeyFile: pem != null);
+    return _credentialChanged(StoreKind.appStore, newKeyFile: pem != null);
   }
 
   Future<StoresView> _setPlay(StorePlaySet request) async {
@@ -279,15 +285,30 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     await _vault.setPlay(
       HeldPlayAccount(account, json == null ? held!.importedAt : _now()),
     );
-    return _credentialChanged(newKeyFile: json != null);
+    return _credentialChanged(StoreKind.googlePlay, newKeyFile: json != null);
   }
 
-  StoresView _credentialChanged({required bool newKeyFile}) {
+  /// A new key file may be another account, so what the old one read goes
+  /// with it; a changed vendor number, bucket or package list keeps it.
+  Future<StoresView> _credentialChanged(
+    StoreKind store, {
+    required bool newKeyFile,
+  }) async {
     _dropConsole();
+    if (newKeyFile) {
+      _generation[store] = _gen(store) + 1;
+      _stores.remove(store);
+      _apps.removeWhere((_, kept) => kept.app.store == store);
+      await _persist();
+    }
     _tell([StoresChanged(view)]);
     if (newKeyFile) _refreshAfterRunning();
     return view;
   }
+
+  final _generation = <StoreKind, int>{};
+
+  int _gen(StoreKind store) => _generation[store] ?? 0;
 
   /// A refresh already under way used the old credential, so this one waits
   /// for it rather than joining it.
@@ -299,6 +320,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
 
   Future<StoresView> _remove(StoreKind store) async {
     await _vault.remove(store);
+    _generation[store] = _gen(store) + 1;
     _stores.remove(store);
     _apps.removeWhere((_, kept) => kept.app.store == store);
     _dropConsole();

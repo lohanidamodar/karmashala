@@ -4,100 +4,61 @@ import 'package:store_console_play/src/play_mapping.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('releasesFromTracks', () {
-    final tracks = TracksListResponse.fromJson({
-      'tracks': [
-        {
-          'track': 'internal',
-          'releases': [
-            {
-              'name': '2.1.0',
-              'status': 'completed',
-              'versionCodes': ['210', '211'],
-            },
+  group('releasesFromSummaries', () {
+    ReleaseSummary summary(String state, List<int> codes, {String? name}) =>
+        ReleaseSummary.fromJson({
+          'releaseName': ?name,
+          'releaseLifecycleState': 'RELEASE_LIFECYCLE_STATE_$state',
+          'activeArtifacts': [
+            for (final code in codes) {'versionCode': code},
           ],
-        },
-        {
-          'track': 'qa-team',
-          'releases': [
-            {'status': 'draft'},
-          ],
-        },
-        {
-          'track': 'production',
-          'releases': [
-            {
-              'name': '2.0.0',
-              'status': 'inProgress',
-              'userFraction': 0.2,
-              'versionCodes': ['200'],
-            },
-            {
-              'name': '1.9.0',
-              'status': 'completed',
-              'versionCodes': ['190'],
-            },
-          ],
-        },
-        {
-          'track': 'beta',
-          'releases': [
-            {
-              'name': '2.0.1',
-              'status': 'halted',
-              'userFraction': 0.5,
-              'versionCodes': ['201'],
-            },
-          ],
-        },
-        {
-          'track': 'alpha',
-          'releases': [
-            {'name': 'x', 'status': 'somethingNew'},
-          ],
-        },
-      ],
-    }).tracks!;
+        });
 
-    final releases = releasesFromTracks(tracks);
+    test('published is live on production, newest build first', () {
+      final releases = releasesFromSummaries('production', [
+        summary('PUBLISHED', [190], name: '1.9.0'),
+        summary('PUBLISHED', [200, 201], name: '2.0.0'),
+      ]);
+      expect([for (final r in releases) r.build], ['201', '190']);
+      expect(releases.first.state, ReleaseState.live);
+      expect(releases.first.version, '2.0.0');
+      expect(releases.first.rolloutFraction, isNull);
+    });
 
-    test('orders production, open, closed, internal, custom', () {
+    test('published elsewhere is testing', () {
       expect(
-        [for (final release in releases) release.track],
-        ['production', 'production', 'beta', 'alpha', 'internal', 'qa-team'],
+        releasesFromSummaries('internal', [
+          summary('PUBLISHED', [300]),
+        ]).single.state,
+        ReleaseState.testing,
       );
     });
 
-    test('a staged rollout carries its fraction', () {
-      expect(releases[0].state, ReleaseState.rollingOut);
-      expect(releases[0].rolloutFraction, 0.2);
-      expect(releases[0].rawState, 'inProgress');
-      expect(releases[0].version, '2.0.0');
-      expect(releases[0].build, '200');
-    });
-
-    test('completed is live on production and testing elsewhere', () {
-      expect(releases[1].state, ReleaseState.live);
-      expect(releases[1].rolloutFraction, isNull);
-      expect(releases[4].state, ReleaseState.testing);
-    });
-
-    test('the build is the highest version code', () {
-      expect(releases[4].build, '211');
-    });
-
-    test('halted, draft and unknown keep their own word', () {
-      expect(releases[2].state, ReleaseState.halted);
-      expect(releases[2].rolloutFraction, isNull);
-      expect(releases[3].state, ReleaseState.unknown);
-      expect(releases[3].rawState, 'somethingNew');
-      expect(releases[5].state, ReleaseState.draft);
-      expect(releases[5].version, '');
-      expect(releases[5].build, isNull);
-    });
-
-    test('a track with no releases adds nothing', () {
-      expect(releasesFromTracks([Track(track: 'production')]), isEmpty);
+    test('review states map, and the raw word is kept', () {
+      final states = [
+        for (final state in [
+          'IN_REVIEW',
+          'APPROVED_NOT_PUBLISHED',
+          'NOT_APPROVED',
+          'NOT_SENT_FOR_REVIEW',
+          'DRAFT',
+          'SOMETHING_NEW',
+        ])
+          releaseFromSummary('production', summary(state, const [])),
+      ];
+      expect(
+        [for (final r in states) r.state],
+        [
+          ReleaseState.inReview,
+          ReleaseState.pendingRelease,
+          ReleaseState.rejected,
+          ReleaseState.draft,
+          ReleaseState.draft,
+          ReleaseState.unknown,
+        ],
+      );
+      expect(states.last.rawState, 'RELEASE_LIFECYCLE_STATE_SOMETHING_NEW');
+      expect(states.last.build, isNull);
     });
   });
 

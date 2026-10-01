@@ -27,6 +27,15 @@ String formatDay(DateTime at) {
   return '${local.year}-$month-$day';
 }
 
+/// A report's calendar day, kept as UTC midnight: converting it to local
+/// time would show the day before anywhere west of UTC.
+String formatReportDay(DateTime day) {
+  final utc = day.toUtc();
+  final month = utc.month.toString().padLeft(2, '0');
+  final date = utc.day.toString().padLeft(2, '0');
+  return '${utc.year}-$month-$date';
+}
+
 /// `1.4.0 (212)`, the version alone, or the build alone when the store names
 /// only that.
 String formatVersion(StoreRelease release) {
