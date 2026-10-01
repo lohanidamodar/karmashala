@@ -134,7 +134,12 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
         Expanded(
           child: _body(document, kind: kind, playsHere: playsHere),
         ),
-        if (showsImage) _statusLine(bytes!, document.name),
+        if (showsImage)
+          _statusLine(bytes!, document.name)
+        else if (!image && document != null)
+          // Video and audio: what the file's stat said, when it said it.
+          if (document.stamp?.length case final length? when length > 0)
+            _strip(mediaStatusLine(byteCount: length, name: document.name)),
       ],
     );
   }
@@ -283,23 +288,30 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
 
   /// `1280×720 · 84 KB · PNG` — what a reader checks a screenshot for.
   Widget _statusLine(Uint8List bytes, String name) {
-    final theme = Theme.of(context);
     final decoded = _decoded;
     final size = decoded != null && identical(decoded.$1, bytes)
         ? decoded.$2
         : null;
+    return _strip(
+      mediaStatusLine(
+        width: size?.width.round(),
+        height: size?.height.round(),
+        byteCount: bytes.length,
+        name: name,
+      ),
+    );
+  }
+
+  /// The strip under a media file: its size and format, right-aligned.
+  Widget _strip(String text) {
+    final theme = Theme.of(context);
     return Container(
       height: Chrome.paneStrip,
       padding: const EdgeInsets.symmetric(horizontal: Insets.md),
       color: theme.colorScheme.surfaceContainerLow,
       alignment: Alignment.centerRight,
       child: Text(
-        mediaStatusLine(
-          width: size?.width.round(),
-          height: size?.height.round(),
-          byteCount: bytes.length,
-          name: name,
-        ),
+        text,
         style: MonoStyles.small.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
@@ -308,7 +320,8 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
   }
 }
 
-/// The image status line's text; the dimensions are left out until known.
+/// A media file's status line: dimensions (images, once decoded), size and
+/// format.
 String mediaStatusLine({
   int? width,
   int? height,
@@ -320,14 +333,17 @@ String mediaStatusLine({
   ?imageFormatOf(name),
 ].join(' · ');
 
-/// `512 B`, `84 KB`, `3.2 MB`.
+/// `512 B`, `84 KB`, `3.2 MB`, `1.4 GB`.
 String formatByteSize(int bytes) {
+  const mb = 1024 * 1024;
   if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  if (bytes < mb) return '${(bytes / 1024).round()} KB';
+  if (bytes < 1024 * mb) return '${(bytes / mb).toStringAsFixed(1)} MB';
+  return '${(bytes / (1024 * mb)).toStringAsFixed(1)} GB';
 }
 
-/// The format a file's extension names, as it is usually written.
+/// The format a file's extension names, as it is usually written: `PNG`,
+/// `JPEG`, `MP4`, `MP3`.
 String? imageFormatOf(String name) {
   final dot = name.lastIndexOf('.');
   if (dot <= 0 || dot == name.length - 1) return null;
