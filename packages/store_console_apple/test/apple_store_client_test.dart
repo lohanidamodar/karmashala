@@ -545,6 +545,102 @@ void main() {
     });
   });
 
+  group('all-time downloads', () {
+    const header =
+        'Provider\tSKU\tProduct Type Identifier\tUnits\tApple Identifier';
+    String report(int units) =>
+        '$header\nAPPLE\tsku\t1F\t$units\t${testApp.id}\n'
+        'APPLE\tsku\t7F\t99\t${testApp.id}\n';
+    http.Response absent() => jsonResponse({
+      'errors': [
+        {'status': '404', 'detail': 'There were no sales for the date.'},
+      ],
+    }, status: 404);
+
+    test('without a vendor number it is not configured', () async {
+      final client = clientWith((_) async => jsonResponse({}));
+      await expectLater(
+        client.allTimeInstalls(testApp),
+        storeFailure(StoreFailure.notConfigured),
+      );
+    });
+
+    test('years, then this year\'s months and days, each once', () async {
+      final asked = <String>[];
+      Future<http.Response> handler(http.Request request) async {
+        final query = request.url.queryParameters;
+        final frequency = query['filter[frequency]']!;
+        final date = query['filter[reportDate]']!;
+        asked.add('$frequency $date');
+        final units = switch ((frequency, date)) {
+          ('YEARLY', '2025') => 100,
+          ('YEARLY', '2024') => 50,
+          ('YEARLY', _) => null,
+          ('MONTHLY', _) => 10,
+          ('DAILY', '2026-09-29') => null,
+          ('DAILY', _) => 1,
+          _ => null,
+        };
+        if (units == null) return absent();
+        return http.Response.bytes(
+          gzip.encode(utf8.encode(report(units))),
+          200,
+        );
+      }
+
+      final ledger = AppleSalesLedger();
+      final client = AppleStoreClient(
+        testKey(vendorNumber: '85000000'),
+        httpClient: MockClient(handler),
+        now: () => fixedNow,
+        salesLedger: ledger,
+      );
+      final total = await client.allTimeInstalls(testApp);
+
+      expect(total.count, 100 + 50 + 8 * 10 + 28);
+      expect(total.measure, 'first-time downloads');
+      expect(total.since, '2024');
+      expect(total.through, DateTime.utc(2026, 9, 28));
+      expect(asked.where((a) => a.startsWith('YEARLY')), [
+        'YEARLY 2025',
+        'YEARLY 2024',
+        'YEARLY 2023',
+      ]);
+      expect(asked.where((a) => a.startsWith('MONTHLY')), hasLength(8));
+      expect(asked.where((a) => a.startsWith('DAILY')), hasLength(29));
+
+      // A later client with the same ledger fetches nothing finished again.
+      asked.clear();
+      final again = AppleStoreClient(
+        testKey(vendorNumber: '85000000'),
+        httpClient: MockClient(handler),
+        now: () => fixedNow,
+        salesLedger: AppleSalesLedger.fromJson(
+          (jsonDecode(jsonEncode(ledger.toJson())) as Map)
+              .cast<String, Object?>(),
+        ),
+      );
+      expect((await again.allTimeInstalls(testApp)).count, total.count);
+      expect(asked, isEmpty);
+    });
+
+    test('no reports at all is said, not zero', () async {
+      final client = clientWith(
+        vendorNumber: '85000000',
+        (_) async => absent(),
+        now: () => DateTime.utc(2026, 1, 2),
+      );
+      await expectLater(
+        client.allTimeInstalls(testApp),
+        throwsA(
+          isA<StoreException>()
+              .having((e) => e.kind, 'kind', StoreFailure.notSupported)
+              .having((e) => e.message, 'message', 'No sales reports yet.'),
+        ),
+      );
+    });
+  });
+
   group('errors', () {
     test('401 is an auth failure that does not quote the token', () async {
       String? token;
