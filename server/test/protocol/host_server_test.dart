@@ -164,6 +164,31 @@ void main() {
     await serving;
   });
 
+  test('stopNow is answered without hello, then starts the shutdown', () async {
+    final env = build();
+    var asked = 0;
+    env.server.onStopRequested = () => asked++;
+    final client = PipeConnection();
+    final serving = env.server.serveConnection(client);
+    await client.send(const StopNowMessage(9));
+
+    final answer = client.only<StopCheckAnswerMessage>();
+    expect(answer.requestId, 9);
+    expect(answer.pid, pid);
+    expect(asked, 1);
+    await serving;
+  });
+
+  test('stopNow is refused by a host that cannot be asked to stop', () async {
+    final env = build();
+    final client = PipeConnection();
+    final serving = env.server.serveConnection(client);
+    await client.send(const StopNowMessage(9));
+
+    expect(client.only<ErrorMessage>().code, ProtocolErrorCode.badRequest);
+    await serving;
+  });
+
   test(
     'welcome reports the host, its pty library and when it looked',
     () async {

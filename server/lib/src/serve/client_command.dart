@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataChanges, DataEnvelope, DataReply, DataRequest;
 import 'package:karmashala_host_protocol/protocol.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import '../pty/process_alive.dart';
 import 'package:karmashala_host_protocol/host_paths.dart';
 
@@ -13,7 +14,7 @@ import 'package:karmashala_host_protocol/host_paths.dart';
 class HostClient {
   HostClient._(this._socket, this._messages);
 
-  final Socket _socket;
+  final OrderlySocket _socket;
   final Stream<HostMessage> _messages;
 
   /// What the host said about itself on the handshake. Its pid comes from here
@@ -21,11 +22,8 @@ class HostClient {
   /// nobody else can read.
   late final WelcomeMessage welcome;
 
-  /// Null when nothing is listening — the caller says so in its own words.
-  static Future<HostClient?> connect(
-    String socketPath, {
-    Duration answerWithin = const Duration(seconds: 10),
-  }) async {
+  /// Null when nothing is listening at [socketPath].
+  static Future<HostClient?> _dial(String socketPath) async {
     final Socket socket;
     try {
       socket = await Socket.connect(
@@ -35,19 +33,29 @@ class HostClient {
     } on SocketException {
       return null;
     }
+    final orderly = OrderlySocket(socket);
     final parser = FrameParser();
-    final messages = socket
+    final messages = orderly.stream
         .expand((chunk) => parser.add(chunk))
         .map(decodeMessage)
         .asBroadcastStream();
-    final client = HostClient._(socket, messages);
+    return HostClient._(orderly, messages);
+  }
+
+  /// Null when nothing is listening — the caller says so in its own words.
+  static Future<HostClient?> connect(
+    String socketPath, {
+    Duration answerWithin = const Duration(seconds: 10),
+  }) async {
+    final client = await _dial(socketPath);
+    if (client == null) return null;
     client._send(const HelloMessage(requestId: 1, clientId: 'karmashala-cli'));
     try {
       client.welcome = await client._expect<WelcomeMessage>(
         within: answerWithin,
       );
     } on HostClientRefusal {
-      socket.destroy();
+      await client.close();
       rethrow;
     }
     return client;
@@ -59,28 +67,30 @@ class HostClient {
   static Future<StopCheckAnswerMessage?> stopCheck(
     String socketPath, {
     Duration answerWithin = const Duration(seconds: 10),
-  }) async {
-    final Socket socket;
-    try {
-      socket = await Socket.connect(
-        InternetAddress(socketPath, type: InternetAddressType.unix),
-        0,
-      );
-    } on SocketException {
-      return null;
-    }
-    final parser = FrameParser();
-    final messages = socket
-        .expand((chunk) => parser.add(chunk))
-        .map(decodeMessage)
-        .asBroadcastStream();
-    final client = HostClient._(socket, messages);
+  }) => _askOnce(socketPath, const StopCheckMessage(1), answerWithin);
+
+  /// Asks the host to shut itself down, closing its clients in order first
+  /// (`stopNow`, docs/daemon-architecture.md). Null when nothing is
+  /// listening; throws [HostClientRefusal] when it refuses — as a host from
+  /// before `stopNow` does.
+  static Future<StopCheckAnswerMessage?> stopNow(
+    String socketPath, {
+    Duration answerWithin = const Duration(seconds: 10),
+  }) => _askOnce(socketPath, const StopNowMessage(1), answerWithin);
+
+  static Future<StopCheckAnswerMessage?> _askOnce(
+    String socketPath,
+    HostMessage question,
+    Duration answerWithin,
+  ) async {
+    final client = await _dial(socketPath);
+    if (client == null) return null;
     final answer = client._expect<StopCheckAnswerMessage>(within: answerWithin);
-    client._send(const StopCheckMessage(1));
+    client._send(question);
     try {
       return await answer;
     } finally {
-      socket.destroy();
+      await client.close();
     }
   }
 
@@ -221,7 +231,9 @@ class HostClient {
             DataEnvelope.readChanges((message as DataChangesMessage).envelope),
       );
 
-  Future<void> close() async => _socket.destroy();
+  /// Awaited by every command: on Windows it is the ordered close, and the
+  /// process exits soon after.
+  Future<void> close() => _socket.release();
 }
 
 class HostClientRefusal implements Exception {
@@ -305,6 +317,8 @@ Future<int> runStop(
   Map<String, String>? environment,
   Duration grace = const Duration(seconds: 5),
   Duration answerWithin = const Duration(seconds: 10),
+  Duration orderlyWithin = const Duration(seconds: 15),
+  bool? askToStop,
 }) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
@@ -348,6 +362,22 @@ Future<int> runStop(
     );
     return 5;
   }
+  // On Windows a signal is TerminateProcess: the host would go with a unix
+  // socket's disconnect still pending, which bugchecks the machine
+  // (orderly_close.dart). So it is asked first, and closes its clients in
+  // order itself; the kill below is for a host that predates the question.
+  if ((askToStop ?? Platform.isWindows) && answer != null) {
+    final stopped = await _askToStop(
+      resolved.socketPath,
+      pid,
+      answerWithin: answerWithin,
+      within: orderlyWithin,
+    );
+    if (stopped) {
+      sink.writeln('stopped pid $pid');
+      return 0;
+    }
+  }
   // An interactive shell ignores SIGTERM and so, under load, does the host;
   // the escalation is the same one `HostSession.terminate` makes.
   Process.killPid(pid);
@@ -367,6 +397,31 @@ Future<int> runStop(
   }
   sink.writeln('stopped pid $pid (it ignored the first signal)');
   return 0;
+}
+
+/// Whether the host at [socketPath] agreed to stop and [pid] then went
+/// within [within]. False for a host that refused, as one from before
+/// `stopNow` does, so the caller falls back to the signal.
+Future<bool> _askToStop(
+  String socketPath,
+  int pid, {
+  required Duration answerWithin,
+  required Duration within,
+}) async {
+  try {
+    if (await HostClient.stopNow(socketPath, answerWithin: answerWithin) ==
+        null) {
+      return !processIsAlive(pid);
+    }
+  } on HostClientRefusal {
+    return false;
+  }
+  final deadline = DateTime.now().add(within);
+  while (DateTime.now().isBefore(deadline)) {
+    if (!processIsAlive(pid)) return true;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  return false;
 }
 
 int? _lockPid(String lockPath) {

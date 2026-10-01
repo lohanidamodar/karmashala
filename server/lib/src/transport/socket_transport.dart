@@ -2,26 +2,29 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
+
 import 'transport.dart';
 
 /// A client on a unix domain socket. The host's own listener today; the same
 /// class serves the local stage unchanged (see transport.dart).
 class SocketHostConnection implements HostConnection {
-  SocketHostConnection(this._socket, this.description)
-    // A write to a peer that has gone fails later, on the socket's `done`,
-    // not in [add]: handled here once, so a client that hangs up while its
-    // last frames are queued (an exit sent after the final byte) is the read
-    // loop's to notice, never an uncaught error in the host.
-    : _done = _socket.done.then<void>((_) {}, onError: (Object _) {});
+  SocketHostConnection(Socket socket, this.description)
+    : _socket = OrderlySocket(socket),
+      // A write to a peer that has gone fails later, on the socket's `done`,
+      // not in [add]: handled here once, so a client that hangs up while its
+      // last frames are queued (an exit sent after the final byte) is the read
+      // loop's to notice, never an uncaught error in the host.
+      _done = socket.done.then<void>((_) {}, onError: (Object _) {});
 
-  final Socket _socket;
+  final OrderlySocket _socket;
   final Future<void> _done;
 
   @override
   final String description;
 
   @override
-  Stream<Uint8List> get incoming => _socket;
+  Stream<Uint8List> get incoming => _socket.stream;
 
   @override
   void add(Uint8List bytes) => _socket.add(bytes);
@@ -29,17 +32,10 @@ class SocketHostConnection implements HostConnection {
   @override
   Future<void> flush() => _socket.flush();
 
+  /// Half-closes, then closes — in order on Windows, so neither side is left
+  /// with a disconnect pending (orderly_close.dart).
   @override
-  Future<void> close() async {
-    try {
-      await _socket.close();
-    } on SocketException {
-      // The peer hung up first; there is nothing left to close politely.
-    }
-    // close() only half-closes, and a client waiting for end-of-file on a
-    // refusal would sit there until something else timed it out.
-    _socket.destroy();
-  }
+  Future<void> close() => _socket.close();
 
   @override
   Future<void> get done => _done;

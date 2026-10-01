@@ -120,7 +120,11 @@ enum MessageType {
   // protocol: `karmashala_host stop` must reach a host of any version
   // (`stop_messages.dart`). Everything above belongs below 0xf0.
   stopCheck(0xf0),
-  stopCheckAnswer(0xf1);
+  stopCheckAnswer(0xf1),
+  // 2026-10-01: `stop` on Windows asks rather than kills, so the host closes
+  // its unix sockets in order before it exits. A host that predates it
+  // refuses the unknown type, and `stop` falls back to the signal.
+  stopNow(0xf2);
 
   const MessageType(this.code);
   final int code;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_host_protocol/host_paths.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 
 /// A byte proxy between stdio and the host's socket, deliberately nothing more:
 /// because it parses nothing, a protocol change needs no change here.
@@ -19,11 +20,13 @@ Future<int> runAttach(
     paths: paths,
     environment: environment,
   );
-  final Socket socket;
+  final OrderlySocket socket;
   try {
-    socket = await Socket.connect(
-      InternetAddress(resolved.socketPath, type: InternetAddressType.unix),
-      0,
+    socket = OrderlySocket(
+      await Socket.connect(
+        InternetAddress(resolved.socketPath, type: InternetAddressType.unix),
+        0,
+      ),
     );
   } on SocketException catch (e) {
     // A distinct code, so the deployer can tell "no host running" from
@@ -41,7 +44,7 @@ Future<int> runAttach(
     if (!done.isCompleted) done.complete(code);
   }
 
-  final fromHost = socket.listen(
+  final fromHost = socket.stream.listen(
     stdoutSink.add,
     onDone: () => finish(0),
     onError: (Object _) => finish(6),
@@ -51,7 +54,7 @@ Future<int> runAttach(
     socket.add,
     // Our end going away must close the socket, or the host holds a half-open
     // channel instead of observing the disconnect.
-    onDone: () => unawaited(socket.close()),
+    onDone: () => unawaited(socket.shutdownSend().catchError((Object _) {})),
     onError: (Object _) => finish(6),
     cancelOnError: true,
   );
@@ -59,7 +62,8 @@ Future<int> runAttach(
   final code = await done.future;
   await toHost.cancel();
   await fromHost.cancel();
-  socket.destroy();
+  // Awaited: `exitAfterSocketsSettle` follows at once.
+  await socket.release();
   // Bounded: a stdout whose reader died with its SSH channel never flushes.
   await stdoutSink
       .flush()

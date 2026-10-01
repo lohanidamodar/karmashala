@@ -71,6 +71,9 @@ class HostServer {
   /// Answers every client's data requests; null refuses them (no store).
   DataService? data;
 
+  /// Begins `serve`'s own shutdown, for `stopNow`; null refuses it.
+  void Function()? onStopRequested;
+
   /// The SSH boxes this server reaches (slice 5d): a client attaching to a
   /// session there is relayed through them. Null reaches none.
   BoxRelay? boxes;
@@ -381,7 +384,13 @@ class _ClientSession implements BoxRelayPeer {
 
     // Before hello and whatever the client's protocol: a `stop` from any
     // version must be able to ask (docs/daemon-architecture.md).
-    if (message is StopCheckMessage) {
+    if (message is StopCheckMessage || message is StopNowMessage) {
+      final requestId = switch (message) {
+        StopCheckMessage(:final requestId) => requestId,
+        StopNowMessage(:final requestId) => requestId,
+        _ => 0,
+      };
+      final stopping = message is StopNowMessage;
       if (_trust.remote) {
         _send(
           const ErrorMessage(
@@ -394,9 +403,21 @@ class _ClientSession implements BoxRelayPeer {
         _hungUp = true;
         return;
       }
+      final stop = _server.onStopRequested;
+      if (stopping && stop == null) {
+        _send(
+          const ErrorMessage(
+            0,
+            ProtocolErrorCode.badRequest,
+            'this host cannot be asked to stop',
+          ),
+        );
+        _hungUp = true;
+        return;
+      }
       _send(
         StopCheckAnswerMessage(
-          requestId: message.requestId,
+          requestId: requestId,
           protocolVersion: kProtocolVersion,
           pid: pid,
           runningSessions: _server.registry
@@ -406,6 +427,7 @@ class _ClientSession implements BoxRelayPeer {
         ),
       );
       _hungUp = true;
+      if (stopping) stop!();
       return;
     }
 
