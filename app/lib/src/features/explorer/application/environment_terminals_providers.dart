@@ -57,7 +57,11 @@ final panesByEnvironmentProvider =
             .add(
               EnvironmentTerminal(
                 id: paneId,
-                label: instance.title,
+                // What the tab strip calls it, by the same precedence: an
+                // agent pane follows its session's current name, a shell its
+                // OSC title or directory. `instance.title` is only the name
+                // the pane launched with, so a renamed session stayed stale.
+                label: controller.titleForPane(paneId),
                 running: instance.liveness.value.isLive,
                 paneId: paneId,
               ),
