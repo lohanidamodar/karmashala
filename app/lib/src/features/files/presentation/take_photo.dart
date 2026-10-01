@@ -5,27 +5,31 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala_ui/picking.dart' show TakePhoto;
+import 'package:karmashala_ui/picking.dart' show DevicePhotos;
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/app_settings.dart';
 
 final _log = AppLogger.named('camera');
 
-/// "Take a photo" for an attach, or null where [Capabilities.takesPhotos]
-/// says no. Read per attach, like the pick server.
-TakePhoto? photoTakerFor(BuildContext context, WidgetRef ref) {
+/// "Photos" and "Take a photo" for an attach, or null where
+/// [Capabilities.takesPhotos] says no. Read per attach, like the pick server.
+DevicePhotos? devicePhotosFor(BuildContext context, WidgetRef ref) {
   if (!ref.read(capabilitiesProvider).takesPhotos) return null;
-  return () => _takePhoto(context);
+  return DevicePhotos(
+    take: () => _photo(context, ImageSource.camera),
+    choose: () => _photo(context, ImageSource.gallery),
+  );
 }
 
-/// The system camera app, through `image_picker`: 2048 px on the long edge
-/// at quality 85 (Stage 3, answer 8), and never saved to the gallery.
-Future<XFile?> _takePhoto(BuildContext context) async {
+/// The system camera app, or the system photo picker, through
+/// `image_picker`: 2048 px on the long edge at quality 85 (Stage 3, answer
+/// 8); a photo taken is never saved to the gallery.
+Future<XFile?> _photo(BuildContext context, ImageSource source) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     return await ImagePicker().pickImage(
-      source: ImageSource.camera,
+      source: source,
       maxWidth: 2048,
       maxHeight: 2048,
       imageQuality: 85,

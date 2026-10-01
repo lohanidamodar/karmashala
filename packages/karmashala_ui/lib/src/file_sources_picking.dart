@@ -27,12 +27,23 @@ enum FileSources {
 }
 
 /// The one place a pick came from, and what [pickFileFrom] remembers.
-/// [camera] is a device file too, taken just now.
-enum FileSource { server, device, camera }
+/// [camera] and [gallery] are device files too: one taken just now, one
+/// chosen from the device's photos.
+enum FileSource { server, device, camera, gallery }
 
-/// Takes a photo with this device's camera; null when none was taken. The
-/// app's to give: this package knows no camera plugin.
+/// Takes a photo with this device's camera, or chooses one from its photos;
+/// null when none was given. The app's to give: this package knows no camera
+/// plugin.
 typedef TakePhoto = Future<XFile?> Function();
+
+/// A phone's own photos, offered beside its files: [take] opens the camera,
+/// [choose] the system photo picker (the gallery).
+final class DevicePhotos {
+  const DevicePhotos({required this.take, required this.choose});
+
+  final TakePhoto take;
+  final TakePhoto choose;
+}
 
 /// What [pickFileFrom] answers.
 sealed class PickedFile {
@@ -144,8 +155,8 @@ void forgetLastFileSources() => _lastSource.clear();
 /// On the server's own machine there is one disk and no choice: today's
 /// picker, answering a [DevicePick] for `device` and a [ServerPick] otherwise.
 ///
-/// [takePhoto] adds "Take a photo" to the choice of [FileSources.both]; its
-/// photo is a [DevicePick].
+/// [photos] adds "Photos" and "Take a photo" to the choice of
+/// [FileSources.both]; either photo is a [DevicePick].
 Future<PickedFile?> pickFileFrom(
   BuildContext context, {
   required String what,
@@ -154,7 +165,7 @@ Future<PickedFile?> pickFileFrom(
   String? purpose,
   String? startNear,
   List<XTypeGroup> acceptedTypeGroups = const [],
-  TakePhoto? takePhoto,
+  DevicePhotos? photos,
 }) async {
   if (server.onThisMachine) {
     final file = await pickOneFile(
@@ -189,7 +200,7 @@ Future<PickedFile?> pickFileFrom(
         what: what,
         server: server,
         last: _lastSource[key],
-        camera: takePhoto != null,
+        photos: photos != null,
       );
       if (chosen == null) return null;
       _lastSource[key] = chosen;
@@ -206,7 +217,10 @@ Future<PickedFile?> pickFileFrom(
       );
       return file == null ? null : DevicePick(file);
     case FileSource.camera:
-      final photo = await takePhoto?.call();
+      final photo = await photos?.take();
+      return photo == null ? null : DevicePick(photo);
+    case FileSource.gallery:
+      final photo = await photos?.choose();
       return photo == null ? null : DevicePick(photo);
     case FileSource.server:
       final file = await pickOneFile(
@@ -397,12 +411,7 @@ class _AdaptivePanel extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Insets.lg,
-          0,
-          Insets.lg,
-          Insets.lg,
-        ),
+        padding: const EdgeInsets.fromLTRB(Insets.lg, 0, Insets.lg, Insets.lg),
         child: FocusRevealGroup(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -433,7 +442,7 @@ Future<FileSource?> _askSource(
   required String what,
   required PickServer server,
   FileSource? last,
-  bool camera = false,
+  bool photos = false,
 }) => _showAdaptive<FileSource>(
   context,
   builder: (context) => _AdaptivePanel(
@@ -454,7 +463,8 @@ Future<FileSource?> _askSource(
           autofocus:
               last == null ||
               last == FileSource.device ||
-              (last == FileSource.camera && !camera),
+              ((last == FileSource.camera || last == FileSource.gallery) &&
+                  !photos),
           onTap: () => Navigator.of(context).pop(FileSource.device),
         ),
         const SizedBox(height: Insets.xs),
@@ -466,7 +476,16 @@ Future<FileSource?> _askSource(
           autofocus: last == FileSource.server,
           onTap: () => Navigator.of(context).pop(FileSource.server),
         ),
-        if (camera) ...[
+        if (photos) ...[
+          const SizedBox(height: Insets.xs),
+          _SourceRow(
+            icon: AppIcons.image,
+            title: 'Photos',
+            detail: 'From the gallery; sent to ${server.name} once chosen',
+            last: last == FileSource.gallery,
+            autofocus: last == FileSource.gallery,
+            onTap: () => Navigator.of(context).pop(FileSource.gallery),
+          ),
           const SizedBox(height: Insets.xs),
           _SourceRow(
             icon: AppIcons.camera,

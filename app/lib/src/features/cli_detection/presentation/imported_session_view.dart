@@ -181,7 +181,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                   // Attachments go where the session's agent runs.
                   server: () =>
                       ref.read(pickServerProvider(session.environmentId)),
-                  camera: () => photoTakerFor(context, ref),
+                  camera: () => devicePhotosFor(context, ref),
                   onSend: (text) => ref
                       .read(sessionActionsProvider)
                       .resumeAndSend(session, text),

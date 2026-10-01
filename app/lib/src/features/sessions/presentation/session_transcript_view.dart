@@ -707,7 +707,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           attaches: caps.mayAttach,
-          camera: () => photoTakerFor(context, ref),
+          camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,
           hintText:
               refusal ??

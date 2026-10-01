@@ -202,10 +202,10 @@ class MessageComposer extends StatefulWidget {
   /// "This device" or its own files to attach, and is sent its own paths.
   final PickServer Function()? server;
 
-  /// Read when attach opens at touch density; a [TakePhoto] adds "Take a
-  /// photo", uploaded like any device file. Null, or answering null, offers
-  /// no camera.
-  final TakePhoto? Function()? camera;
+  /// Read when attach opens at touch density; [DevicePhotos] add "Photos"
+  /// (the gallery) and "Take a photo", uploaded like any device file. Null,
+  /// or answering null, offers neither.
+  final DevicePhotos? Function()? camera;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -534,7 +534,7 @@ class _MessageComposerState extends State<MessageComposer> {
         sources: FileSources.both,
         server: server,
         purpose: 'composer attachment',
-        takePhoto: widget.camera?.call(),
+        photos: widget.camera?.call(),
       );
       if (pick == null || !mounted) return;
       final image = _looksLikeImage(pick.name);
