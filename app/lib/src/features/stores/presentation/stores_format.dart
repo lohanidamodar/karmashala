@@ -65,6 +65,16 @@ String storePageUrl(StoreApp app) => switch (app.store) {
     'https://play.google.com/store/apps/details?id=${app.id}',
 };
 
+/// Play Console for a Google Play app, or null for the App Store, whose
+/// [storePageUrl] is already its console. Not the app's own page: a console
+/// deep link needs the developer account and Play's internal app id, and no
+/// API this reads gives the app id — the old `apps/publish/?package=` link
+/// drops the package (checked 2026-10-01). The app list is one click away.
+String? storeConsoleUrl(StoreApp app) => switch (app.store) {
+  StoreKind.appStore => null,
+  StoreKind.googlePlay => 'https://play.google.com/console/u/0/developers',
+};
+
 String storePageLabel(StoreKind store) => switch (store) {
   StoreKind.appStore => 'Open in App Store Connect',
   StoreKind.googlePlay => 'Open the Play listing',

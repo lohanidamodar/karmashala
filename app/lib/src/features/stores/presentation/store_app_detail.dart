@@ -152,6 +152,15 @@ class _EntryDetail extends ConsumerWidget {
                 ),
                 label: Text(storePageLabel(app.store)),
               ),
+              if (storeConsoleUrl(app) case final console?)
+                TextButton.icon(
+                  onPressed: () => ref.read(openExternalUrlProvider)(console),
+                  icon: const Icon(
+                    AppIcons.arrowSquareOut,
+                    size: Chrome.iconAction,
+                  ),
+                  label: const Text('Open Play Console'),
+                ),
             ],
           ),
           const SizedBox(height: Insets.sm),
