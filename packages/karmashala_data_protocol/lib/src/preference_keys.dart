@@ -20,6 +20,9 @@ abstract final class PreferenceKeys {
     // server's own record. Its setting stays a client preference.
     WorktreeCleanupKeys.log,
     WorktreeCleanupKeys.lastSweep,
+    // Pinned folders: written through `quickAccess.*`, which keeps them in
+    // one order for every client.
+    QuickAccessKeys.pins,
   };
 
   /// Domains whose keys their own store writes (worktree setup) — not a
@@ -54,6 +57,12 @@ abstract final class WorktreeCleanupKeys {
   static const String settings = 'worktree_cleanup.settings.v1';
   static const String log = 'worktree_cleanup.log.v1';
   static const String lastSweep = 'worktree_cleanup.last_sweep.v1';
+}
+
+/// Where the server keeps the quick-access pins: one JSON list, small enough
+/// that a table of its own would buy nothing.
+abstract final class QuickAccessKeys {
+  static const String pins = 'files.quick_access.v1';
 }
 
 /// A client's preferences as its code reads them: at once, from the copy the

@@ -33,6 +33,7 @@ import 'hosts_handler.dart';
 import 'notes_handler.dart';
 import 'pairings_handler.dart';
 import 'preferences_handler.dart';
+import 'quick_access_handler.dart';
 import 'snippets_handler.dart';
 import 'ssh_work.dart';
 import 'data_streams.dart';
@@ -71,6 +72,7 @@ class DataService {
     );
     _worktrees = WorktreesHandler(database, _now);
     _snippets = SnippetsHandler(database, _now);
+    _quickAccess = QuickAccessHandler(database);
     _pairings = PairingsHandler(database);
     _sessions = SessionsHandler(database, _now, runs: runsSession);
     _hosts = HostsHandler(database, _now, opens: opens);
@@ -177,6 +179,7 @@ class DataService {
   checkpointWork;
   late final WorktreesHandler _worktrees;
   late final SnippetsHandler _snippets;
+  late final QuickAccessHandler _quickAccess;
   late final PairingsHandler _pairings;
   late final WorkspaceHandler _workspace;
   late final SessionsHandler _sessions;
@@ -541,6 +544,7 @@ class DataService {
           final ReviewThreadReply r => _worktrees.reply(r, changes),
           final ReviewThreadSetStatus r => _worktrees.setStatus(r, changes),
         },
+        final QuickAccessRequest r => _quickAccess.handle(r, changes),
         final SnippetsRequest r => switch (r) {
           SnippetsList() => _snippets.list(),
           final SnippetAdd r => _snippets.add(r, changes),
@@ -951,6 +955,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       ...?_service.browserWork?.greeting(),
       ...?_service.terminalWork?.greeting(),
       ...?_service.attentionWork?.greeting(),
+      ..._service._quickAccess.greeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
     if (greeting.isNotEmpty) {
@@ -965,8 +970,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// secured: the env vault's writes, SSH hosts and known hosts, and agent
 /// account deletes. Everything else is allowed on purpose — sessions,
 /// transcripts, terminals, files (uploads, write, delete, move, mkdir),
-/// projects, notes, todos, snippets, preferences, git, checks, Flutter and
-/// the browser. Admin and SSH prompts are refused by `LinkTrust`, not here.
+/// projects, notes, todos, snippets, preferences, quick-access pins, git,
+/// checks, Flutter and the browser. Admin and SSH prompts are refused by `LinkTrust`, not here.
 ///
 /// Then by the pairing's [grants] (Stage 3 step 3), in the companion's words:
 /// `send_prompt` — [SessionSend], [SessionInterrupt]; `start_session` —
