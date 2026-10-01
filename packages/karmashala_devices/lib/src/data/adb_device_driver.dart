@@ -358,6 +358,14 @@ class AdbDeviceDriver implements DeviceDriver {
     await adb.removePath(_serial, path, recursive: recursive);
   }
 
+  @override
+  Future<void> makeDirectory(String path) async {
+    if (await adb.statPath(_serial, path) != null) {
+      throw DeviceRefusal('There is already something at $path on $_serial.');
+    }
+    await adb.makeDirectory(_serial, path);
+  }
+
   String _overwriteRefusal(String path, DeviceFileEntry existing) =>
       '$path already exists on $_serial'
       '${existing.sizeBytes == null ? '' : ' (${existing.sizeBytes} bytes'

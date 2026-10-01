@@ -356,4 +356,7 @@ class SimulatorDeviceDriver implements DeviceDriver {
   @override
   Future<void> deletePath(String path, {bool recursive = false}) async =>
       _noFiles();
+
+  @override
+  Future<void> makeDirectory(String path) async => _noFiles();
 }
