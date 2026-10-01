@@ -3,8 +3,9 @@ import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
-/// One process as the OS lists it.
-typedef ProcessRow = ({int pid, int parent, String name});
+/// One process as the OS lists it. [created] orders processes when the OS says
+/// (Windows FILETIME); null when it does not.
+typedef ProcessRow = ({int pid, int parent, String name, int? created});
 
 /// One listening TCP socket and the process holding it.
 typedef ListeningSocket = ({int port, int pid, String address});
@@ -18,7 +19,7 @@ typedef PaneRoot = ({
   String? agentSessionId,
 });
 
-/// What one combined probe printed: `P <pid> <ppid> <name>` and
+/// What one combined probe printed: `P <pid> <ppid> <created> <name>` and
 /// `L <port> <pid> <address>` lines, the shape [windowsProbeScript] prints.
 ({List<ProcessRow> processes, List<ListeningSocket> sockets}) parseProbeLines(
   String output,
@@ -31,11 +32,17 @@ typedef PaneRoot = ({
     final a = int.tryParse(parts[1]);
     final b = int.tryParse(parts[2]);
     if (a == null || b == null) continue;
-    final rest = parts.length > 3 ? parts.sublist(3).join(' ') : '';
     switch (parts[0]) {
       case 'P':
-        processes.add((pid: a, parent: b, name: rest));
+        final created = parts.length > 3 ? int.tryParse(parts[3]) : null;
+        processes.add((
+          pid: a,
+          parent: b,
+          name: parts.length > 4 ? parts.sublist(4).join(' ') : '',
+          created: created == null || created <= 0 ? null : created,
+        ));
       case 'L':
+        final rest = parts.length > 3 ? parts.sublist(3).join(' ') : '';
         sockets.add((port: a, pid: b, address: rest));
     }
   }
@@ -50,6 +57,7 @@ List<ProcessRow> parsePs(String output) => [
         pid: int.parse(m.group(1)!),
         parent: int.parse(m.group(2)!),
         name: m.group(3)!.trim().split('/').last,
+        created: null,
       ),
 ];
 
@@ -95,11 +103,20 @@ List<ListeningSocket> parseSs(String output) {
   return sockets;
 }
 
-/// Each pid under [roots] (a root included), mapped to its root's pid.
+/// Each pid under [roots] (a root included), mapped to its root's pid. A
+/// process created before its "parent" is an orphan whose parent pid Windows
+/// has since reused, so it is not that parent's child.
 Map<int, int> descendantsOf(Iterable<int> roots, List<ProcessRow> processes) {
+  final createdOf = {for (final row in processes) row.pid: row.created};
   final children = <int, List<int>>{};
   for (final row in processes) {
     if (row.pid == row.parent) continue;
+    final parentCreated = createdOf[row.parent];
+    if (row.created != null &&
+        parentCreated != null &&
+        row.created! < parentCreated) {
+      continue;
+    }
     (children[row.parent] ??= []).add(row.pid);
   }
   final owner = <int, int>{};
@@ -117,10 +134,13 @@ Map<int, int> descendantsOf(Iterable<int> roots, List<ProcessRow> processes) {
 
 /// One PowerShell spawn for both lists: `Get-NetTCPConnection` rather than
 /// `netstat`, whose state column is translated on a non-English Windows.
+/// Creation time as a FILETIME number, which no locale formats.
 const String windowsProbeScript =
     r"$ErrorActionPreference='SilentlyContinue';"
     r'Get-CimInstance Win32_Process | ForEach-Object '
-    r'{ "P $($_.ProcessId) $($_.ParentProcessId) $($_.Name)" };'
+    r'{ $c = if ($_.CreationDate) { $_.CreationDate.ToFileTimeUtc() } '
+    r'else { 0 }; '
+    r'"P $($_.ProcessId) $($_.ParentProcessId) $c $($_.Name)" };'
     r'Get-NetTCPConnection -State Listen | ForEach-Object '
     r'{ "L $($_.LocalPort) $($_.OwningProcess) $($_.LocalAddress)" }';
 
@@ -145,10 +165,26 @@ class ListeningPortProbe {
 
   static const Duration timeout = Duration(seconds: 15);
 
+  /// [Process.run] with a timeout that kills the probe rather than orphaning
+  /// it. None of the probes starts a child of its own — CIM answers from
+  /// WmiPrvSE, not under powershell — so killing the one process is the tree.
   static Future<ProcessResult> _runQuietly(
     String executable,
     List<String> arguments,
-  ) => Process.run(executable, arguments).timeout(timeout);
+  ) async {
+    final process = await Process.start(executable, arguments);
+    final out = process.stdout.transform(systemEncoding.decoder).join();
+    final err = process.stderr.transform(systemEncoding.decoder).join();
+    try {
+      final code = await process.exitCode.timeout(timeout);
+      return ProcessResult(process.pid, code, await out, await err);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      out.ignore();
+      err.ignore();
+      rethrow;
+    }
+  }
 
   /// The ports under [roots]; a pane in [unreadPanes] is named as not looked
   /// at, and a probe that fails is said rather than read as "none".
@@ -179,8 +215,14 @@ class ListeningPortProbe {
     ], processes);
     final byRoot = {for (final root in roots) root.pid: root};
     final names = {for (final row in processes) row.pid: row.name};
+    // A pane that is, or has started, wsl.exe: its Linux side's sockets are
+    // not under any Windows process here, so "none" would be a guess.
+    final inWsl = {
+      for (final MapEntry(key: pid, value: root) in owners.entries)
+        if (names[pid]?.toLowerCase() == 'wsl.exe') root,
+    };
     for (final root in roots) {
-      if (names[root.pid]?.toLowerCase() == 'wsl.exe') {
+      if (inWsl.contains(root.pid)) {
         unread.add(
           '"${root.title}" runs in WSL; what listens inside it is not '
           'Windows\' to attribute.',
