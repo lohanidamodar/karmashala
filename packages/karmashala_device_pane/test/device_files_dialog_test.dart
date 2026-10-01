@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -161,6 +162,13 @@ Future<void> _drag(
   await tester.pumpAndSettle();
 }
 
+/// Opens [name]'s row menu with a right-click: at pointer density the `⋮` is
+/// drawn only while the row is hovered.
+Future<void> _openMenu(WidgetTester tester, String name) async {
+  await tester.tap(find.text(name), buttons: kSecondaryButton);
+  await tester.pumpAndSettle();
+}
+
 /// The device command lines that changed something.
 List<String> _writes(FakeCommandRunner runner) => runner.requests
     .map((request) => request.arguments.last)
@@ -189,8 +197,7 @@ void main() {
     final runner = _runner();
     await _pump(tester, runner: runner, host: FakeHostClipboard());
 
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Cut on the device'));
     await tester.pumpAndSettle();
 
@@ -213,8 +220,7 @@ void main() {
     final runner = _runner();
     await _pump(tester, runner: runner, host: FakeHostClipboard());
 
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Copy on the device'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Download'));
@@ -232,8 +238,7 @@ void main() {
     final runner = _runner();
     await _pump(tester, runner: runner, host: FakeHostClipboard());
 
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Copy on the device'));
     await tester.pumpAndSettle();
     await _nextMessage(tester);
@@ -262,8 +267,7 @@ void main() {
     final runner = _runner();
     await _pump(tester, runner: runner, host: FakeHostClipboard());
 
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Copy on the device'));
     await tester.pumpAndSettle();
 
@@ -279,8 +283,7 @@ void main() {
     final made = <String>[];
     await _pump(tester, runner: _runner(), host: host, directoriesMade: made);
 
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Copy for this computer'));
     await tester.pumpAndSettle();
 
@@ -295,8 +298,7 @@ void main() {
     tester,
   ) async {
     await _pump(tester, runner: _runner(), host: FakeHostClipboard());
-    await tester.tap(find.byKey(const Key('device-file-menu-Download')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'Download');
     expect(find.text('Copy for this computer'), findsNothing);
     expect(find.text('Copy on the device'), findsOneWidget);
   });
@@ -338,8 +340,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(InlineSpinner), findsNothing);
+    // In place of the rows, in the device's words: never an empty folder.
+    expect(
+      find.textContaining('/sdcard/Download could not be read'),
+      findsOneWidget,
+    );
     expect(find.textContaining('adb could not be run'), findsOneWidget);
-    expect(find.textContaining('Not permitted'), findsOneWidget);
     // The Up button is live again: the dialog is not wedged.
     runner.throwError = null;
     await tester.tap(find.byKey(const Key('device-files-up')));
@@ -352,8 +358,7 @@ void main() {
   ) async {
     final runner = _runner();
     await _pump(tester, runner: runner, host: FakeHostClipboard());
-    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
-    await tester.pumpAndSettle();
+    await _openMenu(tester, 'a.txt');
     await tester.tap(find.text('Cut on the device'));
     await tester.pumpAndSettle();
     await _nextMessage(tester);

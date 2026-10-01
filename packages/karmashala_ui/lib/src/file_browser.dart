@@ -149,6 +149,10 @@ typedef DirectoryExists = Future<bool> Function(String path);
 /// case this exists for: it must cost a sentence, never the window.
 const Duration kListingPatience = Duration(seconds: 10);
 
+/// How long a shortcut's folder may take to answer before it is left out — a
+/// filesystem probe's patience, not motion.
+const Duration kPlaceProbePatience = Duration(milliseconds: 400);
+
 /// Shows the browser and returns the chosen path, or null when dismissed.
 ///
 /// [directories] picks a folder — the confirm button then names wherever the

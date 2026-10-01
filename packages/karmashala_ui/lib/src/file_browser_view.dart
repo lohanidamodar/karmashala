@@ -1023,7 +1023,6 @@ class _PinTile extends StatelessWidget {
       onLongPressStart: (details) => menu(details.globalPosition),
       child: Tooltip(
         message: pin.path,
-        waitDuration: const Duration(milliseconds: 600),
         child: ListTile(
           dense: true,
           selected: selected,

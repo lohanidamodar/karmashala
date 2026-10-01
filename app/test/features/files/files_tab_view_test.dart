@@ -59,11 +59,13 @@ void main() {
   late ProviderContainer container;
   late FakeDataServer server;
 
+  // Local POSIX is labelled by its name; `environmentLabel` calls every
+  // Windows-native environment "Windows", so two would share one label.
   ExecutionEnvironment environment(String id, String name) =>
       ExecutionEnvironment(
         id: id,
         name: name,
-        kind: EnvironmentKind.windowsNative,
+        kind: EnvironmentKind.localPosix,
         createdAt: DateTime.utc(2026, 9, 20),
       );
 

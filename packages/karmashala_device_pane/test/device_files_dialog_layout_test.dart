@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_cli/process.dart';
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,7 +112,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(_name), findsOneWidget);
-      await tester.tap(find.byKey(const Key('device-file-menu-$_name')));
+      // A right-click opens the row's menu: the `⋮` waits for a hover.
+      await tester.tap(find.text(_name), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Copy on the device'));
       await tester.pumpAndSettle();

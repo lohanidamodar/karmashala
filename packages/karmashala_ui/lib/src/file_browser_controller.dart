@@ -178,6 +178,9 @@ class FileBrowserController extends ChangeNotifier {
     final source = _source;
     final start = _startAt;
     if (start != null && start.isNotEmpty) {
+      // Loading from the first frame, or the resolve's round trip draws an
+      // empty folder. Unannounced: this runs from an `initState`.
+      _loading = true;
       await _open(await _resolved(start));
       if (_error != null && source != null && !source.local) {
         await _openHomeOf(source);
@@ -551,7 +554,7 @@ Future<List<BrowsePlace>> localShortcuts(
     for (final place in candidates)
       exists(
         place.path,
-      ).timeout(const Duration(milliseconds: 400), onTimeout: () => false),
+      ).timeout(kPlaceProbePatience, onTimeout: () => false),
   ]);
   return [
     for (var i = 0; i < candidates.length; i++)
