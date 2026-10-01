@@ -2,10 +2,17 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show StoreAppIcon;
 import 'package:store_console/store_console.dart';
 
+import 'store_attention.dart';
+
 /// One app on one store, with what was read about it — null until it has
 /// been read.
 class StoreEntry {
-  const StoreEntry(this.app, this.snapshot, {this.icon});
+  const StoreEntry(
+    this.app,
+    this.snapshot, {
+    this.icon,
+    this.signals = const [],
+  });
 
   final StoreApp app;
   final StoreAppSnapshot? snapshot;
@@ -13,13 +20,13 @@ class StoreEntry {
   /// Its icon as the server keeps it; null when never looked up.
   final StoreAppIcon? icon;
 
+  /// What this store has to say about the app, loudest first.
+  final List<StoreSignal> signals;
+
   /// The release that most wants looking at: one somebody must act on, else
   /// one on its way.
   StoreRelease? get pending {
     final pending = snapshot?.pending ?? const <StoreRelease>[];
-    for (final release in pending) {
-      if (release.state.needsAttention) return release;
-    }
     return pending.isEmpty ? null : pending.first;
   }
 }
@@ -92,21 +99,55 @@ class StoreAppGroup {
     return null;
   }
 
-  bool get needsAttention =>
-      entries.any((entry) => entry.pending?.state.needsAttention ?? false);
+  /// Every store's signals, loudest first.
+  List<StoreSignal> get signals =>
+      [for (final entry in entries) ...entry.signals]
+        ..sort((a, b) => a.tone.index.compareTo(b.tone.index));
 
-  bool get inFlight =>
-      entries.any((entry) => entry.pending?.state.inFlight ?? false);
+  /// The loudest tone among [signals]; null when there is nothing to say.
+  StoreTone? get tone {
+    final all = signals;
+    return all.isEmpty ? null : all.first.tone;
+  }
+
+  bool get needsAttention => tone == StoreTone.attention;
+
+  bool get inFlight => entries.any(
+    (entry) => entry.signals.any(
+      (signal) => signal is ReleaseSignal && signal.release.state.inFlight,
+    ),
+  );
+
+  /// Reviews written in the week before they were read, on every store.
+  int get newReviewCount => [
+    for (final entry in entries)
+      for (final signal in entry.signals)
+        if (signal is NewReviewsSignal) signal.count,
+  ].fold(0, (sum, count) => sum + count);
+
+  /// When this app was last read: the oldest of its stores' readings, or
+  /// null when one has not been read.
+  DateTime? get readAt {
+    DateTime? oldest;
+    for (final entry in entries) {
+      final at = entry.snapshot?.releases.checkedAt;
+      if (at == null) return null;
+      if (oldest == null || at.isBefore(oldest)) oldest = at;
+    }
+    return oldest;
+  }
 }
 
 /// [apps] as one group per app as [combineStoreApps] — the agent tools'
 /// grouping too — combines them, [links] first: those needing attention
-/// first, then those with a release in flight, then by name.
+/// first, then those with a release in flight, then by name. [storeWide]
+/// holds the failures said once per store, kept off each app's signals.
 List<StoreAppGroup> groupStoreApps(
   Iterable<StoreApp> apps,
   Map<StoreApp, StoreAppSnapshot> snapshots, {
   Map<String, StoreAppIcon> icons = const {},
   Iterable<StoreAppLink> links = const [],
+  Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
 }) {
   int rank(StoreAppGroup group) => group.needsAttention
       ? 0
@@ -120,7 +161,18 @@ List<StoreAppGroup> groupStoreApps(
         combined: combination.combined,
         entries: [
           for (final app in combination.apps)
-            StoreEntry(app, snapshots[app], icon: icons[app.key]),
+            StoreEntry(
+              app,
+              snapshots[app],
+              icon: icons[app.key],
+              signals: switch (snapshots[app]) {
+                final snapshot? => storeSignals(
+                  snapshot,
+                  storeWide: storeWide[app.store] ?? const {},
+                ),
+                null => const [],
+              },
+            ),
         ],
       ),
   ]..sort((a, b) {
@@ -140,6 +192,7 @@ List<StoreAppGroup> groupStoreView(
   List<StoreAppSnapshot> apps, {
   Map<String, StoreAppIcon> icons = const {},
   Iterable<StoreAppLink> links = const [],
+  Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
 }) => groupStoreApps(
   [
     for (final reading in stores.values) ...?reading.valueOrNull,
@@ -148,4 +201,5 @@ List<StoreAppGroup> groupStoreView(
   {for (final snapshot in apps) snapshot.app: snapshot},
   icons: icons,
   links: links,
+  storeWide: storeWide,
 );

@@ -3,6 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../../core/data/data_providers.dart';
+import 'store_attention.dart';
 import 'store_groups.dart';
 
 /// A view older than this is read again when the tab opens.
@@ -36,11 +37,17 @@ class StoresState {
   DateTime? get refreshedAt => view.refreshedAt;
   bool get refreshing => asking || view.refreshing;
 
+  /// The failures every app of a store shares, said once above the apps.
+  List<StoreWideMissing> get storeWide => storeWideMissing(view.apps);
+
+  /// Every app, loudest first. Built afresh on each read: read it once a
+  /// build.
   List<StoreAppGroup> get groups => groupStoreView(
     view.stores,
     view.apps,
     icons: view.icons,
     links: view.links,
+    storeWide: storeWideByArea(storeWide),
   );
 
   StoresState copyWith({

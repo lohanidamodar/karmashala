@@ -148,21 +148,25 @@ void main() {
       await pump(tester, size: size, state: populated());
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Updated 12 min ago'), findsOneWidget);
+      expect(find.text('Updated 12 min ago · 2 listings'), findsOneWidget);
       expect(find.text('Google Play is not connected.'), findsOneWidget);
       expect(find.byType(StoreGroupCard), findsNWidgets(2));
-      // In review sorts before the settled app.
+      // In review sorts before the settled app, under its own heading.
       expect(
         tester.getTopLeft(find.text('Notes')).dy,
         lessThanOrEqualTo(tester.getTopLeft(find.text('Tasks')).dy),
       );
+      expect(find.text('IN PROGRESS · 1'), findsOneWidget);
       expect(find.text('2.3.0'), findsOneWidget);
-      expect(find.text('In review'), findsOneWidget);
-      expect(find.text('4.6 ★ (1.2k)'), findsOneWidget);
-      // A rating the store did not give is a dash with its reason, not a zero.
-      expect(find.text('Rating —'), findsOneWidget);
+      expect(find.text('2.4.0 · In review'), findsOneWidget);
+      expect(find.text('4.6'), findsOneWidget);
+      // A rating the store did not give is said with its reason, not a zero.
+      expect(find.text('Rating unavailable'), findsOneWidget);
       expect(
-        find.byTooltip('Rating: The App Store could not be reached.'),
+        find.byTooltip(
+          'App Store: rating could not be read. The App Store could not be '
+          'reached.',
+        ),
         findsOneWidget,
       );
     });

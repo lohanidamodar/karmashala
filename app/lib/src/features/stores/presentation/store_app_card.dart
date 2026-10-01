@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
+import '../../../core/util/clock_provider.dart';
+import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import 'store_app_icon.dart';
+import 'store_badges.dart';
 import 'stores_format.dart';
 
-/// One app on the dashboard: its name, and a row per store it is on.
-class StoreGroupCard extends StatelessWidget {
+/// An app read this much before the newest read is said to be older: its
+/// store did not answer the last refresh.
+const Duration _staleBehind = Duration(minutes: 5);
+
+/// One app on the overview: its icon and name, a line per store with what is
+/// live and how it is rated, and under each the things that want a look.
+/// A coloured edge says the loudest of them at a glance.
+class StoreGroupCard extends ConsumerWidget {
   const StoreGroupCard({
     required this.group,
     required this.onTap,
     this.selected = false,
+    this.refreshedAt,
     super.key,
   });
 
@@ -22,10 +32,27 @@ class StoreGroupCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool selected;
 
+  /// The newest read of the stores, so a card read before it can say so.
+  final DateTime? refreshedAt;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final semantic = SemanticColors.of(context);
+    final edge = switch (group.signals.firstOrNull) {
+      final ReleaseSignal signal => signalColor(context, signal),
+      final StoreSignal signal when signal.tone == StoreTone.attention =>
+        signalColor(context, signal),
+      _ => null,
+    };
+    final readAt = group.readAt;
+    final newest = refreshedAt;
+    final stale =
+        readAt != null &&
+        newest != null &&
+        newest.difference(readAt) > _staleBehind;
+    final now = ref.watch(clockProvider).nowUtc();
     return Semantics(
       button: true,
       selected: selected,
@@ -42,69 +69,53 @@ class StoreGroupCard extends StatelessWidget {
         ),
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(Insets.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+          child: Stack(
+            children: [
+              if (edge != null)
+                PositionedDirectional(
+                  start: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 3,
+                  child: ColoredBox(color: edge),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(Insets.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    StoreAppIconView(
-                      icon: group.icon,
-                      name: group.name,
-                      size: StoreAppIconView.listSize(context),
-                    ),
-                    const SizedBox(width: Insets.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+                    _Heading(group: group),
+                    const SizedBox(height: Insets.md),
+                    for (final (i, entry) in group.entries.indexed) ...[
+                      if (i > 0) const SizedBox(height: Insets.sm),
+                      StoreEntryRow(entry: entry),
+                    ],
+                    if (stale) ...[
+                      const SizedBox(height: Insets.sm),
+                      Row(
                         children: [
-                          Text(
-                            group.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
+                          Icon(
+                            AppIcons.clockCounterClockwise,
+                            size: Chrome.iconAction,
+                            color: semantic.neutral,
                           ),
-                          // Combined by hand: both ids, after a link mark.
-                          Row(
-                            children: [
-                              if (group.combinedManually) ...[
-                                Tooltip(
-                                  message: 'Combined manually',
-                                  child: Icon(
-                                    AppIcons.linkSimple,
-                                    size: Chrome.iconAction,
-                                    color: scheme.onSurfaceVariant,
-                                    semanticLabel: 'Combined manually',
-                                  ),
-                                ),
-                                const SizedBox(width: Insets.xs),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  group.bundleIds.join(' · '),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                                ),
+                          const SizedBox(width: Insets.xs),
+                          Expanded(
+                            child: Text(
+                              'As read ${formatDataAge(now.difference(readAt))}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
                               ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
+                    ],
                   ],
                 ),
-                for (final entry in group.entries) ...[
-                  const SizedBox(height: Insets.md),
-                  StoreEntryRow(entry: entry),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -112,12 +123,80 @@ class StoreGroupCard extends StatelessWidget {
   }
 }
 
-/// One store's line on a card: what is live, what is pending, the rating and
-/// the downloads.
+class _Heading extends StatelessWidget {
+  const _Heading({required this.group});
+
+  final StoreAppGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      children: [
+        StoreAppIconView(
+          icon: group.icon,
+          name: group.name,
+          size: StoreAppIconView.listSize(context),
+        ),
+        const SizedBox(width: Insets.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                group.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  if (group.combinedManually) ...[
+                    Tooltip(
+                      message: 'Combined manually',
+                      child: Icon(
+                        AppIcons.linkSimple,
+                        size: Chrome.iconAction,
+                        color: scheme.onSurfaceVariant,
+                        semanticLabel: 'Combined manually',
+                      ),
+                    ),
+                    const SizedBox(width: Insets.xs),
+                  ],
+                  Expanded(
+                    child: Text(
+                      group.bundleIds.join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One store's line on a card: the store, what is live, its downloads and
+/// rating; and under it what that store has to say.
 class StoreEntryRow extends StatelessWidget {
   const StoreEntryRow({required this.entry, super.key});
 
   final StoreEntry entry;
+
+  /// Wide enough for "App Store" at 1x text, so versions line up.
+  static const double storeColumn = 72;
 
   @override
   Widget build(BuildContext context) {
@@ -127,56 +206,68 @@ class StoreEntryRow extends StatelessWidget {
       color: scheme.onSurfaceVariant,
     );
     final snapshot = entry.snapshot;
+    final rating = snapshot?.rating.valueOrNull;
+    final downloads = snapshot?.downloads.valueOrNull;
+    final scaler = MediaQuery.textScalerOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           children: [
-            Expanded(
+            SizedBox(
+              width: scaler.scale(storeColumn),
               child: Text(
-                entry.app.store.label,
+                storeShortLabel(entry.app.store),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-            const SizedBox(width: Insets.sm),
-            if (snapshot == null)
-              Text('Not read yet', style: muted)
-            else
-              _LiveVersion(snapshot: snapshot),
+            Expanded(
+              child: snapshot == null
+                  ? Text('Not read yet', style: muted)
+                  : _LiveVersion(snapshot: snapshot),
+            ),
+            if (downloads != null && downloads.days.length > 1) ...[
+              const SizedBox(width: Insets.sm),
+              _Downloads(series: downloads),
+            ],
+            if (rating != null) ...[
+              const SizedBox(width: Insets.md),
+              RatingFigure(rating: rating),
+            ],
           ],
         ),
-        if (snapshot != null) ...[
-          const SizedBox(height: Insets.xs),
-          Wrap(
-            spacing: Insets.md,
-            runSpacing: Insets.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (entry.pending case final release?)
-                ReleaseStateLabel(release: release),
-              switch (snapshot.rating) {
-                ReadingValue(:final value) => Text(
-                  formatRating(value),
-                  style: theme.textTheme.bodySmall,
-                ),
-                ReadingMissing(:final message) => MissingDash(
-                  what: 'Rating',
-                  reason: message,
-                ),
-              },
-              switch (snapshot.downloads) {
-                ReadingValue(:final value) => _Downloads(series: value),
-                ReadingMissing(:final message) => MissingDash(
-                  what: 'Downloads',
-                  reason: message,
-                ),
-              },
-            ],
+        if (entry.signals.isNotEmpty)
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: scaler.scale(storeColumn),
+              top: Insets.xs,
+            ),
+            child: Wrap(
+              spacing: Insets.xs,
+              runSpacing: Insets.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final signal in entry.signals) ...[
+                  SignalPill(signal: signal),
+                  if (signal case ReleaseSignal(
+                    release: StoreRelease(rolloutFraction: final fraction?),
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Insets.xs,
+                        vertical: Insets.sm,
+                      ),
+                      child: RolloutBar(fraction: fraction, width: 40),
+                    ),
+                ],
+              ],
+            ),
           ),
-        ],
       ],
     );
   }
@@ -190,17 +281,48 @@ class _LiveVersion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final releases = snapshot.releases;
-    if (releases is ReadingMissing<List<StoreRelease>>) {
-      return MissingDash(what: 'Live version', reason: releases.message);
+    final scheme = theme.colorScheme;
+    final style = theme.textTheme.bodySmall?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    if (snapshot.releases is ReadingMissing<List<StoreRelease>>) {
+      return Text(
+        'Releases unread',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style?.copyWith(color: scheme.onSurfaceVariant),
+      );
     }
     final live = snapshot.live;
-    return Text(
-      live == null ? 'Not live' : formatVersion(live),
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: live == null ? theme.colorScheme.onSurfaceVariant : null,
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
+    if (live == null) {
+      return Text(
+        'Not live',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style?.copyWith(color: scheme.onSurfaceVariant),
+      );
+    }
+    return Row(
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: SemanticColors.of(context).idle,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: Insets.xs),
+        Flexible(
+          child: Text(
+            formatVersion(live),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style?.copyWith(fontWeight: FontWeight.w500),
+            semanticsLabel: 'Live ${formatVersion(live)}',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -211,138 +333,89 @@ class _Downloads extends StatelessWidget {
   final DownloadSeries series;
 
   /// Wide enough to show fourteen days as a shape, narrow enough for a card.
-  static const sparklineWidth = 56.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (series.days.isEmpty) {
-      return Text(
-        'No ${series.unit.toLowerCase()} reported yet',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Sparkline(
-          values: [for (final day in series.days) day.count.toDouble()],
-          color: theme.colorScheme.primary,
-          width: sparklineWidth,
-          semanticsLabel: '${series.unit} per day',
-        ),
-        const SizedBox(width: Insets.xs),
-        Text(
-          '${formatCompactCount(series.total)} in 14 d',
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A release's state as a dot and its words: the attention colour when
-/// somebody has to act, the working colour while it is on its way.
-class ReleaseStateLabel extends StatelessWidget {
-  const ReleaseStateLabel({required this.release, super.key});
-
-  final StoreRelease release;
-
-  @override
-  Widget build(BuildContext context) {
-    final semantic = SemanticColors.of(context);
-    final state = release.state;
-    final (color, meaning) = state.needsAttention
-        ? (semantic.attention, 'Needs attention')
-        : state.inFlight
-        ? (semantic.working, 'In progress')
-        : (semantic.neutral, 'Settled');
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        StatusDot(color: color, label: meaning),
-        const SizedBox(width: Insets.xs),
-        Flexible(
-          child: Text(
-            formatReleaseState(release),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A reading the store did not give: a muted dash with the reason on hover.
-/// Never a zero, never a guess (PROJECT.md §19).
-class MissingDash extends StatelessWidget {
-  const MissingDash({required this.what, required this.reason, super.key});
-
-  final String what;
-  final String reason;
+  static const sparklineWidth = 44.0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Tooltip(
-      message: '$what: $reason',
-      child: Semantics(
-        label: '$what not available. $reason',
-        child: ExcludeSemantics(
-          child: Text(
-            '$what —',
+      message:
+          '${formatCompactCount(series.total)} ${series.unit.toLowerCase()} '
+          'over the last ${series.days.length} reported days',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Sparkline(
+            values: [for (final day in series.days) day.count.toDouble()],
+            color: theme.colorScheme.primary,
+            width: sparklineWidth,
+            semanticsLabel: '${series.unit} per day',
+          ),
+          const SizedBox(width: Insets.xs),
+          Text(
+            formatCompactCount(series.total),
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-/// A missing reading said inline in the detail: quietly when it is the
-/// store's or the setup's doing, in the warning tone when it is a fault.
-class MissingReadingLine extends StatelessWidget {
-  const MissingReadingLine({
-    required this.what,
-    required this.reading,
-    super.key,
-  });
-
-  final String what;
-  final ReadingMissing<Object?> reading;
+/// A card's shape while the stores are read for the first time, so the
+/// overview fills in place rather than jumping.
+class StoreCardSkeleton extends StatelessWidget {
+  const StoreCardSkeleton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final text = '$what — ${reading.message}';
-    if (reading.expected) {
-      return Text(
-        text,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
+    final scheme = Theme.of(context).colorScheme;
+    Widget bar(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+    );
+    final icon = StoreAppIconView.listSize(context);
+    return ExcludeSemantics(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(Radii.md),
+          border: Border.all(color: scheme.outlineVariant),
         ),
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          AppIcons.warning,
-          size: Chrome.iconSmall,
-          color: SemanticColors.of(context).attention,
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  bar(icon, icon),
+                  const SizedBox(width: Insets.md),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      bar(140, 12),
+                      const SizedBox(height: Insets.xs),
+                      bar(96, 10),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: Insets.md),
+              bar(180, 10),
+              const SizedBox(height: Insets.sm),
+              bar(120, 10),
+            ],
+          ),
         ),
-        const SizedBox(width: Insets.xs),
-        Expanded(child: Text(text, style: theme.textTheme.bodySmall)),
-      ],
+      ),
     );
   }
 }

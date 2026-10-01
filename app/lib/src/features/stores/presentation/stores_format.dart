@@ -19,6 +19,19 @@ String formatRating(RatingSummary rating) {
 /// A fraction of daily users as a percentage: `0.0123` is `1.23%`.
 String formatRate(double fraction) => '${(fraction * 100).toStringAsFixed(2)}%';
 
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// The local day of [at] as people say it: `30 Sep`, with the year when it
+/// is not [now]'s.
+String formatShortDay(DateTime at, DateTime now) {
+  final local = at.toLocal();
+  final day = '${local.day} ${_months[local.month - 1]}';
+  return local.year == now.toLocal().year ? day : '$day ${local.year}';
+}
+
 /// The local calendar day of [at], `2026-09-30`.
 String formatDay(DateTime at) {
   final local = at.toLocal();
@@ -44,13 +57,51 @@ String formatVersion(StoreRelease release) {
   return build == null ? release.version : '${release.version} ($build)';
 }
 
-/// `Rolling out 20%`, `In review`.
+/// `Rolling out 20%`, `In review`; a rollout whose share the store does not
+/// say (Google Play's read-only API) is a `Staged rollout`.
 String formatReleaseState(StoreRelease release) {
   final fraction = release.rolloutFraction;
-  return fraction == null
-      ? release.state.label
-      : '${release.state.label} ${(fraction * 100).round()}%';
+  if (fraction != null) {
+    return '${release.state.label} ${(fraction * 100).round()}%';
+  }
+  if (release.state == ReleaseState.rollingOut &&
+      !release.track.startsWith('App Store')) {
+    return 'Staged rollout';
+  }
+  return release.state.label;
 }
+
+/// A track as the store's console names it: Play's `beta` is Open testing.
+String formatTrack(String track) => switch (track) {
+  'production' => 'Production',
+  'beta' => 'Open testing',
+  'alpha' => 'Closed testing',
+  'internal' => 'Internal testing',
+  _ => track,
+};
+
+/// Whether [track] is where the public gets the app, not a test track.
+bool isPublicTrack(String track) =>
+    track == 'production' || track.startsWith('App Store');
+
+/// A rating's change as a signed figure: `+0.1`, `−0.2`, `±0.0`.
+String formatRatingChange(double change) {
+  final rounded = (change * 10).round() / 10;
+  if (rounded == 0) return '±0.0';
+  return rounded > 0
+      ? '+${rounded.toStringAsFixed(1)}'
+      : '−${(-rounded).toStringAsFixed(1)}';
+}
+
+/// One store's way out of Karmashala for [app]: a label and its address.
+typedef StoreLink = ({String label, String url});
+
+/// Where [app] can be looked at outside Karmashala, console first.
+List<StoreLink> storeLinks(StoreApp app) => [
+  (label: storePageLabel(app.store), url: storePageUrl(app)),
+  if (storeConsoleUrl(app) case final console?)
+    (label: 'Play Console', url: console),
+];
 
 String formatStars(int rating) {
   final filled = rating.clamp(0, 5);
@@ -76,6 +127,12 @@ String? storeConsoleUrl(StoreApp app) => switch (app.store) {
 };
 
 String storePageLabel(StoreKind store) => switch (store) {
-  StoreKind.appStore => 'Open in App Store Connect',
-  StoreKind.googlePlay => 'Open the Play listing',
+  StoreKind.appStore => 'App Store Connect',
+  StoreKind.googlePlay => 'Play listing',
+};
+
+/// The short name a store goes by beside a version: `App Store`, `Play`.
+String storeShortLabel(StoreKind store) => switch (store) {
+  StoreKind.appStore => 'App Store',
+  StoreKind.googlePlay => 'Play',
 };

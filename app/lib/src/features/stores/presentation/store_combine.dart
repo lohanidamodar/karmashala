@@ -101,10 +101,26 @@ class StoreCombineBar extends ConsumerWidget {
         ? '${other.label} lists no apps to combine with.'
         : null;
     final theme = Theme.of(context);
+    final mine = group.entries.single.app;
+    // The same name, standing alone on the other store: most likely the same
+    // app under another id, offered in one click.
+    final likely = [
+      for (final (entry, home) in candidates)
+        if (home.combined == StoreCombined.alone &&
+            _sameName(entry.app.name, mine.name))
+          entry.app,
+    ];
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: Insets.sm,
+      runSpacing: Insets.xs,
       children: [
+        if (likely.length == 1)
+          FilledButton.tonalIcon(
+            onPressed: () => _link(context, ref, mine, likely.single),
+            icon: const Icon(AppIcons.linkSimple, size: Chrome.iconAction),
+            label: Text('Combine with ${likely.single.id} on ${other.label}'),
+          ),
         TextButton.icon(
           onPressed: reason != null
               ? null
@@ -146,7 +162,6 @@ class StoreCombineBar extends ConsumerWidget {
     StoreKind other,
     List<(StoreEntry, StoreAppGroup)> candidates,
   ) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final mine = group.entries.single.app;
     final picked = await showAdaptiveModal<StoreApp>(
       context: context,
@@ -157,7 +172,25 @@ class StoreCombineBar extends ConsumerWidget {
         searchable: candidates.length > _kSearchAbove,
       ),
     );
-    if (picked == null) return;
+    if (picked == null || !context.mounted) return;
+    await _link(context, ref, mine, picked);
+  }
+
+  static bool _sameName(String a, String b) {
+    String plain(String name) => name.toLowerCase().replaceAll(
+      RegExp(r'[^\p{L}\p{N}]+', unicode: true),
+      '',
+    );
+    return plain(a).isNotEmpty && plain(a) == plain(b);
+  }
+
+  Future<void> _link(
+    BuildContext context,
+    WidgetRef ref,
+    StoreApp mine,
+    StoreApp picked,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final (apple, play) = mine.store == StoreKind.appStore
         ? (mine, picked)
         : (picked, mine);

@@ -8,15 +8,19 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
+import '../../../core/util/clock_provider.dart';
 import '../../git/application/remote_links.dart' show openExternalUrlProvider;
+import '../application/store_attention.dart';
 import '../application/store_groups.dart';
-import 'store_app_card.dart';
 import 'store_app_icon.dart';
+import 'store_badges.dart';
 import 'store_combine.dart';
+import 'store_detail_releases.dart';
+import 'store_detail_reviews.dart';
 import 'stores_format.dart';
 
-/// Everything read about one app: per store, its releases, its numbers, its
-/// downloads over time and its reviews.
+/// Everything read about one app: what wants a look, its releases per store
+/// and track, its numbers, its downloads and its reviews.
 class StoreGroupDetail extends StatelessWidget {
   const StoreGroupDetail({
     required this.group,
@@ -34,73 +38,20 @@ class StoreGroupDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final read = group.entries.any((entry) => entry.snapshot != null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
-          ),
-          child: Row(
-            children: [
-              if (pushed)
-                IconButton(
-                  tooltip: 'Back to all apps',
-                  icon: const Icon(AppIcons.arrowLeft),
-                  onPressed: onClose,
-                )
-              else
-                const SizedBox(width: Insets.sm),
-              StoreAppIconView(
-                icon: group.icon,
-                name: group.name,
-                size: StoreAppIconView.detailSize(context),
-              ),
-              const SizedBox(width: Insets.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      group.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    // Combined by hand, each store's id on its own line.
-                    for (final id in storeGroupIdLines(group))
-                      Text(
-                        id,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    if (group.combinedManually) ...[
-                      const SizedBox(height: Insets.xs),
-                      const CombinedManuallyChip(),
-                    ],
-                  ],
-                ),
-              ),
-              if (!pushed)
-                IconButton(
-                  tooltip: 'Close details',
-                  icon: const Icon(AppIcons.x),
-                  onPressed: onClose,
-                ),
-            ],
-          ),
-        ),
+        _Header(group: group, pushed: pushed, onClose: onClose),
         const Divider(height: 1),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Insets.lg),
+            padding: const EdgeInsets.fromLTRB(
+              Insets.lg,
+              Insets.md,
+              Insets.lg,
+              Insets.xl,
+            ),
             child: Align(
               alignment: Alignment.topLeft,
               child: ConstrainedBox(
@@ -110,12 +61,34 @@ class StoreGroupDetail extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    _Links(group: group),
                     if (group.combined != StoreCombined.byId) ...[
+                      const SizedBox(height: Insets.xs),
                       StoreCombineBar(group: group),
-                      const SizedBox(height: Insets.md),
                     ],
-                    for (final entry in group.entries)
-                      _EntryDetail(entry: entry),
+                    if (group.signals.isNotEmpty) ...[
+                      const SizedBox(height: Insets.md),
+                      _SignalsPanel(group: group),
+                    ],
+                    const _Section('Releases'),
+                    for (final (i, entry) in group.entries.indexed) ...[
+                      if (i > 0) const SizedBox(height: Insets.sm),
+                      StoreReleasesCard(
+                        key: ValueKey('releases-${entry.app.key}'),
+                        entry: entry,
+                      ),
+                    ],
+                    if (read) ...[
+                      const _Section('Ratings and stability'),
+                      _Numbers(group: group),
+                      if (_downloadCharts(group) case final charts
+                          when charts.isNotEmpty) ...[
+                        const _Section('Downloads'),
+                        ...charts,
+                      ],
+                    ],
+                    const _Section('Reviews'),
+                    StoreReviewsSection(group: group),
                   ],
                 ),
               ),
@@ -125,350 +98,394 @@ class StoreGroupDetail extends StatelessWidget {
       ],
     );
   }
-}
 
-class _EntryDetail extends ConsumerWidget {
-  const _EntryDetail({required this.entry});
-
-  final StoreEntry entry;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final app = entry.app;
-    final snapshot = entry.snapshot;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: Insets.sm,
-            children: [
-              Semantics(
-                header: true,
-                child: Text(app.store.label, style: theme.textTheme.titleSmall),
-              ),
-              TextButton.icon(
-                onPressed: () =>
-                    ref.read(openExternalUrlProvider)(storePageUrl(app)),
-                icon: const Icon(
-                  AppIcons.arrowSquareOut,
-                  size: Chrome.iconAction,
-                ),
-                label: Text(storePageLabel(app.store)),
-              ),
-              if (storeConsoleUrl(app) case final console?)
-                TextButton.icon(
-                  onPressed: () => ref.read(openExternalUrlProvider)(console),
-                  icon: const Icon(
-                    AppIcons.arrowSquareOut,
-                    size: Chrome.iconAction,
-                  ),
-                  label: const Text('Open Play Console'),
-                ),
-            ],
-          ),
-          const SizedBox(height: Insets.sm),
-          if (snapshot == null)
-            Text('Not read yet. Refresh to read it.', style: muted)
-          else ...[
-            const EyebrowLabel('Releases'),
-            const SizedBox(height: Insets.xs),
-            _Releases(reading: snapshot.releases),
-            const SizedBox(height: Insets.lg),
-            StatTileGrid(tiles: _tiles(snapshot)),
-            for (final line in _missingNumbers(snapshot)) ...[
-              const SizedBox(height: Insets.xs),
-              line,
-            ],
-            const SizedBox(height: Insets.lg),
-            const EyebrowLabel('Downloads'),
-            const SizedBox(height: Insets.xs),
-            _DownloadsChart(reading: snapshot.downloads),
-            const SizedBox(height: Insets.lg),
-            const EyebrowLabel('Reviews'),
-            const SizedBox(height: Insets.xs),
-            _Reviews(store: app.store, reading: snapshot.reviews),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static const _unavailable = 'not available';
-
-  List<Widget> _tiles(StoreAppSnapshot snapshot) {
-    final rating = snapshot.rating.valueOrNull;
-    final reviews = snapshot.reviews.valueOrNull;
-    final vitals = snapshot.vitals.valueOrNull;
-    final downloads = snapshot.downloads.valueOrNull;
-    final ratings = rating?.count;
-    final window = vitals == null
-        ? null
-        : '${vitals.to.difference(vitals.from).inDays} days';
-    // Too little data is the store's answer, not a missing one.
-    final rateUnrecorded = vitals == null ? _unavailable : 'too little data';
-    return [
-      StatTile(
-        label: 'Rating',
-        value: rating == null ? null : '${rating.average.toStringAsFixed(1)} ★',
-        unrecorded: _unavailable,
-        caption: ratings == null
-            ? null
-            : '${formatCompactCount(ratings)} ratings',
-      ),
-      StatTile(
-        label: 'Reviews',
-        value: reviews == null ? null : '${reviews.length}',
-        unrecorded: _unavailable,
-        caption: reviews == null
-            ? null
-            : snapshot.app.store == StoreKind.googlePlay
-            ? 'last 7 days'
-            : 'most recent',
-      ),
-      StatTile(
-        label: 'Crash rate',
-        value: switch (vitals?.crashRate) {
-          final rate? => formatRate(rate),
-          null => null,
-        },
-        unrecorded: rateUnrecorded,
-        caption: window,
-        tooltip: 'The share of daily users who saw a crash.',
-      ),
-      StatTile(
-        label: 'ANR rate',
-        value: switch (vitals?.anrRate) {
-          final rate? => formatRate(rate),
-          null => null,
-        },
-        unrecorded: rateUnrecorded,
-        caption: window,
-        tooltip: 'The share of daily users who saw the app stop responding.',
-      ),
-      StatTile(
-        label: 'Downloads 14 d',
-        value: downloads == null || downloads.days.isEmpty
-            ? null
-            : formatCompactCount(downloads.total),
-        unrecorded: downloads == null ? _unavailable : 'none reported yet',
-        caption: downloads?.unit,
-      ),
-    ];
-  }
-
-  /// Why a tile above has no figure, one line each.
-  List<Widget> _missingNumbers(StoreAppSnapshot snapshot) => [
-    if (snapshot.rating case final ReadingMissing<RatingSummary> missing)
-      MissingReadingLine(what: 'Rating', reading: missing),
-    if (snapshot.vitals case final ReadingMissing<VitalsSummary> missing)
-      MissingReadingLine(what: 'Crash and ANR rate', reading: missing),
+  static List<Widget> _downloadCharts(StoreAppGroup group) => [
+    for (final entry in group.entries)
+      if (entry.snapshot?.downloads.valueOrNull case final series?
+          when series.days.length > 1)
+        _DownloadsChart(
+          store: group.entries.length > 1 ? entry.app.store : null,
+          series: series,
+        ),
   ];
 }
 
-class _Releases extends StatelessWidget {
-  const _Releases({required this.reading});
+class _Section extends StatelessWidget {
+  const _Section(this.title);
 
-  final Reading<List<StoreRelease>> reading;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: Insets.xl, bottom: Insets.sm),
+    child: Semantics(header: true, child: EyebrowLabel(title)),
+  );
+}
+
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.group,
+    required this.pushed,
+    required this.onClose,
+  });
+
+  final StoreAppGroup group;
+  final bool pushed;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final reading = this.reading;
-    if (reading is ReadingMissing<List<StoreRelease>>) {
-      return MissingReadingLine(what: 'Releases', reading: reading);
-    }
-    final releases = reading.valueOrNull ?? const <StoreRelease>[];
-    if (releases.isEmpty) return Text('No releases.', style: muted);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final release in releases)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.xs),
-            child: Wrap(
-              spacing: Insets.md,
-              runSpacing: Insets.hair,
-              crossAxisAlignment: WrapCrossAlignment.center,
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.sm,
+        Insets.sm,
+        Insets.sm,
+        Insets.md,
+      ),
+      child: Row(
+        children: [
+          if (pushed)
+            IconButton(
+              tooltip: 'Back to all apps',
+              icon: const Icon(AppIcons.arrowLeft),
+              onPressed: onClose,
+            )
+          else
+            const SizedBox(width: Insets.sm),
+          StoreAppIconView(
+            icon: group.icon,
+            name: group.name,
+            size: StoreAppIconView.detailSize(context),
+          ),
+          const SizedBox(width: Insets.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  release.track,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  group.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  formatVersion(release),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                const SizedBox(height: 2),
+                // Combined by hand, each store's id on its own line.
+                for (final id in storeGroupIdLines(group))
+                  SelectableText(
+                    id,
+                    maxLines: 1,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                ReleaseStateLabel(release: release),
-                if (release.date case final date?)
-                  Text(formatDay(date), style: muted),
+                if (group.combinedManually) ...[
+                  const SizedBox(height: Insets.xs),
+                  const CombinedManuallyChip(),
+                ],
               ],
             ),
           ),
+          if (!pushed)
+            IconButton(
+              tooltip: 'Close details',
+              icon: const Icon(AppIcons.x),
+              onPressed: onClose,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Each store's console and listing, one click away.
+class _Links extends ConsumerWidget {
+  const _Links({required this.group});
+
+  final StoreAppGroup group;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = ref.read(openExternalUrlProvider);
+    return Wrap(
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
+      children: [
+        for (final entry in group.entries)
+          for (final link in storeLinks(entry.app))
+            OutlinedButton.icon(
+              onPressed: () => open(link.url),
+              icon: const Icon(
+                AppIcons.arrowSquareOut,
+                size: Chrome.iconAction,
+              ),
+              label: Text(link.label),
+            ),
+      ],
+    );
+  }
+}
+
+/// What wants a look, as sentences, loudest first.
+class _SignalsPanel extends StatelessWidget {
+  const _SignalsPanel({required this.group});
+
+  final StoreAppGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final signals = group.signals;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.sm,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final signal in signals)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Icon(
+                        signalIcon(signal),
+                        size: Chrome.icon,
+                        color: signalColor(context, signal),
+                      ),
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: Text(
+                        signalSentence(signal),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (signal case ReleaseSignal(
+                      release: StoreRelease(rolloutFraction: final fraction?),
+                    )) ...[
+                      const SizedBox(width: Insets.sm),
+                      Padding(
+                        padding: const EdgeInsets.only(top: Insets.sm),
+                        child: RolloutBar(fraction: fraction),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The headline numbers of every store; a reading the store did not give is
+/// a line under them saying why, never a zero (PROJECT.md §19).
+class _Numbers extends ConsumerWidget {
+  const _Numbers({required this.group});
+
+  final StoreAppGroup group;
+
+  static const _unavailable = 'unavailable';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(clockProvider).nowUtc();
+    final both = group.entries.length > 1;
+    final tiles = <Widget>[];
+    final notes = <Widget>[];
+    for (final entry in group.entries) {
+      final snapshot = entry.snapshot;
+      if (snapshot == null) continue;
+      final store = entry.app.store;
+      String label(String what) =>
+          both ? '$what · ${storeShortLabel(store)}' : what;
+
+      switch (snapshot.rating) {
+        case ReadingValue(:final value):
+          final trend = value.trend;
+          final caption = [
+            if (value.count case final count?)
+              '${formatCompactCount(count)} ratings',
+            if (trend != null)
+              '${formatRatingChange(trend.change)} since '
+                  '${formatShortDay(trend.since, now)}',
+          ];
+          tiles.add(
+            StatTile(
+              label: label('Rating'),
+              value: '${value.average.toStringAsFixed(1)} ★',
+              caption: caption.isEmpty ? null : caption.join(' · '),
+            ),
+          );
+        case final ReadingMissing<RatingSummary> missing:
+          if (!missing.expected) {
+            tiles.add(
+              StatTile(
+                label: label('Rating'),
+                value: null,
+                unrecorded: _unavailable,
+              ),
+            );
+          }
+          notes.add(
+            MissingReadingLine(what: '${store.label} rating', reading: missing),
+          );
+      }
+
+      switch (snapshot.vitals) {
+        case ReadingValue(:final value):
+          final window = '${value.to.difference(value.from).inDays} days';
+          tiles
+            ..add(
+              StatTile(
+                label: label('Crash rate'),
+                value: switch (value.crashRate) {
+                  final rate? => formatRate(rate),
+                  null => null,
+                },
+                unrecorded: 'too little data',
+                caption: window,
+                tooltip: 'The share of daily users who saw a crash.',
+              ),
+            )
+            ..add(
+              StatTile(
+                label: label('ANR rate'),
+                value: switch (value.anrRate) {
+                  final rate? => formatRate(rate),
+                  null => null,
+                },
+                unrecorded: 'too little data',
+                caption: window,
+                tooltip:
+                    'The share of daily users who saw the app stop '
+                    'responding.',
+              ),
+            );
+        case final ReadingMissing<VitalsSummary> missing:
+          if (!missing.expected) {
+            tiles.add(
+              StatTile(
+                label: label('Crash and ANR'),
+                value: null,
+                unrecorded: _unavailable,
+              ),
+            );
+          }
+          notes.add(
+            MissingReadingLine(
+              what: '${store.label} crash and ANR rates',
+              reading: missing,
+            ),
+          );
+      }
+
+      switch (snapshot.downloads) {
+        case ReadingValue(:final value):
+          tiles.add(
+            StatTile(
+              label: label('${value.unit} 14 d'),
+              value: value.days.isEmpty
+                  ? null
+                  : formatCompactCount(value.total),
+              unrecorded: 'none reported yet',
+              caption: value.days.isEmpty
+                  ? null
+                  : 'to ${formatReportDay(value.days.last.day)}',
+              tooltip: 'Stores report downloads a day or more late.',
+            ),
+          );
+        case final ReadingMissing<DownloadSeries> missing:
+          if (!missing.expected) {
+            tiles.add(
+              StatTile(
+                label: label('Downloads'),
+                value: null,
+                unrecorded: _unavailable,
+              ),
+            );
+          }
+          notes.add(
+            MissingReadingLine(
+              what: '${store.label} downloads',
+              reading: missing,
+            ),
+          );
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (tiles.isNotEmpty) StatTileGrid(tiles: tiles),
+        for (final (i, note) in notes.indexed) ...[
+          SizedBox(height: i == 0 && tiles.isEmpty ? 0 : Insets.sm),
+          note,
+        ],
       ],
     );
   }
 }
 
 class _DownloadsChart extends StatelessWidget {
-  const _DownloadsChart({required this.reading});
+  const _DownloadsChart({required this.store, required this.series});
 
-  final Reading<DownloadSeries> reading;
+  /// Named when the app is on both stores.
+  final StoreKind? store;
+  final DownloadSeries series;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final reading = this.reading;
-    if (reading is ReadingMissing<DownloadSeries>) {
-      return MissingReadingLine(what: 'Downloads', reading: reading);
-    }
-    final series = reading.valueOrNull;
-    final days = series?.days ?? const <DailyCount>[];
-    if (series == null || days.isEmpty) {
-      return Text('The store has reported no days yet.', style: muted);
-    }
-    // One day is a number, not a line.
-    if (days.length < 2) {
-      return Text(
-        '${formatCompactCount(series.total)} ${series.unit.toLowerCase()} on '
-        '${formatReportDay(days.single.day)}.',
-        style: muted,
-      );
-    }
+    final days = series.days;
     final peak = days.fold(0, (most, day) => math.max(most, day.count));
-    return TimeSeriesChart(
-      points: [
-        for (final day in days) TimeSeriesPoint(day.day, day.count.toDouble()),
-      ],
-      start: days.first.day,
-      end: days.last.day,
-      // Headroom over the tallest day; one, so a flat zero still has a scale.
-      maxY: math.max(1.0, peak * 1.1),
-      color: theme.colorScheme.primary,
-      semanticsLabel: '${series.unit} per day',
-      valueLabel: (value) => formatCompactCount(value.round()),
-      timeLabel: formatReportDay,
-    );
-  }
-}
-
-class _Reviews extends StatelessWidget {
-  const _Reviews({required this.store, required this.reading});
-
-  final StoreKind store;
-  final Reading<List<StoreReview>> reading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final reading = this.reading;
-    final reviews = reading.valueOrNull ?? const <StoreReview>[];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (store == StoreKind.googlePlay)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.sm),
-            child: Text(
-              'Google Play’s API only returns the last 7 days of reviews.',
-              style: muted,
-            ),
-          ),
-        if (reading is ReadingMissing<List<StoreReview>>)
-          MissingReadingLine(what: 'Reviews', reading: reading)
-        else if (reviews.isEmpty)
-          Text('No reviews.', style: muted),
-        for (final review in reviews) _Review(review: review),
-      ],
-    );
-  }
-}
-
-class _Review extends StatelessWidget {
-  const _Review({required this.review});
-
-  final StoreReview review;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final meta = [
-      ?review.author,
-      ?review.locale,
-      if (review.appVersion case final version?) 'v$version',
-      formatDay(review.createdAt),
+    final title = [
+      ?store?.label,
+      '${formatCompactCount(series.total)} ${series.unit.toLowerCase()} over '
+          '${days.length} reported days',
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Semantics(
-                label: '${review.rating} of 5 stars',
-                child: ExcludeSemantics(
-                  child: Text(
-                    formatStars(review.rating),
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ),
-              if (review.title case final title? when title.isNotEmpty) ...[
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (review.body.isNotEmpty)
-            Text(review.body, style: theme.textTheme.bodyMedium),
-          Text(meta, style: muted),
-          if (review.reply case final reply?)
-            Padding(
-              padding: const EdgeInsets.only(left: Insets.lg, top: Insets.xs),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  EyebrowLabel(
-                    review.repliedAt == null
-                        ? 'Developer reply'
-                        : 'Developer reply · ${formatDay(review.repliedAt!)}',
-                  ),
-                  Text(reply, style: theme.textTheme.bodySmall),
-                ],
-              ),
+          Text(
+            title,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
+          const SizedBox(height: Insets.xs),
+          TimeSeriesChart(
+            points: [
+              for (final day in days)
+                TimeSeriesPoint(day.day, day.count.toDouble()),
+            ],
+            start: days.first.day,
+            end: days.last.day,
+            // Headroom over the tallest day; one, so a flat zero has a scale.
+            maxY: math.max(1.0, peak * 1.1),
+            color: theme.colorScheme.primary,
+            semanticsLabel: '${series.unit} per day',
+            valueLabel: (value) => formatCompactCount(value.round()),
+            timeLabel: formatReportDay,
+          ),
         ],
       ),
     );
