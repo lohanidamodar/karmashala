@@ -578,3 +578,59 @@ void _migrateToV61(Database db) {
     );
   ''');
 }
+
+/// Each project check's output read as data — analyzer diagnostics or test
+/// results — so a later run of the same check can be compared with it. No
+/// foreign keys: a reading outlives the session and the run that made it.
+void _migrateToV65(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS check_results (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      verification_run_id TEXT,
+      session_id          TEXT,
+      repository_id       TEXT NOT NULL,
+      directory           TEXT,
+      check_name          TEXT NOT NULL,
+      recorded_at         TEXT NOT NULL,
+      results             TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_check_results_check '
+    'ON check_results (repository_id, check_name, recorded_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_check_results_session '
+    'ON check_results (session_id, recorded_at);',
+  );
+}
+
+/// Screenshots filed against the checkpoint whose working tree they showed, so
+/// two checkpoints' pictures can be compared. The PNG is a file beside the
+/// store; a checkpoint's deletion takes its rows with it.
+void _migrateToV66(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS checkpoint_screenshots (
+      id            TEXT PRIMARY KEY,
+      checkpoint_id TEXT NOT NULL
+        REFERENCES session_checkpoints (id) ON DELETE CASCADE,
+      session_id    TEXT,
+      source        TEXT NOT NULL,
+      size          TEXT NOT NULL,
+      width         INTEGER NOT NULL,
+      height        INTEGER NOT NULL,
+      subject       TEXT,
+      label         TEXT,
+      path          TEXT NOT NULL,
+      captured_at   TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_checkpoint_screenshots_checkpoint '
+    'ON checkpoint_screenshots (checkpoint_id, captured_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_checkpoint_screenshots_session '
+    'ON checkpoint_screenshots (session_id, captured_at);',
+  );
+}

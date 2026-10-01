@@ -1,4 +1,5 @@
 import '../domain/browser_consent.dart' show kBrowserConsentLocation;
+import 'browser_viewport_tool.dart' show browserScreenshotSizesSchema;
 
 /// MCP tool definitions for the browser, served to the bridge by the launcher
 /// control server. The descriptions are the only manual an agent gets, and the
@@ -184,6 +185,7 @@ const List<Map<String, dynamic>> browserToolSchemas = [
       },
     },
   },
+  browserScreenshotSizesSchema,
   {
     'name': 'browser_capture',
     'description':

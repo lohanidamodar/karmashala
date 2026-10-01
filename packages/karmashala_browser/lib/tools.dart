@@ -4,3 +4,4 @@ library;
 
 export 'src/application/browser_tool_schemas.dart';
 export 'src/application/browser_tools.dart';
+export 'src/application/browser_viewport_tool.dart';

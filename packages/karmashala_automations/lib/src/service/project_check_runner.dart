@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_verification/check_results.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/verification.dart';
 
@@ -27,6 +28,7 @@ class ProjectCheckRunner {
     required this._commands,
     required this._recorder,
     required this._now,
+    this._results,
     void Function()? onChanged,
     void Function(String message)? log,
   }) : _dao = automations,
@@ -39,6 +41,9 @@ class ProjectCheckRunner {
   final CheckCommandRunner _commands;
   final CommandCheckRecorder _recorder;
   final DateTime Function() _now;
+
+  /// Where parsed results are kept and their baselines read; null keeps none.
+  final CheckResultRecords? _results;
   final void Function() _onChanged;
   final void Function(String message) _log;
 
@@ -132,6 +137,17 @@ class ProjectCheckRunner {
       verdict = VerificationVerdict.inconclusive;
       reason = refusal;
     } else {
+      final automation = _dao.getById(run.automationId);
+      final results = _parse(result, directory);
+      final change = automation == null || results == null
+          ? null
+          : _change(
+              repositoryId: automation.repositoryId,
+              checkName: check.name,
+              results: results,
+              startedAt: run.firedAt,
+              sessionId: run.sessionId,
+            );
       final recorded = await _recorder.recordOne(
         title: '${check.name} · ${directory!.path}',
         command: check.command,
@@ -142,7 +158,19 @@ class ProjectCheckRunner {
         output: result.tail.join('\n'),
         sessionId: run.sessionId,
         producedBySessionId: kAppVerifierId,
+        results: results,
+        change: change,
       );
+      if (automation != null && results != null) {
+        _keep(
+          recorded.id,
+          sessionId: run.sessionId,
+          repositoryId: automation.repositoryId,
+          directory: directory,
+          checkName: check.name,
+          results: results,
+        );
+      }
       verdict = recorded.verdict ?? VerificationVerdict.inconclusive;
       reason = recorded.reason ?? '';
       verificationRunId = recorded.id;
@@ -177,6 +205,7 @@ class ProjectCheckRunner {
         directory,
         title: '${check.name} · ${session.title}',
       );
+      final results = _parse(result, directory);
       ran.add(
         CommandCheck(
           name: check.name,
@@ -184,6 +213,16 @@ class ProjectCheckRunner {
           exitCode: result.exitCode,
           output: result.tail.join('\n'),
           refusal: result.refusal,
+          results: results,
+          change: results == null
+              ? null
+              : _change(
+                  repositoryId: session.repositoryId,
+                  checkName: check.name,
+                  results: results,
+                  startedAt: session.createdAt,
+                  sessionId: session.id,
+                ),
         ),
       );
     }
@@ -194,7 +233,103 @@ class ProjectCheckRunner {
       sessionId: session.id,
       producedBySessionId: kAppVerifierId,
     );
+    for (final check in ran) {
+      if (check.results case final results?) {
+        _keep(
+          run.id,
+          sessionId: session.id,
+          repositoryId: session.repositoryId,
+          directory: directory,
+          checkName: check.name,
+          results: results,
+        );
+      }
+    }
     return (checks: ran, run: run);
+  }
+
+  /// The newest structured reading of each of [session]'s checks, with what it
+  /// changed against the baseline [changeAgainstBaseline] picks.
+  List<({RecordedCheckResults latest, CheckResultsChange? change})>
+  latestResults(Session session) {
+    final records = _results;
+    if (records == null) return const [];
+    final newest = <String, RecordedCheckResults>{};
+    for (final reading in records.forSession(session.id)) {
+      newest[reading.checkName] = reading;
+    }
+    return [
+      for (final reading in newest.values)
+        (
+          latest: reading,
+          change: _change(
+            repositoryId: session.repositoryId,
+            checkName: reading.checkName,
+            results: reading.results,
+            startedAt: session.createdAt,
+            sessionId: session.id,
+            excludingId: reading.id,
+          ),
+        ),
+    ];
+  }
+
+  CheckResults? _parse(CheckExecution result, EnvironmentPath? directory) =>
+      result.refusal != null
+      ? null
+      : parseCheckOutput(
+          result.transcript ?? result.tail.join('\n'),
+          root: directory?.path,
+          columns: result.columns,
+          truncated: result.transcriptTruncated,
+        );
+
+  CheckResultsChange? _change({
+    required String repositoryId,
+    required String checkName,
+    required CheckResults results,
+    required DateTime startedAt,
+    required String? sessionId,
+    int? excludingId,
+  }) {
+    final records = _results;
+    if (records == null) return null;
+    return changeAgainstBaseline(
+      _Excluding(records, excludingId),
+      repositoryId: repositoryId,
+      checkName: checkName,
+      current: results,
+      sessionStartedAt: startedAt,
+      sessionId: sessionId,
+    );
+  }
+
+  void _keep(
+    String verificationRunId, {
+    required String? sessionId,
+    required String repositoryId,
+    required EnvironmentPath? directory,
+    required String checkName,
+    required CheckResults results,
+  }) {
+    final records = _results;
+    if (records == null) return;
+    try {
+      records.record(
+        RecordedCheckResults(
+          verificationRunId: verificationRunId,
+          sessionId: sessionId,
+          repositoryId: repositoryId,
+          directory: directory?.path,
+          checkName: checkName,
+          recordedAt: _now(),
+          results: results,
+        ),
+      );
+    } on Object catch (error) {
+      // The verdict is already recorded; losing its structure loses no verdict.
+      _log('recording structured check results failed: $error');
+    }
   }
 
   Future<CheckExecution> _execute(
@@ -222,4 +357,34 @@ class ProjectCheckRunner {
       );
     }
   }
+}
+
+/// [_records] without reading [_id], so a reading is never its own baseline.
+class _Excluding implements CheckResultRecords {
+  const _Excluding(this._records, this._id);
+
+  final CheckResultRecords _records;
+  final int? _id;
+
+  @override
+  void record(RecordedCheckResults results) => _records.record(results);
+
+  @override
+  List<RecordedCheckResults> forSession(String sessionId) => [
+    for (final reading in _records.forSession(sessionId))
+      if (_id == null || reading.id != _id) reading,
+  ];
+
+  @override
+  RecordedCheckResults? latestBefore({
+    required String repositoryId,
+    required String checkName,
+    required DateTime before,
+    String? excludingSessionId,
+  }) => _records.latestBefore(
+    repositoryId: repositoryId,
+    checkName: checkName,
+    before: before,
+    excludingSessionId: excludingSessionId,
+  );
 }

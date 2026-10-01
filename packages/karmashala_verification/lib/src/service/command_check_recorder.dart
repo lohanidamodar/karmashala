@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import '../domain/check_results.dart';
+import '../domain/check_results_change.dart';
 import '../domain/command_check.dart';
 import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
@@ -45,13 +49,15 @@ class CommandCheckRecorder {
           ordinal: i + 1,
           kind: VerificationStepKind.other,
           summary: '${check.name}: ${check.command.join(' ')}',
-          detail:
-              check.refusal ??
-              switch (check.exitCode) {
-                0 => 'passed',
-                null => 'stopped without an exit code Karmashala observed',
-                final code => 'exited $code',
-              },
+          detail: _withResults(
+            check.refusal ??
+                switch (check.exitCode) {
+                  0 => 'passed',
+                  null => 'stopped without an exit code Karmashala observed',
+                  final code => 'exited $code',
+                },
+            check.resultsLine,
+          ),
           at: finishedAt,
           ok: verdicts[i] == VerificationVerdict.pass,
         ),
@@ -89,6 +95,17 @@ class CommandCheckRecorder {
             stepOrdinal: i + 1,
             at: finishedAt,
           ),
+      for (final (i, check) in checks.indexed)
+        if (check.results case final results?)
+          await _writeResults(
+            runId: id,
+            name: 'results-${i + 1}',
+            label: '${check.name} — results',
+            results: results,
+            change: check.change,
+            stepOrdinal: i + 1,
+            at: finishedAt,
+          ),
     ];
     final stored = await _records.record(run.copyWith(artifacts: artifacts));
     _onChanged();
@@ -106,6 +123,8 @@ class CommandCheckRecorder {
     String output = '',
     String? sessionId,
     String? producedBySessionId,
+    CheckResults? results,
+    CheckResultsChange? change,
   }) async {
     final id = _newId();
     final directory = await _store.createDirectory(id);
@@ -120,7 +139,15 @@ class CommandCheckRecorder {
       ordinal: 1,
       kind: VerificationStepKind.other,
       summary: line,
-      detail: 'in $workingDirectory ($environmentId)',
+      detail: _withResults(
+        'in $workingDirectory ($environmentId)',
+        CommandCheck(
+          name: line,
+          command: command,
+          results: results,
+          change: change,
+        ).resultsLine,
+      ),
       at: finishedAt,
       ok: exitCode == 0,
     );
@@ -154,12 +181,48 @@ class CommandCheckRecorder {
           stepOrdinal: 1,
           at: finishedAt,
         ),
+      if (results != null)
+        await _writeResults(
+          runId: id,
+          name: 'results',
+          label: '$line — results',
+          results: results,
+          change: change,
+          stepOrdinal: 1,
+          at: finishedAt,
+        ),
     ];
     final stored = await _records.record(run.copyWith(artifacts: artifacts));
     _onChanged();
     return stored;
   }
+
+  /// The structured reading, beside the raw output rather than instead of it.
+  Future<VerificationArtifact> _writeResults({
+    required String runId,
+    required String name,
+    required String label,
+    required CheckResults results,
+    required CheckResultsChange? change,
+    required int stepOrdinal,
+    required DateTime at,
+  }) => _store.writeText(
+    runId: runId,
+    name: name,
+    kind: VerificationArtifactKind.other,
+    label: label,
+    text: const JsonEncoder.withIndent('  ').convert({
+      'summary': results.summary,
+      ...results.toJson(),
+      if (change != null) 'change': change.toJson(),
+    }),
+    stepOrdinal: stepOrdinal,
+    at: at,
+  );
 }
+
+String _withResults(String detail, String? results) =>
+    results == null ? detail : '$detail · $results';
 
 /// Sortable, unique, and legible in a folder listing: the id a verification
 /// run's directory is named by.

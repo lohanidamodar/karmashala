@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/checks.dart';
@@ -13,6 +15,9 @@ const String kCheckSessionPrefix = 'karmashala-check-';
 
 /// How much of a finished check's screen is kept beside its verdict.
 const int kCheckRowsRecorded = 400;
+
+/// The width a check's terminal wraps at, which its output parser undoes.
+const int kCheckColumns = 160;
 
 /// Runs a check's command as a session this host owns — watchable from any
 /// client while it runs — waits for it, and lets its record go after.
@@ -63,7 +68,7 @@ class HostedCheckRunner implements CheckCommandRunner {
           environmentOf?.call(directory.environmentId),
           argv: check.command,
           directory: directory.path,
-          columns: 160,
+          columns: kCheckColumns,
           rows: 50,
         ),
       );
@@ -84,12 +89,19 @@ class HostedCheckRunner implements CheckCommandRunner {
       );
     }
     final tail = session.tailText(kCheckRowsRecorded);
+    final printed = session.backlog.since(0);
     try {
       await registry.close(id);
     } on UnknownSession {
       // Pruned already; the verdict is what matters.
     }
-    return CheckExecution.ran(exitCode: end.exitCode, tail: tail);
+    return CheckExecution.ran(
+      exitCode: end.exitCode,
+      tail: tail,
+      transcript: utf8.decode(printed.bytes, allowMalformed: true),
+      columns: kCheckColumns,
+      transcriptTruncated: printed.droppedBytes > 0,
+    );
   }
 
   Future<CheckExecution> _runRemotely(
@@ -124,9 +136,11 @@ class HostedCheckRunner implements CheckCommandRunner {
         'Whether the work still stands is unknown, not proven.',
       );
     }
-    final lines = '${result.stdout}${result.stderr}'.split('\n');
+    final printed = '${result.stdout}${result.stderr}';
+    final lines = printed.split('\n');
     return CheckExecution.ran(
       exitCode: result.exitCode,
+      transcript: printed,
       tail: lines.length <= kCheckRowsRecorded
           ? lines
           : lines.sublist(lines.length - kCheckRowsRecorded),

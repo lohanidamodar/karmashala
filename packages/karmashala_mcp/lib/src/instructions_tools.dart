@@ -324,6 +324,12 @@ So the safe order when you are unsure is: `checkpoint_list` to see what exists,
 `checkpoint_capture` is cheap and non-destructive. Taking one before something
 irreversible costs a moment and buys the ability to be wrong.
 
+**A screenshot compare measures pixels, not correctness.**
+`checkpoint_screenshot_compare` pairs captures by source and size and counts
+changed pixels; 0% means the two pictures match, not that either is right, and
+a page that renders a clock or an animation never reads 0%. A restore does not
+rewind the running app or page, so take the "before" capture before the edit.
+
 **A restore rewinds files, never a conversation.** The agent still believes it
 made the edits you rolled back. `session_fork_from_checkpoint` is the verb that
 does both at once, and it is honest about the same gap:
@@ -542,6 +548,12 @@ configured for your repository — whatever they chose, not only Flutter's — a
 records each exit code against your session as Karmashala's reading, never as
 yours. Run it before you say the work is done; "the tests pass" then points at
 a record instead of a sentence.
+
+**Its parsed results are a reading of the output, not the verdict.** A check
+printing `dart analyze --format=machine` or `flutter test --machine` is also
+read as diagnostics and tests (`checks_results`), compared with the last
+reading before your session started. "No change" means the parse matched, not
+that the exit code passed; a check in neither format has no structure at all.
 
 **One run per device.** A second launch onto a phone somebody else is driving
 is refused with the holder named, the same rule the `device_*` tools follow.
