@@ -105,6 +105,18 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Files dropped on the conversation, for the composer to attach.
   final _dropped = StreamController<List<String>>.broadcast();
 
+  /// Server files queued for this session ([composerAttachmentsProvider]), for
+  /// the composer to attach by path. Taken only while a composer listens — a
+  /// broadcast drops what nobody hears — and again the moment one starts to,
+  /// so a file offered while the transcript was loading waits rather than
+  /// vanishing. After the frame: taking writes a provider, which a build may
+  /// not, and a composer starts listening from its `initState`.
+  late final _serverFiles = StreamController<List<String>>.broadcast(
+    onListen: () => WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeQueuedFiles();
+    }),
+  );
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -127,6 +139,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// on its way out, and the draft has to be parked exactly then.
   late final ComposerDrafts _drafts;
 
+  /// [_drafts]' twin for files, held for the same reason.
+  late final ComposerAttachments _queuedFiles;
+
   /// Set before the draft is parked, because parking it notifies this widget's
   /// own listener on the same provider and `ref` is dead by then.
   bool _leaving = false;
@@ -135,6 +150,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   void initState() {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
+    _queuedFiles = ref.read(composerAttachmentsProvider.notifier);
   }
 
   @override
@@ -158,6 +174,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
     _composer.dispose();
     unawaited(_dropped.close());
+    unawaited(_serverFiles.close());
     super.dispose();
   }
 
@@ -181,6 +198,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _composer.selection = TextSelection.collapsed(
       offset: _composer.text.length,
     );
+  }
+
+  /// Hands the composer whatever files were queued for this session, by the
+  /// path its agent reads. Left queued while no composer is listening: the
+  /// next one to listen takes them ([_serverFiles]).
+  void _takeQueuedFiles() {
+    if (_leaving || !_serverFiles.hasListener) return;
+    final queued = _queuedFiles.take(widget.sessionId);
+    if (queued == null || queued.isEmpty) return;
+    _serverFiles.add([for (final file in queued) file.path]);
   }
 
   /// Keeps [message] as a note, word for word, remembering where it was taken
@@ -386,8 +413,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     ref.listen(composerDraftProvider, (_, next) {
       if (next.containsKey(widget.sessionId)) _takeQueuedNote();
     });
+    // Files offered from an open tab, the same way.
+    ref.listen(composerAttachmentsProvider, (_, next) {
+      if (next.containsKey(widget.sessionId)) _takeQueuedFiles();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _takeQueuedNote();
+      if (!mounted) return;
+      _takeQueuedNote();
+      _takeQueuedFiles();
     });
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
@@ -731,6 +764,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           droppedFiles: _dropped.stream,
+          serverFiles: _serverFiles.stream,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,

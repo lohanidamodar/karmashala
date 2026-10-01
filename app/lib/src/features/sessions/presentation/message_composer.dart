@@ -49,6 +49,10 @@ enum _From {
 
   /// Already on the server.
   server,
+
+  /// Already on the server, handed over from Files or an open file's tab
+  /// (*Attach to chat*) rather than picked here.
+  files,
 }
 
 /// A pasted/attached file, somewhere the agent can read it: a client temp
@@ -82,6 +86,10 @@ class _Attachment {
     _From.local => 'On this machine; the agent is given its path.',
     _From.uploaded => 'Sent to $serverName; the agent is given its path there.',
     _From.server => 'On $serverName; the agent is given its path there.',
+    _From.files =>
+      serverName.isEmpty
+          ? 'From Files; the agent is given its path.'
+          : 'From Files on $serverName; the agent is given its path there.',
   };
 
   /// The same, as a touch chip's second line.
@@ -89,6 +97,8 @@ class _Attachment {
     _From.temp || _From.local => 'On this device',
     _From.uploaded => 'From this device → $serverName',
     _From.server => 'On $serverName',
+    _From.files =>
+      serverName.isEmpty ? 'From Files' : 'From Files · $serverName',
   };
 }
 
@@ -176,6 +186,7 @@ class MessageComposer extends StatefulWidget {
     this.attaches = true,
     this.camera,
     this.droppedFiles,
+    this.serverFiles,
     super.key,
   });
 
@@ -216,6 +227,12 @@ class MessageComposer extends StatefulWidget {
   /// batch attached as if picked from this device.
   final Stream<List<String>>? droppedFiles;
 
+  /// Files already on the server, each batch attached by path with nothing
+  /// uploaded: what *Attach to chat* on an open file queued for this session.
+  /// Each path is **spelled for the agent** already — the host translated it
+  /// into the agent's environment — so it is sent exactly as it arrives.
+  final Stream<List<String>>? serverFiles;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
 }
@@ -245,9 +262,11 @@ class _MessageComposerState extends State<MessageComposer> {
     _input = widget.controller ?? TextEditingController();
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _drops = widget.droppedFiles?.listen(_attachDropped);
+    _handed = widget.serverFiles?.listen(_attachServerFiles);
   }
 
   StreamSubscription<List<String>>? _drops;
+  StreamSubscription<List<String>>? _handed;
 
   void _onLifecycle(AppLifecycleState state) {
     if (state != AppLifecycleState.hidden &&
@@ -272,11 +291,16 @@ class _MessageComposerState extends State<MessageComposer> {
       unawaited(_drops?.cancel());
       _drops = widget.droppedFiles?.listen(_attachDropped);
     }
+    if (oldWidget.serverFiles != widget.serverFiles) {
+      unawaited(_handed?.cancel());
+      _handed = widget.serverFiles?.listen(_attachServerFiles);
+    }
   }
 
   @override
   void dispose() {
     unawaited(_drops?.cancel());
+    unawaited(_handed?.cancel());
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -657,6 +681,39 @@ class _MessageComposerState extends State<MessageComposer> {
         'in it instead.',
       );
     }
+  }
+
+  /// Files already on the server, attached by path as [_From.files]: nothing
+  /// to upload, and no preview — the path is the agent's spelling, which this
+  /// client may not be able to open. One already attached is not added twice.
+  void _attachServerFiles(List<String> paths) {
+    if (!mounted || paths.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    void say(String message) =>
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+    if (!widget.attaches) {
+      return say('Files cannot be attached here.');
+    }
+    if (!widget.enabled || _busy) {
+      return say('The message box is not taking anything right now.');
+    }
+    final serverName = widget.server?.call().name ?? '';
+    final attached = {for (final a in _attachments) a.path};
+    setState(() {
+      for (final path in paths) {
+        if (!attached.add(path)) continue;
+        final name = _leafOf(path);
+        _attachments.add(
+          _Attachment(
+            path: path,
+            name: name,
+            from: _From.files,
+            serverName: serverName,
+            image: _looksLikeImage(name),
+          ),
+        );
+      }
+    });
   }
 
   static String _leafOf(String path) {
