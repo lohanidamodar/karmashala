@@ -186,7 +186,8 @@ class MessageComposer extends StatefulWidget {
     this.attaches = true,
     this.camera,
     this.droppedFiles,
-    this.serverFiles,
+    this.takeServerFiles,
+    this.serverFilesWaiting,
     super.key,
   });
 
@@ -227,11 +228,21 @@ class MessageComposer extends StatefulWidget {
   /// batch attached as if picked from this device.
   final Stream<List<String>>? droppedFiles;
 
-  /// Files already on the server, each batch attached by path with nothing
-  /// uploaded: what *Attach to chat* on an open file queued for this session.
-  /// Each path is **spelled for the agent** already — the host translated it
-  /// into the agent's environment — so it is sent exactly as it arrives.
-  final Stream<List<String>>? serverFiles;
+  /// Takes the files already on the server that wait for this composer — what
+  /// *Attach to chat* on an open file queued — removing them from wherever
+  /// they wait. Each is attached by path with nothing uploaded, and each path
+  /// is **spelled for the agent** already, so it is sent exactly as it comes.
+  ///
+  /// **Pulled, never pushed**: the composer calls it only when it can attach
+  /// at once — attaching allowed, enabled, not busy — so a file is never taken
+  /// and then refused. Until then the files stay where they wait, and they are
+  /// taken when the box mounts, when [serverFilesWaiting] says more arrived,
+  /// and when the box becomes able again (enabled, attaching granted, or a
+  /// send finished).
+  final List<String> Function()? takeServerFiles;
+
+  /// Notifies when files arrive for [takeServerFiles] to hand over.
+  final Listenable? serverFilesWaiting;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -262,11 +273,39 @@ class _MessageComposerState extends State<MessageComposer> {
     _input = widget.controller ?? TextEditingController();
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _drops = widget.droppedFiles?.listen(_attachDropped);
-    _handed = widget.serverFiles?.listen(_attachServerFiles);
+    widget.serverFilesWaiting?.addListener(_scheduleDrain);
+    // Files queued before this box existed — while the transcript loaded.
+    _scheduleDrain();
   }
 
   StreamSubscription<List<String>>? _drops;
-  StreamSubscription<List<String>>? _handed;
+
+  /// Whether a server file taken now would be attached rather than refused.
+  bool get _acceptsServerFiles => widget.attaches && widget.enabled && !_busy;
+
+  /// [_drainServerFiles] after the current task, coalesced. From `initState`
+  /// and `didUpdateWidget`, which run inside a build: taking writes the
+  /// queue's provider, which a build may not, and a microtask never runs
+  /// inside one.
+  bool _drainScheduled = false;
+  void _scheduleDrain() {
+    if (_drainScheduled) return;
+    _drainScheduled = true;
+    scheduleMicrotask(() {
+      _drainScheduled = false;
+      _drainServerFiles();
+    });
+  }
+
+  /// Takes and attaches whatever server files wait, when — and only when —
+  /// they would be attached; otherwise leaves them waiting for the next
+  /// chance ([MessageComposer.takeServerFiles]).
+  void _drainServerFiles() {
+    if (!mounted || !_acceptsServerFiles) return;
+    final paths = widget.takeServerFiles?.call();
+    if (paths == null || paths.isEmpty) return;
+    _attachServerFiles(paths);
+  }
 
   void _onLifecycle(AppLifecycleState state) {
     if (state != AppLifecycleState.hidden &&
@@ -291,16 +330,22 @@ class _MessageComposerState extends State<MessageComposer> {
       unawaited(_drops?.cancel());
       _drops = widget.droppedFiles?.listen(_attachDropped);
     }
-    if (oldWidget.serverFiles != widget.serverFiles) {
-      unawaited(_handed?.cancel());
-      _handed = widget.serverFiles?.listen(_attachServerFiles);
+    if (oldWidget.serverFilesWaiting != widget.serverFilesWaiting) {
+      oldWidget.serverFilesWaiting?.removeListener(_scheduleDrain);
+      widget.serverFilesWaiting?.addListener(_scheduleDrain);
+    }
+    // Able again, or asked of a new source: what waited is taken now.
+    if ((!oldWidget.enabled && widget.enabled) ||
+        (!oldWidget.attaches && widget.attaches) ||
+        oldWidget.takeServerFiles != widget.takeServerFiles) {
+      _scheduleDrain();
     }
   }
 
   @override
   void dispose() {
     unawaited(_drops?.cancel());
-    unawaited(_handed?.cancel());
+    widget.serverFilesWaiting?.removeListener(_scheduleDrain);
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -686,17 +731,10 @@ class _MessageComposerState extends State<MessageComposer> {
   /// Files already on the server, attached by path as [_From.files]: nothing
   /// to upload, and no preview — the path is the agent's spelling, which this
   /// client may not be able to open. One already attached is not added twice.
+  /// Reached only through [_drainServerFiles], which has already checked the
+  /// box can take them: nothing here refuses, because a refusal would drop a
+  /// file already taken from its queue.
   void _attachServerFiles(List<String> paths) {
-    if (!mounted || paths.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
-    void say(String message) =>
-        messenger.showSnackBar(SnackBar(content: Text(message)));
-    if (!widget.attaches) {
-      return say('Files cannot be attached here.');
-    }
-    if (!widget.enabled || _busy) {
-      return say('The message box is not taking anything right now.');
-    }
     final serverName = widget.server?.call().name ?? '';
     final attached = {for (final a in _attachments) a.path};
     setState(() {
@@ -784,7 +822,11 @@ class _MessageComposerState extends State<MessageComposer> {
       final landed = await _uploadQueued();
       if (!mounted) return;
       setState(() => _busy = false);
-      if (!landed) return;
+      if (!landed) {
+        // Not busy any more: a server file offered meanwhile is taken now.
+        _scheduleDrain();
+        return;
+      }
     }
 
     final buffer = StringBuffer(text);
@@ -825,7 +867,12 @@ class _MessageComposerState extends State<MessageComposer> {
         SnackBar(content: Text(e is StateError ? e.message : '$e')),
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        // A server file offered while the message was sending waited in its
+        // queue; it lands in the now-empty box for the next message.
+        _scheduleDrain();
+      }
     }
   }
 

@@ -71,6 +71,65 @@ void main() {
     });
   });
 
+  /// A path typed at a prompt is read back as one path: bare only when every
+  /// character is plain, else single-quoted the prompt's own way.
+  group('quotePathForPrompt', () {
+    test('a path of plain characters is typed bare, on either side', () {
+      expect(
+        quotePathForPrompt(r'C:\src\demo\shot-1_a.png', windows: true),
+        r'C:\src\demo\shot-1_a.png',
+      );
+      expect(
+        quotePathForPrompt('/mnt/c/src/demo/shot-1_a.png', windows: false),
+        '/mnt/c/src/demo/shot-1_a.png',
+      );
+    });
+
+    test('a space is quoted', () {
+      expect(
+        quotePathForPrompt(r'C:\a b\c.png', windows: true),
+        r"'C:\a b\c.png'",
+      );
+      expect(quotePathForPrompt('/a b/c.png', windows: false), "'/a b/c.png'");
+    });
+
+    test(
+      'a single quote is doubled on Windows, spliced as \'\\\'\' on POSIX',
+      () {
+        expect(quotePathForPrompt("it's.png", windows: true), "'it''s.png'");
+        expect(
+          quotePathForPrompt("it's.png", windows: false),
+          r"'it'\''s.png'",
+        );
+      },
+    );
+
+    test('PowerShell\'s typographic quotes are doubled too', () {
+      expect(
+        quotePathForPrompt('it\u2019s.png', windows: true),
+        "'it\u2019\u2019s.png'",
+      );
+    });
+
+    test('& is quoted', () {
+      expect(quotePathForPrompt('a&b.mp4', windows: true), "'a&b.mp4'");
+      expect(quotePathForPrompt('a&b.mp4', windows: false), "'a&b.mp4'");
+    });
+
+    test(r'$ is quoted, in quotes that do not expand it', () {
+      expect(quotePathForPrompt(r'x$(id).png', windows: true), r"'x$(id).png'");
+      expect(
+        quotePathForPrompt(r'x$(id).png', windows: false),
+        r"'x$(id).png'",
+      );
+    });
+
+    test('a backtick is quoted, in quotes that do not escape with it', () {
+      expect(quotePathForPrompt('a`b.png', windows: true), "'a`b.png'");
+      expect(quotePathForPrompt('a`b.png', windows: false), "'a`b.png'");
+    });
+  });
+
   test('an unreachable file says it was not attached', () {
     expect(
       sessionOfferMessage(SessionOfferOutcome.outOfReach, 'Resize'),
@@ -230,7 +289,7 @@ void main() {
       );
 
       expect(outcome, SessionOfferOutcome.typedIntoTerminal);
-      expect(written, [r'"C:\src\demo\screen shot.png"']);
+      expect(written, [r"'C:\src\demo\screen shot.png'"]);
       expect(container.read(composerAttachmentsProvider), isEmpty);
     });
 

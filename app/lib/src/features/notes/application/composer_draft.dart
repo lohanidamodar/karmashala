@@ -71,7 +71,10 @@ class ComposerAttachments extends Notifier<Map<String, List<EnvironmentPath>>> {
     };
   }
 
-  /// Takes every file waiting for [sessionId], leaving nothing behind.
+  /// Takes every file waiting for [sessionId], leaving nothing behind. Called
+  /// only by a composer that attaches them in the same breath: a file taken
+  /// and then refused would be lost after the user was told it was sent, so a
+  /// composer that cannot attach right now leaves them here.
   List<EnvironmentPath>? take(String sessionId) {
     final pending = state[sessionId];
     if (pending == null) return null;
@@ -127,7 +130,8 @@ SessionOfferOutcome offerToSessionWith(
 
 /// Offers [file] to [sessionId] the way [offerToSession] offers text, in the
 /// face the session is showing: its path typed at the terminal's prompt —
-/// quoted when it has spaces, never submitted — or the file queued for the
+/// quoted unless it is all plain characters ([quotePathForPrompt]), never
+/// submitted — or the file queued for the
 /// composer as an attachment ([composerAttachmentsProvider]).
 ///
 /// Either way the path is the one the **agent** reads ([agentPathOf]): a
@@ -194,18 +198,42 @@ EnvironmentPath? agentPathOf(
   }
 }
 
-/// [path] as it is typed at a prompt in its environment: bare when it has no
-/// whitespace, else double-quoted on Windows and single-quoted elsewhere —
-/// what `cmd`, PowerShell, a POSIX shell and the agents' own prompts all read
-/// back as one path.
+/// [path] as it is typed at a prompt in its environment — the environment's
+/// kind decides, a [EnvironmentKind.windowsNative] one being PowerShell's and
+/// any other (or one this client has no row for) a POSIX shell's.
 String _quotedFor(
   T Function<T>(ProviderListenable<T> provider) read,
   EnvironmentPath path,
 ) {
-  final text = path.path;
-  if (!text.contains(RegExp(r'\s'))) return text;
   final kind = read(environmentsDataProvider).getById(path.environmentId)?.kind;
-  return kind == EnvironmentKind.windowsNative ? '"$text"' : posixQuote(text);
+  return quotePathForPrompt(
+    path.path,
+    windows: kind == EnvironmentKind.windowsNative,
+  );
+}
+
+/// The characters a path may hold and still be typed bare: anything else — a
+/// space, a quote, `&`, `$`, a backtick, a bracket — is something some shell
+/// reads as syntax, so the path is quoted whole.
+final _bareSafe = RegExp(r'^[A-Za-z0-9_./:\\-]+$');
+
+/// [path] spelled so a prompt reads it back as exactly one path, never run.
+/// Bare when every character is in [_bareSafe]. Otherwise single-quoted:
+/// on Windows ([windows]) PowerShell's way, each quote doubled
+/// (`'it''s.png'`) — a single-quoted PowerShell string expands neither `$`
+/// nor a backtick, and PowerShell takes the typographic `‘’‚‛` as quotes too,
+/// so those are doubled as well; elsewhere [posixQuote] (`'it'\''s.png'`).
+/// Nothing is submitted, so this is not about injection: an unbalanced quote
+/// would leave the prompt waiting for more, and `$x` would have the path
+/// mangled the moment the user pressed Enter.
+String quotePathForPrompt(String path, {required bool windows}) {
+  if (_bareSafe.hasMatch(path)) return path;
+  if (!windows) return posixQuote(path);
+  final doubled = path.replaceAllMapped(
+    RegExp('[\'‘’‚‛]'),
+    (quote) => '${quote[0]}${quote[0]}',
+  );
+  return "'$doubled'";
 }
 
 /// The one body behind every offer: [typed] into the session's terminal when
