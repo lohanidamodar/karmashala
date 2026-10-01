@@ -4,7 +4,7 @@ import '../mcp/tools/server_tool_set.dart';
 /// it owns when the checkout is on this machine (a WSL distribution too, on a
 /// Windows server), and as commands over its own connection when it is on an
 /// SSH box (slice 3a). Anything else is refused in words (slice 5b: nothing
-/// is handed to an app).
+/// is handed to an app). `checks_results` reads what those runs parsed.
 class ChecksToolSet extends ServerToolSet {
   const ChecksToolSet(this._run);
 
@@ -59,13 +59,41 @@ const List<Map<String, Object?>> checksToolSchemas = [
         'verification_get. Use it before saying work is done. A check that is '
         'closed by hand, or that could not start, is INCONCLUSIVE, '
         'never a pass. Answers NOTHING WAS CHECKED when the repository has '
-        'none.',
+        'none. A check whose output is analyzer diagnostics or test results '
+        '(best as `dart analyze --format=machine` or `flutter test '
+        '--machine`) also reports them as data, and what this session '
+        'added or broke against a baseline.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'sessionId': {
           'type': 'string',
           'description': 'Whose checkout to check. Defaults to yours.',
+        },
+      },
+    },
+  },
+  {
+    'name': 'checks_results',
+    'description':
+        'The structured results of a session\'s project checks, as recorded '
+        'by its newest checks_run: per check, the analyzer diagnostics (file, '
+        'line, code, message) or the failing tests, and what the session '
+        'changed — issues added and resolved, tests broken and fixed — '
+        'against the baseline: the last reading of that check in the '
+        'repository before the session started, or else the session\'s own '
+        'first reading. Runs nothing; run checks_run first for fresh results. '
+        'A check whose output was neither format has none.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Whose results to read. Defaults to yours.',
+        },
+        'limit': {
+          'type': 'number',
+          'description': 'Most items listed per list (default 50).',
         },
       },
     },

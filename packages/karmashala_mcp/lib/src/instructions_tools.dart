@@ -533,6 +533,12 @@ records each exit code against your session as Karmashala's reading, never as
 yours. Run it before you say the work is done; "the tests pass" then points at
 a record instead of a sentence.
 
+**Its parsed results are a reading of the output, not the verdict.** A check
+printing `dart analyze --format=machine` or `flutter test --machine` is also
+read as diagnostics and tests (`checks_results`), compared with the last
+reading before your session started. "No change" means the parse matched, not
+that the exit code passed; a check in neither format has no structure at all.
+
 **One run per device.** A second launch onto a phone somebody else is driving
 is refused with the holder named, the same rule the `device_*` tools follow.
 

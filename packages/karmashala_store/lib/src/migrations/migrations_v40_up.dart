@@ -555,3 +555,29 @@ void _migrateToV60(Database db) {
     'DEFAULT 0;',
   );
 }
+
+/// Each project check's output read as data — analyzer diagnostics or test
+/// results — so a later run of the same check can be compared with it. No
+/// foreign keys: a reading outlives the session and the run that made it.
+void _migrateToV65(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS check_results (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      verification_run_id TEXT,
+      session_id          TEXT,
+      repository_id       TEXT NOT NULL,
+      directory           TEXT,
+      check_name          TEXT NOT NULL,
+      recorded_at         TEXT NOT NULL,
+      results             TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_check_results_check '
+    'ON check_results (repository_id, check_name, recorded_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_check_results_session '
+    'ON check_results (session_id, recorded_at);',
+  );
+}

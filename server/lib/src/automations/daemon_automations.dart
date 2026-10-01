@@ -125,6 +125,7 @@ class DaemonAutomations implements ChecksWork {
         onChanged: _changed,
       ),
       now: now,
+      results: CheckResultDao(database),
       onChanged: _changed,
       log: _log,
     );
@@ -447,12 +448,21 @@ class DaemonAutomations implements ChecksWork {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    if (tool != 'checks_run') return null;
+    if (tool != 'checks_run' && tool != 'checks_results') return null;
     final sessionId = (arguments['sessionId'] as String?) ?? callerSessionId;
     if (sessionId == null) return null;
     final session = _sessions.getById(sessionId);
     if (session == null) {
       return Future.error(StateError('No session $sessionId.'));
+    }
+    if (tool == 'checks_results') {
+      // A read of what is recorded: it runs nothing, so reach does not matter.
+      return Future.value(
+        sessionCheckResultsReport(
+          checks.latestResults(session),
+          limit: (arguments['limit'] as num?)?.round() ?? 50,
+        ),
+      );
     }
     final directory = _directoryOf(session);
     if (!facts.runsChecksIn(directory)) {
