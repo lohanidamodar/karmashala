@@ -25,14 +25,59 @@ class StoreEntry {
 }
 
 /// One app as its owner thinks of it: the same bundle id on every store it is
-/// on.
+/// on, or two apps its owner combined by hand ([combined]).
 class StoreAppGroup {
-  const StoreAppGroup({required this.bundleId, required this.entries});
+  const StoreAppGroup({
+    required this.bundleId,
+    required this.entries,
+    this.combined = StoreCombined.alone,
+  });
 
+  /// The first entry's bundle id; a group combined by hand may have another
+  /// on its other store — [bundleIds] has both.
   final String bundleId;
 
   /// App Store first, then Google Play.
   final List<StoreEntry> entries;
+
+  /// How the entries came to be one app.
+  final StoreCombined combined;
+
+  bool get combinedManually => combined == StoreCombined.manually;
+
+  /// Each distinct bundle id or package name, App Store first: one unless
+  /// combined by hand.
+  List<String> get bundleIds => [
+    ...{for (final entry in entries) entry.app.bundleId},
+  ];
+
+  /// Unique among groups however they are combined: its first app's
+  /// [StoreApp.key].
+  String get key => entries.first.app.key;
+
+  /// Whether the app with [appKey] — a [StoreApp.key] — is in this group.
+  bool has(String? appKey) => entries.any((entry) => entry.app.key == appKey);
+
+  /// The one store this app is on, or null when it is on both.
+  StoreKind? get onlyStore =>
+      entries.length == 1 ? entries.single.app.store : null;
+
+  /// The pair to ask the server to separate; null unless combined by hand.
+  StoreAppLink? get link {
+    if (!combinedManually) return null;
+    String? apple;
+    String? play;
+    for (final entry in entries) {
+      switch (entry.app.store) {
+        case StoreKind.appStore:
+          apple = entry.app.id;
+        case StoreKind.googlePlay:
+          play = entry.app.id;
+      }
+    }
+    if (apple == null || play == null) return null;
+    return StoreAppLink(appStoreId: apple, packageName: play);
+  }
 
   String get name => entries.first.app.name;
 
@@ -54,36 +99,37 @@ class StoreAppGroup {
       entries.any((entry) => entry.pending?.state.inFlight ?? false);
 }
 
-/// [apps] as one group per bundle id: those needing attention first, then
-/// those with a release in flight, then by name.
+/// [apps] as one group per app as [combineStoreApps] — the agent tools'
+/// grouping too — combines them, [links] first: those needing attention
+/// first, then those with a release in flight, then by name.
 List<StoreAppGroup> groupStoreApps(
   Iterable<StoreApp> apps,
   Map<StoreApp, StoreAppSnapshot> snapshots, {
   Map<String, StoreAppIcon> icons = const {},
+  Iterable<StoreAppLink> links = const [],
 }) {
-  final byBundle = <String, List<StoreEntry>>{};
-  for (final app in {...apps}) {
-    byBundle
-        .putIfAbsent(app.bundleId, () => [])
-        .add(StoreEntry(app, snapshots[app], icon: icons[app.key]));
-  }
   int rank(StoreAppGroup group) => group.needsAttention
       ? 0
       : group.inFlight
       ? 1
       : 2;
   return [
-    for (final MapEntry(:key, :value) in byBundle.entries)
+    for (final combination in combineStoreApps(apps, links: links))
       StoreAppGroup(
-        bundleId: key,
-        entries: value
-          ..sort((a, b) => a.app.store.index.compareTo(b.app.store.index)),
+        bundleId: combination.bundleId,
+        combined: combination.combined,
+        entries: [
+          for (final app in combination.apps)
+            StoreEntry(app, snapshots[app], icon: icons[app.key]),
+        ],
       ),
   ]..sort((a, b) {
     final byRank = rank(a).compareTo(rank(b));
     if (byRank != 0) return byRank;
     final byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    return byName != 0 ? byName : a.bundleId.compareTo(b.bundleId);
+    if (byName != 0) return byName;
+    final byBundle = a.bundleId.compareTo(b.bundleId);
+    return byBundle != 0 ? byBundle : a.key.compareTo(b.key);
   });
 }
 
@@ -93,6 +139,7 @@ List<StoreAppGroup> groupStoreView(
   Map<StoreKind, Reading<List<StoreApp>>> stores,
   List<StoreAppSnapshot> apps, {
   Map<String, StoreAppIcon> icons = const {},
+  Iterable<StoreAppLink> links = const [],
 }) => groupStoreApps(
   [
     for (final reading in stores.values) ...?reading.valueOrNull,
@@ -100,4 +147,5 @@ List<StoreAppGroup> groupStoreView(
   ],
   {for (final snapshot in apps) snapshot.app: snapshot},
   icons: icons,
+  links: links,
 );

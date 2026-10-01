@@ -67,13 +67,32 @@ class StoreGroupCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall,
                           ),
-                          Text(
-                            group.bundleId,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                          // Combined by hand: both ids, after a link mark.
+                          Row(
+                            children: [
+                              if (group.combinedManually) ...[
+                                Tooltip(
+                                  message: 'Combined manually',
+                                  child: Icon(
+                                    AppIcons.linkSimple,
+                                    size: Chrome.iconAction,
+                                    color: scheme.onSurfaceVariant,
+                                    semanticLabel: 'Combined manually',
+                                  ),
+                                ),
+                                const SizedBox(width: Insets.xs),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  group.bundleIds.join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
