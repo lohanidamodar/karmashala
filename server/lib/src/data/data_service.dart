@@ -983,7 +983,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// The terminal is never refused: the bits guard against a slip, not a thief.
 String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   final denied = switch (request) {
-    EnvSet() || EnvRemove() =>
+    EnvSet() || EnvRemove() || EnvRename() =>
       'a phone may not change this server\'s environment variables or '
           'secrets; use a desktop paired with it',
     StoreAppleSet() || StorePlaySet() || StoreCredentialRemove() =>

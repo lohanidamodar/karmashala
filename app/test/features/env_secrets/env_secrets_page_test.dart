@@ -77,16 +77,58 @@ void main() {
     expect(find.text('vim'), findsNothing);
   });
 
-  testWidgets('replacing one keeps the name and sets a new value', (
+  Future<void> edit(WidgetTester tester, {String? name, String? value}) async {
+    await tester.tap(find.widgetWithText(TextButton, 'Edit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit GITHUB_TOKEN'), findsOneWidget);
+    if (name != null) {
+      await tester.enterText(find.byType(TextField).first, name);
+    }
+    if (value != null) {
+      await tester.enterText(find.byType(TextField).last, value);
+    }
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('editing only the value keeps the name and sets a new value', (
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.widgetWithText(TextButton, 'Replace'));
-    await tester.pumpAndSettle();
-    expect(find.text('Replace GITHUB_TOKEN'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).last, 'ghp-new');
-    await tester.tap(find.widgetWithText(FilledButton, 'Replace'));
-    await tester.pumpAndSettle();
+    await edit(tester, value: 'ghp-new');
     expect(server.envVault.values, {'GITHUB_TOKEN': 'ghp-new'});
+  });
+
+  testWidgets('a rename with the value left blank keeps the value, and the '
+      'old name is gone', (tester) async {
+    await pump(tester);
+    await edit(tester, name: 'GH_TOKEN');
+    expect(server.envVault.values, {'GH_TOKEN': 'ghp-never-shown'});
+    expect(server.requests, contains('env.rename'));
+    expect(find.text('GH_TOKEN'), findsOneWidget);
+    expect(find.text('GITHUB_TOKEN'), findsNothing);
+  });
+
+  testWidgets('a rename and a new value land together', (tester) async {
+    await pump(tester);
+    await edit(tester, name: 'GH_TOKEN', value: 'ghp-new');
+    expect(server.envVault.values, {'GH_TOKEN': 'ghp-new'});
+  });
+
+  testWidgets('a rename onto another variable is refused, nothing changed', (
+    tester,
+  ) async {
+    server.envVault.seed('OTHER', 'kept');
+    await pump(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Edit').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'OTHER');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('OTHER is already set'), findsOneWidget);
+    expect(server.envVault.values, {
+      'GITHUB_TOKEN': 'ghp-never-shown',
+      'OTHER': 'kept',
+    });
   });
 }

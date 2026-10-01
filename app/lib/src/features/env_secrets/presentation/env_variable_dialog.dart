@@ -7,19 +7,20 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../application/env_secrets_controller.dart';
 
-/// Adds a variable, or replaces the value of one the server holds. **No
-/// value is ever shown**: the vault is write-only, so replacing starts from an
-/// empty field and there is nothing to reveal.
+/// Adds a variable, or edits one the server holds: its name, its value, or
+/// both. **No value is ever shown**: the vault is write-only, so editing
+/// starts from an empty value field that keeps the current value when left
+/// blank, and there is nothing to reveal.
 class EnvVariableDialog extends ConsumerStatefulWidget {
-  const EnvVariableDialog({this.replacing, super.key});
+  const EnvVariableDialog({this.editing, super.key});
 
-  /// The name whose value is being replaced; null adds a new one.
-  final String? replacing;
+  /// The name of the variable being edited; null adds a new one.
+  final String? editing;
 
-  static Future<void> show(BuildContext context, {String? replacing}) =>
+  static Future<void> show(BuildContext context, {String? editing}) =>
       showDialog<void>(
         context: context,
-        builder: (_) => EnvVariableDialog(replacing: replacing),
+        builder: (_) => EnvVariableDialog(editing: editing),
       );
 
   @override
@@ -28,7 +29,7 @@ class EnvVariableDialog extends ConsumerStatefulWidget {
 
 class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
   late final TextEditingController _name = TextEditingController(
-    text: widget.replacing ?? '',
+    text: widget.editing ?? '',
   );
   final TextEditingController _value = TextEditingController();
 
@@ -38,7 +39,7 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
   String? _error;
   bool _saving = false;
 
-  bool get _isReplace => widget.replacing != null;
+  bool get _isEdit => widget.editing != null;
 
   @override
   void dispose() {
@@ -47,9 +48,38 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
     super.dispose();
   }
 
+  /// Why the form cannot be sent as it stands, checked here before the server
+  /// checks it again: the name's rules, the value's, and no clash with
+  /// another variable the server holds.
+  String? _refusal(String name, String value) {
+    final rules =
+        envNameRefusal(name) ??
+        (_isEdit && value.isEmpty ? null : envValueRefusal(value));
+    if (rules != null) return rules;
+    final taken = [
+      for (final variable
+          in ref.read(envVariablesProvider) ?? const <EnvVariableName>[])
+        variable.name,
+    ];
+    final editing = widget.editing;
+    if (editing == null) {
+      return taken.contains(name)
+          ? '$name is already set. Use Edit on it to change it.'
+          : null;
+    }
+    return envRenameRefusal(editing, name, taken);
+  }
+
   Future<void> _submit() async {
-    final name = _name.text;
-    final refusal = envNameRefusal(name) ?? envValueRefusal(_value.text);
+    final name = _name.text.trim();
+    final value = _value.text;
+    final editing = widget.editing;
+    // Nothing changed: the current value stays, under the same name.
+    if (editing != null && name == editing && value.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final refusal = _refusal(name, value);
     if (refusal != null) {
       setState(() => _error = refusal);
       return;
@@ -58,8 +88,14 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
       _saving = true;
       _error = null;
     });
+    final vault = ref.read(envVariablesProvider.notifier);
     try {
-      await ref.read(envVariablesProvider.notifier).set(name, _value.text);
+      if (editing == null || name == editing) {
+        await vault.set(name, value);
+      } else {
+        // One request, so the server never holds both names.
+        await vault.rename(editing, name, value: value.isEmpty ? null : value);
+      }
     } on DataRefused catch (refused) {
       if (!mounted) return;
       setState(() {
@@ -72,14 +108,17 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
     Navigator.of(context).pop();
   }
 
+  void _clearError(String _) {
+    if (_error != null) setState(() => _error = null);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
       title: DesktopDialogTitle(
         icon: AppIcons.terminalWindow,
-        title: _isReplace
-            ? 'Replace ${widget.replacing}'
-            : 'Add environment variable',
+        title: _isEdit ? 'Edit ${widget.editing}' : 'Add environment variable',
         subtitle:
             'Every terminal the Karmashala server starts inherits this, '
             'including agent panes. Anything run in a terminal can print its '
@@ -93,34 +132,43 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
           children: [
             TextField(
               controller: _name,
-              autofocus: !_isReplace,
-              enabled: !_isReplace,
+              autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'Name',
                 hintText: 'GITHUB_TOKEN',
               ),
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
+              onChanged: _clearError,
             ),
             const SizedBox(height: Insets.md),
             TextField(
               controller: _value,
-              autofocus: _isReplace,
               obscureText: !_visible,
               onSubmitted: (_) => _submit(),
               decoration: InputDecoration(
-                labelText: _isReplace ? 'New value' : 'Value',
+                labelText: _isEdit ? 'New value' : 'Value',
+                // The current value is never sent back, so there is nothing
+                // to fill in: blank keeps it, and a rename needs no retyping.
+                helperText: _isEdit
+                    ? 'Leave blank to keep the current value.'
+                    : null,
                 suffixIcon: IconButton(
                   tooltip: _visible ? 'Hide' : 'Show',
                   icon: Icon(_visible ? AppIcons.xCircle : AppIcons.circle),
                   onPressed: () => setState(() => _visible = !_visible),
                 ),
               ),
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
+              onChanged: _clearError,
             ),
+            if (_isEdit) ...[
+              const SizedBox(height: Insets.md),
+              Text(
+                'Terminals already open keep the old name and value until '
+                'they are closed; new ones get the change.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
               DesktopErrorBanner(_error!),
@@ -135,7 +183,7 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
         ),
         FilledButton(
           onPressed: _saving ? null : _submit,
-          child: Text(_isReplace ? 'Replace' : 'Add'),
+          child: Text(_isEdit ? 'Save' : 'Add'),
         ),
       ],
     );

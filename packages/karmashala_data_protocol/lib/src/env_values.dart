@@ -61,6 +61,19 @@ String? envValueRefusal(String value) {
   return null;
 }
 
+/// Why a rename of [from] to [to] cannot be done, given the names [taken] (the
+/// names the vault holds now), or `null` when it can. [to]'s own rules are
+/// [envNameRefusal]'s.
+String? envRenameRefusal(String from, String to, Iterable<String> taken) {
+  final source = from.trim();
+  final target = to.trim();
+  if (!taken.contains(source)) return '$source is not set any more.';
+  if (target != source && taken.contains(target)) {
+    return '$target is already set. Remove it first, or choose another name.';
+  }
+  return null;
+}
+
 /// One variable the server holds, as any client may know it: the name and
 /// when its value was last set. There is no value field, by design.
 final class EnvVariableName {

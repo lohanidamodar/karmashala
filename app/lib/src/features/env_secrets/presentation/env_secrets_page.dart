@@ -169,9 +169,9 @@ class _Fact extends StatelessWidget {
 
 /// One variable the server holds: its name and when it was set. The name is
 /// selectable and has a copy button; the value never reaches this page, so a
-/// name is all there is to copy. The buttons
-/// stay drawn and worded — this is a settings form — plus the same actions on
-/// right-click, `Shift+F10` and the Menu key.
+/// name is all there is to copy. Edit renames it, sets a new value, or both.
+/// The buttons stay drawn and worded — this is a settings form — plus the same
+/// actions on right-click, `Shift+F10` and the Menu key.
 class _VariableCard extends ConsumerWidget {
   const _VariableCard({required this.variable});
 
@@ -190,8 +190,8 @@ class _VariableCard extends ConsumerWidget {
           icon: AppIcons.copySimple,
         ),
         DesktopMenuItem(
-          value: 'replace',
-          label: 'Replace',
+          value: 'edit',
+          label: 'Edit',
           icon: AppIcons.pencilSimple,
         ),
         const DesktopMenuDivider(),
@@ -204,7 +204,7 @@ class _VariableCard extends ConsumerWidget {
       ],
       onSelected: (value) => switch (value) {
         'copy' => copyNameToClipboard(context, variable.name),
-        'replace' => EnvVariableDialog.show(context, replacing: variable.name),
+        'edit' => EnvVariableDialog.show(context, editing: variable.name),
         _ => _remove(context, ref),
       },
       builder: (context) => ItemCard(
@@ -223,9 +223,9 @@ class _VariableCard extends ConsumerWidget {
         actions: [
           TextButton.icon(
             onPressed: () =>
-                EnvVariableDialog.show(context, replacing: variable.name),
+                EnvVariableDialog.show(context, editing: variable.name),
             icon: const Icon(AppIcons.pencilSimple),
-            label: const Text('Replace'),
+            label: const Text('Edit'),
           ),
           TextButton.icon(
             onPressed: () => _remove(context, ref),

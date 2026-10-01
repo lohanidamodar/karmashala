@@ -37,6 +37,15 @@ class EnvVariablesController extends Notifier<List<EnvVariableName>?> {
     await ref.read(dataClientProvider).send(EnvSet(name.trim(), value));
   }
 
+  /// Renames [from] to [to] at the server in one write, setting [value] when
+  /// one is given and keeping the old value otherwise. Throws [DataRefused]
+  /// in the server's words — [to] taken, or [from] gone.
+  Future<void> rename(String from, String to, {String? value}) async {
+    await ref
+        .read(dataClientProvider)
+        .send(EnvRename(from, to.trim(), value: value));
+  }
+
   /// Removes [name] at the server. Throws [DataRefused] in its words.
   Future<void> remove(String name) async {
     await ref.read(dataClientProvider).send(EnvRemove(name));

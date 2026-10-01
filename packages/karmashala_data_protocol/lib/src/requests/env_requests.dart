@@ -1,8 +1,8 @@
 part of '../data_request.dart';
 
 // The server's environment vault (slice 5a): the variables it lays over every
-// terminal it starts. **Write-only**: a client lists names, sets a value and
-// removes one; no answer, change, log line or `toString` ever carries a value
+// terminal it starts. **Write-only**: a client lists names, sets a value,
+// renames one and removes one; no answer, change, log line or `toString` ever carries a value
 // (a request prints its kind alone). Answered when done — the vault is a file.
 
 DataRequest<Object?>? _envRequestFromJson(String kind, _Arguments args) =>
@@ -10,6 +10,11 @@ DataRequest<Object?>? _envRequestFromJson(String kind, _Arguments args) =>
       EnvList.name => const EnvList(),
       EnvSet.name => EnvSet(args.string('name'), args.string('value')),
       EnvRemove.name => EnvRemove(args.string('name')),
+      EnvRename.name => EnvRename(
+        args.string('from'),
+        args.string('to'),
+        value: args.optionalString('value'),
+      ),
       _ => null,
     };
 
@@ -59,6 +64,38 @@ final class EnvSet extends EnvVaultRequest<DataAck> {
 
   @override
   Map<String, Object?> argumentsToJson() => {'name': variable, 'value': value};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Renames [from] to [to] in one write, so the vault never holds both: the
+/// value moves with it, or becomes [value] when one is given. The client
+/// cannot read a value, so only the server can carry one across. Refused when
+/// [from] is not set or [to] is another variable that is.
+final class EnvRename extends EnvVaultRequest<DataAck> {
+  const EnvRename(this.from, this.to, {this.value});
+
+  static const String name = 'env.rename';
+
+  final String from;
+  final String to;
+
+  /// The new value, travelling client → server only; null keeps the old one.
+  final String? value;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'from': from,
+    'to': to,
+    'value': ?value,
+  };
 
   @override
   Object? resultToJson(DataAck result) => null;

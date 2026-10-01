@@ -17,6 +17,8 @@ void main() {
       const EnvList(),
       const EnvSet('API_TOKEN', 's3cret-value'),
       const EnvRemove('API_TOKEN'),
+      const EnvRename('API_TOKEN', 'TOKEN'),
+      const EnvRename('API_TOKEN', 'TOKEN', value: 's3cret-value'),
     ];
     for (final request in requests) {
       final read = DataEnvelope.readRequest(

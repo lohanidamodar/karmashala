@@ -75,6 +75,7 @@ class ServerEnvVault implements EnvVault {
         EnvList() => names,
         final EnvSet r => await _set(r.variable, r.value),
         final EnvRemove r => await _remove(r.variable),
+        final EnvRename r => await _rename(r.from, r.to, r.value),
       };
 
   Future<DataAck> _set(String rawName, String value) async {
@@ -89,6 +90,37 @@ class ServerEnvVault implements EnvVault {
       await _save();
     } on Object {
       _restore(name, before);
+      rethrow;
+    }
+    return const DataAck();
+  }
+
+  /// [from] becomes [to], its value moving with it or replaced by [value], in
+  /// one save: the file never holds both names, and a failed save puts both
+  /// back as they were.
+  Future<DataAck> _rename(String rawFrom, String rawTo, String? value) async {
+    final from = rawFrom.trim();
+    final to = rawTo.trim();
+    final refused =
+        envNameRefusal(to) ?? (value == null ? null : envValueRefusal(value));
+    if (refused != null) throw DataRefused.invalid(refused);
+    _refuseUnreadable();
+    if (envRenameRefusal(from, to, _values.keys) case final clash?) {
+      throw _values.containsKey(from)
+          ? DataRefused.invalid(clash)
+          : DataRefused.notFound(clash);
+    }
+    final beforeFrom = (_values[from], _updated[from]);
+    final beforeTo = (_values[to], _updated[to]);
+    final moved = _values.remove(from)!;
+    _updated.remove(from);
+    _values[to] = value ?? moved;
+    _updated[to] = _now();
+    try {
+      await _save();
+    } on Object {
+      _restore(to, beforeTo);
+      _restore(from, beforeFrom);
       rethrow;
     }
     return const DataAck();

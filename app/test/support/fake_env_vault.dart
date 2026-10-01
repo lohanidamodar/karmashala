@@ -36,6 +36,17 @@ class FakeEnvVault {
       case EnvRemove(:final variable):
         if (values.remove(variable.trim()) == null) return const DataAck();
         _updated.remove(variable.trim());
+      case EnvRename(:final from, :final to, :final value):
+        final source = from.trim();
+        final target = to.trim();
+        final refused =
+            envNameRefusal(target) ??
+            (value == null ? null : envValueRefusal(value)) ??
+            envRenameRefusal(source, target, values.keys);
+        if (refused != null) throw DataRefused.invalid(refused);
+        final moved = values.remove(source)!;
+        _updated.remove(source);
+        seed(target, value ?? moved);
     }
     // Told to every link, the asker's too, as the server announces it.
     _server._tell(null, [EnvVariablesChanged(names)]);
