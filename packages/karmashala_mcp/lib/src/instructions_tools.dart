@@ -546,6 +546,13 @@ a record instead of a sentence.
 **One run per device.** A second launch onto a phone somebody else is driving
 is refused with the holder named, the same rule the `device_*` tools follow.
 
+**A project's run configurations are the developer's, not yours.** Run one by
+name with `flutter_run`'s `configuration` before spelling flavor and defines
+yourself; what you pass explicitly still wins. `flutter_run_config` save
+replaces a configuration of that name wholesale and delete has no undo, and the
+same list is what the developer's Run menu shows — so change one only when
+asked, and say so when you do.
+
 **A successful `flutter_reload` means the reload reached the VM. Nothing else.**
 
 The recompile comes from the `flutter run` that owns the app, and this tool

@@ -433,6 +433,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     openWorld: true,
     movesAttention: true,
   ),
+  // A save replaces a configuration of the same name wholesale and a delete
+  // has no undo; both leave the same rows when repeated.
+  'flutter_run_config': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    movesAttention: false,
+  ),
   // A build overwrites the artifact with no undo and resolves dependencies
   // from the network; only "build" opens and focuses a tab.
   'project_build': McpToolAnnotations(
@@ -1001,6 +1008,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_run': McpToolListing(
     McpToolCategory.flutterApps,
     'Start a project: pub get, launch on a device, and run its gates.',
+  ),
+  'flutter_run_config': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Named run setups: flavor, entrypoint, defines, build mode, device.',
   ),
   'project_build': McpToolListing(
     McpToolCategory.appProjects,

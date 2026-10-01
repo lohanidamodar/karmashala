@@ -108,6 +108,10 @@ class FakeRunsWork {
         executable: 'flutter',
         version: '3.41.0',
       ),
+      FlutterRunConfigs() => const <FlutterRunConfiguration>[],
+      FlutterRunConfigSave(:final configuration) => configuration,
+      FlutterRunConfigDelete() => const DataAck(),
+      FlutterRunStart() => 'flutter run is running in session hosted-1.',
     };
   }
 

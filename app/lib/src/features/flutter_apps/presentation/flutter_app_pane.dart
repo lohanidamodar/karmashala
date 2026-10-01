@@ -13,6 +13,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'flutter_console.dart';
+import 'flutter_run_bar.dart';
 
 /// The debug console for the Flutter app under development, and the two buttons
 /// worth having. Looks when it opens and when asked, never on a timer (§19).
@@ -46,6 +47,7 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
       children: [
         _StatusRow(registry: registry),
         const Divider(height: 1),
+        const FlutterRunBar(),
         if (registry.apps.length > 1) ...[
           _AppList(registry: registry, selectedId: selectedId),
           const Divider(height: 1),

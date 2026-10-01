@@ -956,6 +956,7 @@ Future<int> runServe(
         apps: flutter.apps,
         loop: flutter.loop,
         rows: checkoutRows,
+        configurations: flutter.configurations,
       ),
     )
     ..add(BuildToolSet(builds: flutter.builds, rows: checkoutRows))

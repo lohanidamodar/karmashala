@@ -14,6 +14,7 @@ export 'src/domain/flutter_command_run.dart';
 export 'src/domain/flutter_error_summary.dart';
 export 'src/domain/flutter_preflight.dart';
 export 'src/domain/flutter_project.dart';
+export 'src/domain/flutter_run_configuration.dart';
 export 'src/domain/flutter_sdk.dart';
 export 'src/domain/vm_service_announcement.dart';
 export 'src/domain/vm_service_log_line.dart';

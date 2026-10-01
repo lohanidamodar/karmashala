@@ -188,8 +188,78 @@ const List<Map<String, Object?>> flutterRunToolSchemas = <Map<String, Object?>>[
               'Extra flags for the command, after the ones Karmashala '
               'spells — "--profile", "--exclude-tags=live-ssh,live-wsl".',
         },
+        'configuration': {
+          'type': 'string',
+          'description':
+              'For "run" only: a run configuration\'s name '
+              '(flutter_run_config lists them). It supplies the build mode, '
+              'flavor, target, dart-defines, define files, sub-project and '
+              'default device. WHAT YOU PASS EXPLICITLY WINS: deviceId and '
+              'projectDirectory replace its own; a build mode, --flavor or '
+              '--target in arguments replaces its one; every other argument, '
+              'an extra --dart-define included, is added after its flags.',
+        },
       },
       'required': ['action'],
+    },
+  },
+  {
+    'name': 'flutter_run_config',
+    'description':
+        'The named run configurations of a checkout\'s project — flavor, '
+        'entrypoint, build mode, --dart-define and --dart-define-from-file, '
+        'sub-project and default device — that flutter_run action "run" '
+        'takes by name. Kept per project, so every worktree of it shares '
+        'them, and the same list the Flutter pane\'s Run menu shows. "list" '
+        'answers each with the exact flags it adds. "save" creates one, or '
+        'REPLACES the one of that name with exactly the fields passed — an '
+        'omitted field is cleared, not kept. "delete" removes it for good. '
+        'Defines are stored in plain text: put secrets in a define file.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': ['list', 'save', 'delete'],
+        },
+        'checkoutId': {
+          'type': 'string',
+          'description': 'From list_checkouts; names the project.',
+        },
+        'name': {
+          'type': 'string',
+          'description': 'Required for save and delete. "dev", "staging".',
+        },
+        'projectDirectory': {
+          'type': 'string',
+          'description': 'A sub-project inside the checkout, relative: "app".',
+        },
+        'target': {
+          'type': 'string',
+          'description': 'The entrypoint, e.g. "lib/main_dev.dart".',
+        },
+        'flavor': {'type': 'string'},
+        'buildMode': {
+          'type': 'string',
+          'enum': ['debug', 'profile', 'release'],
+          'description': 'Default debug, the only mode that hot reloads.',
+        },
+        'dartDefines': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'KEY=VALUE pairs, one --dart-define each.',
+        },
+        'dartDefineFiles': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description': 'Paths relative to the project, e.g. "env/dev.json".',
+        },
+        'deviceId': {
+          'type': 'string',
+          'description': 'The device to run on when flutter_run names none.',
+        },
+      },
+      'required': ['action', 'checkoutId'],
     },
   },
 ];
