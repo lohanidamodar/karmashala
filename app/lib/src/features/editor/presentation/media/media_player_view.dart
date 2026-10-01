@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -17,6 +18,7 @@ class MediaPlayerView extends StatefulWidget {
     required this.path,
     required this.kind,
     this.revision = 0,
+    this.showing = true,
     super.key,
   }) : assert(kind != MediaKind.image, 'an image is the ImageViewer\'s');
 
@@ -24,8 +26,14 @@ class MediaPlayerView extends StatefulWidget {
   final String path;
   final MediaKind kind;
 
-  /// A new revision is a new file on disk, opened again from the start.
+  /// A new revision is a new file on disk, opened again where it was.
   final int revision;
+
+  /// Whether its tab is the one on screen. The stack keeps hidden tabs
+  /// mounted, and a player left running there is sound nobody can stop and
+  /// frames nobody sees — so going off screen pauses it. Coming back does not
+  /// resume: playing is the reader's to ask for.
+  final bool showing;
 
   @override
   State<MediaPlayerView> createState() => _MediaPlayerViewState();
@@ -46,26 +54,93 @@ class _MediaPlayerViewState extends State<MediaPlayerView> {
     _errors = _player.stream.error.listen((message) {
       if (mounted) setState(() => _error = message);
     });
-    _open();
+    _open(resumeAt: _lastPositions.remove(widget.path) ?? Duration.zero);
   }
+
+  /// Where each file was left when its player went — a tab evicted from the
+  /// stack (`kMountedTabBudget`) and brought back resumes there, paused.
+  /// Process-lifetime and small: a handful of positions keyed by path.
+  static final Map<String, Duration> _lastPositions = {};
 
   @override
   void didUpdateWidget(MediaPlayerView old) {
     super.didUpdateWidget(old);
-    if (old.path != widget.path || old.revision != widget.revision) _open();
+    if (old.path != widget.path || old.revision != widget.revision) {
+      _open(resumeAt: _player.state.position);
+    }
+    if (old.showing && !widget.showing) unawaited(_player.pause());
   }
 
   @override
   void dispose() {
+    final at = _player.state.position;
+    if (at > Duration.zero) {
+      if (_lastPositions.length >= 32) {
+        _lastPositions.remove(_lastPositions.keys.first);
+      }
+      _lastPositions[widget.path] = at;
+    }
     unawaited(_errors?.cancel());
     unawaited(_player.dispose());
     super.dispose();
   }
 
-  void _open() {
+  /// Opens the file paused. A reload of the file being watched — an agent
+  /// re-rendering a recording — comes back at [resumeAt], not at 0:00, so
+  /// watching a file being rewritten does not throw the reader to the start.
+  void _open({Duration resumeAt = Duration.zero}) {
     _error = null;
-    unawaited(_player.open(Media(widget.path), play: false));
+    unawaited(_openAt(resumeAt));
   }
+
+  Future<void> _openAt(Duration resumeAt) async {
+    try {
+      await _player.open(Media(widget.path), play: false);
+      if (resumeAt <= Duration.zero) return;
+      // A seek before the duration is known is dropped by the backend.
+      final duration = _player.state.duration > Duration.zero
+          ? _player.state.duration
+          : await _player.stream.duration
+                .firstWhere((d) => d > Duration.zero)
+                .timeout(const Duration(seconds: 5));
+      if (!mounted) return;
+      await _player.seek(resumeAt < duration ? resumeAt : duration);
+    } on Object {
+      // A file that will not open says so on the error stream; a resume that
+      // could not happen leaves the player at the start, which is no harm.
+    }
+  }
+
+  /// media_kit's default bindings, less Escape: outside fullscreen it would
+  /// take the key from the shell (closing a dialog, leaving a mode) for an
+  /// exit there is nothing to exit from. Fullscreen keeps its own defaults.
+  late final Map<ShortcutActivator, VoidCallback> _shortcuts = {
+    const SingleActivator(LogicalKeyboardKey.mediaPlay): () =>
+        unawaited(_player.play()),
+    const SingleActivator(LogicalKeyboardKey.mediaPause): () =>
+        unawaited(_player.pause()),
+    const SingleActivator(LogicalKeyboardKey.mediaPlayPause): () =>
+        unawaited(_player.playOrPause()),
+    const SingleActivator(LogicalKeyboardKey.space): () =>
+        unawaited(_player.playOrPause()),
+    const SingleActivator(LogicalKeyboardKey.keyJ): () =>
+        _seekBy(const Duration(seconds: -10)),
+    const SingleActivator(LogicalKeyboardKey.keyL): () =>
+        _seekBy(const Duration(seconds: 10)),
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+        _seekBy(const Duration(seconds: -2)),
+    const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+        _seekBy(const Duration(seconds: 2)),
+    const SingleActivator(LogicalKeyboardKey.arrowUp): () => _volumeBy(5),
+    const SingleActivator(LogicalKeyboardKey.arrowDown): () => _volumeBy(-5),
+  };
+
+  void _seekBy(Duration by) =>
+      unawaited(_player.seek(_player.state.position + by));
+
+  void _volumeBy(double by) => unawaited(
+    _player.setVolume((_player.state.volume + by).clamp(0.0, 100.0)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +156,16 @@ class _MediaPlayerViewState extends State<MediaPlayerView> {
           ),
         Expanded(
           child: video != null
-              ? Video(controller: video, controls: MaterialDesktopVideoControls)
+              ? MaterialDesktopVideoControlsTheme(
+                  normal: MaterialDesktopVideoControlsThemeData(
+                    keyboardShortcuts: _shortcuts,
+                  ),
+                  fullscreen: const MaterialDesktopVideoControlsThemeData(),
+                  child: Video(
+                    controller: video,
+                    controls: MaterialDesktopVideoControls,
+                  ),
+                )
               : Center(child: _AudioCard(player: _player)),
         ),
       ],

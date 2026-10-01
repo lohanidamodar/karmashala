@@ -113,7 +113,12 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (editorPanePath(paneId) case final path?) {
       // An image, a video or an audio file is shown, not refused as binary.
       if (mediaKindOf(path) != null) {
-        return MediaPane(key: ValueKey(paneId), paneId: paneId, hostPath: path);
+        return MediaPane(
+          key: ValueKey(paneId),
+          paneId: paneId,
+          hostPath: path,
+          showing: showing,
+        );
       }
       return EditorTabView(key: ValueKey(paneId), hostPath: path);
     }

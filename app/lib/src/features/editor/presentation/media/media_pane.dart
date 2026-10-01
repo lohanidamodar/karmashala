@@ -16,9 +16,19 @@ import 'media_tab_view.dart';
 /// where *Attach to chat* goes and how a file this machine cannot reach is
 /// opened.
 class MediaPane extends ConsumerWidget {
-  const MediaPane({required this.paneId, required this.hostPath, super.key});
+  const MediaPane({
+    required this.paneId,
+    required this.hostPath,
+    this.showing = true,
+    super.key,
+  });
 
   final String paneId;
+
+  /// Whether its tab is the one on screen. Not a build gate, as it is for the
+  /// browser: an image keeps its zoom across a tab switch only if it stays
+  /// built, so the player is told instead, and pauses.
+  final bool showing;
 
   /// The document id (`document_id.dart`).
   final String hostPath;
@@ -37,6 +47,7 @@ class MediaPane extends ConsumerWidget {
     final opening = ref.watch(serverFileOpeningProvider);
     return MediaTabView(
       hostPath: hostPath,
+      showing: showing,
       onCopyPath: () => copyToClipboard(context, file.path, 'Path'),
       // A file on an SSH host or behind a server elsewhere is brought here
       // first, so this works wherever there is a default app to hand it to.

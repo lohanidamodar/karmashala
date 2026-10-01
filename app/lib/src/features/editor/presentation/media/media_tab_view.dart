@@ -27,8 +27,12 @@ class MediaTabView extends ConsumerStatefulWidget {
     this.onOpenExternally,
     this.onAttachToChat,
     this.attachDisabledReason,
+    this.showing = true,
     super.key,
   });
+
+  /// Whether its tab is the one on screen; off screen a player pauses.
+  final bool showing;
 
   /// The document id (`document_id.dart`).
   final String hostPath;
@@ -266,6 +270,7 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
       path: document.localPath!,
       kind: document.kind,
       revision: document.revision,
+      showing: widget.showing,
     );
   }
 
