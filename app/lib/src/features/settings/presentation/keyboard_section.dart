@@ -12,6 +12,7 @@ import '../../../app/shell/shell_area.dart' show shellCommandShownWith;
 import '../../../core/capabilities/capabilities.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../application/settings_controller.dart';
+import 'copyable_name.dart';
 import 'settings_catalog.dart';
 import 'settings_notice.dart';
 import 'settings_row.dart';
@@ -178,9 +179,19 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
           for (final binding in rows)
             SettingsRow(
               label: binding.does,
-              help: binding.fromKeymap
-                  ? '${binding.command} · keymap.json'
-                  : binding.command,
+              // The id is what keymap.json binds by, so it can be copied.
+              helpWidget: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: CopyableName(
+                      text: binding.command,
+                      tooltip: 'Copy command id',
+                    ),
+                  ),
+                  if (binding.fromKeymap) const Text('· keymap.json'),
+                ],
+              ),
               controlMaxWidth: 200,
               control: SettingsValue(
                 label: binding.keys ?? 'Unbound',

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
+import '../../settings/presentation/copyable_name.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/env_secrets_controller.dart';
 import 'env_variable_dialog.dart';
@@ -166,7 +167,9 @@ class _Fact extends StatelessWidget {
   }
 }
 
-/// One variable the server holds: its name and when it was set. The buttons
+/// One variable the server holds: its name and when it was set. The name is
+/// selectable and has a copy button; the value never reaches this page, so a
+/// name is all there is to copy. The buttons
 /// stay drawn and worded — this is a settings form — plus the same actions on
 /// right-click, `Shift+F10` and the Menu key.
 class _VariableCard extends ConsumerWidget {
@@ -182,6 +185,11 @@ class _VariableCard extends ConsumerWidget {
       menuLabel: 'Actions for ${variable.name}',
       itemBuilder: () => [
         DesktopMenuItem(
+          value: 'copy',
+          label: 'Copy name',
+          icon: AppIcons.copySimple,
+        ),
+        DesktopMenuItem(
           value: 'replace',
           label: 'Replace',
           icon: AppIcons.pencilSimple,
@@ -195,12 +203,13 @@ class _VariableCard extends ConsumerWidget {
         ),
       ],
       onSelected: (value) => switch (value) {
+        'copy' => copyNameToClipboard(context, variable.name),
         'replace' => EnvVariableDialog.show(context, replacing: variable.name),
         _ => _remove(context, ref),
       },
       builder: (context) => ItemCard(
         icon: AppIcons.warningCircle,
-        title: Text(variable.name, style: MonoStyles.label),
+        title: CopyableName(text: variable.name, style: MonoStyles.label),
         details: [
           // The whole write-only rule, in one widget: a variable shows that
           // it is set and when, and never what it is.
