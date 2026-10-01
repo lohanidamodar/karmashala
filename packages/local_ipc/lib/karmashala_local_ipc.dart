@@ -10,6 +10,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'orderly_close.dart';
+
+export 'orderly_close.dart';
 export 'socket_location.dart';
 
 /// Handles one request line and returns the response line.
@@ -74,24 +77,26 @@ class LocalRpcServer {
         0,
         timeout: const Duration(milliseconds: 500),
       );
-      probe.destroy();
+      await OrderlySocket(probe).release();
       return true;
     } on Object {
       return false;
     }
   }
 
-  void _accept(Socket socket) {
+  void _accept(Socket accepted) {
+    final socket = OrderlySocket(accepted);
     // A client may pipeline, so every completed line is answered in turn.
     final reader = _LineReader(kLocalRpcMaxBytes);
-    socket.listen(
+    socket.stream.listen(
       (chunk) async {
         final List<String> lines;
         try {
           lines = reader.add(chunk);
         } on FormatException catch (error) {
           _write(socket, jsonEncode({'ok': false, 'error': '$error'}));
-          await socket.close();
+          // Elsewhere a half-close, as it always was; onDone destroys it.
+          await (socket.orderly ? socket.close() : socket.shutdownSend());
           return;
         }
         for (final line in lines) {
@@ -117,7 +122,7 @@ class LocalRpcServer {
     );
   }
 
-  void _write(Socket socket, String line) {
+  void _write(OrderlySocket socket, String line) {
     try {
       socket.add(utf8.encode(line));
       socket.add(const [0x0a]);
@@ -166,23 +171,22 @@ class LocalRpcClient {
     if (request.contains('\n')) {
       throw ArgumentError('Request must not contain a newline.');
     }
-    final socket = await Socket.connect(
-      localSocketAddress(socketPath),
-      0,
-      timeout: timeout,
+    final socket = OrderlySocket(
+      await Socket.connect(localSocketAddress(socketPath), 0, timeout: timeout),
     );
     try {
       socket.add(encoded);
       socket.add(const [0x0a]);
       await socket.flush();
       final reader = _LineReader(kLocalRpcMaxBytes);
-      await for (final chunk in socket.timeout(timeout)) {
+      await for (final chunk in socket.stream.timeout(timeout)) {
         final lines = reader.add(chunk);
         if (lines.isNotEmpty) return lines.first;
       }
       throw StateError('The server closed the connection without answering.');
     } finally {
-      socket.destroy();
+      // Awaited: a bridge killed after this returns has nothing pending.
+      await socket.release();
     }
   }
 }
