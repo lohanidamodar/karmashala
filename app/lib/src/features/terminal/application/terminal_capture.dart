@@ -2,6 +2,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../sessions/application/session_providers.dart';
+import 'terminal_sessions_controller.dart' show paneSessionsProvider;
 
 /// Where a terminal selection came from. A plain shell can say nothing, and
 /// **that is an answer**: nothing falls back to the Explorer's selection.
@@ -26,9 +27,11 @@ class TerminalSelectionSource {
 /// the menu opens rather than watched — nothing draws it.
 final terminalSelectionSourceProvider = Provider.autoDispose
     .family<TerminalSelectionSource, String>((ref, paneId) {
-      final rows = ref.read(sessionsDataProvider).getByPaneIds([paneId]);
-      if (rows.isEmpty) return TerminalSelectionSource.none;
-      final session = rows.first;
+      final sessionId = ref.read(paneSessionsProvider).sessionOf(paneId);
+      final session = sessionId == null
+          ? null
+          : ref.read(sessionsDataProvider).getById(sessionId);
+      if (session == null) return TerminalSelectionSource.none;
       return TerminalSelectionSource(
         sessionId: session.id,
         repositoryId: session.repositoryId,

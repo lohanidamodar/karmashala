@@ -212,7 +212,7 @@ _WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
   return _WorkbenchSession(
     id: sessionId,
     title: record?.title ?? 'Session',
-    paneId: sessionTerminalPane(ref, sessionId),
+    paneId: ref.watch(paneOfSessionProvider(sessionId)),
     native: true,
   );
 }
@@ -229,12 +229,7 @@ _WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
   final selected = ref.watch(selectedSessionIdProvider);
   if (selected == null) return null;
   // A pane arriving under the selection, or going away, changes the answer.
-  ref.watch(terminalTabsProvider);
-  ref.watchSessionKinds(const {
-    SessionChangeKind.membership,
-    SessionChangeKind.placement,
-  });
-  return sessionTerminalPane(ref, selected) == null
+  return ref.watch(paneOfSessionProvider(selected)) == null
       ? (id: selected, native: true)
       : null;
 }

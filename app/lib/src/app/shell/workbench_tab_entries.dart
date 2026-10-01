@@ -17,20 +17,18 @@ bool _showingPanes(WidgetRef ref, {String? groupId}) {
 List<TabEntry> terminalTabEntries(WidgetRef ref) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-  // Adopting a pane, or launching into one, rewrites `pane_id` on the row; a
-  // rename changes what a tab is called.
+  // A rename changes what a tab is called.
   ref.watchSessionKinds(const {
     SessionChangeKind.membership,
     SessionChangeKind.title,
-    SessionChangeKind.placement,
   });
-  // The panes that exist, not every session ever opened: the pane index makes
-  // this proportional to the tabs on screen rather than a full table scan.
+  final panes = ref.watch(paneSessionsProvider);
+  final rows = ref.read(sessionsDataProvider);
   final titles = <String, String>{
-    for (final record in ref.read(sessionsDataProvider).getByPaneIds([
-      for (final tab in terminals.tabs) ...tab.layout.panes,
-    ]))
-      if (record.paneId != null) record.paneId!: record.title,
+    for (final tab in terminals.tabs)
+      if (panes.sessionOf(tab.focusedPaneId) case final sessionId?)
+        if (rows.getById(sessionId) case final record?)
+          tab.focusedPaneId: record.title,
   };
   final onPanes = _showingPanes(ref);
   final active = terminals.activeTabId;

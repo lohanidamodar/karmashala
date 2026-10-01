@@ -6,8 +6,6 @@ import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_session/session.dart';
-import 'session_providers.dart';
-import 'session_signals.dart';
 
 /// What one session's agent is doing — a projection of the one shared registry,
 /// starting nothing. [AgentActivityStatus.unknown] is a first-class answer.
@@ -46,13 +44,6 @@ final sessionStatusStreamProvider =
               ref.read(sessionStatusRegistryProvider).reportsFor(sessionId),
     );
 
-/// paneId → the session standing in it. One shared producer, watched on
-/// **placement alone**, so the app's most frequent change never wakes a tab.
-final placedSessionIdsProvider = Provider<Map<String, String>>((ref) {
-  ref.watchSessionKinds(const {SessionChangeKind.placement});
-  return ref.read(sessionsDataProvider).paneSessionIds();
-});
-
 /// The panes on screen right now. Pane ids, not session ids: resolving them
 /// costs a table scan the inbox does not need while it holds no items.
 final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
@@ -79,13 +70,11 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
 });
 
 /// What the agent in pane [paneId] is doing, or null when it has no agent.
-/// The session id comes from the **row**, so an adopted shell pane is included.
+/// An adopted shell pane is included — see [PaneSessions].
 final paneAgentActivityProvider = Provider.autoDispose
     .family<AgentActivityStatus?, String>((ref, paneId) {
       if (!ref.watch(terminalPaneLivenessProvider(paneId)).isLive) return null;
-      final sessionId = ref.watch(
-        placedSessionIdsProvider.select((byPane) => byPane[paneId]),
-      );
+      final sessionId = ref.watch(sessionOfPaneProvider(paneId));
       if (sessionId == null) return null;
       return ref.watch(
             agentSessionStatusProvider(
@@ -121,7 +110,11 @@ int _urgency(AgentActivityStatus status) => switch (status) {
 /// The bottom rows of the pane [session] runs in, empty rather than absent for
 /// a dead one. [agentId] picks the depth; these rows are quoted as the prompt.
 List<String> sessionTerminalTail(Ref ref, Session session, {String? agentId}) {
-  return sessionTerminalTailForPane(ref, session.paneId, agentId: agentId);
+  return sessionTerminalTailForPane(
+    ref,
+    ref.read(paneSessionsProvider).paneOf(session.id),
+    agentId: agentId,
+  );
 }
 
 /// The bottom rows of [paneId], or nothing when it is absent or dead — the

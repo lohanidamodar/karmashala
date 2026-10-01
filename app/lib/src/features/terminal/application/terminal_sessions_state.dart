@@ -50,6 +50,7 @@ class TerminalSessionsState {
     this.detached = const [],
     this.liveness = const {},
     this.workingDirectories = const {},
+    this.launchedSessions = const {},
     this.titleRevision = 0,
   });
 
@@ -74,6 +75,10 @@ class TerminalSessionsState {
   /// Per-pane working directory, republished on every OSC 7 `cd`. Its own
   /// projection, so a `cd` in a background pane does not rebuild the tab strip.
   final Map<String, String?> workingDirectories;
+
+  /// Every pane of this window → the session it was opened to run, null for a
+  /// shell. Moves only when a pane comes or goes; see [paneSessionsProvider].
+  final Map<String, String?> launchedSessions;
 
   /// Incremented on every publish so title and metadata watchers can detect
   /// mutations even when tab layout is structurally identical.
@@ -110,6 +115,7 @@ class TerminalSessionsState {
           identical(other.detached, detached) &&
           identical(other.liveness, liveness) &&
           identical(other.workingDirectories, workingDirectories) &&
+          identical(other.launchedSessions, launchedSessions) &&
           other.titleRevision == titleRevision;
 
   @override
@@ -121,6 +127,7 @@ class TerminalSessionsState {
     identityHashCode(detached),
     identityHashCode(liveness),
     identityHashCode(workingDirectories),
+    identityHashCode(launchedSessions),
     titleRevision,
   );
 }

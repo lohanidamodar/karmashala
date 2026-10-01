@@ -24,7 +24,6 @@ import '../../explorer/application/agent_state_providers.dart';
 import '../application/ask_resolutions.dart';
 import '../application/session_input.dart';
 import '../application/session_prompt_answers.dart';
-import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
@@ -695,7 +694,7 @@ String _approvalRefusalText(
 /// Reveals the pane so the user can answer anything we could not represent.
 /// Shared by both halves of the card: the terminal is the complete answer.
 void _openTerminal(WidgetRef ref, String sessionId) {
-  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+  final paneId = ref.read(paneSessionsProvider).paneOf(sessionId);
   if (paneId != null) {
     ref.read(terminalSessionsControllerProvider.notifier)
       ..reattachSession(paneId)

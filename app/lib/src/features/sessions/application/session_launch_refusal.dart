@@ -7,7 +7,6 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'session_notice.dart';
-import 'session_providers.dart';
 import 'session_resume_providers.dart';
 
 final _log = AppLogger.named('sessions.launch');
@@ -24,23 +23,23 @@ void reportRefusedLaunches(Ref ref, Iterable<String> stoppedPaneIds) {
   if (refusals.isEmpty) return;
 
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
+  final panes = ref.read(paneSessionsProvider);
   final registry = ref.read(agentRegistryProvider);
-  for (final session
-      in ref.read(sessionsDataProvider).getByPaneIds(refusals.keys)) {
-    final refusal = refusals[session.paneId];
-    if (refusal == null) continue;
+  for (final refusal in refusals.values) {
+    final sessionId = panes.sessionOf(refusal.pane);
+    if (sessionId == null) continue;
     final agentId = controller.instanceFor(refusal.pane)?.agentLaunch?.agentId;
     final name = registry.byId(agentId ?? '')?.displayName ?? 'agent';
     final sentence = rejectedValueNotice(name, refusal.value);
     _log.warning(
-      'Refused ${session.id} at its command line: agent=$agentId '
+      'Refused $sessionId at its command line: agent=$agentId '
       "value='${refusal.value.value}' flag='${refusal.value.flag}' "
       'offered=${refusal.value.alternativesLabel} pane=${refusal.pane}',
     );
     ref
         .read(sessionNoticesProvider.notifier)
         .post(
-          session.id,
+          sessionId,
           SessionNotice(message: sentence, tone: SessionNoticeTone.warning),
         );
   }

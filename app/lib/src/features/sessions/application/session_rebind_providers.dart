@@ -11,6 +11,8 @@ import '../../agents/application/hook_payload_field.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../domain/session_rebind.dart';
+import '../../terminal/application/terminal_sessions_controller.dart'
+    show paneSessionsProvider;
 import 'session_providers.dart';
 
 /// How often one unknown conversation may be looked at. A busy agent fires
@@ -105,11 +107,13 @@ String? rebindSessionFromHook(
   );
   if (!turn) return null;
 
-  final live = <String>[
+  final paneSessions = container.read(paneSessionsProvider);
+  final liveSessions = <String>{
     for (final pane in container.read(adoptablePanesProvider)())
-      if (pane.isLive && pane.hostsLaunchedSession) pane.paneId,
-  ];
-  if (live.isEmpty) return null;
+      if (pane.isLive && pane.hostsLaunchedSession)
+        ?paneSessions.sessionOf(pane.paneId),
+  };
+  if (liveSessions.isEmpty) return null;
 
   final installations = container.read(agentInstallationsDataProvider);
   final environments = {
@@ -124,7 +128,7 @@ String? rebindSessionFromHook(
   final cwd = cwdPath.isEmpty ? '' : hookStringAt(cwdPath, body);
 
   final panes = <BoundPane>[];
-  for (final session in sessions.getByPaneIds(live)) {
+  for (final session in sessions.getByIds(liveSessions)) {
     if (session.isArchived) continue;
     final bound = session.externalSessionId ?? '';
     // A row with no conversation at all belongs to attribution, not here:

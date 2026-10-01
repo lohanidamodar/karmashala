@@ -127,6 +127,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     _instances[paneId] = instance;
     _livenessMutated();
     _directoriesMutated();
+    _panesMutated();
     // A dormant pane's buffer cannot change, and reaching for `terminal` here
     // would build the very buffer the restore is avoiding.
     if (instance is! DormantTerminalInstance) {
@@ -238,6 +239,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     if (instance == null) return;
     _livenessMutated();
     _directoriesMutated();
+    _panesMutated();
     _unlisten(paneId, instance);
     // Both halves of the debt: dropping only the flag left the unsaved *age*
     // behind, and Diagnostics reported a growing "oldest unsaved" beside zero

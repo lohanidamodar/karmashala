@@ -7,29 +7,15 @@ extension SessionResumeGuards on SessionLauncher {
 
   /// The pane [sessionId] is running in **right now**, or `null`. A detached
   /// pane is live; one restored from disk is not, whatever its buffer shows.
-  String? livePaneFor(String? sessionId) {
-    if (sessionId == null) return null;
-    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
-    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-    final instance = paneId == null ? null : terminals.instanceFor(paneId);
-    if (instance != null && instance.liveness.value.isLive) return paneId;
-    // The row names another window's pane: find ours by what it runs.
-    return terminals.paneRunningSession(sessionId, (l) => l.isLive);
-  }
+  String? livePaneFor(String? sessionId) => sessionId == null
+      ? null
+      : _ref.read(paneSessionsProvider).paneOf(sessionId, where: _isLive);
 
   /// The pane [sessionId] was **restored** into and has never run, or `null`:
   /// it holds this session's own scrollback but nothing running behind it.
-  String? dormantPaneFor(String? sessionId) {
-    if (sessionId == null) return null;
-    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
-    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-    final instance = paneId == null ? null : terminals.instanceFor(paneId);
-    if (instance?.liveness.value == PaneLiveness.restored) return paneId;
-    return terminals.paneRunningSession(
-      sessionId,
-      (l) => l == PaneLiveness.restored,
-    );
-  }
+  String? dormantPaneFor(String? sessionId) => sessionId == null
+      ? null
+      : _ref.read(paneSessionsProvider).paneOf(sessionId, where: _isRestored);
 
   /// The session we are already running conversation [externalSessionId] in:
   /// in a pane of ours, or at this machine's host with no pane ([show] opens
@@ -137,12 +123,15 @@ extension SessionResumeGuards on SessionLauncher {
   /// The live terminal behind [sessionId], or null. Three things have to be
   /// true and each has been wrong on its own — see [livePaneFor].
   Terminal? _liveTerminalFor(String sessionId) {
-    final paneId = _ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
+    final paneId = livePaneFor(sessionId);
     if (paneId == null) return null;
-    final instance = _ref
+    return _ref
         .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(paneId);
-    if (instance == null || !instance.liveness.value.isLive) return null;
-    return instance.terminal;
+        .instanceFor(paneId)
+        ?.terminal;
   }
 }
+
+bool _isLive(PaneLiveness liveness) => liveness.isLive;
+
+bool _isRestored(PaneLiveness liveness) => liveness == PaneLiveness.restored;

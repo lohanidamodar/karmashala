@@ -240,19 +240,19 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
       for (final repository in ref.read(workspaceDataProvider).repositories)
         repository.id: repository,
     };
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    final panes = ref.read(paneSessionsProvider);
     final out = <_Candidate>[];
     for (final session in ref.read(sessionsDataProvider).getAll()) {
       final installation = installations[session.agentInstallationId];
       if (installation == null) continue;
       final descriptor = registry.byId(installation.agentId);
-      final paneId = session.paneId;
-      final pane = paneId == null ? null : terminals.instanceFor(paneId);
       final screening = screenSessionPromise(
         session,
         agentAssignsSessionId:
             descriptor?.launch.sessionIdAssignment.isSupported ?? false,
-        hostedLive: pane != null && pane.liveness.value.isLive,
+        hostedLive:
+            panes.paneOf(session.id, where: (liveness) => liveness.isLive) !=
+            null,
         now: now,
       );
       if (screening != PromiseScreening.candidate) continue;

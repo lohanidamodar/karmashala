@@ -1045,18 +1045,11 @@ class _OpenLinkBody extends StatelessWidget {
   }
 }
 
-/// The pane [sessionId] can be *shown* in, or null when it has none. A row
-/// keeps its `pane_id` after the pane is gone, so an instance must still exist.
-String? sessionTerminalPane(WidgetRef ref, String sessionId) {
-  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-  final paneId = ref.read(sessionsDataProvider).getById(sessionId)?.paneId;
-  if (paneId != null && terminals.instanceFor(paneId) != null) return paneId;
-  // The row names only the pane that last opened it, and another window (a
-  // phone) writes its own there: this window's pane is found by what it
-  // runs. Without it, a session open in a tab here drew "No terminal of ours"
-  // and its Resume focused a tab the surface never looked at (2026-10-01).
-  return terminals.paneRunningSession(sessionId, (_) => true);
-}
+/// The pane of this window [sessionId] can be *shown* in, or null when it has
+/// none. Read, not watched: a widget that must follow it watches
+/// [paneOfSessionProvider].
+String? sessionTerminalPane(WidgetRef ref, String sessionId) =>
+    ref.read(paneSessionsProvider).paneOf(sessionId);
 
 /// A CLI transcript as chat messages, with a compacted session's history shown
 /// **once** — the summary restates everything before the last boundary.

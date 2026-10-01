@@ -6,6 +6,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/notification_providers.dart'
     show windowFocusedProvider;
+import '../../terminal/application/terminal_sessions_controller.dart'
+    show paneSessionsProvider;
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
@@ -80,11 +82,14 @@ final askAnsweredElsewhereProvider =
             !host.isRunning(sessionId)) {
           return null;
         }
-        final paneId = session.paneId;
-        if (paneId != null &&
-            ref.read(windowFocusedProvider) &&
-            ref.read(foregroundTerminalPaneIdsProvider).contains(paneId)) {
-          return null;
+        if (ref.read(windowFocusedProvider)) {
+          final foreground = ref.read(foregroundTerminalPaneIdsProvider);
+          if (foreground.isNotEmpty) {
+            final panes = ref.read(paneSessionsProvider);
+            if (foreground.any((p) => panes.sessionOf(p) == sessionId)) {
+              return null;
+            }
+          }
         }
         final by = _decidedBy(ref, sessionId, waitingSince);
         return by == null ? 'Answered elsewhere' : 'Answered elsewhere, by $by';

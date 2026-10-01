@@ -33,7 +33,7 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       if (session == null) return const SessionWhereabouts();
 
       final external = session.surface == SessionSurface.external;
-      final paneId = session.paneId;
+      final paneId = ref.watch(paneOfSessionProvider(sessionId));
       // When the evidence was *written*, not when we last polled: the poll is
       // always fresh, and its age would make a week-old transcript look live.
       final lastSeen = agentEvidenceAt(
