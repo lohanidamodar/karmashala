@@ -52,6 +52,7 @@ class HostInstallReading {
     this.remotePath,
     this.deployment,
     this.availableTargets = const [],
+    this.noNewerHost = false,
   });
 
   final HostInstallState state;
@@ -85,6 +86,10 @@ class HostInstallReading {
 
   final List<String> availableTargets;
 
+  /// The host is older than this app and the server carries nothing newer
+  /// for it, so there is no Update to offer.
+  final bool noNewerHost;
+
   bool get canInstall => offeredVersion != null;
 
   /// Whether what is on the machine is a *later* build than the server
@@ -101,7 +106,8 @@ class HostInstallReading {
     HostInstallState.notInstalled => 'not installed',
     HostInstallState.installed =>
       'installed ${installedVersion ?? 'unversioned'} '
-          '(${running ? 'running' : 'stopped'})',
+          '(${running ? 'running' : 'stopped'}'
+          '${noNewerHost ? '; older than this app' : ''})',
     HostInstallState.outdated when hostIsNewer =>
       'newer than the server\'s ($installedVersion; the server carries '
           '$offeredVersion), ${running ? 'running' : 'stopped'}',
@@ -126,6 +132,7 @@ class HostInstallReading {
         remotePath: remotePath,
         deployment: deployment,
         availableTargets: availableTargets,
+        noNewerHost: noNewerHost,
       );
 
   Map<String, Object?> toJson() => {
@@ -140,6 +147,7 @@ class HostInstallReading {
     'remotePath': ?remotePath,
     'deployment': ?deployment?.toJson(),
     if (availableTargets.isNotEmpty) 'availableTargets': availableTargets,
+    if (noNewerHost) 'noNewerHost': true,
   };
 
   static HostInstallReading fromJson(Map<String, Object?> json) =>
@@ -168,6 +176,7 @@ class HostInstallReading {
           for (final target in json['availableTargets'] as List? ?? const [])
             target as String,
         ],
+        noNewerHost: json['noNewerHost'] == true,
       );
 }
 

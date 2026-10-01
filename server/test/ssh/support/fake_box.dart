@@ -176,4 +176,7 @@ class FakeBundles implements HostBinarySource {
 
   @override
   String describeSearch() => '/srv/karmashala/host-bundles';
+
+  @override
+  String? get dropFolder => '/srv/karmashala/host-bundles';
 }

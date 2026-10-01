@@ -1302,8 +1302,9 @@ cross-compiled on Windows is a sound ELF next to a sound `.so` and still cannot
 load it: the library's relative path is written with the *building* machine's
 separator, so it looks for `..\lib\libsqlite3.so`. `karmashala_host probe-store`
 reports that as `STORE MISLINKED`. Linux bundles come from the
-`build-host-linux` job on `ubuntu-latest`; `tool/build_release.bat` builds only
-this machine's and downloads the rest.
+`build-host-linux` job on `ubuntu-latest`; `tool/build_release.bat` builds
+this machine's and downloads the rest, and when the release has none it builds
+them in WSL from the commit being built (`tool/build_host_linux.dart`).
 
 The deployed box needs **no `libsqlite3` of its own** — SQLite is bundled. The
 deployer uploads one tarball per target and unpacks it; `probe-store` says which

@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../protocol/host_version.dart';
 import 'host_deployment.dart';
 import 'privileged_command.dart';
 
@@ -99,11 +100,29 @@ HostDeployExplanation explainHostDeployment(
         action: HostDeployAction.retry,
       );
     case HostDeploymentStatus.protocolMismatch:
+      final wanted = platform?.targetKey ?? 'its platform';
+      if (deployment.noNewerHost) {
+        // Update would install the very host that is stale.
+        return HostDeployExplanation(
+          sentence: deployment.reason,
+          remedy:
+              'This build of Karmashala carries no newer host for $wanted '
+              'than the ${deployment.offeredVersion ?? 'one'} on $hostName, so '
+              'there is nothing to update it to. Rebuild or reinstall '
+              'Karmashala with its host bundles, or put '
+              'karmashala_host-$kHostVersion-$wanted.tar.gz into '
+              '${deployment.bundleFolder ?? 'the host-bundles folder in the Karmashala server\'s data folder'}, '
+              'then try again.',
+          action: HostDeployAction.retry,
+        );
+      }
       return HostDeployExplanation(
         sentence: deployment.reason,
         remedy:
-            'End the sessions the old host holds ("Sessions on this host…"), '
-            'then choose Update: it is only replaced when it holds none.',
+            'Its sessions cannot be counted across protocols, so it is not '
+            'replaced on its own. Stop it (Stop, on $hostName\'s card in '
+            'Settings › Machines; its sessions end with it), and then Update '
+            'or Start puts this app\'s host in its place.',
         action: HostDeployAction.update,
       );
     case HostDeploymentStatus.unknown:

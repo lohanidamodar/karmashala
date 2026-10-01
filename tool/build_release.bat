@@ -81,7 +81,7 @@ rem and the .so are both fine — only the path is wrong — so there is nothing
 rem patch around, and `karmashala_host probe-store` reports it as
 rem STORE MISLINKED. Linux bundles are therefore built on Linux, by the
 rem `build-host-linux` job in .github/workflows/release-build.yml, and collected
-rem from the release here.
+rem from the release here - or, when the release has none, built in WSL below.
 rem
 rem The version is in the filename because HostDeployer compares it against what
 rem the remote binary reports rather than trusting the name.
@@ -114,6 +114,20 @@ if not defined GH (
   if errorlevel 1 (
     echo     could not download linux host bundles from release v!APPVERSHORT! - SSH hosts get whatever older bundle is already in %RELEASE%
     echo could not download linux host bundles from release v!APPVERSHORT! >> "%LOG%"
+  )
+)
+
+rem No release bundles for this version (no gh, no release yet, a failed
+rem download): build them in WSL from the commit being built, by the CI job's
+rem commands, with WSL's own Flutter SDK - tool\build_host_linux.dart says how.
+rem Loud but not fatal: the installer still builds, with whatever older bundle
+rem is already in Release.
+if not exist "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64.tar.gz" (
+  echo === SESSION HOST ^(linux, built in WSL^) === >> "%LOG%"
+  "%DARTEXE%" tool\build_host_linux.dart --version !APPVERSHORT! --out "%RELEASE%" >> "%LOG%" 2>&1
+  if errorlevel 1 (
+    echo     LINUX HOST BUNDLES NOT BUILT in WSL - SSH hosts get whatever older bundle is already in %RELEASE%; see %LOG%
+    echo LINUX HOST BUNDLES NOT BUILT in WSL - SSH hosts get whatever older bundle is already in %RELEASE% >> "%LOG%"
   )
 )
 

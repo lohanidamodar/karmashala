@@ -105,6 +105,9 @@ class HostDeployment {
     this.liveSessionIds,
     this.hostUnresponsive = false,
     this.hostPid,
+    this.noNewerHost = false,
+    this.offeredVersion,
+    this.bundleFolder,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -155,6 +158,16 @@ class HostDeployment {
   /// last one ran ended with it.
   final int? hostPid;
 
+  /// For [HostDeploymentStatus.protocolMismatch]: the stale host is the one
+  /// this server carries, so there is nothing newer to update it to.
+  final bool noNewerHost;
+
+  /// The version of the bundle the server carries for the machine.
+  final String? offeredVersion;
+
+  /// Where the server's operator can put a host bundle.
+  final String? bundleFolder;
+
   bool get isReady => status == HostDeploymentStatus.ready;
 
   Map<String, Object?> toJson() => {
@@ -172,6 +185,9 @@ class HostDeployment {
     'liveSessionIds': ?liveSessionIds,
     if (hostUnresponsive) 'hostUnresponsive': true,
     'hostPid': ?hostPid,
+    if (noNewerHost) 'noNewerHost': true,
+    'offeredVersion': ?offeredVersion,
+    'bundleFolder': ?bundleFolder,
   };
 
   static HostDeployment fromJson(Map<String, Object?> json) => HostDeployment(
@@ -201,6 +217,9 @@ class HostDeployment {
     },
     hostUnresponsive: json['hostUnresponsive'] == true,
     hostPid: json['hostPid'] as int?,
+    noNewerHost: json['noNewerHost'] == true,
+    offeredVersion: json['offeredVersion'] as String?,
+    bundleFolder: json['bundleFolder'] as String?,
   );
 }
 

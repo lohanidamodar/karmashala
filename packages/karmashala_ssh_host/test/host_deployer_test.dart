@@ -195,6 +195,9 @@ class FakeBinaries implements HostBinarySource {
   @override
   String describeSearch() => 'the fake bundle folder';
 
+  @override
+  String? get dropFolder => null;
+
   FakeBinaries({
     this.targets = const {'linux-x64': 1024},
     this.isBundleArchive = false,
