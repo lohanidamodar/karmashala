@@ -30,6 +30,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/resume.dart';
 import '../data/sessions_client.dart';
+import 'acp_session_providers.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_launch_exceptions.dart';
 import 'pending_live_switches.dart';

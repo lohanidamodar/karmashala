@@ -35,8 +35,9 @@ class PaneSessions {
   final Map<String, List<String>> _panesBySession;
   final PaneLiveness Function(String paneId) _livenessOf;
 
-  /// The session pane [paneId] of this window runs, or null for a plain shell,
-  /// a document, or a pane this window does not hold.
+  /// The session pane [paneId] of this window runs — or, for a chat pane,
+  /// reads — or null for a plain shell, any other document, or a pane this
+  /// window does not hold.
   String? sessionOf(String paneId) => _sessionByPane[paneId];
 
   /// A pane of this window showing [sessionId] whose liveness passes [where];

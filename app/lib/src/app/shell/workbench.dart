@@ -112,7 +112,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // A restored layout can put an agent pane on screen before anything is
       // selected; the context panel should describe that session.
       if (active != null) ref.read(sessionContextProvider).follow(active);
-      if (selected != null) _showSurfaceFor(_shownPane, selected);
+      if (selected != null) _openSession(selected);
       _hostSelection();
     });
   }
@@ -136,9 +136,18 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       showTerminalFor(ref, paneId, sessionId);
 
   /// Opens [sessionId] on the surface a session *is*: its terminal. No branch on
-  /// whether it has a pane — one that has none gets [_NoPaneForSession].
-  void _openSession(String sessionId) =>
-      _showSurfaceFor(sessionTerminalPane(ref, sessionId), sessionId);
+  /// whether it has a pane — one that has none gets [_NoPaneForSession] — except
+  /// a session with no terminal to have: its conversation becomes the tab.
+  void _openSession(String sessionId) {
+    var paneId = sessionTerminalPane(ref, sessionId);
+    if (paneId == null && ref.read(isAcpSessionProvider(sessionId))) {
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .openChatTab(sessionId);
+      paneId = chatPaneId(sessionId);
+    }
+    _showSurfaceFor(paneId, sessionId);
+  }
 
   /// Follows the selected session onto the pane it acquires, or loses: the
   /// Explorer selects a row *before* it resumes it, so the pane arrives late.

@@ -104,11 +104,19 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                   : session == null
                   ? _TerminalSurface(groupId: groupId, groupFocused: focused)
                   // No stack: there is no terminal to keep alive behind it.
+                  // With a tab, its chat pane is what the pane stack draws;
+                  // a selection with no tab yet is drawn directly.
                   : chatOnly
-                  ? SessionTranscriptView(
-                      sessionId: session.id,
-                      holdForPrompt: compact,
-                    )
+                  ? (session.paneId == null
+                        ? SessionTranscriptView(
+                            sessionId: session.id,
+                            holdForPrompt: compact,
+                          )
+                        : _TerminalSurface(
+                            session: session,
+                            groupId: groupId,
+                            groupFocused: focused,
+                          ))
                   : IndexedStack(
                       key: kWorkbenchSurfaces,
                       index: onTerminal ? 0 : 1,

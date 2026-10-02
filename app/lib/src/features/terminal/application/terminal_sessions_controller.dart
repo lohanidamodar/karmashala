@@ -261,6 +261,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       launchedSessions: _launchesView ??= Map.unmodifiable({
         for (final entry in _instances.entries)
           entry.key: entry.value.agentLaunch?.sessionId,
+        // A chat pane has no instance; the id itself names its session.
+        for (final tab in _tabs)
+          for (final paneId in tab.layout.panes)
+            paneId: ?chatPaneSessionId(paneId),
       }),
       titleRevision: _titleRevision,
     );
@@ -346,6 +350,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsView = null;
     _tabIndexById = null;
     _tabIdByPane = null;
+    // A chat pane comes and goes with its tab, not with an instance.
+    _launchesView = null;
   }
 
   void _detachedMutated() => _detachedView = null;

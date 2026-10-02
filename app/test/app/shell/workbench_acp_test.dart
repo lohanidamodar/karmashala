@@ -15,9 +15,12 @@ import 'package:karmashala/src/features/sessions/presentation/session_transcript
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionEndRequest;
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
@@ -28,8 +31,9 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
 /// **An ACP session is a chat session** (ACP design, C5): the workbench opens
-/// its conversation, offers no terminal to toggle to, and builds no pane for
-/// it — the server owns the process. A PTY session beside it keeps both faces.
+/// its conversation as a tab of its own — a chat pane, with no process behind
+/// it, since the server owns the agent — and offers no terminal to toggle to.
+/// A PTY session beside it keeps both faces.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
@@ -155,15 +159,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('an ACP session opens on the chat, with no terminal to toggle', (
-    tester,
-  ) async {
+  /// The chip the strip draws for the ACP session's tab.
+  Finder acpChip() => find.widgetWithText(TerminalTabChip, 'Over ACP');
+
+  testWidgets('an ACP session selected opens as a chat tab, with no terminal '
+      'to toggle', (tester) async {
     seedAcpSession();
     container.read(selectedSessionIdProvider.notifier).select('acp-1');
     await pump(tester);
 
+    // A real tab, named for the row, holding the chat pane and nothing else.
+    expect(acpChip(), findsOneWidget);
+    final tabs = container.read(terminalSessionsControllerProvider).tabs;
+    expect(tabs, hasLength(1));
+    expect(tabs.single.layout.panes, [chatPaneId('acp-1')]);
+    // Drawn by the pane stack as the tab's body, not beside the tabs.
     expect(find.byType(SessionTranscriptView), findsOneWidget);
-    expect(find.byType(TerminalPaneStack), findsNothing);
+    expect(find.byType(TerminalPaneStack), findsOneWidget);
     expect(find.byTooltip('Terminal view'), findsNothing);
     expect(find.byTooltip('Chat view'), findsNothing);
     // No switcher either: there is no second surface to keep alive.
@@ -181,9 +193,92 @@ void main() {
     await pump(tester, size: const Size(390, 844), compact: true);
 
     expect(find.byType(SessionTranscriptView), findsOneWidget);
-    expect(find.byType(TerminalPaneStack), findsNothing);
     expect(find.byTooltip('Terminal view'), findsNothing);
     expect(find.byTooltip('Chat view'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selecting the ACP session again brings its tab forward, '
+      'never a second one', (tester) async {
+    seedAcpSession();
+    seedPtySessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('acp-1');
+    await pump(tester);
+    expect(find.byType(TerminalTabChip), findsNWidgets(2));
+
+    container.read(selectedSessionIdProvider.notifier).select('pty-1');
+    await tester.pumpAndSettle();
+    container.read(selectedSessionIdProvider.notifier).select('acp-1');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TerminalTabChip), findsNWidgets(2));
+    expect(acpChip(), findsOneWidget);
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+  });
+
+  testWidgets('the chat tab switches with a terminal tab like any two tabs', (
+    tester,
+  ) async {
+    seedAcpSession();
+    seedPtySessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('acp-1');
+    await pump(tester);
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final chatTab = container
+        .read(terminalSessionsControllerProvider)
+        .activeTabId!;
+    final shellTab = container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .firstWhere((tab) => tab.id != chatTab)
+        .id;
+
+    // To the terminal: its surface, its toggle, and the chat put away.
+    terminals.activateTab(shellTab);
+    await tester.pumpAndSettle();
+    expect(find.byType(SessionTranscriptView), findsNothing);
+    expect(find.byTooltip('Chat view'), findsOneWidget);
+    expect(acpChip(), findsOneWidget);
+
+    // And back, by the chip, as a person would.
+    await tester.tap(acpChip());
+    await tester.pumpAndSettle();
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      chatTab,
+    );
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+    expect(find.byTooltip('Chat view'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closing the chat tab leaves the session running at the server', (
+    tester,
+  ) async {
+    seedAcpSession();
+    container.read(selectedSessionIdProvider.notifier).select('acp-1');
+    await pump(tester);
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final tabId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTabId!;
+
+    terminals.closeTab(tabId);
+    await tester.pumpAndSettle();
+
+    expect(acpChip(), findsNothing);
+    expect(find.byType(SessionTranscriptView), findsNothing);
+    expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+    // A view closed, not a session ended: the server was asked nothing.
+    expect(server.sessionWork.asked.whereType<SessionEndRequest>(), isEmpty);
+    expect(
+      db.server.sessionRows.getById('acp-1')!.status,
+      SessionStatus.running,
+    );
     expect(tester.takeException(), isNull);
   });
 

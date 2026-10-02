@@ -40,7 +40,9 @@ class FakeSessionWork {
       case final SessionResume r:
         final row =
             _server.sessionRows.getById(r.sessionId) ??
-            (throw const DataRefused.notFound('This session no longer exists.'));
+            (throw const DataRefused.notFound(
+              'This session no longer exists.',
+            ));
         final conversation = row.externalSessionId;
         if (r.restart && (conversation == null || conversation.isEmpty)) {
           throw const DataRefused.invalid(
@@ -142,7 +144,8 @@ class FakeSessionWork {
     final repository = _server.repositoryRows.getById(spec.repositoryId);
     // A worktree of its own is the server's to make; here it is named, as
     // the server's `sessionWorktreeName` names it, and not created.
-    final worktree = spec.existingWorktree ??
+    final worktree =
+        spec.existingWorktree ??
         (spec.worktree && repository != null
             ? EnvironmentPath(
                 environmentId: repository.path.environmentId,
@@ -164,9 +167,7 @@ class FakeSessionWork {
       // is named after its row; a fork's is the CLI's to mint.
       externalSessionId:
           spec.resumeConversationId ??
-          (spec.forkConversationId == null && _assignsOwnId(spec)
-              ? id
-              : null),
+          (spec.forkConversationId == null && _assignsOwnId(spec) ? id : null),
       parentSessionId: spec.parentSessionId,
       parentLink: spec.parentLink,
       permissionMode: spec.permissionMode,
@@ -178,10 +179,7 @@ class FakeSessionWork {
         ?.agentId;
     if (failsFor.contains(agentId)) {
       _server.sessionRows.insert(row.copyWith(status: SessionStatus.failed));
-      throw DataRefused(
-        DataRefusalCode.failed,
-        'could not start $agentId',
-      );
+      throw DataRefused(DataRefusalCode.failed, 'could not start $agentId');
     }
     _server.sessionRows.insert(row);
     running.add(id);
@@ -201,10 +199,17 @@ class FakeSessionWork {
             false);
   }
 
-  AgentPaneLaunch _launchOf(Session row) {
+  /// Null for an agent spoken to over ACP, as the server answers: it runs the
+  /// agent itself, so there is no terminal for a pane to attach to.
+  AgentPaneLaunch? _launchOf(Session row) {
     final installation = _server.installationRows.getById(
       row.agentInstallationId,
     );
+    final agentId = installation?.agentId;
+    if (agentId != null &&
+        AgentRegistry.builtIn.adapterFor(agentId)?.acp != null) {
+      return null;
+    }
     final directory =
         row.workingDirectory ??
         row.worktree ??

@@ -21,7 +21,17 @@ final isAcpSessionProvider = Provider.autoDispose.family<bool, String>((
   // The installation can arrive after the row on a fresh connection.
   final arrivals = installations.changes.listen((_) => ref.invalidateSelf());
   ref.onDispose(arrivals.cancel);
-  final agentId = installations.getById(row.agentInstallationId)?.agentId;
-  if (agentId == null) return false;
-  return ref.watch(agentRegistryProvider).adapterFor(agentId)?.acp != null;
+  ref.watch(agentRegistryProvider);
+  return installationSpeaksAcp(ref, row.agentInstallationId);
 });
+
+/// The rule behind [isAcpSessionProvider], for a row in hand — a launch's
+/// result — that the feed may not have delivered yet. Read once, not watched.
+bool installationSpeaksAcp(Ref ref, String installationId) {
+  final agentId = ref
+      .read(agentInstallationsDataProvider)
+      .getById(installationId)
+      ?.agentId;
+  if (agentId == null) return false;
+  return ref.read(agentRegistryProvider).adapterFor(agentId)?.acp != null;
+}

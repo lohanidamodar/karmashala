@@ -106,6 +106,12 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
+  /// Opens the conversation of [sessionId] as a tab of its own — a chat pane,
+  /// with no terminal behind it — or brings the open one forward. For a
+  /// session the server runs itself; closing the tab leaves it running there.
+  String openChatTab(String sessionId) =>
+      openDocumentTab(chatPaneId(sessionId));
+
   /// Settings is one document over one store, so a second tab would be the
   /// same page disagreeing with itself.
   String openSettingsTab() => openDocumentTab(kSettingsPaneId);

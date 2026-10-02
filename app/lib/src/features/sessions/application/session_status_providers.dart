@@ -4,8 +4,11 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneSessionId;
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_session/session.dart';
+import 'session_providers.dart';
+import 'session_signals.dart';
 
 /// What one session's agent is doing — a projection of the one shared registry,
 /// starting nothing. [AgentActivityStatus.unknown] is a first-class answer.
@@ -73,6 +76,22 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
 /// An adopted shell pane is included — see [PaneSessions].
 final paneAgentActivityProvider = Provider.autoDispose
     .family<AgentActivityStatus?, String>((ref, paneId) {
+      // A chat pane has no process to be live: its row says whether the
+      // server still runs the session, and the agent's own report the rest.
+      if (chatPaneSessionId(paneId) case final sessionId?) {
+        ref.watchSessionKinds(const {
+          SessionChangeKind.membership,
+          SessionChangeKind.status,
+        });
+        final row = ref.read(sessionsDataProvider).getById(sessionId);
+        if (row == null || !row.status.claimsLive) return null;
+        return ref.watch(
+              agentSessionStatusProvider(
+                sessionId,
+              ).select((report) => report.value?.status),
+            ) ??
+            AgentActivityStatus.unknown;
+      }
       if (!ref.watch(terminalPaneLivenessProvider(paneId)).isLive) return null;
       final sessionId = ref.watch(sessionOfPaneProvider(paneId));
       if (sessionId == null) return null;

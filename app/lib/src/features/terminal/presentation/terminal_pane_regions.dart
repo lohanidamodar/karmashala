@@ -125,6 +125,18 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (notePaneNoteId(paneId) case final noteId?) {
       return NoteTabView(key: ValueKey(paneId), noteId: noteId);
     }
+    // A session's conversation with no terminal behind it. The same gate as
+    // Settings: off screen it would stream a transcript for nobody, and the
+    // composer parks its draft on the way out.
+    if (chatPaneSessionId(paneId) case final sessionId?) {
+      return showing
+          ? SessionTranscriptView(
+              key: ValueKey(paneId),
+              sessionId: sessionId,
+              holdForPrompt: CompactWorkbenchScope.of(context),
+            )
+          : const SizedBox.shrink();
+    }
     if (diffTargetOf(paneId) case final target?) {
       return DiffTabView(key: ValueKey(paneId), target: target);
     }

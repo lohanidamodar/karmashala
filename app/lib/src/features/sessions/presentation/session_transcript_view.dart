@@ -37,6 +37,7 @@ import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
@@ -554,10 +555,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           earlier: earlier,
                           firstOrdinal: window?.from ?? 0,
                           // Whether there is a terminal to point at: the user
-                          // can switch, so the sentences must be true.
-                          hasTerminal:
-                              sessionTerminalPane(ref, widget.sessionId) !=
-                              null,
+                          // can switch, so the sentences must be true. A chat
+                          // pane is this view, not a terminal.
+                          hasTerminal: switch (sessionTerminalPane(
+                            ref,
+                            widget.sessionId,
+                          )) {
+                            final paneId? => !isChatPane(paneId),
+                            null => false,
+                          },
                           onLinkTap: onLinkTap,
                           footer: footer,
                         );
