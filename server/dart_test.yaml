@@ -14,3 +14,10 @@ tags:
   # a failure here is as often the machine's as ours. Run it deliberately:
   #   dart test --tags=live
   live:
+  # Starts a real ACP adapter (`npx -y @agentclientprotocol/...`) inside WSL
+  # through the server's own runtime and spends model turns
+  # (test/live/acp_live_test.dart). It skips itself unless KARMASHALA_LIVE_ACP=1
+  # is set and WSL has npx, so the ordinary gate is unaffected. Run it
+  # deliberately:
+  #   dart test --tags=live-acp test/live/acp_live_test.dart
+  live-acp:

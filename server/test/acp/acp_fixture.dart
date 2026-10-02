@@ -5,6 +5,7 @@ import 'package:agent_cli/descriptors.dart'
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionModesChanged;
+import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_runtime_host.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
@@ -83,6 +84,7 @@ AcpSessionRuntime runtimeOver(
   required AppDatabase database,
   required String workingDirectory,
   AcpRuntimeHost? host,
+  AcpPathScope? files,
   String sessionId = 's1',
   String agentId = 'claude-acp',
   AcpLaunchSpec spec = const AcpLaunchSpec(),
@@ -103,6 +105,7 @@ AcpSessionRuntime runtimeOver(
     workingDirectory: workingDirectory,
     spawn: process.spawn,
     messages: SessionMessageDao(database),
+    files: files,
     host: host ?? RecordingHost(),
     mcpUrl: mcpUrl,
     risk: risk,

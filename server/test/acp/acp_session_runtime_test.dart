@@ -20,11 +20,14 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         SessionMode,
         SessionModeState,
         StopReason,
+        ToolCallStatus,
+        ToolCallUpdate,
         ToolCallLocation,
         ToolKind;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal;
+import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -746,5 +749,94 @@ void main() {
     expect(process.killed, isTrue);
     expect(end, isA<SessionExited>().having((e) => e.exitCode, 'code', 137));
     expect(runtime.closeRequested, isTrue);
+  });
+
+  test('an edit whose kind and file arrive on a later tool_call_update still '
+      'reaches the checkpoint, once', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: const [
+          FakeTurn([
+            FakeStep.update(
+              ToolCallUpdate(
+                toolCallId: 'c1',
+                isNew: true,
+                title: 'Write',
+                status: ToolCallStatus.pending,
+              ),
+            ),
+            FakeStep.update(
+              ToolCallUpdate(
+                toolCallId: 'c1',
+                kind: ToolKind.edit,
+                status: ToolCallStatus.inProgress,
+                locations: [ToolCallLocation('/tmp/work/note.txt')],
+              ),
+            ),
+            FakeStep.update(
+              ToolCallUpdate(
+                toolCallId: 'c1',
+                status: ToolCallStatus.completed,
+                locations: [ToolCallLocation('/tmp/work/note.txt')],
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: '/tmp/work',
+      host: host,
+    );
+    await runtime.start();
+    await runtime.send('Write it');
+    expect(await runtime.awaitTurn(), StopReason.endTurn);
+    expect(host.touched, ['/tmp/work/note.txt']);
+    final tool = jsonDecode(rows()[1].toolJson!) as Map;
+    expect(tool['kind'], 'edit');
+    expect(tool['status'], 'completed');
+    await runtime.stop();
+  });
+
+  test('a WSL agent\'s fs/* paths are checked in POSIX spelling and reach '
+      'this machine through the environment\'s mapping; the checkpoint hears '
+      'the agent\'s spelling', () async {
+    File(p.join(temp.path, 'a.txt')).writeAsStringSync('alpha');
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: const [
+          FakeTurn([
+            FakeStep.readFile('/tmp/work/a.txt'),
+            FakeStep.writeFile('out/b.txt', 'beta'),
+            FakeStep.readFile('/etc/passwd'),
+          ]),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: '/tmp/work',
+      host: host,
+      files: AcpPathScope(
+        root: '/tmp/work',
+        context: p.posix,
+        toHost: (path) =>
+            p.join(temp.path, p.posix.relative(path, from: '/tmp/work')),
+      ),
+    );
+    await runtime.start();
+    await runtime.send('Go');
+    expect(await runtime.awaitTurn(), StopReason.endTurn);
+    expect(process.agent.readFileResults, ['alpha']);
+    expect(File(p.join(temp.path, 'out', 'b.txt')).readAsStringSync(), 'beta');
+    expect(host.touched, ['/tmp/work/out/b.txt']);
+    expect(process.agent.fsErrors, hasLength(1));
+    final refusal = process.agent.fsErrors.single as AcpRpcError;
+    expect(refusal.code, JsonRpcErrorCodes.invalidParams);
+    expect(refusal.message, contains('/tmp/work'));
+    await runtime.stop();
   });
 }

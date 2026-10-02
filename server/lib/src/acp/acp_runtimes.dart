@@ -9,6 +9,7 @@ import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
 import '../checkpoints/daemon_checkpoints.dart';
 import '../data/data_service.dart';
 import '../status/daemon_agent_status.dart';
+import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
 import 'acp_transport.dart';
@@ -91,6 +92,7 @@ class AcpRuntimes {
       ),
     ),
     messages: messages,
+    files: AcpPathScope.forEnvironment(start.environment, start.directory.path),
     host: host,
     mcpUrl: start.mcpUrl,
     risk: start.risk,

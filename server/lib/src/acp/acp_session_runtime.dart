@@ -10,12 +10,12 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionModeOption, SessionModesChanged;
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
-import 'package:path/path.dart' as p;
 
 import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
 import '../domain/uuid.dart';
 import 'acp_conversation_writer.dart';
+import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_transport.dart';
 
@@ -68,6 +68,7 @@ class AcpSessionRuntime implements ScreenSession {
     required this.workingDirectory,
     required Future<AcpTransport> Function() spawn,
     required SessionMessageDao messages,
+    AcpPathScope? files,
     this.host = AcpRuntimeHost.none,
     this.mcpUrl,
     this.risk,
@@ -78,6 +79,7 @@ class AcpSessionRuntime implements ScreenSession {
     Duration coalesce = const Duration(milliseconds: 100),
     this.stopPatience = const Duration(seconds: 5),
   }) : _spawn = spawn,
+       _files = files ?? AcpPathScope(root: workingDirectory),
        _now = now ?? (() => DateTime.now().toUtc()) {
     startedAt = _now();
     _writer = AcpConversationWriter(
@@ -121,6 +123,9 @@ class AcpSessionRuntime implements ScreenSession {
   final Duration stopPatience;
 
   final Future<AcpTransport> Function() _spawn;
+
+  /// Where the agent's `fs/*` paths land on this machine.
+  final AcpPathScope _files;
   final DateTime Function() _now;
   late final AcpConversationWriter _writer;
 
@@ -457,12 +462,28 @@ class AcpSessionRuntime implements ScreenSession {
       }
       return;
     }
-    if (update is ToolCallUpdate &&
-        update.isNew &&
-        update.kind == ToolKind.edit) {
-      host.checkpointTouched(sessionId, _pathsOf(update));
+    if (update is ToolCallUpdate) {
+      final before = _writer.toolCall(update.toolCallId);
+      _writer.update(update);
+      _noteEditPaths(before, _writer.toolCall(update.toolCallId) ?? update);
+      return;
     }
     _writer.update(update);
+  }
+
+  /// An edit's paths reach the checkpoint once they are known — Claude's
+  /// adapter opens a `tool_call` bare and names the kind and the file on a
+  /// later `tool_call_update`.
+  void _noteEditPaths(ToolCallUpdate? before, ToolCallUpdate after) {
+    if (after.kind != ToolKind.edit) return;
+    final seen = before?.kind == ToolKind.edit
+        ? _pathsOf(before!).toSet()
+        : const <String>{};
+    final fresh = [
+      for (final path in _pathsOf(after))
+        if (!seen.contains(path)) path,
+    ];
+    if (fresh.isNotEmpty) host.checkpointTouched(sessionId, fresh);
   }
 
   // Starting.
@@ -635,10 +656,10 @@ class AcpSessionRuntime implements ScreenSession {
   // Files.
 
   Future<String> _read(String path, {int? line, int? limit}) async {
-    final file = _within(path, 'read');
+    final file = _files.resolve(path, verb: 'read');
     String text;
     try {
-      text = await File(file).readAsString();
+      text = await File(file.host).readAsString();
     } on FileSystemException catch (error) {
       throw AcpRpcError(
         JsonRpcErrorCodes.resourceNotFound,
@@ -655,11 +676,11 @@ class AcpSessionRuntime implements ScreenSession {
   }
 
   Future<void> _write(String path, String content) async {
-    final file = _within(path, 'written');
+    final file = _files.resolve(path, verb: 'written');
     await host.checkpointSettled(sessionId);
-    host.checkpointTouched(sessionId, [file]);
+    host.checkpointTouched(sessionId, [file.agent]);
     try {
-      final target = File(file);
+      final target = File(file.host);
       await target.parent.create(recursive: true);
       await target.writeAsString(content, flush: true);
     } on FileSystemException catch (error) {
@@ -668,22 +689,6 @@ class AcpSessionRuntime implements ScreenSession {
         'could not write $path: ${error.osError?.message ?? error.message}',
       );
     }
-  }
-
-  /// [path] under the working directory, or -32602 in words.
-  String _within(String path, String verb) {
-    final root = p.normalize(workingDirectory);
-    final resolved = p.normalize(
-      p.isAbsolute(path) ? path : p.join(workingDirectory, path),
-    );
-    if (!p.equals(resolved, root) && !p.isWithin(root, resolved)) {
-      throw AcpRpcError(
-        JsonRpcErrorCodes.invalidParams,
-        "the path $path is outside the session's working directory "
-        '($workingDirectory), so it was not $verb',
-      );
-    }
-    return resolved;
   }
 
   // Status and the end.
