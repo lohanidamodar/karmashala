@@ -223,6 +223,7 @@ esac
 # 4. A relay installed here: its token is minted now, owner-only, so the URL
 # clients use is known before anything starts.
 RELAY_TOKEN_FILE="$DATA_DIR/relay-token"
+RELAY_PID_FILE="$DATA_DIR/relay.pid"
 if [ "$WANT_RELAY" = 1 ]; then
   mkdir -p "$DATA_DIR" && chmod 700 "$DATA_DIR"
   if [ ! -s "$RELAY_TOKEN_FILE" ]; then
@@ -253,7 +254,7 @@ fi
 if [ "$SERVICE" = 0 ]; then
   say "Not installing a service (--no-service). Run it yourself:"
   [ "$WANT_SERVER" = 1 ] && say "  $BIN serve --data-dir=$DATA_DIR"
-  [ "$WANT_RELAY" = 1 ] && say "  $BIN relay --port=$RELAY_PORT --token-file=$RELAY_TOKEN_FILE"
+  [ "$WANT_RELAY" = 1 ] && say "  $BIN relay --port=$RELAY_PORT --token-file=$RELAY_TOKEN_FILE --pid-file=$RELAY_PID_FILE"
   exit 0
 fi
 
@@ -393,11 +394,11 @@ fi
 
 # 7. The relay first, so a server pointed at it finds it up.
 if [ "$WANT_RELAY" = 1 ]; then
-  RELAY_ARGS="relay --port=$RELAY_PORT --token-file=$RELAY_TOKEN_FILE"
+  RELAY_ARGS="relay --port=$RELAY_PORT --token-file=$RELAY_TOKEN_FILE --pid-file=$RELAY_PID_FILE"
   if [ "$PLATFORM" = linux ]; then
     linux_service karmashala-relay "Karmashala relay" "$RELAY_ARGS" 0
   else
-    macos_service com.karmashala.relay 0 relay "--port=$RELAY_PORT" "--token-file=$RELAY_TOKEN_FILE"
+    macos_service com.karmashala.relay 0 relay "--port=$RELAY_PORT" "--token-file=$RELAY_TOKEN_FILE" "--pid-file=$RELAY_PID_FILE"
   fi
 fi
 

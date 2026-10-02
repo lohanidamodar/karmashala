@@ -98,13 +98,15 @@ $CommandDir = Join-Path $env:LOCALAPPDATA 'Karmashala\bin'
 $ServerTask = 'Karmashala Server'
 $RelayTask = 'Karmashala Relay'
 $RelayTokenFile = Join-Path $DataDir 'relay-token'
+$RelayPidFile = Join-Path $DataDir 'relay.pid'
 
 function Say([string]$Text) { Write-Host $Text }
 function Fail([string]$Text) { throw "install.ps1: $Text" }
 
-# Runs the installed binary and answers its exit code; output is shown.
+# Runs the installed binary and answers its exit code. Its output goes to the
+# screen, not into the answer, which is the exit code alone.
 function Invoke-Host([string[]]$Arguments) {
-  & $Bin @Arguments
+  & $Bin @Arguments | Out-Host
   return $LASTEXITCODE
 }
 
@@ -280,7 +282,7 @@ function Register-HostTask([string]$TaskName, [string]$Description, [string[]]$A
 }
 
 if ($WantRelay) {
-  Register-HostTask $RelayTask 'Karmashala relay' @('relay', "--port=$RelayPort", "--token-file=$RelayTokenFile")
+  Register-HostTask $RelayTask 'Karmashala relay' @('relay', "--port=$RelayPort", "--token-file=$RelayTokenFile", "--pid-file=$RelayPidFile")
 }
 if ($WantServer) {
   $ours = Get-ScheduledTask -TaskName $ServerTask -ErrorAction SilentlyContinue

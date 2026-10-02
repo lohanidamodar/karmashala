@@ -9,9 +9,12 @@ const relayUsage =
     '''
 karmashala_host relay — a relay for one desktop, on this machine.
 
+Required:
   --port=<n>            where to listen (0 asks the OS for a free one)
   --token-file=<path>   the access token; minted here, owner-only, if absent
   --pid-file=<path>     where this process writes its pid, removed when it stops
+
+Optional:
   --address=<host>      the interface to bind (default 0.0.0.0)
   --max-rendezvous=<n>  rendezvous held at once (default $kBoxRelayMaxRendezvous)
 ''';
