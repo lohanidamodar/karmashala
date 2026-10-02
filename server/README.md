@@ -102,7 +102,7 @@ tools).
   asks for a refresh (one under way is joined; `maxAgeSeconds` answers a young
   enough reading as it is), and once when a new key file is set.
 
-## Install on a DigitalOcean droplet
+## Install on a server (a DigitalOcean droplet, for example)
 
 1. **Create the droplet.** Ubuntu 24.04, any size that runs your agents. Add
    your SSH key. In *Networking → Firewalls*, allow inbound SSH (22) only for
@@ -127,23 +127,18 @@ tools).
    # Codex: npm i -g @openai/codex && codex login  (needs Node.js)
    ```
 
-4. **Get the bundle.** Either the release asset for the droplet's CPU
-   (`karmashala_host-<version>-linux-x64.tar.gz`, or `-arm64`) from the GitHub
-   release, or build it from this repository on a Linux machine:
+4. **Install.** The installer downloads the server for the droplet's CPU from
+   the latest release (`--version <v>` for another; a bundle path or URL as
+   the first argument for your own build). Pick the route clients reach it by:
 
    ```sh
-   flutter pub get
-   dart build cli -t server/bin/karmashala_host.dart \
-     --target-os=linux --target-arch=x64 -o build/server
-   tar -czf karmashala-server.tar.gz -C build/server/bundle .
-   ```
+   # Directly, at the droplet's address (open 47820/tcp, see Firewall)
+   curl -fsSL https://github.com/lohanidamodar/karmashala/releases/latest/download/install.sh \
+     | bash -s -- --name droplet --bind 0.0.0.0 --host <droplet address>
 
-5. **Install.** From a checkout of this repository on the droplet (or copy
-   `server/deploy/` there):
-
-   ```sh
-   server/deploy/install.sh https://github.com/<owner>/karmashala-app/releases/download/<tag>/karmashala_host-<version>-linux-x64.tar.gz \
-     --name droplet --bind 0.0.0.0
+   # Through a relay on the droplet itself (open 8787/tcp instead)
+   curl -fsSL https://github.com/lohanidamodar/karmashala/releases/latest/download/install.sh \
+     | bash -s -- --name droplet --with-relay --host <droplet address>
    ```
 
    The installer proves the bundle runs here (`probe-pty`, `probe-store`),
@@ -162,13 +157,45 @@ tools).
    `journalctl --user -u karmashala-server`. The log's first lines say where
    it serves, its store, and which agent CLIs it found.
 
-6. **Pair a phone** — next section.
+5. **Pair a client.** The installer ends by opening a pairing window on the
+   route it set up: scan the QR with the Karmashala app, or type the code.
+   `--no-pair` skips it; `karmashala_host pair` opens another later (next
+   section).
 
-Upgrading is the same command with the new bundle. A server holding live
-sessions is **not** restarted by the installer (that would end them): it says
-so and prints the restart command, or pass `--restart` to end them now.
-`server/deploy/uninstall.sh` removes the service and the bundle and keeps the
-store and pairings unless `--purge`.
+Upgrading is the same command again. A server holding live sessions is
+**not** restarted by the installer (that would end them): it says so and
+prints the restart command, or pass `--restart` to end them now.
+`uninstall.sh` (a release asset too) removes the services and the bundle and
+keeps the store and pairings unless `--purge`.
+
+### On a Mac or another Linux machine
+
+The same command works on any Linux with systemd and on macOS, where the
+services are launchd agents (`com.karmashala.server`, `com.karmashala.relay`).
+On a machine where you use the desktop app, the app's server already is that
+machine's server; the installer refuses rather than run a second one.
+
+### On Windows
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/lohanidamodar/karmashala/releases/latest/download/install.ps1))) -Lan
+```
+
+No administrator rights: the server goes under
+`%LOCALAPPDATA%\Karmashala\server`, `karmashala_host` onto your PATH, and a
+scheduled task (*Karmashala Server*, and *Karmashala Relay* with `-WithRelay`)
+starts it, hidden, when you sign in. It runs as you, so agents use your
+sign-ins, and it runs while you are signed in. `-Relay`, `-WithRelay`,
+`-HostAddress`, `-Bind`, `-RelayUrl`, `-Version` and `-NoPair` match the
+shell flags; `-Uninstall` removes it again (`-Purge` with it deletes the data).
+
+### Only a relay
+
+`--relay` (`-Relay` on Windows) installs just a relay: for a server behind NAT
+whose clients are elsewhere. Run it on a machine both can reach, then give the
+server the URL it prints with `--relay-url <url>` (`-RelayUrl`). The relay's
+token is in `~/.karmashala/relay-token`; the README's *Self-hosting* section
+says how to put the relay behind TLS.
 
 ## Pair a phone
 

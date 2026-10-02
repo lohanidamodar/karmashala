@@ -105,6 +105,17 @@ re-registers automatically when its next push answers `unknown tag`.
 
 ## Deploying
 
-`fly deploy` with the included `fly.toml`, or run the binary behind any TLS
-terminator. The same binary is what a user self-hosts; nothing in it is
-specific to the PopupBits deployment.
+Each release publishes the relay as an image, so running one needs no Dart:
+
+```
+head -c 30 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' > token
+docker run -d -p 8787:8080 -v "$PWD/token:/token:ro" -e RELAY_TOKEN_FILE=/token \
+  ghcr.io/lohanidamodar/karmashala-relay:latest
+```
+
+(`latest`, or a version such as `1.31.0`; leave out the token for an open
+relay.) `fly deploy` with the included `fly.toml` builds the same thing. On a
+machine without Docker, the server's installer sets the relay up as a service:
+`install.sh --relay` (`install.ps1 -Relay` on Windows), see the top-level
+README's *Self-hosting* section. Run any of them behind a TLS terminator for
+`wss://`. Nothing in the relay is specific to the PopupBits deployment.

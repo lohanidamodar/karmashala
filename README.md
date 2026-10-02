@@ -84,8 +84,58 @@ the first one's agent hooks.
 
 A source build has **no hosted relay**. Phones still pair over the local
 network, by address, or through a relay you name in Settings → Remote and
-pairing. Run your own from [`relay/`](relay/README.md), or build with
+pairing. Run your own (below), or build with
 `--dart-define=KARMASHALA_RELAY_URL=wss://…` to give the build a default.
+
+## Self-hosting a server or a relay
+
+No desktop app needed: the server runs your agent sessions on its own machine,
+and any Karmashala client — the phone app, or the desktop app as a client —
+pairs with it. Each installer downloads the latest release for your platform,
+sets it up as a per-user service and ends by showing a pairing code.
+
+**Linux and macOS**
+
+```sh
+# The server, for clients on the same network
+curl -fsSL https://github.com/lohanidamodar/karmashala/releases/latest/download/install.sh | bash -s -- --lan
+
+# The server and a relay, on a machine clients can reach (a VPS)
+curl -fsSL https://github.com/lohanidamodar/karmashala/releases/latest/download/install.sh | bash -s -- --with-relay --host <public address>
+
+# Only a relay, for a server behind NAT to meet its clients at
+curl -fsSL https://github.com/lohanidamodar/karmashala/releases/latest/download/install.sh | bash -s -- --relay --host <public address>
+```
+
+**Windows** (PowerShell, no administrator rights; it starts when you sign in)
+
+```powershell
+& ([scriptblock]::Create((irm https://github.com/lohanidamodar/karmashala/releases/latest/download/install.ps1))) -Lan
+```
+
+`-WithRelay`, `-Relay` and `-HostAddress` match the flags above.
+
+| Where the server is | How a client reaches it | Use |
+| --- | --- | --- |
+| Same network as the client | Directly | `--lan` |
+| A VPS or other public address | Directly, or through a relay beside it | `--with-relay --host …` |
+| Home or office, behind NAT | Through a relay on something public | `--relay` on the public machine, then `--relay-url <its URL>` on the server |
+| Both on a tailnet | Directly | `--bind <tailnet address>` |
+
+A relay installed this way prints its URL, `ws://<host>:8787/k/<token>`. The
+frames it carries are sealed end to end, but the token travels in that URL,
+so put it behind a TLS terminator for `wss://` — two lines of Caddy:
+
+```
+relay.example.com {
+	reverse_proxy 127.0.0.1:8787
+}
+```
+
+and give clients `wss://relay.example.com/k/<token>`. The relay is also an
+image, `ghcr.io/lohanidamodar/karmashala-relay`, for Docker and Fly.io
+([`relay/`](relay/README.md)). Everything else about the server — pairing,
+grants, the firewall, its config — is in [`server/README.md`](server/README.md).
 
 ## Quality checks
 
