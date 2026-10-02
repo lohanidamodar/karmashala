@@ -4,6 +4,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_environments/sweep.dart' show AcpVersionReader;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
@@ -32,6 +33,7 @@ class ServerAgentWork implements AgentWork {
     IdGenerator? ids,
     AgentRegistry registry = AgentRegistry.builtIn,
     AgentRegistryHolder? registryHolder,
+    AcpVersionReader? acpVersion,
     Map<String, String> hostEnvironment = const {},
     PathProbe pathProbe = const LocalPathProbe(),
     AgentUsageService Function(CliStoreLocator stores)? usageService,
@@ -80,6 +82,7 @@ class ServerAgentWork implements AgentWork {
       clock: clock,
       registry: registry,
       registryNow: registryHolder == null ? null : () => registryHolder.current,
+      acpVersion: acpVersion,
       pathProbe: pathProbe,
       hostEnvironment: hostEnvironment,
     );

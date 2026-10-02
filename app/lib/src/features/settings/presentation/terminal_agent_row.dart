@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../agents/presentation/agent_version_label.dart';
 import 'agent_collapsed_row.dart';
 import 'agent_health.dart';
 import 'agent_label.dart';
@@ -61,14 +62,7 @@ class _VersionLine extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(clockProvider).nowUtc();
-    final newest = newestAgentVersion(installs);
-    final shown =
-        installs.where((i) => i.version == newest).firstOrNull ??
-        installs.firstWhere(
-          (i) => i.version != null,
-          orElse: () => installs.first,
-        );
-    final version = describeVersionReading(shown, now: now);
+    final version = describeAgentVersions(installs, now: now);
     String? updateTo;
     for (final install in installs) {
       updateTo ??= agentInstallUpdateTarget(ref, install, installs);
@@ -76,7 +70,7 @@ class _VersionLine extends ConsumerWidget {
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(text: version ?? 'version not read'),
+          TextSpan(text: version),
           if (updateTo != null)
             TextSpan(
               text: ' · update to $updateTo',

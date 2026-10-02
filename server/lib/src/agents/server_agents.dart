@@ -3,6 +3,8 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_environments/karmashala_environments.dart'
     show forgottenAgentKinds;
+import 'package:karmashala_environments/sweep.dart'
+    show AcpVersionReader, readAcpVersionsOf;
 
 import '../data/data_service.dart';
 import 'agent_registry_holder.dart';
@@ -58,16 +60,22 @@ class ServerAgents {
     Clock? clock,
     IdGenerator? ids,
     Map<String, String>? hostEnvironment,
+    AcpVersionReader? acpVersion,
   }) : _data = data,
        _registry = registry,
        _registryHolder = registryHolder,
        _runner = runner ?? const LocalCommandRunner(),
        _clock = clock ?? const SystemClock(),
        _ids = ids ?? RandomIdGenerator(),
-       _hostEnvironment = hostEnvironment;
+       _hostEnvironment = hostEnvironment,
+       _acpVersion = acpVersion;
 
   final AgentRegistry _registry;
   final AgentRegistryHolder? _registryHolder;
+
+  /// Reads an ACP agent's version over the protocol; without one, an ACP
+  /// agent found here keeps no version.
+  final AcpVersionReader? _acpVersion;
 
   /// The registry as it stands at each probe — with a holder, the one the
   /// person-added ACP agents are composed into.
@@ -136,6 +144,25 @@ class ServerAgents {
     );
     final addedIds = {for (final row in written.added) row.id};
     final foundIds = {for (final agent in found) agent.descriptor.id};
+    // An ACP agent says its version over the protocol: every one found here
+    // is asked, all at once, and the answer recorded as read now.
+    if (_acpVersion case final read?) {
+      final versions = await readAcpVersionsOf(read, registry, here, [
+        for (final row in written.present)
+          if (foundIds.contains(row.agentId)) row,
+      ]);
+      for (final entry in versions.entries) {
+        try {
+          _data.recordInstallationVersion(
+            entry.key,
+            entry.value,
+            _clock.nowUtc(),
+          );
+        } on Object {
+          // The row went while the agent was answering.
+        }
+      }
+    }
     return ServerAgentScan(
       agents: [
         for (final installation in _data.installationsIn(

@@ -180,6 +180,7 @@ class SweepWorld {
     Clock? clock,
     AgentRegistry registry = AgentRegistry.builtIn,
     AgentRegistry Function()? registryNow,
+    AcpVersionReader? readAcpVersion,
     Map<String, String> hostEnvironment = const {},
   }) => AgentSweep(
     environments: () => [...environments],
@@ -192,6 +193,7 @@ class SweepWorld {
     clock: clock ?? FixedClock(testTime),
     registry: registry,
     registryNow: registryNow,
+    readAcpVersion: readAcpVersion,
     pathProbe: pathProbe ?? FakePathProbe(),
     hostEnvironment: hostEnvironment,
   );

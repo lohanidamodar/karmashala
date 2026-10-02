@@ -200,6 +200,67 @@ void main() {
       expect(toldChanges().whereType<InstallationRemoved>(), hasLength(1));
     });
 
+    test('reads an ACP agent\'s version over the protocol once it is found, '
+        'and records it as read now', () async {
+      const minePath = r'C:\bin\mine.exe';
+      final asked = <String>[];
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      final registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+        acpVersion: (installation, descriptor, environment) async {
+          asked.add(
+            '${descriptor.id}@${environment.id}:'
+            '${installation.executable.path}',
+          );
+          return '1.0.91';
+        },
+      );
+      service.agentWork = _DetectionWork(detection);
+
+      final report = (await app.handleLater(const AgentsDetect())).value;
+
+      // Only the ACP agent was asked; the terminal agent answered --version.
+      expect(asked, ['${row.agentId}@windows:$minePath']);
+      final mine = rows().singleWhere((i) => i.agentId == row.agentId);
+      expect(mine.version, '1.0.91');
+      expect(mine.versionReadAt, now);
+      final scan = report.environments.single;
+      expect(
+        scan.found.singleWhere((i) => i.agentId == row.agentId).version,
+        '1.0.91',
+      );
+      expect(scan.updated.single.to, '1.0.91');
+      expect(
+        toldChanges().whereType<InstallationChanged>().map(
+          (c) => c.installation.version,
+        ),
+        contains('1.0.91'),
+      );
+    });
+
     test('writes what answered, tells every other client, and logs the '
         'search under the server\'s own key', () async {
       final report = (await app.handleLater(const AgentsDetect())).value;

@@ -6,7 +6,11 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_latest_versions_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
+import '../../agents/presentation/agent_version_label.dart';
 import '../../environments/application/environments_controller.dart';
+
+export '../../agents/presentation/agent_version_label.dart'
+    show newestAgentVersion;
 
 /// One glyph's worth of an agent's state on the collapsed row.
 enum AgentHealth { installed, notInstalled, attention }
@@ -20,14 +24,6 @@ class AgentHealthReading {
 
   /// What the glyph means, for the tooltip and the screen reader.
   final String summary;
-}
-
-/// The newest of [installs]' versions, or null when fewer than two machines
-/// have one — a flag needs something to be behind.
-String? newestAgentVersion(List<AgentInstallation> installs) {
-  final versions = [for (final install in installs) ?install.version];
-  if (versions.length < 2) return null;
-  return versions.reduce((a, b) => compareAgentVersions(a, b) >= 0 ? a : b);
 }
 
 /// The version [install] should move to, or null when it is current.

@@ -43,6 +43,7 @@ import 'package:path/path.dart' as p;
 
 import '../acp/acp_runtimes.dart';
 import '../acp/acp_session_modes.dart';
+import '../acp/acp_version_probe.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
@@ -430,9 +431,16 @@ Future<int> runServe(
     remote: ssh.remote,
   );
   data.terminalWork = terminals;
+  // An ACP agent says its version over the protocol: detection asks each one
+  // it finds, in that agent's own environment.
+  final acpVersions = AcpVersionProbe(
+    runnerFor: ssh.runners.forEnvironment,
+    log: sink.writeln,
+  );
   final agentWork = ServerAgentWork(
     data: data,
     runners: ssh.runners,
+    acpVersion: acpVersions.read,
     hostEnvironment: hostEnvironment,
     // `off`: work only when asked — no usage schedule, no start-up check. For
     // a test's server: its temporary HOME holds no credentials, and its
@@ -1092,7 +1100,11 @@ Future<int> runServe(
   // desktop app on this machine; the server looks for its agent CLIs now.
   final agents =
       (agentsFor ??
-      (data) => ServerAgents(data: data, registryHolder: agentRegistry))(data);
+      (data) => ServerAgents(
+        data: data,
+        registryHolder: agentRegistry,
+        acpVersion: acpVersions.read,
+      ))(data);
   server.data = data;
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,

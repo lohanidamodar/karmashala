@@ -96,6 +96,7 @@ void main() {
     expect(result.agentCapabilities.mcpCapabilities.http, isTrue);
     expect(result.authMethods.single.id, 'fake-login');
     expect(result.agentInfo!.name, 'fake-acp-agent');
+    expect(result.agentInfo!.version, '0.0.1');
   });
 
   test(

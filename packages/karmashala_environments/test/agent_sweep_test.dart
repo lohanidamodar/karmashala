@@ -400,6 +400,43 @@ void main() {
       ]);
     });
 
+    test('reads an ACP agent\'s version over the protocol, and reports '
+        'it', () async {
+      final row = AcpAgentRow(
+        id: 'r1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: testTime,
+      );
+      final asked = <String>[];
+      final runner = hostRunner();
+      sweep = world.sweep(
+        runnerFor: (_) => runner,
+        registry: AgentRegistry([...registry.adapters, acpAgentAdapter(row)]),
+        readAcpVersion: (installation, descriptor, environment) async {
+          asked.add('${descriptor.id}@${environment.id}');
+          return '1.0.91';
+        },
+      );
+      installed['mine'] = 'never asked --version';
+
+      final report = await sweep.sweep();
+
+      // Only the ACP agent; Claude Code answered --version as before.
+      expect(asked, ['${row.agentId}@windows']);
+      final mine = world.installations.getAll().singleWhere(
+        (i) => i.agentId == row.agentId,
+      );
+      expect(mine.version, '1.0.91');
+      expect(mine.versionReadAt, testTime);
+      final scan = report.environments.single;
+      expect(
+        scan.found.singleWhere((i) => i.agentId == row.agentId).version,
+        '1.0.91',
+      );
+      expect(scan.updated.single.to, '1.0.91');
+    });
+
     test('records a changed version in place', () async {
       await sweep.sweep();
       final before = world.installations.getAll().single;

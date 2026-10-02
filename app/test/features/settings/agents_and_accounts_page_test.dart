@@ -236,6 +236,8 @@ void main() {
 
     expect(find.text('npx -y $package'), findsOneWidget);
     expect(expandButton(nameOf(npxAcpId)), findsNothing);
+    // Run from its package: npx's own version is never the agent's.
+    expect(find.text('via npx · downloaded on first start'), findsOneWidget);
     expect(find.text('version not read'), findsNothing);
     expect(find.text('Account not read yet'), findsNothing);
     expect(
@@ -243,6 +245,46 @@ void main() {
       findsNothing,
     );
     expect(find.text(acpAgentsNote), findsOneWidget);
+  });
+
+  testWidgets('an ACP agent\'s version, once read over the protocol, shows '
+      'with its age like a terminal agent\'s', (tester) async {
+    final row = userRow();
+    db.server.acpAgentRows.insert(row);
+    db.server.installationRows
+      ..insert(
+        AgentInstallation(
+          id: 'a3',
+          agentId: npxAcpId,
+          executable: const EnvironmentPath(
+            environmentId: 'windows',
+            path: r'C:\npm\npx.cmd',
+          ),
+          leadingArguments: const ['-y', 'pkg'],
+          version: '0.9.0',
+          versionReadAt: testTime,
+          createdAt: testTime,
+        ),
+      )
+      ..insert(
+        AgentInstallation(
+          id: 'a9',
+          agentId: row.agentId,
+          executable: const EnvironmentPath(
+            environmentId: 'windows',
+            path: r'C:\tools\mine.exe',
+          ),
+          version: '1.0.91',
+          versionReadAt: testTime,
+          createdAt: testTime,
+        ),
+      );
+    await pump(tester);
+
+    expect(find.textContaining('0.9.0 · read'), findsOneWidget);
+    expect(find.textContaining('1.0.91 · read'), findsOneWidget);
+    expect(find.text('via npx · downloaded on first start'), findsNothing);
+    expect(find.text('version not read'), findsNothing);
   });
 
   testWidgets('a person\'s ACP agent keeps Edit and Remove, and shows where '
@@ -264,6 +306,7 @@ void main() {
 
     expect(find.text('Mine'), findsOneWidget);
     expect(find.text('mine --acp'), findsOneWidget);
+    expect(find.text('version not read'), findsOneWidget);
     expect(find.widgetWithText(SettingsChip, 'Custom'), findsOneWidget);
     expect(find.widgetWithText(SettingsChip, 'Windows'), findsOneWidget);
     expect(find.byTooltip('Edit Mine'), findsOneWidget);

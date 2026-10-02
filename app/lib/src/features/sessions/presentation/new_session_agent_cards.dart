@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/presentation/agent_version_label.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import '../../environments/application/environments_controller.dart';
 
@@ -88,7 +89,9 @@ class _AgentCard extends ConsumerWidget {
     final where = ref.watch(
       environmentLabelForIdProvider(installation.environmentId),
     );
-    final version = installation.version;
+    // An agent run through npx and not yet asked says so, never npx's own
+    // version.
+    final version = describeInstallVersion(installation);
     final muted = theme.textTheme.labelSmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );

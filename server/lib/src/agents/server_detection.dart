@@ -26,6 +26,7 @@ class ServerDetection {
     Clock clock = const SystemClock(),
     AgentRegistry registry = AgentRegistry.builtIn,
     AgentRegistry Function()? registryNow,
+    AcpVersionReader? acpVersion,
     PathProbe pathProbe = const LocalPathProbe(),
     Map<String, String> hostEnvironment = const {},
   }) : _data = data,
@@ -57,6 +58,7 @@ class ServerDetection {
          clock: clock,
          registry: registry,
          registryNow: registryNow,
+         readAcpVersion: acpVersion,
          pathProbe: pathProbe,
          hostEnvironment: hostEnvironment,
        );

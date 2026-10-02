@@ -50,6 +50,67 @@ void main() {
 
   setUp(() => world = SweepWorld([windowsEnv(), wslEnv(), sshEnvFixture()]));
 
+  group('an ACP agent run from its package through npx', () {
+    const npxPath = r'C:\npm\npx.cmd';
+    late String npxAcpId;
+    late AgentInstallation viaNpx;
+
+    setUp(() {
+      npxAcpId = AgentRegistry.builtIn.adapters
+          .firstWhere((a) => a.acp?.npxPackage != null)
+          .id;
+      // npx's own version, written by a refresh that ran `npx --version`.
+      viaNpx = agentInstallation(
+        id: 'n',
+        agentId: npxAcpId,
+        path: npxPath,
+        version: '11.18.0',
+        versionReadAt: _long,
+      ).copyWith(leadingArguments: ['-y', 'pkg']);
+    });
+
+    test('is never asked --version: npx would answer with its own', () async {
+      world.installations.insert(viaNpx);
+      final sweep = workspaceWith(
+        probe: FakePathProbe(files: const {npxPath}),
+        responder: (_) => fail('nothing is spawned for a row run through npx'),
+      );
+
+      final changed = await sweep.refreshStaleVersions();
+
+      expect(windows.requests, isEmpty);
+      expect(changed, isEmpty);
+      expect(world.installations.getById('n')!.version, '11.18.0');
+    });
+
+    test('is asked over the protocol instead, when a reader is here', () async {
+      world.installations.insert(viaNpx);
+      final asked = <String>[];
+      windows = FakeCommandRunner(
+        responder: (_) => fail('the version comes over ACP, not --version'),
+      );
+      final sweep = world.sweep(
+        runnerFor: (_) => windows,
+        pathProbe: FakePathProbe(files: const {npxPath}),
+        clock: FixedClock(_now),
+        readAcpVersion: (installation, descriptor, environment) async {
+          asked.add('${installation.id}:${descriptor.id}@${environment.id}');
+          return '0.9.0';
+        },
+      );
+
+      final changed = await sweep.refreshStaleVersions();
+
+      expect(asked, ['n:$npxAcpId@windows']);
+      expect(windows.requests, isEmpty);
+      final row = world.installations.getById('n')!;
+      expect(row.version, '0.9.0');
+      expect(row.versionReadAt, _now);
+      expect(changed.single.from, '11.18.0');
+      expect(changed.single.to, '0.9.0');
+    });
+  });
+
   group('the start-time version refresh', () {
     test('a reading still inside the freshness bound spawns nothing', () async {
       // The whole claim to running on every start: the path check spawns no

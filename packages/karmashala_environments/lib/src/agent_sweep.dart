@@ -19,6 +19,63 @@ typedef SweepReconcile =
       required Map<String, ExecutableReachability> readings,
     });
 
+/// Reads the version an ACP agent reports of itself (`initialize`, then
+/// `agentInfo.version`) by starting [installation] in [environment]; null
+/// when it did not answer. The server supplies one; a test may leave it out.
+typedef AcpVersionReader =
+    Future<String?> Function(
+      AgentInstallation installation,
+      AgentDescriptor descriptor,
+      ExecutionEnvironment environment,
+    );
+
+/// Reads, all at once, the version of every row among [rows] whose agent
+/// speaks ACP, through [read]: the version by row id, for the rows that
+/// answered. A read that throws or answers nothing is left out, and nothing
+/// is recorded here.
+Future<Map<String, String>> readAcpVersionsOf(
+  AcpVersionReader read,
+  AgentRegistry registry,
+  ExecutionEnvironment environment,
+  Iterable<AgentInstallation> rows,
+) async {
+  final acpRows = <AgentInstallation>[];
+  final descriptors = <AgentDescriptor>[];
+  for (final row in rows) {
+    final descriptor = registry.byId(row.agentId);
+    if (descriptor?.acp == null) continue;
+    acpRows.add(row);
+    descriptors.add(descriptor!);
+  }
+  if (acpRows.isEmpty) return const {};
+  final versions = await Future.wait([
+    for (var i = 0; i < acpRows.length; i++)
+      _quietly(() => read(acpRows[i], descriptors[i], environment)),
+  ]);
+  return {
+    for (var i = 0; i < acpRows.length; i++)
+      if (versions[i]?.trim() case final version? when version.isNotEmpty)
+        acpRows[i].id: version,
+  };
+}
+
+Future<String?> _quietly(Future<String?> Function() read) async {
+  try {
+    return await read();
+  } on Object {
+    return null;
+  }
+}
+
+/// What one reading of ACP versions recorded: the version by row id, and
+/// what changed, named for a person.
+final class _AcpVersions {
+  const _AcpVersions([this.versions = const {}, this.changes = const []]);
+
+  final Map<String, String> versions;
+  final List<AgentVersionChange> changes;
+}
+
 /// Which `(agent, environment)` pairs have ever been *searched* for — never
 /// looked for is not the same as looked for and not found. Kept as JSON under
 /// one key by whoever holds it ([read] / [write]).
@@ -83,9 +140,14 @@ class AgentSweep {
     required this.clock,
     AgentRegistry registry = AgentRegistry.builtIn,
     this.registryNow,
+    this.readAcpVersion,
     this.pathProbe = const LocalPathProbe(),
     this.hostEnvironment = const {},
   }) : initialRegistry = registry;
+
+  /// Reads an ACP agent's version over the protocol, for every ACP agent a
+  /// probe finds and every aged one; without it their versions stay unread.
+  final AcpVersionReader? readAcpVersion;
 
   /// Every recorded environment, in the table's order.
   final List<ExecutionEnvironment> Function() environments;
@@ -186,7 +248,8 @@ class AgentSweep {
         );
         continue;
       }
-      reports.add(_report(environment, probe, written));
+      final acp = await _recordAcpVersions(environment, written.present);
+      reports.add(_report(environment, probe, written, acp: acp));
       // Only for an environment that answered, and only the agents actually
       // asked about: a probe not performed would become a permanent state.
       if (environment.kind != EnvironmentKind.ssh) {
@@ -218,7 +281,43 @@ class AgentSweep {
       probed: const {},
       readings: const {},
     );
-    return AgentDiscoveryReport([_report(environment, probe, written)]);
+    final acp = await _recordAcpVersions(environment, written.present);
+    return AgentDiscoveryReport([
+      _report(environment, probe, written, acp: acp),
+    ]);
+  }
+
+  /// Reads and records the versions of the ACP agents among [rows], all at
+  /// once; a read that answers nothing writes nothing.
+  Future<_AcpVersions> _recordAcpVersions(
+    ExecutionEnvironment environment,
+    Iterable<AgentInstallation> rows,
+  ) async {
+    final read = readAcpVersion;
+    if (read == null) return const _AcpVersions();
+    final versions = await readAcpVersionsOf(read, registry, environment, rows);
+    final recorded = <String, String>{};
+    final changes = <AgentVersionChange>[];
+    for (final row in rows) {
+      final version = versions[row.id];
+      if (version == null) continue;
+      try {
+        await recordVersion(row.id, version, clock.nowUtc());
+      } on Object {
+        continue;
+      }
+      recorded[row.id] = version;
+      if (version != row.version) {
+        changes.add(
+          AgentVersionChange(
+            displayName: registry.displayNameFor(row.agentId),
+            from: row.version,
+            to: version,
+          ),
+        );
+      }
+    }
+    return _AcpVersions(recorded, changes);
   }
 
   Future<EnvironmentProbe> _probe(
@@ -264,16 +363,27 @@ class AgentSweep {
   EnvironmentScanReport _report(
     ExecutionEnvironment environment,
     EnvironmentProbe probe,
-    InstallationsReconciled written,
-  ) {
+    InstallationsReconciled written, {
+    _AcpVersions acp = const _AcpVersions(),
+  }) {
     final unreachableAgentIds = {
       for (final row in written.unreachable) row.agentId,
     };
+    final readAt = clock.nowUtc();
     return EnvironmentScanReport(
       environmentId: environment.id,
       environmentName: environment.name,
       reachable: true,
-      found: written.present,
+      found: [
+        for (final row in written.present)
+          switch (acp.versions[row.id]) {
+            final version? => row.copyWith(
+              version: version,
+              versionReadAt: readAt,
+            ),
+            null => row,
+          },
+      ],
       missing: [
         for (final id in probe.missingAgentIds)
           if (!unreachableAgentIds.contains(id)) registry.displayNameFor(id),
@@ -288,6 +398,7 @@ class AgentSweep {
             from: change.from,
             to: change.to,
           ),
+        ...acp.changes,
       ],
       movedPaths: [
         for (final change in written.pathChanges)
@@ -379,19 +490,29 @@ class AgentSweep {
   }
 
   /// Re-reads the version of every row aged out of [kVersionReadingFreshFor],
-  /// in its own environment; SSH is never asked, a failed read writes nothing.
+  /// in its own environment: over ACP when the agent speaks it and a reader
+  /// is here, else with the binary's own `--version` — never through a
+  /// runner such as npx, whose answer is its own version. SSH is never
+  /// asked, a failed read writes nothing.
   Future<List<AgentVersionChange>> refreshStaleVersions() async {
     final now = clock.nowUtc();
     final changes = <AgentVersionChange>[];
     for (final environment in environments()) {
       if (environment.kind == EnvironmentKind.ssh) continue;
-      final candidates = [
-        for (final row in _in(environment.id))
-          if ((registry.byId(row.agentId)?.discovery.probeVersion ?? false) &&
-              versionFreshness(row, now: now) != VersionFreshness.fresh)
-            row,
-      ];
-      if (candidates.isEmpty) continue;
+      final overAcp = <AgentInstallation>[];
+      final withBinary = <AgentInstallation>[];
+      for (final row in _in(environment.id)) {
+        if (versionFreshness(row, now: now) == VersionFreshness.fresh) continue;
+        final descriptor = registry.byId(row.agentId);
+        if (descriptor == null) continue;
+        if (descriptor.acp != null && readAcpVersion != null) {
+          overAcp.add(row);
+        } else if (descriptor.discovery.probeVersion &&
+            row.leadingArguments.isEmpty) {
+          withBinary.add(row);
+        }
+      }
+      if (overAcp.isEmpty && withBinary.isEmpty) continue;
       final readings = _readingsFor(environment);
       final CommandRunner runner;
       try {
@@ -401,7 +522,12 @@ class AgentSweep {
         // established about it.
         continue;
       }
-      for (final row in candidates) {
+      final acp = await _recordAcpVersions(environment, [
+        for (final row in overAcp)
+          if (readings[row.id]?.isUsable != false) row,
+      ]);
+      changes.addAll(acp.changes);
+      for (final row in withBinary) {
         if (readings[row.id]?.isUsable == false) continue;
         final version = await _readVersion(
           runner,
@@ -433,6 +559,8 @@ class AgentSweep {
     AgentInstallation row,
     List<String> versionArguments,
   ) async {
+    // A runner such as npx would answer with its own version.
+    if (row.leadingArguments.isNotEmpty) return null;
     try {
       final result = await runner.run(
         CommandRequest(
@@ -448,6 +576,7 @@ class AgentSweep {
 
   /// Probes only the pairs nobody has ever searched for, which is what makes
   /// an agent a newer build knows visible. SSH is skipped and not recorded.
+  /// An ACP agent found has its version read at once.
   Future<List<AgentInstallation>> discoverUnprobed() async {
     final discovered = <AgentInstallation>[];
     for (final environment in environments()) {
@@ -475,8 +604,9 @@ class AgentSweep {
         continue;
       }
       if (found.isNotEmpty) {
+        final InstallationsReconciled written;
         try {
-          await reconcile(
+          written = await reconcile(
             environmentId: environment.id,
             readAt: clock.nowUtc(),
             found: found,
@@ -488,6 +618,7 @@ class AgentSweep {
           // Not recorded, so not probed either: the next start asks again.
           continue;
         }
+        await _recordAcpVersions(environment, written.added);
       }
       discovered.addAll(found);
       for (final agentId in missing) {

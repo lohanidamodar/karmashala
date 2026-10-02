@@ -6,7 +6,9 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../core/util/clock_provider.dart';
 import '../../agents/application/acp_agent_providers.dart';
+import '../../agents/presentation/agent_version_label.dart';
 import 'acp_agent_dialog.dart';
 import 'acp_builtin_agent_row.dart' show acpAgentsNote;
 import 'agent_health.dart';
@@ -16,8 +18,9 @@ import 'settings_theme.dart';
 
 /// **An ACP agent a person added, one row**: its name, where it came from
 /// (Registry or Custom), the machines it was found on, the command that
-/// starts it, and Edit and Remove. Nothing a terminal agent's row has that
-/// an ACP agent cannot answer — no version, no account, no mode.
+/// starts it, the version it reported of itself over ACP, and Edit and
+/// Remove. Nothing a terminal agent's row has that an ACP agent cannot
+/// answer — no account, no mode.
 class AcpUserAgentRow extends ConsumerWidget {
   const AcpUserAgentRow({required this.row, required this.installs, super.key});
 
@@ -82,6 +85,16 @@ class AcpUserAgentRow extends ConsumerWidget {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (installs.isNotEmpty) ...[
+                    const SizedBox(height: Insets.xs),
+                    Text(
+                      describeAgentVersions(
+                        installs,
+                        now: ref.watch(clockProvider).nowUtc(),
+                      ),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                 ],
               ),
             ),

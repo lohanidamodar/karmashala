@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -25,6 +26,56 @@ void main() {
     service.open(told.add).handle(const DataSubscribe());
   });
   tearDown(() => db.close());
+
+  test('a refresh reads an ACP agent\'s version over the protocol', () async {
+    final row = AcpAgentRow(
+      id: 'r1',
+      name: 'Mine',
+      command: 'mine',
+      createdAt: now,
+    );
+    const minePath = r'C:\bin\mine.exe';
+    final asked = <String>[];
+    final agents = ServerAgents(
+      data: service,
+      registryHolder: AgentRegistryHolder(
+        AgentRegistry.withExtra([acpAgentAdapter(row)]),
+      ),
+      // Located whichever shell this machine asks with.
+      runner: ScriptedRunner(
+        (request) => request.arguments.any((a) => a.contains('mine'))
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: '$minePath\n',
+                stderr: '',
+              )
+            : notFound,
+      ),
+      clock: MutableClock(now),
+      ids: CountingIds(),
+      hostEnvironment: const {},
+      acpVersion: (installation, descriptor, environment) async {
+        asked.add('${descriptor.id}:${installation.executable.path}');
+        return '1.0.91';
+      },
+    );
+
+    final scan = await agents.refresh();
+
+    expect(scan.error, isNull);
+    expect(asked, ['${row.agentId}:$minePath']);
+    final mine = scan.agents.single.installation;
+    expect(mine.agentId, row.agentId);
+    expect(mine.version, '1.0.91');
+    expect(mine.versionReadAt, now);
+    expect(
+      told
+          .expand((batch) => batch.changes)
+          .whereType<InstallationChanged>()
+          .map((c) => c.installation.version),
+      contains('1.0.91'),
+    );
+  });
 
   test(
     'a refresh drops the row of an agent the registry has forgotten',
