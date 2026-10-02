@@ -253,6 +253,7 @@ class AcpSessionRuntime implements ScreenSession {
       var resumed = false;
       SessionModeState? modes;
       List<ConfigOption>? options;
+      var forgotten = false;
       if (resume != null && resume.isNotEmpty && _capabilities.loadSession) {
         _loading = true;
         try {
@@ -269,13 +270,26 @@ class AcpSessionRuntime implements ScreenSession {
           );
           modes = loaded.modes;
           options = loaded.configOptions;
+          _agentSessionId = resume;
+          resumed = true;
+        } on AcpRpcError catch (error) {
+          // The agent no longer holds that conversation (its own store was
+          // cleared, or it never kept one for a start it refused). A load
+          // that cannot find it is not a session that cannot run: it goes
+          // on as a fresh conversation in the same row, and says so.
+          if (error.code != JsonRpcErrorCodes.resourceNotFound) rethrow;
+          forgotten = true;
         } finally {
           _loading = false;
         }
-        _agentSessionId = resume;
-        resumed = true;
-      } else {
-        if (resume != null && resume.isNotEmpty) {
+      }
+      if (!resumed) {
+        if (forgotten) {
+          notices.add(
+            '$agentName no longer holds this conversation, so this is a '
+            'fresh conversation in the same session.',
+          );
+        } else if (resume != null && resume.isNotEmpty) {
           notices.add(
             '$agentName cannot reload a conversation over ACP, so this is a '
             'fresh conversation in the same session.',

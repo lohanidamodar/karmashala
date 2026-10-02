@@ -209,6 +209,42 @@ void main() {
     },
   );
 
+  test('a resume of a conversation the agent no longer holds goes on as a '
+      'fresh one in the same row, and says so', () async {
+    // Seen live: GitHub Copilot answered session/load with -32002 "Session
+    // … not found", and the resume gave up with nothing sent.
+    process = FakeAcpProcess(
+      FakeAcpAgent(sessionIdPrefix: 'fresh', holdsNoConversations: true),
+    );
+    final rows = CheckoutRows(database);
+    SessionDao(database).insert(
+      Session(
+        id: 'old',
+        repositoryId: 'r1',
+        agentInstallationId: 'acp1',
+        title: 'Old',
+        useWorktree: false,
+        status: SessionStatus.failed,
+        createdAt: t0,
+        externalSessionId: 'gone-9',
+      ),
+    );
+    final started = await launcher().startDetailed(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('acp1')!,
+        title: 'Old',
+        resuming: SessionDao(database).getById('old'),
+      ),
+    );
+    expect(process.agent.loadSessionParams.single['sessionId'], 'gone-9');
+    expect(process.agent.newSessionParams, hasLength(1));
+    expect(started.session.externalSessionId, 'fresh');
+    expect(row('old').externalSessionId, 'fresh');
+    expect(row('old').status, SessionStatus.running);
+    expect(started.attachNotice, contains('no longer holds this conversation'));
+  });
+
   test('a PTY agent is untouched by the branch', () async {
     final rows = CheckoutRows(database);
     await launcher().start(

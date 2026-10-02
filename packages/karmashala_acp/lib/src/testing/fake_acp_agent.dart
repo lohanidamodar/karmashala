@@ -26,6 +26,7 @@ class FakeAcpAgent {
     this.configOptions,
     this.sessionIdPrefix = 'fake-session',
     this.supportsLoadSession = true,
+    this.holdsNoConversations = false,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
   }) : _turns = List.of(turns) {
@@ -46,6 +47,10 @@ class FakeAcpAgent {
   List<ConfigOption>? configOptions;
   final String sessionIdPrefix;
   final bool supportsLoadSession;
+
+  /// Answers every `session/load` that the conversation is not found, as an
+  /// agent does whose own store no longer has it.
+  final bool holdsNoConversations;
 
   /// Updates replayed, in order, before `session/load` is answered.
   final List<SessionUpdate> loadReplay;
@@ -134,6 +139,14 @@ class FakeAcpAgent {
           );
         case AcpMethods.sessionLoad:
           loadSessionParams.add(params);
+          if (holdsNoConversations) {
+            request.fail(
+              JsonRpcErrorCodes.resourceNotFound,
+              'Resource not found: Session '
+              '${params.string('sessionId')} not found',
+            );
+            break;
+          }
           final sessionId = params.string('sessionId') ?? '';
           for (final update in loadReplay) {
             _sendUpdate(sessionId, update.toJson());
