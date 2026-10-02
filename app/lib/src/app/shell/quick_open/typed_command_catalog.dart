@@ -198,7 +198,8 @@ CommandCatalog readCommandCatalog(
     final environmentId = project.environmentId;
     final installed = [
       for (final i in installations)
-        if (i.environmentId == environmentId)
+        if (i.environmentId == environmentId &&
+            registry.adapterFor(i.agentId) != null)
           CommandInstallation(id: i.id, agentId: i.agentId),
     ];
     final lastUsed = lastUsedInstallation[project.id];

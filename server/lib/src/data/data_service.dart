@@ -311,13 +311,22 @@ class DataService {
 
   /// Records the agent CLIs the server found on this machine ([here]) by
   /// the one reconciliation rule, and tells every client what it wrote.
+  /// [forgotten] names the agent kinds the registry no longer knows, whose
+  /// leftover rows go.
   InstallationsReconciled recordAgentsFound(
     ExecutionEnvironment here,
     List<AgentInstallation> found,
-    DateTime readAt,
-  ) {
+    DateTime readAt, {
+    Set<String> forgotten = const {},
+  }) {
     final changes = <DataChange>[];
-    final result = _hosts.recordFound(here, found, readAt, changes);
+    final result = _hosts.recordFound(
+      here,
+      found,
+      readAt,
+      changes,
+      forgotten: forgotten,
+    );
     announce(changes);
     return result;
   }

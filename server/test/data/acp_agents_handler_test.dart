@@ -1,3 +1,6 @@
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_store/database.dart';
@@ -118,6 +121,54 @@ void main() {
     final before = told.length;
     expect(app.handle(AcpAgentDelete(row.id)).value, isA<DataAck>());
     expect(told.length, before);
+  });
+
+  test('a delete takes the agent\'s installations with it, on every '
+      'machine, told as removed', () {
+    final row = app.handle(put).value;
+    final windows = ExecutionEnvironment(
+      id: 'windows',
+      kind: EnvironmentKind.windowsNative,
+      name: 'Windows',
+      createdAt: now,
+    );
+    final wsl = ExecutionEnvironment(
+      id: 'wsl:Ubuntu',
+      kind: EnvironmentKind.wsl,
+      name: 'Ubuntu',
+      wslDistribution: 'Ubuntu',
+      createdAt: now,
+    );
+    AgentInstallation found(
+      String id,
+      ExecutionEnvironment where,
+      String path, {
+      String? agentId,
+    }) => AgentInstallation(
+      id: id,
+      agentId: agentId ?? row.agentId,
+      executable: EnvironmentPath(environmentId: where.id, path: path),
+      createdAt: now,
+    );
+    service.recordAgentsFound(windows, [
+      found('w', windows, r'C:\mine.exe'),
+      found('other', windows, r'C:\claude.exe', agentId: AgentIds.claudeCode),
+    ], now);
+    service.recordAgentsFound(wsl, [found('u', wsl, '/usr/bin/mine')], now);
+    told.clear();
+
+    app.handle(AcpAgentDelete(row.id));
+
+    final changes = lastTold();
+    expect(changes.whereType<AcpAgentRemoved>().single.id, row.id);
+    expect(
+      changes.whereType<InstallationRemoved>().map((c) => c.id),
+      unorderedEquals(['w', 'u']),
+    );
+    expect(
+      app.handle(const AgentsList()).value.installations.map((i) => i.id),
+      ['other'],
+    );
   });
 
   test('the agents snapshot carries the rows', () {

@@ -165,7 +165,12 @@ class AgentSweep {
           environmentId: environment.id,
           readAt: clock.nowUtc(),
           found: _candidates(probe),
-          probed: probed,
+          // A kind the registry forgot is judged with the ones asked about:
+          // it was found nowhere, so its row goes.
+          probed: {
+            ...probed,
+            ...forgottenAgentKinds(registry, _in(environment.id)),
+          },
           readings: {
             for (final entry in _readingsFor(environment).entries)
               entry.key: entry.value.reachability,

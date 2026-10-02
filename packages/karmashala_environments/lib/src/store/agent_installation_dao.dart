@@ -78,6 +78,16 @@ class AgentInstallationDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every installation of [agentId], in every environment.
+  List<AgentInstallation> getByAgent(String agentId) {
+    final rows = _db.query(
+      'SELECT * FROM agent_installations WHERE agent_kind = ? '
+      'ORDER BY created_at, id;',
+      [agentId],
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// Records what the CLI answered and **when it was asked** — a confirmed
   /// reading is a fresh reading. A null [version] is refused, never written.
   void recordVersion(String id, String? version, {required DateTime readAt}) {

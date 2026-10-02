@@ -7,9 +7,11 @@ import 'package:karmashala_store/database.dart';
 /// a command — the rows become adapters in `AgentRegistryHolder`.
 class AcpAgentsHandler {
   AcpAgentsHandler(AppDatabase db, this._now, this._newId)
-    : _rows = AcpAgentDao(db);
+    : _rows = AcpAgentDao(db),
+      _installations = AgentInstallationDao(db);
 
   final AcpAgentDao _rows;
+  final AgentInstallationDao _installations;
   final DateTime Function() _now;
   final String Function() _newId;
 
@@ -44,10 +46,19 @@ class AcpAgentsHandler {
     return row;
   }
 
+  /// Removes the row and, with it, every installation recorded under its
+  /// adapter id — in every environment, told the way a sweep tells a removal.
+  /// One a session still points at stays (`ON DELETE RESTRICT`).
   DataAck delete(AcpAgentDelete request, List<DataChange> changes) {
-    if (_rows.getById(request.id) == null) return const DataAck();
+    final row = _rows.getById(request.id);
+    if (row == null) return const DataAck();
     _rows.delete(request.id);
     changes.add(AcpAgentRemoved(request.id));
+    for (final installation in _installations.getByAgent(row.agentId)) {
+      if (_installations.deleteIfUnreferenced(installation.id)) {
+        changes.add(InstallationRemoved(installation.id));
+      }
+    }
     return const DataAck();
   }
 }

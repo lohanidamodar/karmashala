@@ -150,6 +150,56 @@ void main() {
       },
     );
 
+    test('drops the installations of an agent the registry has forgotten, '
+        'command or no command', () async {
+      var registry = AgentRegistry.builtIn;
+      const minePath = r'C:\bin\mine.exe';
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+      );
+      service.agentWork = _DetectionWork(detection);
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      await app.handleLater(const AgentsDetect());
+      expect(
+        rows().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+
+      // The row is gone from the registry; its command is still on PATH.
+      registry = AgentRegistry.builtIn;
+      told.clear();
+      final report = (await app.handleLater(const AgentsDetect())).value;
+
+      expect(report.environments.single.removed.map((i) => i.agentId), [
+        row.agentId,
+      ]);
+      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+      expect(toldChanges().whereType<InstallationRemoved>(), hasLength(1));
+    });
+
     test('writes what answered, tells every other client, and logs the '
         'search under the server\'s own key', () async {
       final report = (await app.handleLater(const AgentsDetect())).value;

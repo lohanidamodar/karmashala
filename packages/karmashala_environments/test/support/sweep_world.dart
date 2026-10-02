@@ -174,6 +174,7 @@ class SweepWorld {
     PathProbe? pathProbe,
     Clock? clock,
     AgentRegistry registry = AgentRegistry.builtIn,
+    AgentRegistry Function()? registryNow,
     Map<String, String> hostEnvironment = const {},
   }) => AgentSweep(
     environments: () => [...environments],
@@ -185,6 +186,7 @@ class SweepWorld {
     ids: SequentialIdGenerator(),
     clock: clock ?? FixedClock(testTime),
     registry: registry,
+    registryNow: registryNow,
     pathProbe: pathProbe ?? FakePathProbe(),
     hostEnvironment: hostEnvironment,
   );

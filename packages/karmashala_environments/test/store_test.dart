@@ -107,6 +107,21 @@ void main() {
       );
     });
 
+    test('finds every installation of one agent, on every machine', () {
+      dao.insert(installation(id: 'win', agentId: 'acp:r1'));
+      dao.insert(
+        installation(
+          id: 'wsl',
+          agentId: 'acp:r1',
+          environmentId: 'wsl:Ubuntu',
+          path: '/usr/bin/mine',
+        ),
+      );
+      dao.insert(installation(id: 'other'));
+      expect(dao.getByAgent('acp:r1').map((i) => i.id), ['win', 'wsl']);
+      expect(dao.getByAgent('acp:r2'), isEmpty);
+    });
+
     test('the same (agent, environment, executable) twice is refused', () {
       dao.insert(installation(id: 'a1'));
       expect(

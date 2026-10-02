@@ -1,7 +1,19 @@
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 
 import 'values_json.dart';
+
+/// The agent kinds among [stored] that [registry] no longer knows — an ACP
+/// agent whose row was removed. A probe judges them as asked about and
+/// found nowhere, so their rows go on the next sweep.
+Set<String> forgottenAgentKinds(
+  AgentRegistry registry,
+  Iterable<AgentInstallation> stored,
+) => {
+  for (final row in stored)
+    if (registry.adapterFor(row.agentId) == null) row.agentId,
+};
 
 /// **The one reconciliation of a probe with the recorded installations** —
 /// what the server applies to every sweep, the desktop's across its

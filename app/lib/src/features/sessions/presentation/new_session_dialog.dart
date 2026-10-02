@@ -12,6 +12,7 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../../app/widgets/full_screen_form.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
+import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_values.dart'
     show EnvironmentPath;
@@ -827,14 +828,17 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     // Only the agents installed **where the session will run**: one discovered
     // on Windows is a Windows path, unresolvable inside a WSL checkout. A
     // session without a project runs wherever its agent is, so every agent.
-    final installations = scratch
-        ? ref.watch(agentInstallationsControllerProvider)
-        : checkout == null
-        ? const <AgentInstallation>[]
-        : [
-            for (final i in ref.watch(agentInstallationsControllerProvider))
-              if (i.environmentId == checkout.path.environmentId) i,
-          ];
+    // An installation of an agent the registry no longer knows (a removed ACP
+    // agent's leftover row) is not offered.
+    final registry = ref.watch(agentRegistryProvider);
+    final installations = [
+      for (final i in ref.watch(agentInstallationsControllerProvider))
+        if (registry.adapterFor(i.agentId) != null &&
+            (scratch ||
+                (checkout != null &&
+                    i.environmentId == checkout.path.environmentId)))
+          i,
+    ];
     final installation = scratch
         ? _agentForScratch(installations)
         : _agentFor(checkout, installations);

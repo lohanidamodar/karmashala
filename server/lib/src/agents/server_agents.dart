@@ -1,6 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_environments/karmashala_environments.dart'
+    show forgottenAgentKinds;
 
 import '../data/data_service.dart';
 import 'agent_registry_holder.dart';
@@ -115,18 +117,23 @@ class ServerAgents {
       );
     }
     final now = _clock.nowUtc();
-    final written = _data.recordAgentsFound(here, [
-      for (final agent in found)
-        AgentInstallation(
-          id: _ids.newId(),
-          agentId: agent.descriptor.id,
-          executable: agent.executable,
-          version: agent.version,
-          versionReadAt: agent.version == null ? null : now,
-          createdAt: now,
-          leadingArguments: agent.leadingArguments,
-        ),
-    ], now);
+    final written = _data.recordAgentsFound(
+      here,
+      [
+        for (final agent in found)
+          AgentInstallation(
+            id: _ids.newId(),
+            agentId: agent.descriptor.id,
+            executable: agent.executable,
+            version: agent.version,
+            versionReadAt: agent.version == null ? null : now,
+            createdAt: now,
+            leadingArguments: agent.leadingArguments,
+          ),
+      ],
+      now,
+      forgotten: forgottenAgentKinds(registry, _data.installationsIn(here.id)),
+    );
     final addedIds = {for (final row in written.added) row.id};
     final foundIds = {for (final agent in found) agent.descriptor.id};
     return ServerAgentScan(

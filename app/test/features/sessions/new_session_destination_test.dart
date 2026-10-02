@@ -224,6 +224,25 @@ void main() {
       expect(find.textContaining('beta-app'), findsNothing);
     });
 
+    testWidgets('offering no card for an agent the registry has forgotten', (
+      tester,
+    ) async {
+      // A removed ACP agent's leftover installation row: no name to show.
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'ghost',
+          agentId: 'acp:gone',
+          path: r'C:\gone\agent.exe',
+        ),
+      );
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+
+      expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('agent-card:ghost')), findsNothing);
+      expect(find.text('acp:gone'), findsNothing);
+    });
+
     testWidgets('and at the first project when nothing is selected', (
       tester,
     ) async {

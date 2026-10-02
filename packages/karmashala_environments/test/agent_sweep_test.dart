@@ -368,6 +368,38 @@ void main() {
       ]);
     });
 
+    test('drops a row whose agent the registry no longer knows', () async {
+      // An ACP agent a person added and then removed: the registry forgets
+      // its kind while its row — and its command — are still there.
+      final row = AcpAgentRow(
+        id: 'r1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: testTime,
+      );
+      var current = AgentRegistry([...registry.adapters, acpAgentAdapter(row)]);
+      final runner = hostRunner();
+      sweep = world.sweep(
+        runnerFor: (_) => runner,
+        registry: registry,
+        registryNow: () => current,
+      );
+      installed['mine'] = '1.0.0';
+      await sweep.sweep();
+      expect(
+        world.installations.getAll().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+
+      current = registry;
+      final report = await sweep.sweep();
+
+      expect(report.removedCount, 1);
+      expect(world.installations.getAll().map((i) => i.agentId), [
+        AgentIds.claudeCode,
+      ]);
+    });
+
     test('records a changed version in place', () async {
       await sweep.sweep();
       final before = world.installations.getAll().single;

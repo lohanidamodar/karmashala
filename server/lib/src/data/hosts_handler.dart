@@ -239,13 +239,16 @@ class HostsHandler {
   /// What the server found on this machine itself: recorded by the same
   /// rules, judging no leftover row — a CLI that has gone is the desktop's
   /// to reconcile with the person — and reading this machine's disk for the
-  /// paths already recorded.
+  /// paths already recorded. [forgotten] names the agent kinds the registry
+  /// no longer knows: their rows are judged, and go when nothing points at
+  /// them.
   InstallationsReconciled recordFound(
     ExecutionEnvironment here,
     List<AgentInstallation> found,
     DateTime readAt,
-    List<DataChange> changes,
-  ) {
+    List<DataChange> changes, {
+    Set<String> forgotten = const {},
+  }) {
     ensureEnvironment(here, changes);
     final stored = _installations.getByEnvironment(here.id);
     return _apply(
@@ -253,7 +256,7 @@ class HostsHandler {
         environmentId: here.id,
         stored: stored,
         found: found,
-        probed: const {},
+        probed: forgotten,
         readings: {
           for (final row in stored)
             row.id: _opens(row.executable.path)

@@ -407,6 +407,30 @@ class ProjectLine extends StatelessWidget {
   );
 }
 
+/// One "New session with …" entry per agent installed here, when there are at
+/// least two to choose from. A row whose agent the registry no longer knows
+/// (a removed ACP agent's leftover) is not a choice, so it is not offered.
+List<PopupMenuEntry<String>> newSessionWithItems(
+  List<AgentInstallation> installations,
+  AgentRegistry registry,
+) {
+  final known = [
+    for (final installation in installations)
+      if (registry.adapterFor(installation.agentId) != null) installation,
+  ];
+  if (known.length < 2) return const [];
+  return [
+    for (final installation in known)
+      DesktopMenuItem(
+        value: 'new-with:${installation.id}',
+        label:
+            'New session with '
+            '${registry.displayNameFor(installation.agentId)}',
+        icon: AppIcons.robot,
+      ),
+  ];
+}
+
 /// A project row's menu. Pure: every reading arrives as an argument.
 List<PopupMenuEntry<String>> projectMenuItems({
   required Project project,
@@ -431,15 +455,7 @@ List<PopupMenuEntry<String>> projectMenuItems({
   ),
   // Offered only when there is a choice: with one installation the `+`
   // already uses it.
-  if (installations.length >= 2)
-    for (final installation in installations)
-      DesktopMenuItem(
-        value: 'new-with:${installation.id}',
-        label:
-            'New session with '
-            '${registry.displayNameFor(installation.agentId)}',
-        icon: AppIcons.robot,
-      ),
+  ...newSessionWithItems(installations, registry),
   DesktopMenuItem(
     value: 'copy-cmd',
     label: 'Copy new-session command',
