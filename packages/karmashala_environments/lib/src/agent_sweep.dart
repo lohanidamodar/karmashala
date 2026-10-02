@@ -81,10 +81,11 @@ class AgentSweep {
     required this.probeLog,
     required this.ids,
     required this.clock,
-    this.registry = AgentRegistry.builtIn,
+    AgentRegistry registry = AgentRegistry.builtIn,
+    this.registryNow,
     this.pathProbe = const LocalPathProbe(),
     this.hostEnvironment = const {},
-  });
+  }) : initialRegistry = registry;
 
   /// Every recorded environment, in the table's order.
   final List<ExecutionEnvironment> Function() environments;
@@ -104,7 +105,17 @@ class AgentSweep {
   final AgentProbeLog probeLog;
   final IdGenerator ids;
   final Clock clock;
-  final AgentRegistry registry;
+
+  /// The registry when nobody supplies [registryNow].
+  final AgentRegistry initialRegistry;
+
+  /// The registry as it stands now, when it can change while the server
+  /// runs.
+  final AgentRegistry Function()? registryNow;
+
+  /// The agents a sweep probes, read at each sweep: an agent a person adds
+  /// while the server runs is probed by the next one, not after a restart.
+  AgentRegistry get registry => registryNow?.call() ?? initialRegistry;
 
   /// Reads this machine's filesystem, junction chains and all.
   final PathProbe pathProbe;

@@ -90,6 +90,66 @@ void main() {
   tearDown(() => db.close());
 
   group('agents.detect', () {
+    test(
+      'probes an agent added while the server runs, on the next detect',
+      () async {
+        // The registry as the holder would hand it: built-ins first, then a
+        // row a person added from Settings.
+        var registry = AgentRegistry.builtIn;
+        const copilotPath = r'C:\bin\copilot.exe';
+        runner = ScriptedRunner((request) {
+          if (request.executable == 'where' &&
+              request.arguments.first == 'copilot') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: '$copilotPath\n',
+              stderr: '',
+            );
+          }
+          return claudeOnly(request);
+        });
+        disk = SetPathProbe({newPath, copilotPath});
+        detection = ServerDetection(
+          data: service,
+          runnerFor: (_) => runner,
+          ids: CountingIds('found'),
+          clock: clock,
+          pathProbe: disk,
+          registryNow: () => registry,
+        );
+        service.agentWork = _DetectionWork(detection);
+
+        final before = (await app.handleLater(const AgentsDetect())).value;
+        expect(
+          before.environments.single.added.single.agentId,
+          AgentIds.claudeCode,
+        );
+
+        final row = AcpAgentRow(
+          id: 'row-1',
+          name: 'GitHub Copilot',
+          command: 'copilot',
+          args: const ['--acp'],
+          env: const {},
+          source: AcpAgentSource.custom,
+          createdAt: now,
+        );
+        registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+
+        final after = (await app.handleLater(const AgentsDetect())).value;
+        expect(
+          after.environments.single.added.map((i) => i.agentId),
+          [row.agentId],
+          reason:
+              'the sweep read the registry again rather than the one it began with',
+        );
+        expect(
+          rows().map((i) => i.agentId),
+          containsAll([AgentIds.claudeCode, row.agentId]),
+        );
+      },
+    );
+
     test('writes what answered, tells every other client, and logs the '
         'search under the server\'s own key', () async {
       final report = (await app.handleLater(const AgentsDetect())).value;

@@ -434,6 +434,8 @@ Future<int> runServe(
     // schedule would reach for this machine's Keychain whatever HOME says.
     onItsOwn: hostEnvironment[kAgentWorkVariable] != 'off',
     registry: agentRegistry.current,
+    // Detection probes the agents added since, not the ones at start.
+    registryHolder: agentRegistry,
   )..attach();
   final companion = DaemonCompanion(
     database: database,

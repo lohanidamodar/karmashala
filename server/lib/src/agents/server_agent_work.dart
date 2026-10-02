@@ -8,6 +8,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
 import '../data/data_service.dart';
+import 'agent_registry_holder.dart';
 import 'server_accounts.dart';
 import 'server_detection.dart';
 import 'server_imports.dart';
@@ -30,6 +31,7 @@ class ServerAgentWork implements AgentWork {
     Clock clock = const SystemClock(),
     IdGenerator? ids,
     AgentRegistry registry = AgentRegistry.builtIn,
+    AgentRegistryHolder? registryHolder,
     Map<String, String> hostEnvironment = const {},
     PathProbe pathProbe = const LocalPathProbe(),
     AgentUsageService Function(CliStoreLocator stores)? usageService,
@@ -68,12 +70,16 @@ class ServerAgentWork implements AgentWork {
       registry: registry,
       claude: claudeAuth,
     );
+    // Detection alone reads the registry live: it is the one part that must
+    // see an ACP agent added after start. Usage, accounts and imports are
+    // about the shipped agents' stores.
     detection = ServerDetection(
       data: data,
       runnerFor: runnerFor,
       ids: generator,
       clock: clock,
       registry: registry,
+      registryNow: registryHolder == null ? null : () => registryHolder.current,
       pathProbe: pathProbe,
       hostEnvironment: hostEnvironment,
     );
