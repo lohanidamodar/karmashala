@@ -39,7 +39,8 @@ import 'package:karmashala_session_engine/store.dart'
         ImportedSessionDao,
         SessionDao,
         SessionMessageDao,
-        SessionRepositoryDao;
+        SessionRepositoryDao,
+        SessionUsageDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -866,8 +867,10 @@ Future<int> runServe(
     data: data,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  final sessionUsage = SessionUsageDao(database);
   final acpRuntimes = AcpRuntimes(
     messages: sessionMessages,
+    usage: sessionUsage,
     host: acpHost,
     runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
@@ -1033,6 +1036,9 @@ Future<int> runServe(
     runners: ssh.runners,
     storeHome: transcripts.storeHome,
     readRows: readSqliteRows,
+    // An ACP session's counts come from the rows and usage this server kept.
+    messages: sessionMessages,
+    usage: sessionUsage,
   );
   data.sessionRecordReadings = sessionRecordReadings;
   // Sessions' pictures (Stage 0 step 10), extracted from the same records.

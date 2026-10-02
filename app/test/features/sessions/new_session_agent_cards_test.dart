@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/presentation/agent_logo.dart';
+import 'package:karmashala/src/features/agents/presentation/acp_usage_note.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_agent_cards.dart';
 
 import '../../support/fake_data_server.dart';
@@ -93,5 +94,21 @@ void main() {
   ) async {
     await pump(tester, [agentInstallation(version: null)]);
     expect(find.text('Windows'), findsOneWidget);
+  });
+
+  testWidgets('an ACP agent says limits are not reported, never checks', (
+    tester,
+  ) async {
+    // Every ACP adapter, decided by its capability and not its id.
+    final acp = AgentRegistry.builtIn.adapters
+        .where((a) => a.acp != null)
+        .map((a) => a.id)
+        .toList();
+    await pump(tester, [
+      agentInstallation(),
+      for (final id in acp) agentInstallation(id: 'i-$id', agentId: id),
+    ]);
+    expect(find.text('Checking usage…'), findsOneWidget);
+    expect(find.text(kAcpUsageLimitsNote), findsNWidgets(acp.length));
   });
 }

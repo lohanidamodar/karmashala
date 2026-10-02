@@ -194,7 +194,8 @@ class SessionStatsPopover extends ConsumerWidget {
     final footer = [
       const SizedBox(height: Insets.md),
       Text(
-        '${sessionStatsProvenance(view)}. Counts only — not a bill.',
+        '${sessionStatsProvenance(view)}. '
+        '${stats?.reportedCost == null ? 'Counts only — not a bill.' : 'Counts, and the cost as the agent reported it — not a bill.'}',
         style: meta,
       ),
     ];
@@ -215,9 +216,18 @@ class SessionStatsPopover extends ConsumerWidget {
     }
     final byName = stats.toolCallsByName;
     final perTurn = stats.outputTokensPerTurn;
+    final contextPerTurn = stats.contextUsedPerTurn;
+    final agent = view.agentName.isEmpty ? 'the agent' : view.agentName;
     return [
       const _GroupLabel('Context'),
       _ContextHeader(stats: stats, agentName: view.agentName, meta: meta),
+      if (stats.reportedCost case final cost?) ...[
+        const SizedBox(height: Insets.xs),
+        Text(
+          '${formatReportedCost(cost)} so far, as $agent reported it.',
+          style: meta,
+        ),
+      ],
       const SizedBox(height: Insets.md),
       _FigureRow(stats: stats, meta: meta),
       const _GroupLabel('Tokens by kind'),
@@ -237,8 +247,24 @@ class SessionStatsPopover extends ConsumerWidget {
         )
       else
         _ToolCalls(byName: byName, total: stats.toolCalls, meta: meta),
-      const _GroupLabel('Output per turn'),
-      if (perTurn == null)
+      if (perTurn == null && contextPerTurn != null) ...[
+        const _GroupLabel('Context per turn'),
+        if (contextPerTurn.length < 2)
+          Text(
+            contextPerTurn.isEmpty
+                ? 'No turn has finished yet.'
+                : 'One turn so far: '
+                      '${formatCompactCount(contextPerTurn.single)} tokens '
+                      'in context.',
+            style: meta,
+          )
+        else
+          ContextPerTurn(perTurn: contextPerTurn),
+      ] else
+        const _GroupLabel('Output per turn'),
+      if (perTurn == null && contextPerTurn != null)
+        const SizedBox.shrink()
+      else if (perTurn == null)
         Text('Output per turn is $kStatNotRecorded.', style: meta)
       else if (perTurn.length < 2)
         Text(

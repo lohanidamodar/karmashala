@@ -409,6 +409,9 @@ final class _DaemonHost extends AcpRuntimeHost {
   void configOptionsChanged(SessionConfigOptionsChanged change) {}
 
   @override
+  void usageChanged(SessionUsageChanged change) {}
+
+  @override
   void messagesChanged(String sessionId) {}
 
   @override

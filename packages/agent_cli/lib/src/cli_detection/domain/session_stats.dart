@@ -10,6 +10,43 @@ enum SessionStatsSource {
 
   /// Printed by the CLI itself, in answer to a command sent to its pane.
   agentOutput,
+
+  /// Reported by the agent over its protocol as it worked, and kept by the
+  /// server beside the conversation it wrote for the session.
+  agentReported,
+}
+
+/// What an agent itself said its session has cost so far. **Never computed
+/// here** — the no-price-table rule of [SessionStats] stands; this is the
+/// agent's own figure, carried as it was given.
+class ReportedCost {
+  const ReportedCost({required this.amount, required this.currency});
+
+  final double amount;
+
+  /// ISO 4217, as the agent wrote it.
+  final String currency;
+
+  Map<String, Object?> toJson() => {'amount': amount, 'currency': currency};
+
+  static ReportedCost? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final amount = json['amount'], currency = json['currency'];
+    if (amount is! num || currency is! String) return null;
+    return ReportedCost(amount: amount.toDouble(), currency: currency);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ReportedCost &&
+      other.amount == amount &&
+      other.currency == currency;
+
+  @override
+  int get hashCode => Object.hash(amount, currency);
+
+  @override
+  String toString() => 'ReportedCost($amount $currency)';
 }
 
 /// Tokens, as far as one route can account for them.
@@ -142,6 +179,8 @@ class SessionStats {
     this.lastPromptTokens,
     this.outputTokensPerTurn,
     this.reasoningTokensPerTurn,
+    this.contextUsedPerTurn,
+    this.reportedCost,
   });
 
   final SessionStatsSource source;
@@ -193,6 +232,14 @@ class SessionStats {
   /// [outputTokensPerTurn]. Null where the agent does not break thinking out.
   final List<int>? reasoningTokensPerTurn;
 
+  /// Tokens in the agent's context as each turn ended, oldest first — what an
+  /// agent reporting over its protocol says instead of per-turn output.
+  final List<int>? contextUsedPerTurn;
+
+  /// The session's cumulative cost as the agent itself reported it; null
+  /// where it reported none. Never computed here.
+  final ReportedCost? reportedCost;
+
   /// Between the first and last record — elapsed, **not** time spent working.
   /// A session resumed a month later spans a month.
   Duration? get span {
@@ -211,6 +258,8 @@ class SessionStats {
       firstActivityAt == null &&
       lastActivityAt == null &&
       (output == null || output!.trim().isEmpty) &&
+      contextUsedPerTurn == null &&
+      reportedCost == null &&
       tokens.isUnknown;
 
   /// The wire form of a server's `sessions.stats` answer (Stage 0 step 9):
@@ -235,6 +284,8 @@ class SessionStats {
     'lastPromptTokens': ?lastPromptTokens,
     'outputTokensPerTurn': ?outputTokensPerTurn,
     'reasoningTokensPerTurn': ?reasoningTokensPerTurn,
+    'contextUsedPerTurn': ?contextUsedPerTurn,
+    'reportedCost': ?reportedCost?.toJson(),
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -272,6 +323,8 @@ class SessionStats {
       lastPromptTokens: count('lastPromptTokens'),
       outputTokensPerTurn: _countsFromJson(json['outputTokensPerTurn']),
       reasoningTokensPerTurn: _countsFromJson(json['reasoningTokensPerTurn']),
+      contextUsedPerTurn: _countsFromJson(json['contextUsedPerTurn']),
+      reportedCost: ReportedCost.fromJson(json['reportedCost']),
     );
   }
 }

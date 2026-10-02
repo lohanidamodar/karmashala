@@ -247,6 +247,8 @@ class FakeAcpAgent {
         _sendUpdate(sessionId, PlanUpdate(entries).toJson());
       case FakeModeStep(:final modeId):
         _sendUpdate(sessionId, CurrentModeUpdate(modeId).toJson());
+      case FakeUsageStep(:final update):
+        _sendUpdate(sessionId, update.toJson());
       case FakeUpdateStep(:final update):
         _sendUpdate(sessionId, update.toJson());
       case FakeRawUpdateStep(:final update):

@@ -15,3 +15,4 @@ export 'src/store/session_placement.dart';
 export 'src/store/session_recap_dao.dart';
 export 'src/store/session_relay_dao.dart';
 export 'src/store/session_repository_dao.dart';
+export 'src/store/session_usage_dao.dart';

@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionConfigOptionsChanged, SessionModesChanged;
-import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
+    show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionMessageDao, SessionUsageDao;
 
 import '../checkpoints/daemon_checkpoints.dart';
 import '../data/data_service.dart';
@@ -63,10 +64,14 @@ class AcpRuntimes {
     required this.messages,
     required this.host,
     required this.runnerFor,
+    this.usage,
     DateTime Function()? now,
   }) : _now = now;
 
   final SessionMessageDao messages;
+
+  /// Where each agent's `usage_update`s are kept; null keeps none.
+  final SessionUsageDao? usage;
   final AcpRuntimeHost host;
   final CommandRunner Function(ExecutionEnvironment? environment) runnerFor;
   final DateTime Function()? _now;
@@ -92,6 +97,7 @@ class AcpRuntimes {
       ),
     ),
     messages: messages,
+    usage: usage,
     files: AcpPathScope.forEnvironment(start.environment, start.directory.path),
     host: host,
     mcpUrl: start.mcpUrl,
@@ -159,6 +165,9 @@ class ServerAcpHost extends AcpRuntimeHost {
   @override
   void configOptionsChanged(SessionConfigOptionsChanged change) =>
       data.announce([change]);
+
+  @override
+  void usageChanged(SessionUsageChanged change) => data.announce([change]);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

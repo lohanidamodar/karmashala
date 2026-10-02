@@ -4,12 +4,13 @@ import 'package:agent_cli/descriptors.dart'
     show AcpLaunchSpec, AgentStatusReport, PermissionRisk;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionConfigOptionsChanged, SessionModesChanged;
+    show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_runtime_host.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
-import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionMessageDao, SessionUsageDao;
 import 'package:karmashala_store/database.dart';
 
 /// Everything a runtime told its server, kept for assertions.
@@ -19,6 +20,7 @@ class RecordingHost extends AcpRuntimeHost {
   final prompts = <String>[];
   final modes = <SessionModesChanged>[];
   final configOptions = <SessionConfigOptionsChanged>[];
+  final usage = <SessionUsageChanged>[];
   var messagesChangedCount = 0;
   final logged = <String>[];
 
@@ -49,6 +51,9 @@ class RecordingHost extends AcpRuntimeHost {
   @override
   void configOptionsChanged(SessionConfigOptionsChanged change) =>
       configOptions.add(change);
+
+  @override
+  void usageChanged(SessionUsageChanged change) => usage.add(change);
 
   @override
   void messagesChanged(String sessionId) => messagesChangedCount++;
@@ -110,6 +115,7 @@ AcpSessionRuntime runtimeOver(
     workingDirectory: workingDirectory,
     spawn: process.spawn,
     messages: SessionMessageDao(database),
+    usage: SessionUsageDao(database),
     files: files,
     host: host ?? RecordingHost(),
     mcpUrl: mcpUrl,

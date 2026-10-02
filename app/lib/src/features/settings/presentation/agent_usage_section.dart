@@ -6,7 +6,9 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/presentation/acp_usage_note.dart';
 import 'package:agent_cli/usage.dart';
 import '../../agents/presentation/usage_history_charts.dart';
 import '../../agents/presentation/usage_window_meter.dart';
@@ -185,6 +187,33 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: SemanticColors.of(context).neutral,
     );
+    final where = ref.watch(
+      environmentLabelForIdProvider(widget.installation.environmentId),
+    );
+    // An agent spoken to over ACP has no account to read: said instead of a
+    // button that would check forever.
+    final speaksAcp =
+        ref
+            .watch(agentRegistryProvider)
+            .adapterFor(widget.installation.agentId)
+            ?.acp !=
+        null;
+    if (speaksAcp) {
+      return SettingsCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '$label · $where',
+              style: MonoStyles.body,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: Insets.xs),
+            Text('$kAcpUsageLimitsNote. $kAcpUsageLimitsDetail', style: muted),
+          ],
+        ),
+      );
+    }
     return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

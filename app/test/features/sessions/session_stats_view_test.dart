@@ -3,6 +3,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/sessions/application/session_stats_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_stats_dialog.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_stats_sections.dart';
 
 /// The stats dialog's wording and its number formatting, asserted without
 /// pumping a frame — the same bargain `UsageChipView` makes.
@@ -36,6 +37,15 @@ void main() {
       expect(agentStoreRecordsStats(const DataOnlyAgentAdapter(x)), isFalse);
       expect(agentStoreRecordsStats(null), isFalse);
     });
+
+    test('an agent spoken to over ACP does: the server keeps its rows', () {
+      // Decided by the adapter declaring `acp`, never by its id.
+      for (final adapter in AgentRegistry.builtIn.adapters) {
+        if (adapter.acp != null) {
+          expect(agentStoreRecordsStats(adapter), isTrue, reason: adapter.id);
+        }
+      }
+    });
   });
 
   group('provenance', () {
@@ -62,6 +72,42 @@ void main() {
         'Antigravity',
       );
       expect(sessionStatsProvenance(view), 'Nothing to count');
+    });
+
+    test('an answer the agent reported says so', () {
+      final view = SessionStatsView.computed(
+        const SessionStats(source: SessionStatsSource.agentReported),
+        'Claude (ACP)',
+      );
+      expect(
+        sessionStatsProvenance(view),
+        startsWith('Reported by Claude (ACP)'),
+      );
+      expect(sessionStatsProvenance(view), contains('the server kept'));
+    });
+  });
+
+  group('what the agent reported', () {
+    test('a cost is written as the agent gave it', () {
+      expect(
+        formatReportedCost(const ReportedCost(amount: 1.5, currency: 'USD')),
+        '1.50 USD',
+      );
+      expect(
+        formatReportedCost(const ReportedCost(amount: 0.0042, currency: 'EUR')),
+        '0.0042 EUR',
+      );
+      expect(
+        formatReportedCost(const ReportedCost(amount: 0, currency: '')),
+        '0.00',
+      );
+    });
+
+    test('context per turn names the latest and the peak', () {
+      expect(
+        contextPerTurnSummary([1000, 4000, 2500]),
+        'Latest 2.5k at turn 3 · peak 4k at turn 2',
+      );
     });
   });
 

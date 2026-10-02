@@ -15,6 +15,7 @@ import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';
 import '../application/session_status_providers.dart';
+import '../application/session_usage_providers.dart';
 import 'agent_status_badge.dart';
 import 'session_stats_popover.dart';
 import 'session_stats_sections.dart';
@@ -274,12 +275,24 @@ class _SessionSection extends StatelessWidget {
           const StatsBlockLabel('Context'),
           ContextUsage(stats: stats, agentName: view.agentName),
         ],
+        if (stats.reportedCost case final cost?) ...[
+          const StatsBlockLabel('Cost'),
+          StatsNote(
+            '${formatReportedCost(cost)} so far, as '
+            '${view.agentName.isEmpty ? 'the agent' : view.agentName} '
+            'reported it.',
+          ),
+        ],
         if (perTurn != null && perTurn.length >= 2) ...[
           const StatsBlockLabel('Output per turn'),
           OutputPerTurn(
             perTurn: perTurn,
             reasoningPerTurn: stats.reasoningTokensPerTurn,
           ),
+        ] else if (stats.contextUsedPerTurn case final context?
+            when context.length >= 2) ...[
+          const StatsBlockLabel('Context per turn'),
+          ContextPerTurn(perTurn: context),
         ],
         if (byModel != null && byModel.length >= 2) ...[
           const StatsBlockLabel('By model'),
@@ -426,6 +439,14 @@ class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
         }
       },
     );
+    // An agent reporting its own context mid-turn moves the chip at once,
+    // and the popover re-reads what the server kept of it.
+    ref.listen(sessionUsageProvider(sessionId), (previous, next) {
+      if (next != null && !identical(previous, next)) {
+        ref.invalidate(sessionStatsProvider(sessionId));
+      }
+    });
+    final live = ref.watch(sessionUsageProvider(sessionId));
     // Esc and a click outside close it: MenuAnchor's own dismissal.
     return MenuAnchor(
       controller: _controller,
@@ -433,6 +454,9 @@ class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
       menuChildren: [SessionStatsPopover(sessionId: sessionId)],
       child: SessionStatsChip(
         stats: ref.watch(sessionStatsProvider(sessionId)).value?.stats,
+        liveContext: live == null
+            ? null
+            : (used: live.contextUsed, size: live.contextSize),
         onTap: () =>
             _controller.isOpen ? _controller.close() : _controller.open(),
       ),
@@ -466,17 +490,33 @@ class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
 }
 
 /// [SessionStatsButton] from values: the context fill when [stats] records
-/// both the newest prompt and the window, "Stats" otherwise.
+/// both the newest prompt and the window \u2014 or, newer, what the agent itself
+/// last reported as [liveContext] \u2014 "Stats" otherwise.
 class SessionStatsChip extends StatelessWidget {
-  const SessionStatsChip({required this.stats, required this.onTap, super.key});
+  const SessionStatsChip({
+    required this.stats,
+    required this.onTap,
+    this.liveContext,
+    super.key,
+  });
 
   final SessionStats? stats;
+
+  /// The agent's own latest report of its context, ahead of [stats] while a
+  /// turn runs. A size of zero is no report.
+  final ({int used, int size})? liveContext;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final stats = this.stats;
-    final fill = stats == null ? null : contextFill(stats);
+    final live = liveContext;
+    final (int? used, int? window) = live != null && live.size > 0
+        ? (live.used, live.size)
+        : (stats?.lastPromptTokens, stats?.contextWindow);
+    final fill = used != null && window != null && window > 0
+        ? used / window
+        : null;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final label = fill == null ? 'Stats' : '${(fill * 100).round()}% context';
@@ -484,8 +524,8 @@ class SessionStatsChip extends StatelessWidget {
         ? 'Turns, tokens and tool calls for this session, counted from '
               'the agent\u2019s own record'
         : 'The newest request filled ${(fill * 100).round()}% of the '
-              'context window (${formatCompactCount(stats!.lastPromptTokens!)} '
-              'of ${formatCompactCount(stats.contextWindow!)} tokens). '
+              'context window (${formatCompactCount(used!)} '
+              'of ${formatCompactCount(window!)} tokens). '
               'Opens Session stats.';
 
     return Tooltip(
@@ -573,6 +613,9 @@ String sessionStatsProvenance(SessionStatsView view) {
       'Computed from $agent\u2019s own record '
           'on this machine',
     SessionStatsSource.agentOutput => 'Asked $agent directly',
+    SessionStatsSource.agentReported =>
+      'Reported by $agent as it worked, counted with the conversation the '
+          'server kept',
   };
 }
 

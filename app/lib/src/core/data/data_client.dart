@@ -308,6 +308,18 @@ class DataClient {
   Stream<SessionConfigOptionsChanged> get sessionConfigOptionChanges =>
       _sessionConfigOptionChanges.stream;
 
+  /// What each session's agent last reported of its context and cost, by
+  /// session id. In memory only, like [sessionModes].
+  final sessionUsage = <String, SessionUsageChanged>{};
+
+  final _sessionUsageChanges = StreamController<SessionUsageChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent reported its usage.
+  Stream<SessionUsageChanged> get sessionUsageChanges =>
+      _sessionUsageChanges.stream;
+
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
   /// change.
@@ -994,6 +1006,9 @@ class DataClient {
           if (!_sessionConfigOptionChanges.isClosed) {
             _sessionConfigOptionChanges.add(change);
           }
+        case final SessionUsageChanged change:
+          sessionUsage[change.sessionId] = change;
+          if (!_sessionUsageChanges.isClosed) _sessionUsageChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1211,6 +1226,7 @@ class DataClient {
     unawaited(_transcriptChanges.close());
     unawaited(_sessionModeChanges.close());
     unawaited(_sessionConfigOptionChanges.close());
+    unawaited(_sessionUsageChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());

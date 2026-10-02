@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../agents/presentation/acp_usage_note.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import '../../environments/application/environments_controller.dart';
@@ -170,6 +171,15 @@ class _AgentUsageLine extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An agent spoken to over ACP has no account to read: the protocol
+    // carries no limits, only what a running session reports of itself.
+    final speaksAcp =
+        ref
+            .watch(agentRegistryProvider)
+            .adapterFor(installation.agentId)
+            ?.acp !=
+        null;
+    if (speaksAcp) return Text(kAcpUsageLimitsNote, style: muted);
     final usage = ref.watch(agentUsageProvider(installation));
     final value = usage.value;
     if (value == null) {

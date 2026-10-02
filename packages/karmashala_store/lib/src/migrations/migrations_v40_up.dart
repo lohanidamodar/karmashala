@@ -714,3 +714,22 @@ void _migrateToV68(Database db) {
   if (columns.contains('icon_url')) return;
   db.execute('ALTER TABLE acp_agents ADD COLUMN icon_url TEXT;');
 }
+
+/// What an ACP session's agent reported of its own usage (`usage_update`):
+/// the latest context used of its size and the cumulative cost, and one
+/// entry per turn in `turns_json` — the last report before the turn ended.
+/// Nothing is computed here; a column is null until the agent said it.
+void _migrateToV69(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_usage (
+      session_id    TEXT PRIMARY KEY
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      context_used  INTEGER,
+      context_size  INTEGER,
+      cost_amount   REAL,
+      cost_currency TEXT,
+      turns_json    TEXT NOT NULL DEFAULT '[]',
+      updated_at    TEXT NOT NULL
+    );
+  ''');
+}

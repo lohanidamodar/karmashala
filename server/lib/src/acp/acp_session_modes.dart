@@ -55,6 +55,7 @@ class AcpSessionModes implements SessionModeChanger {
       if (!runtime.lifecycle.hasEnded) ...[
         ?runtime.modes,
         ?runtime.configOptions,
+        ?runtime.reportedUsage,
       ],
   ];
 

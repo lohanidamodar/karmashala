@@ -12,9 +12,11 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionConfigOption,
         SessionConfigOptionsChanged,
         SessionModeOption,
-        SessionModesChanged;
+        SessionModesChanged,
+        SessionUsageChanged;
 import 'package:karmashala_host_protocol/protocol.dart';
-import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionMessageDao, SessionUsageDao, SessionUsageTurn;
 
 import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
@@ -73,6 +75,7 @@ class AcpSessionRuntime implements ScreenSession {
     required this.workingDirectory,
     required Future<AcpTransport> Function() spawn,
     required SessionMessageDao messages,
+    this.usage,
     AcpPathScope? files,
     this.host = AcpRuntimeHost.none,
     this.mcpUrl,
@@ -135,6 +138,9 @@ class AcpSessionRuntime implements ScreenSession {
 
   final Future<AcpTransport> Function() _spawn;
 
+  /// Where the agent's `usage_update`s are kept; null keeps none.
+  final SessionUsageDao? usage;
+
   /// Where the agent's `fs/*` paths land on this machine.
   final AcpPathScope _files;
   final DateTime Function() _now;
@@ -149,6 +155,8 @@ class AcpSessionRuntime implements ScreenSession {
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
   List<ConfigOption>? _configOptions;
+  UsageUpdate? _latestUsage;
+  UsageUpdate? _turnUsage;
   String? _agentSessionId;
   Future<StopReason>? _turn;
   Completer<StopReason?>? _turnSettled;
@@ -505,6 +513,7 @@ class AcpSessionRuntime implements ScreenSession {
       failure = error;
     }
     _writer.turnEnded();
+    _usageTurnEnded();
     if (identical(_turn, turn)) _turn = null;
     _resolvePending(const PermissionOutcome.cancelled());
     if (failure != null) {
@@ -553,6 +562,10 @@ class AcpSessionRuntime implements ScreenSession {
     if (update is ConfigOptionUpdate) {
       _configOptions = update.configOptions;
       _announceConfigOptions();
+      return;
+    }
+    if (update is UsageUpdate) {
+      _usageReported(update);
       return;
     }
     if (update is ToolCallUpdate) {
@@ -707,6 +720,64 @@ class AcpSessionRuntime implements ScreenSession {
       ],
     );
   }
+
+  // Usage.
+
+  /// The agent's latest `usage_update`, as a client is told it; null until
+  /// it has reported one.
+  SessionUsageChanged? get reportedUsage => switch (_latestUsage) {
+    final latest? => _usageChange(latest),
+    null => null,
+  };
+
+  /// Kept as the latest report at once, so a restart answers it, and held
+  /// as the turn's until the turn ends.
+  void _usageReported(UsageUpdate update) {
+    _latestUsage = update;
+    if (_turn != null) _turnUsage = update;
+    try {
+      usage?.recordLatest(
+        sessionId,
+        contextUsed: update.used,
+        contextSize: update.size,
+        costAmount: update.cost?.amount,
+        costCurrency: update.cost?.currency,
+        at: _now(),
+      );
+    } on Object catch (error) {
+      host.log('recording usage of session $sessionId failed: $error');
+    }
+    host.usageChanged(_usageChange(update));
+  }
+
+  /// The last report of the turn becomes the turn's entry.
+  void _usageTurnEnded() {
+    final last = _turnUsage;
+    _turnUsage = null;
+    if (last == null) return;
+    try {
+      usage?.recordTurn(
+        sessionId,
+        SessionUsageTurn(
+          contextUsed: last.used,
+          contextSize: last.size,
+          costAmount: last.cost?.amount,
+          costCurrency: last.cost?.currency,
+        ),
+        at: _now(),
+      );
+    } on Object catch (error) {
+      host.log('recording a turn\'s usage of $sessionId failed: $error');
+    }
+  }
+
+  SessionUsageChanged _usageChange(UsageUpdate update) => SessionUsageChanged(
+    sessionId: sessionId,
+    contextUsed: update.used,
+    contextSize: update.size,
+    costAmount: update.cost?.amount,
+    costCurrency: update.cost?.currency,
+  );
 
   /// The agent is gone, so it offers nothing to set: a client's picker for
   /// this session clears until a start announces again.

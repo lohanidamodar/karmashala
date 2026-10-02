@@ -26,8 +26,10 @@ import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 import 'package:karmashala_session/delivery.dart' show SessionRecordGap;
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionDao, SessionMessageDao, SessionUsageDao;
 
+import 'acp_session_stats.dart';
 import 'session_records.dart';
 
 /// **The readers of a session's raw record lines, run here for any client**
@@ -44,6 +46,8 @@ class SessionRecordReadings {
     this.storeHome,
     this.readRows = noSqliteBinding,
     this.lifetimeFresh = const Duration(seconds: 30),
+    this.messages,
+    this.usage,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -52,6 +56,11 @@ class SessionRecordReadings {
   final SessionDao sessions;
   final CheckoutRows rows;
   final CommandRunnerFactory runners;
+
+  /// The conversation and usage this server kept of each ACP session, which
+  /// answer its counts (`adapter.acp != null`); null answers no counts.
+  final SessionMessageDao? messages;
+  final SessionUsageDao? usage;
 
   /// Agent `agentId`'s store home in environment `environmentId`, else in
   /// any environment that has one; null answers no lifetime totals.
@@ -76,11 +85,7 @@ class SessionRecordReadings {
   final _lifetimes =
       <
         (String, String?),
-        ({
-          DateTime at,
-          LifetimeStats? stats,
-          LifetimeStatsUnavailable? gap,
-        })
+        ({DateTime at, LifetimeStats? stats, LifetimeStatsUnavailable? gap})
       >{};
 
   /// Each session's counts (`sessions.stats`, Stage 0 step 9), read as the
@@ -95,8 +100,7 @@ class SessionRecordReadings {
       );
     }
     return SessionStatsBatch({
-      for (final id in ids)
-        id: await _statsOf(id, lifetime: request.lifetime),
+      for (final id in ids) id: await _statsOf(id, lifetime: request.lifetime),
     });
   }
 
@@ -115,7 +119,8 @@ class SessionRecordReadings {
             : null,
       );
     }
-    final stats = agentId == null ? null : registry.adapterFor(agentId)?.stats;
+    final adapter = agentId == null ? null : registry.adapterFor(agentId);
+    final stats = adapter?.stats;
     final (LifetimeStats?, LifetimeStatsUnavailable?) books = lifetime
         ? await _lifetimeOf(
             agentId,
@@ -128,6 +133,20 @@ class SessionRecordReadings {
       lifetime: books.$1,
       lifetimeGap: books.$2,
     );
+    // An agent spoken to over ACP keeps no store of its own here: its rows
+    // and its reported usage are this server's.
+    if (adapter?.acp != null && row != null) {
+      final rows = messages;
+      if (rows == null) return gap(SessionStatsGap.agentKeepsNoCounts);
+      return SessionStatsReading(
+        stats: acpSessionStats(
+          rows: rows.listAfter(sessionId),
+          usage: usage?.getBySession(sessionId),
+        ),
+        lifetime: books.$1,
+        lifetimeGap: books.$2,
+      );
+    }
     if (agentId == null || stats == null) {
       return gap(SessionStatsGap.agentKeepsNoCounts);
     }
@@ -346,10 +365,9 @@ Future<List<StoreServerFileChange>> _editsIn(
   List<FileEditRecord> Function(Map<String, Object?> json) editsOnLine,
 ) async {
   final changes = <StoreServerFileChange>[];
-  await for (final line
-      in File(
-        path,
-      ).openRead().transform(utf8.decoder).transform(const LineSplitter())) {
+  await for (final line in File(
+    path,
+  ).openRead().transform(utf8.decoder).transform(const LineSplitter())) {
     if (line.isEmpty) continue;
     final Object? decoded;
     try {

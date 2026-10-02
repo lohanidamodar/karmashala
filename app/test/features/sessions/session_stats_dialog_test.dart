@@ -805,5 +805,45 @@ void main() {
       await pumpChip(tester, null);
       expect(find.text('Stats'), findsOneWidget);
     });
+
+    testWidgets('what the agent itself reported outranks the read numbers', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SessionStatsChip(
+                stats: const SessionStats(
+                  source: SessionStatsSource.agentReported,
+                  lastPromptTokens: 124000,
+                  contextWindow: 200000,
+                ),
+                liveContext: (used: 150000, size: 200000),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('75% context'), findsOneWidget);
+    });
+
+    testWidgets('a live report of no size is no report', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SessionStatsChip(
+                stats: null,
+                liveContext: (used: 10, size: 0),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Stats'), findsOneWidget);
+    });
   });
 }

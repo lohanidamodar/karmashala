@@ -455,6 +455,9 @@ class FakeDataServer {
           sessionModes[sessionId] = change;
         case SessionConfigOptionsChanged(:final sessionId):
           sessionConfigOptions[sessionId] = change;
+        case SessionUsageChanged():
+          // Told, never kept: a late client reads it from `sessions.stats`.
+          break;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;

@@ -24,6 +24,7 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
             ),
         ],
       ),
+      'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
       _ => null,
     };
 
@@ -274,5 +275,48 @@ final class SessionConfigOptionsChanged extends DataChange {
     'change': 'sessionConfigOptionsChanged',
     'sessionId': sessionId,
     'options': [for (final option in options) option.toJson()],
+  };
+}
+
+/// Session [sessionId]'s agent reported its usage (`usage_update`): the
+/// tokens in its context of the window's size, and its cumulative cost when
+/// it gives one. Told as it arrives, mid-turn too; the server also keeps it,
+/// so `sessions.stats` answers the same after a restart.
+final class SessionUsageChanged extends DataChange {
+  const SessionUsageChanged({
+    required this.sessionId,
+    required this.contextUsed,
+    required this.contextSize,
+    this.costAmount,
+    this.costCurrency,
+  });
+
+  factory SessionUsageChanged.fromJson(Map<String, Object?> json) {
+    final cost = json['costAmount'];
+    return SessionUsageChanged(
+      sessionId: json['sessionId']! as String,
+      contextUsed: json['contextUsed'] as int? ?? 0,
+      contextSize: json['contextSize'] as int? ?? 0,
+      costAmount: cost is num ? cost.toDouble() : null,
+      costCurrency: json['costCurrency'] as String?,
+    );
+  }
+
+  final String sessionId;
+  final int contextUsed;
+  final int contextSize;
+  final double? costAmount;
+
+  /// ISO 4217, as the agent wrote it.
+  final String? costCurrency;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionUsageChanged',
+    'sessionId': sessionId,
+    'contextUsed': contextUsed,
+    'contextSize': contextSize,
+    'costAmount': ?costAmount,
+    'costCurrency': ?costCurrency,
   };
 }

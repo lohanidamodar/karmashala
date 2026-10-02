@@ -87,6 +87,26 @@ String perTurnSummary(List<int> perTurn) {
       '${formatCompactCount((total / perTurn.length).round())}';
 }
 
+/// A context-per-turn chart's latest and peak in words. [perTurn] must not
+/// be empty.
+String contextPerTurnSummary(List<int> perTurn) {
+  final peak = peakTurn(perTurn)!;
+  return 'Latest ${formatCompactCount(perTurn.last)} at turn '
+      '${perTurn.length} · peak ${formatCompactCount(peak.tokens)} at turn '
+      '${peak.turn}';
+}
+
+/// A cost as the agent reported it: its own amount and currency, never a
+/// figure worked out here. A fraction of a cent keeps its digits.
+String formatReportedCost(ReportedCost cost) {
+  final amount = cost.amount;
+  final digits = amount != 0 && amount.abs() < 0.01 ? 4 : 2;
+  final currency = cost.currency.trim();
+  return currency.isEmpty
+      ? amount.toStringAsFixed(digits)
+      : '${amount.toStringAsFixed(digits)} $currency';
+}
+
 /// How a per-turn chart's output divides where the agent breaks thinking out:
 /// the answer and the thinking, each with its share of the output. Thinking is
 /// a part of output, so it is drawn in output's own hue, lighter — the same
@@ -504,6 +524,33 @@ class OutputPerTurn extends StatelessWidget {
           const SizedBox(height: Insets.xs),
           ExcludeSemantics(child: ChartLegend(segments: segments)),
         ],
+      ],
+    );
+  }
+}
+
+/// Tokens in the agent's context as each turn ended, as a sparkline with the
+/// latest and the peak in words — what an agent reporting over its protocol
+/// gives instead of output per turn.
+class ContextPerTurn extends StatelessWidget {
+  const ContextPerTurn({required this.perTurn, super.key});
+
+  final List<int> perTurn;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = contextPerTurnSummary(perTurn);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Sparkline(
+          values: [for (final v in perTurn) v.toDouble()],
+          color: tokenKindColor(context, TokenKind.input),
+          height: 36,
+          semanticsLabel: 'Context in use per turn. $summary',
+        ),
+        ExcludeSemantics(child: StatsNote(summary)),
       ],
     );
   }

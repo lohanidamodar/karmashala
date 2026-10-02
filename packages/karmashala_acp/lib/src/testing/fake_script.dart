@@ -44,6 +44,14 @@ sealed class FakeStep {
 
   const factory FakeStep.mode(String modeId) = FakeModeStep;
 
+  /// A `usage_update`: [used] tokens in context of [size], with a
+  /// cumulative [cost] when given.
+  const factory FakeStep.usage({
+    required int used,
+    required int size,
+    UsageCost? cost,
+  }) = FakeUsageStep;
+
   /// Any update, verbatim.
   const factory FakeStep.update(SessionUpdate update) = FakeUpdateStep;
 
@@ -120,6 +128,16 @@ final class FakeModeStep extends FakeStep {
   const FakeModeStep(this.modeId);
 
   final String modeId;
+}
+
+final class FakeUsageStep extends FakeStep {
+  const FakeUsageStep({required this.used, required this.size, this.cost});
+
+  final int used;
+  final int size;
+  final UsageCost? cost;
+
+  UsageUpdate get update => UsageUpdate(used: used, size: size, cost: cost);
 }
 
 final class FakeUpdateStep extends FakeStep {
