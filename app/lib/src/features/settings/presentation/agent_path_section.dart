@@ -31,41 +31,57 @@ class AgentPathSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final installations = ref.watch(agentInstallationsControllerProvider);
-    final repair = ref.watch(agentPathRepairProvider);
     if (installations.isEmpty) return const SizedBox.shrink();
+    return SettingsSection(
+      title: SettingsAnchor.executables.heading,
+      child: AgentExecutableRows(installations: installations),
+    );
+  }
+}
 
+/// The path rows for [installations] — one agent's, on its card, or every
+/// agent's in the standalone section — under the last check's verdict and
+/// age, or the plain fact that none has run.
+class AgentExecutableRows extends ConsumerWidget {
+  const AgentExecutableRows({required this.installations, super.key});
+
+  final List<AgentInstallation> installations;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repair = ref.watch(agentPathRepairProvider);
     final readings = {
       for (final reading in [...repair.repaired, ...repair.unresolved])
         reading.installation.id: reading,
     };
-
-    return SettingsSection(
-      title: SettingsAnchor.executables.heading,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SettingsNote(
-            repair.hasChecked
-                // Per §19: a measurement with no timestamp is over-trusted.
-                ? '${repair.summary} Checked '
-                      '${describeAge(ref.watch(clockProvider).nowUtc().difference(repair.checkedAt!))}.'
-                // And never a claim of health that was not observed at all.
-                : 'These paths have not been checked yet this run.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SettingsNote(
+          repair.hasChecked
+              // Per §19: a measurement with no timestamp is over-trusted.
+              ? '${repair.summary} Checked '
+                    '${describeAge(ref.watch(clockProvider).nowUtc().difference(repair.checkedAt!))}.'
+              // And never a claim of health that was not observed at all.
+              : 'These paths have not been checked yet this run.',
+        ),
+        for (final install in installations)
+          AgentExecutableRow(
+            installation: install,
+            reading: readings[install.id],
           ),
-          for (final install in installations)
-            _ExecutableRow(
-              installation: install,
-              reading: readings[install.id],
-            ),
-        ],
-      ),
+      ],
     );
   }
 }
 
 /// One installation's path: what it is, whether it opened, and who chose it.
-class _ExecutableRow extends ConsumerStatefulWidget {
-  const _ExecutableRow({required this.installation, this.reading});
+class AgentExecutableRow extends ConsumerStatefulWidget {
+  const AgentExecutableRow({
+    required this.installation,
+    this.reading,
+    super.key,
+  });
 
   final AgentInstallation installation;
 
@@ -73,17 +89,17 @@ class _ExecutableRow extends ConsumerStatefulWidget {
   final AgentPathReading? reading;
 
   @override
-  ConsumerState<_ExecutableRow> createState() => _ExecutableRowState();
+  ConsumerState<AgentExecutableRow> createState() => _AgentExecutableRowState();
 }
 
-class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
+class _AgentExecutableRowState extends ConsumerState<AgentExecutableRow> {
   late final TextEditingController _path = TextEditingController(
     text: widget.installation.executable.path,
   );
   String? _error;
 
   @override
-  void didUpdateWidget(_ExecutableRow old) {
+  void didUpdateWidget(AgentExecutableRow old) {
     super.didUpdateWidget(old);
     // A repair moved the row; follow it unless they are mid-edit.
     final stored = widget.installation.executable.path;

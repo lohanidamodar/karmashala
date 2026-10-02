@@ -17,56 +17,62 @@ import 'settings_section.dart';
 
 /// Settings → Agents and accounts → Default agent: the installation a new
 /// session pre-selects.
-class DefaultAgentSection extends ConsumerWidget {
+class DefaultAgentSection extends StatelessWidget {
   const DefaultAgentSection({super.key});
+
+  @override
+  Widget build(BuildContext context) => SettingsSection(
+    title: SettingsAnchor.defaultAgent.heading,
+    child: const DefaultAgentRow(),
+  );
+}
+
+/// The row itself — the dropdown over every discovered installation, or the
+/// note that there is none — so the Agents page's header strip can hold it.
+class DefaultAgentRow extends ConsumerWidget {
+  const DefaultAgentRow({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final installations = ref.watch(agentInstallationsControllerProvider);
+    if (installations.isEmpty) {
+      return const SettingsNote(
+        'No agents found. Discover agents looks for them on every machine.',
+      );
+    }
     // Every discovered installation, not just the kind, and the saved value is
     // clamped so the dropdown never holds an id with no matching item.
     final currentId =
         installations.any((i) => i.id == settings.defaultAgentInstallationId)
         ? settings.defaultAgentInstallationId
         : null;
-    // Board "Defaults": the page opens with what a new session starts on.
-    return SettingsSection(
-      title: SettingsAnchor.defaultAgent.heading,
-      child: installations.isEmpty
-          ? const SettingsNote(
-              'No agents found. Rescan under Find agents below.',
-            )
-          : SettingsRow(
-              label: 'Agent for new sessions',
-              help: 'Pre-selected when starting a session.',
-              control: DropdownButtonFormField<String?>(
-                initialValue: currentId,
-                isExpanded: true,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('None')),
-                  for (final install in installations)
-                    DropdownMenuItem(
-                      value: install.id,
-                      child: Text(
-                        '${agentLabel(ref, install.agentId)} · '
-                        '${ref.watch(environmentLabelForIdProvider(install.environmentId))}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: (id) {
-                  final install = id == null
-                      ? null
-                      : installations.firstWhere((i) => i.id == id);
-                  controller.setDefaultAgentInstallation(
-                    install?.agentId,
-                    install?.id,
-                  );
-                },
+    return SettingsRow(
+      label: 'Agent for new sessions',
+      help: 'Pre-selected when starting a session.',
+      control: DropdownButtonFormField<String?>(
+        initialValue: currentId,
+        isExpanded: true,
+        items: [
+          const DropdownMenuItem(value: null, child: Text('None')),
+          for (final install in installations)
+            DropdownMenuItem(
+              value: install.id,
+              child: Text(
+                '${agentLabel(ref, install.agentId)} · '
+                '${ref.watch(environmentLabelForIdProvider(install.environmentId))}',
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+        ],
+        onChanged: (id) {
+          final install = id == null
+              ? null
+              : installations.firstWhere((i) => i.id == id);
+          controller.setDefaultAgentInstallation(install?.agentId, install?.id);
+        },
+      ),
     );
   }
 }

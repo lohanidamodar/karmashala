@@ -10,6 +10,12 @@ import 'agent_installations_controller.dart';
 
 export '../data/acp_agents_data.dart' show acpAgentRowsProvider;
 
+/// The agent ids of the ACP agents a person added, so a surface can tell a
+/// row-backed agent from a shipped one without naming either.
+final userAcpAgentIdsProvider = Provider<Set<String>>(
+  (ref) => {for (final row in ref.watch(acpAgentRowsProvider)) row.agentId},
+);
+
 /// The registry's platform key for this machine: `windows-x86_64`,
 /// `darwin-aarch64`, `linux-x86_64`, … Read off `Platform.version`, whose
 /// tail names the build (`on "windows_x64"`), so no `dart:ffi` is needed.
