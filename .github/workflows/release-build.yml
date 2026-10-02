@@ -1,8 +1,9 @@
 name: Release
 
-# Builds the release artifacts (Windows installer + portable zip, macOS DMG,
-# Linux tarball, Linux session hosts, Android APK) and attaches them to the
-# release. Nothing is sent to Google Play.
+# Builds the release artifacts and attaches them to the release: the Windows
+# installer and portable zip, the macOS DMG, the Linux tarball and AppImage,
+# the Android APK, the server bundles for every platform with their install
+# scripts, and the relay image on GHCR. Nothing is sent to Google Play.
 #   - publishing a release uploads the artifacts to it,
 #   - pushing a `v*` tag or dispatching with a version input creates the release.
 on:
@@ -175,6 +176,94 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: build/artifacts/karmashala_host-*-linux-*.tar.gz
+
+  # The server on its own for macOS and Windows, for install.sh / install.ps1.
+  # Each is built on the platform it runs on, like the Linux bundles above.
+  build-host-desktop:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-latest, platform: macos, arch: arm64 }
+          - { runner: macos-15-intel, platform: macos, arch: x64 }
+          - { runner: windows-latest, platform: windows, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Build the server bundle
+        run: dart build cli -t server/bin/karmashala_host.dart -o build/host
+      - name: Package it (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          tar -czf "build/artifacts/karmashala_host-$VERSION-macos-${{ matrix.arch }}.tar.gz" -C build/host/bundle .
+      - name: Package it (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build/artifacts -Force | Out-Null
+          Compress-Archive -Path build/host/bundle/* -DestinationPath "build/artifacts/karmashala_host-$env:VERSION-windows-x64.zip"
+      - name: Upload it to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: build/artifacts/karmashala_host-*
+
+  # The installers, attached so .../releases/latest/download/install.sh always
+  # names the newest server.
+  attach-installers:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            server/deploy/install.sh
+            server/deploy/install.ps1
+            server/deploy/uninstall.sh
+
+  # The relay as an image, for Docker and Fly.io: no Dart SDK needed to run one.
+  relay-image:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: relay
+          file: relay/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/karmashala-relay:${{ env.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/karmashala-relay:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=The Karmashala relay: a dumb pipe between a server and its clients
 
   # The macOS app, by the same recipe a local release uses (tool/build_release.sh):
   # the app, the MCP bridge and the session host inside the bundle, the host's

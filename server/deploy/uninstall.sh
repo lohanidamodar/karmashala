@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Removes what server/deploy/install.sh installed: the service, the bundle and
+# Removes what install.sh installed: the services, the bundle and
 # the `karmashala_host` wrapper. The store and server.json — every phone's
 # pairing — are kept unless --purge says otherwise.
 #
@@ -53,16 +53,22 @@ if [ -x "$BIN" ]; then
 fi
 
 if [ "$OS" = Linux ] && command -v systemctl >/dev/null; then
-  UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/karmashala-server.service"
-  systemctl --user disable --now karmashala-server 2>/dev/null || true
-  rm -f "$UNIT"
+  for unit in karmashala-server karmashala-relay; do
+    FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit.service"
+    [ -f "$FILE" ] || continue
+    systemctl --user disable --now "$unit" 2>/dev/null || true
+    rm -f "$FILE"
+    say "Removed the $unit user unit."
+  done
   systemctl --user daemon-reload 2>/dev/null || true
-  say "Removed the systemd user unit."
 elif [ "$OS" = Darwin ]; then
-  PLIST="$HOME/Library/LaunchAgents/com.karmashala.server.plist"
-  launchctl bootout "gui/$(id -u)/com.karmashala.server" 2>/dev/null || true
-  rm -f "$PLIST"
-  say "Removed the launchd agent."
+  for label in com.karmashala.server com.karmashala.relay; do
+    PLIST="$HOME/Library/LaunchAgents/$label.plist"
+    [ -f "$PLIST" ] || continue
+    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+    rm -f "$PLIST"
+    say "Removed the $label launchd agent."
+  done
 fi
 
 # The wrapper, only if it is ours.
