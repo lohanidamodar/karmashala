@@ -7,7 +7,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
-import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
