@@ -5,17 +5,24 @@ name: CI
 # everything. No secrets are read, so pull requests from forks run in full.
 on:
   pull_request:
+    paths-ignore: ["**.md"]
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
 
 permissions:
   contents: read
 
+# A newer push to the same branch or pull request cancels the run before it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
+  # The toolchain releases are built with; keep in step with the release
+  # workflows and the local Flutter.
+  FLUTTER_VERSION: "3.47.5"
+  DART_VERSION: "3.13.4"
   # The suites that exercise the hosted relay need one; a placeholder, never a
   # real relay.
   RELAY_DEFINE: --dart-define=KARMASHALA_RELAY_URL=wss://relay.example.com
@@ -37,6 +44,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_VERSION }}
       - id: affected
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -56,6 +65,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       # The lock file as committed: a fresh resolution on a runner has dropped
@@ -72,6 +82,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_VERSION }}
       # relay/ and its contract resolve on their own lock files.
       - name: Relay protocol
         working-directory: relay/protocol
@@ -95,6 +107,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
@@ -119,6 +132,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile

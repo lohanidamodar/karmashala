@@ -38,6 +38,11 @@ on:
 permissions:
   contents: write
 
+# Never cancelled: a half-run upload to Play is worse than a queued one.
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Build and upload to Play (${{ inputs.track || 'internal' }})
@@ -63,11 +68,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          # Keep in lockstep with the local toolchain.
+          # Keep in step with ci.yml, release-build.yml and the local Flutter.
           flutter-version: "3.47.5"
           channel: stable
           cache: true
