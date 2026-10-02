@@ -275,7 +275,7 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
           DeviceControl(
             name: 'Device settings',
             tooltip: 'Font scale, locale and permissions',
-            icon: AppIcons.gearSix,
+            icon: AppIcons.slidersHorizontal,
             onPressed: canRecord ? _deviceSettings : null,
             buttonKey: const Key('simulator-device-settings'),
           ),

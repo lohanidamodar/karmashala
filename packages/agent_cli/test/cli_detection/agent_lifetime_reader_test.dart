@@ -206,6 +206,12 @@ void main() {
       expect((await reader.read(home))!.messages, 1297);
 
       writeCache({...real(), 'totalMessages': 2000});
+      // Same length as before, so only the timestamp says it changed; a fast
+      // disk can land both writes in one tick.
+      final file = File(p.join(home, 'stats-cache.json'));
+      file.setLastModifiedSync(
+        file.lastModifiedSync().add(const Duration(seconds: 2)),
+      );
 
       expect((await reader.read(home))!.messages, 2000);
     });

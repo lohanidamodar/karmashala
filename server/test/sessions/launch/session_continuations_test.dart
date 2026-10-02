@@ -124,6 +124,9 @@ void main() {
         handoffFiles: HandoffPacketFiles(
           Directory('${temp.path}${Platform.pathSeparator}handoff'),
         ),
+        // These cases read the prompt off argv; how a Windows-native launch
+        // carries a long one is wsl_hosted_launch_test's.
+        windows: false,
       ),
       registry: registry,
       sessions: SessionDao(database),

@@ -168,7 +168,7 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
             tooltip: target == null
                 ? idle
                 : 'Font scale, rotation, network, locale, permissions, app data',
-            icon: AppIcons.gearSix,
+            icon: AppIcons.slidersHorizontal,
             onPressed: canReach ? _deviceSettings : null,
             buttonKey: const Key('android-device-settings'),
           ),

@@ -854,4 +854,10 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData slidersHorizontal = IconData(
+    0xe434,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }

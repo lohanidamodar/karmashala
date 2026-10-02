@@ -94,6 +94,9 @@ void main() {
       ),
       links: SessionRepositoryDao(database),
       openAgent: openAgent,
+      // These cases read the prompt off argv; how a Windows-native launch
+      // carries a long one is wsl_hosted_launch_test's.
+      windows: false,
     );
     return ServerSessionLauncher(
       launcher: launcher,

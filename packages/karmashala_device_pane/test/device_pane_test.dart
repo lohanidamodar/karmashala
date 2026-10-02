@@ -390,11 +390,11 @@ void main() {
       await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
 
       // Present — so the row does not appear from nowhere when the live view
-      // starts — but inert, and saying so. Six of them now: the three hardware
-      // keys, plus the appearance switch, the screenshot and the deep link
-      // that Android gained to match what the simulator row already offered.
+      // starts — but inert, and saying so. Seven of them: the three hardware
+      // keys, the appearance switch, the screenshot, the deep link and the
+      // device settings, as the simulator row offers.
       final idle = find.byTooltip(_idleKeys);
-      expect(idle, findsNWidgets(6));
+      expect(idle, findsNWidgets(7));
       for (final button in tester.widgetList<IconButton>(
         find.descendant(of: idle, matching: find.byType(IconButton)),
       )) {

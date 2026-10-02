@@ -91,6 +91,9 @@ class _DeviceStateDialogState extends State<_DeviceStateDialog> {
     if (sure == true) await _run(() => ClearAppDataChange(app));
   }
 
+  /// One column for every row's label, so the controls line up.
+  static const _labelWidth = 96.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -99,7 +102,7 @@ class _DeviceStateDialogState extends State<_DeviceStateDialog> {
       child: Row(
         children: [
           SizedBox(
-            width: 96,
+            width: _labelWidth,
             child: Text(label, style: theme.textTheme.bodySmall),
           ),
           Expanded(child: control),
