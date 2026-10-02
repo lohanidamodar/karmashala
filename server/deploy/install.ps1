@@ -147,6 +147,18 @@ function Remove-Tasks {
   }
 }
 
+# Stopping a task ends conhost, not the program it started, and `stop` reaches
+# only the server. What is still running from this install is ended, so its
+# files can go; nothing outside $Prefix is touched.
+function Stop-InstalledProcesses {
+  $ours = Get-Process -Name karmashala_host -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($Prefix, [StringComparison]::OrdinalIgnoreCase) }
+  if ($ours) {
+    $ours | Stop-Process -Force
+    $ours | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+  }
+}
+
 if ($Uninstall) {
   if (Test-HostRunning) {
     $held = Get-HeldSessions
@@ -154,6 +166,7 @@ if ($Uninstall) {
     Invoke-Native $Bin @('stop') | Out-Null
   }
   Remove-Tasks
+  Stop-InstalledProcesses
   if (Test-Path $Prefix) { Remove-Item -Recurse -Force $Prefix; Say "Removed $Prefix." }
   $shim = Join-Path $CommandDir 'karmashala_host.cmd'
   if (Test-Path $shim) { Remove-Item -Force $shim }
@@ -304,6 +317,11 @@ function Register-HostTask([string]$TaskName, [string]$Description, [string[]]$A
 }
 
 if ($WantRelay) {
+  # An earlier relay still holds the port; the pid file it wrote names it.
+  if (Test-Path $RelayPidFile) {
+    $old = (Get-Content $RelayPidFile -Raw).Trim()
+    if ($old -match '^\d+$') { Stop-Process -Id ([int]$old) -Force -ErrorAction SilentlyContinue }
+  }
   Register-HostTask $RelayTask 'Karmashala relay' @('relay', "--port=$RelayPort", "--token-file=$RelayTokenFile", "--pid-file=$RelayPidFile")
 }
 if ($WantServer) {
