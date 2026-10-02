@@ -96,6 +96,12 @@ void main() {
     test('an unbounded width puts everything on one row', () {
       expect(statTileColumns(double.infinity, 4), 4);
     });
+
+    test('a cap holds a row to it, still evened out', () {
+      expect(statTileColumns(620, 5, maxColumns: 2), 2);
+      expect(statTileColumns(900, 9, maxColumns: 4), 3, reason: '3 + 3 + 3');
+      expect(statTileColumns(200, 5, maxColumns: 4), 1);
+    });
   });
 
   group('as widgets', () {

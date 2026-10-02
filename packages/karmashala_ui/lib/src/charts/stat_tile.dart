@@ -131,25 +131,30 @@ const double kStatTileMinWidth = 104;
 /// How many tiles share a row [width] wide: as many as fit at
 /// [kStatTileMinWidth] grown with the text, then evened out so the last row is
 /// never a lone tile under a full one — 5 tiles in room for 4 go 3 + 2.
+/// [maxColumns] caps a row, e.g. two-up on a phone however narrow tiles fit.
 int statTileColumns(
   double width,
   int count, {
   TextScaler textScaler = TextScaler.noScaling,
   double gap = Insets.sm,
+  int? maxColumns,
 }) {
   if (count <= 0) return 1;
   final tile = WidthClass.scaleBreakpoint(kStatTileMinWidth, textScaler);
   final fit = width.isFinite ? ((width + gap) / (tile + gap)).floor() : count;
-  final most = math.max(1, math.min(fit, count));
+  final most = math.max(1, math.min(math.min(fit, count), maxColumns ?? count));
   final rows = (count / most).ceil();
   return (count / rows).ceil();
 }
 
 /// [tiles] in rows of [statTileColumns], each row as tall as its tallest tile.
 class StatTileGrid extends StatelessWidget {
-  const StatTileGrid({required this.tiles, super.key});
+  const StatTileGrid({required this.tiles, this.maxColumns, super.key});
 
   final List<Widget> tiles;
+
+  /// The most tiles a row holds; null for as many as fit.
+  final int? maxColumns;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +165,7 @@ class StatTileGrid extends StatelessWidget {
           constraints.maxWidth,
           tiles.length,
           textScaler: scaler,
+          maxColumns: maxColumns,
         );
         final rows = <Widget>[];
         for (var start = 0; start < tiles.length; start += columns) {
