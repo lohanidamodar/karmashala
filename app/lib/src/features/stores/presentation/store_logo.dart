@@ -64,7 +64,6 @@ class StoreLogo extends StatelessWidget {
 
   Widget _logo(BuildContext context) => Tooltip(
     message: store.label,
-    waitDuration: const Duration(milliseconds: 400),
     child: Semantics(
       label: store.label,
       child: ExcludeSemantics(child: _glyph(context)),

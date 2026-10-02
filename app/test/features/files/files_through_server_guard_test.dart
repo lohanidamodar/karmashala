@@ -10,9 +10,12 @@ import 'package:path/path.dart' as p;
 
 /// The files in those features that still touch this machine's own disk or
 /// platform, and why: an external editor launched here, a server file brought
-/// here to open with its default app, and the health command's wording.
+/// here to open with its default app, the health command's wording, and the
+/// media viewer's playback cache — a remote video or audio file read through
+/// the server and copied here, because the player needs a local path.
 const _dartIoAllowed = {
   'lib/src/features/editor/data/code_editor_service.dart',
+  'lib/src/features/editor/data/media_store.dart',
   'lib/src/features/files/application/server_file_opening.dart',
   'lib/src/app/shell/quick_open/quick_open_sources.dart',
 };

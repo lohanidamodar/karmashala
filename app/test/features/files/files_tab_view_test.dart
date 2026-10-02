@@ -206,17 +206,12 @@ void main() {
     await tester.tap(find.text('Delete').first);
     await settle(tester);
 
-    // A drive path on Windows goes to the Recycle Bin; any other path has
-    // none here, and the question says the delete is permanent (defdfcf74).
-    final toBin = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(left.path);
-    expect(
-      find.text(
-        toBin
-            ? 'Move "gone.txt" to the Recycle Bin?'
-            : 'Permanently delete "gone.txt"?',
-      ),
-      findsOneWidget,
-    );
+    // Only a drive path in a Windows-native environment has a Recycle Bin
+    // (FilesClient.canTrash). These machines are POSIX ones the server does
+    // not know as the local host, so even on a Windows drive the delete is
+    // permanent and the question says so (defdfcf74) — which also keeps the
+    // test out of the real Recycle Bin.
+    expect(find.text('Permanently delete "gone.txt"?'), findsOneWidget);
     expect(
       File(p.join(left.path, 'gone.txt')).existsSync(),
       isTrue,
@@ -226,9 +221,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text(
-          toBin ? 'Move to Recycle Bin' : 'Delete permanently',
-        ),
+        matching: find.text('Delete permanently'),
       ),
     );
     await settle(tester);

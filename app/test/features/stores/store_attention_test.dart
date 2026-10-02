@@ -39,7 +39,9 @@ void main() {
     final fine = storeSnapshot(storeApp(StoreKind.appStore, 'com.example.b'));
 
     expect(storeWideMissing([failing, fine]), isEmpty);
-    final signal = storeSignals(failing).single as UnreadSignal;
+    // The fixture's fresh review is a signal of its own; the failure is the
+    // one unread signal.
+    final signal = storeSignals(failing).whereType<UnreadSignal>().single;
     expect(signal.area, StoreArea.rating);
   });
 

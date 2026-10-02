@@ -4,8 +4,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 
-import '../../terminal/data/terminals_client.dart';
 import '../application/browser_pane_controller.dart';
+import '../application/dev_server_ports.dart';
 
 /// Lists the ports Karmashala's panes have started listening on, read when
 /// the menu opens — nothing polls — and opens one in the browser pane.
@@ -22,9 +22,8 @@ class DevServerMenuButton extends ConsumerStatefulWidget {
 class _DevServerMenuButtonState extends ConsumerState<DevServerMenuButton> {
   Future<ListeningPortsReading>? _reading;
 
-  void _read() => setState(
-    () => _reading = ref.read(terminalsClientProvider).listeningPorts(),
-  );
+  void _read() =>
+      setState(() => _reading = ref.read(listeningPortsReaderProvider)());
 
   @override
   Widget build(BuildContext context) => MenuAnchor(
@@ -51,7 +50,7 @@ class _DevServerMenuButtonState extends ConsumerState<DevServerMenuButton> {
                 const _Note('Nothing started in a pane is listening.'),
               for (final port in reading.ports)
                 MenuItemButton(
-                  leadingIcon: const Icon(AppIcons.globe, size: 16),
+                  leadingIcon: const Icon(AppIcons.globe),
                   onPressed: () => ref
                       .read(browserPaneControllerProvider.notifier)
                       .navigate(port.url),

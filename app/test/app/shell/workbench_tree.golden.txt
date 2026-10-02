@@ -368,7 +368,7 @@ WorkbenchView
                                                                                   Padding
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="macOS"
+                                                                                        Text text="Windows"
                                                                                           RichText
 
 == 02 two tabs, the second active ==
@@ -923,7 +923,7 @@ WorkbenchView
                                                                                   Padding
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="macOS"
+                                                                                        Text text="Windows"
                                                                                           RichText
 
 == 03 a workspace split in two groups ==
@@ -1294,7 +1294,7 @@ WorkbenchView
                                                                                       Padding
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="macOS"
+                                                                                            Text text="Windows"
                                                                                               RichText
       PaneDivider
         MouseRegion
@@ -1673,7 +1673,7 @@ WorkbenchView
                                                                                       Padding
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="macOS"
+                                                                                            Text text="Windows"
                                                                                               RichText
 
 == 04 an empty group ==
@@ -2044,7 +2044,7 @@ WorkbenchView
                                                                                       Padding
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="macOS"
+                                                                                            Text text="Windows"
                                                                                               RichText
       PaneDivider
         MouseRegion
@@ -8097,7 +8097,7 @@ WorkbenchView
                                                                                   Padding
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="macOS"
+                                                                                        Text text="Windows"
                                                                                           RichText
 
 == 10 a tab dragged over its neighbour ==
@@ -8673,7 +8673,7 @@ WorkbenchView
                                                                                   Padding
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="macOS"
+                                                                                        Text text="Windows"
                                                                                           RichText
 
 == 11 a settings tab in the strip ==
@@ -9171,5 +9171,5 @@ WorkbenchView
                                                                                   Padding
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="macOS"
+                                                                                        Text text="Windows"
                                                                                           RichText

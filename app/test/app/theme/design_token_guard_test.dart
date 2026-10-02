@@ -72,14 +72,16 @@ void main() {
   test('no literal millisecond duration in presentation code', () {
     // Not motion, so not Motion's: a repaint interval, a filesystem probe's
     // patience, a watched file's settle, a typing pause before a folder is
-    // read, a touch gesture's timeouts and a poll for a prompt to close.
-    // Tooltip wait is named in the theme itself.
+    // read, a touch gesture's timeouts, a poll for a prompt to close, and a
+    // media seek bar's slider value (milliseconds of the clip) turned into
+    // the position it names. Tooltip wait is named in the theme itself.
     const notMotion = {
       'lib/src/app/shell/keymap_controller.dart',
       'lib/src/app/shell/logs_panel.dart',
       'lib/src/features/projects/presentation/new_project_dialog.dart',
       'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
       'lib/src/features/sessions/presentation/approval_request_card/tool_ask_answers.dart',
+      'lib/src/features/editor/presentation/media/media_player_view.dart',
       '../packages/karmashala_ui/lib/src/file_browser.dart',
       '../packages/karmashala_ui/lib/src/app_theme.dart',
     };

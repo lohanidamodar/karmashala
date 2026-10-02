@@ -2902,114 +2902,133 @@ TerminalPaneStack
                   Expanded
                     _NoTerminalOpen
                       Center
-                        Column
-                          Text text="No terminal open"
-                            RichText
-                          SizedBox
-                          FilledButton
-                            Semantics
-                              _InputPadding
-                                ConstrainedBox
-                                  Material
-                                    _MaterialInterior
-                                      PhysicalShape
-                                        _ShapeBorderPaint
-                                          CustomPaint
-                                            NotificationListener<LayoutChangedNotification>
-                                              _InkFeatures key=[GlobalKey#… ink renderer]
-                                                AnimatedDefaultTextStyle
-                                                  DefaultTextStyle
-                                                    AnimatedTheme
-                                                      Theme
-                                                        _InheritedTheme
-                                                          CupertinoTheme
-                                                            InheritedCupertinoTheme
-                                                              IconTheme
-                                                                IconTheme
-                                                                  DefaultSelectionStyle
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
-                                                                                          Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  Padding
-                                                                                                    Align
-                                                                                                      _FilledButtonWithIconChild
-                                                                                                        Row
-                                                                                                          Icon icon=IconData(U+0E3D4)
-                                                                                                            Semantics
-                                                                                                              ExcludeSemantics
-                                                                                                                SizedBox
-                                                                                                                  Center
-                                                                                                                    RichText
-                                                                                                          Flexible
-                                                                                                            Text text="New terminal (Ctrl+Shift+T)"
-                                                                                                              RichText
-                          SizedBox
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="Quick open"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+K"
-                                  RichText
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="Quick open, filtered to commands"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+Shift+P"
-                                  RichText
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="New session"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+N"
-                                  RichText
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="New project"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+Shift+N"
-                                  RichText
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="Go to the next agent waiting for you"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+Shift+J"
-                                  RichText
-                          Padding
-                            Row
-                              SizedBox
-                                Text text="Open Settings"
-                                  RichText
-                              SizedBox
-                              SizedBox
-                                Text text="Ctrl+,"
-                                  RichText
+                        SingleChildScrollView
+                          PrimaryScrollController
+                            Scrollable
+                              StretchingOverscrollIndicator
+                                NotificationListener<ScrollNotification>
+                                  AnimatedBuilder
+                                    ClipRect
+                                      StretchEffect
+                                        Transform
+                                          NotificationListener<ScrollMetricsNotification>
+                                            _ScrollSemantics key=[GlobalKey#…]
+                                              _ScrollableScope
+                                                Listener
+                                                  RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
+                                                    _GestureSemantics
+                                                      Listener
+                                                        Semantics
+                                                          IgnorePointer key=[GlobalKey#…]
+                                                            _SingleChildViewport
+                                                              Column
+                                                                Text text="No terminal open"
+                                                                  RichText
+                                                                SizedBox
+                                                                FilledButton
+                                                                  Semantics
+                                                                    _InputPadding
+                                                                      ConstrainedBox
+                                                                        Material
+                                                                          _MaterialInterior
+                                                                            PhysicalShape
+                                                                              _ShapeBorderPaint
+                                                                                CustomPaint
+                                                                                  NotificationListener<LayoutChangedNotification>
+                                                                                    _InkFeatures key=[GlobalKey#… ink renderer]
+                                                                                      AnimatedDefaultTextStyle
+                                                                                        DefaultTextStyle
+                                                                                          AnimatedTheme
+                                                                                            Theme
+                                                                                              _InheritedTheme
+                                                                                                CupertinoTheme
+                                                                                                  InheritedCupertinoTheme
+                                                                                                    IconTheme
+                                                                                                      IconTheme
+                                                                                                        DefaultSelectionStyle
+                                                                                                          InkWell
+                                                                                                            _InkResponseStateWidget
+                                                                                                              _ParentInkResponseProvider
+                                                                                                                Actions
+                                                                                                                  _ActionsScope
+                                                                                                                    Focus
+                                                                                                                      _FocusInheritedScope
+                                                                                                                        Semantics
+                                                                                                                          MouseRegion
+                                                                                                                            Builder
+                                                                                                                              DefaultSelectionStyle
+                                                                                                                                Semantics
+                                                                                                                                  GestureDetector
+                                                                                                                                    RawGestureDetector
+                                                                                                                                      Listener
+                                                                                                                                        Padding
+                                                                                                                                          Align
+                                                                                                                                            _FilledButtonWithIconChild
+                                                                                                                                              Row
+                                                                                                                                                Icon icon=IconData(U+0E3D4)
+                                                                                                                                                  Semantics
+                                                                                                                                                    ExcludeSemantics
+                                                                                                                                                      SizedBox
+                                                                                                                                                        Center
+                                                                                                                                                          RichText
+                                                                                                                                                Flexible
+                                                                                                                                                  Text text="New terminal (Ctrl+Shift+T)"
+                                                                                                                                                    RichText
+                                                                SizedBox
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="Quick open"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+K"
+                                                                        RichText
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="Quick open, filtered to commands"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+Shift+P"
+                                                                        RichText
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="New session"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+N"
+                                                                        RichText
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="New project"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+Shift+N"
+                                                                        RichText
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="Go to the next agent waiting for you"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+Shift+J"
+                                                                        RichText
+                                                                Padding
+                                                                  Row
+                                                                    SizedBox
+                                                                      Text text="Open Settings"
+                                                                        RichText
+                                                                    SizedBox
+                                                                    SizedBox
+                                                                      Text text="Ctrl+,"
+                                                                        RichText
 
 == one live pane ==
 TerminalPaneStack

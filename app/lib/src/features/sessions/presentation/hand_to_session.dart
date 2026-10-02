@@ -75,7 +75,7 @@ class HandToSessionButton extends ConsumerWidget {
     return MenuAnchor(
       menuChildren: [
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.plusCircle, size: 16),
+          leadingIcon: const Icon(AppIcons.plusCircle),
           onPressed: () => _withPrompt(
             context,
             (text) => startSessionWith(
@@ -88,7 +88,7 @@ class HandToSessionButton extends ConsumerWidget {
           child: const Text('New session…'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(AppIcons.paperPlaneRight, size: 16),
+          leadingIcon: const Icon(AppIcons.paperPlaneRight),
           onPressed: ref.watch(focusedSessionIdProvider) == null
               ? null
               : () => _withPrompt(
@@ -103,12 +103,12 @@ class HandToSessionButton extends ConsumerWidget {
             controller.isOpen ? controller.close() : controller.open();
         return dense
             ? IconButton(
-                icon: const Icon(AppIcons.robot, size: 16),
+                icon: const Icon(AppIcons.robot),
                 tooltip: label,
                 onPressed: toggle,
               )
             : TextButton.icon(
-                icon: const Icon(AppIcons.robot, size: 16),
+                icon: const Icon(AppIcons.robot),
                 label: Text(label),
                 onPressed: toggle,
               );

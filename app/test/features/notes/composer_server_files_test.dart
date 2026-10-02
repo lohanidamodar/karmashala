@@ -81,6 +81,9 @@ void main() {
     await pump(tester);
 
     container.read(composerAttachmentsProvider.notifier).queue('s1', shot);
+    // The composer drains in a microtask, after the frame this pump draws;
+    // the chip it adds shows on the next one.
+    await tester.pump();
     await tester.pump();
 
     expect(queued(), isNull, reason: 'taken means attached');

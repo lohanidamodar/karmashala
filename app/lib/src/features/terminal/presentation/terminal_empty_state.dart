@@ -19,44 +19,47 @@ class _NoTerminalOpen extends ConsumerWidget {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    // Scrolls rather than clipping when large text outgrows a short pane.
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('No terminal open', style: theme.textTheme.bodySmall),
-          const SizedBox(height: Insets.md),
-          FilledButton.tonalIcon(
-            onPressed: onNewTerminal,
-            icon: const Icon(AppIcons.plus, size: Chrome.icon),
-            label: Text(
-              'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
-            ),
-          ),
-          const SizedBox(height: Insets.lg),
-          for (final command in kWorkspaceKeyCommands)
-            if (boundShellChord(command) case final chord?)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Insets.xs),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      child: Text(
-                        chord.does,
-                        textAlign: TextAlign.end,
-                        style: muted,
-                      ),
-                    ),
-                    const SizedBox(width: Insets.md),
-                    SizedBox(
-                      width: 120,
-                      child: Text(chord.label, style: MonoStyles.label),
-                    ),
-                  ],
-                ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('No terminal open', style: theme.textTheme.bodySmall),
+            const SizedBox(height: Insets.md),
+            FilledButton.tonalIcon(
+              onPressed: onNewTerminal,
+              icon: const Icon(AppIcons.plus, size: Chrome.icon),
+              label: Text(
+                'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
               ),
-        ],
+            ),
+            const SizedBox(height: Insets.lg),
+            for (final command in kWorkspaceKeyCommands)
+              if (boundShellChord(command) case final chord?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Insets.xs),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: Text(
+                          chord.does,
+                          textAlign: TextAlign.end,
+                          style: muted,
+                        ),
+                      ),
+                      const SizedBox(width: Insets.md),
+                      SizedBox(
+                        width: 120,
+                        child: Text(chord.label, style: MonoStyles.label),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
