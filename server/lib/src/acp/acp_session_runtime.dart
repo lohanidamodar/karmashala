@@ -78,6 +78,7 @@ class AcpSessionRuntime implements ScreenSession {
     DateTime Function()? now,
     Duration coalesce = const Duration(milliseconds: 100),
     this.stopPatience = const Duration(seconds: 5),
+    this.startPatience = const Duration(minutes: 3),
   }) : _spawn = spawn,
        _files = files ?? AcpPathScope(root: workingDirectory),
        _now = now ?? (() => DateTime.now().toUtc()) {
@@ -121,6 +122,11 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// How long a stop waits for the exit before killing, and after killing.
   final Duration stopPatience;
+
+  /// How long `initialize` and then `session/new` or `session/load` may each
+  /// take before the start is given up in words. Generous: an agent run
+  /// through `npx` downloads itself the first time.
+  final Duration startPatience;
 
   final Future<AcpTransport> Function() _spawn;
 
@@ -207,8 +213,11 @@ class AcpSessionRuntime implements ScreenSession {
       final client = AcpAgentClient(peer, handler: _Handler(this));
       _client = client;
       _updates = client.updates.listen(_onUpdate);
-      final init = await client.initialize(
-        clientInfo: ClientInfo(name: spec.clientName, version: clientVersion),
+      final init = await _within(
+        AcpMethods.initialize,
+        client.initialize(
+          clientInfo: ClientInfo(name: spec.clientName, version: clientVersion),
+        ),
       );
       _capabilities = init.agentCapabilities;
       final url = mcpUrl;
@@ -227,12 +236,15 @@ class AcpSessionRuntime implements ScreenSession {
       if (resume != null && resume.isNotEmpty && _capabilities.loadSession) {
         _loading = true;
         try {
-          final loaded = await _authenticating(
-            init,
-            () => client.loadSession(
-              sessionId: resume,
-              cwd: workingDirectory,
-              mcpServers: servers,
+          final loaded = await _within(
+            AcpMethods.sessionLoad,
+            _authenticating(
+              init,
+              () => client.loadSession(
+                sessionId: resume,
+                cwd: workingDirectory,
+                mcpServers: servers,
+              ),
             ),
           );
           modes = loaded.modes;
@@ -248,9 +260,12 @@ class AcpSessionRuntime implements ScreenSession {
             'fresh conversation in the same session.',
           );
         }
-        final created = await _authenticating(
-          init,
-          () => client.newSession(cwd: workingDirectory, mcpServers: servers),
+        final created = await _within(
+          AcpMethods.sessionNew,
+          _authenticating(
+            init,
+            () => client.newSession(cwd: workingDirectory, mcpServers: servers),
+          ),
         );
         _agentSessionId = created.sessionId;
         modes = created.modes;
@@ -487,6 +502,17 @@ class AcpSessionRuntime implements ScreenSession {
   }
 
   // Starting.
+
+  /// [call], or a [TimeoutException] in words once [startPatience] has
+  /// passed: a start that hangs — an `npx` waiting on a terminal, a download
+  /// that never ends — fails like any other instead of holding the launch.
+  Future<T> _within<T>(String method, Future<T> call) => call.timeout(
+    startPatience,
+    onTimeout: () => throw TimeoutException(
+      '$agentName did not answer $method within '
+      '${startPatience.inSeconds}s',
+    ),
+  );
 
   Future<T> _authenticating<T>(
     InitializeResult init,

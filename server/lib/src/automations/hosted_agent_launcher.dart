@@ -677,8 +677,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required String? credentialNotice,
     required void Function(Object? error)? settleWorktree,
   }) async {
-    final arguments = [...installation.leadingArguments, ...acp.arguments];
     try {
+      final arguments = acpArgumentsFor(installation, acp, agentName);
       final factory = acpRuntimes;
       if (factory == null) {
         throw StateError(
@@ -873,3 +873,36 @@ String promptFilePointer(String path, {required bool isPacket}) => isPacket
           'carry out what it ends with.'
     : 'My opening message to you is in the file $path. Read all of it and '
           'act on it exactly as if I had typed it here.';
+
+/// The argv [installation] starts [spec]'s agent with over ACP: what
+/// discovery put in front (`-y <package>` for an agent found only through
+/// npx) and the spec's own mode arguments.
+///
+/// An installation recorded before discovery kept its leading arguments
+/// names `npx` with nothing to run; `npx --acp` then waits on a terminal
+/// nobody has, and the start hangs without a word. The package the
+/// descriptor declares fills that in, and an `npx` with no package to run is
+/// refused in words rather than started.
+List<String> acpArgumentsFor(
+  AgentInstallation installation,
+  AcpLaunchSpec spec,
+  String agentName,
+) {
+  final leading = installation.leadingArguments;
+  if (leading.isNotEmpty || !_isNpx(installation.executable.path)) {
+    return [...leading, ...spec.arguments];
+  }
+  final package = spec.npxPackage;
+  if (package == null) {
+    throw StateError(
+      '$agentName is recorded as npx with no package to run; run Discover '
+      'agents in Settings, or install it on that machine.',
+    );
+  }
+  return ['-y', package, ...spec.arguments];
+}
+
+bool _isNpx(String executable) {
+  final name = executable.split(RegExp(r'[\\/]')).last.toLowerCase();
+  return name == 'npx' || name == 'npx.cmd' || name == 'npx.exe';
+}
