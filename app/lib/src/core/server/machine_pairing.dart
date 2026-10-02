@@ -230,12 +230,12 @@ Future<DeviceId> _phoneDeviceId(CompanionStore store) async {
 }
 
 /// The relay a phone's typed code meets its server on: the companion's
-/// setting, else the default.
-Future<Uri> _pairingRelay(CompanionStore store) async {
+/// setting, else this build's default; null when there is neither.
+Future<Uri?> _pairingRelay(CompanionStore store) async {
   final raw = await store.read(kPairingRelayStoreKey);
   final parsed = raw == null ? null : Uri.tryParse(raw.trim());
   if (parsed != null && parsed.hasScheme) return parsed;
-  return Uri.parse(kDefaultCompanionRelayUrl);
+  return defaultCompanionRelay;
 }
 
 String _machineName(String? given) {

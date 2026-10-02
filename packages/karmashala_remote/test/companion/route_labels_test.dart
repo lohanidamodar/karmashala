@@ -7,7 +7,20 @@ import 'package:test/test.dart';
 
 void main() {
   test('the hosted relay is named, not addressed', () {
-    expect(describeRelay(Uri.parse(kDefaultCompanionRelayUrl)), 'Hosted relay');
+    final hosted = defaultCompanionRelay;
+    if (hosted == null) {
+      markTestSkipped('this build has no hosted relay');
+      return;
+    }
+    expect(describeRelay(hosted), 'Hosted relay');
+  });
+
+  test('with no hosted relay, no relay is called the hosted one', () {
+    if (defaultCompanionRelay != null) return;
+    expect(
+      describeRelay(Uri.parse('wss://relay.example.com')),
+      'Relay at relay.example.com',
+    );
   });
 
   test('a relay on this network says so, with where it is', () {

@@ -45,7 +45,7 @@ void main() {
     await tester.enterText(field, '');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(await gateway.pairingRelay(), Uri.parse(kDefaultCompanionRelayUrl));
+    expect(await gateway.pairingRelay(), defaultCompanionRelay);
     expect(
       tester.widget<TextField>(field).controller?.text,
       kDefaultCompanionRelayUrl,
@@ -73,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Enter a full URL'), findsOneWidget);
-    expect(await gateway.pairingRelay(), Uri.parse(kDefaultCompanionRelayUrl));
+    expect(await gateway.pairingRelay(), defaultCompanionRelay);
   });
 
   testWidgets('the unpaired settings screen still offers the relay field — '

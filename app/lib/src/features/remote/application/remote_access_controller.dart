@@ -15,6 +15,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import '../../../core/probe/probe_mode.dart';
 import '../../notes/application/notes_providers.dart';
+import 'package:karmashala_remote/client.dart' show defaultCompanionRelay;
 import 'package:karmashala_remote/remote.dart';
 import 'host_companion_link.dart';
 import 'host_companion_providers.dart';
@@ -23,24 +24,26 @@ import 'remote_access_settings.dart';
 import 'ssh_relays.dart';
 import 'remote_providers.dart';
 
-/// The relay PopupBits runs, used until the user points at their own.
-const String kDefaultRelayUrl = 'wss://relay.popupbits.com';
+/// The hosted relay this build was given
+/// (`--dart-define=KARMASHALA_RELAY_URL=…`), used until the user points at
+/// their own. Empty in a source build, which then has no hosted relay.
+const String kDefaultRelayUrl = String.fromEnvironment('KARMASHALA_RELAY_URL');
 
-/// The relay URL to dial: the user's setting when it parses, the PopupBits
-/// default otherwise.
-Uri resolveRelayUri(String? configured) {
+/// The relay URL to dial: the user's setting when it parses, this build's
+/// default otherwise, and null when there is neither.
+Uri? resolveRelayUri(String? configured) {
   final text = configured?.trim() ?? '';
-  if (text.isEmpty) return Uri.parse(kDefaultRelayUrl);
-  final parsed = Uri.tryParse(text);
+  final parsed = text.isEmpty ? null : Uri.tryParse(text);
   if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
-    return Uri.parse(kDefaultRelayUrl);
+    return defaultCompanionRelay;
   }
   return parsed;
 }
 
-/// The internet relay the server's config names, or the PopupBits one.
-Uri hostedRelayOf(RemoteAccessSettings settings) =>
-    settings.relay ?? Uri.parse(kDefaultRelayUrl);
+/// The internet relay the server's config names, else this build's default;
+/// null when there is neither.
+Uri? hostedRelayOf(RemoteAccessSettings settings) =>
+    settings.relay ?? defaultCompanionRelay;
 
 class RemoteAccessController {
   RemoteAccessController(this._ref);
@@ -80,19 +83,23 @@ class RemoteAccessController {
     final current = _ref.read(remoteAccessSettingsProvider);
     final relay = relayUrl == null
         ? null
-        : resolveRelayUri(relayUrl).toString();
+        : resolveRelayUri(relayUrl)?.toString();
     final companion = <String, Object?>{
       'enabled': ?enabled,
       'relayEnabled': ?hostedEnabled,
       'localRelay': ?localRelay,
       'localRelayPort': ?localRelayPort,
-      if (relay != null) ...{'relay': relay, 'relayToken': null},
+      // A cleared field in a build with no default clears the relay.
+      if (relayUrl != null) ...{'relay': relay, 'relayToken': null},
       if (enabled == true) ...{
         'bind': '0.0.0.0',
         'beacon': true,
-        // The internet relay the desktop has always offered, until the
-        // person names another.
-        if (relay == null && current.relay == null) 'relay': kDefaultRelayUrl,
+        // The internet relay this build offers, until the person names
+        // another.
+        if (relayUrl == null &&
+            current.relay == null &&
+            kDefaultRelayUrl.isNotEmpty)
+          'relay': kDefaultRelayUrl,
         ..._appOwned(),
       },
     };

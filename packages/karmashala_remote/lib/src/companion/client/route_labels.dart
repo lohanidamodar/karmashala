@@ -2,15 +2,15 @@
 /// the sentence that says a pinned route is not answering.
 library;
 
-import '../../client/relay_candidates.dart' show isLocalRelay;
+import '../../client/relay_candidates.dart'
+    show defaultCompanionRelay, isLocalRelay;
 import '../../client/route_pin.dart';
-import 'companion_gateway.dart' show kDefaultCompanionRelayUrl;
 
 /// A relay by where it is, and **never by its path**: a relay on the person's
 /// own box carries its access token there (`/k/<token>`), and a label is
 /// something people screenshot.
 String describeRelay(Uri url) {
-  if (url.host == Uri.parse(kDefaultCompanionRelayUrl).host) {
+  if (url.host == defaultCompanionRelay?.host) {
     return 'Hosted relay';
   }
   final at = url.hasPort ? '${url.host}:${url.port}' : url.host;

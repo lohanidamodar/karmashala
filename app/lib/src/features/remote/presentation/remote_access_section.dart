@@ -12,6 +12,7 @@ import '../application/remote_access_controller.dart';
 import '../application/remote_access_settings.dart';
 import '../application/remote_providers.dart';
 import '../application/ssh_relays.dart';
+import 'package:karmashala_remote/client.dart' show kNoHostedRelayMessage;
 import 'package:karmashala_remote/remote.dart';
 import 'device_permissions_dialog.dart';
 import 'grant_presets.dart';
@@ -50,7 +51,8 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     _port.text = '${access.localRelayPort}';
   }
 
-  /// The URL field's text: empty for the PopupBits relay, as its hint says.
+  /// The URL field's text: empty for this build's hosted relay, as its hint
+  /// says.
   static String _relayText(RemoteAccessSettings access) {
     final relay = access.relay?.toString();
     return relay == null || relay == kDefaultRelayUrl ? '' : relay;
@@ -98,7 +100,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
       unawaited(_change(hostedEnabled: value));
 
   /// The relay is written, and redialled, only when editing ends — not per
-  /// keystroke. Empty is the PopupBits relay.
+  /// keystroke. Empty is the hosted relay.
   void _applyRelay() {
     final text = _relay.text.trim();
     if (text == _relayText(ref.read(remoteAccessSettingsProvider))) return;
@@ -257,20 +259,32 @@ class _RelaySwitches extends StatelessWidget {
           value: hostedEnabled,
           onChanged: onHostedChanged,
         ),
-        if (hostedEnabled)
+        if (hostedEnabled) ...[
           TextField(
             controller: relay,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               isDense: true,
               labelText: 'Relay URL',
-              hintText: kDefaultRelayUrl,
-              helperText:
-                  'Leave empty for the PopupBits relay, or point it at '
-                  'your own.',
+              hintText: kDefaultRelayUrl.isEmpty
+                  ? 'wss://relay.example.com'
+                  : kDefaultRelayUrl,
+              helperText: kDefaultRelayUrl.isEmpty
+                  ? 'The relay you run, or one you trust.'
+                  : 'Leave empty for the hosted relay, or point it at '
+                        'your own.',
             ),
             onSubmitted: (_) => onRelayDone(),
             onEditingComplete: onRelayDone,
           ),
+          if (hostedRelayOf(access) == null)
+            const Padding(
+              padding: EdgeInsets.only(top: Insets.xs),
+              child: SettingsNotice(
+                tone: SettingsNoticeTone.attention,
+                message: kNoHostedRelayMessage,
+              ),
+            ),
+        ],
         if (!access.localRelay && !hostedEnabled)
           const Padding(
             padding: EdgeInsets.only(top: Insets.xs),

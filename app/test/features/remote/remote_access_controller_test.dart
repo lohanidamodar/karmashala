@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
+import 'package:karmashala_remote/client.dart' show defaultCompanionRelay;
 import 'package:karmashala_remote/remote.dart';
 
 import '../../support/fake_data_server.dart';
@@ -16,10 +17,10 @@ import '../../support/memory_server_config.dart';
 
 void main() {
   group('resolveRelayUri', () {
-    test('null, empty and junk fall back to the PopupBits default', () {
-      expect(resolveRelayUri(null), Uri.parse(kDefaultRelayUrl));
-      expect(resolveRelayUri('   '), Uri.parse(kDefaultRelayUrl));
-      expect(resolveRelayUri('not a url'), Uri.parse(kDefaultRelayUrl));
+    test("null, empty and junk fall back to this build's default, or none", () {
+      expect(resolveRelayUri(null), defaultCompanionRelay);
+      expect(resolveRelayUri('   '), defaultCompanionRelay);
+      expect(resolveRelayUri('not a url'), defaultCompanionRelay);
     });
 
     test('a configured relay wins', () {

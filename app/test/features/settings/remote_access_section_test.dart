@@ -307,7 +307,7 @@ void main() {
     expect(
       tester.widget<TextField>(field).controller!.text,
       isEmpty,
-      reason: 'the PopupBits relay shows as the hint',
+      reason: 'the hosted relay shows as the hint',
     );
 
     await tester.enterText(field, 'wss://mine.example.com');

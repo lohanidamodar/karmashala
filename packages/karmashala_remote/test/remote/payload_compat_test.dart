@@ -237,7 +237,7 @@ void main() {
       hostName: 'Desktop',
       relays: [
         Uri.parse('ws://192.168.1.20:8787'),
-        Uri.parse('wss://relay.popupbits.com'),
+        Uri.parse('wss://relay.example.com'),
       ],
       lanHint: '192.168.1.20:47653',
     );

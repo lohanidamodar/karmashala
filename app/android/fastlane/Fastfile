@@ -7,6 +7,9 @@
 #
 # Required env: APP_IDENTIFIER, and one of
 #   PLAY_STORE_JSON_KEY_PATH / PLAY_STORE_JSON_KEY_DATA
+#
+# The plugin's `play_build` forwards app/dart_defines.json, which names the
+# official build's hosted relay (KARMASHALA_RELAY_URL).
 # ---------------------------------------------------------------
 
 default_platform(:android)

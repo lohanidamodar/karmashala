@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_remote/pairing.dart';
+import 'package:karmashala_remote/client.dart' show kNoHostedRelayMessage;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_environments/ssh.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
@@ -85,7 +86,8 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
 
   /// The relay a box is met at when it cannot be dialled: the one this desktop
   /// is configured with, so there is one hosted relay and one place to set it.
-  Uri get _hostedRelay => hostedRelayOf(ref.read(remoteAccessSettingsProvider));
+  Uri? get _hostedRelay =>
+      hostedRelayOf(ref.read(remoteAccessSettingsProvider));
 
   Future<void> _invite({
     bool probe = true,
@@ -129,12 +131,24 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
         chosen: ref.read(companionRouteStoreProvider).read(widget.host.id),
         reachable: endpoint.reachable,
       );
+      final hosted = _hostedRelay;
+      if (route == HostRoute.relay && hosted == null) {
+        // Nothing to meet at; the direct route stays choosable.
+        if (mounted && serial == _serial) {
+          setState(() {
+            _endpoint = endpoint;
+            _route = route;
+            _failure = kNoHostedRelayMessage;
+          });
+        }
+        return;
+      }
       // Everything the phone is granted. A desktop that offered less than the
       // person chose would be deciding something nobody asked it to.
       final opened = await ssh.pairPhone(
         widget.host.id,
         capabilities: CapabilitySet.all.bits,
-        relay: route == HostRoute.relay ? '$_hostedRelay' : '',
+        relay: route == HostRoute.relay ? '$hosted' : '',
       );
       if (!mounted || serial != _serial) return;
       final window = opened.value;
@@ -434,16 +448,17 @@ class _RouteStory extends StatelessWidget {
   const _RouteStory({required this.route, required this.relay});
 
   final HostRoute route;
-  final Uri relay;
+  final Uri? relay;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Text(
-      switch (route) {
-        HostRoute.direct =>
+      switch ((route, relay)) {
+        (HostRoute.direct, _) =>
           'The phone dials this machine itself. Nothing else is involved.',
-        HostRoute.relay =>
+        (HostRoute.relay, null) => kNoHostedRelayMessage,
+        (HostRoute.relay, final Uri relay) =>
           'The phone and this machine meet at ${relay.host}. Frames are sealed '
               'end to end; the relay sees both addresses, sizes and timing, '
               'and nothing inside.',

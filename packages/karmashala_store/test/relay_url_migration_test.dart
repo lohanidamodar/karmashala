@@ -47,6 +47,10 @@ String? _relayOf(Database db, String id) =>
         ]).first['relay_url']
         as String?;
 
+/// This build's hosted relay, or null in a build given none.
+const _define = String.fromEnvironment('KARMASHALA_RELAY_URL');
+const String? _hosted = _define == '' ? null : _define;
+
 void main() {
   test('a hosted-mode setup backfills the configured relay URL', () {
     final db = _migratedTo(18);
@@ -81,7 +85,7 @@ void main() {
   });
 
   test('no settings, junk settings and an unusable URL all fall back to the '
-      'PopupBits relay', () {
+      "build's hosted relay", () {
     for (final settings in <Map<String, Object?>?>[
       null,
       {'remoteRelayMode': 'hosted'},
@@ -97,8 +101,8 @@ void main() {
 
       expect(
         _relayOf(db, 'c' * 32),
-        'wss://relay.popupbits.com',
-        reason: 'the default relay is what those pairings actually used',
+        _hosted,
+        reason: "this build's relay is what those pairings actually used",
       );
     }
   });
@@ -114,7 +118,7 @@ void main() {
 
     schemaMigrations[19]!(db);
 
-    expect(_relayOf(db, 'd' * 32), 'wss://relay.popupbits.com');
+    expect(_relayOf(db, 'd' * 32), _hosted);
   });
 
   test('a fresh database has the column and no rows to backfill', () {

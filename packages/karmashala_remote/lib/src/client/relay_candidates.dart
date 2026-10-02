@@ -6,8 +6,25 @@
 library;
 
 /// The relay a typed pairing code falls back to when the phone has configured
-/// none. Pinned equal to the desktop's `kDefaultRelayUrl` by test.
-const String kDefaultCompanionRelayUrl = 'wss://relay.popupbits.com';
+/// none, given at build time (`--dart-define=KARMASHALA_RELAY_URL=…`). Empty in
+/// a source build, which then has no hosted relay. Pinned equal to the
+/// desktop's `kDefaultRelayUrl` by test.
+const String kDefaultCompanionRelayUrl = String.fromEnvironment(
+  'KARMASHALA_RELAY_URL',
+);
+
+/// What a build with no hosted relay says where one would have been used.
+const String kNoHostedRelayMessage =
+    'No hosted relay configured — set one in Settings, or run your own: '
+    'see relay/README.md';
+
+/// [kDefaultCompanionRelayUrl] as a URL, or null when this build has none.
+Uri? get defaultCompanionRelay {
+  final parsed = Uri.tryParse(kDefaultCompanionRelayUrl);
+  return parsed != null && parsed.hasScheme && parsed.host.isNotEmpty
+      ? parsed
+      : null;
+}
 
 /// Guards against a runaway list. The HEAD is kept, because every list here is
 /// already in priority order, so a truncation drops the least useful tail.

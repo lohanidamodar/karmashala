@@ -43,7 +43,7 @@ echo === BUILDING !APPVER! === > "%LOG%"
 echo === WINDOWS RELEASE === >> "%LOG%"
 rem The Flutter client is app\; everything else here runs from the root.
 pushd app
-call "%FLUTTER%" build windows --release --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
+call "%FLUTTER%" build windows --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail
@@ -155,7 +155,7 @@ rem debug key. Both builds write app-release.apk, so the companion goes first
 rem and is copied aside.
 echo === ANDROID COMPANION APK (old companion, until Stage 4) === >> "%LOG%"
 pushd app
-call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_MODE=companion --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
+call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_MODE=companion --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
 if "!RC!"=="0" copy /y build\app\outputs\flutter-apk\app-release.apk build\app\outputs\flutter-apk\app-companion-release.apk >> "%LOG%" 2>&1
 if "!RC!"=="0" set RC=!errorlevel!
@@ -164,7 +164,7 @@ if not "!RC!"=="0" goto :fail
 
 echo === ANDROID APK (the one app) === >> "%LOG%"
 pushd app
-call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! >> "%LOG%" 2>&1
+call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail

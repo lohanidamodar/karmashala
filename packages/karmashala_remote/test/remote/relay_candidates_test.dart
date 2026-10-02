@@ -12,7 +12,7 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:test/test.dart';
 
 final _local = Uri.parse('ws://192.168.1.20:8787');
-final _hosted = Uri.parse('wss://relay.popupbits.com');
+final _hosted = Uri.parse('wss://relay.example.com');
 final _other = Uri.parse('wss://relay.example.test');
 final _now = DateTime.utc(2026, 8, 31, 12);
 
@@ -478,7 +478,7 @@ void main() {
 
     test('a hosted relay, and the ranges that only look private, are not', () {
       for (final url in [
-        'wss://relay.popupbits.com',
+        'wss://relay.example.com',
         'ws://8.8.8.8:8787',
         'ws://172.15.0.1:8787',
         'ws://172.32.0.1:8787',

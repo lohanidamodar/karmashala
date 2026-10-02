@@ -200,6 +200,7 @@ real install.
 | `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, for pointing a bridge at a second install without guessing. Wins over `KARMASHALA_DATA_DIR`, because it names a file rather than a directory. |
 | `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the mobile app from this codebase. An APK built **without** it used to install and sit on a black screen; `main()` now refuses on a phone and names the missing define. |
 | `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. Absent in a plain `flutter run`, which logs "version not recorded" rather than a stale number. |
+| `KARMASHALA_RELAY_URL` | build-time `--dart-define` | The hosted relay phones meet the desktop at when neither side names its own. Unset in a source build, which then offers no hosted relay: pairing works on the LAN, or through a relay the user sets in Settings (run one from [`relay/`](relay/README.md)). The official build recipes pass it. |
 | `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests and the SSH benchmark | Where to dial. Unset, they skip themselves with a reason. |
 
 A user-defined environment secret may not start with `KARMASHALA_`; the vault

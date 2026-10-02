@@ -16,7 +16,11 @@ import '../../pairing/host_pairing_invite.dart' show HostRoute;
 import '../../protocol.dart';
 
 export '../../client/gateway_exception.dart';
-export '../../client/relay_candidates.dart' show kDefaultCompanionRelayUrl;
+export '../../client/relay_candidates.dart'
+    show
+        kDefaultCompanionRelayUrl,
+        kNoHostedRelayMessage,
+        defaultCompanionRelay;
 export '../../client/route_pin.dart';
 export '../../pairing/host_pairing_invite.dart' show HostRoute;
 
@@ -723,8 +727,9 @@ abstract interface class CompanionGateway {
   Stream<CompanionPairingProgress> get pairingProgress;
 
   /// The relay a typed code will dial (the code itself carries none):
-  /// the configured one, or [kDefaultCompanionRelayUrl].
-  Future<Uri> pairingRelay();
+  /// the configured one, or [kDefaultCompanionRelayUrl]; null when there is
+  /// neither, and only the LAN or an address can pair.
+  Future<Uri?> pairingRelay();
 
   /// Configures [pairingRelay]; null returns to the default.
   Future<void> setPairingRelay(Uri? url);

@@ -51,7 +51,7 @@ void main() {
     localUri = Uri.parse('http://127.0.0.1:${local.port}');
     phoneDisk = {
       // The last resort of the dial order is the phone's CONFIGURED relay,
-      // which defaults to the public PopupBits one. Point it at this suite's
+      // which defaults to the build's hosted one. Point it at this suite's
       // hosted stand-in so no test ever reaches the internet.
       RemoteCompanionGateway.kPairingRelayStoreKey: hostedUri.toString(),
     };

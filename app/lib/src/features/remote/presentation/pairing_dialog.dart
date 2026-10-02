@@ -9,6 +9,8 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../application/pairing_in_progress.dart';
 import '../application/remote_access_controller.dart';
+import '../application/remote_access_settings.dart';
+import 'package:karmashala_remote/client.dart' show kNoHostedRelayMessage;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import '../pairing/pairing_relay_endpoints.dart';
@@ -87,10 +89,14 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     if (endpoint == null && ref.read(pairingRelayEndpointsProvider).isEmpty) {
       // Every relay is switched off: a code nothing listens on cannot pair.
       if (mounted && serial == _beginSerial) {
+        final noHosted =
+            hostedRelayOf(ref.read(remoteAccessSettingsProvider)) == null;
         setState(() {
-          _error =
-              'No relay is switched on. Turn on the local relay or the '
-              'hosted one in Settings → Remote and pairing first.';
+          _error = noHosted
+              ? 'No relay is switched on. Turn on the local relay in '
+                    'Settings → Remote and pairing. $kNoHostedRelayMessage.'
+              : 'No relay is switched on. Turn on the local relay or the '
+                    'hosted one in Settings → Remote and pairing first.';
         });
       }
       return;

@@ -25,7 +25,7 @@ List<Uri> knownRelays(CompanionPairing machine) => [
 /// A relay by where it is, and **never by its path**: a relay on the owner's
 /// own box carries its access token there, and a label gets screenshotted.
 String relayName(Uri url) {
-  if (url.host == Uri.parse(kDefaultCompanionRelayUrl).host) {
+  if (url.host == defaultCompanionRelay?.host) {
     return 'the hosted relay';
   }
   final at = url.hasPort ? '${url.host}:${url.port}' : url.host;

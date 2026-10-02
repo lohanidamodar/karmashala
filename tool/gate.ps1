@@ -65,6 +65,9 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $flutter = Join-Path $env:USERPROFILE 'flutter\bin\flutter.bat'
+# The suites that exercise the hosted relay need one: a placeholder, never a
+# real relay. `dart test` takes no define, so the pure-Dart halves run without.
+$relayDefine = '--dart-define=KARMASHALA_RELAY_URL=wss://relay.example.com'
 $dart    = Join-Path $env:USERPROFILE 'flutter\bin\cache\dart-sdk\bin\dart.exe'
 $gateDir = Join-Path $root '.gate'
 if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | Out-Null }
@@ -468,7 +471,9 @@ function Invoke-PackageGate {
     Push-Location $pkgDir
     try {
       $pkgExe = if ($entry['flutter']) { $flutter } else { $dart }
-      Invoke-Gate -Label "$Key-pkg" -Exe $pkgExe -GateArgs @('test', '--reporter', 'expanded') | Out-Null
+      $pkgArgs = @('test', '--reporter', 'expanded')
+      if ($entry['flutter']) { $pkgArgs += $relayDefine }
+      Invoke-Gate -Label "$Key-pkg" -Exe $pkgExe -GateArgs $pkgArgs | Out-Null
     } finally {
       Pop-Location
     }
@@ -486,7 +491,7 @@ function Invoke-PackageGate {
     return
   }
   $flutterArgs = @('test') + $appPaths + @(
-    '--exclude-tags=live-ssh,live-wsl,cost', '--reporter', 'expanded'
+    '--exclude-tags=live-ssh,live-wsl,cost', '--reporter', 'expanded', $relayDefine
   )
   Invoke-Gate -Label "$Key-app" -Exe $flutter -GateArgs $flutterArgs | Out-Null
 }
@@ -523,7 +528,7 @@ function Get-ChangedPackages {
 
 if ($Full) {
   Invoke-Gate -Label 'full' -Exe $flutter -GateArgs @(
-    'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded'
+    'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded', $relayDefine
   ) | Out-Null
 } elseif ($Package) {
   Invoke-PackageGate -Key $Package
@@ -539,7 +544,7 @@ if ($Full) {
   if ($selection.full) {
     Write-Host 'a change reaches the app shell, a pubspec or the test harness: running the full gate.'
     Invoke-Gate -Label 'full' -Exe $flutter -GateArgs @(
-      'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded'
+      'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded', $relayDefine
     ) | Out-Null
   } elseif ($selection.packages.Count -eq 0) {
     # App-only folders map to their own mirror: lib/src/features/<f> -> test/features/<f>.
@@ -553,12 +558,12 @@ if ($Full) {
     if ($mirrors.Count -eq 0) {
       Write-Host 'changed files map to no package and no mirror folder: running the full gate.'
       Invoke-Gate -Label 'full' -Exe $flutter -GateArgs @(
-        'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded'
+        'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded', $relayDefine
       ) | Out-Null
     } else {
       Write-Host "app-only change; mirrors: $($mirrors -join ', ')"
       Invoke-Gate -Label 'mirrors' -Exe $flutter -GateArgs (
-        @('test') + $mirrors + @('--exclude-tags=live-ssh,live-wsl,cost', '--reporter', 'expanded')
+        @('test') + $mirrors + @('--exclude-tags=live-ssh,live-wsl,cost', '--reporter', 'expanded', $relayDefine)
       ) | Out-Null
     }
   } else {

@@ -61,14 +61,14 @@ void main() {
     test('the pairing relay defaults to the same relay the desktop ships '
         'with, and is settable and resettable', () async {
       final gateway = FakeCompanionGateway();
-      expect(await gateway.pairingRelay(), Uri.parse(kDefaultRelayUrl));
+      expect(await gateway.pairingRelay(), defaultCompanionRelay);
       expect(kDefaultCompanionRelayUrl, kDefaultRelayUrl);
 
       await gateway.setPairingRelay(Uri.parse('wss://my.relay.example'));
       expect(await gateway.pairingRelay(), Uri.parse('wss://my.relay.example'));
 
       await gateway.setPairingRelay(null);
-      expect(await gateway.pairingRelay(), Uri.parse(kDefaultRelayUrl));
+      expect(await gateway.pairingRelay(), defaultCompanionRelay);
     });
   });
 

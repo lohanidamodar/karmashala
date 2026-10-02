@@ -172,7 +172,7 @@ class FakeCompanionGateway implements CompanionGateway {
   final _progress = StreamController<CompanionPairingProgress>.broadcast(
     sync: true,
   );
-  Uri _pairingRelay = Uri.parse(kDefaultCompanionRelayUrl);
+  Uri? _pairingRelay = defaultCompanionRelay;
   final _Watched<CompanionPairing?> _pairing;
   late final _Watched<CompanionLinkState> _link;
   final _Watched<CompanionLinkPath?> _linkPath;
@@ -360,11 +360,11 @@ class FakeCompanionGateway implements CompanionGateway {
   Stream<CompanionPairingProgress> get pairingProgress => _progress.stream;
 
   @override
-  Future<Uri> pairingRelay() async => _pairingRelay;
+  Future<Uri?> pairingRelay() async => _pairingRelay;
 
   @override
   Future<void> setPairingRelay(Uri? url) async =>
-      _pairingRelay = url ?? Uri.parse(kDefaultCompanionRelayUrl);
+      _pairingRelay = url ?? defaultCompanionRelay;
 
   PairingException _refuse(PairingException error) {
     _emit(CompanionPairingStage.failed, message: error.message);

@@ -255,7 +255,7 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
     final url = await ref.read(companionGatewayProvider).pairingRelay();
     if (!mounted) return;
     setState(() {
-      _relay.text = url.toString();
+      _relay.text = url?.toString() ?? '';
       _loaded = true;
     });
   }
@@ -308,10 +308,15 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
           ),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            hintText: kDefaultCompanionRelayUrl,
-            helperText:
-                'Used when pairing with a typed code (the QR names its own). '
-                'Leave empty for the default.',
+            hintText: kDefaultCompanionRelayUrl.isEmpty
+                ? 'wss://relay.example.com'
+                : kDefaultCompanionRelayUrl,
+            helperText: kDefaultCompanionRelayUrl.isEmpty
+                ? 'Used when pairing with a typed code (the QR names its '
+                      'own). $kNoHostedRelayMessage. Without one, a typed '
+                      'code pairs over this network only.'
+                : 'Used when pairing with a typed code (the QR names its '
+                      'own). Leave empty for the default.',
             helperMaxLines: 3,
             errorText: _error,
           ),

@@ -106,7 +106,7 @@ class RemoteAccessSettings {
   final bool enabled;
 
   /// The internet relay as configured, or null for none — the desktop shows
-  /// the PopupBits relay then.
+  /// the hosted relay then.
   final Uri? relay;
 
   /// Whether [relay] is served (`companion.relayEnabled`); off parks it.

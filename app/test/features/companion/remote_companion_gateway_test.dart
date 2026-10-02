@@ -67,7 +67,7 @@ void main() {
     // the record's whole journey through SecureCompanionStore is real.
     phoneDisk = {
       // The last resort in Loop 83's dial order is the phone's CONFIGURED
-      // relay, which defaults to the public PopupBits one. Point it at this
+      // relay, which defaults to the build's hosted one. Point it at this
       // suite's in-process relay so a failed re-dial never reaches the
       // internet from a test.
       RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),

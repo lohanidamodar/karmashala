@@ -123,7 +123,7 @@ extension _GatewayDial on RemoteCompanionGateway {
       announced.isEmpty
           ? record.candidates
           : mergeRelayCandidates(record.candidates, announced),
-      fallback: await pairingRelay(),
+      fallback: await pairingRelay() ?? record.relay,
       now: _now(),
     );
   }

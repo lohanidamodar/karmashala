@@ -44,18 +44,21 @@ class PairingRelayEndpoint {
 /// own LAN relay first (it always works on a shared network), then the
 /// person's own boxes, then the internet relay. **Empty is real**: with every
 /// relay off, no code could be redeemed. With remote access off, the internet
-/// relay is offered — switching it on is part of pairing.
+/// relay is offered — switching it on is part of pairing. A build with no
+/// hosted relay, and no relay of the person's own, offers no internet one.
 final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
   ref,
 ) {
   final access = ref.watch(remoteAccessSettingsProvider);
+  final hosted = hostedRelayOf(access);
   if (!access.enabled) {
     return [
-      PairingRelayEndpoint(
-        label: 'Internet',
-        url: hostedRelayOf(access),
-        kind: PairingRelayKind.internet,
-      ),
+      if (hosted != null)
+        PairingRelayEndpoint(
+          label: 'Internet',
+          url: hosted,
+          kind: PairingRelayKind.internet,
+        ),
     ];
   }
   final local = access.localRelayReport;
@@ -77,10 +80,10 @@ final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
           url: entry.url,
           kind: PairingRelayKind.sshHost,
         ),
-    if (access.relayEnabled)
+    if (access.relayEnabled && hosted != null)
       PairingRelayEndpoint(
         label: 'Internet',
-        url: hostedRelayOf(access),
+        url: hosted,
         kind: PairingRelayKind.internet,
       ),
   ];

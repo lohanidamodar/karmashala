@@ -532,8 +532,9 @@ void _migrateToV19(Database db) {
   db.execute('ALTER TABLE paired_devices ADD COLUMN relay_url TEXT;');
 
   // Every pre-v19 pairing went through the one configured relay; absent or
-  // unreadable settings mean the hosted default.
-  var relayUrl = 'wss://relay.popupbits.com';
+  // unreadable settings mean this build's hosted relay, or none at all.
+  String? relayUrl = const String.fromEnvironment('KARMASHALA_RELAY_URL');
+  if (relayUrl.isEmpty) relayUrl = null;
   final settingsRows = db.select(
     "SELECT value FROM app_metadata WHERE key = 'settings.v1';",
   );

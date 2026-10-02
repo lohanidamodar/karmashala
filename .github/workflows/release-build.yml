@@ -66,7 +66,7 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Build Windows release
         working-directory: app
-        run: flutter build windows --release --dart-define=KARMASHALA_VERSION=${{ env.VERSION }}
+        run: flutter build windows --release --dart-define=KARMASHALA_VERSION=${{ env.VERSION }} --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com
       # Mirrors tool/build_release.bat, the local recipe: keep the two in step.
       - name: Build and bundle the MCP bridge
         shell: pwsh
@@ -216,7 +216,7 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Build Linux release
         working-directory: app
-        run: flutter build linux --release --dart-define=KARMASHALA_VERSION=${{ needs.prepare.outputs.version }}
+        run: flutter build linux --release --dart-define=KARMASHALA_VERSION=${{ needs.prepare.outputs.version }} --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com
       - name: Build and bundle the MCP bridge and session host
         run: |
           set -euo pipefail

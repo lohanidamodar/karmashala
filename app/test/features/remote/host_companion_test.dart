@@ -186,7 +186,7 @@ void main() {
     });
 
     test('switching remote access on writes the server config — the LAN, '
-        'the beacon, the PopupBits relay and what only the app knows — and '
+        'the beacon, the hosted relay and what only the app knows — and '
         'runs no server of its own', () async {
       await controller.setRemoteAccess(enabled: true);
 

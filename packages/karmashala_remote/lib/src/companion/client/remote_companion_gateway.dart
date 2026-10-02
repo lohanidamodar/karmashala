@@ -392,7 +392,10 @@ class RemoteCompanionGateway implements CompanionGateway {
     final direct = invite.route == HostRoute.direct;
     // Only ever dialled on the relay route; on the direct one it is just what
     // the record has to name, and the dial never reads it.
-    final relay = invite.relay ?? await pairingRelay();
+    final relay =
+        invite.relay ??
+        await pairingRelay() ??
+        (direct ? _noRelay : throw _noHostedRelay());
     final rendezvous = await derivePairingRendezvous(
       (await derivePairingSecret(codeSecret)).bytes,
     );
@@ -436,7 +439,9 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (codeSecret == null) throw _refusedPairingInput();
     _emitPairing(CompanionPairingStage.codeAccepted);
     await _dropLink();
-    final relay = await pairingRelay();
+    final configured = await pairingRelay();
+    // With no relay to meet at, the LAN and a typed address still can.
+    final relay = configured ?? _noRelay;
     // The code names no rendezvous; both ends derive it from the secret.
     final rendezvous = await derivePairingRendezvous(
       (await derivePairingSecret(codeSecret)).bytes,
@@ -457,6 +462,9 @@ class RemoteCompanionGateway implements CompanionGateway {
       relay: relay,
       rendezvous: rendezvous,
       at: at,
+      legs: configured == null
+          ? const {_PairingLeg.lan, _PairingLeg.direct}
+          : const {_PairingLeg.relay, _PairingLeg.lan, _PairingLeg.direct},
     );
     // Remembered on the record, so every later dial goes straight back rather
     // than searching a network the box was never on.
@@ -484,7 +492,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   );
 
   @override
-  Future<Uri> pairingRelay() async {
+  Future<Uri?> pairingRelay() async {
     try {
       final raw = await store.read(kPairingRelayStoreKey);
       if (raw != null) {
@@ -494,7 +502,17 @@ class RemoteCompanionGateway implements CompanionGateway {
     } on Object catch (error) {
       onLog?.call('pairing relay read failed: $error');
     }
-    return Uri.parse(kDefaultCompanionRelayUrl);
+    return defaultCompanionRelay;
+  }
+
+  /// What a record paired with no relay names, as the desktop's pairing does;
+  /// never dialled for a pairing, and filtered from the relays a phone shows.
+  static final Uri _noRelay = Uri.parse('https://invalid.local');
+
+  PairingException _noHostedRelay() {
+    const failure = PairingException(kNoHostedRelayMessage);
+    _emitPairing(CompanionPairingStage.failed, message: failure.message);
+    return failure;
   }
 
   @override

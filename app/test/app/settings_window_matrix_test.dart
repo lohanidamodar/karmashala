@@ -395,7 +395,7 @@ void main() {
               (ref) => [
                 PairingRelayEndpoint(
                   label: 'Internet',
-                  url: Uri.parse('wss://relay.popupbits.com'),
+                  url: Uri.parse('wss://relay.example.com'),
                   kind: PairingRelayKind.internet,
                 ),
                 PairingRelayEndpoint(

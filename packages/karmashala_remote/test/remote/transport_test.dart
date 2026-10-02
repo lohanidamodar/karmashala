@@ -160,10 +160,10 @@ void main() {
     test('is the rendezvous under /v1 on the relay', () {
       expect(
         RelayTransport.endpointFor(
-          Uri.parse('wss://relay.popupbits.com'),
+          Uri.parse('wss://relay.example.com'),
           _rendezvous,
         ).toString(),
-        'wss://relay.popupbits.com/v1/0123456789abcdef0123456789abcdef',
+        'wss://relay.example.com/v1/0123456789abcdef0123456789abcdef',
       );
     });
 
