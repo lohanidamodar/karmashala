@@ -128,15 +128,21 @@ void main() {
       ['serve', '--standalone', '--bogus'],
       ['stop', '--help'],
     ]) {
-      test('`${args.join(' ')}` writes nothing anywhere', () async {
-        final result = await run(args);
-        expect(
-          result.exitCode,
-          args.any((a) => a.startsWith('--bogus')) ? 2 : 0,
-          reason: '${result.stdout}${result.stderr}',
-        );
-        expect(leftBehind(), ['home']);
-      });
+      // Each case compiles the host from source, which outlasts the default
+      // 30 s on a busy machine; the process itself is bounded by `run`.
+      test(
+        '`${args.join(' ')}` writes nothing anywhere',
+        timeout: const Timeout(Duration(minutes: 3)),
+        () async {
+          final result = await run(args);
+          expect(
+            result.exitCode,
+            args.any((a) => a.startsWith('--bogus')) ? 2 : 0,
+            reason: '${result.stdout}${result.stderr}',
+          );
+          expect(leftBehind(), ['home']);
+        },
+      );
     }
   });
 }
