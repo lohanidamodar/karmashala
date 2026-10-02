@@ -51,10 +51,15 @@ jobs:
           dart analyze
           dart test
 
+  # The app suite is split across runners: one 4-core runner is the bottleneck.
   app-tests:
-    name: App tests
+    name: App tests (${{ matrix.shard }}/4)
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -65,12 +70,18 @@ jobs:
       - name: flutter test
         working-directory: app
         shell: pwsh
-        run: flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE
+        run: |
+          $index = ${{ matrix.shard }} - 1
+          flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE --total-shards=4 "--shard-index=$index"
 
   package-tests:
-    name: Server and package tests
+    name: Server and package tests (${{ matrix.shard }}/3)
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -82,9 +93,12 @@ jobs:
         shell: pwsh
         run: |
           $failed = @()
-          $members = @('server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" })
+          $members = @('server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" }) |
+            Where-Object { Test-Path "$_/test" }
+          # Every third member, so each shard gets a mix of large and small suites.
+          $shard = ${{ matrix.shard }} - 1
+          $members = for ($i = $shard; $i -lt $members.Count; $i += 3) { $members[$i] }
           foreach ($member in $members) {
-            if (-not (Test-Path "$member/test")) { continue }
             # A Flutter package needs flutter_tester; the rest run on plain Dart.
             $usesFlutter = Select-String -Path "$member/pubspec.yaml" -Pattern 'sdk: flutter' -Quiet
             Write-Host "::group::$member"
