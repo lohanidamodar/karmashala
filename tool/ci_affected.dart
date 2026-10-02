@@ -20,6 +20,7 @@ const _everything = {
   'analysis_options.yaml',
   '.github/workflows/ci.yml',
   'tool/ci_affected.dart',
+  'tool/ci_test_shards.dart',
 };
 
 void main(List<String> args) {

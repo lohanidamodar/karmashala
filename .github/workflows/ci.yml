@@ -111,12 +111,15 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      # By directory (tool/ci_test_shards.dart), so a runner compiles only its
+      # share and every file runs whole.
       - name: flutter test
-        working-directory: app
         shell: pwsh
         run: |
-          $index = ${{ matrix.shard }} - 1
-          flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE --total-shards=4 "--shard-index=$index"
+          $paths = @(dart tool/ci_test_shards.dart app ${{ matrix.shard }} 4)
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Location app
+          flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE @paths
 
   member-tests:
     name: Server and package tests
