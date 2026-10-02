@@ -86,6 +86,10 @@ class _FakeFiles extends FilesClient {
   /// a copy through first.
   var gateFrom = 0;
 
+  /// Completes when a read reaches [readGate] and starts waiting on it — the
+  /// point a test can be sure every earlier read went through.
+  final held = Completer<void>();
+
   void put(String path, List<int> bytes) {
     contents[path] = Uint8List.fromList(bytes);
     _modified[path] = DateTime.utc(2026, 10, 1, 12, 0, ++_clock);
@@ -127,7 +131,10 @@ class _FakeFiles extends FilesClient {
     int? length,
   }) async {
     final n = reads++;
-    if (readGate != null && n >= gateFrom) await readGate!.future;
+    if (readGate != null && n >= gateFrom) {
+      if (!held.isCompleted) held.complete();
+      await readGate!.future;
+    }
     _reach();
     final bytes = contents[path.path];
     if (bytes == null) throw const FilesException('No such file');
@@ -446,7 +453,9 @@ void main() {
         ..readGate = Completer<void>();
 
       final opening = media.open(_video);
-      await pumpEventQueue();
+      // Not pumpEventQueue: the part file's open and first write are real
+      // disk I/O, which a few event-loop turns do not reliably outlast.
+      await files.held.future;
       // One chunk through, the second held: the part file is on disk.
       expect(cached().where((name) => name.endsWith('.part')), hasLength(1));
 
