@@ -279,6 +279,11 @@ final class Capabilities {
   bool get sendViaServer =>
       serverOffers('sessions.send') && serverOffers('sessions.interrupt');
 
+  /// A send to an ACP session nothing runs is resumed by the server itself,
+  /// so this client sends and asks for no resume of its own.
+  bool get sendResumesAtServer =>
+      sendViaServer && serverOffers('sessions.send.resumes');
+
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.
   bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;

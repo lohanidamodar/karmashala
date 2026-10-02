@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/directory_resume_providers.dart';
@@ -500,9 +501,12 @@ class SessionActions {
     String text, {
     String? requestId,
   }) async {
+    // A server that resumes on send does it in the same request, for every
+    // client alike; only an older one is asked to resume first.
     final running =
-        row.status.claimsLive &&
-        _ref.read(sessionRunningOnHostProvider)(row.id);
+        _ref.read(capabilitiesProvider).sendResumesAtServer ||
+        (row.status.claimsLive &&
+            _ref.read(sessionRunningOnHostProvider)(row.id));
     if (!running) {
       final launched = await _ref
           .read(sessionLauncherProvider)

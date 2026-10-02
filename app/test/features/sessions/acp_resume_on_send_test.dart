@@ -43,18 +43,26 @@ void main() {
     server.sessionWork.typesSends = true;
   });
 
-  Future<ProviderContainer> connect({bool runningOnHost = false}) async {
+  Future<ProviderContainer> connect({
+    bool runningOnHost = false,
+    bool serverResumes = false,
+  }) async {
     final container = ProviderContainer(
       overrides: [
         await server.override(),
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        // A server that types sends itself (Stage 2 step 2).
+        // A server that types sends itself (Stage 2 step 2) — and, newer,
+        // resumes an ACP session a send reaches.
         serverOfferProvider.overrideWithValue(
-          const ServerOffer(
+          ServerOffer(
             sameMachine: true,
             serverOs: 'windows',
-            features: {'sessions.send', 'sessions.interrupt'},
+            features: {
+              'sessions.send',
+              'sessions.interrupt',
+              if (serverResumes) 'sessions.send.resumes',
+            },
           ),
         ),
         sessionRunningOnHostProvider.overrideWithValue((_) => runningOnHost),
@@ -178,5 +186,26 @@ void main() {
 
     expect(resumesAsked(), isEmpty);
     expect(server.sessionWork.sent.single.sessionId, 'pty-1');
+  });
+
+  test('a server that resumes on send is only sent to: it resumes the '
+      'session in the same request, as for every client', () async {
+    db.server.sessionRows.insert(
+      session(
+        id: 'acp-1',
+        agentInstallationId: 'acp',
+        status: SessionStatus.completed,
+      ),
+    );
+    server.sessionWork.resumesOnSend = true;
+    final container = await connect(serverResumes: true);
+
+    await container
+        .read(sessionActionsProvider)
+        .continueSession('acp-1', 'carry on');
+
+    expect(resumesAsked(), isEmpty);
+    expect(server.sessionWork.sent.single.text, 'carry on');
+    expect(server.sessionWork.running, {'acp-1'});
   });
 }

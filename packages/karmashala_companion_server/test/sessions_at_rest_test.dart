@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart' show ImportedSession;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
 import 'package:karmashala_remote/host.dart' show RemoteApiRefusal;
+import 'package:karmashala_remote/remote.dart' show ErrorCode;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
@@ -185,6 +186,62 @@ void main() {
         contains('not running in this Karmashala server'),
       );
     });
+  });
+
+  group('a session whose agent speaks a protocol', () {
+    late List<String> typed;
+    late List<String> delivered;
+
+    SessionsAtRest atRestWith({String? refusal}) => SessionsAtRest(
+      sessions: SessionDao(database),
+      names: WorkspaceNames(database),
+      screens: _TypingScreens(typed),
+      hostName: 'droplet',
+      // The server's own path: resuming it when nothing runs it, then a
+      // turn — here, the ids it says are its own.
+      deliverOverProtocol: (sessionId, text) async {
+        if (sessionId != 'acp') return false;
+        if (refusal != null) {
+          throw RemoteApiRefusal(ErrorCode.badRequest, refusal);
+        }
+        delivered.add(text);
+        return true;
+      },
+      clock: () => t0,
+    );
+
+    setUp(() {
+      typed = [];
+      delivered = [];
+    });
+
+    test('is sent to by its protocol, never typed into a screen; a terminal '
+        'session still is', () async {
+      final atRest = atRestWith();
+      expect(await atRest.sendPrompt('acp', 'carry on'), isNotNull);
+      await atRest.sendPrompt('pty', 'hi');
+      expect(delivered, ['carry on']);
+      expect(typed, ['karmashala_pty:hi']);
+    });
+
+    test(
+      'a refusal reaches the phone in its words, and nothing is typed',
+      () async {
+        await expectLater(
+          atRestWith(
+            refusal: 'This session is not running and could not be resumed',
+          ).sendPrompt('acp', 'carry on'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('could not be resumed'),
+            ),
+          ),
+        );
+        expect(typed, isEmpty);
+      },
+    );
   });
 }
 

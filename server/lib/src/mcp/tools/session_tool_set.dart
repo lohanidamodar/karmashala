@@ -7,7 +7,8 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionDao, SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import '../../domain/session_registry.dart';
 import '../../status/daemon_prompt_answers.dart';
@@ -359,6 +360,21 @@ class SessionToolSet extends ServerToolSet {
     final recent = events.length > capped
         ? events.sublist(events.length - capped)
         : events;
+    // An agent spoken to over ACP keeps no event log: its conversation is
+    // the rows its runtime wrote, live or ended.
+    final messages = events.isEmpty
+        ? [
+            for (final row in SessionMessageDao(
+              _context.database,
+            ).listAfter(sessionId))
+              if (row.role != SessionMessageRole.tool &&
+                  row.text.trim().isNotEmpty)
+                row,
+          ]
+        : const <SessionMessage>[];
+    final recentMessages = messages.length > capped
+        ? messages.sublist(messages.length - capped)
+        : messages;
     final screen = held
         ? prompts.status.liveScreenOf(sessionId)?.tailText(capped)
         : null;
@@ -393,14 +409,26 @@ class SessionToolSet extends ServerToolSet {
             'at': event.createdAt.toIso8601String(),
             'text': _textOf(event.payload),
           },
+        for (final row in recentMessages)
+          <String, Object?>{
+            'seq': row.ordinal,
+            'role': row.role == SessionMessageRole.user ? 'user' : 'agent',
+            'at': row.createdAt.toIso8601String(),
+            'text': row.text,
+          },
       ],
-      'omittedTurns': events.length - recent.length,
+      'omittedTurns': events.isNotEmpty
+          ? events.length - recent.length
+          : messages.length - recentMessages.length,
       // Two honest absences, said differently on purpose: the log holds
       // nothing for a PTY session, and the screen cannot be read with nothing
       // running.
-      'turnsSource': events.isEmpty
-          ? 'not recorded — this session has no event log; read screen instead'
-          : 'session event log',
+      'turnsSource': events.isNotEmpty
+          ? 'session event log'
+          : messages.isNotEmpty
+          ? "the conversation the server keeps for an agent it speaks to "
+                'over ACP'
+          : 'not recorded — this session has no event log; read screen instead',
       'screen': screen,
       'screenSource': screen == null
           ? 'not recorded — no live pane to read'

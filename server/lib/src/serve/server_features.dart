@@ -54,4 +54,7 @@ const Set<String> kServerFeatures = <String>{
   // conversation, which `sessions.transcript` serves from its own rows
   // (ACP design, C3).
   'acpSessions',
+  // `sessions.send` to an ACP session nothing runs resumes it here and sends
+  // the message as its first turn, answering `resumed` and any notice.
+  'sessions.send.resumes',
 };

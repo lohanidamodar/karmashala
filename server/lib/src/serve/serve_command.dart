@@ -19,9 +19,11 @@ import 'package:karmashala_checkpoints/store.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
+        DataRefused,
         DecisionAppend,
         DecisionRecorded,
         OpenSessionTab,
+        SessionSend,
         TerminalOpen,
         UsageLimitNotice,
         UsageLimitNoticed,
@@ -967,11 +969,34 @@ Future<int> runServe(
   );
   // A client's chat sends and Stop (`sessions.send`, `.interrupt`), typed by
   // the same typist as MCP `session_send`.
-  data.sessionInput = SessionInput(
+  // An agent spoken to over ACP that nothing runs is resumed here to take a
+  // client's message, whichever client sent it.
+  final speaksAcp = sessionSpeaksAcp(
+    rows: checkoutRows,
+    agents: liveAgents,
+    sessionOf: sessionRows.getById,
+  );
+  final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
+    resumesOnSend: speaksAcp,
+    resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  data.sessionInput = sessionInput;
+  // A phone on the older companion API sends to such a session the same way.
+  companion.sendOverProtocol = (sessionId, text) async {
+    if (!speaksAcp(sessionId)) return false;
+    try {
+      await sessionInput.handle(
+        SessionSend(sessionId: sessionId, text: text),
+        null,
+      );
+    } on DataRefused catch (refusal) {
+      throw StateError(refusal.message);
+    }
+    return true;
+  };
   // Sessions' transcripts for any client (`sessions.transcript`): read here,
   // where the agents write them.
   final sessionTranscripts = SessionTranscripts(

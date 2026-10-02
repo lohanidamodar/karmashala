@@ -19,12 +19,26 @@ UnknownResolver sessionEndsWithServer({
   required CheckoutRows rows,
   required DaemonAgents agents,
 }) => (Session session, SessionFacts? facts) {
-  final agentId = rows.installation(session.agentInstallationId)?.agentId;
-  if (agentId == null || agents.adapterOf(agentId)?.acp == null) {
-    return SessionStatus.unknown;
-  }
+  if (!_speaksAcp(rows, agents, session)) return SessionStatus.unknown;
   if (facts == null || facts.reason == SessionEndedWithoutCode.hostStopped) {
     return SessionStatus.completed;
   }
   return SessionStatus.failed;
 };
+
+/// Whether row [String]'s agent is one this server speaks to over ACP — by
+/// the same capability — so any client's message to it while nothing runs
+/// it resumes it here first. False for a row that is gone.
+bool Function(String sessionId) sessionSpeaksAcp({
+  required CheckoutRows rows,
+  required DaemonAgents agents,
+  required Session? Function(String sessionId) sessionOf,
+}) => (sessionId) {
+  final session = sessionOf(sessionId);
+  return session != null && _speaksAcp(rows, agents, session);
+};
+
+bool _speaksAcp(CheckoutRows rows, DaemonAgents agents, Session session) {
+  final agentId = rows.installation(session.agentInstallationId)?.agentId;
+  return agentId != null && agents.adapterOf(agentId)?.acp != null;
+}

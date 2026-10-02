@@ -520,12 +520,25 @@ final class SessionInterrupt extends SessionInputRequest<DataAck> {
 /// What `sessions.send` answers. [via] is [readBack] when the Return was read
 /// back off the server's screen, [unverified] when the agent's composer could
 /// not be read and Return was pressed once.
+///
+/// [resumed] says the server resumed the session to take the message — an
+/// agent it speaks to over a protocol, sent to while nothing ran it — and
+/// [notice] is what a person should know of that resume (a fresh
+/// conversation in the same session, a directory that had gone). Both are
+/// left out of the wire when unset; an older server never sends them.
 final class SessionSent {
-  const SessionSent({required this.sent, required this.via});
+  const SessionSent({
+    required this.sent,
+    required this.via,
+    this.resumed = false,
+    this.notice,
+  });
 
   factory SessionSent.fromJson(Map<String, Object?> json) => SessionSent(
     sent: json['sent'] == true,
     via: json['via'] is String ? json['via']! as String : unverified,
+    resumed: json['resumed'] == true,
+    notice: json['notice'] is String ? json['notice']! as String : null,
   );
 
   static const String readBack = 'readBack';
@@ -533,6 +546,13 @@ final class SessionSent {
 
   final bool sent;
   final String via;
+  final bool resumed;
+  final String? notice;
 
-  Map<String, Object?> toJson() => {'sent': sent, 'via': via};
+  Map<String, Object?> toJson() => {
+    'sent': sent,
+    'via': via,
+    if (resumed) 'resumed': true,
+    'notice': ?notice,
+  };
 }

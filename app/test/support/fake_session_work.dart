@@ -36,6 +36,10 @@ class FakeSessionWork {
   /// Every `sessions.send` taken, in order.
   final sent = <SessionSend>[];
 
+  /// A send to a session it does not run resumes it first, as a server that
+  /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
+  bool resumesOnSend = false;
+
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
 
@@ -47,12 +51,20 @@ class FakeSessionWork {
       SessionSend(:final sessionId) => sessionId,
       SessionInterrupt(:final sessionId) => sessionId,
     };
+    var resumed = false;
     if (!running.contains(sessionId)) {
-      throw const DataRefused.notFound('this session is not running here');
+      final row = _server.sessionRows.getById(sessionId);
+      if (request is! SessionSend || !resumesOnSend || row == null) {
+        throw const DataRefused.notFound('this session is not running here');
+      }
+      // As a server that resumes on send (`sessions.send.resumes`).
+      running.add(sessionId);
+      _server.sessionRows.put(row.copyWith(status: SessionStatus.running));
+      resumed = true;
     }
     if (request case final SessionSend send) {
       sent.add(send);
-      return const SessionSent(sent: true, via: 'protocol');
+      return SessionSent(sent: true, via: 'protocol', resumed: resumed);
     }
     return const DataAck();
   }
