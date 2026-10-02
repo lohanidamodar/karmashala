@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import '../../environments/application/environments_controller.dart';
@@ -122,13 +123,24 @@ class _AgentCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    AgentLogo(
+                      agentId: installation.agentId,
+                      size: Chrome.iconAction,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 Text(
                   version == null ? where : '$where · $version',

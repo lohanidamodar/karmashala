@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../data/acp_agents_data.dart';
+import 'acp_agent_icon_backfill.dart';
 import 'agent_installations_controller.dart';
 
 export '../data/acp_agents_data.dart' show acpAgentRowsProvider;
@@ -62,8 +63,11 @@ final acpRegistryCatalogProvider = FutureProvider.autoDispose(
   retry: (_, _) => null,
   (ref) async {
     final client = ref.read(acpRegistryHttpClientProvider)();
+    // Read before the fetch: a one-off read may dispose this provider while
+    // it waits, and its ref is then unusable.
+    final backfill = ref.read(acpAgentIconBackfillProvider);
     try {
-      return await AcpRegistryCatalog.fetch((url) async {
+      final catalog = await AcpRegistryCatalog.fetch((url) async {
         final request = await client.getUrl(url);
         request.headers.set(HttpHeaders.acceptHeader, 'application/json');
         final response = await request.close();
@@ -75,6 +79,10 @@ final acpRegistryCatalogProvider = FutureProvider.autoDispose(
         }
         return body;
       }).timeout(const Duration(seconds: 15));
+      // A row kept before icons were stored gains its entry's icon now that
+      // the catalog is in hand, with no second fetch.
+      unawaited(backfill.fillFrom(catalog));
+      return catalog;
     } on AcpRegistryUnavailable {
       rethrow;
     } on TimeoutException {
@@ -145,6 +153,8 @@ class AcpAgentsSetup extends Notifier<AcpAgentsSetupState> {
           .read(agentInstallationsControllerProvider.notifier)
           .discoverAll();
       state = const AcpAgentsSetupState();
+      // A Discover is also when a row kept without its icon gets one.
+      unawaited(ref.read(acpAgentIconBackfillProvider).fillMissing());
     } on Object catch (e) {
       state = AcpAgentsSetupState(discoveryError: 'Discovery failed: $e');
     }

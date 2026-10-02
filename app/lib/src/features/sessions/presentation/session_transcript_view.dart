@@ -251,6 +251,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         );
   }
 
+  /// The agent this session is with, for the empty state's mark; null for a
+  /// session whose installation is not known here.
+  String? _agentId() {
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    return ref
+        .read(agentInstallationsDataProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+  }
+
   /// The server the agent runs on, for the composer's attachments: browsed in
   /// the environment the session's agent runs in, a WSL or SSH one included.
   PickServer _pickServer() {
@@ -621,6 +632,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               )
             : null,
         firstOrdinal: firstOrdinal,
+        agentId: _agentId(),
         turn: turn,
         resolveHostPath: resolveHostPath,
         // Paths in the conversation are clickable, and a click reveals

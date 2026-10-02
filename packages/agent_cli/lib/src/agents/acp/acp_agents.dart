@@ -24,7 +24,16 @@ const antigravityAcpAdapter = DataOnlyAgentAdapter(
     mark: AgentMark.antigravity,
   ),
 );
+
+/// The public registry publishes an icon per entry for clients to draw; a
+/// shipped agent with no mark of the app's own is drawn with it, the glyph
+/// standing in until it is fetched.
 const grokAdapter = DataOnlyAgentAdapter(
   grokDescriptor,
-  presentation: AgentPresentation(shortName: 'Grok', glyph: AgentGlyph.rocket),
+  presentation: AgentPresentation(
+    shortName: 'Grok',
+    glyph: AgentGlyph.rocket,
+    iconUrl:
+        'https://cdn.agentclientprotocol.com/registry/v1/latest/grok-build.svg',
+  ),
 );

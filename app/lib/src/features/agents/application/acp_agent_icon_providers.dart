@@ -15,10 +15,17 @@ final acpAgentIconCacheDirectoryProvider = FutureProvider<Directory>(
       Directory(p.join((await appSupportDirectory()).path, 'acp-icons')),
 );
 
+/// How long a failed fetch is remembered before it is tried again while
+/// something still draws the agent; a test shortens it.
+final acpAgentIconRetryDelayProvider = Provider<Duration>(
+  (ref) => const Duration(minutes: 2),
+);
+
 /// The SVG text at [url] — an ACP agent's icon as the public registry
 /// publishes it — read from the on-disk cache, else fetched once and kept
-/// there. Null when it could not be had: the glyph stands in, and once
-/// nothing draws it any more the next look asks again.
+/// there. Null when it could not be had: the glyph stands in, and it is
+/// asked for again after [acpAgentIconRetryDelayProvider] while drawn, or
+/// at once the next time it is drawn after nothing drew it.
 final acpAgentIconProvider = FutureProvider.autoDispose.family<String?, String>(
   (ref, url) async {
     final directory = await ref.watch(
@@ -26,12 +33,28 @@ final acpAgentIconProvider = FutureProvider.autoDispose.family<String?, String>(
     );
     final file = File(p.join(directory.path, iconCacheFileName(url)));
     try {
-      if (await file.exists()) return _asSvg(await file.readAsString());
+      if (await file.exists()) {
+        final cached = asSvgDocument(await file.readAsString());
+        if (cached != null) return cached;
+        // Something that is not an SVG was kept by an older build: fetched
+        // again below, and the file replaced or removed.
+      }
     } on IOException {
       // Unreadable cache: fetch again below.
     }
     final svg = await _fetch(ref, url);
-    if (svg == null) return null;
+    if (svg == null) {
+      final retry = Timer(ref.read(acpAgentIconRetryDelayProvider), () {
+        ref.invalidateSelf();
+      });
+      ref.onDispose(retry.cancel);
+      try {
+        if (await file.exists()) await file.delete();
+      } on IOException {
+        // Left for the next look.
+      }
+      return null;
+    }
     try {
       await directory.create(recursive: true);
       await file.writeAsString(svg);
@@ -62,9 +85,32 @@ int _fnv1a(String text) {
   return hash;
 }
 
-/// Only an SVG document is drawn; anything else the CDN answers with — an
-/// HTML error page, say — reads as no icon.
-String? _asSvg(String text) => text.contains('<svg') ? text : null;
+/// [text] when it is an SVG document — one whose root element is `<svg>`,
+/// after any XML prolog, doctype or comment — else null. A CDN's "not
+/// found" page is HTML that happens to hold an inline `<svg>`, which is why
+/// containing the tag is not enough.
+String? asSvgDocument(String text) {
+  var rest = text.trimLeft();
+  if (rest.startsWith('﻿')) rest = rest.substring(1);
+  while (true) {
+    if (rest.startsWith('<?')) {
+      final end = rest.indexOf('?>');
+      if (end < 0) return null;
+      rest = rest.substring(end + 2).trimLeft();
+    } else if (rest.startsWith('<!--')) {
+      final end = rest.indexOf('-->');
+      if (end < 0) return null;
+      rest = rest.substring(end + 3).trimLeft();
+    } else if (rest.startsWith('<!')) {
+      final end = rest.indexOf('>');
+      if (end < 0) return null;
+      rest = rest.substring(end + 1).trimLeft();
+    } else {
+      break;
+    }
+  }
+  return RegExp(r'^<svg[\s/>]').hasMatch(rest) ? text : null;
+}
 
 Future<String?> _fetch(Ref ref, String url) async {
   final uri = Uri.tryParse(url);
@@ -74,7 +120,7 @@ Future<String?> _fetch(Ref ref, String url) async {
     final request = await client.getUrl(uri);
     final response = await request.close().timeout(const Duration(seconds: 15));
     final body = await response.transform(utf8.decoder).join();
-    return response.statusCode == HttpStatus.ok ? _asSvg(body) : null;
+    return response.statusCode == HttpStatus.ok ? asSvgDocument(body) : null;
   } on Object {
     return null;
   } finally {

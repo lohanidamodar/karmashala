@@ -16,12 +16,19 @@ void main() {
     expect(of(AgentIds.codexAcp).shortName, 'Codex');
     expect(of(AgentIds.antigravityAcp).mark, AgentMark.antigravity);
     expect(of(AgentIds.antigravityAcp).shortName, 'Antigravity');
+    // Grok has no mark of the app's own: the registry's icon, the glyph
+    // standing in until it is fetched.
     expect(of(AgentIds.grok).mark, isNull);
     expect(of(AgentIds.grok).glyph, AgentGlyph.rocket);
-    expect(of(AgentIds.grok).iconUrl, isNull);
-    // Nothing shipped is drawn from the network.
+    expect(
+      of(AgentIds.grok).iconUrl,
+      'https://cdn.agentclientprotocol.com/registry/v1/latest/grok-build.svg',
+    );
+    // An agent with a mark is drawn with it, never from the network.
     for (final adapter in registry.adapters) {
-      expect(adapter.presentation.iconUrl, isNull, reason: adapter.id);
+      if (adapter.presentation.mark != null) {
+        expect(adapter.presentation.iconUrl, isNull, reason: adapter.id);
+      }
     }
   });
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../features/agents/application/acp_agent_icon_backfill.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_sweep.dart';
@@ -350,12 +351,18 @@ class AppLifecycle {
       // Published, not just logged: an unrepaired row is something only the user
       // can fix, and "not installed" and "cannot be reached" are different answers.
       _container.read(agentPathRepairProvider.notifier).set(report);
-      if (report.isClean) return;
-      _logger.info('Agent paths: ${report.summary}');
+      if (!report.isClean) _logger.info('Agent paths: ${report.summary}');
     } on Object catch (error, stack) {
       // A check that could not run leaves the rows exactly as they were, which
       // is the same state the app was in before this existed.
       _logger.warning('Checking the stored agent paths failed.', error, stack);
+    }
+    // An ACP agent row kept before its registry icon was stored gets it now;
+    // nothing is fetched when every row has one.
+    try {
+      await _container.read(acpAgentIconBackfillProvider).fillMissing();
+    } on Object catch (error, stack) {
+      _logger.warning('Filling in agent icons failed.', error, stack);
     }
   }
 
@@ -456,8 +463,11 @@ class AppLifecycle {
           .close(teardownBudget: closeBudget)
           .timeout(closeBudget + const Duration(seconds: 1));
     } on Object catch (error, stack) {
-      _logger.warning('lifecycle: closing the server session failed.', error,
-          stack);
+      _logger.warning(
+        'lifecycle: closing the server session failed.',
+        error,
+        stack,
+      );
       return false;
     }
   }

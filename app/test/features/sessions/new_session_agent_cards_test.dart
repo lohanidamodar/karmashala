@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
+import 'package:karmashala/src/features/agents/presentation/agent_logo.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_agent_cards.dart';
 
 import '../../support/fake_data_server.dart';
@@ -70,6 +71,8 @@ void main() {
 
   testWidgets('an npx fallback says so instead of a version', (tester) async {
     await pump(tester, [agentInstallation(), viaNpx()]);
+    // Each card wears its agent's mark beside the name.
+    expect(find.byType(AgentLogo), findsNWidgets(2));
     expect(find.text('Windows · 1.0.0'), findsOneWidget);
     expect(
       find.text('Windows · via npx · downloaded on first start'),

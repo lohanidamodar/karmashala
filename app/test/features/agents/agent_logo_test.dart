@@ -95,6 +95,73 @@ void main() {
       expect(await read(container()), isNull);
     });
 
+    test('an HTML page holding an inline svg is not an icon', () async {
+      // A CDN's "not found" page, which is what a wrong URL answers with.
+      http = FakeHttpClient(
+        body:
+            '<!doctype html>\n<html><body><main><svg viewBox="0 0 1 1">'
+            '</svg><p>Not Found</p></main></body></html>',
+      );
+      expect(await read(container()), isNull);
+      expect(cache.listSync(), isEmpty);
+    });
+
+    test('what counts as an SVG document', () {
+      expect(asSvgDocument('<svg xmlns="x"><path/></svg>'), isNotNull);
+      expect(asSvgDocument('﻿  <svg/>'), isNotNull);
+      expect(
+        asSvgDocument(
+          '<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "x" "y">\n'
+          '<!-- made by hand -->\n<svg viewBox="0 0 1 1"/>',
+        ),
+        isNotNull,
+      );
+      expect(asSvgDocument('<html><svg/></html>'), isNull);
+      expect(asSvgDocument('<svgx/>'), isNull);
+      expect(asSvgDocument(''), isNull);
+      expect(asSvgDocument('<?xml version="1.0"'), isNull);
+    });
+
+    test(
+      'a failed fetch is tried again after the delay, while drawn',
+      () async {
+        final scope = ProviderContainer(
+          overrides: [
+            acpAgentIconCacheDirectoryProvider.overrideWith(
+              (ref) async => cache,
+            ),
+            acpRegistryHttpClientProvider.overrideWithValue(() => http),
+            acpAgentIconRetryDelayProvider.overrideWithValue(
+              const Duration(milliseconds: 40),
+            ),
+          ],
+        );
+        addTearDown(scope.dispose);
+        http = FakeHttpClient(statusCode: 503, body: 'down');
+        expect(await read(scope), isNull);
+        expect(http.requests, 1);
+
+        http = FakeHttpClient(body: svg);
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        expect(await scope.read(acpAgentIconProvider(iconUrl).future), svg);
+        expect(http.requests, 1);
+        expect(cache.listSync(), hasLength(1));
+      },
+    );
+
+    test('a file an older build kept that is not an SVG is replaced', () async {
+      await cache.create(recursive: true);
+      File(
+        '${cache.path}/${iconCacheFileName(iconUrl)}',
+      ).writeAsStringSync('<html>stale</html>');
+      expect(await read(container()), svg);
+      expect(http.requests, 1);
+      expect(
+        File('${cache.path}/${iconCacheFileName(iconUrl)}').readAsStringSync(),
+        svg,
+      );
+    });
+
     test('the cache file name is stable, safe, and tells two URLs apart', () {
       final a = iconCacheFileName('https://cdn.example.test/a/x.svg');
       final b = iconCacheFileName('https://cdn.example.test/b/x.svg');
