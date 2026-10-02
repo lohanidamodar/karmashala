@@ -46,10 +46,9 @@ each release.
 
 ## Platforms
 
-Windows is the primary target and the best tested. Linux is built and released
-by CI. macOS has maintained source support and builds by hand with
-[`tool/build_release.sh`](tool/build_release.sh). The phone app targets
-Android first, then iOS.
+Windows is the primary target and the best tested. Windows, macOS and Linux
+builds are attached to every GitHub release; the macOS build is ad-hoc signed
+and not notarised. The phone app targets Android first, then iOS.
 
 ## Requirements
 
@@ -99,15 +98,21 @@ The relay define is a placeholder that the hosted-relay tests need. The
 `live-ssh` and `live-wsl` suites drive a real SSH server and a real WSL
 distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
 
-## Building a release
+## CI and releases
 
-[`tool/build_release.bat`](tool/build_release.bat) builds the Windows app, its
-MCP bridge, the server bundles, the installer and the Android APK;
-[`tool/build_release.sh`](tool/build_release.sh) is the macOS counterpart.
-[`release-build.yml`](.github/workflows/release-build.yml) attaches Windows and
-Linux builds to a GitHub release, and
-[`android-release.yml`](.github/workflows/android-release.yml) publishes to
-Google Play.
+- [`ci.yml`](.github/workflows/ci.yml) analyzes and tests every pull request
+  and every push to `main`.
+- Publishing a GitHub release runs
+  [`release-build.yml`](.github/workflows/release-build.yml), which attaches the
+  Windows installer and portable zip, the macOS DMG, the Linux tarball and the
+  server bundles, and
+  [`android-release.yml`](.github/workflows/android-release.yml), which attaches
+  the Android APK and AAB and ships to Google Play's internal track. Either can
+  also be run by hand.
+
+[`tool/build_release.bat`](tool/build_release.bat) and
+[`tool/build_release.sh`](tool/build_release.sh) build the same desktop
+artifacts locally on Windows and macOS.
 
 ## Environment variables
 

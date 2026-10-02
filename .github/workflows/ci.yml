@@ -1,0 +1,104 @@
+name: CI
+
+# Analyze and test every pull request and every push to main. No secrets are
+# read, so pull requests from forks run in full.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The suites that exercise the hosted relay need one; a placeholder, never a
+  # real relay.
+  RELAY_DEFINE: --dart-define=KARMASHALA_RELAY_URL=wss://relay.example.com
+  # Need a real WSL distribution, SSH server, device or agent, or quiet timing.
+  EXCLUDED_TAGS: live,live-ssh,live-wsl,live-android,live-timing,live-agent,cost
+
+jobs:
+  analyze:
+    name: Analyze, and test the relay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # The lock file as committed: a fresh resolution on a runner has dropped
+      # packages the app needs.
+      - run: flutter pub get --enforce-lockfile
+      - name: Analyze the app, the server and the packages
+        run: dart analyze app server packages
+      # relay/ and its contract resolve on their own lock files.
+      - name: Analyze and test the relay protocol
+        working-directory: relay/protocol
+        run: |
+          dart pub get
+          dart analyze
+          dart test
+      - name: Analyze and test the relay
+        working-directory: relay
+        run: |
+          dart pub get
+          dart analyze
+          dart test
+
+  app-tests:
+    name: App tests
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: flutter test
+        working-directory: app
+        shell: pwsh
+        run: flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE
+
+  package-tests:
+    name: Server and package tests
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Each member's own suite
+        shell: pwsh
+        run: |
+          $failed = @()
+          $members = @('server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" })
+          foreach ($member in $members) {
+            if (-not (Test-Path "$member/test")) { continue }
+            # A Flutter package needs flutter_tester; the rest run on plain Dart.
+            $usesFlutter = Select-String -Path "$member/pubspec.yaml" -Pattern 'sdk: flutter' -Quiet
+            Write-Host "::group::$member"
+            Push-Location $member
+            if ($usesFlutter) {
+              flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE
+            } else {
+              dart test --exclude-tags=$env:EXCLUDED_TAGS
+            }
+            if ($LASTEXITCODE -ne 0) { $failed += $member }
+            Pop-Location
+            Write-Host '::endgroup::'
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "Failed: $($failed -join ', ')"
+            exit 1
+          }

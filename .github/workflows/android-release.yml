@@ -9,7 +9,7 @@
 #   - the AAB is built here with --dart-define=KARMASHALA_VERSION, which the
 #     play_publisher plugin cannot forward, and fastlane reuses it
 #     (SKIP_FLUTTER_BUILD=1) for the upload only;
-#   - no `flutter test` step: this repository's gate is `flutter analyze`.
+#   - no `flutter test` step: ci.yml tests every pull request and push to main.
 #
 # Secrets, set per repository (org secrets do not reach private repos on the
 # free plan): PLAY_STORE_JSON_KEY_DATA, ANDROID_KEYSTORE_BASE64,
@@ -18,6 +18,10 @@
 name: Android Release
 
 on:
+  # A published GitHub release ships to the internal track and gets the AAB and
+  # an APK attached; a manual run picks the track.
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       track:
@@ -32,11 +36,11 @@ on:
         options: [completed, draft, halted, inProgress]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
-    name: Build and upload to Play (${{ inputs.track }})
+    name: Build and upload to Play (${{ inputs.track || 'internal' }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -44,7 +48,7 @@ jobs:
       # Consumed by the fastlane Appfile and the play_publisher plugin.
       APP_IDENTIFIER: com.popupbits.karmashala
       PLAY_STORE_JSON_KEY_DATA: ${{ secrets.PLAY_STORE_JSON_KEY_DATA }}
-      SUPPLY_RELEASE_STATUS: ${{ inputs.release_status }}
+      SUPPLY_RELEASE_STATUS: ${{ inputs.release_status || 'completed' }}
       # Written into app/android/key.properties below.
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -118,12 +122,29 @@ jobs:
           path: app/build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
+      # For people who install outside Play: the same build as an APK, signed
+      # with the same upload key, beside the AAB on the GitHub release.
+      - name: Build release APK and attach both to the release
+        if: github.event_name == 'release'
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')
+          flutter build apk --release --dart-define=KARMASHALA_VERSION="$version" --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com
+          mkdir -p build/artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk "build/artifacts/Karmashala-android-${TAG#v}.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "build/artifacts/Karmashala-android-${TAG#v}.aab"
+          gh release upload "$TAG" build/artifacts/Karmashala-android-* --clobber -R "$GITHUB_REPOSITORY"
+
       # The Fastfile's lane for the production track is `release`.
-      - name: Upload to Play (${{ inputs.track }})
+      - name: Upload to Play (${{ inputs.track || 'internal' }})
         working-directory: app/android
         env:
           SKIP_FLUTTER_BUILD: "1"
-          TRACK: ${{ inputs.track }}
+          TRACK: ${{ inputs.track || 'internal' }}
         run: |
           case "$TRACK" in
             production) lane=release ;;
