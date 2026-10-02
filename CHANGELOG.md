@@ -17,6 +17,28 @@ installs claim the same version name.
 
 ---
 
+## 1.31.1 — 2026-10-02 (build 60)
+
+The first release made for self-hosting, and the first under a licence.
+
+- **Install the server, a relay or both with one command** on Linux, macOS and
+  Windows. `install.sh` (`curl … | bash`) and `install.ps1` (PowerShell, no
+  administrator rights) download the server for the machine from the latest
+  release, set it up as a per-user service (systemd, launchd, or a task that
+  starts at sign-in), and end by opening a pairing window. `--lan`,
+  `--with-relay` and `--relay` cover the same network, a VPS, and a server
+  behind NAT; a relay's URL and token are printed for clients to use.
+- **Every release carries the server for every platform**: macOS (Apple
+  Silicon, Intel) and Windows beside Linux, with the install scripts.
+- **The relay as an image**, `ghcr.io/lohanidamodar/karmashala-relay`.
+- **A Linux AppImage** beside the tarball. It carries the libraries the app
+  links and uses the system's GTK 3 and OpenGL.
+- **Licensed under Apache 2.0**; `NOTICE` names the parts under their own
+  licences.
+- `karmashala_host relay --help` now says which options are required.
+
+---
+
 ## 1.28.0 — 2026-09-30 (build 51)
 
 Built from `integration/next`. Not yet run on a device before release.
