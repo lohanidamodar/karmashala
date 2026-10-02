@@ -26,6 +26,16 @@ DataRequest<Object?>? _agentWorkRequestFromJson(String kind, _Arguments args) =>
       ),
       AgentsRefreshVersions.name => const AgentsRefreshVersions(),
       AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
+      AcpAgentInstall.name => AcpAgentInstall(
+        environmentId: args.string('environmentId'),
+        registryId: args.string('registryId'),
+        version: args.string('version'),
+        archive: args.string('archive'),
+        command: args.string('command'),
+        args: args.strings('args', orEmpty: true),
+        sha256: args.optionalString('sha256'),
+        agentId: args.optionalString('agentId'),
+      ),
       ImportsScan.name => const ImportsScan(),
       ImportsAdd.name => ImportsAdd(
         args.objects('projects', detectedProjectFromJson),
@@ -278,6 +288,67 @@ final class AgentsDiscoverUnprobed
       for (final item in _objects(json, kind)) installationFromJson(item),
     ];
   });
+}
+
+/// Downloads the archive the public ACP registry ships for one agent and one
+/// platform into [environmentId]'s managed folder
+/// (`~/karmashala/acp/<registryId>/<version>/`), checks it against [sha256]
+/// when the registry gives one, unpacks it and marks [command] executable.
+/// With [agentId], the server then looks for that agent there again so the
+/// installation is recorded. Told as it goes ([AcpInstallProgress]);
+/// answered with where the executable landed. Refused in the shell's words
+/// when a step fails.
+final class AcpAgentInstall extends AgentWorkRequest<AcpAgentInstalled> {
+  const AcpAgentInstall({
+    required this.environmentId,
+    required this.registryId,
+    required this.version,
+    required this.archive,
+    required this.command,
+    this.args = const [],
+    this.sha256,
+    this.agentId,
+  });
+
+  static const String name = 'acpAgents.install';
+
+  final String environmentId;
+  final String registryId;
+  final String version;
+
+  /// The archive's URL, as the registry's binary distribution gives it.
+  final String archive;
+
+  /// The command inside the archive (`./agy_acp_server.par`), and the argv
+  /// the registry says to start it with.
+  final String command;
+  final List<String> args;
+  final String? sha256;
+
+  /// The shipped agent this installs, when it is one.
+  final String? agentId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'registryId': registryId,
+    'version': version,
+    'archive': archive,
+    'command': command,
+    'args': args,
+    'sha256': ?sha256,
+    'agentId': ?agentId,
+  };
+
+  @override
+  Object? resultToJson(AcpAgentInstalled result) => result.toJson();
+
+  @override
+  AcpAgentInstalled resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAgentInstalled.fromJson(_object(json, kind)));
 }
 
 // The CLI import.

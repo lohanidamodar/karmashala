@@ -47,6 +47,18 @@ class FakeAgentWork {
   AgentPathRepairReport Function(bool full) onRepair = (_) =>
       AgentPathRepairReport(checkedAt: DateTime.utc(2026));
 
+  /// What `acpAgents.install` answers, given the request; [installs] keeps
+  /// each one asked. The default refuses, so a test says what it installs.
+  /// [tellStep] tells every client a step of the install under way.
+  AcpAgentInstalled Function(
+    AcpAgentInstall request,
+    void Function(AcpInstallStep step) tellStep,
+  )
+  onInstall = (request, _) => throw const DataRefused.unavailable(
+    'this fake installs nothing unless told what to',
+  );
+  final installs = <AcpAgentInstall>[];
+
   /// The projects `imports.scan` finds.
   var detected = <DetectedProject>[];
 
@@ -94,6 +106,19 @@ class FakeAgentWork {
         }(),
         AgentsDetect(:final environmentId) => onDetect(environmentId),
         AgentsRepair(:final full) => onRepair(full),
+        final AcpAgentInstall install => () {
+          installs.add(install);
+          return onInstall(
+            install,
+            (step) => _server._tell(null, [
+              AcpInstallProgress(
+                environmentId: install.environmentId,
+                registryId: install.registryId,
+                step: step,
+              ),
+            ]),
+          );
+        }(),
         AgentsRefreshVersions() => const <AgentVersionChange>[],
         AgentsDiscoverUnprobed() => const <AgentInstallation>[],
         ImportsScan() => detected,

@@ -209,10 +209,13 @@ void main() {
     }
     for (final adapter in acp) {
       final binary = adapter.descriptor.binaries.posix.first;
+      // npx is offered only for an agent that ships as an npm package; one
+      // the registry ships as an archive is installed from the row instead.
+      final npx = adapter.acp!.npxPackage == null ? '' : ', or add it with npx';
       expect(
         find.text(
-          'Not installed. Install `$binary` on a machine Karmashala reaches, '
-          'or add it with npx.',
+          'Not installed. Install `$binary` on a machine Karmashala reaches'
+          '$npx.',
         ),
         findsOneWidget,
       );

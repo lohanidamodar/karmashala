@@ -104,13 +104,12 @@ void main() {
       expect(gemini.args, ['-y', '@google/gemini-cli@0.62.0', '--acp']);
     });
 
-    test('falls back to the platform binary, and to nothing', () {
+    test('a binary distribution is not a launch: it is installed first', () {
       final native = catalog.byId('native-agent')!;
-      final darwin = native.launchFor('darwin-aarch64')!;
-      expect(darwin.command, 'native-agent');
-      expect(darwin.args, ['--stdio']);
+      // The archive's command names a file inside it, not a program here.
+      expect(native.launchFor('darwin-aarch64'), isNull);
+      expect(native.binaries['darwin-aarch64']!.command, 'native-agent');
       expect(native.launchFor('linux-x86_64'), isNull);
-      // A platform entry with no command is not launchable.
       expect(native.launchFor('plan9-mips'), isNull);
       // An npx block without a package is not npx.
       expect(catalog.agents.last.launchFor('linux-x86_64'), isNull);

@@ -17,11 +17,11 @@ void main() {
     'antigravity',
     'claudeAcp',
     'codexAcp',
-    'geminiCli',
+    'antigravityAcp',
     'grok',
     'claude-acp',
     'codex-acp',
-    'gemini-cli',
+    'antigravity-acp',
   ];
   final idAlternation = ids.join('|');
 

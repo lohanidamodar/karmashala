@@ -36,11 +36,11 @@ void main() {
         hostEnvironment: const {},
       ).discover();
 
-      // Every ACP agent names a package; no terminal agent is found.
+      // Every ACP agent with a package is found; Antigravity ships as an
+      // archive, and no terminal agent is found.
       expect(found.map((i) => i.agentId), [
         AgentIds.claudeAcp,
         AgentIds.codexAcp,
-        AgentIds.geminiCli,
         AgentIds.grok,
       ]);
       final claude = found.first;
@@ -52,7 +52,7 @@ void main() {
       // No binary was run, so there is no version and no reading time.
       expect(claude.version, isNull);
       expect(claude.versionReadAt, isNull);
-      expect(found[2].leadingArguments, ['-y', '@google/gemini-cli']);
+      expect(found[2].leadingArguments, ['-y', '@xai-official/grok']);
 
       // One `npx` lookup serves the whole sweep.
       expect(
@@ -82,7 +82,7 @@ void main() {
         clock: FixedClock(testTime),
         hostEnvironment: const {},
       ).discover();
-      expect(found, hasLength(4));
+      expect(found, hasLength(3));
       expect(found.first.executable.path, '/usr/bin/npx');
       expect(found.first.executable.environmentId, 'wsl:Ubuntu');
     });
@@ -92,12 +92,12 @@ void main() {
         responder: (req) {
           if (req.executable == 'where') {
             return switch (req.arguments.single) {
-              'gemini' => _ok('C:\\bin\\gemini.cmd\r\n'),
+              'grok' => _ok('C:\\bin\\grok.cmd\r\n'),
               'npx.cmd' => _ok('C:\\nodejs\\npx.cmd\r\n'),
               _ => _notFound,
             };
           }
-          if (req.arguments.contains('--version')) return _ok('0.62.0');
+          if (req.arguments.contains('--version')) return _ok('1.4.0');
           return _notFound;
         },
       );
@@ -108,10 +108,10 @@ void main() {
         clock: FixedClock(testTime),
         hostEnvironment: const {},
       ).discover();
-      final gemini = found.singleWhere((i) => i.agentId == AgentIds.geminiCli);
-      expect(gemini.executable.path, r'C:\bin\gemini.cmd');
-      expect(gemini.leadingArguments, isEmpty);
-      expect(gemini.version, '0.62.0');
+      final grok = found.singleWhere((i) => i.agentId == AgentIds.grok);
+      expect(grok.executable.path, r'C:\bin\grok.cmd');
+      expect(grok.leadingArguments, isEmpty);
+      expect(grok.version, '1.4.0');
     });
 
     test('without npx an ACP agent is simply missing', () async {

@@ -1,7 +1,7 @@
 import '../acp/acp_agents.dart';
+import '../acp/antigravity_acp_descriptor.dart';
 import '../acp/claude_acp_descriptor.dart';
 import '../acp/codex_acp_descriptor.dart';
-import '../acp/gemini_cli_descriptor.dart';
 import '../acp/grok_descriptor.dart';
 import '../antigravity/antigravity_adapter.dart';
 import '../antigravity/antigravity_descriptor.dart';
@@ -22,7 +22,7 @@ const List<AgentAdapter> builtInAgentAdapters = [
   AntigravityAdapter(),
   claudeAcpAdapter,
   codexAcpAdapter,
-  geminiCliAdapter,
+  antigravityAcpAdapter,
   grokAdapter,
 ];
 
@@ -35,6 +35,6 @@ const List<AgentDescriptor> builtInAgentDescriptors = [
   antigravityDescriptor,
   claudeAcpDescriptor,
   codexAcpDescriptor,
-  geminiCliDescriptor,
+  antigravityAcpDescriptor,
   grokDescriptor,
 ];

@@ -1,8 +1,8 @@
 import '../adapter/agent_presentation.dart';
 import '../adapter/data_only_agent_adapter.dart';
+import 'antigravity_acp_descriptor.dart';
 import 'claude_acp_descriptor.dart';
 import 'codex_acp_descriptor.dart';
-import 'gemini_cli_descriptor.dart';
 import 'grok_descriptor.dart';
 
 /// The shipped ACP agents: data-only adapters, because everything the runtime
@@ -17,7 +17,13 @@ const codexAcpAdapter = DataOnlyAgentAdapter(
   codexAcpDescriptor,
   presentation: AgentPresentation(shortName: 'Codex', mark: AgentMark.openAi),
 );
-const geminiCliAdapter = DataOnlyAgentAdapter(geminiCliDescriptor);
+const antigravityAcpAdapter = DataOnlyAgentAdapter(
+  antigravityAcpDescriptor,
+  presentation: AgentPresentation(
+    shortName: 'Antigravity',
+    mark: AgentMark.antigravity,
+  ),
+);
 const grokAdapter = DataOnlyAgentAdapter(
   grokDescriptor,
   presentation: AgentPresentation(shortName: 'Grok', glyph: AgentGlyph.rocket),

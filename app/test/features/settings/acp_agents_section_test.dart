@@ -10,6 +10,8 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/acp_agent_providers.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_agent_dialog.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_agents_section.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AcpAgentInstalled, AcpInstallStep, DataRefusalCode, DataRefused;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fake_data_server.dart';
@@ -32,6 +34,19 @@ void main() {
    "distribution": {"binary": {"darwin-aarch64": {"archive": "x.tar.gz",
                                                    "cmd": "native-agent",
                                                    "args": ["--stdio"]}}}}
+]}''';
+
+  /// The same registry with an entry shipped as an archive for this machine.
+  const registryJsonWithArchive = '''
+{"agents": [
+  {"id": "gemini", "name": "Gemini CLI", "version": "0.9.0",
+   "distribution": {"npx": {"package": "@google/gemini-cli@0.9.0",
+                            "args": ["--experimental-acp"]}}},
+  {"id": "shipped", "name": "Shipped Agent", "version": "2.0.0",
+   "icon": "https://cdn.example.test/registry/shipped.svg",
+   "distribution": {"binary": {"windows-x86_64": {
+     "archive": "https://dl.example.test/shipped-2.0.0-windows-x86_64.zip",
+     "cmd": "./shipped.exe", "args": ["--stdio"]}}}}
 ]}''';
 
   late TestMachine db;
@@ -307,6 +322,85 @@ void main() {
     // An edit is not a new agent: nothing to discover.
     expect(detections, 0);
     expect(find.text('Renamed'), findsOneWidget);
+  });
+
+  testWidgets(
+    'an entry shipped as an archive alone is installed on this machine first, '
+    'and the row names the executable where it landed',
+    (tester) async {
+      db.server.agentWork.onInstall = (request, tellStep) {
+        tellStep(AcpInstallStep.unpacking);
+        return const AcpAgentInstalled(
+          executablePath:
+              r'C:\Users\me\karmashala\acp\shipped\2.0.0\shipped.exe',
+        );
+      };
+      http = FakeHttpClient(body: registryJsonWithArchive);
+      await pump(tester);
+      await openDialog(tester);
+      expect(
+        find.text(
+          '2.0.0 · installs shipped-2.0.0-windows-x86_64.zip on this machine',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Shipped Agent'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(FilledButton, 'Install and add'),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Install and add'));
+      await tester.pumpAndSettle();
+
+      final sent = db.server.agentWork.installs.single;
+      expect(sent.environmentId, 'windows');
+      expect(sent.registryId, 'shipped');
+      expect(sent.version, '2.0.0');
+      expect(
+        sent.archive,
+        'https://dl.example.test/shipped-2.0.0-windows-x86_64.zip',
+      );
+      expect(sent.command, './shipped.exe');
+      expect(sent.args, ['--stdio']);
+      // Not a shipped agent of Karmashala's: the row, once saved, is what
+      // discovery looks for.
+      expect(sent.agentId, isNull);
+
+      final kept = db.server.acpAgentRows.getAll().single;
+      expect(kept.name, 'Shipped Agent');
+      expect(
+        kept.command,
+        r'C:\Users\me\karmashala\acp\shipped\2.0.0\shipped.exe',
+      );
+      expect(kept.args, ['--stdio']);
+      expect(kept.source, AcpAgentSource.registry);
+      expect(kept.registryId, 'shipped');
+      expect(kept.iconUrl, 'https://cdn.example.test/registry/shipped.svg');
+      expect(detections, 1);
+      expect(find.byType(AcpAgentDialog), findsNothing);
+    },
+  );
+
+  testWidgets('an install that fails keeps the dialog open with the words', (
+    tester,
+  ) async {
+    db.server.agentWork.onInstall = (request, _) => throw const DataRefused(
+      DataRefusalCode.failed,
+      'The download failed (exit 22): 404',
+    );
+    http = FakeHttpClient(body: registryJsonWithArchive);
+    await pump(tester);
+    await openDialog(tester);
+    await tester.tap(find.text('Shipped Agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Install and add'));
+    await tester.pumpAndSettle();
+    expect(find.text('The download failed (exit 22): 404'), findsOneWidget);
+    expect(find.byType(AcpAgentDialog), findsOneWidget);
+    expect(db.server.acpAgentRows.getAll(), isEmpty);
+    expect(detections, 0);
   });
 
   testWidgets('Remove asks first, and Cancel keeps the row', (tester) async {

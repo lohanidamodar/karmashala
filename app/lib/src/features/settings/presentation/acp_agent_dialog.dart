@@ -2,7 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefused;
+    show AcpInstallStep, DataRefused;
 import 'package:karmashala_git/git.dart' show joinCommandLine, splitCommandLine;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -11,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/acp_agent_form.dart';
 import '../../agents/application/acp_agent_providers.dart';
+import '../../agents/application/acp_install_controller.dart';
 
 /// Where the agent to add comes from.
 enum AcpAgentOrigin { registry, custom }
@@ -72,6 +73,20 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
     AcpAgentOrigin.custom => true,
   };
 
+  /// Whether [entry] has no launch for this machine and is installed first.
+  bool _installsFirst(AcpRegistryEntry entry) {
+    final platform = ref.read(acpRegistryPlatformProvider);
+    return entry.launchFor(platform) == null &&
+        acpInstallableBinary(entry, platform) != null;
+  }
+
+  /// The step of an install this dialog started, while it runs.
+  AcpInstallStep? get _installStep {
+    final id = _picked?.id;
+    if (!_saving || id == null) return null;
+    return ref.watch(acpInstallControllerProvider).stepHere(id);
+  }
+
   Future<void> _save() async {
     final existing = widget.existing;
     final String name;
@@ -84,15 +99,44 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
     switch (_origin) {
       case AcpAgentOrigin.registry:
         final entry = _picked;
-        final launch = entry?.launchFor(ref.read(acpRegistryPlatformProvider));
-        if (entry == null || launch == null) return;
+        if (entry == null) return;
+        final platform = ref.read(acpRegistryPlatformProvider);
+        final launch = entry.launchFor(platform);
+        final binary = acpInstallableBinary(entry, platform);
+        if (launch == null && binary == null) return;
         name = entry.label;
-        command = launch.command;
-        args = launch.args;
-        env = const {};
         source = AcpAgentSource.registry;
         registryId = entry.id;
         iconUrl = entry.icon;
+        if (launch != null) {
+          command = launch.command;
+          args = launch.args;
+          env = const {};
+        } else {
+          // Shipped as an archive alone: installed on this machine first, and
+          // the row then names the executable where it landed.
+          setState(() {
+            _saving = true;
+            _refusal = null;
+          });
+          try {
+            command = await ref
+                .read(acpInstallControllerProvider.notifier)
+                .installHere(entry.id!);
+          } on Object catch (e) {
+            if (mounted) {
+              setState(() {
+                _refusal = e is DataRefused
+                    ? e.message
+                    : 'Could not install ${entry.label}: $e';
+                _saving = false;
+              });
+            }
+            return;
+          }
+          args = binary!.args;
+          env = binary.env;
+        }
       case AcpAgentOrigin.custom:
         final refusal = acpAgentFormRefusal(
           name: _name.text,
@@ -209,6 +253,24 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
               ),
             },
             const SizedBox(height: Insets.md),
+            if (_installStep case final step?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.sm),
+                child: Row(
+                  children: [
+                    const InlineSpinner(),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: Text(
+                        '${describeAcpInstallStep(step)} ${_picked?.label ?? ''} '
+                        'installs on this machine, into its karmashala/acp '
+                        'folder.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Text(AcpAgentDialog.protocolNote, style: theme.textTheme.bodySmall),
           ],
         ),
@@ -220,7 +282,13 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         ),
         FilledButton(
           onPressed: _canSave && !_saving ? _save : null,
-          child: Text(_editing ? 'Save' : 'Add'),
+          child: Text(
+            _editing
+                ? 'Save'
+                : _picked != null && _installsFirst(_picked!)
+                ? 'Install and add'
+                : 'Add',
+          ),
         ),
       ],
     );
@@ -349,16 +417,21 @@ class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
                   itemBuilder: (context, index) {
                     final entry = shown[index];
                     final launch = entry.launchFor(platform);
+                    final binary = acpInstallableBinary(entry, platform);
                     final detail = [
                       ?entry.version,
-                      launch == null
-                          ? 'no build for this machine'
-                          : [launch.command, ...launch.args].join(' '),
+                      if (launch != null)
+                        [launch.command, ...launch.args].join(' ')
+                      else if (binary != null)
+                        'installs ${acpArchiveName(binary)} on this machine'
+                      else
+                        'no build for this machine',
                     ].join(' · ');
+                    final usable = launch != null || binary != null;
                     return ListTile(
                       key: ValueKey('acp-registry-${entry.id ?? index}'),
                       dense: true,
-                      enabled: launch != null,
+                      enabled: usable,
                       selected: identical(entry, widget.picked),
                       selectedTileColor: theme.colorScheme.primaryContainer
                           .withValues(alpha: 0.4),
@@ -375,7 +448,7 @@ class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      onTap: launch == null ? null : () => widget.onPick(entry),
+                      onTap: usable ? () => widget.onPick(entry) : null,
                     );
                   },
                 ),

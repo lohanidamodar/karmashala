@@ -678,7 +678,11 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required void Function(Object? error)? settleWorktree,
   }) async {
     try {
-      final arguments = acpArgumentsFor(installation, acp);
+      final arguments = acpArgumentsFor(
+        installation,
+        acp,
+        linux: AcpLaunchSpec.runsOnLinux(kind, hostIsLinux: Platform.isLinux),
+      );
       final factory = acpRuntimes;
       if (factory == null) {
         throw StateError(
@@ -886,16 +890,18 @@ String promptFilePointer(String path, {required bool isPacket}) => isPacket
 /// given.
 List<String> acpArgumentsFor(
   AgentInstallation installation,
-  AcpLaunchSpec spec,
-) {
+  AcpLaunchSpec spec, {
+  required bool linux,
+}) {
   final leading = installation.leadingArguments;
   final package = spec.npxPackage;
+  final mode = spec.argumentsFor(linux: linux);
   if (leading.isEmpty &&
       package != null &&
       _isNpx(installation.executable.path)) {
-    return ['-y', package, ...spec.arguments];
+    return ['-y', package, ...mode];
   }
-  return [...leading, ...spec.arguments];
+  return [...leading, ...mode];
 }
 
 bool _isNpx(String executable) {

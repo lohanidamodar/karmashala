@@ -76,7 +76,7 @@ void main() {
       for (final id in [
         AgentIds.claudeAcp,
         AgentIds.codexAcp,
-        AgentIds.geminiCli,
+        AgentIds.antigravityAcp,
         AgentIds.grok,
       ]) {
         expect(

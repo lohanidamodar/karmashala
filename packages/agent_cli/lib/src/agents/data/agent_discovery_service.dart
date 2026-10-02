@@ -9,6 +9,7 @@ import '../../util/id_generator.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/environment_path.dart';
 import '../../environments/execution_environment.dart';
+import '../acp/acp_managed_install.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_registry.dart';
@@ -377,7 +378,9 @@ class AgentDiscoveryService {
     String? version;
 
     if (path == null) {
-      final hit = await _locateAtDeclaredPath(descriptor);
+      final hit =
+          await _locateAtDeclaredPath(descriptor) ??
+          await _locateManaged(descriptor);
       if (hit == null) return _probeNpx(descriptor);
       path = hit.path;
       // Running the file is what proved it exists, so its output is the
@@ -408,6 +411,33 @@ class AgentDiscoveryService {
       executable: EnvironmentPath(environmentId: environment.id, path: path),
       version: version,
     );
+  }
+
+  /// An ACP agent the registry ships as an archive, where Karmashala installs
+  /// it (`~/karmashala/acp/<registry id>/<version>/`): the newest version
+  /// folder, whose name is the version — the registry's at install, and what
+  /// the agent answers over ACP confirms it later. One process, no
+  /// `--version` spawn.
+  Future<({String path, String? version})?> _locateManaged(
+    AgentDescriptor descriptor,
+  ) async {
+    final registryId = descriptor.acp?.registryId;
+    if (registryId == null) return null;
+    final request = acpManagedLocateRequest(
+      environment.kind,
+      registryId,
+      descriptor.binaries.forKind(environment.kind),
+      hostEnvironment: hostEnvironment,
+    );
+    if (request == null) return null;
+    try {
+      // `ls` and `where` exit non-zero when a name has no match, having
+      // printed the ones that do, so the output is read whatever the code.
+      final result = await runner.run(request);
+      return newestAcpManagedInstall(result.stdout);
+    } on CommandException {
+      return null;
+    }
   }
 
   /// An ACP agent with no binary installed, run from its npm package through

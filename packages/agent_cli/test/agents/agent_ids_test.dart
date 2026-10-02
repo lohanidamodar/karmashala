@@ -12,7 +12,7 @@ void main() {
       'antigravity',
       'claude-acp',
       'codex-acp',
-      'gemini-cli',
+      'antigravity-acp',
       'grok',
     ]);
     expect(

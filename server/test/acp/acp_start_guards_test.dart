@@ -41,23 +41,69 @@ void main() {
         acpArgumentsFor(
           installation('/usr/bin/npx', leading: ['-y', '@example/agent@1']),
           spec,
+          linux: true,
         ),
         ['-y', '@example/agent@1', '--acp'],
       );
       expect(
-        acpArgumentsFor(installation('/home/me/.local/bin/gemini'), spec),
+        acpArgumentsFor(
+          installation('/home/me/.local/bin/agent'),
+          spec,
+          linux: true,
+        ),
         ['--acp'],
       );
     });
 
     test('an npx recorded with nothing in front runs the declared package', () {
       for (final path in ['/usr/sbin/npx', r'C:\nodejs\npx.cmd', 'NPX.EXE']) {
-        expect(acpArgumentsFor(installation(path), spec), [
+        expect(acpArgumentsFor(installation(path), spec, linux: false), [
           '-y',
           '@example/agent',
           '--acp',
         ], reason: path);
       }
+    });
+
+    test('Linux-only arguments follow the mode arguments on Linux alone', () {
+      const withLinux = AcpLaunchSpec(
+        arguments: ['--acp'],
+        linuxArguments: ['--uid='],
+      );
+      expect(
+        acpArgumentsFor(installation('/opt/agent'), withLinux, linux: true),
+        ['--acp', '--uid='],
+      );
+      expect(
+        acpArgumentsFor(installation(r'C:\agent.exe'), withLinux, linux: false),
+        ['--acp'],
+      );
+      // A WSL distribution is Linux; the local host only when it is.
+      expect(
+        AcpLaunchSpec.runsOnLinux(EnvironmentKind.wsl, hostIsLinux: false),
+        isTrue,
+      );
+      expect(
+        AcpLaunchSpec.runsOnLinux(
+          EnvironmentKind.localPosix,
+          hostIsLinux: true,
+        ),
+        isTrue,
+      );
+      expect(
+        AcpLaunchSpec.runsOnLinux(
+          EnvironmentKind.localPosix,
+          hostIsLinux: false,
+        ),
+        isFalse,
+      );
+      expect(
+        AcpLaunchSpec.runsOnLinux(
+          EnvironmentKind.windowsNative,
+          hostIsLinux: true,
+        ),
+        isFalse,
+      );
     });
 
     test('a person\'s own npx row, which names its package itself, is left '
@@ -68,6 +114,7 @@ void main() {
         acpArgumentsFor(
           installation('/usr/sbin/npx'),
           const AcpLaunchSpec(arguments: ['-y', '@github/copilot', '--acp']),
+          linux: true,
         ),
         ['-y', '@github/copilot', '--acp'],
       );

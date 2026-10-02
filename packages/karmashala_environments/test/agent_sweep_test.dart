@@ -368,6 +368,32 @@ void main() {
       ]);
     });
 
+    test('drops a stored row of a kind no shipped agent has any more, and '
+        'nothing breaks on it', () async {
+      // An installation an older build recorded for an agent this one no
+      // longer ships (`gemini-cli`): a kind the registry cannot name.
+      world.installations.insert(
+        agentInstallation(
+          id: 'g1',
+          agentId: 'gemini-cli',
+          path: r'C:\bin\gemini.cmd',
+          version: '0.62.0',
+        ),
+      );
+      expect(AgentRegistry.builtIn.byId('gemini-cli'), isNull);
+
+      final report = await sweep.sweep();
+
+      expect(report.removedCount, 1);
+      expect(report.foundCount, 1);
+      expect(report.environments.single.removed.single.agentId, 'gemini-cli');
+      expect(world.installations.getAll().map((i) => i.agentId), [
+        AgentIds.claudeCode,
+      ]);
+      // A second sweep has nothing left to say about it.
+      expect((await sweep.sweep()).removedCount, 0);
+    });
+
     test('drops a row whose agent the registry no longer knows', () async {
       // An ACP agent a person added and then removed: the registry forgets
       // its kind while its row — and its command — are still there.

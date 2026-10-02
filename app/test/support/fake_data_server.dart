@@ -413,6 +413,9 @@ class FakeDataServer {
           notes.remove(id);
         case TodoChanged(:final todo):
           todos[todo.id] = todo;
+        // Not a row: nothing of it is kept.
+        case AcpInstallProgress():
+          break;
         case TodoRemoved(:final id):
           todos.remove(id);
         case PreferenceChanged(:final key, :final value):

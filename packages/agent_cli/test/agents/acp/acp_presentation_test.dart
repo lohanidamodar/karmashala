@@ -14,6 +14,8 @@ void main() {
     expect(of(AgentIds.claudeAcp).shortName, 'Claude');
     expect(of(AgentIds.codexAcp).mark, AgentMark.openAi);
     expect(of(AgentIds.codexAcp).shortName, 'Codex');
+    expect(of(AgentIds.antigravityAcp).mark, AgentMark.antigravity);
+    expect(of(AgentIds.antigravityAcp).shortName, 'Antigravity');
     expect(of(AgentIds.grok).mark, isNull);
     expect(of(AgentIds.grok).glyph, AgentGlyph.rocket);
     expect(of(AgentIds.grok).iconUrl, isNull);

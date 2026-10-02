@@ -166,7 +166,8 @@ void main() {
 
     await type(tester, 'start Karmashala anti');
     expect(find.text('antigravity'), findsOneWidget);
-    expect(find.textContaining('not installed in'), findsOneWidget);
+    // Antigravity and Antigravity (ACP) both match, and neither is installed.
+    expect(find.textContaining('not installed in'), findsNWidgets(2));
 
     await press(tester, LogicalKeyboardKey.tab);
     expect(boxText(tester), 'start Karmashala anti');

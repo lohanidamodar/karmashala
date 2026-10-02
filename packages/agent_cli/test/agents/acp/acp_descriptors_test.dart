@@ -7,7 +7,7 @@ void main() {
   const acpIds = [
     AgentIds.claudeAcp,
     AgentIds.codexAcp,
-    AgentIds.geminiCli,
+    AgentIds.antigravityAcp,
     AgentIds.grok,
   ];
 
@@ -30,7 +30,7 @@ void main() {
     expect(names, {
       'claude-acp': 'Claude (ACP)',
       'codex-acp': 'Codex (ACP)',
-      'gemini-cli': 'Gemini CLI',
+      'antigravity-acp': 'Antigravity (ACP)',
       'grok': 'Grok',
     });
   });
@@ -45,7 +45,13 @@ void main() {
         expect(adapter.acp, same(descriptor.acp));
         expect(adapter.capabilities, contains(AgentCapability.acp));
         expect(descriptor.acp!.clientName, 'Karmashala');
-        expect(descriptor.acp!.npxPackage, isNotNull);
+        // Each is reachable without an install of its own: an npm package,
+        // or a registry archive Karmashala installs.
+        expect(
+          descriptor.acp!.npxPackage != null ||
+              descriptor.acp!.registryId != null,
+          isTrue,
+        );
       });
 
       test('declares nothing terminal-shaped', () {
@@ -68,7 +74,9 @@ void main() {
         // The mode travels over the protocol (`session/set_mode`), so every
         // value is argument-less and `argumentsFor` is always empty.
         final support = descriptor.launch.permission;
-        expect(support.isKnown, isTrue);
+        // An agent whose modes were never read off a session declares none,
+        // rather than a guess.
+        expect(support.isKnown, descriptor.acp!.modeNames.isNotEmpty);
         for (final selection in support.selections()) {
           expect(support.argumentsFor(selection), isEmpty);
         }
@@ -102,21 +110,63 @@ void main() {
   }
 
   test('mode names are matched case-insensitively, first candidate wins', () {
-    final gemini = geminiCliDescriptor.acp!;
+    const spec = AcpLaunchSpec(
+      modeNames: {
+        PermissionRisk.acceptEdits: ['auto_edit', 'autoEdit'],
+      },
+    );
     expect(
-      gemini.modeFor(PermissionRisk.acceptEdits, ['default', 'AUTOEDIT']),
+      spec.modeFor(PermissionRisk.acceptEdits, ['default', 'AUTOEDIT']),
       'AUTOEDIT',
     );
     expect(
-      gemini.modeFor(PermissionRisk.acceptEdits, ['auto_edit', 'autoEdit']),
+      spec.modeFor(PermissionRisk.acceptEdits, ['auto_edit', 'autoEdit']),
       'auto_edit',
     );
-    expect(gemini.modeFor(PermissionRisk.readOnly, ['default']), isNull);
+    expect(spec.modeFor(PermissionRisk.readOnly, ['default']), isNull);
     // Grok has no read-only rung at all.
     expect(
       grokDescriptor.acp!.modeFor(PermissionRisk.readOnly, ['plan']),
       isNull,
     );
+    // Antigravity's modes have not been read: it offers none yet.
+    expect(antigravityAcpDescriptor.acp!.modeNames, isEmpty);
+    expect(antigravityAcpDescriptor.launch.permission.isKnown, isFalse);
+  });
+
+  test('Antigravity (ACP) is the registry\'s archive, found where it is '
+      'installed, with --uid= on Linux only', () {
+    final acp = antigravityAcpDescriptor.acp!;
+    expect(acp.registryId, 'antigravity-acp');
+    expect(acp.npxPackage, isNull);
+    expect(acp.arguments, isEmpty);
+    expect(acp.linuxArguments, ['--uid=']);
+    expect(acp.argumentsFor(linux: true), ['--uid=']);
+    expect(acp.argumentsFor(linux: false), isEmpty);
+    expect(antigravityAcpDescriptor.binaries.posix, [
+      'agy_acp_server.par',
+      'agy_acp_server',
+    ]);
+    expect(antigravityAcpDescriptor.binaries.windows, ['agy_acp_server.exe']);
+    // `--version` prints a build stamp, not a version: read over ACP instead.
+    expect(antigravityAcpDescriptor.discovery.probeVersion, isFalse);
+    expect(
+      antigravityAcpDescriptor.store?.homeDirectoryName,
+      '.gemini/antigravity-acp',
+    );
+    // The others carry no Linux-only argv.
+    for (final other in [
+      claudeAcpDescriptor,
+      codexAcpDescriptor,
+      grokDescriptor,
+    ]) {
+      expect(other.acp!.linuxArguments, isEmpty, reason: other.id);
+      expect(
+        other.acp!.argumentsFor(linux: true),
+        other.acp!.arguments,
+        reason: other.id,
+      );
+    }
   });
 
   test('the declared argv and packages', () {
@@ -130,8 +180,6 @@ void main() {
       codexAcpDescriptor.acp!.npxPackage,
       '@agentclientprotocol/codex-acp',
     );
-    expect(geminiCliDescriptor.acp!.arguments, ['--acp']);
-    expect(geminiCliDescriptor.acp!.npxPackage, '@google/gemini-cli');
     expect(grokDescriptor.acp!.arguments, ['agent', 'stdio']);
     expect(grokDescriptor.acp!.npxPackage, '@xai-official/grok');
   });

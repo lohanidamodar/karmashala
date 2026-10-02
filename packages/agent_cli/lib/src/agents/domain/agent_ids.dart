@@ -14,7 +14,7 @@ abstract final class AgentIds {
   /// The agents spoken to over the Agent Client Protocol (`agents/acp/`).
   static const String claudeAcp = 'claude-acp';
   static const String codexAcp = 'codex-acp';
-  static const String geminiCli = 'gemini-cli';
+  static const String antigravityAcp = 'antigravity-acp';
   static const String grok = 'grok';
 
   /// The shipped ids, in registry order: the three terminal agents, then the
@@ -25,7 +25,7 @@ abstract final class AgentIds {
     antigravity,
     claudeAcp,
     codexAcp,
-    geminiCli,
+    antigravityAcp,
     grok,
   ];
 }

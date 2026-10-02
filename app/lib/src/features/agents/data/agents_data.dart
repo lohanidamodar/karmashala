@@ -156,6 +156,34 @@ class AgentWorkData {
   Future<AgentPathRepairReport> repair({bool full = false}) =>
       _ask(AgentsRepair(full: full));
 
+  /// Downloads a registry entry's prebuilt archive into [environmentId]'s
+  /// managed folder and unpacks it; with [agentId], looks for that agent
+  /// there again. Answers where the executable landed.
+  Future<AcpAgentInstalled> installAcpBinary({
+    required String environmentId,
+    required String registryId,
+    required String version,
+    required String archive,
+    required String command,
+    List<String> args = const [],
+    String? sha256,
+    String? agentId,
+  }) => _ask(
+    AcpAgentInstall(
+      environmentId: environmentId,
+      registryId: registryId,
+      version: version,
+      archive: archive,
+      command: command,
+      args: args,
+      sha256: sha256,
+      agentId: agentId,
+    ),
+  );
+
+  /// Each step of an install under way, as the server tells it.
+  Stream<AcpInstallProgress> get installProgress => _client.acpInstallProgress;
+
   /// The conversations the agents' own stores hold, merged into projects.
   Future<List<DetectedProject>> scanImports() => _ask(const ImportsScan());
 

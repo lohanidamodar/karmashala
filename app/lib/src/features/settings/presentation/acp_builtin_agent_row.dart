@@ -8,6 +8,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import '../../environments/application/environments_controller.dart';
+import 'acp_install_actions.dart';
 import 'agent_collapsed_row.dart';
 import 'agent_health.dart';
 import 'agent_label.dart';
@@ -26,11 +27,12 @@ String describeAgentLaunch(AgentInstallation install) =>
     ? install.executable.path
     : 'npx ${install.leadingArguments.join(' ')}';
 
-/// **A shipped ACP agent, one row** (Claude (ACP), Codex (ACP), Gemini CLI,
-/// Grok): its health, where it is installed, how each machine launches it,
-/// and the version the agent reported of itself over ACP. No account or
-/// permission block — none applies to an agent driven over ACP — and one
-/// line saying so when it is installed nowhere.
+/// **A shipped ACP agent, one row** (Claude (ACP), Codex (ACP), Antigravity
+/// (ACP), Grok): its health, where it is installed, how each machine
+/// launches it, and the version the agent reported of itself over ACP. No
+/// account or permission block — none applies to an agent driven over ACP —
+/// one line saying so when it is installed nowhere, and an install action
+/// per machine for an agent the registry ships as an archive.
 class AcpBuiltInAgentRow extends ConsumerWidget {
   const AcpBuiltInAgentRow({
     required this.descriptor,
@@ -50,20 +52,28 @@ class AcpBuiltInAgentRow extends ConsumerWidget {
       health: health,
       environmentIds: installs.map((i) => i.environmentId),
       tooltip: acpAgentsNote,
-      detail: installs.isEmpty
-          ? Text(notInstalledLine(descriptor))
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AgentLaunchLines(installs: installs),
-                Text(
-                  describeAgentVersions(
-                    installs,
-                    now: ref.watch(clockProvider).nowUtc(),
-                  ),
-                ),
-              ],
+      detail: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (installs.isEmpty)
+            Text(notInstalledLine(descriptor))
+          else ...[
+            AgentLaunchLines(installs: installs),
+            Text(
+              describeAgentVersions(
+                installs,
+                now: ref.watch(clockProvider).nowUtc(),
+              ),
             ),
+          ],
+          AcpInstallActions(
+            descriptor: descriptor,
+            installedOn: {
+              for (final install in installs) install.environmentId,
+            },
+          ),
+        ],
+      ),
     );
   }
 }

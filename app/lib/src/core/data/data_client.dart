@@ -414,6 +414,14 @@ class DataClient {
   /// How far a refresh under way has got, once per app read.
   Stream<({int done, int total})> get storesProgress => _storesProgress.stream;
 
+  final _acpInstallProgress = StreamController<AcpInstallProgress>.broadcast(
+    sync: true,
+  );
+
+  /// Each step of an ACP agent install the server is doing, as told.
+  Stream<AcpInstallProgress> get acpInstallProgress =>
+      _acpInstallProgress.stream;
+
   /// The Flutter apps the server is attached to, as last told (slice 3d);
   /// null until the server has said.
   FlutterAppRegistry? flutterApps;
@@ -1006,6 +1014,10 @@ class DataClient {
           if (!_storesProgress.isClosed) {
             _storesProgress.add((done: done, total: total));
           }
+        case final AcpInstallProgress progress:
+          if (!_acpInstallProgress.isClosed) {
+            _acpInstallProgress.add(progress);
+          }
         case final AttentionChange change:
           _applyAttention(change);
         case final ClientIntent intent:
@@ -1191,6 +1203,7 @@ class DataClient {
     unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());
+    unawaited(_acpInstallProgress.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
     unawaited(_intents.close());

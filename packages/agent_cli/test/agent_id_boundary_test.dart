@@ -16,7 +16,12 @@ void main() {
     'lib/src/agents/claude_code/': {'claudeCode'},
     'lib/src/agents/codex/': {'codex'},
     'lib/src/agents/antigravity/': {'antigravity'},
-    'lib/src/agents/acp/': {'claude-acp', 'codex-acp', 'gemini-cli', 'grok'},
+    'lib/src/agents/acp/': {
+      'claude-acp',
+      'codex-acp',
+      'antigravity-acp',
+      'grok',
+    },
   };
 
   /// `AgentIds` constant name → the id literal it holds.
@@ -26,7 +31,7 @@ void main() {
     'antigravity': 'antigravity',
     'claudeAcp': 'claude-acp',
     'codexAcp': 'codex-acp',
-    'geminiCli': 'gemini-cli',
+    'antigravityAcp': 'antigravity-acp',
     'grok': 'grok',
   };
 

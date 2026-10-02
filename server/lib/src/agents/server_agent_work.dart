@@ -9,6 +9,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
 import '../data/data_service.dart';
+import 'acp_binary_installer.dart';
 import 'agent_registry_holder.dart';
 import 'server_accounts.dart';
 import 'server_detection.dart';
@@ -94,6 +95,10 @@ class ServerAgentWork implements AgentWork {
       clock: clock,
       registry: registry,
     );
+    installer = AcpBinaryInstaller(
+      runnerFor: runnerFor,
+      hostEnvironment: hostEnvironment,
+    );
   }
 
   final DataService _data;
@@ -106,6 +111,7 @@ class ServerAgentWork implements AgentWork {
   late final ServerAccounts accounts;
   late final ServerDetection detection;
   late final ServerImports imports;
+  late final AcpBinaryInstaller installer;
 
   /// Answers the clients' agent work from now on.
   void attach() => _data.agentWork = this;
@@ -128,6 +134,34 @@ class ServerAgentWork implements AgentWork {
 
   @override
   List<AccountUsageState> usageStates() => usage.states();
+
+  /// Installs a registry archive into one environment's managed folder,
+  /// telling each step, then — for a shipped agent — looks for it there so
+  /// the installation is recorded.
+  Future<AcpAgentInstalled> _install(AcpAgentInstall request) async {
+    final environment = _data.environments
+        .where((e) => e.id == request.environmentId)
+        .firstOrNull;
+    if (environment == null) {
+      throw DataRefused.notFound(
+        'no environment with id ${request.environmentId}',
+      );
+    }
+    void tell(AcpInstallStep step) => _data.announce([
+      AcpInstallProgress(
+        environmentId: request.environmentId,
+        registryId: request.registryId,
+        step: step,
+      ),
+    ]);
+    final path = await installer.install(environment, request, onStep: tell);
+    AgentDiscoveryReport? report;
+    if (request.agentId != null) {
+      tell(AcpInstallStep.detecting);
+      report = await detection.detect(environmentId: environment.id);
+    }
+    return AcpAgentInstalled(executablePath: path, report: report);
+  }
 
   @override
   Future<Object?> handle(AgentWorkRequest<Object?> request) async =>
@@ -153,6 +187,7 @@ class ServerAgentWork implements AgentWork {
         AgentsRepair(:final full) => await detection.repair(full: full),
         AgentsRefreshVersions() => await detection.refreshVersions(),
         AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
+        final AcpAgentInstall install => await _install(install),
         ImportsScan() => await imports.scan(),
         ImportsAdd(:final projects) => await imports.add(projects),
         ImportsForRepositories(:final repositoryIds) =>

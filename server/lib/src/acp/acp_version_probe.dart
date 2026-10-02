@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Directory;
+import 'dart:io' show Directory, Platform;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -122,7 +122,15 @@ class AcpVersionProbe {
         await runner.start(
           CommandRequest(
             executable: installation.executable.path,
-            arguments: [...installation.leadingArguments, ...spec.arguments],
+            arguments: [
+              ...installation.leadingArguments,
+              ...spec.argumentsFor(
+                linux: AcpLaunchSpec.runsOnLinux(
+                  environment.kind,
+                  hostIsLinux: Platform.isLinux,
+                ),
+              ),
+            ],
             workingDirectory: EnvironmentPath(
               environmentId: environment.id,
               path: directory,

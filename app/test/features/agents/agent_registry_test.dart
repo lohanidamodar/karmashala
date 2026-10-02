@@ -228,10 +228,10 @@ _acpGoldens = [
     acpArguments: [],
   ),
   (
-    id: 'gemini-cli',
-    displayName: 'Gemini CLI',
-    executable: 'gemini',
-    acpArguments: ['--acp'],
+    id: 'antigravity-acp',
+    displayName: 'Antigravity (ACP)',
+    executable: 'agy_acp_server.exe',
+    acpArguments: [],
   ),
   (
     id: 'grok',
