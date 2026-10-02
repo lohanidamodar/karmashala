@@ -106,11 +106,10 @@ distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
   them.
 - Publishing a GitHub release runs
   [`release-build.yml`](.github/workflows/release-build.yml), which attaches the
-  Windows installer and portable zip, the macOS DMG, the Linux tarball and the
-  server bundles, and
-  [`android-release.yml`](.github/workflows/android-release.yml), which attaches
-  the Android APK and AAB and ships to Google Play's internal track. Either can
-  also be run by hand.
+  Windows installer and portable zip, the macOS DMG, the Linux tarball, the
+  server bundles and the Android APK.
+- [`android-release.yml`](.github/workflows/android-release.yml) uploads to
+  Google Play, and only when run by hand.
 
 [`tool/build_release.bat`](tool/build_release.bat) and
 [`tool/build_release.sh`](tool/build_release.sh) build the same desktop
