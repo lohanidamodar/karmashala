@@ -103,17 +103,38 @@ $RelayPidFile = Join-Path $DataDir 'relay.pid'
 function Say([string]$Text) { Write-Host $Text }
 function Fail([string]$Text) { throw "install.ps1: $Text" }
 
-# Runs the installed binary and answers its exit code. Its output goes to the
-# screen, not into the answer, which is the exit code alone.
-function Invoke-Host([string[]]$Arguments) {
-  & $Bin @Arguments | Out-Host
+# Every call to a binary goes through these two. Windows PowerShell turns a
+# native program's stderr into a terminating error under 'Stop', and the binary
+# answers "no host yet" on stderr while the server starts.
+function Invoke-Native([string]$Program, [string[]]$Arguments, [switch]$Show) {
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    if ($Show) { & $Program @Arguments 2>&1 | Out-Host } else { & $Program @Arguments *> $null }
+  } finally {
+    $ErrorActionPreference = $previous
+  }
   return $LASTEXITCODE
 }
 
+# The lines the binary prints, stderr left out.
+function Read-Native([string]$Program, [string[]]$Arguments) {
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { return @(& $Program @Arguments 2>$null) } finally { $ErrorActionPreference = $previous }
+}
+
+# Runs the installed binary, showing what it says; answers its exit code.
+function Invoke-Host([string[]]$Arguments) { return Invoke-Native $Bin $Arguments -Show }
+
 function Test-HostRunning {
   if (-not (Test-Path $Bin)) { return $false }
-  & $Bin list *> $null
-  return $LASTEXITCODE -eq 0
+  return (Invoke-Native $Bin @('list')) -eq 0
+}
+
+function Get-HeldSessions {
+  return @(Read-Native $Bin @('list') | Select-Object -Skip 1 |
+    Where-Object { ($_ -split '\s+')[3] -eq 'running' }).Count
 }
 
 function Remove-Tasks {
@@ -128,9 +149,9 @@ function Remove-Tasks {
 
 if ($Uninstall) {
   if (Test-HostRunning) {
-    $held = (& $Bin list 2>$null | Select-Object -Skip 1 | Where-Object { ($_ -split '\s+')[3] -eq 'running' }).Count
+    $held = Get-HeldSessions
     if ($held -gt 0) { Fail "the server is running $held session(s); end them first (karmashala_host list / end <id>)" }
-    & $Bin stop *> $null
+    Invoke-Native $Bin @('stop') | Out-Null
   }
   Remove-Tasks
   if (Test-Path $Prefix) { Remove-Item -Recurse -Force $Prefix; Say "Removed $Prefix." }
@@ -200,15 +221,16 @@ try {
 
   # 2. Proven here before anything is replaced. A relay alone needs neither a
   # terminal nor a store.
-  & $StageBin version *> $null
-  if ($LASTEXITCODE -ne 0) { Fail 'the bundle does not run on this machine' }
+  if ((Invoke-Native $StageBin @('version')) -ne 0) { Fail 'the bundle does not run on this machine' }
   if ($WantServer) {
     foreach ($probe in 'probe-pty', 'probe-store') {
-      $said = & $StageBin $probe 2>&1
-      if ($LASTEXITCODE -ne 0) { $said | Write-Host; Fail "the bundle failed $probe here" }
+      if ((Invoke-Native $StageBin @($probe)) -ne 0) {
+        Invoke-Native $StageBin @($probe) -Show | Out-Null
+        Fail "the bundle failed $probe here"
+      }
     }
   }
-  Say ("Bundle: " + (& $StageBin version))
+  Say ("Bundle: " + ((Read-Native $StageBin @('version')) -join ' '))
 
   # 3. Installed side by side with any earlier one; `current` is a junction to
   # the live one, which needs no administrator rights.
@@ -287,11 +309,11 @@ if ($WantRelay) {
 if ($WantServer) {
   $ours = Get-ScheduledTask -TaskName $ServerTask -ErrorAction SilentlyContinue
   if ($ours -and $ours.State -eq 'Running') {
-    $held = (& $Bin list 2>$null | Select-Object -Skip 1 | Where-Object { ($_ -split '\s+')[3] -eq 'running' }).Count
+    $held = Get-HeldSessions
     if ($held -gt 0) {
       Say "The server is running $held session(s); it was not restarted, so they keep running."
     } else {
-      & $Bin stop *> $null
+      Invoke-Native $Bin @('stop') | Out-Null
       Register-HostTask $ServerTask 'Karmashala server' @('serve', "--data-dir=$DataDir")
     }
   } elseif (Test-HostRunning) {
