@@ -20,9 +20,20 @@ const int _kReviewPage = 20;
 /// Every store's reviews of one app in one list, newest first, with the
 /// spread of stars and filters by store, stars and whether answered.
 class StoreReviewsSection extends StatefulWidget {
-  const StoreReviewsSection({required this.group, super.key});
+  const StoreReviewsSection({
+    required this.group,
+    this.sideBySide = false,
+    super.key,
+  });
 
   final StoreAppGroup group;
+
+  /// The spread and the filters in a column beside the reviews, where the
+  /// detail is wide, rather than above them.
+  final bool sideBySide;
+
+  /// The side column's width at 1x text.
+  static const double sideWidth = 280;
 
   @override
   State<StoreReviewsSection> createState() => _StoreReviewsSectionState();
@@ -87,51 +98,87 @@ class _StoreReviewsSectionState extends State<StoreReviewsSection> {
       (entry) => entry.app.store == StoreKind.googlePlay,
     );
 
+    final playNote = onPlay
+        ? Text(
+            'Google Play’s API returns only reviews with text from the '
+            'last week; older ones are not gone, only not shown here.',
+            style: muted,
+          )
+        : null;
+    final summary = [
+      for (final line in missing) ...[line, const SizedBox(height: Insets.sm)],
+      if (all.isNotEmpty) ...[
+        _Spread(reviews: [for (final item in all) item.$2]),
+        const SizedBox(height: Insets.md),
+        _filters(withReviews, all),
+        const SizedBox(height: Insets.md),
+      ],
+    ];
+    final list = [
+      if (!read && missing.isEmpty)
+        Text('Not read yet. Refresh to read them.', style: muted)
+      else if (read && all.isEmpty)
+        Text('No reviews yet.', style: muted)
+      else if (all.isNotEmpty && shown.isEmpty)
+        Text('No reviews match these filters.', style: muted),
+      for (final (store, review, readAt) in shown.take(_shown))
+        _ReviewCard(
+          store: store,
+          app: widget.group.entries
+              .firstWhere((entry) => entry.app.store == store)
+              .app,
+          review: review,
+          fresh: readAt.difference(review.createdAt) <= kNewReviewWindow,
+          showStore: widget.group.entries.length > 1,
+        ),
+      if (shown.length > _shown)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton(
+            onPressed: () => setState(() => _shown += _kReviewPage),
+            child: Text('Show ${shown.length - _shown} more'),
+          ),
+        ),
+    ];
+
+    if (widget.sideBySide && all.isNotEmpty) {
+      // Each side traversed whole: filters first, then what they filter.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: WidthClass.scaleBreakpoint(
+              StoreReviewsSection.sideWidth,
+              MediaQuery.textScalerOf(context),
+            ),
+            child: FocusTraversalGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [...summary, ?playNote],
+              ),
+            ),
+          ),
+          const SizedBox(width: Insets.xl),
+          Expanded(
+            child: FocusTraversalGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: list,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final line in missing) ...[
-          line,
-          const SizedBox(height: Insets.sm),
-        ],
-        if (all.isNotEmpty) ...[
-          _Spread(reviews: [for (final item in all) item.$2]),
-          const SizedBox(height: Insets.md),
-          _filters(withReviews, all),
-          const SizedBox(height: Insets.md),
-        ],
-        if (!read && missing.isEmpty)
-          Text('Not read yet. Refresh to read them.', style: muted)
-        else if (read && all.isEmpty)
-          Text('No reviews yet.', style: muted)
-        else if (all.isNotEmpty && shown.isEmpty)
-          Text('No reviews match these filters.', style: muted),
-        for (final (store, review, readAt) in shown.take(_shown))
-          _ReviewCard(
-            store: store,
-            app: widget.group.entries
-                .firstWhere((entry) => entry.app.store == store)
-                .app,
-            review: review,
-            fresh: readAt.difference(review.createdAt) <= kNewReviewWindow,
-            showStore: widget.group.entries.length > 1,
-          ),
-        if (shown.length > _shown)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
-              onPressed: () => setState(() => _shown += _kReviewPage),
-              child: Text('Show ${shown.length - _shown} more'),
-            ),
-          ),
-        if (onPlay)
+        ...summary,
+        ...list,
+        if (playNote != null)
           Padding(
             padding: const EdgeInsets.only(top: Insets.sm),
-            child: Text(
-              'Google Play’s API returns only reviews with text from the '
-              'last week; older ones are not gone, only not shown here.',
-              style: muted,
-            ),
+            child: playNote,
           ),
       ],
     );
@@ -346,23 +393,31 @@ class _ReviewCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Semantics(
-                    label: '${review.rating} of 5 stars',
-                    child: ExcludeSemantics(
-                      child: Text(
-                        formatStars(review.rating),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: low ? semantic.attention : semantic.idle,
-                          letterSpacing: 1,
+                  // Takes what the actions leave; the pill wraps under the
+                  // stars rather than pushing them off a phone.
+                  Expanded(
+                    child: Wrap(
+                      spacing: Insets.sm,
+                      runSpacing: Insets.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Semantics(
+                          label: '${review.rating} of 5 stars',
+                          child: ExcludeSemantics(
+                            child: Text(
+                              formatStars(review.rating),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: low ? semantic.attention : semantic.idle,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        if (fresh)
+                          StatusPill(label: 'New', color: semantic.unread),
+                      ],
                     ),
                   ),
-                  if (fresh) ...[
-                    const SizedBox(width: Insets.sm),
-                    StatusPill(label: 'New', color: semantic.unread),
-                  ],
-                  const Spacer(),
                   HandToSessionButton(
                     label: 'Start a session from this review',
                     dense: true,

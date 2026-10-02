@@ -22,6 +22,39 @@ import 'store_detail_reviews.dart';
 import 'store_installs.dart';
 import 'stores_format.dart';
 
+/// The detail's own width, at 1x text, from which its body runs in two
+/// columns.
+const double kStoreDetailTwoColumnMin = 960;
+
+/// The widest the two-column detail runs, so a 4K window does not stretch it.
+const double kStoreDetailMaxWidth = 1280;
+
+/// How the detail lays itself out, by the width it was given (PROJECT.md §6).
+enum _Layout {
+  /// A phone, or the detail beside the list in a small window: one column.
+  narrow,
+
+  /// One column with more tiles to a row.
+  medium,
+
+  /// Releases and numbers side by side; reviews beside their filters.
+  wide;
+
+  static _Layout of(double width, TextScaler scaler) {
+    if (WidthClass.of(width, textScaler: scaler).isCompact) return narrow;
+    final twoColumns = WidthClass.scaleBreakpoint(
+      kStoreDetailTwoColumnMin,
+      scaler,
+    );
+    return width >= twoColumns ? wide : medium;
+  }
+
+  int get tileColumns => this == narrow ? 2 : 4;
+  double get gutter => this == wide ? Insets.xl : Insets.lg;
+  double get maxWidth =>
+      this == wide ? kStoreDetailMaxWidth : Chrome.readableWidth;
+}
+
 /// Everything read about one app: what wants a look, its releases per store
 /// and track, its numbers, its downloads and its reviews.
 class StoreGroupDetail extends StatelessWidget {
@@ -41,143 +74,273 @@ class StoreGroupDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final read = group.entries.any((entry) => entry.snapshot != null);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Header(group: group, pushed: pushed, onClose: onClose),
-        const Divider(height: 1),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.lg,
-              Insets.md,
-              Insets.lg,
-              Insets.xl,
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = _Layout.of(constraints.maxWidth, scaler);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              group: group,
+              pushed: pushed,
+              onClose: onClose,
+              layout: layout,
             ),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: Chrome.readableWidth,
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  layout.gutter,
+                  Insets.md,
+                  layout.gutter,
+                  Insets.xxl,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Links(group: group),
-                    if (group.combined != StoreCombined.byId) ...[
-                      const SizedBox(height: Insets.xs),
-                      StoreCombineBar(group: group),
-                    ],
-                    if (group.signals.isNotEmpty) ...[
-                      const SizedBox(height: Insets.md),
-                      _SignalsPanel(group: group),
-                    ],
-                    const _Section('Releases'),
-                    for (final (i, entry) in group.entries.indexed) ...[
-                      if (i > 0) const SizedBox(height: Insets.sm),
-                      StoreReleasesCard(
-                        key: ValueKey('releases-${entry.app.key}'),
-                        entry: entry,
-                      ),
-                    ],
-                    if (read) ...[
-                      const _Section('Ratings and stability'),
-                      _Numbers(group: group),
-                      if (_downloadCharts(group) case final charts
-                          when charts.isNotEmpty) ...[
-                        const _Section('Downloads'),
-                        ...charts,
-                      ],
-                      if (hasErrorIssues(group)) ...[
-                        const _Section('Crashes and ANRs'),
-                        StoreErrorIssuesSection(group: group),
-                      ],
-                    ],
-                    const _Section('Reviews'),
-                    StoreReviewsSection(group: group),
-                  ],
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: layout.maxWidth),
+                    child: _Body(group: group, layout: layout),
+                  ),
                 ),
               ),
             ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _Body extends StatelessWidget {
+  const _Body({required this.group, required this.layout});
+
+  final StoreAppGroup group;
+  final _Layout layout;
+
+  @override
+  Widget build(BuildContext context) {
+    final read = group.entries.any((entry) => entry.snapshot != null);
+    final wide = layout == _Layout.wide;
+    final charts = read ? _downloadCharts(group, layout) : const <Widget>[];
+
+    final wantsALook = group.signals.isEmpty
+        ? null
+        : _Section('Wants a look', child: _SignalsPanel(group: group));
+    final numbers = read
+        ? _Section(
+            'Ratings and stability',
+            child: _Numbers(group: group, maxColumns: layout.tileColumns),
+          )
+        : null;
+    final downloads = charts.isEmpty
+        ? null
+        : _Section('Downloads', child: _Stack(children: charts));
+    final crashes = read && hasErrorIssues(group)
+        ? _Section(
+            'Crashes and ANRs',
+            child: StoreErrorIssuesSection(group: group),
+          )
+        : null;
+    final numbersSide = [?numbers, ?downloads];
+
+    final Widget status;
+    if (wide && numbersSide.isNotEmpty) {
+      // A column traversed whole before the next, not row by row.
+      status = Row(
+        key: const ValueKey('status'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: FocusTraversalGroup(
+              child: _Sections(
+                children: [
+                  ?wantsALook,
+                  _Section(
+                    'Releases',
+                    child: _Releases(group: group, sideBySide: false),
+                  ),
+                ],
+              ),
+            ),
           ),
+          const SizedBox(width: Insets.xl),
+          Expanded(
+            child: FocusTraversalGroup(child: _Sections(children: numbersSide)),
+          ),
+        ],
+      );
+    } else {
+      status = _Sections(
+        key: const ValueKey('status'),
+        children: [
+          ?wantsALook,
+          _Section(
+            'Releases',
+            child: _Releases(group: group, sideBySide: wide),
+          ),
+          ...numbersSide,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Actions(group: group),
+        status,
+        ?crashes,
+        // Keyed so its filters and paging survive a change of layout.
+        _Section(
+          'Reviews',
+          key: const ValueKey('reviews'),
+          child: StoreReviewsSection(group: group, sideBySide: wide),
         ),
       ],
     );
   }
 
-  static List<Widget> _downloadCharts(StoreAppGroup group) => [
+  static List<Widget> _downloadCharts(StoreAppGroup group, _Layout layout) => [
     for (final entry in group.entries)
       if (entry.snapshot?.downloads.valueOrNull case final series?
           when series.days.length > 1)
         _DownloadsChart(
           store: group.entries.length > 1 ? entry.app.store : null,
           series: series,
+          height: layout == _Layout.narrow ? 120 : 160,
         ),
   ];
 }
 
-class _Section extends StatelessWidget {
-  const _Section(this.title);
+/// Sections one under another: each brings its own space above it.
+class _Sections extends StatelessWidget {
+  const _Sections({required this.children, super.key});
 
-  final String title;
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: Insets.xl, bottom: Insets.sm),
-    child: Semantics(header: true, child: EyebrowLabel(title)),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: children,
   );
 }
 
+/// [children] one under another, [Insets.md] apart.
+class _Stack extends StatelessWidget {
+  const _Stack({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final (i, child) in children.indexed) ...[
+        if (i > 0) const SizedBox(height: Insets.md),
+        child,
+      ],
+    ],
+  );
+}
+
+/// A section: its heading, then [child]. Every section opens the same way,
+/// so two columns' first headings line up.
+class _Section extends StatelessWidget {
+  const _Section(this.title, {required this.child, super.key});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(top: Insets.xl, bottom: Insets.sm),
+        child: Semantics(header: true, child: EyebrowLabel(title)),
+      ),
+      child,
+    ],
+  );
+}
+
+/// A card in the detail's one style.
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
+    );
+  }
+}
+
+/// The icon, the name, the ids, and each store the app is on with what is
+/// live there.
 class _Header extends StatelessWidget {
   const _Header({
     required this.group,
     required this.pushed,
     required this.onClose,
+    required this.layout,
   });
 
   final StoreAppGroup group;
   final bool pushed;
   final VoidCallback onClose;
+  final _Layout layout;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final narrow = layout == _Layout.narrow;
+    final iconSize = StoreAppIconView.detailSize(context) - (narrow ? 8 : 0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.sm,
-        Insets.sm,
-        Insets.sm,
+      padding: EdgeInsetsDirectional.fromSTEB(
+        pushed ? Insets.xs : layout.gutter,
+        Insets.md,
+        Insets.xs,
         Insets.md,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (pushed)
+          if (pushed) ...[
             IconButton(
               tooltip: 'Back to all apps',
               icon: const Icon(AppIcons.arrowLeft),
               onPressed: onClose,
-            )
-          else
-            const SizedBox(width: Insets.sm),
-          StoreAppIconView(
-            icon: group.icon,
-            name: group.name,
-            size: StoreAppIconView.detailSize(context),
-          ),
+            ),
+            const SizedBox(width: Insets.xs),
+          ],
+          StoreAppIconView(icon: group.icon, name: group.name, size: iconSize),
           const SizedBox(width: Insets.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  group.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Semantics(
+                  header: true,
+                  child: Text(
+                    group.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        (narrow
+                                ? theme.textTheme.titleMedium
+                                : theme.textTheme.titleLarge)
+                            ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -185,53 +348,173 @@ class _Header extends StatelessWidget {
                 for (final id in storeGroupIdLines(group))
                   SelectableText(
                     id,
-                    maxLines: 1,
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    // On a phone a long id wraps rather than scrolls.
+                    maxLines: narrow ? null : 1,
+                    style: MonoStyles.body.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
-                if (group.combinedManually) ...[
-                  const SizedBox(height: Insets.xs),
-                  const CombinedManuallyChip(),
-                ],
+                const SizedBox(height: Insets.sm),
+                Wrap(
+                  spacing: Insets.lg,
+                  runSpacing: Insets.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final entry in group.entries)
+                      _StorePresence(entry: entry),
+                    if (group.combinedManually) const CombinedManuallyChip(),
+                  ],
+                ),
               ],
             ),
           ),
-          if (!pushed)
+          if (!pushed) ...[
+            const SizedBox(width: Insets.sm),
             IconButton(
               tooltip: 'Close details',
               icon: const Icon(AppIcons.x),
               onPressed: onClose,
             ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Each store's console and listing, one click away.
-class _Links extends ConsumerWidget {
-  const _Links({required this.group});
+/// One store in the header: its logo and name, and the version live there.
+class _StorePresence extends StatelessWidget {
+  const _StorePresence({required this.entry});
+
+  final StoreEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final store = entry.app.store;
+    final (status, isLive) = switch (entry.snapshot) {
+      null => ('Not read yet', false),
+      StoreAppSnapshot(releases: ReadingMissing()) => (
+        'Releases unread',
+        false,
+      ),
+      StoreAppSnapshot(:final live?) => (formatVersion(live), true),
+      _ => ('Not live', false),
+    };
+    final style = theme.textTheme.bodySmall?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Semantics(
+      container: true,
+      label:
+          '${store.label}: ${isLive ? 'live $status' : status.toLowerCase()}',
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: StoreLogo.named(
+                store,
+                size: 14,
+                color: scheme.onSurface,
+                style: style?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: Insets.sm),
+            if (isLive) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: SemanticColors.of(context).idle,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: Insets.xs),
+            ],
+            Flexible(
+              child: Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: isLive
+                    ? style?.copyWith(fontWeight: FontWeight.w500)
+                    : style?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Each store's console and listing, one click away, and combining.
+class _Actions extends ConsumerWidget {
+  const _Actions({required this.group});
 
   final StoreAppGroup group;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final open = ref.read(openExternalUrlProvider);
-    return Wrap(
-      spacing: Insets.xs,
-      runSpacing: Insets.xs,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final entry in group.entries)
-          for (final link in storeLinks(entry.app))
-            OutlinedButton.icon(
-              onPressed: () => open(link.url),
-              icon: const Icon(
-                AppIcons.arrowSquareOut,
-                size: Chrome.iconAction,
-              ),
-              label: Text(link.label),
-            ),
+        Wrap(
+          spacing: Insets.sm,
+          runSpacing: Insets.sm,
+          children: [
+            for (final entry in group.entries)
+              for (final link in storeLinks(entry.app))
+                OutlinedButton.icon(
+                  onPressed: () => open(link.url),
+                  icon: const Icon(
+                    AppIcons.arrowSquareOut,
+                    size: Chrome.iconAction,
+                  ),
+                  label: Text(
+                    link.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+          ],
+        ),
+        if (group.combined != StoreCombined.byId) ...[
+          const SizedBox(height: Insets.xs),
+          StoreCombineBar(group: group),
+        ],
+      ],
+    );
+  }
+}
+
+/// One card per store: stacked, or side by side.
+class _Releases extends StatelessWidget {
+  const _Releases({required this.group, required this.sideBySide});
+
+  final StoreAppGroup group;
+  final bool sideBySide;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = [
+      for (final entry in group.entries)
+        StoreReleasesCard(
+          key: ValueKey('releases-${entry.app.key}'),
+          entry: entry,
+        ),
+    ];
+    if (!sideBySide || cards.length < 2) return _Stack(children: cards);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (i, card) in cards.indexed) ...[
+          if (i > 0) const SizedBox(width: Insets.md),
+          Expanded(child: card),
+        ],
       ],
     );
   }
@@ -246,57 +529,45 @@ class _SignalsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final signals = group.signals;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Insets.md,
-          vertical: Insets.sm,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final signal in signals)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 1),
-                      child: Icon(
-                        signalIcon(signal),
-                        size: Chrome.icon,
-                        color: signalColor(context, signal),
-                      ),
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, signal) in signals.indexed)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : Insets.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      signalIcon(signal),
+                      size: Chrome.icon,
+                      color: signalColor(context, signal),
                     ),
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Text(
+                      signalSentence(signal),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  if (signal case ReleaseSignal(
+                    release: StoreRelease(rolloutFraction: final fraction?),
+                  )) ...[
                     const SizedBox(width: Insets.sm),
-                    Expanded(
-                      child: Text(
-                        signalSentence(signal),
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: Insets.sm),
+                      child: RolloutBar(fraction: fraction),
                     ),
-                    if (signal case ReleaseSignal(
-                      release: StoreRelease(rolloutFraction: final fraction?),
-                    )) ...[
-                      const SizedBox(width: Insets.sm),
-                      Padding(
-                        padding: const EdgeInsets.only(top: Insets.sm),
-                        child: RolloutBar(fraction: fraction),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -305,9 +576,10 @@ class _SignalsPanel extends StatelessWidget {
 /// The headline numbers of every store; a reading the store did not give is
 /// a line under them saying why, never a zero (PROJECT.md §19).
 class _Numbers extends ConsumerWidget {
-  const _Numbers({required this.group});
+  const _Numbers({required this.group, required this.maxColumns});
 
   final StoreAppGroup group;
+  final int maxColumns;
 
   static const _unavailable = 'unavailable';
 
@@ -316,7 +588,8 @@ class _Numbers extends ConsumerWidget {
     final now = ref.watch(clockProvider).nowUtc();
     final both = group.entries.length > 1;
     final tiles = <Widget>[];
-    final notes = <Widget>[];
+    // Grouped under their store, so they read as one block per store.
+    final notes = <StoreKind, List<Widget>>{};
     for (final entry in group.entries) {
       final snapshot = entry.snapshot;
       if (snapshot == null) continue;
@@ -325,6 +598,9 @@ class _Numbers extends ConsumerWidget {
       // label, its name for a screen reader (owner, 2026-10-01).
       final logo = both ? StoreLogo(store, size: 13) : null;
       String spoken(String what) => both ? '$what · ${store.label}' : what;
+      void note(String what, ReadingMissing<Object?> missing) => notes
+          .putIfAbsent(store, () => [])
+          .add(MissingReadingLine(what: what, reading: missing));
 
       switch (snapshot.rating) {
         case ReadingValue(:final value):
@@ -357,9 +633,7 @@ class _Numbers extends ConsumerWidget {
               ),
             );
           }
-          notes.add(
-            MissingReadingLine(what: '${store.label} rating', reading: missing),
-          );
+          note('Rating', missing);
       }
 
       switch (snapshot.vitals) {
@@ -408,12 +682,7 @@ class _Numbers extends ConsumerWidget {
               ),
             );
           }
-          notes.add(
-            MissingReadingLine(
-              what: '${store.label} crash and ANR rates',
-              reading: missing,
-            ),
-          );
+          note('Crash and ANR rates', missing);
       }
 
       switch (snapshot.downloads) {
@@ -445,12 +714,7 @@ class _Numbers extends ConsumerWidget {
               ),
             );
           }
-          notes.add(
-            MissingReadingLine(
-              what: '${store.label} downloads',
-              reading: missing,
-            ),
-          );
+          note('Downloads', missing);
       }
 
       final allTimeLabel = store == StoreKind.appStore
@@ -482,58 +746,109 @@ class _Numbers extends ConsumerWidget {
               ),
             );
           }
-          notes.add(
-            MissingReadingLine(
-              what:
-                  '${store.label} all-time '
-                  '${store == StoreKind.appStore ? 'downloads' : 'installs'}',
-              reading: missing,
-            ),
-          );
+          note(allTimeLabel, missing);
       }
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return _Stack(
       children: [
-        if (tiles.isNotEmpty) StatTileGrid(tiles: tiles),
-        for (final (i, note) in notes.indexed) ...[
-          SizedBox(height: i == 0 && tiles.isEmpty ? 0 : Insets.sm),
-          note,
-        ],
+        if (tiles.isNotEmpty)
+          StatTileGrid(tiles: tiles, maxColumns: maxColumns),
+        if (notes.isNotEmpty) _MissingNotes(notes: notes),
       ],
     );
   }
 }
 
-class _DownloadsChart extends StatelessWidget {
-  const _DownloadsChart({required this.store, required this.series});
+/// What a store could not give, a block per store under its logo and name.
+class _MissingNotes extends StatelessWidget {
+  const _MissingNotes({required this.notes});
 
-  /// Named when the app is on both stores.
-  final StoreKind? store;
-  final DownloadSeries series;
+  final Map<StoreKind, List<Widget>> notes;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final days = series.days;
-    final peak = days.fold(0, (most, day) => math.max(most, day.count));
-    final title = [
-      ?store?.label,
-      '${formatCompactCount(series.total)} ${series.unit.toLowerCase()} over '
-          '${days.length} reported days',
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.md),
+    final scheme = theme.colorScheme;
+    return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          for (final (i, MapEntry(key: store, value: lines))
+              in notes.entries.indexed) ...[
+            if (i > 0) const SizedBox(height: Insets.md),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: StoreLogo.named(
+                store,
+                size: 14,
+                color: scheme.onSurface,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs),
+                child: line,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadsChart extends StatelessWidget {
+  const _DownloadsChart({
+    required this.store,
+    required this.series,
+    required this.height,
+  });
+
+  /// Named when the app is on both stores.
+  final StoreKind? store;
+  final DownloadSeries series;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final days = series.days;
+    final peak = days.fold(0, (most, day) => math.max(most, day.count));
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final store = this.store;
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: Insets.sm,
+            runSpacing: Insets.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (store != null)
+                StoreLogo.named(
+                  store,
+                  size: 14,
+                  color: scheme.onSurface,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              Text(
+                '${formatCompactCount(series.total)} '
+                '${series.unit.toLowerCase()} over ${days.length} reported '
+                'days',
+                style: muted,
+              ),
+            ],
           ),
-          const SizedBox(height: Insets.xs),
+          const SizedBox(height: Insets.sm),
           TimeSeriesChart(
             points: [
               for (final day in days)
@@ -543,8 +858,12 @@ class _DownloadsChart extends StatelessWidget {
             end: days.last.day,
             // Headroom over the tallest day; one, so a flat zero has a scale.
             maxY: math.max(1.0, peak * 1.1),
-            color: theme.colorScheme.primary,
-            semanticsLabel: '${series.unit} per day',
+            color: scheme.primary,
+            height: height,
+            semanticsLabel: [
+              ?store?.label,
+              '${series.unit} per day',
+            ].join(' · '),
             valueLabel: (value) => formatCompactCount(value.round()),
             timeLabel: formatReportDay,
           ),

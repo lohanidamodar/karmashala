@@ -54,9 +54,28 @@ class StoreErrorIssuesSection extends ConsumerWidget {
           }
       }
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+    if (children.isEmpty) return const SizedBox.shrink();
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, child) in children.indexed) ...[
+              if (i > 0) const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+                child: child,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -88,35 +107,44 @@ class _IssueRow extends StatelessWidget {
       if (issue.sampleTrace != null) 'stack trace read',
     ].join(' · ');
     final headline = issue.cause.isNotEmpty ? issue.cause : issue.kind.label;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  headline,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                headline,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
-                if (issue.location.isNotEmpty)
-                  SelectableText(issue.location, style: muted),
-                Text(meta, style: muted),
+              ),
+              if (issue.location.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                SelectableText(
+                  issue.location,
+                  style: MonoStyles.body.copyWith(color: muted?.color),
+                ),
               ],
-            ),
+              const SizedBox(height: 2),
+              Text(
+                meta,
+                style: muted?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          HandToSessionButton(
-            label: 'Start a session from this crash',
-            dense: true,
-            title: '${issue.kind.label}: ${app.name}',
-            prompt: () => errorIssuePrompt(app, issue),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(width: Insets.sm),
+        HandToSessionButton(
+          label: 'Start a session from this crash',
+          dense: true,
+          title: '${issue.kind.label}: ${app.name}',
+          prompt: () => errorIssuePrompt(app, issue),
+        ),
+      ],
     );
   }
 }
