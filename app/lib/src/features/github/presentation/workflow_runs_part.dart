@@ -6,7 +6,6 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../explorer/application/checkout_picker.dart';
-import '../../git/data/git_data.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../sessions/presentation/hand_to_session.dart';
 import '../../sessions/presentation/session_destination_picker.dart';
@@ -96,9 +95,10 @@ class _RunTile extends ConsumerWidget {
               ),
               // Fetched only when asked: a log is tens of KB per run.
               prompt: () async {
-                final log = await ref
-                    .read(gitDataProvider)
-                    .failedRunLog(checkout.path, runId: run.id);
+                final log = await ref.read(githubFailedRunLogProvider)(
+                  checkout.path,
+                  runId: run.id,
+                );
                 return fixRunPrompt(run, log);
               },
             ),

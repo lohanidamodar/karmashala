@@ -150,3 +150,9 @@ final githubWorkflowRunsProvider =
       }
       return git.workflowRuns(repo.path, branch: branch);
     }, retry: _theServersAnswer);
+
+/// Fetches the log of a failed Actions run in a checkout, asked only when
+/// someone hands it to an agent: a log is tens of KB per run.
+final githubFailedRunLogProvider = Provider(
+  (ref) => ref.watch(gitDataProvider).failedRunLog,
+);

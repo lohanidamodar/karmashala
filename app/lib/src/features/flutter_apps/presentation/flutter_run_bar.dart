@@ -9,7 +9,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../explorer/application/checkout_picker.dart';
 import '../application/run_configurations.dart';
-import '../data/flutter_data.dart';
 
 /// Run the selected checkout under one of its project's run configurations,
 /// on the server, in a session every window shows. Nothing when no checkout
@@ -51,8 +50,8 @@ class _FlutterRunBarState extends ConsumerState<FlutterRunBar> {
       final device = _device.text.trim();
       _say(
         await ref
-            .read(flutterDataProvider)
-            .runStart(
+            .read(flutterRunActionsProvider)
+            .start(
               checkout.id,
               configurationId: chosen?.id,
               deviceId: device.isEmpty ? null : device,
@@ -278,7 +277,7 @@ class _RunConfigurationDialogState
       dartDefineFiles: _lines(_files),
       deviceId: _text(_device),
     )..validate();
-    return _Edited(await ref.read(flutterDataProvider).saveRunConfig(draft));
+    return _Edited(await ref.read(flutterRunActionsProvider).save(draft));
   }
 
   Future<void> _confirmDelete() async {
@@ -305,7 +304,7 @@ class _RunConfigurationDialogState
   }
 
   Future<_Edited> _delete() async {
-    await ref.read(flutterDataProvider).deleteRunConfig(widget.existing!.id);
+    await ref.read(flutterRunActionsProvider).delete(widget.existing!.id);
     return const _Edited(null);
   }
 
