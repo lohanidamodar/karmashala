@@ -6,7 +6,7 @@ import 'logcat_tail.dart';
 // dependency in common that a log filter belongs in (`karmashala_flutter_apps`
 // is pure Dart, so it cannot reach `karmashala_ui`, and `agent_cli` must stay
 // publishable), and the owner's package rule is to copy a small helper rather
-// than add a dependency for it (docs/PACKAGE_SPLIT.md §2). Keep the two in step.
+// than add a dependency for it. Keep the two in step.
 
 /// What the logcat view is asked to show. Filters ([levels], [tags]) always
 /// hide; [text] only highlights unless [onlyMatching] is on.

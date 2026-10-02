@@ -1,7 +1,6 @@
 /// The UI files that still reach data, processes, files or the database, as of
 /// the start of the UI overhaul (2026-09-28). The list only shrinks: a stage
-/// that touches one of these cleans it and takes it off
-/// (docs/superpowers/specs/2026-09-28-ui-overhaul-design.md §8).
+/// that touches one of these cleans it and takes it off.
 const Set<String> presentationPurityDebt = {
   'lib/src/app/shell/app_shell.dart',
   'lib/src/app/shell/keymap_controller.dart',

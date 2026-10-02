@@ -338,7 +338,7 @@ ReviewCarry carryReviewPermission({
 ///
 /// [PermissionRisk.autoRun] because it is the highest rung where something
 /// other than the user still screens what runs, and a spawned child is by
-/// definition not the session the user is watching. docs/spawn-approval.md.
+/// definition not the session the user is watching.
 const PermissionRisk spawnPermissionCeiling = PermissionRisk.autoRun;
 
 /// What a session an agent asked for may launch under: the least of what was

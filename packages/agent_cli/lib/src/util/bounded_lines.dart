@@ -2,8 +2,7 @@
 ///
 /// `LineSplitter` streams the file but not the record, and `jsonDecode` has no
 /// streaming form — so without this the largest *record* set the reader's peak
-/// memory. `docs/SETTLED.md`, *Four transcript-tailing traps*, has what was
-/// measured and why the number is where it is.
+/// memory.
 library;
 
 import 'dart:async';

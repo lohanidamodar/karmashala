@@ -14,7 +14,7 @@
 /// dialog fixes it, because the failure is in code we do not run. This browser
 /// asks `dart:io` instead, whose directory listing is asynchronous — so a slow
 /// path costs a spinner rather than the UI thread — and never touches the
-/// shell namespace, COM or Network at all. See docs/SETTLED.md.
+/// shell namespace, COM or Network at all.
 ///
 /// The body is [FileBrowserView], driven by a [FileBrowserController]: the
 /// same one the Files tab draws each side with and the phone's Files page

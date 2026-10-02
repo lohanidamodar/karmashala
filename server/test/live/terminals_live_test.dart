@@ -85,7 +85,7 @@ void main() {
     // The code, or the honest absence of one: in a process where `dart:io`
     // also runs children (this test runner; `serve` running git), its SIGCHLD
     // handler can reap the shell before the pty reader's `waitpid` does
-    // (ECHILD) — never a guessed zero. docs/daemon-architecture.md, 5a risks.
+    // (ECHILD) — never a guessed zero.
     if (record.exitCode == null) {
       expect(record.endReason, contains('could not be reaped'));
     } else {

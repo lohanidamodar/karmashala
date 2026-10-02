@@ -57,8 +57,8 @@ class ExplorerEnvironmentScope {
 }
 
 /// Which machine the Explorer lists, for the scope bar and the tree. Its own
-/// provider so that the scope bar does not subscribe to the tree — measured,
-/// in SETTLED — and fed by the app's own list of environments.
+/// provider so that the scope bar does not subscribe to the tree — measured —
+/// and fed by the app's own list of environments.
 final explorerEnvironmentScopeProvider =
     Provider.autoDispose<ExplorerEnvironmentScope>((ref) {
       final environments = environmentChoices(

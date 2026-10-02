@@ -1,7 +1,7 @@
 /// One session's hold on one physical device, and the refusal a second caller
 /// gets while it stands.
 ///
-/// `SETTLED.md` refuses leases for `terminal_run` because a lease an agent
+/// `terminal_run` takes no lease because a lease an agent
 /// cannot see is a hang — this one names its holder, and its age, in every
 /// refusal. And a phone has no side door: `adb` is the only way in, where an
 /// agent can always type into its own pane.

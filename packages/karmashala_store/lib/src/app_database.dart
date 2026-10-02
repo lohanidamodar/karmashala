@@ -71,7 +71,7 @@ class AppDatabase {
   factory AppDatabase.memory() => AppDatabase(sqlite3.openInMemory());
 
   /// Connection settings, applied once before any other statement. WAL, and
-  /// `synchronous = NORMAL` only once WAL is in effect — see docs/SETTLED.md.
+  /// `synchronous = NORMAL` only once WAL is in effect.
   void _configure() {
     _db.execute('PRAGMA foreign_keys = ON;');
     // A second writer (a debug build beside the installed app) waits instead

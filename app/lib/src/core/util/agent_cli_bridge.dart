@@ -7,7 +7,7 @@ import '../paths/path_probe_provider.dart';
 import 'clock_provider.dart';
 
 /// The app's `Clock` and `PathProbe`, spelled the way
-/// `package:agent_cli` spells them — it carries its own copies (PACKAGE_SPLIT §2).
+/// `package:agent_cli` spells them — it carries its own copies.
 class _BridgedClock implements agent_cli.Clock {
   const _BridgedClock(this._clock);
 

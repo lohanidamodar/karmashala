@@ -2,8 +2,7 @@ part of 'messages.dart';
 
 // The version-independent pair: `karmashala_host stop` must reach a host of
 // any protocol, so these are answered before (and without) hello and their
-// codes and payloads never change. See docs/daemon-architecture.md, "Frames
-// that never change".
+// codes and payloads never change.
 
 /// client → host, as the first and only frame: "who are you, and is anything
 /// running?" Answered with [StopCheckAnswerMessage], then the host hangs up.

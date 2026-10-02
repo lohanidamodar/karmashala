@@ -8,8 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// agent in `packages/agent_cli/lib/src/agents/<agent>/`; the daemon, the
 /// session engine and the app ask the adapter for a capability. A branch on a
 /// concrete agent id anywhere else is a bug to move behind the adapter, not a
-/// pattern to copy — this test fails on the first one to appear
-/// (docs/daemon-architecture.md, "Coding agents behind one boundary").
+/// pattern to copy — this test fails on the first one to appear.
 void main() {
   /// The ids of the shipped agents, as the literals a branch would spell.
   const ids = ['claudeCode', 'codex', 'antigravity'];

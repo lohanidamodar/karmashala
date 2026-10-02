@@ -1,272 +1,149 @@
 # Karmashala
 
-कर्मशाला — the hall where the work is done. A Flutter **desktop agent
-development environment**: it runs local coding-agent CLIs in embedded
-terminals, keeps one index of every session those CLIs write to disk, and hands
-the agents a tool surface of its own back over MCP.
+कर्मशाला — the hall where the work is done. An **agent development
+environment**: one Flutter app that runs coding-agent CLIs on your desktop,
+on a server, or both, and follows them from your phone.
 
-**Version 1.16.0 (build 29).** [`CHANGELOG.md`](CHANGELOG.md) records every
-release from 1.1.0 onwards and is traceable to commits — read it for when
-something landed and what it replaced.
+**Version 1.31.0.** [`CHANGELOG.md`](CHANGELOG.md) records what changed in
+each release.
 
 ## What it does
 
-Judged from the code, not from folder names. Everything listed here is wired
-into the shell and reachable; caveats are stated inline rather than implied.
-
-- **Three agent CLIs.** Claude Code (`claude`, stream-json), Codex
-  (`codex app-server`, JSON-RPC) and Antigravity (`agy`, plain PTY text). Each
-  is discovered, launched, resumed, permission-moded and status-reported from
-  its own vocabulary; nothing is assumed common. The set of hand-written
-  protocol adapters is closed in code (`AgentKind`) — a fourth agent gets
-  `GenericAgentAdapter` and no rich chat.
-- **Sessions the CLIs started outside the app** are imported by scanning their
-  own stores (`~/.claude`, `~/.codex`, `~/.gemini/antigravity-cli`), not by
-  owning them. Titles sync both ways; a title typed here is never overwritten.
-- **Embedded terminals** on a vendored, leak-fixed `flutter_pty`
-  ([`packages/flutter_pty/VENDORED.md`](packages/flutter_pty/VENDORED.md)) —
-  ConPTY on Windows, `forkpty` on POSIX — rendered by our `xterm2` fork, pinned
-  to a commit in `app/pubspec.yaml`. Splits, tabs, search, OSC 7/8, panes restored
-  across a restart.
-- **Environments:** this host, a WSL distribution, or an SSH host. An SSH host
-  is a real workspace — clone into it, run sessions on it, browse it over SFTP.
-- **Status by hook, not by poll.** The agents' own hook scripts report into the
-  app; polling is the fallback.
-- **An MCP server of its own** — around 85 tools
-  ([`mcp_tool_catalogue.dart`](packages/karmashala_mcp/lib/src/mcp_tool_catalogue.dart) is
-  the list). Served over HTTP by the local server (or the app, where none
-  runs), and over stdio by a separate
-  `karmashala_mcp` binary
-  ([`packages/mcp_bridge/`](packages/mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists
-  because a session inside WSL cannot reach the host across the WSL switch on
-  every machine; it is spawned over WSL interop instead.
-- **Device control.** Android over `adb` with a bundled `scrcpy-server` for real
-  H.264 mirroring; iOS **Simulators only**, over WebDriverAgent with an MJPEG
-  stream. Simulator support requires a macOS host.
-- **Browser automation** over CDP against Chrome or Edge. No Firefox or WebKit.
-- **A mobile companion** — the same codebase built with
-  `--dart-define=KARMASHALA_MODE=companion`. Pairs over LAN or through the
-  relay in [`relay/`](relay/README.md); every frame is sealed
-  end to end (XChaCha20-Poly1305, HKDF-SHA256), so the relay sees a rendezvous
-  id and a frame size. The phone can read a transcript, send a prompt, answer an
-  approval and start a session — nothing else.
+- **Claude Code, Codex and Antigravity**, each driven through its own protocol
+  — started, resumed, given a permission mode and reported on in its own
+  words. Sessions the CLIs started outside the app are imported from their own
+  stores, and titles sync both ways.
+- **Terminals and chat.** Each session is an embedded terminal (ConPTY on
+  Windows, `forkpty` elsewhere) or a chat view of the same conversation, in
+  split, tabbed workbench groups that survive a restart.
+- **An editor and a file explorer.** Open, edit and save files in tabs, browse
+  any environment's tree, view images, video and audio, and hand a file to a
+  session.
+- **Anywhere the work is.** This machine, a WSL distribution, or an SSH host.
+  An SSH host gets the Karmashala server deployed to it and runs its sessions
+  there.
+- **A server you can run headless.** `karmashala_host` keeps the sessions,
+  automations and pairings, and the desktop app is one of its clients. See
+  [`server/README.md`](server/README.md).
+- **Your phone.** The same app built for Android and iOS pairs with a desktop
+  or a server — on the LAN, through a relay, or at an address. It lists
+  sessions, reads and answers them, approves tool calls, starts new ones, opens
+  their terminals and files, and keeps notes. Every frame is sealed end to end;
+  a relay sees nothing inside.
+- **Tools for the agents.** An MCP server of its own (about 85 tools: sessions,
+  terminals, devices, browser, checkpoints, notes, todos, store data), with a
+  stdio bridge for sessions inside WSL.
+- **Status by hook, not by poll.** The agents' own hooks report what they are
+  doing, and an attention inbox collects what needs you.
 - **Checkpoints, fan-out and verification.** Per-turn snapshots of the working
-  tree; the same prompt run across agents or checkouts and diffed; and a
-  recorded pass/fail workflow where one agent checks another's work.
-- **GitHub** through the `gh` CLI, so it works only where `gh` is installed and
-  signed in. The **editor** integration opens VS Code or Zed externally; there
-  is no in-app code editor.
+  tree, one prompt run across agents or checkouts and compared, and a recorded
+  pass/fail check where one agent reviews another's work.
+- **Devices, browser and stores.** Android over `adb` with live mirroring, iOS
+  Simulators (macOS only), Chrome or Edge over CDP, and a read-only view of
+  your App Store Connect and Google Play apps, reviews and installs.
+- **Git and GitHub** — worktrees per task, diffs, and GitHub through the `gh`
+  CLI where it is installed.
 
-## Documents
+## Platforms
 
-There is no architecture document, product document, roadmap or ADR directory.
-They were deleted deliberately on 2026-09-01 (`1bf4b700`, `390e600d`) because
-they described an app that had moved on; the code is the specification, and the
-comments explain *why* a line is the way it is at the line itself. What is left:
-
-- [`CHANGELOG.md`](CHANGELOG.md) — 1.1.0 → 1.16.0, per release.
-- [`CLAUDE.md`](CLAUDE.md) — the working contract. Also the reference for the
-  Windows-toolchain rule (§17), the opt-in live tests (§18) and system health
-  (§19).
-- [`docs/BACKLOG.md`](docs/BACKLOG.md) — the only planning document. One list
-  of open items, ordered by what each is worth to somebody building mobile apps
-  with several coding agents running at once. There are no sections by where an
-  idea came from; items cite their own source at a pinned commit, and the
-  comparison documents below are the evidence behind them.
-- [`docs/SETTLED.md`](docs/SETTLED.md) — the closed half: diagnoses worth
-  keeping, what shipped and why it is shaped that way, the cost measurements,
-  the limits that are deliberate, and the refusals. Nothing here is wanted; it
-  exists so an answered question is not asked twice.
-- Design notes: [agent status](docs/agent-status-integration.md),
-  [inter-agent communication](docs/inter-agent-communication.md),
-  [spawn approval](docs/spawn-approval.md),
-  [sandboxing](docs/sandboxing-evaluation.md),
-  [wasmer](docs/wasmer-evaluation.md).
-- Comparisons: [cmux](docs/compare-cmux.md), [orca](docs/compare-orca.md),
-  [t3.codes](docs/compare-t3codes.md).
-- Profiling: [`docs/PROFILE-2026-09-03.md`](docs/PROFILE-2026-09-03.md) and its
-  [final report](docs/PROFILE-2026-09-03-final.md). Both are macOS/Impeller
-  measurements; 1.14.0's Windows profile reached a different conclusion about
-  where the time goes, so read them as a dated record rather than current
-  guidance.
+Windows is the primary target and the best tested. Linux is built and released
+by CI. macOS has maintained source support and builds by hand with
+[`tool/build_release.sh`](tool/build_release.sh). The phone app targets
+Android first, then iOS.
 
 ## Requirements
 
-- **Flutter**, stable channel, with the desktop toolchain. `app/pubspec.yaml`
-  requires Dart `^3.12.2` and CI pins nothing tighter than `stable`, so no
-  exact version is recorded here to go stale.
-- **Windows 10/11** — Visual Studio with "Desktop development with C++".
+- **Flutter**, stable channel, with the desktop toolchain for your platform.
+- **Windows** — Visual Studio with "Desktop development with C++".
 - **Linux** — `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
   libsqlite3-dev libayatana-appindicator3-dev libkeybinder-3.0-dev
-  libsecret-1-dev libmpv-dev libnotify-dev` (the list
-  [`release-build.yml`](.github/workflows/release-build.yml) installs).
+  libsecret-1-dev libmpv-dev libnotify-dev`.
 - **macOS** — Xcode. For the iOS Simulator live view, run
-  [`app/tool/vendor/fetch_wda.sh`](app/tool/vendor/fetch_wda.sh); without it the build
-  still succeeds and only the live view is missing.
+  [`app/tool/vendor/fetch_wda.sh`](app/tool/vendor/fetch_wda.sh).
 
-**No code generation.** Raw SQL through the `sqlite3` package and plain Riverpod
-providers — no `build_runner`, no `*.g.dart`. `flutter pub get` is all you need.
-
-## Platform support, honestly
-
-Windows is the primary target and the best-verified one. Linux is built and
-released by CI. **macOS has real, maintained source support but no CI release
-job** — `release-build.yml` builds Windows and Linux only, so a Mac build is a
-manual one via [`tool/build_release.sh`](tool/build_release.sh). WSL machinery
-exists only on a Windows host, by construction.
+There is no code generation: `flutter pub get` is all the setup there is.
 
 ## Running it
 
-> **On a Windows checkout, drive the Windows toolchain from PowerShell or
-> `cmd` — never `flutter` from a WSL shell.** A bare `flutter` on a WSL `PATH`
-> resolves to the POSIX script inside the *Windows* install and makes it
-> download a **Linux** Dart SDK over the top of the Windows one, breaking the
-> toolchain for every other terminal and agent sharing it.
-> [`CLAUDE.md`](CLAUDE.md) §17 gives the safe invocation.
-
-```powershell
+```sh
 flutter pub get          # at the repository root: one pub workspace
 cd app
-flutter run -d windows
+flutter run -d windows   # or macos, linux
 ```
+
+On Windows with WSL beside it, run Flutter from PowerShell or `cmd`, never from
+a WSL shell: a bare `flutter` there resolves to the Windows install's POSIX
+script and replaces its Dart SDK with a Linux one.
+
+**Running a second copy beside an installed one?** Set `KARMASHALA_PROBE=1`
+and point `KARMASHALA_DATA_DIR` somewhere else, or the second copy takes over
+the first one's agent hooks.
+
+### Remote access and the relay
+
+A source build has **no hosted relay**. Phones still pair over the local
+network, by address, or through a relay you name in Settings → Remote and
+pairing. Run your own from [`relay/`](relay/README.md), or build with
+`--dart-define=KARMASHALA_RELAY_URL=wss://…` to give the build a default.
 
 ## Quality checks
 
-```powershell
-dart analyze app server packages   # at the repository root
+```sh
+dart analyze app server packages     # at the repository root
 cd app
-flutter test --exclude-tags=live-ssh,live-wsl
+flutter test --exclude-tags=live-ssh,live-wsl \
+  --dart-define=KARMASHALA_RELAY_URL=wss://relay.example.com
 ```
 
-[`app/dart_test.yaml`](app/dart_test.yaml) sets `concurrency: 8` — a measured value, and
-the reason no command in this repository passes `--concurrency`. Leave it off so
-a local run and automation cannot drift apart.
-
-**Do not run `dart format .`.** Measured under the current SDK it rewrites 144
-of 669 files — a repo-wide reformat here is a change, not a tidy-up.
-
-The two live tags are excluded because they drive a real WSL distribution and
-dial a real SSH server. They are meant to be run deliberately:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1
-```
+The relay define is a placeholder that the hosted-relay tests need. The
+`live-ssh` and `live-wsl` suites drive a real SSH server and a real WSL
+distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
 
 ## Building a release
 
-[`tool/build_release.bat`](tool/build_release.bat) is the Windows recipe, run
-through the `KarmashalaBuild` scheduled task (never from WSL — interop cannot
-traverse the plugin symlinks a Flutter Windows build needs). It builds the
-desktop app, compiles `karmashala_mcp.exe` beside it, runs Inno Setup
-([`app/windows/installer/karmashala.iss`](app/windows/installer/karmashala.iss)) and
-builds the Android APKs (the one app, and the old companion until Stage 4).
+[`tool/build_release.bat`](tool/build_release.bat) builds the Windows app, its
+MCP bridge, the server bundles, the installer and the Android APK;
 [`tool/build_release.sh`](tool/build_release.sh) is the macOS counterpart.
-
-CI: [`release-build.yml`](.github/workflows/release-build.yml) attaches Windows
-and Linux artifacts to a published GitHub release.
-[`android-release.yml`](.github/workflows/android-release.yml) is the
-manual-only Play release: it builds the app bundle and uploads it to the
-chosen track through fastlane (secrets in [PROJECT.md §13](PROJECT.md)).
+[`release-build.yml`](.github/workflows/release-build.yml) attaches Windows and
+Linux builds to a GitHub release, and
+[`android-release.yml`](.github/workflows/android-release.yml) publishes to
+Google Play.
 
 ## Environment variables
 
-**`KARMASHALA_DATA_DIR` is the only way to start against throwaway data, and
-`%APPDATA%` is not a substitute.** Redirecting `%APPDATA%` looks like it should
-work and does nothing: `path_provider` resolves the Windows folder through
-`SHGetKnownFolderPath`, which ignores the environment variable, so an instance
-launched that way silently opens the **real** database and imports into it.
-Two resolvers read it, and every consumer goes through one of them:
-`serverDataDirectory()`
-([`app/lib/src/core/paths/server_data_directory.dart`](app/lib/src/core/paths/server_data_directory.dart))
-for what is the server's — the database (shared with the local
-`karmashala_host serve`), `server.json`, the MCP handshake and session
-configs, the verification artifacts — `~/.karmashala` by default; and
-`appSupportDirectory()`
-([`app/lib/src/core/paths/app_support_directory.dart`](app/lib/src/core/paths/app_support_directory.dart))
-for what only the app keeps — logs, the env vault, the IPC socket, the session
-media store. With the variable set, both are that folder. It moves as a set on
-purpose: a demo instance writing
-its rows to a scratch directory and its socket to the real one would be worse
-than no override at all. The MCP bridge reads the same variable, so it finds
-the handshake the instance actually published instead of connecting to the
-real install.
-
 | Variable | Read by | Effect |
 | --- | --- | --- |
-| `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Puts the whole per-user data directory — the server's (`~/.karmashala`) and the app's own — somewhere else, created if absent; the app then starts its server with `--data-dir` naming it. For screenshots, demos and running a release build against data nobody minds losing. **Not a user setting** — nothing in the app writes it. |
-| `KARMASHALA_PROBE` | the app, once at launch | `1` makes the instance a **probe**: a second copy for testing a change beside the real app, with no global side effects (agent hooks, skills, launch at login, hotkey, remote access, toasts, the fixed control port) and a PROBE banner. Requires `KARMASHALA_DATA_DIR` pointing somewhere other than the real folder, or it refuses to start. See PROJECT.md §23. |
-| `KARMASHALA_SESSION_ID` | stamped on agent panes; read by the MCP bridge | Which session a process belongs to. The bridge forwards it as `callerSessionId`, which is how agent-spawns-agent depth is capped from the real process tree. |
-| `KARMASHALA_PORT_BASE` | stamped on agent panes | A deterministic per-session port base in `[20000, 32760)`. A namespace a repo's own scripts may read — not a lock or a reservation. |
-| `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, for pointing a bridge at a second install without guessing. Wins over `KARMASHALA_DATA_DIR`, because it names a file rather than a directory. |
-| `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the mobile app from this codebase. An APK built **without** it used to install and sit on a black screen; `main()` now refuses on a phone and names the missing define. |
-| `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. Absent in a plain `flutter run`, which logs "version not recorded" rather than a stale number. |
-| `KARMASHALA_RELAY_URL` | build-time `--dart-define` | The hosted relay phones meet the desktop at when neither side names its own. Unset in a source build, which then offers no hosted relay: pairing works on the LAN, or through a relay the user sets in Settings (run one from [`relay/`](relay/README.md)). The official build recipes pass it. |
-| `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests and the SSH benchmark | Where to dial. Unset, they skip themselves with a reason. |
-
-A user-defined environment secret may not start with `KARMASHALA_`; the vault
-refuses the name so it cannot collide with the plumbing above.
+| `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Moves the whole data directory (the server's `~/.karmashala` and the app's own) somewhere else. Redirecting `%APPDATA%` does not work: Windows resolves that folder without reading the variable. |
+| `KARMASHALA_PROBE` | the app, at launch | `1` makes the instance a probe: a second copy with no global side effects (agent hooks, skills, launch at login, hotkey, remote access, toasts). Requires its own `KARMASHALA_DATA_DIR`. |
+| `KARMASHALA_SESSION_ID` | set on agent panes; read by the MCP bridge | Which session a process belongs to. |
+| `KARMASHALA_PORT_BASE` | set on agent panes | A per-session port base in `[20000, 32760)` a repository's scripts may use. |
+| `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, to point a bridge at a particular install. |
+| `KARMASHALA_RELAY_URL` | build-time `--dart-define` | The hosted relay phones meet the desktop at when neither side names its own. Unset in a source build, which then offers no hosted relay. The official build recipes pass it. |
+| `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. |
+| `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the older phone companion from this codebase. |
+| `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests | Where to dial. Unset, those tests skip themselves. |
 
 ## Project layout
 
 ```
-pubspec.yaml                # The pub workspace: app, server, packages/*. No code.
-app/                        # The Flutter client, with its own pubspec.yaml
-  lib/
-    main.dart               # Logging, database, discovery, control server, then runApp
-    src/
-      app/                  # Shell, workbench, side panel, theme, shortcuts, companion boot
-      core/                 # Database, logging, lifecycle, process
-      features/             # 32 feature folders: sessions, terminal, agents, devices, …
-  test/                     # Mirrors lib/; 727 files
-  integration_test/         # Driver tests that need a real device or PTY
-  tool/                     # Profiling, benchmark and manual-verification programs
-  android/ ios/ macos/ windows/ linux/ web/
-server/                     # The Karmashala server (package karmashala_host); deploy/ installs it
-relay/                      # The self-hostable relay, outside the workspace
-  protocol/                 # Its contract (karmashala_relay_protocol), shared with every client
-packages/mcp_bridge/        # The standalone stdio MCP bridge
-packages/                   # The shared packages: vendored flutter_pty and launch_at_startup, local IPC, …
-tool/                       # Release recipes, the gate, live tests, soaks, run scripts
-docs/                       # Backlog, design notes, comparisons, profiling reports
+pubspec.yaml     # the pub workspace: app, server, packages/*
+app/             # the Flutter app — desktop and phone
+server/          # the Karmashala server (karmashala_host); deploy/ installs it
+relay/           # the self-hostable relay, and protocol/, its contract
+packages/        # shared packages, the MCP bridge, vendored forks
+tool/            # release recipes, the test gate, live tests, run scripts
 ```
-
-Paths in the docs that start `lib/`, `test/` or a platform folder are the
-app's, under `app/`.
-
-## tool/ and app/tool/
-
-None of these run in the default test gate; several are *invoked* through
-`flutter test` but live under `tool/` so discovery cannot pick them up and
-their presence never reads as coverage. The scripts in `tool/` find their own
-way (each moves into `app/` where it needs to); the Dart programs in
-`app/tool/` import the app, so run them from `app/`.
-
-| Path | What it is |
-| --- | --- |
-| [`build_release.bat`](tool/build_release.bat) / [`.sh`](tool/build_release.sh) | The release recipes (above). |
-| [`live_tests.ps1`](tool/live_tests.ps1) | Runs the excluded `live-wsl` / `live-ssh` suites, after printing what it found. |
-| [`reliability_soak.ps1`](tool/reliability_soak.ps1) | Repeats the flake-prone suites N times (default 20) to catch what one run cannot. |
-| [`profile_run.bat`](tool/profile_run.bat) | Builds and launches a `--profile` build for a profiling session, via the `KarmashalaProfile` scheduled task. |
-| [`app/tool/vm_probe.dart`](app/tool/vm_probe.dart) | Samples a running app's VM service — frames, stalls, timeline — for when the Dart MCP server will not connect. `dart tool/vm_probe.dart <ws-uri> <seconds>`. |
-| [`app/tool/analysis/test_purity.dart`](app/tool/analysis/test_purity.dart) | Classifies each test as widget / Flutter-free / blocked, and prices the imports that block it. Produces the numbers in `docs/BACKLOG.md`. |
-| [`app/tool/analysis/migrate_unit_tests.dart`](app/tool/analysis/migrate_unit_tests.dart) | The one-shot mover for a purity-driven batch: relocates files, swaps `flutter_test` for `package:test`, repairs the imports. Dormant between migrations. |
-| [`app/tool/ui_screenshot.dart`](app/tool/ui_screenshot.dart) | Renders the real shell against a fixture and writes PNGs of several states. `flutter test tool/ui_screenshot.dart`. |
-| [`app/tool/benchmark/`](app/tool/benchmark) | Nine on-demand benchmarks — paint, input latency, ingest, scale, autosave, SSH. They print; they do not assert. |
-| [`app/tool/verification/`](app/tool/verification/README.md) | Manual programs that drive real browsers, devices and CLIs. Kept out of `test/` so their presence never reads as coverage. |
-| [`app/tool/icon/`](app/tool/icon) | Renders the app icon, the Android adaptive layers and the Windows `.ico` from one drawn description. |
-| [`app/tool/vendor/fetch_wda.sh`](app/tool/vendor/fetch_wda.sh) | Fetches the pinned WebDriverAgent for the macOS build. |
 
 ## Keyboard shortcuts
 
-The full list, with what each one costs a focused shell, is
-[`shell_shortcuts.dart`](app/lib/src/app/shell/shell_shortcuts.dart); Settings →
-Terminal offers the contested ones back. `Ctrl` below is `Cmd` on macOS.
+`Ctrl` is `Cmd` on macOS. The full list is in
+[`shell_shortcuts.dart`](app/lib/src/app/shell/shell_shortcuts.dart).
 
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+1` / `Ctrl+2` | Focus the Explorer / the workbench |
-| `Ctrl+3` | Show or hide the side panel |
 | `Ctrl+B` | Show or hide the Explorer |
+| `Ctrl+3` | Show or hide the side panel |
 | `` Ctrl+` `` | Switch between the terminal and the chat view |
 | `Ctrl+K` / `Ctrl+P` | Quick open (`Ctrl+Shift+P` for commands) |
 | `Ctrl+Shift+A` | Attention inbox |

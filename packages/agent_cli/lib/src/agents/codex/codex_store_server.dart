@@ -13,7 +13,7 @@ import 'codex_thread.dart';
 /// for updates (only the TUI does, in `tui/src/updates.rs`), so this is a
 /// belt-and-braces override on an always-internal process: a Codex Karmashala
 /// spawns never runs the startup update check that behavioural antivirus reads
-/// as a dropper signal (docs/windows-antivirus.md). Unconditional because the
+/// as a dropper signal. Unconditional because the
 /// app-server is never a session the user watches; the per-session setting
 /// governs the interactive launches.
 const List<String> codexAppServerArguments = [

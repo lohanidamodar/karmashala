@@ -35,8 +35,7 @@ import '../../support/test_machine.dart';
 /// Twelve seconds of the engine's own timeline, taken while the owner's window
 /// sat idle with live sessions in it, counted 516 `VsyncFireCallback`s, 516
 /// rasterizer draws and 516 glyph-atlas builds — ~43 fps of full GPU work with
-/// nothing happening, and the 87-120% of a core the app burned overnight
-/// (`docs/MEMORY-2026-09-20.md`, 2026-09-21).
+/// nothing happening, and the 87-120% of a core the app burned overnight.
 ///
 /// The driver was an indeterminate spinner. Material's
 /// `CircularProgressIndicator` drives an `AnimationController.repeat()` on a

@@ -293,7 +293,7 @@ class Settings {
   /// an unsigned parent is a behavioural-antivirus dropper signal, and on the
   /// owner's managed Windows machine it killed the whole process tree. Off, the
   /// launched agent is passed the switch that stops its self-update; the user's
-  /// own updates outside Karmashala are untouched (docs/windows-antivirus.md).
+  /// own updates outside Karmashala are untouched.
   final bool? letAgentsUpdateThemselves;
 
   /// The terminal colour scheme: `null` for Match app, `preset:<id>` for a

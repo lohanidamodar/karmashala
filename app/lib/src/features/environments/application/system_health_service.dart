@@ -18,7 +18,7 @@ import 'environment_providers.dart';
 import 'system_health.dart';
 
 /// Runs the machine checks behind the health panel. **Nothing here runs on a
-/// timer**, and the report carries the time it ran — see docs/SETTLED.md.
+/// timer**, and the report carries the time it ran.
 class SystemHealthService {
   SystemHealthService(this.ref);
 

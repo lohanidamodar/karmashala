@@ -27,8 +27,7 @@ enum MessageType {
   // and a `badRequest` to `pair` means exactly "this host predates pairing".
   // Bumping instead would make every already-deployed host a `protocolMismatch`
   // until it is replaced — and a host still holding sessions is replaced only
-  // when the person agrees (SETTLED.md, "An older local session host is
-  // replaced, or kept only for what it holds").
+  // when the person agrees.
   pair(0x12),
   paired(0x13),
   // `open` plus the names to withhold, added 2026-09-22 the same way as

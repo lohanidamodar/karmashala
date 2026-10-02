@@ -1,4 +1,4 @@
-// Copied verbatim from packages/karmashala_core/lib/src/util/bounded_text.dart; see PACKAGE_SPLIT.md on consolidation.
+// Copied verbatim from packages/karmashala_core/lib/src/util/bounded_text.dart.
 /// One bound on transcript text, for every path a message travels. The bound
 /// belongs to the **text**, not to a path: a second cut somewhere else is a
 /// second answer to "how much do we keep", and the transcript then changes

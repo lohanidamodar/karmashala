@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 ///
 /// `agent_cli` 0.1.0 was a cut-down re-derivation of Karmashala's process and
 /// discovery layer with a one-shot `ask()` on top, so where the two overlapped
-/// Karmashala's implementation won (docs/PACKAGE_SPLIT.md §3). Every case below
+/// Karmashala's implementation won. Every case below
 /// is the case that was here; only the symbol it exercises changed:
 ///
 /// | 0.1.0 | now |

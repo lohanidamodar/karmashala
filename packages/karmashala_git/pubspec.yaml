@@ -20,7 +20,7 @@ dependencies:
   # The runner a git command executes through and the environment types a path
   # is spelled in (`CommandRunner`, `EnvironmentPath`, `PathTranslator`), plus
   # `FileEditRecord`, the agent's record of a write that `file_edit_diff` draws.
-  # One-way, per docs/PACKAGE_SPLIT.md §2: agent_cli never imports this.
+  # One-way: agent_cli never imports this.
   agent_cli:
     path: ../agent_cli
   # `ListEquality` for `BranchProtection`'s required-checks list, which used

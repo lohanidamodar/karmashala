@@ -383,7 +383,7 @@ class _ClientSession implements BoxRelayPeer {
     }
 
     // Before hello and whatever the client's protocol: a `stop` from any
-    // version must be able to ask (docs/daemon-architecture.md).
+    // version must be able to ask.
     if (message is StopCheckMessage || message is StopNowMessage) {
       final requestId = switch (message) {
         StopCheckMessage(:final requestId) => requestId,

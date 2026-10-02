@@ -57,8 +57,8 @@ class GenericChatProtocol implements AgentChatProtocol {
   ///
   /// One function in place of the three collaborators this adapter used to
   /// hold — a `CommandRunnerFactory`, an `ExecutionEnvironmentDao` and a
-  /// Riverpod-backed resolver — each of which reached a database
-  /// (docs/PACKAGE_SPLIT.md §3). The host composes those behind it; refusing
+  /// Riverpod-backed resolver — each of which reached a database.
+  /// The host composes those behind it; refusing
   /// an environment it cannot place is now the resolver's job, and it still
   /// refuses in one place for every launch path.
   final RunnerResolver runnerFor;

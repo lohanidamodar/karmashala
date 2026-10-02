@@ -5,7 +5,6 @@
 /// that exits with one pending bugchecks the machine (0xD1). So there the side
 /// that goes half-closes, waits for the peer's end-of-file, and only then
 /// closes: the peer has closed by then, and the disconnect completes at once.
-/// docs/SETTLED.md, "A unix socket on Windows is closed in order".
 library;
 
 import 'dart:async';

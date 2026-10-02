@@ -25,8 +25,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<!-- The owner's to confirm before the first upload: whether the sealed
-	     channel's XChaCha20-Poly1305 is exempt (docs/superpowers/plans/
-	     2026-09-30-stage-1-ios-release-gaps.md). -->
+	     channel's XChaCha20-Poly1305 is exempt. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>

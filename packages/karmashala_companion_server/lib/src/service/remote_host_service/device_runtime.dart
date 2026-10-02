@@ -528,7 +528,7 @@ class _DeviceRuntime {
       answersPings: true,
     );
     active.host = link;
-    // Host-protocol bytes cannot carry a `link.ping`; see SETTLED.md.
+    // Host-protocol bytes cannot carry a `link.ping`.
     active.liveness?.stop();
     active.liveness = null;
     unawaited(

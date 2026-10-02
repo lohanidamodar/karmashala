@@ -70,7 +70,7 @@ class HostClient {
   }) => _askOnce(socketPath, const StopCheckMessage(1), answerWithin);
 
   /// Asks the host to shut itself down, closing its clients in order first
-  /// (`stopNow`, docs/daemon-architecture.md). Null when nothing is
+  /// (`stopNow`). Null when nothing is
   /// listening; throws [HostClientRefusal] when it refuses — as a host from
   /// before `stopNow` does.
   static Future<StopCheckAnswerMessage?> stopNow(

@@ -159,8 +159,7 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
       byEnvironmentId[environment.id] ?? fallback;
 
   /// This factory as the `RunnerResolver` the adapters and `CliStoreLocator`
-  /// take — the seam that replaced the factory-plus-DAO trio
-  /// (docs/PACKAGE_SPLIT.md §3).
+  /// take — the seam that replaced the factory-plus-DAO trio.
   RunnerResolver get resolver =>
       (String environmentId) => byEnvironmentId[environmentId] ?? fallback;
 }

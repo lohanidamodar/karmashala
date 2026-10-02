@@ -6,7 +6,7 @@
 /// shell, which is what makes a CLI installed in `~/.local/bin` visible at all.
 ///
 /// Nothing here knows about SSH; a host that reaches other machines subclasses
-/// `CommandRunnerFactory` and keeps the transport (docs/PACKAGE_SPLIT.md §3).
+/// `CommandRunnerFactory` and keeps the transport.
 library;
 
 export 'src/environments/environment_kind.dart';

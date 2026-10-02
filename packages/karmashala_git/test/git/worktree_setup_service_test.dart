@@ -205,7 +205,7 @@ void main() {
       expect(
         File(p.join(made, 'macos', 'Vendor', 'copy_wda.sh')).readAsStringSync(),
         '#!/bin/sh\n',
-        reason: 'PROFILE-2026-09-03: only worktrees that had this build',
+        reason: 'only worktrees that had this build',
       );
       // No `cp` process: the host is that filesystem.
       expect(runner.requests.where((r) => r.executable == 'cp'), isEmpty);

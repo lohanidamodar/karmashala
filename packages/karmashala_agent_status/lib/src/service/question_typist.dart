@@ -6,7 +6,7 @@ import '../domain/prompt_refusal.dart';
 /// every step lands before the next: the tab is drawn, the highlight reached
 /// the row, the box is ticked, the words are typed, the next tab or the review
 /// appeared. Neither one burst nor fixed pauses survived the real app — keys
-/// sent while a tab draws are dropped (docs/SETTLED.md). A step that cannot be
+/// sent while a tab draws are dropped. A step that cannot be
 /// seen to land stops the answer with [SessionPromptRefusal].
 class SessionQuestionTypist {
   SessionQuestionTypist({

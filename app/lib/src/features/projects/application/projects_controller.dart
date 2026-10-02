@@ -290,7 +290,7 @@ class ProjectsController extends Notifier<List<Project>> {
     }
     final path = project.root.path;
     // A share, whoever it is filed under — the same exclusion the async probe
-    // makes, and for the same reason (docs/windows-antivirus.md).
+    // makes, and for the same reason.
     if (path.startsWith(r'\\') || path.startsWith('//')) return false;
     try {
       return !Directory(path).existsSync();
@@ -422,7 +422,7 @@ final projectsControllerProvider =
 /// An SSH project is never asked. A WSL project is asked from inside its
 /// distribution ([WslPathExistence]) — batched, kept, asked again when the
 /// window comes back to the front or the project is rescanned, and never by a
-/// stat over `\\wsl.localhost` (docs/windows-antivirus.md).
+/// stat over `\\wsl.localhost`.
 final projectPathMissingProvider = FutureProvider.autoDispose
     .family<bool, Project>((ref, project) async {
       final environmentDao = ref.read(environmentsDataProvider);

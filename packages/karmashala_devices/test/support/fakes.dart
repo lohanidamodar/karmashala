@@ -6,8 +6,8 @@ import 'package:karmashala_core/util.dart';
 final testTime = DateTime.utc(2026, 1, 2, 3, 4, 5);
 
 /// A [Clock] that always returns a fixed instant. It satisfies `agent_cli`'s
-/// verbatim copy of the interface as well as core's — see PACKAGE_SPLIT.md §2
-/// for why there are two.
+/// verbatim copy of the interface as well as core's: `agent_cli` keeps its own
+/// copy so it depends on nothing in this repository.
 class FixedClock implements Clock, agent_cli.Clock {
   FixedClock(this._now);
 

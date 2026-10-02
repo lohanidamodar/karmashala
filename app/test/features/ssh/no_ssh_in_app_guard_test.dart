@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// **The app holds no SSH pool and reads no key** (slice 5d,
-/// docs/daemon-architecture.md): the server connects to every box, deploys
+/// **The app holds no SSH pool and reads no key** (slice 5d): the
+/// server connects to every box, deploys
 /// the Karmashala host there, relays its sessions, sets up its relay and
 /// pairs phones — over its own pool, with keys read on its own machine. The
 /// app only asks (`features/ssh/data/ssh_client.dart`), keeps what a person

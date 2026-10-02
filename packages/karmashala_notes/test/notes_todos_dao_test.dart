@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 /// The two DAOs the server writes notes and todos through, and what a note
 /// calls itself. Moved here from the app, which no longer reaches these
-/// tables (docs/daemon-architecture.md, slice 1).
+/// tables.
 void main() {
   final t0 = DateTime.utc(2026, 9, 25, 12);
   late AppDatabase db;

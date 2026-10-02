@@ -103,7 +103,7 @@ List<DtdApp> vmServicesInDtdReply(String resultJson) {
 }
 
 /// Every directory a daemon may have written itself down in, per the SDK's
-/// `getDartDataHome('dtd')` (docs/SETTLED.md); empty when the environment names
+/// `getDartDataHome('dtd')`; empty when the environment names
 /// none. An override adds a candidate: the daemon resolved it in *its* env.
 List<String> dtdPidFileDirectories(
   Map<String, String> environment, {

@@ -1,6 +1,6 @@
 /// A menu an agent draws only on its screen — folder trust, a permission
 /// prompt, a startup offer — read off the grid so it can be answered by
-/// option; Enter alone picks whatever is highlighted. See docs/SETTLED.md.
+/// option; Enter alone picks whatever is highlighted.
 library;
 
 /// One menu as the screen shows it.

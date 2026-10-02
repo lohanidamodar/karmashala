@@ -511,8 +511,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
 
 /// The group header the list has scrolled past, drawn over its top edge until
 /// the next header pushes it out. Not a pinned sliver: a `SliverList` per group
-/// inflates a row per group off screen, and this builds none (SETTLED, "The
-/// Explorer is two levels").
+/// inflates a row per group off screen, and this builds none.
 class ExplorerPinnedHeader extends StatefulWidget {
   const ExplorerPinnedHeader({
     required this.controller,

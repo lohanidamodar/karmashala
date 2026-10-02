@@ -30,8 +30,7 @@ import '../../support/fixtures.dart';
 /// write: two writes inside one tick report the same timestamp, so a poll whose
 /// `stat` lands between them never learns about the second. A transcript is
 /// append-only, so its size moves even when the clock does not — which is why
-/// the key is `(modified, size)` and what these cases pin. `docs/SETTLED.md`,
-/// *Four transcript-tailing traps*, has the measurement.
+/// the key is `(modified, size)` and what these cases pin.
 void main() {
   late Directory dir;
   late File transcript;

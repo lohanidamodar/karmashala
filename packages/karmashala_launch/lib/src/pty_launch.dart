@@ -124,7 +124,7 @@ PtyLaunch ptyLaunchFor(
       // With integration the bootstrap rides as a plain, readable `-Command`
       // on an exact argv: one PowerShell, never an encoded one. An
       // `-EncodedCommand` from an unsigned parent is among the strongest
-      // signals behavioural antivirus scores (docs/windows-antivirus.md).
+      // signals behavioural antivirus scores.
       // `-NoExit` keeps the session interactive after the bootstrap, and
       // `-Command` runs after the profiles exactly as the encoded form did.
       // Not `-File`: the owner's execution policy is `Restricted`, which
@@ -325,7 +325,7 @@ PtyLaunch wrapForPty(
       // PowerShell, not `cmd.exe`, so the pane and the copied line speak one
       // shell and `%NAME%` is never expanded. A plain `-Command` on an exact
       // argv — it was `-EncodedCommand`, which behavioural antivirus treats as
-      // a dropper signal (docs/windows-antivirus.md) — in printable ASCII only,
+      // a dropper signal — in printable ASCII only,
       // because `flutter_pty` casts each byte of its command line to a `WCHAR`.
       return PtyLaunch(
         executable: 'powershell.exe',

@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'scale_harness.dart';
 
 /// **The churn/leak gate** — and deliberately *not* the "8-hour churn/leak
-/// soak" `docs/BACKLOG.md` asked for, because that one cannot honestly be
+/// soak" the backlog asked for, because that one cannot honestly be
 /// built here and this one is more useful.
 ///
 /// A gate that runs for eight hours is a gate nobody runs, and a gate that runs

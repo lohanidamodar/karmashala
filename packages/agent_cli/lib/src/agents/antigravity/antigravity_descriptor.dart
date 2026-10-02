@@ -113,8 +113,7 @@ const antigravityDescriptor = AgentDescriptor(
     //
     // A rung is a promise about what the agent may do. Declaring this one would
     // promise "auto-run, screened by a sandbox" and deliver an agent that
-    // cannot run anything, on the platform half our sessions launch into. See
-    // docs/SETTLED.md, "Antigravity's `--sandbox` axis".
+    // cannot run anything, on the platform half our sessions launch into.
     permission: AgentPermissionSupport.axes(
       evidence: 'agy 1.1.24 --help (WSL ~/.local/bin/agy)',
       legacyAliases: {

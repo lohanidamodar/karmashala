@@ -32,8 +32,7 @@ enum InlineSpinnerSize {
 ///
 /// A [SteppedRing] rather than Material's ring: that one holds a vsync
 /// [Ticker], so one spinner anywhere on screen put the whole app at 60 full
-/// frames a second — measured as ~43 fps of GPU raster on an idle window
-/// (`docs/MEMORY-2026-09-20.md`, 2026-09-21).
+/// frames a second — measured as ~43 fps of GPU raster on an idle window.
 class InlineSpinner extends StatelessWidget {
   const InlineSpinner({
     this.size = InlineSpinnerSize.small,

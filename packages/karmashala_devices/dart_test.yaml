@@ -1,8 +1,7 @@
 # Tags declared so `dart test` does not warn about them; declaring one changes
 # no default behaviour.
 tags:
-  # A cost or soak measurement rather than a behaviour (docs/PACKAGE_SPLIT.md
-  # §7). Two of the seven live here — `device_stream` and
+  # A cost or soak measurement rather than a behaviour. Two of the seven live here — `device_stream` and
   # `device_stream_lifecycle` — and the per-change gate excludes them with
   # `--exclude-tags=cost`; a full run keeps them.
   cost:

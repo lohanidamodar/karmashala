@@ -21,7 +21,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 ///
 /// The Explorer ran `Directory.exists` on the translated UNC path once per
 /// built WSL row. Bitdefender's on-access scanner flags file access over that
-/// share, and it is slow (docs/windows-antivirus.md).
+/// share, and it is slow.
 void main() {
   /// A Windows host whose `wsl.exe` knows [folders] per distribution and which
   /// of them are [running].

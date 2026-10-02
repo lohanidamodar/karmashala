@@ -2,7 +2,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_store/database.dart';
 
 /// The `session_relays` record: append-only, so "who told this session to do
-/// that" survives a restart (docs/inter-agent-communication.md §4.2).
+/// that" survives a restart.
 class SessionRelayDao {
   SessionRelayDao(this._db);
 

@@ -20,8 +20,7 @@ printf '__karmashala_exists:%s\n' "$out"
 /// directory. `--exec`, so no login shell re-parses a path; `$0` is a name.
 ///
 /// This is how a Windows host learns that a WSL folder is still there: a stat
-/// over `\\wsl.localhost` is slow and is what on-access antivirus scans
-/// (docs/windows-antivirus.md).
+/// over `\\wsl.localhost` is slow and is what on-access antivirus scans.
 List<String> wslDirectoriesExistArguments({
   required String distribution,
   required List<String> paths,

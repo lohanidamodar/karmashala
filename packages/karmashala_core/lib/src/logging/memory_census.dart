@@ -42,7 +42,7 @@ class MemoryCensus {
   });
 
   /// `ProcessInfo.currentRss`. Available in a release build, unlike the VM
-  /// service — measured, not assumed; see `docs/SETTLED.md`.
+  /// service — measured, not assumed.
   final int residentBytes;
 
   /// `ProcessInfo.maxRss`: the high-water mark, which never falls. A resident

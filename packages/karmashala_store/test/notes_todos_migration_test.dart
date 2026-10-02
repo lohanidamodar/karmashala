@@ -4,8 +4,8 @@ import 'package:test/test.dart';
 
 /// Schema v21 (notes) and v34 (todos, and filing notes under a project):
 /// what the tables are and what the foreign keys keep. Moved here from the
-/// app, which no longer reaches these tables (docs/daemon-architecture.md,
-/// slice 1).
+/// app, which no longer reaches these tables
+/// (slice 1: data through the server).
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
 /// does, so an older database can be populated and then migrated.

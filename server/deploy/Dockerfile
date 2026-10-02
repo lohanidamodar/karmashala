@@ -15,7 +15,7 @@
 #
 # The agent CLIs (Claude Code, Codex) are NOT in this image: install them in an
 # image built FROM this one and sign in inside the container — see
-# docs/server.md, "Docker".
+# server/README.md, "Docker".
 
 FROM --platform=$BUILDPLATFORM ghcr.io/cirruslabs/flutter:stable AS build
 ARG TARGETARCH

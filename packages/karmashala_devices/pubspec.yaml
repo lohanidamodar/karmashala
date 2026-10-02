@@ -19,7 +19,7 @@ environment:
 dependencies:
   # The runner every adb/simctl/scrcpy invocation goes through, plus
   # `EnvironmentPath` and `formatBytes`. One-way, and the only reason this
-  # package can reach a WSL distribution at all (docs/PACKAGE_SPLIT.md §2).
+  # package can reach a WSL distribution at all.
   agent_cli:
     path: ../agent_cli
   # `Clock` behind this package's own clock port, and `AppLogger` — which

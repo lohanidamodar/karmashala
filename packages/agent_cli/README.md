@@ -67,8 +67,7 @@ final found = await claude.store!.sessionReader().read(
 adapters, the descriptor table, the store and transcript readers, the usage and
 auth services, and the process layer underneath them — with 0.1.0's one-shot
 `ask` kept as the mode that layer did not have. Where the two overlapped,
-Karmashala's implementation won; the migration and the symbol-by-symbol
-reasoning are in that repository's `docs/PACKAGE_SPLIT.md` §3.
+Karmashala's implementation won.
 
 **It depends on pub.dev and nothing else.** No Flutter, no Riverpod, no SQLite
 binding, nothing from the application that hosts it — which is what lets its

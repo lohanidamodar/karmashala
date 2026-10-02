@@ -65,8 +65,8 @@ class SystemCheck {
   );
 }
 
-/// The checks this app knows how to run, in the order they are shown. What is
-/// deliberately absent is recorded in docs/SETTLED.md, not rediscovered here.
+/// The checks this app knows how to run, in the order they are shown.
+/// Machine CPU, memory and network reachability are left out on purpose.
 enum SystemCheckId {
   /// The stdio bridge an agent spawns, probed by handshake.
   mcpBridge,

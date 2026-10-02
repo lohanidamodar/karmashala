@@ -7,8 +7,7 @@ environment:
   sdk: ^3.12.2
 
 # A member of the pub workspace declared in the repository root's pubspec: one
-# resolution, one lock file and one `.dart_tool`, all at the root
-# (docs/PACKAGE_SPLIT.md §2).
+# resolution, one lock file and one `.dart_tool`, all at the root.
 resolution: workspace
 
 dependencies:
@@ -29,8 +28,7 @@ dependencies:
   karmashala_companion:
     path: ../packages/karmashala_companion
   # The Flutter-free core: logging, small utilities and path probing. A
-  # workspace member, so this path resolves to the copy in the tree
-  # (docs/PACKAGE_SPLIT.md §5).
+  # workspace member, so this path resolves to the copy in the tree.
   karmashala_core:
     path: ../packages/karmashala_core
   # Frame capture and video encoding — the GIF/PNG sinks and the Media
@@ -52,7 +50,7 @@ dependencies:
   # Finding, running and driving a Flutter app from outside it: project and
   # SDK discovery, the four routes to a VM service address, the Dart Tooling
   # Daemon and the VM service link. Built beside the app in phase A — nothing
-  # under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  # under `lib/` imports it yet.
   karmashala_flutter_apps:
     path: ../packages/karmashala_flutter_apps
   karmashala_remote:
@@ -83,18 +81,17 @@ dependencies:
     path: ../packages/karmashala_projects
   # What a session is, as values: the record and its states, what a launch asks
   # for, the resume rules, lineage and handoff, the event and decision
-  # vocabulary, the transcript readings and the delivery ladder. Pure Dart
-  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
+  # vocabulary, the transcript readings and the delivery ladder. Pure Dart.
   # The tool surface served to agents: the MCP wire format and its Streamable
   # HTTP binding, the catalogue, the instruction texts and skills, and how an
-  # agent reaches the tools. Not the handlers — those serve the app's own types
-  # (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction). Pure Dart.
+  # agent reaches the tools. Not the handlers — those serve the app's own types.
+  # Pure Dart.
   karmashala_mcp:
     path: ../packages/karmashala_mcp
   # Work that starts itself: cron and interval schedules, the fires a sleeping
   # machine missed, the unattended gate, scheduled resumes and project checks,
   # and the three DAOs over them. The DAOs take an `AppDatabase`; their
-  # providers stay in the app (docs/PACKAGE_SPLIT_3.md, Tier 2). Pure Dart.
+  # providers stay in the app. Pure Dart.
   karmashala_automations:
     path: ../packages/karmashala_automations
   # Verification runs as values and tables, and the recorder for gates
@@ -147,15 +144,14 @@ dependencies:
     path: ../packages/karmashala_files
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
-  # format. A Flutter package — `xterm2`'s buffer types are its vocabulary
-  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
+  # format. A Flutter package — `xterm2`'s buffer types are its vocabulary.
   karmashala_terminal_core:
     path: ../packages/karmashala_terminal_core
   # What a terminal does: the three running instances, the PTY launch and
   # shutdown, the ingest budget and coalescer, the scrollback codec, spool and
   # park, the grid readings and command blocks, the cast recorder and renderer,
   # the theme readers and the host's own terminal emulators. Not the DAOs'
-  # providers — those stay here (docs/PACKAGE_SPLIT_3.md, Tier 1).
+  # providers — those stay here.
   karmashala_terminal_runtime:
     path: ../packages/karmashala_terminal_runtime
   # The design system: tokens, the Phosphor glyph table, the assembled theme
@@ -163,19 +159,18 @@ dependencies:
   karmashala_ui:
     path: ../packages/karmashala_ui
   # Git and GitHub as values plus the readers and parsers that produce them.
-  # Built beside the app in phase A — nothing under `lib/` imports it yet
-  # (docs/PACKAGE_SPLIT.md §2).
+  # Built beside the app in phase A — nothing under `lib/` imports it yet.
   karmashala_git:
     path: ../packages/karmashala_git
   # The coding-agent interface: discovery, launch, stream, ask, store reading
   # and usage, over one descriptor table. Built beside the app in phase A —
-  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §3).
+  # nothing under `lib/` imports it yet.
   agent_cli:
     path: ../packages/agent_cli
   # How an agent reports back: the hook callbacks written into its own config,
   # the WSL spool, the receiver that classifies one, the skill installer and
-  # the status sources. Not the application services or the DAOs
-  # (docs/PACKAGE_SPLIT_2.md, the agents correction). Pure Dart.
+  # the status sources. Not the application services or the DAOs.
+  # Pure Dart.
   karmashala_agent_reporting:
     path: ../packages/karmashala_agent_reporting
   # What an agent in a terminal is doing and answering its prompts: the

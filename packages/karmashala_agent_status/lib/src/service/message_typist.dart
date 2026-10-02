@@ -5,7 +5,7 @@ import '../domain/prompt_refusal.dart';
 /// see the field let them go. A Return that reaches the agent in the same read
 /// as the text is folded into a newline by a composer reading the run as a
 /// paste: the message then sits in the field, typed but unsent, which is what
-/// the phone's messages did while an agent was working (docs/SETTLED.md). A
+/// the phone's messages did while an agent was working. A
 /// Return the composer ignored is pressed again — on an empty composer a
 /// Return does nothing, so pressing one too many costs nothing.
 class SessionMessageTypist {

@@ -14,7 +14,7 @@ import 'wsl_command_runner.dart';
 /// distribution on it.** SSH is deliberately absent — reaching another machine
 /// means a connection, a key and somewhere to keep both, which is the host
 /// application's business and not a coding CLI's. Karmashala subclasses this
-/// and adds an `EnvironmentKind.ssh` case (docs/PACKAGE_SPLIT.md §3); the
+/// and adds an `EnvironmentKind.ssh` case; the
 /// [unsupported] hook is what lets a subclass answer for a kind this package
 /// cannot place, instead of this class having to know it exists.
 class CommandRunnerFactory {

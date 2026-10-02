@@ -83,7 +83,7 @@ class SessionMenuAnswerer {
     }
     final label = menu.options[option];
     // One step at a time, each seen before the next: a burst sent as the menu
-    // draws can be dropped (docs/SETTLED.md).
+    // draws can be dropped.
     final deadline = DateTime.now().add(patience);
     var at = menu.highlighted;
     while (at != option) {

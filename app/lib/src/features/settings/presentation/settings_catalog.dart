@@ -7,7 +7,6 @@ import '../../../core/capabilities/capabilities.dart';
 /// The one description of the settings screen: its groups, pages, the titled
 /// sections on each page, and every option a search can land on. The page
 /// list, search, page layout and deep links all read this, so none can drift.
-/// See docs/settings-ia.md.
 enum SettingsGroup {
   general('App'),
   agents('Agents'),
@@ -582,7 +581,7 @@ enum SettingsAnchor {
     'toolchain',
     'build',
   ]),
-  // SSH plumbing, not a place work runs; last on the page (SETTLED).
+  // SSH plumbing, not a place work runs; last on the page.
   knownHosts(SettingsSectionId.environments, 'Trusted host keys', [
     'known hosts',
     'keys',

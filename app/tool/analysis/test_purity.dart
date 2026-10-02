@@ -1,7 +1,7 @@
 // Reports which test files could run on plain `dart test` — i.e. whose
-// transitive imports never reach `package:flutter` or `dart:ui`. See
-// docs/BACKLOG.md, "What the test gate actually costs", for why that question
-// turned out not to be the interesting one.
+// transitive imports never reach `package:flutter` or `dart:ui`. Moving them
+// does not pay: `flutter test` shares one incremental compiler across a run,
+// and `dart test` compiles per isolate.
 //
 //   --seams   rank the first Flutter-reaching hop out of each blocked test
 //   --rank    price each seam by how many tests it alone would release

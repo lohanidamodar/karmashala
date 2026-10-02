@@ -392,8 +392,8 @@ Map<String, FileDiffStat> parseNumstatByFile(String output) {
   return stats;
 }
 
-/// The **new** name of the file a `--numstat` path field describes — see
-/// `docs/SETTLED.md` for the rename shapes git writes.
+/// The **new** name of the file a `--numstat` path field describes, in
+/// each rename shape git writes (`a => b`, `dir/{a => b}/f`).
 String _numstatNewPath(String field) {
   final brace = field.indexOf('{');
   final arrow = field.indexOf(' => ', brace < 0 ? 0 : brace);

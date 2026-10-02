@@ -8,7 +8,7 @@
 /// `LastVisitedPidlMRU` folder while it builds, and a `\\wsl.localhost` row
 /// there costs an enumeration of Network — 30.3 s measured 2026-09-10, and a
 /// process hung with `p9np.dll` loaded and no dialog window at all on
-/// 2026-09-15. See [forgetLastVisitedFolder] and docs/SETTLED.md.
+/// 2026-09-15. See [forgetLastVisitedFolder].
 library;
 
 import 'dart:io';

@@ -8,5 +8,5 @@
 ///
 /// This is the `singleQuote` the public `agent_cli` shipped and the `posixQuote`
 /// Karmashala's SSH runner has, which are the same function; the SSH runner
-/// stays in the app (docs/PACKAGE_SPLIT.md §3), so the package keeps its own.
+/// stays in the app, so the package keeps its own.
 String posixQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";

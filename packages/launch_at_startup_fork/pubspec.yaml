@@ -4,9 +4,8 @@
 # 13 and wakelock_plus 1.8. lib/ is upstream's, verbatim (MIT, see LICENSE),
 # except `src/app_auto_launcher_impl_windows.dart` — win32_registry 3 renamed
 # most of the API it used — and `windows.dart`, which exposes that class so a
-# test can drive it. docs/SETTLED.md, "One stale package pinned the whole
-# win32 family", has the reasoning; delete this directory and the override
-# when upstream ships a release on win32_registry 3.
+# test can drive it. Delete this directory and the override when upstream
+# ships a release on win32_registry 3.
 name: launch_at_startup
 description: Local fork of launch_at_startup, built against win32_registry 3.
 version: 0.5.1+win32registry3

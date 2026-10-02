@@ -58,8 +58,7 @@ class CliStoreLocator {
   ///
   /// A function rather than a `CommandRunnerFactory`: this used to hold the
   /// factory itself, which reached an SSH connection pool and through it a
-  /// database, for the sake of one `bash -lc 'printf %s "$HOME"'`
-  /// (docs/PACKAGE_SPLIT.md §3).
+  /// database, for the sake of one `bash -lc 'printf %s "$HOME"'`.
   final RunnerResolver runnerFor;
 
   final PathTranslator translator;

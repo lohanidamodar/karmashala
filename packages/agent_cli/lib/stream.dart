@@ -5,8 +5,7 @@
 /// adapter translates its wire format into the one `AgentEvent` vocabulary.
 ///
 /// The adapters take a `RunnerResolver` — `CommandRunner Function(String
-/// environmentId)` — and nothing else; composing that is the host's job
-/// (docs/PACKAGE_SPLIT.md §3).
+/// environmentId)` — and nothing else; composing that is the host's job.
 library;
 
 export 'src/agents/antigravity/antigravity_chat_protocol.dart';

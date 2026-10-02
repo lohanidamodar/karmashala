@@ -1,7 +1,6 @@
 // The code is a copy of `describeAge` in packages/karmashala_session/lib/src/session_resume.dart, kept identical to it.
 // The doc comments are not kept in step: they are this package's
 // pub.dev documentation, and the original's were trimmed.
-// See PACKAGE_SPLIT.md on consolidation.
 /// A coarse, deliberately unexciting rendering of an age.
 ///
 /// Rounded down and capped at days, because the point of the number is to tell

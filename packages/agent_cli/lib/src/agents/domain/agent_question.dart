@@ -194,8 +194,7 @@ const _enter = '\r';
 
 /// [keys] split the way a terminal sends them: an escape sequence whole, a run
 /// of printable text whole, every other control key alone. Written to the TUI
-/// one at a time, because a burst crossing a question's tabs loses keys
-/// (docs/SETTLED.md).
+/// one at a time, because a burst crossing a question's tabs loses keys.
 List<String> keystrokesOf(String keys) => [
   for (final m in RegExp(
     r'\x1b\[[0-9;]*[A-Za-z~]|[\x00-\x1f\x7f]|[^\x00-\x1f\x7f]+',

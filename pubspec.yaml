@@ -7,7 +7,7 @@ environment:
 
 # Pub workspace. This root holds no code; every member declares `resolution:
 # workspace` and shares this one resolution, lock file and `.dart_tool`, so a
-# member's `dart test` needs no `pub get` of its own (docs/PACKAGE_SPLIT.md §2).
+# member's `dart test` needs no `pub get` of its own.
 # Run `flutter pub get` here, at the root.
 #
 # `app` is the Flutter client and `server` the Karmashala server (package

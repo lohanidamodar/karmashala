@@ -9,7 +9,7 @@ import '../../../core/util/clock_provider.dart';
 /// **Whether a WSL folder is still there, asked from inside the distribution.**
 ///
 /// Never a stat over `\\wsl.localhost`: that share is slow and is what
-/// Windows on-access antivirus scans (docs/windows-antivirus.md). Every path
+/// Windows on-access antivirus scans. Every path
 /// wanted in one turn of the event loop goes out in **one** `wsl.exe` call per
 /// distribution, and an answer is kept: a row scrolled away and back asks
 /// nothing.

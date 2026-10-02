@@ -116,7 +116,7 @@ void main() {
     expect(request.executable, endsWith('codex.exe'));
     // Led by the global that stops the startup update check — a
     // behavioural-antivirus dropper signal — left of the `app-server`
-    // subcommand (docs/windows-antivirus.md).
+    // subcommand.
     expect(request.arguments, [
       '-c',
       'check_for_update_on_startup=false',

@@ -12,8 +12,7 @@ import 'package:karmashala_ui/tokens.dart';
 /// frame the instant the current one is drawn: one spinner anywhere on screen
 /// puts the *whole app* at 60 full pipeline passes a second — build, layout,
 /// compositing bits, semantics, raster, glyph atlas — for a 16px ring. That was
-/// measured on the owner's idle window as ~43 fps of continuous GPU raster
-/// (`docs/MEMORY-2026-09-20.md`, 2026-09-21).
+/// measured on the owner's idle window as ~43 fps of continuous GPU raster.
 void main() {
   final step = Motion.statusPeriod ~/ Motion.statusSteps;
   final clock = StatusSpinnerClock.instance;

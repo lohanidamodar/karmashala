@@ -8,8 +8,8 @@
 /// The package still takes no SQLite dependency. `package:sqlite3` binds a
 /// native library, and a package that pulls one in stops being a package a
 /// `dart test` can run without staging `sqlite3.dll` beside it — which is most
-/// of the point of extracting this layer at all
-/// (docs/PACKAGE_SPLIT.md §4). So the *host* supplies the reader, exactly the
+/// of the point of extracting this layer at all.
+/// So the *host* supplies the reader, exactly the
 /// way it supplies a [CommandRunner]: a function, injected, defaulting to
 /// absent.
 library;

@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// A WSL folder is asked about from inside its distribution, many at a time,
-/// and never by a stat over `\\wsl.localhost` (docs/windows-antivirus.md).
+/// and never by a stat over `\\wsl.localhost`.
 ///
 /// The author's machine has no WSL, so what is proved here is the argv, the
 /// parse, and — against this machine's own `sh` — the script itself.

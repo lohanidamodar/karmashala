@@ -31,7 +31,7 @@ void showQuickStart(WidgetRef ref) {
   showShellArea(ref, area == ShellArea.devices ? ShellArea.sessions : area);
 }
 
-/// **The quick start** (docs/BACKLOG.md #5): a card at the foot of the sidebar,
+/// **The quick start**: a card at the foot of the sidebar,
 /// beside the terminal rather than over it. It takes no focus when it appears;
 /// every row is a link to the real control, and a step is ticked only once
 /// the thing exists.

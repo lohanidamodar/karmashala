@@ -342,7 +342,7 @@ its own: `app/` is the Flutter client, `server/` the Karmashala server (package
 `karmashala_host`), `relay/` the relay with its contract in `relay/protocol/`,
 and `packages/` everything shared. Run `flutter pub get` at the root; run the
 app's `flutter` commands (`run`, `test`, `build`) from `app/`. A path in this
-guide or in `docs/` that starts `lib/`, `test/`, `integration_test/`, `assets/`
+guide that starts `lib/`, `test/`, `integration_test/`, `assets/`
 or a platform folder is the app's, under `app/`.
 
 Add tests in proportion to risk and user impact.
@@ -460,7 +460,7 @@ dart run build_runner build --delete-conflicting-outputs
 
 Driving the running app — the widget tree, taps, typing and screenshots of a
 debug build over the VM service. **A probe instance (§23)**, never the one you
-are working in. See [docs/marionette.md](docs/marionette.md):
+are working in:
 
 ```powershell
 $env:KARMASHALA_PROBE = "1"
@@ -500,9 +500,7 @@ Never expose, print, rewrite, or commit private signing credentials unless the
 user explicitly requests a credential-related change and understands the risk.
 
 **How Karmashala ships to Play.** `.github/workflows/android-release.yml`, run
-by hand (`workflow_dispatch`, track `internal` / `beta` / `production`). It is
-the shared `popupbits/.github` Play workflow inlined, because this private
-`lohanidamodar` repository cannot call another owner's reusable workflow. It
+by hand (`workflow_dispatch`, track `internal` / `beta` / `production`). It
 writes `app/android/key.properties` and the upload keystore, builds the AAB with
 `--dart-define=KARMASHALA_VERSION=<pubspec version>`, and runs the fastlane lane
 in `app/android` with `SKIP_FLUTTER_BUILD=1` so fastlane only uploads.
@@ -880,10 +878,8 @@ is one `WriteFile` followed by `FlushFileBuffers` — so the app already hands
 each key to ConPTY as a single indivisible write, and
 `ENABLE_VIRTUAL_TERMINAL_INPUT` is the *client's* flag to set, which `wsl.exe`
 does for itself. The only variable that moved the boundaries was the launch
-form. The exploratory harness — SS3 and kitty forms, burst and auto-repeat
-patterns, a repainting pane, and a Windows-native raw reader for the control —
-is kept at `C:\kw\keep\esc-split-probe\` rather than in the repository,
-because the one property worth pinning is the one the test above asserts.
+form. The exploratory harness is not
+kept: the one property worth pinning is the one the test above asserts.
 
 ### A failure is not automatically a bug
 
@@ -1171,7 +1167,7 @@ Most of this app is on the safe side of it by construction: toolchain lookups
 (`git`, `gh`, Chrome, editors, terminals) are resolved by bare name on
 every spawn; `adb` by one rule every user of it on a machine shares, on
 every probe (the `androidSdkPath` setting, `ANDROID_HOME`, `ANDROID_SDK_ROOT`,
-the default SDK, the PATH — docs/daemon-architecture.md, slice 4a); `karmashala_mcp` and WebDriverAgent are found relative to
+the default SDK, the PATH); `karmashala_mcp` and WebDriverAgent are found relative to
 `Platform.resolvedExecutable` per call; `scrcpy-server` is a bundle asset
 staged into `systemTemp` under a per-start name; `CliStoreLocator` rebuilds
 every store home from `$HOME` each time; `execution_environments
@@ -1267,14 +1263,13 @@ it wrong.** One line, two at most. A doc comment on a public API may name what
 it returns and one refusal it makes; that is all.
 
 **Delete on sight:** anything restating the code; a measurement narrative
-("measured on the owner's machine, 25 s, the dialog stayed at visible=0…"); the
-history of what the code used to be; "why that matters" essays; a paragraph
-justifying a decision. **Those belong in `docs/SETTLED.md`**, which is where a
-reader looks for a decision and where they will not scroll past it to reach the
-next function.
+("measured here, 25 s, the dialog stayed at visible=0…"); the history of what
+the code used to be; "why that matters" essays; a paragraph justifying a
+decision. **Those belong in the commit message**, where `git log` finds them
+beside the change and a reader of the code does not scroll past them.
 
-**When trimming, a fact that is load-bearing and not already in `SETTLED.md`
-moves there in one sentence** rather than being deleted. Everything else goes.
+**When trimming, a fact that is load-bearing stays as one sentence** rather
+than being deleted. Everything else goes.
 
 ## 22. The session host is a bundle, and it is built where it runs
 
@@ -1312,17 +1307,13 @@ of four things is wrong when a machine cannot hold a store.
 
 **The bundle is also the relay.** `karmashala_host relay` runs
 `relay/`'s server, so an SSH host used as the desktop's relay needs no
-second artifact and CI builds none (`docs/SETTLED.md`, *An SSH host can be the
-desktop's relay*). `relay/` stays out of the workspace and is reached by
+second artifact and CI builds none. `relay/` stays out of the workspace and is reached by
 path, as the app already reaches it; so does its contract, `relay/protocol/`,
 which the server and every client of the relay read instead of repeating.
 
 **In tests, never `dart run` the host.** Every spawn stages the bundled library
 into `.dart_tool/`, and parallel workers collide on the locked library. The live
 harnesses build once per isolate instead.
-
-The full reasoning, and what was measured, is in `docs/SETTLED.md` under *"The
-store became a package and the host stopped being one file"*.
 
 ## 23. Probe mode — building Karmashala inside Karmashala
 

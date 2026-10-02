@@ -3,8 +3,7 @@
 // Every open here passes `hardwareTransforms: false`: asking for the vendor
 // MFTs has killed `flutter_tester.exe` outright under load, with nothing in the
 // test output but "did not complete". `an encode here loads no vendor hardware
-// encoder` below is the guard, and docs/SETTLED.md has the measurement and how
-// to repeat it.
+// encoder` below is the guard.
 
 import 'dart:ffi';
 import 'dart:io';

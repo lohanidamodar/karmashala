@@ -6,7 +6,7 @@
 /// window existed**, and the process held `MPR.dll`, `p9np.dll`, `ntlanman.dll`
 /// and `davclnt.dll`. The dialog was enumerating Network while it built, before
 /// it had a window. `SetFolder` does not prevent that: it chooses what is
-/// *shown*, not what the dialog restores. See docs/SETTLED.md.
+/// *shown*, not what the dialog restores.
 library;
 
 import 'dart:convert';

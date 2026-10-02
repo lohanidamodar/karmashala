@@ -239,7 +239,7 @@ class RepoFileIndex {
     final host = space.hostPathOf(root);
     // A share is walked again when stale and never watched: a recursive watch
     // held on `\\wsl.localhost` is background access on the path Windows
-    // antivirus scans (docs/windows-antivirus.md). SFTP has no watch at all.
+    // antivirus scans. SFTP has no watch at all.
     if (host == null || host.startsWith(r'\\') || host.startsWith('//')) {
       return;
     }

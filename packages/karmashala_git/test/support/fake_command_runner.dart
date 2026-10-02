@@ -151,7 +151,7 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
       byEnvironmentId[environment.id] ?? fallback;
 
   /// This factory as the `RunnerResolver` the adapters and `CliStoreLocator`
-  /// take (docs/PACKAGE_SPLIT.md §3).
+  /// take.
   RunnerResolver get resolver =>
       (String environmentId) => byEnvironmentId[environmentId] ?? fallback;
 }

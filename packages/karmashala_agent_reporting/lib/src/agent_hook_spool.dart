@@ -94,7 +94,7 @@ class AgentHookSpool {
   /// `\\wsl.localhost`. On-access antivirus scans a file when it is *opened*,
   /// and a hook payload is the agent's own words — the prompt, a Bash command
   /// it ran — so Bitdefender flagged a spool file read over the share as
-  /// `CMD:Heur…Boxter` and denied the read (docs/windows-antivirus.md). The
+  /// `CMD:Heur…Boxter` and denied the read. The
   /// contents are read from inside the distribution instead: [wslDrainScript].
   Future<bool> hasPayloads(Directory directory) async {
     try {

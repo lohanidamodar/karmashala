@@ -1,6 +1,6 @@
 // The environment fixtures and the porcelain v2 builder the moved suites
 // need, copied from the app's test/support/fixtures.dart (a package cannot
-// import another package's test tree — see SETTLED.md, karmashala_core).
+// import another package's test tree).
 import 'package:agent_cli/process.dart';
 
 /// Fixed timestamp used across tests for determinism.

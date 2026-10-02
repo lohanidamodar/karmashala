@@ -110,7 +110,7 @@ class ServerSession {
     ProviderContainer? container;
     try {
       // The app opens no database: everything but the terminal layout is the
-      // server's (docs/daemon-architecture.md, slice 1). The layout is this
+      // server's. The layout is this
       // window's own, beside the app — one per server, since a pane names a
       // session on the server it was opened on.
       final machineDirectory = remote == null

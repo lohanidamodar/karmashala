@@ -132,7 +132,7 @@ void main() {
   ///
   /// The accepted sockets are HELD: one nobody references is finalised by the
   /// VM's next collection and sends a clean FIN, which is a host hanging up
-  /// rather than a slow one (SETTLED.md, the stranger that hung up).
+  /// rather than a slow one.
   Future<void> silentHost() async {
     final server = await ServerSocket.bind(
       InternetAddress(paths.socketPath, type: InternetAddressType.unix),

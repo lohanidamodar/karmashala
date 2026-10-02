@@ -5,7 +5,7 @@ import 'package:xterm2/xterm.dart';
 
 /// How long a pane's size has to hold still before its terminal takes it: a
 /// drag is then two reflows and two SIGWINCHes, not one per column, and a
-/// burst of row changes reaches the agent as its last size (SETTLED.md).
+/// burst of row changes reaches the agent as its last size.
 const kColumnResizeSettle = Duration(milliseconds: 100);
 
 /// How long a terminal shown again keeps its size while the chrome around it

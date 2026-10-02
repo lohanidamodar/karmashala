@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs a Karmashala server bundle on this machine (Linux or macOS) and runs
 # it as a per-user service: a systemd user unit on Linux, a launchd agent on
-# macOS. See docs/server.md.
+# macOS. See server/README.md.
 #
 #   server/deploy/install.sh <bundle> [options]
 #
@@ -248,4 +248,4 @@ fi
 
 say ""
 say "Next: pair a phone with \`karmashala_host pair --address=<this machine's address>\`"
-say "(docs/server.md: direct, relay and tailnet pairing, and the firewall)."
+say "(server/README.md: direct, relay and tailnet pairing, and the firewall)."

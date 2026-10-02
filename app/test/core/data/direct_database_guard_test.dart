@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// **The app is a client of the server's data** (docs/daemon-architecture.md,
-/// "Slice 1 — data through the server").
+/// **The app is a client of the server's data** (slice 1:
+/// data through the server).
 ///
 /// Every domain — notes, todos, preferences, the workspace, sessions and
 /// their records, environments and agents, automations, checkpoints,

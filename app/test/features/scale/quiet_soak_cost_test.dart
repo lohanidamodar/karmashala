@@ -21,7 +21,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 
 /// **The 100-session quiet soak.** One of the four benchmark gates
-/// `docs/BACKLOG.md` carried as unbuilt, and the reason "not proven for
+/// the backlog carried as unbuilt, and the reason "not proven for
 /// hundreds" was still literally true.
 ///
 /// "Quiet" means *idle*. A hundred sessions and their panes exist, every pane

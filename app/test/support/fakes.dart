@@ -6,8 +6,8 @@ import 'package:karmashala_core/util.dart';
 ///
 /// It implements the package's copy of the interface as well as core's.
 /// `agent_cli` is published and carries verbatim copies of `Clock` and
-/// `IdGenerator` rather than depending on `karmashala_core` for them
-/// (docs/PACKAGE_SPLIT.md §2); one fake satisfying both is what keeps every
+/// `IdGenerator` rather than depending on `karmashala_core` for them;
+/// one fake satisfying both is what keeps every
 /// suite that pins a time or an id on a single double.
 class FixedClock implements Clock, agent_cli.Clock {
   FixedClock(this._now);

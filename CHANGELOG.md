@@ -142,7 +142,7 @@ edited.** Schema head moves to **v49**.
   offer its bar makes when a turn ends on a limit: the account is read again at
   the reset, the session resumed on its own conversation and told to continue,
   or the wait moved to the new reset. Every waiting one is listed under
-  Settings › Automations. `docs/SETTLED.md`, *A session can be resumed…*.
+  Settings › Automations.
 - **The host's file dialog is gone from the desktop.** It had stopped drawing
   at all in this process: measured on a hung app, `IFileDialog::Show` had been
   entered and **no dialog window ever existed**, while the same dialog opened
@@ -1592,8 +1592,7 @@ flag, so a local run and automation cannot drift apart. Measured on a quiet
 machine: **5:19 at the old four, 3:24-3:40 at eight, 3:55 at thirty-two** —
 past eight, contention costs more than the parallelism buys.
 
-`docs/BACKLOG.md` records why it had been pinned at four, and why eight is safe
-now: companion tests with fixed 800 ms windows flaked 0.8% per instance at four
+It had been pinned at four, and eight is safe now: companion tests with fixed 800 ms windows flaked 0.8% per instance at four
 against 26% at eight, caused by a fixture that kept no reference to its socket
 so the VM finaliser closed it mid-window. That was fixed, and eight ran 153
 instances clean afterwards.

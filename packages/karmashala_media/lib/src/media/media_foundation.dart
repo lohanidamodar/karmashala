@@ -724,7 +724,7 @@ int _bitrateFor(int width, int height) {
 
 /// Whether this machine can write an MP4 — measured by opening a real sink and
 /// asking it to take RGB32, then throwing the file away. `MFTEnumEx` is not the
-/// question and answers it wrongly (see docs/SETTLED.md).
+/// question and answers it wrongly.
 VideoSupport probeVideoSupport({required bool hardwareTransforms}) {
   if (!Platform.isWindows) {
     return VideoSupport.unavailable(

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   The full gate is ~16 minutes and reruns 864 suites to prove a change in one
-  of them. docs/PACKAGE_SPLIT.md §4 splits that: a change in package X runs X's
+  of them. This splits that: a change in package X runs X's
   own `dart test` — no `flutter_tester`, no `sqlite3.dll`, no exit hang — plus
   the app folders that exercise X and whichever golden has X in its import
   closure. That is 1-3 minutes. The full gate stays the pre-merge check, not

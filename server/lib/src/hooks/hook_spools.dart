@@ -26,7 +26,7 @@ class HookSpoolSource {
   final String distribution;
 
   /// The spool in this server's spelling, `\\wsl.localhost\<distro>\…`: only
-  /// ever **listed by name** here, never opened (docs/windows-antivirus.md).
+  /// ever **listed by name** here, never opened.
   final String directory;
 
   /// The same directory inside the distribution, where it is read from.

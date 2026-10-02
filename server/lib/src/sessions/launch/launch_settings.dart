@@ -31,7 +31,7 @@ class LaunchSettings {
   final Map<String, String> existingSessionModes;
   final Map<String, String> defaultModels;
 
-  /// Null is unset: off on Windows, on elsewhere (docs/windows-antivirus.md).
+  /// Null is unset: off on Windows, on elsewhere.
   final bool? letAgentsUpdateThemselves;
 
   /// Whether a launched agent may update itself, the unset case decided by

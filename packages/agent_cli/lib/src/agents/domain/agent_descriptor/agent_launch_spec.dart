@@ -250,7 +250,7 @@ class AgentLaunchSpec {
 /// installer self-update. Launched under an unsigned desktop app, through a
 /// shell, that download-and-replace-an-exe step is the tail of a chain
 /// behavioural antivirus reads as a dropper, and on the owner's managed machine
-/// Bitdefender killed the whole process tree for it (docs/windows-antivirus.md).
+/// Bitdefender killed the whole process tree for it.
 ///
 /// Karmashala does not disable the user's updates in general — only in the
 /// processes it launches, and only when the setting says so. Each field is

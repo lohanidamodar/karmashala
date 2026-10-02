@@ -84,8 +84,8 @@ Get-ChildItem -LiteralPath $roots -Filter *.lnk -Recurse | ForEach-Object {
       CommandRequest(
         executable: 'powershell.exe',
         // A readable `-Command`: no `-EncodedCommand` and no execution-policy
-        // override, both of which behavioural antivirus scores as a dropper
-        // (docs/windows-antivirus.md). Neither was needed — the policy governs
+        // override, both of which behavioural antivirus scores as a dropper.
+        // Neither was needed — the policy governs
         // script *files*, not `-Command` — and `Process.start` quotes this one
         // argument for Windows itself, in UTF-16.
         arguments: ['-NoProfile', '-Command', startMenuScript],

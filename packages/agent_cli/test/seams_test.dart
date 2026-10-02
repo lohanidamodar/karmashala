@@ -9,8 +9,8 @@ import 'support/fixtures.dart';
 /// Each of the three collaborators an adapter used to hold — a
 /// `CommandRunnerFactory`, an `ExecutionEnvironmentDao` and a Riverpod-backed
 /// resolver — reached a database. They said one thing between them, "give me a
-/// runner for this environment id", and that is now one function
-/// (docs/PACKAGE_SPLIT.md §3). `CliStoreLocator` had the same shape: a factory
+/// runner for this environment id", and that is now one function.
+/// `CliStoreLocator` had the same shape: a factory
 /// plus an installations DAO, for a `$HOME` and a Codex path.
 ///
 /// These cases exist because a seam is only real if something drives it. Every

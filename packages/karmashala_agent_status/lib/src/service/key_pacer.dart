@@ -2,8 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 
 /// Types an answer into a session's pane the way a person would: one keystroke
 /// at a time, and a longer pause after Enter, which draws the next screen. One
-/// burst loses the keys that land while a question's next tab draws
-/// (docs/SETTLED.md).
+/// burst loses the keys that land while a question's next tab draws.
 class SessionKeyPacer {
   SessionKeyPacer({
     required this.press,

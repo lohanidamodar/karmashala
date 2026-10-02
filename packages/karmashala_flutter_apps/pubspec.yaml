@@ -19,7 +19,7 @@ dependencies:
   # The runner a scan or an SDK probe executes through, the environment kinds
   # and paths it is addressed in, and the `locateRequest` / version-parsing
   # shapes `FlutterSdkService` is modelled on. One-way: `agent_cli` never
-  # imports this package (docs/PACKAGE_SPLIT.md §2).
+  # imports this package.
   agent_cli:
     path: ../agent_cli
   # The VM service link logs through `package:logging` directly rather than

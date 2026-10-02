@@ -615,8 +615,7 @@ void main() {
     });
   });
 
-  // docs/daemon-architecture.md, "Frames that never change": a host of every
-  // protocol answers these bytes, so no bump may touch them.
+  // Frames that never change: a host of every protocol answers these bytes, so no bump may touch them.
   group('the stop check never changes', () {
     test('stopCheck, byte for byte', () {
       expect(const StopCheckMessage(7).toFrame().encode(), [

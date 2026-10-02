@@ -5,7 +5,7 @@
 #   docker compose -f server/deploy/docker-compose.yml exec server karmashala_host pair --address=<this machine's address>
 #
 # The agent CLIs must be installed in the image and signed in inside the
-# container (docs/server.md, "Docker"); the `home` volume keeps their sign-in
+# container (server/README.md, "Docker"); the `home` volume keeps their sign-in
 # across restarts.
 services:
   server:

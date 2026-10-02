@@ -5,8 +5,7 @@ import 'dart:io';
 /// The guard is not tidiness. `deleteSync(recursive: true)` names the **top**
 /// directory when any child cannot be removed, so an unguarded teardown turns a
 /// case's real failure into a `PathNotFoundException` about a path in `%TEMP%`
-/// — which is exactly how a shutdown defect stayed hidden for a day (see
-/// `SETTLED.md`, "The lifecycle 'flake' was a shutdown defect"). Windows also
+/// — which is exactly how a shutdown defect stayed hidden for a day. Windows also
 /// holds a handle for a moment after the process that had it exits, so a
 /// refusal here is a normal outcome and not a fault.
 ///

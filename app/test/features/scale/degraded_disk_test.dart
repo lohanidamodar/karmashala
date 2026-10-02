@@ -11,7 +11,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'scale_harness.dart';
 
 /// **The degraded-disk gate.** One of the four benchmark gates
-/// `docs/BACKLOG.md` carried as unbuilt.
+/// the backlog carried as unbuilt.
 ///
 /// Two failures matter, and they are different failures. A **slow** write
 /// blocks the UI isolate, because `package:sqlite3` is synchronous and every

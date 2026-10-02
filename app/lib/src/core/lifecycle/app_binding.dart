@@ -7,7 +7,7 @@ import 'package:marionette_flutter/marionette_flutter.dart';
 
 /// Initializes the binding, and in a **debug build only** makes it Marionette's
 /// — the VM-service extensions an agent drives the app through: read the widget
-/// tree, tap, type, scroll, screenshot (see docs/marionette.md).
+/// tree, tap, type, scroll, screenshot.
 ///
 /// `kDebugMode` rather than a flag, for two reasons. The extensions are
 /// registered on the VM service, which a release build does not serve at all;
