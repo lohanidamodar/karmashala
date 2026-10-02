@@ -38,6 +38,7 @@ import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import '../application/acp_session_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -427,7 +428,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
     // (see `SessionTranscriptLocator`): stdout carries no structured stream.
-    final fromPty = session?.surface == SessionSurface.pane;
+    // An ACP session's is the server's rows, read down the same path.
+    final fromPty =
+        ref.watch(isAcpSessionProvider(widget.sessionId)) ||
+        session?.surface == SessionSurface.pane;
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     final footer = _footerFor(active);

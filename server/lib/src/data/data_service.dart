@@ -17,6 +17,7 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
+import '../sessions/session_modes.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
 import '../stores/store_desk.dart';
@@ -165,6 +166,10 @@ class DataService {
   /// A client's chat sends and Stop, typed as host keys (Stage 2 step 2);
   /// refused `unavailable` without it.
   SessionInput? sessionInput;
+
+  /// Where `sessions.setMode` lands (ACP design, C5): the ACP runtime replaces
+  /// the default, which refuses every session as having no modes.
+  SessionModeChanger sessionModes = const NoSessionModes();
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -521,6 +526,7 @@ class DataService {
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
         SessionInputRequest() ||
+        SessionSetMode() ||
         EnvVaultRequest() ||
         StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
@@ -735,6 +741,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
       request is SessionInputRequest ||
+      request is SessionSetMode ||
       request is EnvVaultRequest ||
       request is StoreRequest;
 
@@ -819,6 +826,10 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
           ));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
+    }
+    if (request case SessionSetMode(:final sessionId, :final modeId)) {
+      await _service.sessionModes.setMode(sessionId, modeId);
+      return DataReply(const DataAck() as R, _service._revision);
     }
     if (request case final SessionTranscriptRequest<Object?> asked) {
       if (!transcripts) {
@@ -1012,7 +1023,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   };
   if (denied != null || grants == null) return denied;
   final needed = switch (request) {
-    SessionSend() || SessionInterrupt() => Capability.sendPrompt,
+    SessionSend() || SessionInterrupt() || SessionSetMode() =>
+      Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to
     // sessions: no more than the phone may do itself.
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>

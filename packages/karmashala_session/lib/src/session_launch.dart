@@ -28,9 +28,11 @@ enum SessionView {
 
 /// **The prior**: whether this agent's adapter says a chat view is built from
 /// its transcripts. No longer the answer — [SessionChatView] is the
-/// per-session reading a surface asks.
+/// per-session reading a surface asks. An agent spoken to over ACP has one
+/// without a transcript file: the server keeps its conversation as rows.
 bool agentSupportsChatView(AgentAdapter? adapter) =>
-    adapter?.transcripts?.buildsChatView ?? false;
+    adapter != null &&
+    (adapter.acp != null || (adapter.transcripts?.buildsChatView ?? false));
 
 /// The default view for an agent: chat where we can build one, terminal
 /// otherwise. The user can always switch.

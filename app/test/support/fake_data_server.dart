@@ -335,6 +335,13 @@ class FakeDataServer {
   /// Every request answered, by kind, in order.
   final requests = <String>[];
 
+  /// The modes each session's agent last announced (seeded through
+  /// [writeAsAnotherClient]); `sessions.setMode` moves `currentModeId`.
+  final sessionModes = <String, SessionModesChanged>{};
+
+  /// When set, `sessions.setMode` is refused `invalid` with these words.
+  String? modeRefusal;
+
   /// When set, answers wait for it — a slow server, or one mid-answer.
   Completer<void>? hold;
 
@@ -433,6 +440,8 @@ class FakeDataServer {
         case FilesChange() || TranscriptChanged():
           // A watch's news is one link's.
           break;
+        case SessionModesChanged(:final sessionId):
+          sessionModes[sessionId] = change;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;
@@ -576,6 +585,18 @@ class FakeDataServer {
 
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
     requests.add(request.kind);
+    if (request case SessionSetMode(:final sessionId, :final modeId)) {
+      if (modeRefusal case final words?) throw DataRefused.invalid(words);
+      final before = sessionModes[sessionId];
+      final after = SessionModesChanged(
+        sessionId: sessionId,
+        currentModeId: modeId,
+        availableModes: before?.availableModes ?? const [],
+      );
+      sessionModes[sessionId] = after;
+      _tell(null, [after]);
+      return DataReply(const DataAck() as R, revision, const []);
+    }
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
     }
@@ -759,7 +780,7 @@ class FakeDataServer {
       SessionInputRequest() => throw const DataRefused.unavailable(
         'this fake types into no sessions',
       ),
-      StoreRequest() => throw StateError('answered above'),
+      SessionSetMode() || StoreRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

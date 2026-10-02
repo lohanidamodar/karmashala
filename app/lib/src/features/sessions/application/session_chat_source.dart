@@ -13,6 +13,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../data/server_transcripts.dart';
+import 'acp_session_providers.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 
@@ -175,8 +176,27 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         capabilitiesProvider.select((caps) => caps.chatViaServer),
       );
       final session = ref.read(sessionsDataProvider).getById(sessionId);
-      final externalId = session?.externalSessionId;
-      if (session == null || externalId == null || externalId.isEmpty) {
+      if (session == null) {
+        yield const [];
+        return;
+      }
+      // An ACP session's conversation is the server's own rows (ACP design,
+      // C3): no file on any disk, and no CLI id to wait for. A server that
+      // cannot serve them has nothing to show.
+      if (ref.watch(isAcpSessionProvider(sessionId))) {
+        if (viaServer) {
+          yield* serverTranscriptMessages(
+            ref,
+            sessionId,
+            visible: chatTranscriptPollingProvider,
+          );
+        } else {
+          yield const [];
+        }
+        return;
+      }
+      final externalId = session.externalSessionId;
+      if (externalId == null || externalId.isEmpty) {
         yield const [];
         return;
       }

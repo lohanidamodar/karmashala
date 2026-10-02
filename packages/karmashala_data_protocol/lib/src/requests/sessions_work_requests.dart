@@ -78,8 +78,39 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     args.string('sessionId'),
     requestId: args.optionalString('requestId'),
   ),
+  SessionSetMode.name => SessionSetMode(
+    sessionId: args.string('sessionId'),
+    modeId: args.string('modeId'),
+  ),
   _ => null,
 };
+
+/// Puts session [sessionId]'s agent into mode [modeId] — one of the
+/// `availableModes` a `SessionModesChanged` offered (ACP `session/set_mode`).
+/// Refused `invalid` for a session whose agent offers no modes.
+final class SessionSetMode extends DataRequest<DataAck> {
+  const SessionSetMode({required this.sessionId, required this.modeId});
+
+  static const String name = 'sessions.setMode';
+
+  final String sessionId;
+  final String modeId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'modeId': modeId,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
 
 /// Sessions the server starts and runs; answered when done.
 sealed class SessionWorkRequest<R> extends DataRequest<R> {

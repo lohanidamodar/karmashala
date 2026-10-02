@@ -30,6 +30,11 @@ SessionChatView screenSessionChatView(Ref ref, String sessionId) {
   // **The store's answer comes before the session's**: a session with no CLI
   // id yet will get one, and an agent whose store we cannot open will not.
   final adapter = ref.read(agentRegistryProvider).adapterFor(agentId);
+  // An ACP agent's conversation is the server's own rows: no store, no file,
+  // no CLI id to wait for (ACP design, C3).
+  if (adapter != null && adapter.acp != null) {
+    return SessionChatView.unread(prior: agentSupportsChatView(adapter));
+  }
   if (adapter?.descriptor.store == null || adapter?.store == null) {
     return const SessionChatView.read(
       ChatViewEvidence.storeUnreadable,
@@ -92,9 +97,7 @@ final sessionChatViewProbeProvider = FutureProvider.autoDispose
       // The server looked where the agent wrote it: its page's `absence` is
       // the answer, and none means a record is there (Stage 0 step 6).
       if (ref.read(capabilitiesProvider).chatViaServer) {
-        final page = await ref
-            .read(serverTranscriptsProvider)
-            .peek(sessionId);
+        final page = await ref.read(serverTranscriptsProvider).peek(sessionId);
         return SessionChatView.read(
           page.absence ?? ChatViewEvidence.transcriptOnDisk,
           prior: screen.prior,

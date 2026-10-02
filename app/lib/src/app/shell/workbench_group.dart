@@ -58,11 +58,14 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     final session = empty ? null : _groupSession();
     // With nothing to read the group is its terminal. Which of the two faces is
     // up is a property of *this* group, so three agents can show three at once.
+    // A chat-only session has one face, whatever the group was last showing.
+    final chatOnly = session?.chatOnly ?? false;
     final onTerminal =
         session == null ||
-        (groupId == null
-            ? !_chatWithoutGroup
-            : ref.watch(terminalVisibleInGroupProvider(groupId)));
+        (!chatOnly &&
+            (groupId == null
+                ? !_chatWithoutGroup
+                : ref.watch(terminalVisibleInGroupProvider(groupId))));
     // Asked for, or let go of — see [workspaceGroupConversationProvider]. Derived
     // here from both inputs, and written back after the frame.
     final conversationFor = _settleConversation(session?.id, onTerminal);
@@ -99,9 +102,12 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                       compact: compact,
                     )
                   : session == null
-                  ? _TerminalSurface(
-                      groupId: groupId,
-                      groupFocused: focused,
+                  ? _TerminalSurface(groupId: groupId, groupFocused: focused)
+                  // No stack: there is no terminal to keep alive behind it.
+                  : chatOnly
+                  ? SessionTranscriptView(
+                      sessionId: session.id,
+                      holdForPrompt: compact,
                     )
                   : IndexedStack(
                       key: kWorkbenchSurfaces,
@@ -204,6 +210,7 @@ _WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
       title: row?.title ?? 'Session',
       paneId: null,
       native: true,
+      chatOnly: ref.watch(isAcpSessionProvider(hosted.id)),
     );
   }
   final sessionId = groupId == null
@@ -216,6 +223,7 @@ _WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
     title: record?.title ?? 'Session',
     paneId: ref.watch(paneOfSessionProvider(sessionId)),
     native: true,
+    chatOnly: ref.watch(isAcpSessionProvider(sessionId)),
   );
 }
 

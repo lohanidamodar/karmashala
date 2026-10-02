@@ -91,7 +91,8 @@ class _SessionBar extends ConsumerWidget {
       _sessionBarNarrowWidth,
       textScaler,
     );
-    final toggle = selected == null
+    // No toggle for a session with one face: there is nothing to switch to.
+    final toggle = selected == null || selected.chatOnly
         ? null
         : (bool compact) => _ViewToggle(
             onTerminal: onTerminal,
@@ -304,6 +305,7 @@ class _SessionStatusLine extends StatelessWidget {
                   SessionStatsButton(sessionId: sessionId),
                   const SizedBox(width: Insets.sm),
                   PermissionModeChip(sessionId: sessionId),
+                  SessionModePicker(sessionId: sessionId),
                   const SizedBox(width: Insets.xs),
                   OperatorChip(sessionId: sessionId),
                   const SizedBox(width: Insets.xs),
@@ -395,6 +397,7 @@ class _SessionActionRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         PermissionModeChip(sessionId: sessionId),
+                        SessionModePicker(sessionId: sessionId),
                         const SizedBox(width: Insets.xs),
                         OperatorChip(sessionId: sessionId),
                         const SizedBox(width: Insets.xs),
@@ -420,6 +423,8 @@ class _SessionActionRow extends StatelessWidget {
           const Spacer()
         else ...[
           PermissionModeChip(sessionId: sessionId),
+          // Not flexible: a fourth flex child would take the strip's share.
+          SessionModePicker(sessionId: sessionId),
           const SizedBox(width: Insets.xs),
           // Its qualifier gives way before the row overflows.
           Flexible(child: OperatorChip(sessionId: sessionId)),

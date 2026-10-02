@@ -285,6 +285,18 @@ class DataClient {
   /// ended, or was forgotten.
   Stream<TerminalChange> get terminalChanges => _terminalChanges.stream;
 
+  /// The modes each session's agent offers (ACP design, C5), by session id,
+  /// as last told. In memory only: the agent announces them again on resume.
+  final sessionModes = <String, SessionModesChanged>{};
+
+  final _sessionModeChanges = StreamController<SessionModesChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent announced or changed its modes.
+  Stream<SessionModesChanged> get sessionModeChanges =>
+      _sessionModeChanges.stream;
+
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
   /// change.
@@ -955,6 +967,9 @@ class DataClient {
           if (!_fileChanges.isClosed) _fileChanges.add(change);
         case final TranscriptChanged change:
           if (!_transcriptChanges.isClosed) _transcriptChanges.add(change);
+        case final SessionModesChanged change:
+          sessionModes[change.sessionId] = change;
+          if (!_sessionModeChanges.isClosed) _sessionModeChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1165,6 +1180,7 @@ class DataClient {
     unawaited(_intents.close());
     unawaited(_fileChanges.close());
     unawaited(_transcriptChanges.close());
+    unawaited(_sessionModeChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());
