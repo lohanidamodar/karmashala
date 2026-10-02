@@ -82,8 +82,11 @@ void main() {
     db = TestMachine();
     server = FakeDataServer()..runsOn(db);
     data = await server.override();
+    // The Windows host, not `localHostEnvironment`: the status line names
+    // the machine, and a golden that says "macOS" on one host and "Windows"
+    // on another fails for where it ran, not for what changed.
     server.environmentRows.upsert(
-      localHostEnvironment(FixedClock(testTime).nowUtc()),
+      windowsHostEnvironment(FixedClock(testTime).nowUtc()),
     );
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
