@@ -11,6 +11,7 @@ import '../application/session_status_providers.dart';
 String agentStatusExplanation(AgentStatusReport report) {
   final how = switch (report.source) {
     AgentStatusSource.hook => 'from an installed hook',
+    AgentStatusSource.protocol => "from the agent's own protocol",
     AgentStatusSource.stateFile => "from the agent's transcript",
     AgentStatusSource.terminalGrid => "from the agent's terminal",
     AgentStatusSource.none => 'no source could tell',

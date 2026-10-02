@@ -98,9 +98,11 @@ void main() {
       expect(scan.added.single.agentId, AgentIds.claudeCode);
       expect(scan.added.single.executable.path, newPath);
       expect(scan.added.single.version, '2.1.0');
+      // Every built-in but the one found, the ACP agents included.
       expect(scan.missing, [
-        for (final id in [AgentIds.codex, AgentIds.antigravity])
-          AgentRegistry.builtIn.displayNameFor(id),
+        for (final id in AgentIds.builtIn)
+          if (id != AgentIds.claudeCode)
+            AgentRegistry.builtIn.displayNameFor(id),
       ]);
 
       expect(rows().single.agentId, AgentIds.claudeCode);
@@ -298,7 +300,8 @@ void main() {
         if (script.contains('exit 0')) {
           return const CommandResult(exitCode: 0, stdout: '', stderr: '');
         }
-        if (script.contains('command -v claude')) {
+        // The word itself, not a prefix: `claude-agent-acp` is probed too.
+        if (RegExp(r'command -v claude(\s|$)').hasMatch(script)) {
           return const CommandResult(
             exitCode: 0,
             stdout: '/home/dev/.local/bin/claude\n',

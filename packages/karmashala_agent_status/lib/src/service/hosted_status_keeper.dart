@@ -156,7 +156,7 @@ class HostedStatusKeeper {
       kept.hookStatus = report.status;
       kept.hookSince = report.observedAt;
     }
-    if (report.hasOpenQuestion && report.source == AgentStatusSource.hook) {
+    if (report.hasOpenQuestion && _isTheAgentsWord(report.source)) {
       kept.question = _questionIn(kept.agentId, body) ?? kept.question;
     }
     // The screen read at the last tick still stands beside a hook: a fresh
@@ -217,8 +217,7 @@ class HostedStatusKeeper {
           : composed;
     }
     // A question travels only while the hook that opened it is the word.
-    final hookQuestion =
-        next.hasOpenQuestion && next.source == AgentStatusSource.hook;
+    final hookQuestion = next.hasOpenQuestion && _isTheAgentsWord(next.source);
     if (!hookQuestion) kept.question = null;
     final before = kept.status;
     // The call an open prompt asks about, and when the wait began.
@@ -273,6 +272,11 @@ class HostedStatusKeeper {
         source: AgentStatusSource.none,
         observedAt: clock.nowUtc(),
       );
+
+  /// A hook is the agent's own word about itself; so is a report the agent
+  /// sent over its protocol. A screen or state-file reading is ours.
+  static bool _isTheAgentsWord(AgentStatusSource source) =>
+      source == AgentStatusSource.hook || source == AgentStatusSource.protocol;
 }
 
 /// Everything kept about one session between readings.
