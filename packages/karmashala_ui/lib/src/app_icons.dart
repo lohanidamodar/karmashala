@@ -304,6 +304,18 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData magnifyingGlassMinus = IconData(
+    0xe30e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData magnifyingGlassPlus = IconData(
+    0xe310,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData minusCircle = IconData(
     0xe32c,
     fontFamily: 'PhosphorRegular',
@@ -330,6 +342,12 @@ abstract final class AppIcons {
   );
   static const IconData openAiLogo = IconData(
     0xe7d2,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData paperclip = IconData(
+    0xe39a,
     fontFamily: 'PhosphorRegular',
     fontPackage: 'picons',
     matchTextDirection: true,

@@ -173,7 +173,7 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
           ),
           _IconAction(
             tooltip: 'Zoom out',
-            icon: AppIcons.minusCircle,
+            icon: AppIcons.magnifyingGlassMinus,
             onPressed: _zoom.zoomOut,
           ),
           ListenableBuilder(
@@ -187,7 +187,7 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
           ),
           _IconAction(
             tooltip: 'Zoom in',
-            icon: AppIcons.plusCircle,
+            icon: AppIcons.magnifyingGlassPlus,
             onPressed: _zoom.zoomIn,
           ),
           const SizedBox(
@@ -199,7 +199,7 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
           tooltip: attach != null
               ? 'Attach to chat'
               : (widget.attachDisabledReason ?? 'Attach to chat'),
-          icon: AppIcons.chat,
+          icon: AppIcons.paperclip,
           onPressed: attach,
         ),
         if (copyImage != null)
@@ -435,7 +435,7 @@ class _NoPlaybackCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final attach = TextButton.icon(
       onPressed: onAttachToChat,
-      icon: const Icon(AppIcons.chat),
+      icon: const Icon(AppIcons.paperclip),
       label: const Text('Attach to chat'),
     );
     return PanePlaceholder(
