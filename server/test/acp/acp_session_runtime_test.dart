@@ -717,7 +717,7 @@ void main() {
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          allOf(contains('offers 2 methods'), contains('a, b')),
+          allOf(contains('logged in first'), contains('a, b')),
         ),
       ),
     );

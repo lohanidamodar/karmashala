@@ -525,14 +525,16 @@ class AcpSessionRuntime implements ScreenSession {
       final method =
           spec.authMethodId ?? (methods.length == 1 ? methods.single.id : null);
       if (method == null) {
+        // A login the agent would run itself opens a browser nobody here
+        // can see; the person logs in once where the agent runs instead.
         throw StateError(
           methods.isEmpty
               ? '$agentName asks to be authenticated (${error.message}) and '
                     'advertises no way to do it'
-              : '$agentName asks to be authenticated and offers '
-                    '${methods.length} methods '
-                    '(${methods.map((m) => m.id).join(', ')}); none is chosen '
-                    'for it',
+              : '$agentName asks to be logged in first. Run it once in a '
+                    'terminal on that machine and complete its login, then '
+                    'start the session again (it offers '
+                    '${methods.map((m) => m.id).join(', ')}).',
         );
       }
       await _client!.authenticate(method);

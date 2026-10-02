@@ -168,7 +168,7 @@ Future<void> _exercise(
     try {
       outcome = await runtime.start();
     } on StateError catch (error) {
-      if (error.message.contains('authenticated')) {
+      if (error.message.contains('logged in first')) {
         fail(
           '$agentName refused the session until it is logged in; log in to it '
           'inside WSL and rerun. Its words: ${error.message}',
