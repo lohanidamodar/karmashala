@@ -221,26 +221,19 @@ void main() {
       ]);
     });
 
-    test('Scratch cannot be deleted while a session runs in it', () async {
+    test('Scratch is removed like any project, its sessions with it', () async {
+      // It once refused while a session was in it, which left a Scratch
+      // nobody could remove from the explorer: the confirmation there
+      // already says the sessions go with the project.
       final scratch = await fixture.folders.createScratchCheckout(
         target: host(),
       );
       session('s1', scratch.id);
 
-      expect(
-        () => fixture.context.write(ProjectDelete(scratch.projectId)),
-        throwsA(
-          isA<DataRefused>().having(
-            (r) => r.message,
-            'message',
-            contains('holds 1 session'),
-          ),
-        ),
-      );
-      expect(
-        ProjectDao(fixture.database).getById(scratch.projectId),
-        isNotNull,
-      );
+      fixture.context.write(ProjectDelete(scratch.projectId));
+
+      expect(ProjectDao(fixture.database).getById(scratch.projectId), isNull);
+      expect(SessionDao(fixture.database).getById('s1'), isNull);
     });
   });
 

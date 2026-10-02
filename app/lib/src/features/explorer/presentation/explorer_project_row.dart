@@ -7,6 +7,8 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -744,9 +746,15 @@ class ProjectRowActions {
       builder: (context) => _RemoveProjectDialog(name: project.name),
     );
     if (deleteCliSessions == null) return;
-    await ref
-        .read(projectsControllerProvider.notifier)
-        .deleteProject(project.id, deleteCliSessions: deleteCliSessions);
+    try {
+      await ref
+          .read(projectsControllerProvider.notifier)
+          .deleteProject(project.id, deleteCliSessions: deleteCliSessions);
+    } on DataRefused catch (refusal) {
+      // The server's words, where the person is looking — not an uncaught
+      // error in the log.
+      _say(refusal.message);
+    }
   }
 
   /// Files the project where the menu said, and says what happened.

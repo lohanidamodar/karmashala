@@ -219,18 +219,7 @@ class WorkspaceHandler {
   /// cascades — everything recorded against them go; its notes and todos
   /// stay, unfiled, and every subscribed client is told all of it.
   DataAck deleteProject(ProjectDelete request, List<DataChange> changes) {
-    final project = _project(request.id);
-    // Scratch is where sessions without a project live; while any does, the
-    // project is not the user's to remove — the sessions are.
-    if (project.isScratch) {
-      final held = _projects.sessionsIn(project.id);
-      if (held > 0) {
-        throw DataRefused.invalid(
-          'Scratch holds $held ${held == 1 ? 'session' : 'sessions'}. Delete '
-          'them first; the project goes with its last one.',
-        );
-      }
-    }
+    _project(request.id);
     final checkouts = _repositories.getByProject(request.id);
     final notes = [
       for (final note in _notes.list())
