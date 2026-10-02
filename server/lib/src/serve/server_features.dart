@@ -49,4 +49,9 @@ const Set<String> kServerFeatures = <String>{
   // `quickAccess.*`: folders pinned to every file browser, kept here for
   // every client and greeted with `quickAccessChanged`.
   'quickAccess',
+
+  // Sessions whose agent speaks ACP: the server owns the process and the
+  // conversation, which `sessions.transcript` serves from its own rows
+  // (ACP design, C3).
+  'acpSessions',
 };

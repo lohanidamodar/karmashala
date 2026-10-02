@@ -10,6 +10,7 @@ export 'src/store/follow_up_dao.dart';
 export 'src/store/imported_session_dao.dart';
 export 'src/store/session_dao.dart';
 export 'src/store/session_event_dao.dart';
+export 'src/store/session_message_dao.dart';
 export 'src/store/session_placement.dart';
 export 'src/store/session_recap_dao.dart';
 export 'src/store/session_relay_dao.dart';

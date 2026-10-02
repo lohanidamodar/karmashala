@@ -16,6 +16,7 @@ import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
 
+import 'session_message_transcripts.dart';
 import 'session_records.dart';
 
 /// One client link, as transcript watches see it: a notice goes to it alone.
@@ -33,18 +34,34 @@ abstract interface class TranscriptWatchLink {
 /// A watched record is stat-ed every [interval] — longer when its reads are
 /// costly — and each new revision is told to its watchers as
 /// [TranscriptChanged]. At most [maxHeld] unwatched records stay in memory.
+///
+/// A session [servesFromMessages] says yes to is read from `session_messages`
+/// through [messages] instead (ACP design, C3): no file, no tail, the rows'
+/// own revisions; its writer calls [messagesChanged].
 class SessionTranscripts {
   SessionTranscripts({
     required this.lookUp,
+    this.messages,
+    bool Function(String sessionId)? servesFromMessages,
     this.interval = const Duration(seconds: 1),
     this.tick = const Duration(milliseconds: 250),
     this.searchInterval = const Duration(seconds: 3),
     this.maxHeld = 16,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now;
+  }) : servesFromMessages = servesFromMessages ?? _noSession,
+       _now = now ?? DateTime.now;
 
   /// Where a session's record is, or why there is none.
   final Future<SessionRecordLookup> Function(String sessionId) lookUp;
+
+  /// The table-backed source, for the sessions [servesFromMessages] names.
+  final SessionMessageTranscriptSource? messages;
+
+  /// Whether a session's transcript is the server's own rows rather than its
+  /// agent's file. The runtime wires it to "this session's agent is ACP".
+  final bool Function(String sessionId) servesFromMessages;
+
+  static bool _noSession(String _) => false;
   final Duration interval;
   final Duration tick;
 
@@ -174,6 +191,15 @@ class SessionTranscripts {
     _arm();
   }
 
+  /// `session_messages` rows of [sessionId] were written: re-read them now
+  /// and tell its watchers, rather than at the next poll. Nothing happens for
+  /// a session nobody has asked about.
+  Future<void> messagesChanged(String sessionId) {
+    final held = _held[sessionId];
+    if (held == null) return Future.value();
+    return _refresh(held);
+  }
+
   void closed(TranscriptWatchLink link) {
     for (final held in _held.values) {
       held.links.remove(link);
@@ -255,6 +281,7 @@ class SessionTranscripts {
   }
 
   Future<void> _read(_Held held) async {
+    if (servesFromMessages(held.sessionId)) return _readMessages(held);
     final now = _now();
     if (held.tail == null) {
       final at = held.lookedAt;
@@ -319,6 +346,53 @@ class SessionTranscripts {
       ..cost = clock.elapsed
       ..stamp = stamp;
     _absorb(held, next);
+  }
+
+  /// The table's rows: whole on the first read and after a shrink, else only
+  /// those changed since the revision held. Ordinals are contiguous from 0,
+  /// so a row's ordinal is its index.
+  Future<void> _readMessages(_Held held) async {
+    final source = messages;
+    if (source == null) {
+      return _absent(held, ChatViewEvidence.storeUnreadable);
+    }
+    const generation = SessionMessageTranscriptSource.generation;
+    final clock = Stopwatch()..start();
+    final latest = source.latestRevision(held.sessionId);
+    if (held.generation == generation && latest == held.revision) return;
+    var whole = held.generation != generation || latest < held.revision;
+    if (!whole) {
+      final rows = held.messages.toList();
+      final changedAt = held.changedAt.toList();
+      for (final row in source.readSince(held.sessionId, held.revision)) {
+        if (row.ordinal < rows.length) {
+          rows[row.ordinal] = row.message;
+          changedAt[row.ordinal] = row.revision;
+        } else if (row.ordinal == rows.length) {
+          rows.add(row.message);
+          changedAt.add(row.revision);
+        } else {
+          whole = true;
+          break;
+        }
+      }
+      if (!whole) {
+        held
+          ..messages = rows
+          ..changedAt = changedAt
+          ..revision = latest;
+      }
+    }
+    if (whole) {
+      final all = source.readAll(held.sessionId);
+      held
+        ..absence = null
+        ..generation = generation
+        ..messages = all.messages
+        ..changedAt = all.changedAt
+        ..revision = latest;
+    }
+    held.cost = clock.elapsed;
   }
 
   void _absent(_Held held, ChatViewEvidence absence) {

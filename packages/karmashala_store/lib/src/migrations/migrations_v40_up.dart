@@ -645,3 +645,30 @@ void _migrateToV64(Database db) {
   if (columns.contains('kind')) return;
   db.execute('ALTER TABLE projects ADD COLUMN kind TEXT;');
 }
+
+/// An ACP session's conversation, written by the server from the agent's
+/// `session/update` stream (ACP design, C3). `revision` is per session, so a
+/// client naming the one it holds is sent only the rows that moved.
+void _migrateToV65(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_messages (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+      ordinal     INTEGER NOT NULL,
+      role        TEXT NOT NULL,
+      text        TEXT NOT NULL DEFAULT '',
+      thinking    TEXT,
+      tool_json   TEXT,
+      plan_json   TEXT,
+      message_id  TEXT,
+      revision    INTEGER NOT NULL,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      UNIQUE (session_id, ordinal)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_messages_revision '
+    'ON session_messages (session_id, revision);',
+  );
+}

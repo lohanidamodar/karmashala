@@ -14,9 +14,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 64);
+    expect(db.schemaVersion, 65);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 64);
+    expect(version, 65);
     final indexes = db.query("PRAGMA index_list('sessions');");
     expect(indexes.map((row) => row['name']), contains('idx_sessions_pane'));
     expect(
@@ -132,7 +132,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 64);
+    expect(db.schemaVersion, 65);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

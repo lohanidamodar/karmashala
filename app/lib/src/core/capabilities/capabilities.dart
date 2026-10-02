@@ -264,6 +264,11 @@ final class Capabilities {
   /// [readsServerDisk].
   bool get mediaViaServer => serverOffers('sessions.media');
 
+  /// The server runs ACP agents as sessions of its own and serves their
+  /// conversation from its rows (ACP design, C3); without it the New Session
+  /// dialog offers none.
+  bool get acpSessions => serverOffers('acpSessions');
+
   /// An approval names the prompt it answers, and the server refuses it when
   /// another is open by the time it lands (Stage 2 step 1).
   bool get answersCarryAsk => serverOffers('prompt.answer.ask');
