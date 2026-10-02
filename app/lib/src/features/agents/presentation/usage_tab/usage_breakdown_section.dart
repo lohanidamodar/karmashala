@@ -5,13 +5,16 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../explorer/application/explorer_actions.dart';
+import '../../../sessions/presentation/session_stats_sections.dart'
+    show thinkingSplitSegments, thinkingSummary;
 import '../../application/session_token_totals.dart' show formatTokenCount;
 import '../../application/usage_session_tokens.dart';
 import '../usage_chip.dart' show formatUsageDuration;
 
 /// **Where the tokens went**, by project and by model, over the sessions of
-/// the account's agent last active in the range. Whole-session totals: a
-/// session's file does not say which tokens fell in which hour.
+/// the account's agent last active in the range, and how much of the output
+/// was thinking. Whole-session totals: a session's file does not say which
+/// tokens fell in which hour.
 class UsageWhereItWent extends StatelessWidget {
   const UsageWhereItWent({required this.breakdown, super.key});
 
@@ -60,6 +63,55 @@ class UsageWhereItWent extends StatelessWidget {
               ),
             ),
         ],
+        const SizedBox(height: Insets.md),
+        const EyebrowLabel('Thinking'),
+        const SizedBox(height: Insets.xs),
+        _ThinkingSplit(breakdown: breakdown, muted: muted),
+      ],
+    );
+  }
+}
+
+/// How the range's output divided between answer and thinking, over the
+/// sessions whose files break thinking out — or a sentence when none does.
+class _ThinkingSplit extends StatelessWidget {
+  const _ThinkingSplit({required this.breakdown, required this.muted});
+
+  final UsageBreakdown breakdown;
+  final TextStyle? muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final thinking = breakdown.thinking;
+    if (thinking == null) {
+      return Text(
+        'Not recorded — no session in the range breaks thinking out of its '
+        'output.',
+        style: muted,
+      );
+    }
+    final segments = thinkingSplitSegments(
+      context,
+      output: thinking.output,
+      thinking: thinking.reasoning,
+    );
+    final sessions = thinking.sessions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SegmentedBar(
+          segments: segments,
+          semanticsLabel: 'Output by kind. ${thinkingSummary(segments)}',
+        ),
+        const SizedBox(height: Insets.sm),
+        ChartLegend(segments: segments),
+        const SizedBox(height: Insets.xs),
+        Text(
+          '$sessions of ${breakdown.counted} '
+          '${breakdown.counted == 1 ? 'session breaks' : 'sessions break'} '
+          'thinking out of their output.',
+          style: muted,
+        ),
       ],
     );
   }

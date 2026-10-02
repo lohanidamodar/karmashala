@@ -19,8 +19,8 @@ import '../../support/window_matrix.dart';
 /// really about the same rule: a number must never appear without saying where
 /// it came from, and a field nobody recorded must never appear as a zero.
 void main() {
-  /// Claude Code: cache-heavy, two models, named tools, output per turn, and
-  /// no context window — it does not write one.
+  /// Claude Code: cache-heavy, two models, named tools, output per turn with
+  /// thinking broken out, and no context window — it does not write one.
   final claudeSession = SessionStats(
     source: SessionStatsSource.localStore,
     turns: 213,
@@ -31,6 +31,7 @@ void main() {
       output: 1199,
       cacheCreated: 1384461,
       cacheRead: 44952107,
+      reasoning: 600,
     ),
     toolCallsByName: const {
       'Read': 1400,
@@ -58,8 +59,19 @@ void main() {
     },
     lastPromptTokens: 182000,
     outputTokensPerTurn: const [120, 4000, 12400, 800],
+    reasoningTokensPerTurn: const [20, 3000, 9000, 100],
     firstActivityAt: DateTime.utc(2026, 8, 5, 15, 23),
     lastActivityAt: DateTime.utc(2026, 8, 5, 17, 34),
+  );
+
+  /// A Claude Code store written before thinking was broken out: output per
+  /// turn, but no reasoning anywhere.
+  const olderClaudeSession = SessionStats(
+    source: SessionStatsSource.localStore,
+    turns: 2,
+    replies: 2,
+    tokens: TokenTally(input: 10, output: 4120, cacheCreated: 0, cacheRead: 0),
+    outputTokensPerTurn: [120, 4000],
   );
 
   /// Codex: one running total, a context window, reasoning broken out.
@@ -233,7 +245,44 @@ void main() {
       expect(text('Cache read  45M  97%'), findsOneWidget);
       expect(text('Input  5.3k  <1%'), findsOneWidget);
       expect(text('Read from cache'), findsOneWidget);
-      // No reasoning split: Claude Code folds thinking into output.
+      expect(text('Of the output, 600 was reasoning (50%).'), findsOneWidget);
+    });
+
+    testWidgets('the turn chart splits thinking from the answer', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        SessionStatsView.computed(
+          claudeSession,
+          'Claude Code',
+          lifetime: claudeLifetime,
+        ),
+      );
+
+      final chart = tester.widget<Sparkline>(find.byType(Sparkline));
+      expect(chart.values, [120, 4000, 12400, 800]);
+      expect(chart.secondaryValues, [20, 3000, 9000, 100]);
+      expect(text('Answer  5.2k  30%'), findsOneWidget);
+      expect(text('Thinking  12.1k  70%'), findsOneWidget);
+    });
+
+    testWidgets('a store that never broke thinking out gets a plain chart', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        SessionStatsView.computed(
+          olderClaudeSession,
+          'Claude Code',
+          lifetime: claudeLifetime,
+        ),
+      );
+
+      expect(find.text('Output per turn'), findsOneWidget);
+      final chart = tester.widget<Sparkline>(find.byType(Sparkline));
+      expect(chart.secondaryValues, isNull);
+      expect(text('Thinking'), findsNothing);
       expect(text('was reasoning'), findsNothing);
     });
 
@@ -559,7 +608,11 @@ void main() {
       ),
     );
     expect(
-      find.bySemanticsLabel(RegExp('^Output tokens per turn. Peak 12.4k')),
+      find.bySemanticsLabel(
+        RegExp(
+          r'^Output tokens per turn\. Peak 12\.4k.*Thinking 12\.1k \(70%\)',
+        ),
+      ),
       findsOneWidget,
     );
     semantics.dispose();

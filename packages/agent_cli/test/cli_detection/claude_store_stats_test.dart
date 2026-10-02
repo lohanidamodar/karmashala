@@ -67,6 +67,7 @@ void main() {
     int output = 100,
     int cacheCreated = 20,
     int cacheRead = 300,
+    int? thinking,
     String? model,
   }) => {
     'type': 'assistant',
@@ -82,6 +83,9 @@ void main() {
         'output_tokens': output,
         'cache_creation_input_tokens': cacheCreated,
         'cache_read_input_tokens': cacheRead,
+        // Newer Claude Code releases break thinking out of output here.
+        if (thinking != null)
+          'output_tokens_details': {'thinking_tokens': thinking},
       },
     },
   };
@@ -224,6 +228,68 @@ void main() {
       );
     },
   );
+
+  test('thinking is split out of output, in total and per turn', () async {
+    write('s1', [
+      user('plan it'),
+      assistantBlock(
+        'msg_a',
+        {'type': 'thinking', 'thinking': 'hmm'},
+        output: 40,
+        thinking: 30,
+      ),
+      // The same response again, as its text block: charged once.
+      assistantBlock(
+        'msg_a',
+        {'type': 'text', 'text': 'plan'},
+        output: 40,
+        thinking: 30,
+      ),
+      assistantBlock(
+        'msg_b',
+        {'type': 'text', 'text': 'more'},
+        output: 10,
+        thinking: 4,
+      ),
+      user('build it'),
+      assistantBlock(
+        'msg_c',
+        {'type': 'text', 'text': 'done'},
+        output: 60,
+        thinking: 0,
+      ),
+    ]);
+
+    final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
+    final stats = (await reader.readSessionStats(pathFor('s1')))!;
+
+    expect(stats.tokens.output, 110);
+    expect(stats.tokens.reasoning, 34);
+    expect(
+      stats.tokens.total,
+      110 + 3 * (5 + 20 + 300),
+      reason: 'inside output',
+    );
+    expect(stats.outputTokensPerTurn, [50, 60]);
+    expect(stats.reasoningTokensPerTurn, [34, 0]);
+  });
+
+  test('a store written before thinking was broken out records none', () async {
+    write('s1', [
+      user('go'),
+      assistantBlock('msg_a', {'type': 'text', 'text': 'a'}),
+      user('again'),
+      assistantBlock('msg_b', {'type': 'text', 'text': 'b'}, output: 7),
+    ]);
+
+    final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
+    final stats = (await reader.readSessionStats(pathFor('s1')))!;
+
+    expect(stats.tokens.output, 107);
+    expect(stats.tokens.reasoning, isNull, reason: 'not recorded, not zero');
+    expect(stats.outputTokensPerTurn, [100, 7]);
+    expect(stats.reasoningTokensPerTurn, isNull);
+  });
 
   test('the newest call\'s prompt is fresh input plus both caches', () async {
     write('s1', [

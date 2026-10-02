@@ -276,7 +276,10 @@ class _SessionSection extends StatelessWidget {
         ],
         if (perTurn != null && perTurn.length >= 2) ...[
           const StatsBlockLabel('Output per turn'),
-          OutputPerTurn(perTurn: perTurn),
+          OutputPerTurn(
+            perTurn: perTurn,
+            reasoningPerTurn: stats.reasoningTokensPerTurn,
+          ),
         ],
         if (byModel != null && byModel.length >= 2) ...[
           const StatsBlockLabel('By model'),
@@ -396,8 +399,7 @@ class SessionStatsButton extends ConsumerStatefulWidget {
   final String sessionId;
 
   @override
-  ConsumerState<SessionStatsButton> createState() =>
-      _SessionStatsButtonState();
+  ConsumerState<SessionStatsButton> createState() => _SessionStatsButtonState();
 }
 
 class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {

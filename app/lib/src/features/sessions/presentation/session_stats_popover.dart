@@ -78,7 +78,9 @@ class SessionStatsPopover extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.body);
+    final body13 = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: TypeSizes.body,
+    );
     final meta = theme.textTheme.bodySmall?.copyWith(
       fontSize: TypeSizes.label,
       color: scheme.onSurfaceVariant,
@@ -142,7 +144,9 @@ class SessionStatsPopover extends ConsumerWidget {
     return SizedBox(
       width: width,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight < 160 ? 160 : maxHeight),
+        constraints: BoxConstraints(
+          maxHeight: maxHeight < 160 ? 160 : maxHeight,
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: tones.raised,
@@ -245,7 +249,11 @@ class SessionStatsPopover extends ConsumerWidget {
           style: meta,
         )
       else
-        _OutputPerTurn(perTurn: perTurn, meta: meta),
+        _OutputPerTurn(
+          perTurn: perTurn,
+          reasoningPerTurn: stats.reasoningTokensPerTurn,
+          meta: meta,
+        ),
       const _GroupLabel('This project’s week'),
       _ProjectWeekSection(sessionId: sessionId, width: inner, meta: meta),
       ...footer,
@@ -641,35 +649,51 @@ class _ToolCalls extends StatelessWidget {
   }
 }
 
-/// Output tokens per turn as a sparkline, with the peak and average in words.
+/// Output tokens per turn as a sparkline, with the peak and average in words,
+/// and the thinking band and legend where the agent breaks thinking out.
 /// [Sparkline] sizes itself with a LimitedBox, not a LayoutBuilder, so it is
-/// safe here as it stands.
+/// safe here as it stands; the legend is a [Wrap] of text.
 class _OutputPerTurn extends StatelessWidget {
-  const _OutputPerTurn({required this.perTurn, required this.meta});
+  const _OutputPerTurn({
+    required this.perTurn,
+    required this.reasoningPerTurn,
+    required this.meta,
+  });
 
   final List<int> perTurn;
+  final List<int>? reasoningPerTurn;
   final TextStyle? meta;
 
   @override
   Widget build(BuildContext context) {
-    final peak = peakTurn(perTurn)!;
-    final total = perTurn.fold<int>(0, (sum, v) => sum + v);
-    final summary =
-        'Peak ${formatCompactCount(peak.tokens)} at turn ${peak.turn} of '
-        '${perTurn.length} · average '
-        '${formatCompactCount((total / perTurn.length).round())}';
+    final summary = perTurnSummary(perTurn);
+    final reasoning = reasoningPerTurn;
+    final segments = reasoning == null
+        ? null
+        : thinkingSegments(context, perTurn, reasoning);
+    final hue = tokenKindColor(context, TokenKind.output);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Sparkline(
           values: [for (final v in perTurn) v.toDouble()],
-          color: SemanticColors.of(context).idle,
+          secondaryValues: reasoning == null
+              ? null
+              : [for (final v in reasoning) v.toDouble()],
+          secondaryColor: hue,
+          color: hue,
           height: 32,
-          semanticsLabel: 'Output tokens per turn. $summary',
+          semanticsLabel:
+              'Output tokens per turn. $summary'
+              '${segments == null ? '' : '. ${thinkingSummary(segments)}'}',
         ),
         const SizedBox(height: Insets.xs),
         ExcludeSemantics(child: Text(summary, style: meta)),
+        if (segments != null) ...[
+          const SizedBox(height: Insets.xs),
+          ExcludeSemantics(child: ChartLegend(segments: segments)),
+        ],
       ],
     );
   }

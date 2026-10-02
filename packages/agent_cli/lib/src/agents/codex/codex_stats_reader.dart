@@ -25,19 +25,17 @@ import '../adapter/agent_stats.dart';
 /// discover it is not a usage record is the entire cost.
 ///
 /// So nothing here decodes a line it does not need, and nothing here builds a
-/// `String` out of one. Two reads, each cheap for a different reason:
-///
-/// * **Tokens come from the tail.** `total_token_usage` is cumulative, so only
-///   the *last* `token_count` in the file matters. Seeking to the end and
-///   scanning back over a bounded window finds it in one decode: in that
-///   120 MB rollout the last one begins **1,282 bytes from EOF**, so a 64 KB
-///   window has 50× the room it needs. O(window), not O(file).
-/// * **Counts come from a prefix scan.** A record's kind is at the head of its
-///   line — `"payload":{"type":"` never appears past **byte 82** across the
-///   51,060 lines of this machine's 52 rollouts — so only the first
-///   [_prefixCap] bytes of each line are ever copied and the rest is skipped
-///   to the newline. A line whose prefix does not classify is simply not
-///   counted; nothing throws.
+/// `String` out of one. **Counts come from a prefix scan.** A record's kind is
+/// at the head of its line — `"payload":{"type":"` never appears past
+/// **byte 82** across the 51,060 lines of this machine's 52 rollouts — so only
+/// the first [_prefixCap] bytes of each line are ever copied and the rest is
+/// skipped to the newline. A line whose prefix does not classify is simply not
+/// counted; nothing throws. **Only usage records are decoded**, and every one
+/// of them is: `total_token_usage` is cumulative, so the step between two
+/// consecutive records is what one turn cost, and the last one is the total.
+/// The reader once decoded only the last record, found from the tail; per-turn
+/// tokens need them all, and they are the thousandth of the file that was
+/// never the cost.
 ///
 /// Measured on that 120 MB rollout, for the same answer (18 turns, 279 tool
 /// calls, the same cumulative total):
@@ -45,7 +43,7 @@ import '../adapter/agent_stats.dart';
 /// | | wall | bytes into Strings | lines decoded |
 /// | --- | --- | --- | --- |
 /// | decode every line | 1,882 ms | 114.9 MB | 1,392 |
-/// | prefix scan + tail read | **156 ms** | **345 KB** | **1** |
+/// | prefix scan, usage records only | **156 ms** | **345 KB** | the usage records |
 ///
 /// That is what retired the isolate this used to need: 156 ms spread over
 /// ~1,900 chunk callbacks blocks no frame, so there is nothing left to move
@@ -60,7 +58,7 @@ class CodexStatsReader implements SessionStatsReader {
   int bytesRead = 0;
 
   /// Lines handed to `jsonDecode`. The cost claim, and what a test asserts on:
-  /// a cold read of any rollout decodes **one** line, whatever its size.
+  /// a read decodes its usage records and **nothing else**, whatever its size.
   int linesDecoded = 0;
 
   /// What one rollout adds up to, resumed from wherever the last read stopped.
@@ -93,21 +91,7 @@ class CodexStatsReader implements SessionStatsReader {
     final counters = resume?.counters.copy() ?? CodexStatsCounters();
     final from = resume?.consumed ?? 0;
 
-    // The tail read earns its second pass only on a rollout big enough for the
-    // forward scan to want to skip usage records entirely. A rollout that fits
-    // inside one tail window would be read twice for nothing, and a resumed
-    // read already has the newest usage record in its delta — so both of those
-    // decode as they go, which is also what keeps an incremental read
-    // proportional to what was appended.
-    final useTail = from == 0 && stat.size > _tailWindow;
-    if (useTail) await _readLastUsage(file, stat.size, counters);
-
-    final scan = await _scanForward(
-      file,
-      from: from,
-      counters: counters,
-      decodeUsage: !useTail,
-    );
+    final scan = await _scanForward(file, from: from, counters: counters);
     if (!scan.readable) return counters.toStats();
 
     _cache._byPath[filePath] = _CodexStatsEntry(
@@ -117,55 +101,6 @@ class CodexStatsReader implements SessionStatsReader {
       counters: counters,
     );
     return counters.toStats();
-  }
-
-  /// The newest `token_count`, found by scanning backwards from EOF.
-  ///
-  /// The window grows only when the one before it held no usage record at all
-  /// — a rollout whose model calls are all near the top, which is a short file
-  /// by construction. It gives up rather than reading the whole thing.
-  Future<void> _readLastUsage(
-    File file,
-    int size,
-    CodexStatsCounters counters,
-  ) async {
-    if (size <= 0) return;
-    var window = _tailWindow;
-    while (window <= _tailWindowCap) {
-      final from = size - window < 0 ? 0 : size - window;
-      final Uint8List buffer;
-      try {
-        final handle = await file.open();
-        try {
-          await handle.setPosition(from);
-          buffer = await handle.read(size - from);
-        } finally {
-          await handle.close();
-        }
-      } on Object {
-        return;
-      }
-      bytesRead += buffer.length;
-
-      for (var at = buffer.length - _usageMarker.length; at >= 0; at--) {
-        if (!_matchesAt(buffer, _usageMarker, at)) continue;
-        var start = at;
-        while (start > 0 && buffer[start - 1] != _newline) {
-          start--;
-        }
-        var end = at;
-        while (end < buffer.length && buffer[end] != _newline) {
-          end++;
-        }
-        // A first window that begins mid-record would decode a fragment; the
-        // line is only trustworthy when its own start was inside the window.
-        if (start == 0 && from > 0) break;
-        _decodeUsage(buffer.sublist(start, end), counters);
-        return;
-      }
-      if (from == 0) return;
-      window *= 4;
-    }
   }
 
   /// One resumable pass for the counts, copying at most [_prefixCap] bytes of
@@ -178,13 +113,11 @@ class CodexStatsReader implements SessionStatsReader {
   ///
   /// The buffer is fixed and reused, so a 22 MB pasted-context line costs a
   /// scan for its newline and not one byte of allocation. Only a line whose
-  /// head says it is a usage record is allowed to grow past [_prefixCap], and
-  /// only when [decodeUsage] asked for one.
+  /// head says it is a usage record is allowed to grow past [_prefixCap].
   Future<_CodexScan> _scanForward(
     File file, {
     required int from,
     required CodexStatsCounters counters,
-    required bool decodeUsage,
   }) async {
     var consumed = from;
     final buffer = Uint8List(_lineCap);
@@ -214,9 +147,7 @@ class CodexStatsReader implements SessionStatsReader {
         // decide whether the body is worth keeping. Only a usage record is.
         if (!classified && held >= _prefixCap) {
           classified = true;
-          if (decodeUsage && _containsIn(buffer, held, _usageMarker)) {
-            cap = _lineCap;
-          }
+          if (_containsIn(buffer, held, _usageMarker)) cap = _lineCap;
         }
       }
     }
@@ -229,7 +160,7 @@ class CodexStatsReader implements SessionStatsReader {
           if (chunk[i] != _newline) continue;
           keep(chunk, start, i);
           consumed += lineLength + 1;
-          _count(buffer, held, counters, decodeUsage: decodeUsage);
+          _count(buffer, held, counters);
           held = 0;
           lineLength = 0;
           cap = _prefixCap;
@@ -246,16 +177,11 @@ class CodexStatsReader implements SessionStatsReader {
     return _CodexScan(consumed: consumed, readable: true);
   }
 
-  void _count(
-    Uint8List head,
-    int length,
-    CodexStatsCounters counters, {
-    required bool decodeUsage,
-  }) {
+  void _count(Uint8List head, int length, CodexStatsCounters counters) {
     if (length == 0) return;
     counters.markTime(_timestampIn(head, length));
     if (_containsIn(head, length, _userMessageMarker)) {
-      counters.turns++;
+      counters.openTurn();
       return;
     }
     if (_containsIn(head, length, _agentMessageMarker)) {
@@ -275,7 +201,7 @@ class CodexStatsReader implements SessionStatsReader {
       }
       return;
     }
-    if (decodeUsage && _containsIn(head, length, _usageMarker)) {
+    if (_containsIn(head, length, _usageMarker)) {
       _decodeUsage(Uint8List.sublistView(head, 0, length), counters);
     }
   }
@@ -335,13 +261,6 @@ const int _prefixCap = 256;
 /// needs (~721 bytes) plus room to grow.
 const int _lineCap = 8 * 1024;
 
-/// Where the backwards search for the newest usage record starts. The last one
-/// in the owner's 120 MB rollout begins 1,282 bytes from EOF.
-const int _tailWindow = 64 * 1024;
-
-/// Where it gives up rather than reading a whole rollout backwards.
-const int _tailWindowCap = 16 * 1024 * 1024;
-
 const int _newline = 0x0A;
 const int _quote = 0x22;
 
@@ -394,10 +313,15 @@ void _readUsageInfo(Object? info, CodexStatsCounters counters) {
         _int(total['cached_input_tokens']) ?? counters.cachedInputTokens;
     counters.cacheWriteTokens =
         _int(total['cache_write_input_tokens']) ?? counters.cacheWriteTokens;
-    counters.outputTokens =
-        _int(total['output_tokens']) ?? counters.outputTokens;
-    counters.reasoningTokens =
+    final output = _int(total['output_tokens']) ?? counters.outputTokens;
+    final reasoning =
         _int(total['reasoning_output_tokens']) ?? counters.reasoningTokens;
+    counters.chargeTurn(
+      output: (output ?? 0) - (counters.outputTokens ?? 0),
+      reasoning: (reasoning ?? 0) - (counters.reasoningTokens ?? 0),
+    );
+    counters.outputTokens = output;
+    counters.reasoningTokens = reasoning;
   }
   final last = info['last_token_usage'];
   if (last is Map) {
@@ -475,6 +399,13 @@ class CodexStatsCounters {
   int? lastPromptTokens;
   Map<String, int> toolCallsByName = {};
 
+  /// Each prompt's share of the cumulative totals: the step between the usage
+  /// record that closed it and the one before, so a turn with several model
+  /// calls adds up its calls and a resumed read continues from the cached
+  /// total rather than from zero.
+  List<int> outputPerTurn = [];
+  List<int> reasoningPerTurn = [];
+
   DateTime? firstAt;
   DateTime? lastAt;
 
@@ -490,8 +421,30 @@ class CodexStatsCounters {
     ..contextWindow = contextWindow
     ..lastPromptTokens = lastPromptTokens
     ..toolCallsByName = {...toolCallsByName}
+    ..outputPerTurn = [...outputPerTurn]
+    ..reasoningPerTurn = [...reasoningPerTurn]
     ..firstAt = firstAt
     ..lastAt = lastAt;
+
+  void openTurn() {
+    turns++;
+    outputPerTurn.add(0);
+    reasoningPerTurn.add(0);
+  }
+
+  /// A usage record's step over the previous one, charged to the open turn. A
+  /// record before any prompt — a resumed conversation's replayed total — opens
+  /// one; a step below zero is a reset, and counts as nothing.
+  void chargeTurn({required int output, required int reasoning}) {
+    if (outputPerTurn.isEmpty) {
+      outputPerTurn.add(0);
+      reasoningPerTurn.add(0);
+    }
+    outputPerTurn[outputPerTurn.length - 1] += output < 0 ? 0 : output;
+    reasoningPerTurn[reasoningPerTurn.length - 1] += reasoning < 0
+        ? 0
+        : reasoning;
+  }
 
   void markTime(String? timestamp) {
     if (timestamp == null || timestamp.isEmpty) return;
@@ -527,6 +480,12 @@ class CodexStatsCounters {
       lastActivityAt: lastAt,
       toolCallsByName: Map.unmodifiable(toolCallsByName),
       lastPromptTokens: lastPromptTokens,
+      outputTokensPerTurn: input == null
+          ? null
+          : List.unmodifiable(outputPerTurn),
+      reasoningTokensPerTurn: input == null
+          ? null
+          : List.unmodifiable(reasoningPerTurn),
     );
   }
 }

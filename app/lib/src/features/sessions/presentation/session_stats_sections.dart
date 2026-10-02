@@ -78,6 +78,72 @@ rankToolCalls(Map<String, int> byName, int? total, {int limit = 6}) {
   return (turn: best + 1, tokens: perTurn[best]);
 }
 
+/// A per-turn chart's peak and average in words. [perTurn] must not be empty.
+String perTurnSummary(List<int> perTurn) {
+  final peak = peakTurn(perTurn)!;
+  final total = perTurn.fold<int>(0, (sum, v) => sum + v);
+  return 'Peak ${formatCompactCount(peak.tokens)} at turn ${peak.turn} of '
+      '${perTurn.length} · average '
+      '${formatCompactCount((total / perTurn.length).round())}';
+}
+
+/// How a per-turn chart's output divides where the agent breaks thinking out:
+/// the answer and the thinking, each with its share of the output. Thinking is
+/// a part of output, so it is drawn in output's own hue, lighter — the same
+/// way [Sparkline] draws its band.
+List<BarSegment> thinkingSegments(
+  BuildContext context,
+  List<int> output,
+  List<int> reasoning,
+) {
+  final total = output.fold<int>(0, (sum, v) => sum + v);
+  var thinking = 0;
+  for (var i = 0; i < output.length && i < reasoning.length; i++) {
+    thinking += math.min(reasoning[i], output[i]);
+  }
+  return thinkingSplitSegments(context, output: total, thinking: thinking);
+}
+
+/// [thinkingSegments] for totals: [thinking] is the part of [output] that was
+/// reasoning.
+List<BarSegment> thinkingSplitSegments(
+  BuildContext context, {
+  required int output,
+  required int thinking,
+}) {
+  final total = output;
+  final answer = total - thinking;
+  final hue = tokenKindColor(context, TokenKind.output);
+  String? share(int part) => total <= 0 ? null : formatShare(part, total);
+  return [
+    BarSegment(
+      label: 'Answer',
+      value: answer,
+      color: hue,
+      valueLabel: formatCompactCount(answer),
+      detail: share(answer),
+    ),
+    BarSegment(
+      label: 'Thinking',
+      value: thinking,
+      color: hue.withValues(alpha: kThinkingBandAlpha),
+      valueLabel: formatCompactCount(thinking),
+      detail: share(thinking),
+    ),
+  ];
+}
+
+/// The share of the output hue the thinking band and its swatch are drawn at.
+const double kThinkingBandAlpha = SparklinePainter.bandAlpha;
+
+/// The thinking part of a per-turn chart in words, for its screen reader.
+String thinkingSummary(List<BarSegment> segments) {
+  final thinking = segments.last;
+  final detail = thinking.detail;
+  return 'Thinking ${thinking.valueLabel}'
+      '${detail == null ? '' : ' ($detail)'} of output.';
+}
+
 /// A tally in words, for a screen reader: every kind, recorded or not.
 String tokenSplitSummary(TokenTally tally) {
   final total = tally.total;
@@ -394,31 +460,50 @@ class ContextUsage extends StatelessWidget {
   }
 }
 
-/// Output tokens per turn as a sparkline, with the peak in words.
+/// Output tokens per turn as a sparkline, with the peak in words — and, where
+/// the agent breaks thinking out, the thinking as a band under the line with
+/// a legend saying how the output divided.
 class OutputPerTurn extends StatelessWidget {
-  const OutputPerTurn({required this.perTurn, super.key});
+  const OutputPerTurn({
+    required this.perTurn,
+    this.reasoningPerTurn,
+    super.key,
+  });
 
   final List<int> perTurn;
 
+  /// In step with [perTurn]; null where thinking was not recorded.
+  final List<int>? reasoningPerTurn;
+
   @override
   Widget build(BuildContext context) {
-    final peak = peakTurn(perTurn)!;
-    final total = perTurn.fold<int>(0, (sum, v) => sum + v);
-    final summary =
-        'Peak ${formatCompactCount(peak.tokens)} at turn ${peak.turn} of '
-        '${perTurn.length} · average '
-        '${formatCompactCount((total / perTurn.length).round())}';
+    final summary = perTurnSummary(perTurn);
+    final reasoning = reasoningPerTurn;
+    final segments = reasoning == null
+        ? null
+        : thinkingSegments(context, perTurn, reasoning);
+    final hue = tokenKindColor(context, TokenKind.output);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Sparkline(
           values: [for (final v in perTurn) v.toDouble()],
-          color: SemanticColors.of(context).idle,
+          secondaryValues: reasoning == null
+              ? null
+              : [for (final v in reasoning) v.toDouble()],
+          secondaryColor: hue,
+          color: hue,
           height: 36,
-          semanticsLabel: 'Output tokens per turn. $summary',
+          semanticsLabel:
+              'Output tokens per turn. $summary'
+              '${segments == null ? '' : '. ${thinkingSummary(segments)}'}',
         ),
         ExcludeSemantics(child: StatsNote(summary)),
+        if (segments != null) ...[
+          const SizedBox(height: Insets.xs),
+          ExcludeSemantics(child: ChartLegend(segments: segments)),
+        ],
       ],
     );
   }

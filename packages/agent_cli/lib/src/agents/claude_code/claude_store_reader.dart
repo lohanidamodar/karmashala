@@ -353,11 +353,18 @@ class _ClaudeCounters {
   int outputTokens = 0;
   int cacheCreatedTokens = 0;
   int cacheReadTokens = 0;
+  int reasoningTokens = 0;
   bool sawUsage = false;
+
+  /// Whether any reply carried `output_tokens_details.thinking_tokens`. A
+  /// store written before Claude Code broke thinking out has no reasoning
+  /// count at all, which is not the same as none.
+  bool sawThinking = false;
   final Map<String, int> toolCallsByName = {};
   final Map<String, _ModelTally> byModel = {};
   int? lastPromptTokens;
   final List<int> outputPerTurn = [];
+  final List<int> reasoningPerTurn = [];
   DateTime? firstAt;
   DateTime? lastAt;
 
@@ -392,6 +399,7 @@ class _ClaudeCounters {
     }
     turns++;
     outputPerTurn.add(0);
+    reasoningPerTurn.add(0);
   }
 
   /// One model reply, and the tool calls it made.
@@ -444,8 +452,20 @@ class _ClaudeCounters {
     cacheCreatedTokens += cacheCreated;
     cacheReadTokens += cacheRead;
     lastPromptTokens = input + cacheCreated + cacheRead;
-    if (outputPerTurn.isEmpty) outputPerTurn.add(0);
+    if (outputPerTurn.isEmpty) {
+      outputPerTurn.add(0);
+      reasoningPerTurn.add(0);
+    }
     outputPerTurn[outputPerTurn.length - 1] += output;
+
+    // Thinking is inside `output_tokens`; this only says how much of it.
+    final details = usage['output_tokens_details'];
+    if (details is Map && details['thinking_tokens'] is num) {
+      sawThinking = true;
+      final thinking = _int(details['thinking_tokens']);
+      reasoningTokens += thinking;
+      reasoningPerTurn[reasoningPerTurn.length - 1] += thinking;
+    }
 
     // `<synthetic>` marks a reply Claude Code wrote itself (an API error), not
     // a model call.
@@ -475,6 +495,7 @@ class _ClaudeCounters {
             output: outputTokens,
             cacheCreated: cacheCreatedTokens,
             cacheRead: cacheReadTokens,
+            reasoning: sawThinking ? reasoningTokens : null,
           )
         : TokenTally.unknown,
     firstActivityAt: firstAt,
@@ -488,6 +509,9 @@ class _ClaudeCounters {
         : null,
     lastPromptTokens: lastPromptTokens,
     outputTokensPerTurn: sawUsage ? List.unmodifiable(outputPerTurn) : null,
+    reasoningTokensPerTurn: sawThinking
+        ? List.unmodifiable(reasoningPerTurn)
+        : null,
   );
 }
 

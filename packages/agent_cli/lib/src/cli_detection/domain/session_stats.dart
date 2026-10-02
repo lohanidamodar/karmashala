@@ -43,7 +43,8 @@ class TokenTally {
   ///
   /// **A part of [output], not a fifth bucket** — Codex's own totals add input
   /// and output alone — so it is reported beside the others and left out of
-  /// [total]. Claude Code does not break thinking out at all.
+  /// [total]. Claude Code writes it as `output_tokens_details.thinking_tokens`
+  /// since late 2026; a store from before that has none.
   final int? reasoning;
 
   bool get isUnknown =>
@@ -140,6 +141,7 @@ class SessionStats {
     this.tokensByModel,
     this.lastPromptTokens,
     this.outputTokensPerTurn,
+    this.reasoningTokensPerTurn,
   });
 
   final SessionStatsSource source;
@@ -187,6 +189,10 @@ class SessionStats {
   /// written beside it; a cumulative total cannot be split after the fact.
   final List<int>? outputTokensPerTurn;
 
+  /// The part of each turn's output that was reasoning, in step with
+  /// [outputTokensPerTurn]. Null where the agent does not break thinking out.
+  final List<int>? reasoningTokensPerTurn;
+
   /// Between the first and last record — elapsed, **not** time spent working.
   /// A session resumed a month later spans a month.
   Duration? get span {
@@ -228,6 +234,7 @@ class SessionStats {
       },
     'lastPromptTokens': ?lastPromptTokens,
     'outputTokensPerTurn': ?outputTokensPerTurn,
+    'reasoningTokensPerTurn': ?reasoningTokensPerTurn,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -237,7 +244,6 @@ class SessionStats {
     int? count(String key) => _countFromJson(json[key]);
     final byName = json['toolCallsByName'];
     final byModel = json['tokensByModel'];
-    final perTurn = json['outputTokensPerTurn'];
     final output = json['output'];
     return SessionStats(
       source:
@@ -264,15 +270,18 @@ class SessionStats {
             }
           : null,
       lastPromptTokens: count('lastPromptTokens'),
-      outputTokensPerTurn: perTurn is List
-          ? [
-              for (final value in perTurn)
-                if (value is int) value,
-            ]
-          : null,
+      outputTokensPerTurn: _countsFromJson(json['outputTokensPerTurn']),
+      reasoningTokensPerTurn: _countsFromJson(json['reasoningTokensPerTurn']),
     );
   }
 }
+
+List<int>? _countsFromJson(Object? value) => value is List
+    ? [
+        for (final item in value)
+          if (item is int) item,
+      ]
+    : null;
 
 /// Where an agent's lifetime totals came from.
 ///
