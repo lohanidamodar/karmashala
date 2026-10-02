@@ -40,6 +40,10 @@ class FakeSessionWork {
   /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
   bool resumesOnSend = false;
 
+  /// Set to refuse a send's resume in these words, as the server refuses an
+  /// agent that would not start — a login it asks for first.
+  String? resumeOnSendRefusesWith;
+
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
 
@@ -56,6 +60,9 @@ class FakeSessionWork {
       final row = _server.sessionRows.getById(sessionId);
       if (request is! SessionSend || !resumesOnSend || row == null) {
         throw const DataRefused.notFound('this session is not running here');
+      }
+      if (resumeOnSendRefusesWith case final words?) {
+        throw DataRefused(DataRefusalCode.failed, words);
       }
       // As a server that resumes on send (`sessions.send.resumes`).
       running.add(sessionId);

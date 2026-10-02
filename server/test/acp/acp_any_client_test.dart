@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
+import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -171,7 +172,8 @@ void main() {
   });
 
   /// `sessions.send` and `.interrupt`, wired as `serve` wires them.
-  SessionInput input() => SessionInput(
+  SessionInput input({void Function(String)? log}) => SessionInput(
+    log: log,
     prompts: prompts,
     typist: SessionToolSet.typistOver(prompts),
     resumesOnSend: sessionSpeaksAcp(
@@ -334,6 +336,84 @@ void main() {
         expect(agent.prompts, isEmpty);
       },
     );
+
+    test('to a start that was refused — failed, no conversation named — '
+        'starts a fresh conversation in the same row and takes the '
+        'message', () async {
+      row('refused', status: SessionStatus.failed, conversation: null);
+
+      final sent =
+          await input().handle(
+                const SessionSend(sessionId: 'refused', text: 'try again'),
+                null,
+              )
+              as SessionSent;
+
+      expect(sent.sent, isTrue);
+      expect(sent.resumed, isTrue);
+      expect(agent.newSessionParams, hasLength(1));
+      expect(agent.loadSessionParams, isEmpty);
+      await runtimeOf('refused').awaitTurn();
+      expect(conversation('refused'), ['try again', 'Back on it']);
+    });
+
+    test('to a start refused for a login that this server still holds '
+        'starts it again; refused again, the agent\'s words reach the '
+        'sender, and a retry of the same key is tried again', () async {
+      // A fake agent serves one process; each start gets its own.
+      FakeAcpAgent refusing() => FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      );
+      agent = refusing();
+      row('refused', status: SessionStatus.failed, conversation: null);
+      await expectLater(
+        launches.resume('refused', prompt: 'hello'),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        SessionDao(database).getById('refused')!.status,
+        SessionStatus.failed,
+      );
+      final logged = <String>[];
+      final client = input(log: logged.add);
+      const send = SessionSend(
+        sessionId: 'refused',
+        text: 'try again',
+        requestId: 'k1',
+      );
+
+      for (var attempt = 2; attempt <= 3; attempt++) {
+        agent = refusing();
+        await expectLater(
+          client.handle(send, null),
+          throwsA(
+            isA<DataRefused>()
+                .having((r) => r.code, 'code', DataRefusalCode.failed)
+                .having(
+                  (r) => r.message,
+                  'message',
+                  contains('asks to be logged in first'),
+                ),
+          ),
+        );
+        expect(starts, hasLength(attempt));
+      }
+      expect(conversation('refused'), isEmpty);
+      // The server's log says so too, not only the sender's snackbar.
+      expect(logged, [
+        for (var i = 0; i < 2; i++) ...[
+          contains('resuming it at the server to take the message'),
+          allOf(
+            startsWith('sessions.send refused refused:'),
+            contains('asks to be logged in first'),
+          ),
+        ],
+      ]);
+    });
 
     test(
       'a terminal session nothing runs is not resumed: not running here',

@@ -82,11 +82,23 @@ class SessionInput {
     return answer;
   }
 
-  Future<Object?> _run(SessionInputRequest<Object?> request) =>
-      switch (request) {
+  /// Every refusal is logged as well as answered: the sender's only other
+  /// trace of it is a snackbar.
+  Future<Object?> _run(SessionInputRequest<Object?> request) async {
+    try {
+      return await switch (request) {
         final SessionSend r => _send(r.sessionId, r.text),
         SessionInterrupt(:final sessionId) => _interrupt(sessionId),
       };
+    } on DataRefused catch (refusal) {
+      final sessionId = switch (request) {
+        SessionSend(:final sessionId) => sessionId,
+        SessionInterrupt(:final sessionId) => sessionId,
+      };
+      log?.call('${request.kind} $sessionId refused: ${refusal.message}');
+      rethrow;
+    }
+  }
 
   void _forgetOld() {
     final cutoff = _now().subtract(keep);
@@ -181,6 +193,11 @@ class SessionInput {
     String text,
     Future<SessionStarted> Function(String, String) resume,
   ) async {
+    // Said before it starts: an agent's start can take minutes.
+    log?.call(
+      'sessions.send $sessionId: nothing runs it; resuming it at the server '
+      'to take the message',
+    );
     final SessionStarted started;
     try {
       started = await resume(sessionId, text);

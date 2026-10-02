@@ -441,11 +441,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // A PTY-hosted session's conversation lives in the agent's own transcript
     // (see `SessionTranscriptLocator`): stdout carries no structured stream.
     // An ACP session's is the server's rows, read down the same path.
-    final fromPty =
-        ref.watch(isAcpSessionProvider(widget.sessionId)) ||
-        session?.surface == SessionSurface.pane;
-    final active =
-        fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
+    final acp = ref.watch(isAcpSessionProvider(widget.sessionId));
+    final fromPty = acp || session?.surface == SessionSurface.pane;
+    // An ACP row is live only while its row says so: a failed or ended one
+    // is resumed by the next message, and the hint says that.
+    final active = acp
+        ? session?.status.claimsLive ?? false
+        : fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     final footer = _footerFor(active);
     final recapShare = CompactWorkbenchScope.of(context)
         ? _recapShareCompact

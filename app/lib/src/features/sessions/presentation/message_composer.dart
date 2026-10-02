@@ -257,6 +257,10 @@ class _MessageComposerState extends State<MessageComposer> {
   /// Device files on their way to a server elsewhere. Send waits.
   final _uploads = <_Upload>[];
   bool _busy = false;
+
+  /// Why the last send failed, kept over the box until the next one: a
+  /// snackbar alone is gone in seconds.
+  String? _sendError;
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKey);
   late final AppLifecycleListener _lifecycle;
 
@@ -845,7 +849,10 @@ class _MessageComposerState extends State<MessageComposer> {
 
     final messenger = ScaffoldMessenger.of(context);
     final touch = _touch;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _sendError = null;
+    });
     try {
       await widget.onSend(buffer.toString());
       if (mounted) {
@@ -861,11 +868,12 @@ class _MessageComposerState extends State<MessageComposer> {
           });
         }
       }
-    } catch (e) {
+    } on Object catch (e, stack) {
       // Keep the text/attachments so the user can retry.
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
+      final words = e is StateError ? e.message : '$e';
+      _log.warning('Send failed: $words', e, stack);
+      if (mounted) setState(() => _sendError = words);
+      messenger.showSnackBar(SnackBar(content: Text(words)));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -990,6 +998,25 @@ class _MessageComposerState extends State<MessageComposer> {
                 attachments: _attachments,
                 uploading: _uploading,
                 onRemove: (i) => setState(() => _attachments.removeAt(i)),
+              ),
+            if (_sendError case final error?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.md,
+                  Insets.sm,
+                  Insets.md,
+                  0,
+                ),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    error,
+                    key: const ValueKey('composer-send-error'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.error,
+                    ),
+                  ),
+                ),
               ),
             if (touch)
               _touchRow(field, canType: canType)
