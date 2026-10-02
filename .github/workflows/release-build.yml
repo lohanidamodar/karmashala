@@ -320,3 +320,39 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: build/artifacts/Karmashala-linux.tar.gz
+      # For the AppImage job, which packages this same bundle.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: build/artifacts/Karmashala-linux.tar.gz
+          if-no-files-found: error
+
+  # The same Linux bundle as one AppImage file. Its own job, so a packaging
+  # problem never holds up the tarball. linuxdeploy copies in the libraries
+  # the app and its plugins link (mpv, libsecret, keybinder, appindicator,
+  # notify); GTK, X11 and the graphics stack stay the host's, as AppImages
+  # expect, because bundled copies break themes and drivers.
+  build-linux-appimage:
+    needs: [prepare, build-linux]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      # The runner has no FUSE; the tools unpack themselves instead.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundle
+          path: build/linux
+      # What the bundle links, so linuxdeploy can find and copy it.
+      - name: Install the libraries the app links
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-0 libmpv2 libsecret-1-0 libkeybinder-3.0-0 libayatana-appindicator3-1 libnotify4 libsqlite3-0 imagemagick file
+      - name: Package as an AppImage
+        run: bash tool/package_appimage.sh build/linux/Karmashala-linux.tar.gz "$VERSION"
+      - name: Upload the AppImage to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: Karmashala-${{ env.VERSION }}-x86_64.AppImage
