@@ -240,7 +240,7 @@ class DaemonCompanion implements CompanionHandler {
 
   late final RemoteHostBindings bindings = hostCompanionBindings(
     hostName: hostName,
-    hosted: prompts == null ? null : CompanionPrompts(prompts!.answers),
+    hosted: prompts == null ? null : CompanionPrompts(prompts!.answering),
     holds: prompts?.holds,
     workspace: HostedWorkspace(
       rows: WorkspaceRows(database),

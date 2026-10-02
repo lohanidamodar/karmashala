@@ -20,6 +20,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+import '../acp/acp_runtimes.dart';
 import '../domain/session_registry.dart';
 import '../pty/environment_spawn.dart';
 import '../sessions/launch/handoff_packet_files.dart';
@@ -209,6 +210,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.vaultNames,
     this.handoffFiles,
     this.links,
+    this.acpRuntimes,
     Map<String, String>? hostEnvironment,
     bool? windows,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -263,6 +265,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Records a session's checkouts beside its primary one.
   final SessionRepositoryDao? links;
 
+  /// Runs an agent whose adapter speaks ACP (`adapter.acp != null`) in place
+  /// of a PTY; null refuses such a launch in words.
+  final AcpRuntimeFactory? acpRuntimes;
+
   final Map<String, String> _hostEnvironment;
   final bool _windows;
 
@@ -292,7 +298,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     final installation = launch.installation;
     final agentId = installation.agentId;
     final descriptor = agents.descriptorOf(agentId);
-    final refusal = agents.launchRefusal(agentId, launch.prompt ?? '');
+    final acp = agents.adapterOf(agentId)?.acp;
+    // Over ACP the opening message is the first `session/prompt`, never argv.
+    final refusal = agents.launchRefusal(
+      agentId,
+      acp == null ? launch.prompt ?? '' : '',
+    );
     if (refusal != null) throw StateError(refusal);
     final resuming = launch.resuming;
     final resumeId = launch.fresh
@@ -453,14 +464,15 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     );
     // A packet that could not travel as a file travels as the opening message
     // — it ends with the instruction, so nothing is lost.
-    final typedPacket =
-        launch.systemPrompt != null && systemPromptPath == null;
-    final prompt = _promptOnArgv(
-      id,
-      typedPacket ? launch.systemPrompt : launch.prompt,
-      kind,
-      isPacket: typedPacket,
-    );
+    final typedPacket = launch.systemPrompt != null && systemPromptPath == null;
+    final prompt = acp != null
+        ? (typedPacket ? launch.systemPrompt : launch.prompt)
+        : _promptOnArgv(
+            id,
+            typedPacket ? launch.systemPrompt : launch.prompt,
+            kind,
+            isPacket: typedPacket,
+          );
     final newConversation = resumeId == null || resumeId.isEmpty;
     final permission = launch.followSettings
         ? agents.permissionOf(
@@ -484,7 +496,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     // A conversation the agent keeps in a service of its own is attached to,
     // not resumed: the resume would be refused and the pane would die on it.
     // Never with something to say — an attach carries no prompt.
-    final attachId = forking || newConversation || prompt != null
+    final attachId = acp != null || forking || newConversation || prompt != null
         ? null
         : await _backgroundSessionId(
             descriptor,
@@ -545,6 +557,29 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     final notice = credentials.changedEnvironment
         ? inheritedCredentialNotice(credentials)
         : null;
+
+    if (acp != null) {
+      return _startAcp(
+        acp,
+        id: id,
+        agentId: agentId,
+        agentName: descriptor?.displayName ?? agentId,
+        installation: installation,
+        session: session,
+        resuming: resuming,
+        directory: directory,
+        environment: environment,
+        kind: kind,
+        resumeId: resumeId,
+        risk: descriptor?.launch.permission.riskOf(permission),
+        prompt: prompt,
+        removed: agentLaunch.removedEnvironment,
+        wslDistribution: agentLaunch.wslDistribution,
+        sshHostId: agentLaunch.sshHostId,
+        credentialNotice: notice,
+        settleWorktree: settleWorktree,
+      );
+    }
 
     if (launch.surface == SessionSurface.external) {
       // Launched into a window nobody here can see: `running` would be a
@@ -615,6 +650,101 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
                 'attached to it instead of resuming it. Ending the session '
                 'here closes the terminal; the conversation carries on there.',
     );
+  }
+
+  /// The ACP branch of a start: the runtime in the registry under the row's
+  /// host id, started, the agent's session id written to the row, and the
+  /// opening message sent as the first prompt. A start that fails leaves the
+  /// row as a failed PTY spawn would and rethrows.
+  Future<HostedStart> _startAcp(
+    AcpLaunchSpec acp, {
+    required String id,
+    required String agentId,
+    required String agentName,
+    required AgentInstallation installation,
+    required Session session,
+    required Session? resuming,
+    required EnvironmentPath directory,
+    required ExecutionEnvironment? environment,
+    required EnvironmentKind kind,
+    required String? resumeId,
+    required PermissionRisk? risk,
+    required String? prompt,
+    required Set<String> removed,
+    required String? wslDistribution,
+    required String? sshHostId,
+    required String? credentialNotice,
+    required void Function(Object? error)? settleWorktree,
+  }) async {
+    final arguments = [...installation.leadingArguments, ...acp.arguments];
+    final stored = AgentPaneLaunch(
+      agentId: agentId,
+      executable: installation.executable.path,
+      arguments: arguments,
+      workingDirectory: directory.path,
+      wslDistribution: wslDistribution,
+      sshHostId: sshHostId,
+      sessionId: id,
+      title: session.title,
+    );
+    try {
+      final factory = acpRuntimes;
+      if (factory == null) {
+        throw StateError(
+          '$agentName speaks the Agent Client Protocol, and this server was '
+          'given no runtime to run it',
+        );
+      }
+      if (kind == EnvironmentKind.ssh) {
+        throw StateError(
+          '${environment?.name ?? 'That SSH machine'} cannot run $agentName '
+          'over ACP from here yet',
+        );
+      }
+      final access = mcp.accessFor(id, withConfigFile: false, kind: kind);
+      final runtime = factory(
+        AcpSessionStart(
+          sessionId: id,
+          hostSessionId: hostSessionIdOf(id),
+          agentId: agentId,
+          agentName: agentName,
+          spec: acp,
+          executable: installation.executable.path,
+          arguments: arguments,
+          directory: directory,
+          environment: environment,
+          variables: {kSessionIdEnvironmentVariable: id},
+          removed: removed,
+          mcpUrl: access?.url,
+          resumeSessionId: resumeId,
+          risk: risk,
+        ),
+      );
+      registry.openAcp(hostSessionIdOf(id), runtime);
+      final outcome = await runtime.start();
+      if (outcome.agentSessionId != session.externalSessionId) {
+        sessions.updateExternalSessionId(id, outcome.agentSessionId);
+        onRowWritten?.call(id);
+      }
+      if (prompt != null && prompt.trim().isNotEmpty) {
+        await runtime.send(prompt);
+      }
+      settleWorktree?.call(null);
+      onLaunched?.call(id, agentId, directory.path);
+      return HostedStart(
+        session: session.copyWith(externalSessionId: outcome.agentSessionId),
+        launch: stored,
+        credentialNotice: credentialNotice,
+        attachNotice: outcome.notices.isEmpty
+            ? null
+            : outcome.notices.join(' '),
+      );
+    } on Object catch (error) {
+      settleWorktree?.call(error);
+      sessions.updateStatus(id, resuming?.status ?? SessionStatus.failed);
+      onRowWritten?.call(id);
+      rethrow;
+    }
   }
 
   /// The id [installation]'s own service runs [conversationId] under, or

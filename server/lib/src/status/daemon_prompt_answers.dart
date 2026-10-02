@@ -44,10 +44,71 @@ class DaemonPromptAnswers implements PromptTerminals {
   late final SessionPromptAnswers answers;
 
   /// Whether the row [sessionId]'s session is one this host answers for: it
-  /// runs here, and its agent's status is kept.
+  /// runs here — a PTY or an ACP runtime — and its agent's status is kept.
   bool holds(String sessionId) =>
-      status.runningSessionOf(sessionId) != null &&
-      status.keeper.isTracked(sessionId);
+      status.runsHere(sessionId) && status.keeper.isTracked(sessionId);
+
+  /// Answers [request]: a permission an agent spoken to over ACP has open is
+  /// answered over its protocol, anything else typed into its terminal.
+  /// Throws [SessionPromptRefusal], with nothing chosen, when it will not.
+  Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) async {
+    final runtime = status.acpRuntimeOf(request.sessionId);
+    if (runtime == null) return answers.answer(request);
+    if (!exists(request.sessionId)) {
+      throw const SessionPromptRefusal('no such session', notFound: true);
+    }
+    if (request is! ApprovalAnswerRequest) {
+      throw const SessionPromptRefusal(
+        'an agent spoken to over ACP has no menu or question to answer; '
+        'approve or deny its permission request',
+      );
+    }
+    final answered = await runtime.answerPermission(
+      approve: request.approve,
+      toolCallId: request.ask?.toolUseId,
+    );
+    final filed = approvalDecisionRecord(
+      sessionId: request.sessionId,
+      granted: answered.granted,
+      effect: answered.effect,
+      answerLabel: answered.answered,
+      decidedBy: request.decidedBy,
+      decidedBySessionId: request.decidedBySessionId,
+      recordedAt: status.keeper.clock.nowUtc(),
+    );
+    if (filed != null) record(filed);
+    return SessionApprovalAnswer(
+      answered: answered.answered,
+      effect: answered.effect,
+    );
+  }
+
+  /// [answer] and [evidence] as the one interface the phone's bindings take.
+  PromptAnswering get answering => _Answering(this);
+
+  /// What [sessionId]'s open prompt looks like: an ACP permission request is
+  /// answered by [answer], so its evidence names Allow and Reject as the
+  /// keys; a terminal's is the screen's.
+  Future<PromptEvidence> evidence(String sessionId) async {
+    final runtime = status.acpRuntimeOf(sessionId);
+    final report = statusOf(sessionId);
+    if (runtime == null || !runtime.hasOpenPermission) {
+      return answers.evidence(sessionId);
+    }
+    return PromptEvidence(
+      report: report,
+      approve: const AgentApprovalKey(
+        keys: 'allow',
+        label: 'Allow',
+        effect: 'Lets the agent make this call.',
+      ),
+      deny: const AgentApprovalKey(
+        keys: 'reject',
+        label: 'Reject',
+        effect: 'Refuses this call; the agent carries on without it.',
+      ),
+    );
+  }
 
   /// Answers [request] — `PromptAnswerRequest.toJson` from a client — as the
   /// frame that replies to [requestId].
@@ -64,7 +125,7 @@ class DaemonPromptAnswers implements PromptTerminals {
       );
     }
     try {
-      final answer = await answers.answer(parsed);
+      final answer = await this.answer(parsed);
       return PromptAnsweredMessage.answered(
         requestId: requestId,
         answered: answer.answered,
@@ -121,4 +182,22 @@ class DaemonPromptAnswers implements PromptTerminals {
       // taken back because its record could not be written.
     }
   }
+}
+
+final class _Answering implements PromptAnswering {
+  const _Answering(this._prompts);
+
+  final DaemonPromptAnswers _prompts;
+
+  @override
+  Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) =>
+      _prompts.answer(request);
+
+  @override
+  Future<PromptEvidence> evidence(String sessionId) =>
+      _prompts.evidence(sessionId);
+
+  @override
+  AgentScreenMenu? menuOnScreen(String sessionId) =>
+      _prompts.answers.menuOnScreen(sessionId);
 }

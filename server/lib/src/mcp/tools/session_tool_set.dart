@@ -136,9 +136,9 @@ class SessionToolSet extends ServerToolSet {
     return null;
   }
 
-  /// Whether this server runs the session [sessionId] in its own PTY.
-  bool _runsHere(String sessionId) =>
-      prompts.status.runningSessionOf(sessionId) != null;
+  /// Whether this server runs the session [sessionId] itself: a PTY, or an
+  /// agent over ACP.
+  bool _runsHere(String sessionId) => prompts.status.runsHere(sessionId);
 
   static String _onBoxRefusal(String act) =>
       'That session is still running on an SSH box, and this tool cannot '
@@ -161,7 +161,7 @@ class SessionToolSet extends ServerToolSet {
     _session(sessionId);
     final SessionApprovalAnswer answer;
     try {
-      answer = await prompts.answers.answer(
+      answer = await prompts.answer(
         ApprovalAnswerRequest(
           sessionId: sessionId,
           approve: decision == 'approve',
@@ -270,10 +270,22 @@ class SessionToolSet extends ServerToolSet {
         : SessionAttribution(sessionId: sender.id, title: sender.title);
     final message = attribution == null ? text : attribution.render(text);
     // Not running: the message is its resume's opening prompt, as the app's
-    // composer resumed a stopped session with what was typed.
-    final delivered = held
-        ? await typist.send(sessionId, message)
-        : await resumeWith!(sessionId, message).then((_) => true);
+    // composer resumed a stopped session with what was typed. An agent over
+    // ACP takes it as `session/prompt`, one turn at a time.
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    final bool delivered;
+    if (runtime != null) {
+      try {
+        await runtime.send(message);
+      } on StateError catch (error) {
+        throw StateError('NOTHING WAS SENT: ${error.message}.');
+      }
+      delivered = true;
+    } else {
+      delivered = held
+          ? await typist.send(sessionId, message)
+          : await resumeWith!(sessionId, message).then((_) => true);
+    }
     if (!delivered) {
       throw StateError(
         'That session\'s process ended before the message could be typed '

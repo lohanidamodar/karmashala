@@ -94,9 +94,24 @@ class SessionInput {
     'send',
   );
 
+  /// How a message reached an agent spoken to over ACP: as `session/prompt`,
+  /// with no screen to read a Return back off.
+  static const String viaProtocol = 'protocol';
+
   Future<SessionSent> _send(String sessionId, String text) async {
     if (text.trim().isEmpty) {
       throw const DataRefused.invalid('there is no message to send');
+    }
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    if (runtime != null) {
+      // The protocol takes one turn at a time; a message during one would
+      // be refused by the agent, so it is refused here, in words.
+      try {
+        await runtime.send(text);
+      } on StateError catch (error) {
+        throw DataRefused(DataRefusalCode.conflict, error.message);
+      }
+      return const SessionSent(sent: true, via: viaProtocol);
     }
     if (!prompts.status.holds(sessionId)) throw _notHere;
     final report = prompts.status.statusOf(sessionId)?.report;
@@ -126,6 +141,11 @@ class SessionInput {
   }
 
   Future<DataAck> _interrupt(String sessionId) async {
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    if (runtime != null) {
+      runtime.cancel();
+      return const DataAck();
+    }
     if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }

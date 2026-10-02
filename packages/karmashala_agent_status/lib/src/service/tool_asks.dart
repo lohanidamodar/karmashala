@@ -81,6 +81,13 @@ class ToolAskTracker {
     _asks.remove(key);
   }
 
+  /// A call the agent itself announced as waiting on permission, over its
+  /// protocol rather than a hook.
+  void note(String agentId, String conversation, AgentToolAsk ask) {
+    if (conversation.isEmpty) return;
+    _asks['$agentId/$conversation'] = ask;
+  }
+
   /// Drops everything kept for [agentId]'s [conversation].
   void forget(String agentId, String conversation) =>
       _asks.remove('$agentId/$conversation');
@@ -103,7 +110,11 @@ class ToolAskTracker {
         before != null &&
         (before.hasOpenPrompt || before.hasOpenQuestion) &&
         before.waiting == next.waiting;
-    final fresh = next.source == AgentStatusSource.hook ? next.observedAt : now;
+    final fresh =
+        next.source == AgentStatusSource.hook ||
+            next.source == AgentStatusSource.protocol
+        ? next.observedAt
+        : now;
     var since = (wasAsking ? before.waitingSince : null) ?? fresh;
     var ask = next.hasOpenPrompt ? _askFor(next, since) : null;
     // One prompt straight after another, with no report between them that

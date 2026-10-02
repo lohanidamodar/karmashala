@@ -36,10 +36,13 @@ import 'package:karmashala_session_engine/store.dart'
         DecisionRecordDao,
         ImportedSessionDao,
         SessionDao,
+        SessionMessageDao,
         SessionRepositoryDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../acp/acp_runtimes.dart';
+import '../acp/acp_session_modes.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
@@ -55,6 +58,7 @@ import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
+import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_transcripts.dart';
@@ -352,7 +356,7 @@ Future<int> runServe(
     database,
     runsSession: (sessionId) {
       final id = hostSessionIdOf(sessionId);
-      if (registry.find(id) != null) return true;
+      if (registry.findProcess(id) != null) return true;
       final onBox = boxSessions?.byId(id);
       return onBox != null && !onBox.lifecycle.hasEnded;
     },
@@ -486,7 +490,7 @@ Future<int> runServe(
     onRecorded: agentWork.imports.checkoutsRecorded,
   );
   final liveness = SessionLiveness(
-    (id) => registry.find(hostSessionIdOf(id)) != null,
+    (id) => registry.findProcess(hostSessionIdOf(id)) != null,
   );
   final worktrees = daemonWorktrees(
     database: database,
@@ -624,7 +628,7 @@ Future<int> runServe(
   final checkpoints = DaemonCheckpoints(
     database: database,
     data: data,
-    heldHere: (id) => status.runningSessionOf(id) != null,
+    heldHere: status.runsHere,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   data.checkpointWork = checkpoints.handle;
@@ -696,7 +700,7 @@ Future<int> runServe(
     // A project added or rescanned by a client imports the CLI history of
     // its new checkouts, as an agent's does.
     folders: folders,
-    hostsSession: (id) => registry.find(hostSessionIdOf(id)) != null,
+    hostsSession: (id) => registry.findProcess(hostSessionIdOf(id)) != null,
     livePaneDirectories: () => [
       for (final pane in sessionSync.panes.all)
         if (pane.live) ?pane.workingDirectory,
@@ -829,6 +833,23 @@ Future<int> runServe(
   final sessionRows = SessionDao(database);
   LaunchSettings launchSettings() =>
       LaunchSettings.parse(database.readMetadata(kLaunchSettingsKey));
+  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
+  // a PTY: its conversation is `session_messages`, its status its own word.
+  final sessionMessages = SessionMessageDao(database);
+  final acpHost = ServerAcpHost(
+    agentStatus: status,
+    checkpoints: checkpoints,
+    data: data,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final acpRuntimes = AcpRuntimes(
+    messages: sessionMessages,
+    host: acpHost,
+    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
+      environment ?? localHostEnvironment(DateTime.now().toUtc()),
+    ),
+  );
+  data.sessionModes = AcpSessionModes(runtimeOf: status.acpRuntimeOf);
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     sessions: sessionRows,
@@ -856,6 +877,7 @@ Future<int> runServe(
       Directory(p.join(dataDirectory, 'handoff')),
     ),
     links: SessionRepositoryDao(database),
+    acpRuntimes: acpRuntimes.start,
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(
@@ -928,7 +950,19 @@ Future<int> runServe(
       locate: transcripts.recordFor,
       registry: transcripts.registry,
     ),
+    // An ACP session's transcript is the rows its runtime wrote (C3).
+    messages: SessionMessageTranscriptSource(sessionMessages),
+    servesFromMessages: (sessionId) {
+      final row = sessionRows.getById(sessionId);
+      final installation = row == null
+          ? null
+          : checkoutRows.installation(row.agentInstallationId);
+      if (installation == null) return false;
+      return agentRegistry.current.adapterFor(installation.agentId)?.acp !=
+          null;
+    },
   );
+  acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
   data.sessionTranscripts = sessionTranscripts;
   // Rewind points, changed files and the open question (Stage 0 step 7):
   // the adapters' readers of raw lines, run over the same records; and each
@@ -1032,7 +1066,8 @@ Future<int> runServe(
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
   // desktop app on this machine; the server looks for its agent CLIs now.
-  final agents = (agentsFor ??
+  final agents =
+      (agentsFor ??
       (data) => ServerAgents(data: data, registryHolder: agentRegistry))(data);
   server.data = data;
   server.admin = ServerAdministration(

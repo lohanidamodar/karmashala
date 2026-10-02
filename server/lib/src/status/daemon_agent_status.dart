@@ -9,7 +9,9 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../acp/acp_session_runtime.dart';
 import '../domain/host_session.dart';
+import '../domain/hosted_process.dart';
 import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
 import '../ssh/ssh_domain.dart';
@@ -82,14 +84,28 @@ class DaemonAgentStatus {
     return session;
   }
 
+  /// The running ACP runtime this host holds for the row [sessionId], or null.
+  AcpSessionRuntime? acpRuntimeOf(String sessionId) {
+    final runtime = registry.findAcp(hostSessionIdOf(sessionId));
+    if (runtime == null || runtime.lifecycle.hasEnded) return null;
+    return runtime;
+  }
+
+  /// Whether this server itself runs row [sessionId]'s agent: in one of its
+  /// PTYs, or over ACP. Not a session on an SSH box.
+  bool runsHere(String sessionId) =>
+      runningSessionOf(sessionId) != null || acpRuntimeOf(sessionId) != null;
+
   /// Whether the server holds row [sessionId]'s agent — one of its own
-  /// PTYs, or a session on an SSH box it keeps a copy of (slice 5d).
+  /// PTYs or ACP runtimes, or a session on an SSH box it keeps a copy of
+  /// (slice 5d).
   bool holds(String sessionId) => liveScreenOf(sessionId) != null;
 
   /// The screen of row [sessionId]'s running agent: one of this host's own
-  /// PTYs, or its copy of a session on an SSH box. Null when neither runs it.
+  /// PTYs, its ACP runtime's rendered conversation, or its copy of a session
+  /// on an SSH box. Null when none runs it.
   ScreenSession? liveScreenOf(String sessionId) {
-    final own = runningSessionOf(sessionId);
+    final own = runningSessionOf(sessionId) ?? acpRuntimeOf(sessionId);
     if (own != null) return own;
     final id = hostSessionIdOf(sessionId);
     for (final screen in remoteScreens?.call() ?? const <ScreenSession>[]) {
@@ -122,18 +138,25 @@ class DaemonAgentStatus {
   }
 
   /// One pass: starts keeping each running agent session, reads each screen,
-  /// and lets go of what has ended.
+  /// and lets go of what has ended. An ACP session has no screen to read:
+  /// its agent's word arrives through [report].
   void tick() {
     final running = <String>{};
-    for (final session in <ScreenSession>[
-      ...registry.sessions,
-      ...?remoteScreens?.call(),
-    ]) {
-      if (session.lifecycle.hasEnded) continue;
-      final rowId = _rowOf(session.id);
+    for (final process in registry.processes) {
+      if (process.lifecycle.hasEnded) continue;
+      final rowId = _rowOf(process.id);
       if (rowId == null) continue;
       running.add(rowId);
-      final tail = session.tailText(keeper.scanLinesFor(rowId));
+      if (process is AcpProcess) continue;
+      final tail = process.screen.tailText(keeper.scanLinesFor(rowId));
+      _announce(keeper.screen(rowId, tail));
+    }
+    for (final screen in remoteScreens?.call() ?? const <ScreenSession>[]) {
+      if (screen.lifecycle.hasEnded) continue;
+      final rowId = _rowOf(screen.id);
+      if (rowId == null) continue;
+      running.add(rowId);
+      final tail = screen.tailText(keeper.scanLinesFor(rowId));
       _announce(keeper.screen(rowId, tail));
     }
     for (final rowId in keeper.tracked.toList()) {
@@ -161,6 +184,14 @@ class DaemonAgentStatus {
     rowId ??= keeper.sessionForConversation(hook.agent, report.sessionId);
     if (rowId == null) return;
     _announce(keeper.hookLanded(rowId, report, body: body));
+  }
+
+  /// What the agent of row [sessionId] said of itself over its protocol
+  /// (`AgentStatusSource.protocol`), from the ACP runtime that holds it.
+  void report(String sessionId, AgentStatusReport report) {
+    final rowId = _rowOf(hostSessionIdOf(sessionId));
+    if (rowId == null) return;
+    _announce(keeper.report(rowId, report));
   }
 
   void _announce(HostedAgentStatus? status) {

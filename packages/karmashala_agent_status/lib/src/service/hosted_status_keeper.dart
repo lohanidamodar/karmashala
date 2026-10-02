@@ -164,6 +164,28 @@ class HostedStatusKeeper {
     return _recompose(kept);
   }
 
+  /// Folds in the agent's own word about itself, sent over its protocol
+  /// ([AgentStatusSource.protocol]): ranked as a hook is, and the ask it
+  /// carries kept for the dock. The new status when its evidence moved.
+  HostedAgentStatus? report(String sessionId, AgentStatusReport report) {
+    final kept = _sessions[sessionId];
+    if (kept == null) return null;
+    if (report.sessionId.isNotEmpty) kept.conversationId = report.sessionId;
+    _reports.record(report);
+    if (report.status != AgentActivityStatus.unknown &&
+        report.status != kept.hookStatus) {
+      kept.hookStatus = report.status;
+      kept.hookSince = report.observedAt;
+    }
+    final ask = report.toolAsk;
+    if (ask != null) {
+      _asks.note(report.agentId, report.sessionId, ask);
+    } else if (!report.hasOpenPrompt) {
+      _asks.forget(report.agentId, report.sessionId);
+    }
+    return _recompose(kept);
+  }
+
   /// Reads [sessionId]'s screen — its bottom [tailLines] — and recomposes;
   /// the new status when its evidence moved, else null. Also where a hook
   /// that has gone stale stops being believed, so it is called on a tick.
@@ -184,7 +206,11 @@ class HostedStatusKeeper {
     );
     final AgentStatusReport next;
     if (agents.byId(kept.agentId) == null) {
-      next = _service.unknownFor(query, now);
+      // No adapter to read a screen or a hook with; the agent's own protocol
+      // report, when it sent one, still stands.
+      next =
+          _reports.latest(query.agentId, query.sessionId) ??
+          _service.unknownFor(query, now);
     } else {
       final hook = _service.hookReport(query, now);
       // Beside a fresh hook, only a screen read since the hooks came to say

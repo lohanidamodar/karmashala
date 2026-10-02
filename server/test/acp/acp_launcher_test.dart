@@ -1,0 +1,259 @@
+import 'dart:io';
+
+import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod, StopReason;
+import 'package:karmashala_acp/testing.dart';
+import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host/src/acp/acp_runtimes.dart';
+import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
+import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/store.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:test/test.dart';
+
+import 'acp_fixture.dart';
+
+/// The launcher's ACP branch (design C4): an installation whose adapter has
+/// `acp != null` is started as a runtime in the registry, never a PTY; the
+/// row learns the agent's session id, the opening message is the first
+/// prompt, and a start that fails leaves the row as a failed spawn would.
+void main() {
+  final t0 = DateTime.utc(2026, 10, 2, 12);
+
+  late AppDatabase database;
+  late SessionRegistry registry;
+  late FakePtyLauncher pty;
+  late Directory temp;
+  late List<AcpSessionStart> starts;
+  late FakeAcpProcess process;
+  late RecordingHost host;
+
+  setUp(() {
+    database = AppDatabase.memory();
+    database.execute('PRAGMA foreign_keys = OFF;');
+    temp = Directory.systemTemp.createTempSync('acp_launcher_test');
+    final local = Platform.isWindows ? 'windowsNative' : 'localPosix';
+    database.execute(
+      'INSERT INTO execution_environments (id, kind, name, created_at) '
+      'VALUES (?, ?, ?, ?);',
+      ['local', local, 'Here', '$t0'],
+    );
+    database.execute(
+      'INSERT INTO repositories (id, project_id, name, environment_id, '
+      'path, created_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['r1', 'p1', 'shop', 'local', temp.path, '$t0'],
+    );
+    database.execute(
+      'INSERT INTO agent_installations (id, agent_kind, environment_id, '
+      'executable_path, created_at, executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?);',
+      [
+        'acp1', AgentIds.claudeAcp, 'local', 'npx.cmd', '$t0', 1, //
+        'cc1', AgentIds.claudeCode, 'local', '/bin/claude', '$t0', 1,
+      ],
+    );
+    pty = FakePtyLauncher();
+    registry = SessionRegistry(launcher: pty);
+    starts = [];
+    process = FakeAcpProcess(
+      FakeAcpAgent(
+        sessionIdPrefix: 'agent-session',
+        turns: const [
+          FakeTurn([FakeStep.message('Hello back')]),
+        ],
+      ),
+    );
+    host = RecordingHost();
+  });
+
+  tearDown(() async {
+    for (final handle in pty.handles) {
+      handle.finish(0);
+    }
+    await registry.shutdown();
+    database.close();
+    temp.deleteSync(recursive: true);
+  });
+
+  /// The server's factory, with the fake agent in place of a process.
+  AcpSessionRuntime factory(AcpSessionStart start) {
+    starts.add(start);
+    return runtimeOver(
+      process,
+      database: database,
+      workingDirectory: start.directory.path,
+      host: host,
+      sessionId: start.sessionId,
+      agentId: start.agentId,
+      spec: start.spec,
+      mcpUrl: start.mcpUrl,
+      risk: start.risk,
+      resumeSessionId: start.resumeSessionId,
+    );
+  }
+
+  HostedAgentLauncher launcher({bool withRuntimes = true}) {
+    final rows = CheckoutRows(database);
+    return HostedAgentLauncher(
+      registry: registry,
+      sessions: SessionDao(database),
+      mcp: SessionMcpAccessPoint(mcp: null, configDirectory: temp.path),
+      now: () => t0,
+      newId: () => 's1',
+      hostEnvironment: const {},
+      environmentOf: rows.environment,
+      acpRuntimes: withRuntimes ? factory : null,
+      windows: false,
+    );
+  }
+
+  Session row(String id) => SessionDao(database).getById(id)!;
+
+  test('an ACP installation starts a runtime under karmashala_<id>, not a '
+      'PTY; the row names the agent\'s session and the prompt is the first '
+      'turn', () async {
+    final rows = CheckoutRows(database);
+    final started = await launcher().startDetailed(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('acp1')!,
+        title: 'Cart',
+        prompt: 'Fix the cart',
+        permissionMode: 'mode=acceptEdits',
+      ),
+    );
+    expect(pty.started, isEmpty);
+    expect(registry.find('karmashala_s1'), isNull);
+    final runtime = registry.findAcp('karmashala_s1');
+    expect(runtime, isNotNull);
+    expect(started.launch?.sessionId, 's1');
+    expect(started.launch?.agentId, AgentIds.claudeAcp);
+    expect(started.launch?.executable, 'npx.cmd');
+    expect(
+      started.attachNotice,
+      contains("Karmashala's tools were not handed"),
+    );
+
+    final start = starts.single;
+    expect(start.sessionId, 's1');
+    expect(start.hostSessionId, 'karmashala_s1');
+    expect(start.executable, 'npx.cmd');
+    expect(start.directory.path, temp.path);
+    expect(start.variables, {'KARMASHALA_SESSION_ID': 's1'});
+    expect(start.risk, PermissionRisk.acceptEdits);
+    expect(start.resumeSessionId, isNull);
+    expect(start.mcpUrl, isNull);
+
+    expect(row('s1').externalSessionId, 'agent-session');
+    expect(started.session.externalSessionId, 'agent-session');
+    expect(row('s1').status, SessionStatus.running);
+    expect(await runtime!.awaitTurn(), StopReason.endTurn);
+    expect(
+      process.agent.prompts.single.single.toJson()['text'],
+      'Fix the cart',
+    );
+    final messages = SessionMessageDao(database).listAfter('s1');
+    expect(messages.map((m) => m.text), ['Fix the cart', 'Hello back']);
+  });
+
+  test(
+    'a resume hands the row\'s conversation to the runtime, which loads it',
+    () async {
+      final rows = CheckoutRows(database);
+      SessionDao(database).insert(
+        Session(
+          id: 'old',
+          repositoryId: 'r1',
+          agentInstallationId: 'acp1',
+          title: 'Old',
+          useWorktree: false,
+          status: SessionStatus.completed,
+          createdAt: t0,
+          externalSessionId: 'agent-session-9',
+        ),
+      );
+      final started = await launcher().startDetailed(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation('acp1')!,
+          title: 'Old',
+          resuming: SessionDao(database).getById('old'),
+        ),
+      );
+      expect(starts.single.resumeSessionId, 'agent-session-9');
+      expect(
+        process.agent.loadSessionParams.single['sessionId'],
+        'agent-session-9',
+      );
+      expect(process.agent.newSessionParams, isEmpty);
+      expect(started.session.externalSessionId, 'agent-session-9');
+      expect(row('old').status, SessionStatus.running);
+      expect(registry.findAcp('karmashala_old'), isNotNull);
+    },
+  );
+
+  test('a PTY agent is untouched by the branch', () async {
+    final rows = CheckoutRows(database);
+    await launcher().start(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('cc1')!,
+        title: 'Terminal',
+      ),
+    );
+    expect(pty.started, hasLength(1));
+    expect(starts, isEmpty);
+    expect(registry.find('karmashala_s1'), isNotNull);
+  });
+
+  test('with no runtime factory the start is refused in words and the row '
+      'is left failed', () async {
+    final rows = CheckoutRows(database);
+    await expectLater(
+      launcher(withRuntimes: false).start(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation('acp1')!,
+          title: 'Cart',
+        ),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('given no runtime'),
+        ),
+      ),
+    );
+    expect(row('s1').status, SessionStatus.failed);
+    expect(registry.findProcess('karmashala_s1'), isNull);
+  });
+
+  test('a runtime that cannot start leaves the row failed and the registry '
+      'holding its ended process', () async {
+    process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      ),
+    );
+    final rows = CheckoutRows(database);
+    await expectLater(
+      launcher().start(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation('acp1')!,
+          title: 'Cart',
+        ),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(row('s1').status, SessionStatus.failed);
+    expect(registry.findProcess('karmashala_s1')?.lifecycle.hasEnded, isTrue);
+  });
+}

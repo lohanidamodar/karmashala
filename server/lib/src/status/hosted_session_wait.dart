@@ -173,7 +173,7 @@ class HostedSessionWait {
     bool? inputSent, {
     bool changed = false,
   }) {
-    final session = status.registry.find(hostSessionIdOf(sessionId));
+    final session = status.registry.findProcess(hostSessionIdOf(sessionId));
     final lifecycle = session?.lifecycle;
     final code = lifecycle is SessionExited ? lifecycle.exitCode : null;
     return _outcome(

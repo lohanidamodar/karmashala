@@ -82,6 +82,10 @@ dependencies:
   # no app is connected. Pure Dart.
   karmashala_companion_server:
     path: ../packages/karmashala_companion_server
+  # The Agent Client Protocol from the client side: the peer, the typed
+  # client and the value types `src/acp/` runs an ACP agent through.
+  karmashala_acp:
+    path: ../packages/karmashala_acp
   # The data API's requests, answers and changes (protocol 11), which
   # `src/data/` answers from the store.
   karmashala_data_protocol:
