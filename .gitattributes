@@ -15,3 +15,13 @@
 # otherwise leaves a carriage return on every path and turns eleven
 # karmashala_git tests red.
 *.diff text eol=lf
+
+# Flutter writes the desktop plugin registrants with LF on every pub get and
+# build. Under core.autocrlf=true a CRLF checkout made them read as modified
+# after each one, with no change in content. Pinned to LF so they only show
+# as changed when a plugin really is added or removed — then commit them.
+app/linux/flutter/generated_plugin_registrant.* text eol=lf
+app/linux/flutter/generated_plugins.cmake text eol=lf
+app/windows/flutter/generated_plugin_registrant.* text eol=lf
+app/windows/flutter/generated_plugins.cmake text eol=lf
+app/macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
