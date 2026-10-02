@@ -44,3 +44,8 @@ tags:
   # with `--exclude-tags=live-ssh,live-wsl,cost`, so a change is measured by
   # its own tests and the soaks stay a pre-merge check.
   cost:
+
+  # Green on a developer machine, but rests on real-time timers or Windows
+  # file handles that a contended shared CI runner breaks. The local gate runs
+  # them; CI excludes them.
+  shared-runner:

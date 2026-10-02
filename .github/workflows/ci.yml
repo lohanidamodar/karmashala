@@ -19,8 +19,9 @@ env:
   # The suites that exercise the hosted relay need one; a placeholder, never a
   # real relay.
   RELAY_DEFINE: --dart-define=KARMASHALA_RELAY_URL=wss://relay.example.com
-  # Need a real WSL distribution, SSH server, device or agent, or quiet timing.
-  EXCLUDED_TAGS: live,live-ssh,live-wsl,live-android,live-timing,live-agent,cost
+  # Need a real WSL distribution, SSH server, device or agent, quiet timing, or
+  # a machine nobody else is sharing.
+  EXCLUDED_TAGS: live,live-ssh,live-wsl,live-android,live-timing,live-agent,cost,shared-runner
 
 jobs:
   changes:

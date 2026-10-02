@@ -358,6 +358,7 @@ void main() {
   group('a promotion is a second link, not a drop', () {
     test(
       'every row crosses exactly once, and the link never says it is down',
+      tags: 'shared-runner',
       timeout: const Timeout(Duration(minutes: 3)),
       () async {
         final started = await startService();
@@ -549,6 +550,7 @@ void main() {
 
   test(
     'a failed promotion waits out beacons, doubling — never a clock',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 3)),
     () async {
       await startService();

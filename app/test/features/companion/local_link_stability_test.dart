@@ -267,6 +267,7 @@ void main() {
   test(
     'the link holds while the local relay is up, through the lone-peer '
     'timeout, the heartbeat and the beacon',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 3)),
     () async {
       await startService();
@@ -312,6 +313,7 @@ void main() {
   test(
     'a desktop that is NOT where the relay earns direct attempts at a '
     'widening count of beacons, and the link pays for none of them',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 3)),
     () async {
       await startService();
@@ -544,6 +546,7 @@ void main() {
 
   test(
     'a desktop too busy to answer one request keeps its link',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 3)),
     () async {
       await startService();

@@ -1,0 +1,4 @@
+tags:
+  # Green on a developer machine, but rests on a real-time isolate a contended
+  # shared CI runner breaks. The local gate runs it; CI excludes it.
+  shared-runner:

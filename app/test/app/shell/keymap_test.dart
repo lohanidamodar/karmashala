@@ -175,21 +175,25 @@ void main() {
       return container.read(keymapProvider);
     }
 
-    test('a good edit is applied; a bad one keeps it and says why', () async {
-      File(
-        '${dir.path}/keymap.json',
-      ).writeAsStringSync('[{"keys": "ctrl+alt+n", "command": "session.new"}]');
-      final first = await settled();
-      expect(first.problems, isEmpty);
-      expect(first.entries, 1);
-      expect(shellChords.any((c) => c.label == 'Ctrl+Alt+N'), isTrue);
+    test(
+      'a good edit is applied; a bad one keeps it and says why',
+      tags: 'shared-runner',
+      () async {
+        File('${dir.path}/keymap.json').writeAsStringSync(
+          '[{"keys": "ctrl+alt+n", "command": "session.new"}]',
+        );
+        final first = await settled();
+        expect(first.problems, isEmpty);
+        expect(first.entries, 1);
+        expect(shellChords.any((c) => c.label == 'Ctrl+Alt+N'), isTrue);
 
-      container.read(keymapProvider.notifier).apply('[{"keys": ');
-      final bad = container.read(keymapProvider);
-      expect(bad.problems, isNotEmpty);
-      expect(bad.revision, first.revision, reason: 'nothing was applied');
-      expect(shellChords.any((c) => c.label == 'Ctrl+Alt+N'), isTrue);
-    });
+        container.read(keymapProvider.notifier).apply('[{"keys": ');
+        final bad = container.read(keymapProvider);
+        expect(bad.problems, isNotEmpty);
+        expect(bad.revision, first.revision, reason: 'nothing was applied');
+        expect(shellChords.any((c) => c.label == 'Ctrl+Alt+N'), isTrue);
+      },
+    );
 
     test('a first edit starts from an example that changes nothing', () async {
       await settled();

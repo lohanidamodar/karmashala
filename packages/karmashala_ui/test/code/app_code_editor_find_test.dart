@@ -375,6 +375,7 @@ void main() {
 
   testWidgets(
     'a 50,000-line buffer searches off the UI thread and paints only nearby',
+    tags: 'shared-runner',
     (tester) async {
       final body = List.generate(
         50000,
