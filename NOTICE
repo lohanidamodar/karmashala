@@ -1,0 +1,12 @@
+Karmashala
+Copyright 2026 Damodar Lohani
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Some parts of this repository carry their own licences:
+
+- packages/agent_cli: MIT License (packages/agent_cli/LICENSE).
+- packages/launch_at_startup_fork: MIT License, the upstream
+  launch_at_startup package's (packages/launch_at_startup_fork/LICENSE).
+- app/assets/scrcpy: the scrcpy server, Apache License 2.0
+  (app/assets/scrcpy/LICENSE.txt).

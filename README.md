@@ -207,3 +207,8 @@ tool/            # release recipes, the test gate, live tests, run scripts
 | `Ctrl+K` / `Ctrl+P` | Quick open (`Ctrl+Shift+P` for commands) |
 | `Ctrl+Shift+A` | Attention inbox |
 | `Ctrl+\` | Focus mode |
+
+## License
+
+[Apache License 2.0](LICENSE), copyright 2026 Damodar Lohani. A few parts
+carry their own licences, listed in [NOTICE](NOTICE).
