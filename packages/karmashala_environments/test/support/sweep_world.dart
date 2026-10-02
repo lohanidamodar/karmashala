@@ -98,6 +98,11 @@ class MemoryInstallations {
         if (row == null) return;
         _replace(row.copyWith(version: version, versionReadAt: readAt));
       });
+      plan.leadingArguments.forEach((id, arguments) {
+        final row = getById(id);
+        if (row == null) return;
+        _replace(row.copyWith(leadingArguments: arguments));
+      });
       plan.inserts.forEach(insert);
     } on Object {
       _rows

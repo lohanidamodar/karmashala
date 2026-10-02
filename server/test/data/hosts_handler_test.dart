@@ -293,6 +293,30 @@ void main() {
     List<AgentInstallation> rows() =>
         app.handle(const AgentsList()).value.installations;
 
+    test('the same executable found with other runner arguments is updated '
+        'in place, and told', () {
+      const npx = r'C:\npm\npx.cmd';
+      reconcile([found('a', npx)]);
+      expect(rows().single.leadingArguments, isEmpty);
+      told.clear();
+
+      final again = reconcile([
+        found('new', npx).copyWith(leadingArguments: ['-y', 'pkg']),
+      ]);
+
+      expect(again.added, isEmpty);
+      expect(again.present.single.id, 'a');
+      expect(rows().single.leadingArguments, ['-y', 'pkg']);
+      expect(
+        toldChanges()
+            .whereType<InstallationChanged>()
+            .single
+            .installation
+            .leadingArguments,
+        ['-y', 'pkg'],
+      );
+    });
+
     test('a new CLI is a row; the same one again records its version', () {
       expect(reconcile([found('a', r'C:\codex.exe')]).added.single.id, 'a');
       final again = reconcile([found('b', r'C:\codex.exe', version: '2.0')]);

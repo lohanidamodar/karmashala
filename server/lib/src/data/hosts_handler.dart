@@ -288,6 +288,10 @@ class HostsHandler {
         _installations.recordVersion(id, version, readAt: readAt);
         touched.add(id);
       });
+      plan.leadingArguments.forEach((id, arguments) {
+        _installations.updateLeadingArguments(id, arguments);
+        touched.add(id);
+      });
       for (final row in plan.inserts) {
         _installations.insert(row);
         touched.add(row.id);

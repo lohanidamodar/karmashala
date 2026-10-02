@@ -152,6 +152,17 @@ void main() {
       expect(dao.getById('a2')!.executable.path, r'C:\two\c.exe');
     });
 
+    test(
+      'runner arguments are updated in place, and empty reads back empty',
+      () {
+        dao.insert(installation(id: 'a1'));
+        dao.updateLeadingArguments('a1', ['-y', 'pkg']);
+        expect(dao.getById('a1')!.leadingArguments, ['-y', 'pkg']);
+        dao.updateLeadingArguments('a1', const []);
+        expect(dao.getById('a1')!.leadingArguments, isEmpty);
+      },
+    );
+
     test('a null version reading is never written', () {
       dao.insert(installation());
       dao.recordVersion('a1', null, readAt: t0);

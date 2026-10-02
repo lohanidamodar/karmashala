@@ -254,6 +254,7 @@ class AgentSweep {
         version: agent.version,
         versionReadAt: agent.version == null ? null : clock.nowUtc(),
         createdAt: clock.nowUtc(),
+        leadingArguments: agent.leadingArguments,
       ),
   ];
 

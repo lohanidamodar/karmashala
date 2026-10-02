@@ -99,6 +99,14 @@ class AgentInstallationDao {
     );
   }
 
+  /// Records the runner arguments discovery now finds before the executable.
+  void updateLeadingArguments(String id, List<String> arguments) {
+    _db.execute(
+      'UPDATE agent_installations SET leading_arguments = ? WHERE id = ?;',
+      [arguments.isEmpty ? null : jsonEncode(arguments), id],
+    );
+  }
+
   /// Moves an installation to [path], keeping its id, since settings and every
   /// session row reference it. `false` when another row already holds [path].
   bool updatePath(String id, String path, {required bool byUser}) {
