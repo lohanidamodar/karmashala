@@ -1,7 +1,8 @@
 name: CI
 
-# Analyze and test every pull request and every push to main. No secrets are
-# read, so pull requests from forks run in full.
+# Analyze everything on every pull request and push to main. A pull request
+# tests only what its change can break (tool/ci_affected.dart); main tests
+# everything. No secrets are read, so pull requests from forks run in full.
 on:
   pull_request:
   push:
@@ -22,10 +23,34 @@ env:
   EXCLUDED_TAGS: live,live-ssh,live-wsl,live-android,live-timing,live-agent,cost
 
 jobs:
-  analyze:
-    name: Analyze, and test the relay
+  changes:
+    name: What to test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.affected.outputs.app }}
+      relay: ${{ steps.affected.outputs.relay }}
+      member_shards: ${{ steps.affected.outputs.member_shards }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dart-lang/setup-dart@v1
+      - id: affected
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only "$BASE...HEAD" | dart tool/ci_affected.dart | tee -a "$GITHUB_OUTPUT"
+          else
+            dart tool/ci_affected.dart --all | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -35,25 +60,30 @@ jobs:
       # The lock file as committed: a fresh resolution on a runner has dropped
       # packages the app needs.
       - run: flutter pub get --enforce-lockfile
-      - name: Analyze the app, the server and the packages
-        run: dart analyze app server packages
+      - run: dart analyze app server packages
+
+  relay-tests:
+    name: Relay tests
+    needs: changes
+    if: needs.changes.outputs.relay == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
       # relay/ and its contract resolve on their own lock files.
-      - name: Analyze and test the relay protocol
+      - name: Relay protocol
         working-directory: relay/protocol
-        run: |
-          dart pub get
-          dart analyze
-          dart test
-      - name: Analyze and test the relay
+        run: dart pub get && dart analyze && dart test
+      - name: Relay
         working-directory: relay
-        run: |
-          dart pub get
-          dart analyze
-          dart test
+        run: dart pub get && dart analyze && dart test
 
   # The app suite is split across runners: one 4-core runner is the bottleneck.
   app-tests:
     name: App tests (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: windows-latest
     timeout-minutes: 40
     strategy:
@@ -74,14 +104,16 @@ jobs:
           $index = ${{ matrix.shard }} - 1
           flutter test --exclude-tags=$env:EXCLUDED_TAGS $env:RELAY_DEFINE --total-shards=4 "--shard-index=$index"
 
-  package-tests:
-    name: Server and package tests (${{ matrix.shard }}/3)
+  member-tests:
+    name: Server and package tests
+    needs: changes
+    if: needs.changes.outputs.member_shards != '[]'
     runs-on: windows-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        members: ${{ fromJSON(needs.changes.outputs.member_shards) }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -91,14 +123,11 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Each member's own suite
         shell: pwsh
+        env:
+          MEMBERS: ${{ matrix.members }}
         run: |
           $failed = @()
-          $members = @('server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" }) |
-            Where-Object { Test-Path "$_/test" }
-          # Every third member, so each shard gets a mix of large and small suites.
-          $shard = ${{ matrix.shard }} - 1
-          $members = for ($i = $shard; $i -lt $members.Count; $i += 3) { $members[$i] }
-          foreach ($member in $members) {
+          foreach ($member in $env:MEMBERS -split ' ') {
             # A Flutter package needs flutter_tester; the rest run on plain Dart.
             $usesFlutter = Select-String -Path "$member/pubspec.yaml" -Pattern 'sdk: flutter' -Quiet
             Write-Host "::group::$member"

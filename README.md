@@ -100,8 +100,10 @@ distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
 
 ## CI and releases
 
-- [`ci.yml`](.github/workflows/ci.yml) analyzes and tests every pull request
-  and every push to `main`.
+- [`ci.yml`](.github/workflows/ci.yml) analyzes every pull request and push to
+  `main`; a pull request tests only the members its change can reach
+  ([`tool/ci_affected.dart`](tool/ci_affected.dart)), and `main` tests all of
+  them.
 - Publishing a GitHub release runs
   [`release-build.yml`](.github/workflows/release-build.yml), which attaches the
   Windows installer and portable zip, the macOS DMG, the Linux tarball and the
