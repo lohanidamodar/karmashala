@@ -48,6 +48,29 @@ class StoreReleasesCard extends StatefulWidget {
 class _StoreReleasesCardState extends State<StoreReleasesCard> {
   bool _history = false;
 
+  /// Kept in the route's [PageStorage] rather than only here: the detail
+  /// moves this card to another column when it crosses its wide breakpoint,
+  /// which builds a new State, and an opened history should stay open.
+  String get _historyId =>
+      'store-releases-history:'
+      '${widget.entry.app.store.name}:${widget.entry.app.id}';
+
+  @override
+  void initState() {
+    super.initState();
+    _history =
+        PageStorage.maybeOf(context)?.readState(context, identifier: _historyId)
+            as bool? ??
+        false;
+  }
+
+  void _toggleHistory() {
+    setState(() => _history = !_history);
+    PageStorage.maybeOf(
+      context,
+    )?.writeState(context, _history, identifier: _historyId);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -95,7 +118,7 @@ class _StoreReleasesCardState extends State<StoreReleasesCard> {
                     child: Padding(
                       padding: const EdgeInsets.only(top: Insets.sm),
                       child: TextButton.icon(
-                        onPressed: () => setState(() => _history = !_history),
+                        onPressed: _toggleHistory,
                         icon: Icon(
                           _history ? AppIcons.caretUp : AppIcons.caretDown,
                           size: Chrome.iconAction,
