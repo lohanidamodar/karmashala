@@ -277,6 +277,7 @@ void main() {
 
   test(
     'a burst of watch events reloads once, after the file settles',
+    tags: 'shared-runner',
     () async {
       files.put(_image, [1, 2, 3]);
       await media.open(_image);

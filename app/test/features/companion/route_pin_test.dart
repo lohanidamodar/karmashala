@@ -220,6 +220,7 @@ void main() {
   test(
     'pinned to one relay, the phone uses only it, stays off the others when '
     'it stops answering, and Auto brings it back',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 2)),
     () async {
       await startService();
@@ -309,6 +310,7 @@ void main() {
   test(
     'pinned to the LAN, the relays are never dialled, even when the LAN '
     'goes',
+    tags: 'shared-runner',
     timeout: const Timeout(Duration(minutes: 2)),
     () async {
       final started = await startService();
