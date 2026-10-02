@@ -65,6 +65,17 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
     skipTraversal: true,
   );
 
+  /// The shell's own place for the keyboard, under every chord. Taken back
+  /// whenever focus is left parked above the shell — nothing open in the
+  /// workspace, a pane that held it closed, a page with no field — or no
+  /// chord (Ctrl+K, Ctrl+P, Ctrl+W) reaches [Shortcuts] at all (owner,
+  /// 2026-10-02).
+  final FocusNode _shellFocus = FocusNode(
+    debugLabel: 'shell',
+    skipTraversal: true,
+  );
+  bool _reclaimScheduled = false;
+
   /// The strokes typed so far, while a chord of several is waiting.
   List<SingleActivator>? _pending;
   List<ShellChord> _candidates = const [];
@@ -74,6 +85,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
   void initState() {
     super.initState();
     _sequenceFocus.addListener(_onSequenceFocus);
+    FocusManager.instance.addListener(_onFocusMoved);
     // A bad edit keeps the last good keymap; this says so without a dialog.
     ref.listenManual(
       keymapProvider.select((k) => k.problems),
@@ -89,9 +101,41 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
     );
   }
 
+  /// Whether [node] is a scope above the shell — the route's, the root — where
+  /// focus parks when whatever held it inside went away.
+  bool _parkedAbove(FocusNode? node) =>
+      node == null ||
+      (node is FocusScopeNode && _shellFocus.ancestors.contains(node));
+
+  void _onFocusMoved() {
+    if (_reclaimScheduled ||
+        !_parkedAbove(FocusManager.instance.primaryFocus)) {
+      return;
+    }
+    _reclaimScheduled = true;
+    // After the frame: a pane closing hands focus on in the same frame, and
+    // only focus still parked then is lost.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reclaimScheduled = false;
+      if (!mounted) return;
+      if (!_parkedAbove(FocusManager.instance.primaryFocus)) return;
+      // Not while the window is in the background: Flutter parks focus then
+      // on purpose, and gives it back to the node that had it on return
+      // (and [KeyboardFocusKeeper] does if it does not).
+      if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+        return;
+      }
+      // Not from under a dialog or another route on top.
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      _shellFocus.requestFocus();
+    });
+  }
+
   @override
   void dispose() {
     if (Platform.isMacOS) _chords.setMethodCallHandler(null);
+    FocusManager.instance.removeListener(_onFocusMoved);
+    _shellFocus.dispose();
     _sequenceFocus
       ..removeListener(_onSequenceFocus)
       ..dispose();
@@ -522,7 +566,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
               child: Stack(
                 fit: StackFit.passthrough,
                 children: [
-                  Focus(autofocus: true, child: child),
+                  Focus(focusNode: _shellFocus, autofocus: true, child: child),
                   if (pending != null)
                     Positioned(
                       left: 0,
