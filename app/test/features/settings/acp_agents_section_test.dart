@@ -197,6 +197,29 @@ void main() {
     expect(kept.source, AcpAgentSource.custom);
   });
 
+  testWidgets('Fetch again asks the registry once more, in the same dialog', (
+    tester,
+  ) async {
+    http.throwOnRequest = const SocketException('no route to host');
+    await pump(tester);
+    await openDialog(tester);
+    expect(find.textContaining('could not be fetched'), findsOneWidget);
+    expect(http.requestedUrls, hasLength(1));
+
+    http.throwOnRequest = null;
+    await tester.tap(find.text('Fetch again'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('could not be fetched'), findsNothing);
+    expect(find.text('Gemini CLI'), findsOneWidget);
+    expect(http.requestedUrls, hasLength(2));
+
+    await tester.tap(find.byTooltip('Fetch the registry again'));
+    await tester.pumpAndSettle();
+    expect(http.requestedUrls, hasLength(3));
+    expect(find.text('Gemini CLI'), findsOneWidget);
+  });
+
   testWidgets('Custom refuses a blank name, a blank command and a bad '
       'environment line in words, and keeps nothing', (tester) async {
     await pump(tester);

@@ -402,6 +402,52 @@ void main() {
       );
     });
 
+    test('a full rescan — what Discover agents and Rescan ask — probes an '
+        'ACP agent added since the server started', () async {
+      var registry = AgentRegistry.builtIn;
+      const minePath = r'C:\bin\mine.exe';
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+      );
+      service.agentWork = _DetectionWork(detection);
+      await app.handleLater(const AgentsRepair(full: true));
+      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      final report = (await app.handleLater(
+        const AgentsRepair(full: true),
+      )).value;
+
+      expect(report.scan!.addedCount, 1);
+      expect(
+        rows().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+    });
+
     test('nothing broken asks nothing — unless it is full', () async {
       final quiet = (await app.handleLater(const AgentsRepair())).value;
       expect(quiet.checkedAt, now);

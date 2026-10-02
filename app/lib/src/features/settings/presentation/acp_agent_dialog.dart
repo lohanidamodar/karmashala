@@ -256,9 +256,21 @@ class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
     // provider is doing.
     if (catalog.value case final value?) return _list(theme, value, platform);
     if (catalog.error case final error?) {
-      return DesktopErrorBanner(
-        'The registry could not be fetched: $error. '
-        'A custom agent can still be added.',
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DesktopErrorBanner(
+            'The registry could not be fetched: $error. '
+            'A custom agent can still be added.',
+          ),
+          const SizedBox(height: Insets.xs),
+          // The fetch is one per dialog; this asks again without closing it.
+          TextButton.icon(
+            onPressed: () => ref.invalidate(acpRegistryCatalogProvider),
+            icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
+            label: const Text('Fetch again'),
+          ),
+        ],
       );
     }
     return Row(
@@ -293,15 +305,29 @@ class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _filter,
-          autofocus: true,
-          decoration: const InputDecoration(
-            isDense: true,
-            prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-            hintText: 'Filter agents',
-          ),
-          onChanged: (_) => setState(() {}),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _filter,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+                  hintText: 'Filter agents',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Fetch the registry again',
+              icon: const Icon(
+                AppIcons.arrowsClockwise,
+                size: Chrome.iconAction,
+              ),
+              onPressed: () => ref.invalidate(acpRegistryCatalogProvider),
+            ),
+          ],
         ),
         const SizedBox(height: Insets.sm),
         SizedBox(

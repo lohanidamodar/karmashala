@@ -78,6 +78,42 @@ void main() {
   });
 
   test(
+    'a refresh probes an ACP agent added since the server started',
+    () async {
+      const minePath = r'C:\bin\mine.exe';
+      final holder = AgentRegistryHolder.composed(service.acpAgents)
+        ..follow(service);
+      final agents = ServerAgents(
+        data: service,
+        registryHolder: holder,
+        runner: ScriptedRunner(
+          (request) => request.arguments.any((a) => a.contains('mine'))
+              ? const CommandResult(
+                  exitCode: 0,
+                  stdout: '$minePath\n',
+                  stderr: '',
+                )
+              : notFound,
+        ),
+        clock: MutableClock(now),
+        ids: CountingIds(),
+        hostEnvironment: const {},
+      );
+      expect((await agents.refresh()).agents, isEmpty);
+
+      service
+          .open((_) {})
+          .handle(
+            const AcpAgentPut(id: 'r1', agentName: 'Mine', command: 'mine'),
+          );
+
+      final scan = await agents.refresh();
+      expect(scan.agents.single.installation.agentId, 'acp:r1');
+      expect(scan.agents.single.installation.executable.path, minePath);
+    },
+  );
+
+  test(
     'a refresh drops the row of an agent the registry has forgotten',
     () async {
       final holder = AgentRegistryHolder.composed(service.acpAgents)
