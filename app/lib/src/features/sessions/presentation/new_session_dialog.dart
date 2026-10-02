@@ -795,33 +795,13 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     );
   }
 
-  /// The workspace has nothing to run a session in, and says so instead of
-  /// offering an empty dropdown.
-  Widget _noProjects() => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'There are no projects yet, so there is nowhere to start a session. '
-        'Add a project first — a folder with your Git checkouts in it.',
-      ),
-      const SizedBox(height: Insets.md),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.tonalIcon(
-          onPressed: () => NewProjectDialog.show(context),
-          icon: const Icon(AppIcons.folderPlus, size: Chrome.iconAction),
-          label: const Text('Add project…'),
-        ),
-      ),
-    ],
-  );
-
   @override
   Widget build(BuildContext context) {
-    final destination = _destination;
-    final checkout = destination?.checkout;
-    final scratch = destination?.isScratch ?? false;
+    // Never null since a workspace with no projects opens on "No project";
+    // kept nullable for the moment before the first frame reads the default.
+    final destination = _destination ?? const SessionDestination.scratch();
+    final checkout = destination.checkout;
+    final scratch = destination.isScratch;
 
     // Only the agents installed **where the session will run**: one discovered
     // on Windows is a Windows path, unresolvable inside a WSL checkout. A
@@ -881,85 +861,82 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         ),
         // Four labelled parts in the order the choice is made (spec
         // §5): who runs, on what, where the work lands, what it is told.
-        destination == null
-            ? _noProjects()
-            : Column(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NewDialogSection(
+              label: 'Agent',
+              first: true,
+              child: installations.isEmpty
+                  ? _noAgents(checkout)
+                  : NewSessionAgentCards(
+                      installations: installations,
+                      selected: installation,
+                      enabled: !_busy,
+                      onSelected: (v) => setState(() => _installation = v),
+                    ),
+            ),
+            NewDialogSection(
+              label: 'Project & machine',
+              child: SessionDestinationPicker(
+                destination: destination,
+                enabled: !_busy,
+                onChanged: (picked) {
+                  setState(() {
+                    _error = null;
+                    _destination = picked;
+                    // The agent belongs to the environment we are
+                    // leaving. Cleared so `_agentFor` re-resolves
+                    // the default.
+                    _installation = null;
+                  });
+                  _afterDestinationChanged();
+                },
+              ),
+            ),
+            if (externalOffered || worktreeOffered)
+              NewDialogSection(
+                label: 'Where it works',
+                child: _whereItWorks(
+                  worktreeOffered,
+                  checkout,
+                  externalOffered: externalOffered,
+                ),
+              ),
+            NewDialogSection(
+              label: 'First prompt',
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  NewDialogSection(
-                    label: 'Agent',
-                    first: true,
-                    child: installations.isEmpty
-                        ? _noAgents(checkout)
-                        : NewSessionAgentCards(
-                            installations: installations,
-                            selected: installation,
-                            enabled: !_busy,
-                            onSelected: (v) =>
-                                setState(() => _installation = v),
-                          ),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
                   ),
-                  NewDialogSection(
-                    label: 'Project & machine',
-                    child: SessionDestinationPicker(
-                      destination: destination,
-                      enabled: !_busy,
-                      onChanged: (picked) {
-                        setState(() {
-                          _error = null;
-                          _destination = picked;
-                          // The agent belongs to the environment we are
-                          // leaving. Cleared so `_agentFor` re-resolves
-                          // the default.
-                          _installation = null;
-                        });
-                        _afterDestinationChanged();
-                      },
+                  const SizedBox(height: Insets.md),
+                  TextField(
+                    controller: _promptController,
+                    minLines: 2,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'First message (optional)',
+                      hintText: 'What should the agent start on?',
                     ),
                   ),
-                  if (externalOffered || worktreeOffered)
-                    NewDialogSection(
-                      label: 'Where it works',
-                      child: _whereItWorks(
-                        worktreeOffered,
-                        checkout,
-                        externalOffered: externalOffered,
-                      ),
-                    ),
-                  NewDialogSection(
-                    label: 'First prompt',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                          controller: _titleController,
-                          decoration: const InputDecoration(labelText: 'Title'),
-                        ),
-                        const SizedBox(height: Insets.md),
-                        TextField(
-                          controller: _promptController,
-                          minLines: 2,
-                          maxLines: 6,
-                          decoration: const InputDecoration(
-                            labelText: 'First message (optional)',
-                            hintText: 'What should the agent start on?',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_creation != null) ...[
-                    const SizedBox(height: Insets.md),
-                    WorktreeCreationLiveView(tracker: _creation!),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: Insets.md),
-                    DesktopErrorBanner(_error!),
-                  ],
                 ],
               ),
+            ),
+            if (_creation != null) ...[
+              const SizedBox(height: Insets.md),
+              WorktreeCreationLiveView(tracker: _creation!),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: Insets.md),
+              DesktopErrorBanner(_error!),
+            ],
+          ],
+        ),
       ],
     );
     if (fullScreen) {

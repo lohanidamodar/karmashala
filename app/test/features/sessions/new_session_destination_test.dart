@@ -417,22 +417,23 @@ void main() {
   });
 
   group('a workspace with nothing to run in', () {
-    testWidgets('says so instead of offering an empty dropdown', (
-      tester,
-    ) async {
+    testWidgets('opens on No project, and can start there', (tester) async {
       server.projectRows
         ..delete('p1')
         ..delete('p2');
       final container = containerFor();
       await open(tester, container);
 
-      expect(find.textContaining('no projects yet'), findsOneWidget);
-      expect(find.text('Add project…'), findsOneWidget);
+      // A workspace with no projects is not a workspace with nowhere to go:
+      // a session without a project needs none.
+      expect(find.text('No project'), findsOneWidget);
       expect(
-        tester.widget<FilledButton>(startButton()).onPressed,
-        isNull,
-        reason: 'there is nowhere to start it',
+        find.textContaining('Runs in its own folder under ~/karmashala/scratch'),
+        findsOneWidget,
       );
+      expect(find.text('Checkout'), findsNothing);
+      expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
+      await closeAll(tester);
     });
 
     /// **A project with no checkout is not a project with nowhere to run.**
