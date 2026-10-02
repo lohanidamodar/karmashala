@@ -29,7 +29,12 @@ import 'package:karmashala_git/git.dart' show GitPresence;
 import 'package:karmashala_git/repositories.dart';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ScratchCheckoutCreate;
+    show
+        AcpAuthMethod,
+        AcpAuthMethods,
+        DataRefusalCode,
+        DataRefused,
+        ScratchCheckoutCreate;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 
 import '../../support/fake_data_server.dart';
@@ -644,6 +649,52 @@ void main() {
     expect(find.text(SlowStartNote.text), findsOneWidget);
     await closeAll(tester);
   });
+  testWidgets('an agent that asks to be logged in first offers Log in, '
+      'which lists its methods', (tester) async {
+    server.agentWork.acpAuthMethods['a1'] = const AcpAuthMethods(
+      installationId: 'a1',
+      methods: [AcpAuthMethod(id: 'oauth', name: 'Log in with the browser')],
+    );
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        sessionLauncherProvider.overrideWith((ref) => _LoginRequired(ref)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+    expect(find.text('Log in…'), findsNothing);
+    await tester.ensureVisible(startButton());
+    await tester.tap(startButton());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('asks to be logged in first'), findsOneWidget);
+    await tester.ensureVisible(find.text('Log in…'));
+    await tester.tap(find.text('Log in…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Log in with the browser'), findsOneWidget);
+
+    await tester.tap(find.text('Log in with the browser'));
+    await tester.pumpAndSettle();
+    expect(server.agentWork.acpAuthenticates, [('a1', 'oauth')]);
+    expect(find.textContaining('asks to be logged in first'), findsNothing);
+    expect(find.text('Logged in via Log in with the browser.'), findsOneWidget);
+    await closeAll(tester);
+  });
+}
+
+/// A start the server refused because the agent wants a login first.
+class _LoginRequired extends SessionLauncher {
+  _LoginRequired(super.ref);
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async => throw const DataRefused(
+    DataRefusalCode.loginRequired,
+    'Antigravity asks to be logged in first.',
+  );
 }
 
 /// Records the terminal a launch was asked for, and launches nothing.

@@ -23,5 +23,10 @@ const antigravityAcpDescriptor = AgentDescriptor(
   ),
   discovery: AgentDiscoveryRules(probeVersion: false),
   store: AgentStoreSpec(homeDirectoryName: '.gemini/antigravity-acp'),
-  acp: AcpLaunchSpec(linuxArguments: ['--uid='], registryId: 'antigravity-acp'),
+  // Its `gemini-api-key` method reads the key the Gemini tools document.
+  acp: AcpLaunchSpec(
+    linuxArguments: ['--uid='],
+    registryId: 'antigravity-acp',
+    apiKeyVariables: {'gemini-api-key': 'GEMINI_API_KEY'},
+  ),
 );

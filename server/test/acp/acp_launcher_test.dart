@@ -1,10 +1,13 @@
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod, StopReason;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_host/src/acp/acp_auth.dart' show AcpStartAuth;
+import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_runtimes.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/automations/daemon_agents.dart';
@@ -109,7 +112,10 @@ void main() {
     );
   }
 
-  HostedAgentLauncher launcher({bool withRuntimes = true}) {
+  HostedAgentLauncher launcher({
+    bool withRuntimes = true,
+    AcpStartAuth Function(AgentInstallation, AcpLaunchSpec)? acpAuth,
+  }) {
     final rows = CheckoutRows(database);
     return HostedAgentLauncher(
       registry: registry,
@@ -120,6 +126,7 @@ void main() {
       hostEnvironment: const {},
       environmentOf: rows.environment,
       acpRuntimes: withRuntimes ? factory : null,
+      acpAuth: acpAuth,
       windows: false,
     );
   }
@@ -306,7 +313,7 @@ void main() {
         ),
       ),
       throwsA(
-        isA<StateError>().having(
+        isA<AcpLoginRequired>().having(
           (e) => e.message,
           'message',
           contains('asks to be logged in first'),
@@ -321,5 +328,39 @@ void main() {
     final ended = registry.findProcess('karmashala_s1')!.lifecycle;
     expect(ended.hasEnded, isTrue);
     expect(ended.exitCode, isNull, reason: 'it never ran a turn to exit');
+  });
+  test('the login remembered for the installation is the method a start '
+      'authenticates with, and its key reaches the agent', () async {
+    process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      ),
+    );
+    final asked = <String>[];
+    final rows = CheckoutRows(database);
+    await launcher(
+      acpAuth: (installation, spec) {
+        asked.add(installation.id);
+        return (
+          spec: spec.withAuthMethod('b'),
+          variables: const {'API_KEY': 'k'},
+        );
+      },
+    ).start(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('acp1')!,
+        title: 'Cart',
+      ),
+    );
+    expect(asked, ['acp1']);
+    expect(process.agent.authenticatedWith, 'b');
+    expect(starts.single.spec.authMethodId, 'b');
+    expect(starts.single.variables['API_KEY'], 'k');
+    expect(starts.single.variables['KARMASHALA_SESSION_ID'], 's1');
   });
 }

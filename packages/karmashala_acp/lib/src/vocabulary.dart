@@ -10,6 +10,7 @@ abstract final class AcpVocabulary {
   static const agentMethods = [
     AcpMethods.initialize,
     AcpMethods.authenticate,
+    AcpMethods.logout,
     AcpMethods.sessionNew,
     AcpMethods.sessionLoad,
     AcpMethods.sessionPrompt,
@@ -110,6 +111,7 @@ abstract final class AcpVocabulary {
 abstract final class AcpMethods {
   static const initialize = 'initialize';
   static const authenticate = 'authenticate';
+  static const logout = 'logout';
   static const sessionNew = 'session/new';
   static const sessionLoad = 'session/load';
   static const sessionPrompt = 'session/prompt';

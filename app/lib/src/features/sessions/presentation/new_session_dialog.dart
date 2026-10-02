@@ -13,6 +13,9 @@ import '../../../app/widgets/full_screen_form.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/acp_login_dialog.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused, DataRefusalCode;
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_values.dart'
     show EnvironmentPath;
@@ -159,6 +162,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
+
+  /// The installation whose agent asked to be logged in before it would
+  /// start, which the error then offers to log in.
+  AgentInstallation? _loginFor;
 
   /// Set once a start has been busy for a while: an agent run through npx
   /// is downloaded on its first start, and a silent spinner looked hung.
@@ -489,6 +496,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _loginFor = null;
+      _loginNotice = null;
       _creation = null;
       _slowStart = false;
     });
@@ -572,7 +581,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     } on WorktreeCreationCancelled catch (e) {
       if (mounted) setState(() => _error = 'Cancelled. ${e.cleanup}');
     } catch (e) {
-      if (mounted) setState(() => _error = 'Could not start session: $e');
+      if (!mounted) return;
+      setState(() {
+        if (e is DataRefused && e.code == DataRefusalCode.loginRequired) {
+          _error = e.message;
+          _loginFor = installation;
+        } else {
+          _error = 'Could not start session: $e';
+        }
+      });
     } finally {
       await watching?.cancel();
       _slowStartTimer?.cancel();
@@ -584,6 +601,27 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       }
     }
   }
+
+  /// Opens [installation]'s login; once it is done, the refusal is stale.
+  Future<void> _logIn(AgentInstallation installation) async {
+    final said = await AcpLoginDialog.show(
+      context,
+      installationId: installation.id,
+      agentName: ref
+          .read(agentRegistryProvider)
+          .displayNameFor(installation.agentId),
+    );
+    if (said != null && mounted) {
+      setState(() {
+        _error = null;
+        _loginFor = null;
+        _loginNotice = said;
+      });
+    }
+  }
+
+  /// What the last login said, shown until the next start.
+  String? _loginNotice;
 
   Widget _terminalPicker() {
     final terminals = ref.watch(availableSystemTerminalsProvider);
@@ -959,6 +997,18 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
               DesktopErrorBanner(_error!),
+            ],
+            if (_loginFor case final login?)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: _busy ? null : () => _logIn(login),
+                  child: const Text('Log in…'),
+                ),
+              ),
+            if (_loginNotice case final notice?) ...[
+              const SizedBox(height: Insets.md),
+              Text(notice, style: Theme.of(context).textTheme.bodySmall),
             ],
             if (_busy && _slowStart) ...[
               const SizedBox(height: Insets.md),

@@ -23,6 +23,10 @@ enum DataRefusalCode {
   /// does not grant it (slice 5e).
   denied,
 
+  /// The agent it would start asks to be logged in first; a client offers
+  /// the agent's login (`acpAuth.methods`).
+  loginRequired,
+
   /// The server tried and failed.
   failed;
 

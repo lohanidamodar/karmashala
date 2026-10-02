@@ -14,6 +14,7 @@ class AcpLaunchSpec {
     this.environment = const {},
     this.linuxArguments = const [],
     this.registryId,
+    this.apiKeyVariables = const {},
   });
 
   /// Argv that puts the binary into ACP stdio mode — `['--acp']`,
@@ -49,9 +50,26 @@ class AcpLaunchSpec {
   /// A rung with no entry is one the agent has no mode for.
   final Map<PermissionRisk, List<String>> modeNames;
 
-  /// The auth method to use when the agent demands one, or null for the first
-  /// it advertises.
+  /// The auth method to use when the agent demands one, or null for the only
+  /// one it advertises.
   final String? authMethodId;
+
+  /// Auth method id → the environment variable that method reads its API key
+  /// from, as the agent documents it.
+  final Map<String, String> apiKeyVariables;
+
+  /// This spec with [methodId] as its [authMethodId].
+  AcpLaunchSpec withAuthMethod(String? methodId) => AcpLaunchSpec(
+    arguments: arguments,
+    modeNames: modeNames,
+    authMethodId: methodId,
+    clientName: clientName,
+    npxPackage: npxPackage,
+    environment: environment,
+    linuxArguments: linuxArguments,
+    registryId: registryId,
+    apiKeyVariables: apiKeyVariables,
+  );
 
   /// What `initialize` announces as `clientInfo.name`.
   final String clientName;

@@ -27,6 +27,9 @@ class FakeAcpAgent {
     this.sessionIdPrefix = 'fake-session',
     this.supportsLoadSession = true,
     this.holdsNoConversations = false,
+
+    this.supportsLogout = false,
+    this.authenticateRefusal,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
   }) : _turns = List.of(turns) {
@@ -52,6 +55,12 @@ class FakeAcpAgent {
   /// agent does whose own store no longer has it.
   final bool holdsNoConversations;
 
+  /// Whether `initialize` advertises `auth.logout`, and `logout` answers.
+  final bool supportsLogout;
+
+  /// When set, `authenticate` fails -32603 with these words.
+  final String? authenticateRefusal;
+
   /// Updates replayed, in order, before `session/load` is answered.
   final List<SessionUpdate> loadReplay;
   final AgentInfo agentInfo;
@@ -66,6 +75,7 @@ class FakeAcpAgent {
   // What the client said, for assertions.
   JsonMap? initializeParams;
   String? authenticatedWith;
+  var logouts = 0;
   final newSessionParams = <JsonMap>[];
   final loadSessionParams = <JsonMap>[];
   final prompts = <List<ContentBlock>>[];
@@ -110,10 +120,26 @@ class FakeAcpAgent {
               loadSession: supportsLoadSession,
               authMethods: authMethods,
               agentInfo: agentInfo,
+              supportsLogout: supportsLogout,
             ),
           );
         case AcpMethods.authenticate:
+          if (authenticateRefusal case final words?) {
+            request.fail(JsonRpcErrorCodes.internalError, words);
+            return;
+          }
           authenticatedWith = params.string('methodId');
+          request.respond(const <String, Object?>{});
+        case AcpMethods.logout:
+          if (!supportsLogout) {
+            request.fail(
+              JsonRpcErrorCodes.methodNotFound,
+              'Method not found: ${request.method}',
+            );
+            return;
+          }
+          logouts++;
+          authenticatedWith = null;
           request.respond(const <String, Object?>{});
         case AcpMethods.sessionNew:
           newSessionParams.add(params);
@@ -381,6 +407,7 @@ abstract final class InitializeResultJson {
     required bool loadSession,
     required List<AuthMethod> authMethods,
     required AgentInfo agentInfo,
+    bool supportsLogout = false,
   }) => {
     'protocolVersion': protocolVersion,
     'agentCapabilities': {
@@ -391,6 +418,7 @@ abstract final class InitializeResultJson {
         'embeddedContext': true,
       },
       'mcpCapabilities': {'http': true, 'sse': false},
+      if (supportsLogout) 'auth': {'logout': <String, Object?>{}},
     },
     'authMethods': [for (final m in authMethods) m.toJson()],
     'agentInfo': agentInfo.toJson(),

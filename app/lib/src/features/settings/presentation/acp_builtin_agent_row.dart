@@ -9,16 +9,19 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import '../../environments/application/environments_controller.dart';
 import 'acp_install_actions.dart';
+import 'acp_login_lines.dart';
 import 'agent_collapsed_row.dart';
 import 'agent_health.dart';
 import 'agent_label.dart';
 import 'terminal_agent_row.dart' show notInstalledLine;
 
 /// What every ACP agent has in common, said once per group and on hover: no
-/// terminal, no account or usage here, and the agent's own default mode.
+/// terminal, no usage here, a login by method rather than account, and the
+/// agent's own default mode.
 const acpAgentsNote =
     'These agents run as chat sessions over the Agent Client Protocol. They '
-    'keep no account or usage here and start under their own default mode.';
+    'keep no usage here, log in by a method the agent offers, and start '
+    'under their own default mode.';
 
 /// How one install is started: `npx -y <package>` when discovery fell back
 /// to the package runner, else the binary's path.
@@ -29,10 +32,11 @@ String describeAgentLaunch(AgentInstallation install) =>
 
 /// **A shipped ACP agent, one row** (Claude (ACP), Codex (ACP), Antigravity
 /// (ACP), Grok): its health, where it is installed, how each machine
-/// launches it, and the version the agent reported of itself over ACP. No
-/// account or permission block — none applies to an agent driven over ACP —
-/// one line saying so when it is installed nowhere, and an install action
-/// per machine for an agent the registry ships as an archive.
+/// launches it, the version the agent reported of itself over ACP, and each
+/// installation's login ([AcpLoginLine]). No account or permission block —
+/// none applies to an agent driven over ACP — one line saying so when it is
+/// installed nowhere, and an install action per machine for an agent the
+/// registry ships as an archive.
 class AcpBuiltInAgentRow extends ConsumerWidget {
   const AcpBuiltInAgentRow({
     required this.descriptor,
@@ -46,8 +50,9 @@ class AcpBuiltInAgentRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final health = readAgentHealth(ref, installs: installs);
+    final name = agentLabel(ref, descriptor.id);
     return AgentCollapsedRow(
-      name: agentLabel(ref, descriptor.id),
+      name: name,
       logo: AgentLogo(agentId: descriptor.id, size: Chrome.iconAction),
       health: health,
       environmentIds: installs.map((i) => i.environmentId),
@@ -65,6 +70,7 @@ class AcpBuiltInAgentRow extends ConsumerWidget {
                 now: ref.watch(clockProvider).nowUtc(),
               ),
             ),
+            AcpLoginLines(installs: installs, agentName: name),
           ],
           AcpInstallActions(
             descriptor: descriptor,

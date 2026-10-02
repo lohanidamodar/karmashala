@@ -733,3 +733,20 @@ void _migrateToV69(Database db) {
     );
   ''');
 }
+
+/// The auth method a person chose for an ACP installation, so the next start
+/// authenticates with it: the method's id and name as the agent advertised
+/// them, and when `authenticate` last succeeded with it — null for a login
+/// the person completed in a terminal, which the protocol cannot confirm.
+void _migrateToV70(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS acp_auth_choices (
+      installation_id  TEXT PRIMARY KEY
+        REFERENCES agent_installations (id) ON DELETE CASCADE,
+      method_id        TEXT NOT NULL,
+      method_name      TEXT NOT NULL,
+      authenticated_at TEXT,
+      chosen_at        TEXT NOT NULL
+    );
+  ''');
+}

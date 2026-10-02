@@ -5,6 +5,7 @@
 library;
 
 export 'src/store/acp_agent_dao.dart';
+export 'src/store/acp_auth_choice_dao.dart';
 export 'src/store/agent_installation_dao.dart';
 export 'src/store/claude_account_dao.dart';
 export 'src/store/codex_account_dao.dart';

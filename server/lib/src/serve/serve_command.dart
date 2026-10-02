@@ -9,7 +9,7 @@ import 'package:agent_cli/process.dart'
         localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
-    show ExecutionEnvironmentDao;
+    show AcpAuthChoiceDao, ExecutionEnvironmentDao;
 
 import 'package:karmashala_checkpoints/store.dart'
     show
@@ -23,6 +23,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         DecisionAppend,
         DecisionRecorded,
         OpenSessionTab,
+        OpenTerminalTab,
         SessionSend,
         TerminalOpen,
         UsageLimitNotice,
@@ -44,7 +45,9 @@ import 'package:karmashala_session_engine/store.dart'
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../acp/acp_auth.dart';
 import '../acp/acp_runtimes.dart';
+import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
 import '../acp/acp_version_probe.dart';
 import '../agents/agent_registry_holder.dart';
@@ -441,8 +444,47 @@ Future<int> runServe(
     runnerFor: ssh.runners.forEnvironment,
     log: sink.writeln,
   );
+  // Logging in to an ACP agent: a short-lived connection for its methods and
+  // `authenticate`, a terminal tab for a login it runs itself, and the
+  // method remembered for its next start.
+  final acpAuth = ServerAcpAuth(
+    installations: () => data.installations,
+    environments: () => data.environments,
+    registry: () => agentRegistry.current,
+    choices: AcpAuthChoiceDao(database),
+    spawn: (environment, request) async => AcpTransport.process(
+      await ssh.runners.forEnvironment(environment).start(request),
+    ),
+    vault: envVault.overlay,
+    openTerminal: (login) {
+      final paneId = 'acp-login-${newUuid()}';
+      final opened = terminals.open(
+        TerminalOpen(
+          paneId: paneId,
+          environmentId: login.environment.id,
+          agentLaunch: AgentPaneLaunch(
+            agentId: login.agentId,
+            executable: login.executable,
+            arguments: login.arguments,
+            environment: login.variables,
+            workingDirectory: login.directory,
+            wslDistribution: login.environment.kind == EnvironmentKind.wsl
+                ? login.environment.wslDistribution
+                : null,
+            title: login.title,
+          ),
+          columns: 120,
+          rows: 40,
+        ),
+      );
+      return data.tellIntent(
+        OpenTerminalTab(paneId: paneId, title: opened.title),
+      );
+    },
+  );
   final agentWork = ServerAgentWork(
     data: data,
+    acpAuth: acpAuth,
     runners: ssh.runners,
     acpVersion: acpVersions.read,
     hostEnvironment: hostEnvironment,
@@ -914,6 +956,7 @@ Future<int> runServe(
     ),
     links: SessionRepositoryDao(database),
     acpRuntimes: acpRuntimes.start,
+    acpAuth: acpAuth.startAuth,
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(

@@ -12,6 +12,7 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import 'acp_agent_dialog.dart';
 import 'acp_builtin_agent_row.dart' show acpAgentsNote;
+import 'acp_login_lines.dart';
 import 'agent_health.dart';
 import 'environment_chips.dart';
 import 'settings_row.dart';
@@ -19,9 +20,9 @@ import 'settings_theme.dart';
 
 /// **An ACP agent a person added, one row**: its name, where it came from
 /// (Registry or Custom), the machines it was found on, the command that
-/// starts it, the version it reported of itself over ACP, and Edit and
-/// Remove. Nothing a terminal agent's row has that an ACP agent cannot
-/// answer — no account, no mode.
+/// starts it, the version it reported of itself over ACP, its login per
+/// machine, and Edit and Remove. Nothing a terminal agent's row has that an
+/// ACP agent cannot answer — no account, no mode.
 class AcpUserAgentRow extends ConsumerWidget {
   const AcpUserAgentRow({required this.row, required this.installs, super.key});
 
@@ -96,6 +97,7 @@ class AcpUserAgentRow extends ConsumerWidget {
                       ),
                       style: theme.textTheme.bodySmall,
                     ),
+                    AcpLoginLines(installs: installs, agentName: row.name),
                   ],
                 ],
               ),

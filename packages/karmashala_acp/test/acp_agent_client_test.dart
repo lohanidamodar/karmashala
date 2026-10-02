@@ -88,6 +88,7 @@ void main() {
       'clientCapabilities': {
         'fs': {'readTextFile': true, 'writeTextFile': true},
         'terminal': false,
+        'auth': {'terminal': true},
       },
       'clientInfo': {'name': 'karmashala-test', 'version': '0.0.0'},
     });

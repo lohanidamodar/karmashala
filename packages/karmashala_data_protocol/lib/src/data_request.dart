@@ -65,6 +65,7 @@ import 'package:karmashala_launch/karmashala_launch.dart'
     show AgentPaneLaunch, TerminalProfile;
 
 import 'acp_agent_values.dart';
+import 'acp_auth_values.dart';
 import 'agent_work_values.dart';
 import 'automation_values.dart';
 import 'environment_values.dart';

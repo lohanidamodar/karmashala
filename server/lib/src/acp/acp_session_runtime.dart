@@ -22,6 +22,7 @@ import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
 import '../domain/uuid.dart';
 import 'acp_conversation_writer.dart';
+import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_transport.dart';
@@ -322,7 +323,9 @@ class AcpSessionRuntime implements ScreenSession {
       final reason = _failureWords('could not be started', error);
       _finish(SessionEndedWithoutCode(_now(), reason));
       unawaited(_tearDown(killNow: true));
-      throw StateError(reason);
+      throw error is AcpLoginRequired
+          ? AcpLoginRequired(reason)
+          : StateError(reason);
     }
   }
 
@@ -627,22 +630,34 @@ class AcpSessionRuntime implements ScreenSession {
       return await call();
     } on AcpAuthenticationRequired catch (error) {
       final methods = init.authMethods;
-      final method =
-          spec.authMethodId ?? (methods.length == 1 ? methods.single.id : null);
+      // A terminal method is never passed to `authenticate` (ACP v1).
+      final byAgent = [
+        for (final m in methods)
+          if (!m.isTerminal) m.id,
+      ];
+      final chosen = spec.authMethodId;
+      final method = chosen != null && byAgent.contains(chosen)
+          ? chosen
+          : (methods.length == 1 && byAgent.length == 1
+                ? byAgent.single
+                : null);
       if (method == null) {
-        // A login the agent would run itself opens a browser nobody here
-        // can see; the person logs in once where the agent runs instead.
-        throw StateError(
+        throw AcpLoginRequired(
           methods.isEmpty
               ? '$agentName asks to be authenticated (${error.message}) and '
                     'advertises no way to do it'
-              : '$agentName asks to be logged in first. Run it once in a '
-                    'terminal on that machine and complete its login, then '
-                    'start the session again (it offers '
-                    '${methods.map((m) => m.id).join(', ')}).',
+              : '$agentName asks to be logged in first. Choose Log in on its '
+                    'row in Settings, then start the session again (it offers '
+                    '${methods.map((m) => m.name.isEmpty ? m.id : m.name).join(', ')}).',
         );
       }
-      await _client!.authenticate(method);
+      try {
+        await _client!.authenticate(method);
+      } on AcpRpcError catch (refused) {
+        throw AcpLoginRequired(
+          '$agentName refused the login with "$method": ${refused.message}',
+        );
+      }
       return call();
     }
   }

@@ -6,45 +6,59 @@ part of '../data_request.dart';
 // every one is answered when its work is done (`DataSession.handleLater`),
 // and what it writes is told to every client as the rows it wrote.
 
-DataRequest<Object?>? _agentWorkRequestFromJson(String kind, _Arguments args) =>
-    switch (kind) {
-      UsageCurrent.name => const UsageCurrent(),
-      UsageRefresh.name => UsageRefresh(
-        accountKey: args.optionalString('accountKey'),
-      ),
-      AccountsCurrent.name => AccountsCurrent(args.string('installationId')),
-      AccountsCapture.name => AccountsCapture(args.string('installationId')),
-      AccountsSwitch.name => AccountsSwitch(
-        installationId: args.string('installationId'),
-        accountId: args.string('accountId'),
-      ),
-      AgentsDetect.name => AgentsDetect(
-        environmentId: args.optionalString('environmentId'),
-      ),
-      AgentsRepair.name => AgentsRepair(
-        full: args.boolean('full', orElse: false),
-      ),
-      AgentsRefreshVersions.name => const AgentsRefreshVersions(),
-      AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
-      AcpAgentInstall.name => AcpAgentInstall(
-        environmentId: args.string('environmentId'),
-        registryId: args.string('registryId'),
-        version: args.string('version'),
-        archive: args.string('archive'),
-        command: args.string('command'),
-        args: args.strings('args', orEmpty: true),
-        sha256: args.optionalString('sha256'),
-        agentId: args.optionalString('agentId'),
-      ),
-      ImportsScan.name => const ImportsScan(),
-      ImportsAdd.name => ImportsAdd(
-        args.objects('projects', detectedProjectFromJson),
-      ),
-      ImportsForRepositories.name => ImportsForRepositories(
-        args.strings('repositoryIds'),
-      ),
-      _ => null,
-    };
+DataRequest<Object?>? _agentWorkRequestFromJson(
+  String kind,
+  _Arguments args,
+) => switch (kind) {
+  UsageCurrent.name => const UsageCurrent(),
+  UsageRefresh.name => UsageRefresh(
+    accountKey: args.optionalString('accountKey'),
+  ),
+  AccountsCurrent.name => AccountsCurrent(args.string('installationId')),
+  AccountsCapture.name => AccountsCapture(args.string('installationId')),
+  AccountsSwitch.name => AccountsSwitch(
+    installationId: args.string('installationId'),
+    accountId: args.string('accountId'),
+  ),
+  AgentsDetect.name => AgentsDetect(
+    environmentId: args.optionalString('environmentId'),
+  ),
+  AgentsRepair.name => AgentsRepair(full: args.boolean('full', orElse: false)),
+  AgentsRefreshVersions.name => const AgentsRefreshVersions(),
+  AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
+  AcpAgentInstall.name => AcpAgentInstall(
+    environmentId: args.string('environmentId'),
+    registryId: args.string('registryId'),
+    version: args.string('version'),
+    archive: args.string('archive'),
+    command: args.string('command'),
+    args: args.strings('args', orEmpty: true),
+    sha256: args.optionalString('sha256'),
+    agentId: args.optionalString('agentId'),
+  ),
+  ImportsScan.name => const ImportsScan(),
+  ImportsAdd.name => ImportsAdd(
+    args.objects('projects', detectedProjectFromJson),
+  ),
+  ImportsForRepositories.name => ImportsForRepositories(
+    args.strings('repositoryIds'),
+  ),
+  AcpAuthMethodsRead.name => AcpAuthMethodsRead(args.string('installationId')),
+  AcpAuthStateRead.name => AcpAuthStateRead(args.string('installationId')),
+  AcpAuthenticate.name => AcpAuthenticate(
+    installationId: args.string('installationId'),
+    methodId: args.string('methodId'),
+  ),
+  AcpAuthTerminalLogin.name => AcpAuthTerminalLogin(
+    installationId: args.string('installationId'),
+    methodId: args.string('methodId'),
+  ),
+  AcpAuthClear.name => AcpAuthClear(
+    args.string('installationId'),
+    logout: args.boolean('logout', orElse: false),
+  ),
+  _ => null,
+};
 
 /// Work the server does on its own machine for its agents; answered when
 /// done.
@@ -427,4 +441,139 @@ final class ImportsForRepositories extends AgentWorkRequest<ImportSummary> {
   @override
   ImportSummary resultFromJson(Object? json) =>
       _decode(kind, () => ImportSummary.fromJson(_object(json, kind)));
+}
+
+// Logging in to an ACP agent. ACP v1 names methods, not accounts, so nothing
+// here says who is logged in.
+
+/// The auth methods installation [installationId] advertises on
+/// `initialize`, read over a connection the server opens and ends.
+final class AcpAuthMethodsRead extends AgentWorkRequest<AcpAuthMethods> {
+  const AcpAuthMethodsRead(this.installationId);
+
+  static const String name = 'acpAuth.methods';
+
+  final String installationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'installationId': installationId};
+
+  @override
+  Object? resultToJson(AcpAuthMethods result) => result.toJson();
+
+  @override
+  AcpAuthMethods resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthMethods.fromJson(_object(json, kind)));
+}
+
+/// The method remembered for installation [installationId]; null when none
+/// was chosen.
+final class AcpAuthStateRead extends AgentWorkRequest<AcpAuthState?> {
+  const AcpAuthStateRead(this.installationId);
+
+  static const String name = 'acpAuth.state';
+
+  final String installationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'installationId': installationId};
+
+  @override
+  Object? resultToJson(AcpAuthState? result) => result?.toJson();
+
+  @override
+  AcpAuthState? resultFromJson(Object? json) => json == null
+      ? null
+      : _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Asks installation [installationId] to `authenticate` with [methodId] over
+/// a short-lived connection, and remembers the method once it succeeded.
+/// Refused `failed` in the agent's own words when it did not.
+final class AcpAuthenticate extends AgentWorkRequest<AcpAuthState> {
+  const AcpAuthenticate({required this.installationId, required this.methodId});
+
+  static const String name = 'acpAuth.authenticate';
+
+  final String installationId;
+  final String methodId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'methodId': methodId,
+  };
+
+  @override
+  Object? resultToJson(AcpAuthState result) => result.toJson();
+
+  @override
+  AcpAuthState resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Opens a terminal on installation [installationId]'s machine running the
+/// login terminal method [methodId] names, shown as a tab in the window a
+/// person last used, and remembers the method unconfirmed.
+final class AcpAuthTerminalLogin extends AgentWorkRequest<AcpAuthState> {
+  const AcpAuthTerminalLogin({
+    required this.installationId,
+    required this.methodId,
+  });
+
+  static const String name = 'acpAuth.terminalLogin';
+
+  final String installationId;
+  final String methodId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'methodId': methodId,
+  };
+
+  @override
+  Object? resultToJson(AcpAuthState result) => result.toJson();
+
+  @override
+  AcpAuthState resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Forgets the method remembered for installation [installationId]; with
+/// [logout], an agent that answers `logout` is asked to end its login too.
+final class AcpAuthClear extends AgentWorkRequest<DataAck> {
+  const AcpAuthClear(this.installationId, {this.logout = false});
+
+  static const String name = 'acpAuth.clear';
+
+  final String installationId;
+  final bool logout;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'logout': logout,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
 }

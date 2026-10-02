@@ -69,67 +69,117 @@ class FakeAgentWork {
   /// Each `imports.add`'s projects.
   final added = <List<DetectedProject>>[];
 
-  Object? _handle(AgentWorkRequest<Object?> request, List<DataChange> c) =>
-      switch (request) {
-        UsageCurrent() => [...usage.values],
-        UsageRefresh(:final accountKey) => () {
-          refreshes.add(accountKey);
-          final keys = accountKey == null ? [...usage.keys] : [accountKey];
-          return [
-            for (final key in keys)
-              if (onRefresh?.call(key) ?? usage[key] case final state?)
-                () {
-                  if (usage[key] == null || !usage[key]!.sameAs(state)) {
-                    usage[key] = state;
-                    c.add(UsageStateChanged(state));
-                  }
-                  return state;
-                }(),
-          ];
-        }(),
-        AccountsCurrent(:final installationId) => () {
-          _refuse(installationId);
-          return signIns[installationId] ?? const NoSignIn();
-        }(),
-        AccountsCapture(:final installationId) => () {
-          _refuse(installationId);
-          return switch (captures[installationId]) {
-            final ClaudeAccount a => _server._saveClaude(a, c).id,
-            final CodexAccount a => _server._saveCodex(a, c).id,
-            _ => throw DataRefused.invalid('nothing is signed in there'),
-          };
-        }(),
-        AccountsSwitch(:final installationId, :final accountId) => () {
-          _refuse(installationId);
-          switches.add((installationId, accountId));
-          return const DataAck();
-        }(),
-        AgentsDetect(:final environmentId) => onDetect(environmentId),
-        AgentsRepair(:final full) => onRepair(full),
-        final AcpAgentInstall install => () {
-          installs.add(install);
-          return onInstall(
-            install,
-            (step) => _server._tell(null, [
-              AcpInstallProgress(
-                environmentId: install.environmentId,
-                registryId: install.registryId,
-                step: step,
-              ),
-            ]),
-          );
-        }(),
-        AgentsRefreshVersions() => const <AgentVersionChange>[],
-        AgentsDiscoverUnprobed() => const <AgentInstallation>[],
-        ImportsScan() => detected,
-        ImportsAdd(:final projects) => () {
-          added.add(projects);
-          return ImportSummary(projects: projects.length);
-        }(),
-        ImportsForRepositories(:final repositoryIds) => onImportFor(
-          repositoryIds,
-        ),
+  /// What `acpAuth.methods` answers, by installation id.
+  final acpAuthMethods = <String, AcpAuthMethods>{};
+
+  /// The method remembered per installation, as `acpAuth.state` answers.
+  final acpAuthStates = <String, AcpAuthState>{};
+
+  /// Each `acpAuth.authenticate` and `acpAuth.terminalLogin`, as
+  /// (installationId, methodId), and each `acpAuth.clear` as
+  /// (installationId, logout).
+  final acpAuthenticates = <(String, String)>[];
+  final acpTerminalLogins = <(String, String)>[];
+  final acpClears = <(String, bool)>[];
+
+  /// A refusal the next `acpAuth.authenticate` gets.
+  DataRefused? acpAuthRefusal;
+
+  AcpAuthState _remember(String installationId, String methodId, bool ok) {
+    final method = acpAuthMethods[installationId]?.methods
+        .where((m) => m.id == methodId)
+        .firstOrNull;
+    final now = _server._now();
+    return acpAuthStates[installationId] = AcpAuthState(
+      installationId: installationId,
+      methodId: methodId,
+      methodName: method?.name ?? methodId,
+      chosenAt: now,
+      authenticatedAt: ok ? now : null,
+    );
+  }
+
+  Object? _handle(
+    AgentWorkRequest<Object?> request,
+    List<DataChange> c,
+  ) => switch (request) {
+    UsageCurrent() => [...usage.values],
+    UsageRefresh(:final accountKey) => () {
+      refreshes.add(accountKey);
+      final keys = accountKey == null ? [...usage.keys] : [accountKey];
+      return [
+        for (final key in keys)
+          if (onRefresh?.call(key) ?? usage[key] case final state?)
+            () {
+              if (usage[key] == null || !usage[key]!.sameAs(state)) {
+                usage[key] = state;
+                c.add(UsageStateChanged(state));
+              }
+              return state;
+            }(),
+      ];
+    }(),
+    AccountsCurrent(:final installationId) => () {
+      _refuse(installationId);
+      return signIns[installationId] ?? const NoSignIn();
+    }(),
+    AccountsCapture(:final installationId) => () {
+      _refuse(installationId);
+      return switch (captures[installationId]) {
+        final ClaudeAccount a => _server._saveClaude(a, c).id,
+        final CodexAccount a => _server._saveCodex(a, c).id,
+        _ => throw DataRefused.invalid('nothing is signed in there'),
       };
+    }(),
+    AccountsSwitch(:final installationId, :final accountId) => () {
+      _refuse(installationId);
+      switches.add((installationId, accountId));
+      return const DataAck();
+    }(),
+    AgentsDetect(:final environmentId) => onDetect(environmentId),
+    AgentsRepair(:final full) => onRepair(full),
+    final AcpAgentInstall install => () {
+      installs.add(install);
+      return onInstall(
+        install,
+        (step) => _server._tell(null, [
+          AcpInstallProgress(
+            environmentId: install.environmentId,
+            registryId: install.registryId,
+            step: step,
+          ),
+        ]),
+      );
+    }(),
+    AgentsRefreshVersions() => const <AgentVersionChange>[],
+    AgentsDiscoverUnprobed() => const <AgentInstallation>[],
+    ImportsScan() => detected,
+    ImportsAdd(:final projects) => () {
+      added.add(projects);
+      return ImportSummary(projects: projects.length);
+    }(),
+    ImportsForRepositories(:final repositoryIds) => onImportFor(repositoryIds),
+    AcpAuthMethodsRead(:final installationId) =>
+      acpAuthMethods[installationId] ??
+          AcpAuthMethods(installationId: installationId, methods: const []),
+    AcpAuthStateRead(:final installationId) => acpAuthStates[installationId],
+    AcpAuthenticate(:final installationId, :final methodId) => () {
+      acpAuthenticates.add((installationId, methodId));
+      final refusal = acpAuthRefusal;
+      acpAuthRefusal = null;
+      if (refusal != null) throw refusal;
+      return _remember(installationId, methodId, true);
+    }(),
+    AcpAuthTerminalLogin(:final installationId, :final methodId) => () {
+      acpTerminalLogins.add((installationId, methodId));
+      return _remember(installationId, methodId, false);
+    }(),
+    AcpAuthClear(:final installationId, :final logout) => () {
+      acpClears.add((installationId, logout));
+      acpAuthStates.remove(installationId);
+      return const DataAck();
+    }(),
+  };
 
   void _refuse(String installationId) {
     final refusal = accountRefusals.remove(installationId);

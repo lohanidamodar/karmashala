@@ -181,6 +181,33 @@ class AgentWorkData {
     ),
   );
 
+  /// The auth methods [installationId] advertises over ACP.
+  Future<AcpAuthMethods> acpAuthMethods(String installationId) =>
+      _ask(AcpAuthMethodsRead(installationId));
+
+  /// The login method remembered for [installationId], or null.
+  Future<AcpAuthState?> acpAuthState(String installationId) =>
+      _ask(AcpAuthStateRead(installationId));
+
+  /// Asks [installationId] to `authenticate` with [methodId].
+  Future<AcpAuthState> acpAuthenticate(
+    String installationId,
+    String methodId,
+  ) =>
+      _ask(AcpAuthenticate(installationId: installationId, methodId: methodId));
+
+  /// Opens a terminal running the login [methodId] names.
+  Future<AcpAuthState> acpTerminalLogin(
+    String installationId,
+    String methodId,
+  ) => _ask(
+    AcpAuthTerminalLogin(installationId: installationId, methodId: methodId),
+  );
+
+  /// Forgets [installationId]'s remembered login; [logout] asks the agent too.
+  Future<void> acpAuthClear(String installationId, {bool logout = false}) =>
+      _ask(AcpAuthClear(installationId, logout: logout));
+
   /// Each step of an install under way, as the server tells it.
   Stream<AcpInstallProgress> get installProgress => _client.acpInstallProgress;
 

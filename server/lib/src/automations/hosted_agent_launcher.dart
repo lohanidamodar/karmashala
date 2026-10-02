@@ -20,6 +20,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+import '../acp/acp_auth.dart' show AcpStartAuth;
 import '../acp/acp_runtimes.dart';
 import '../domain/session_registry.dart';
 import '../pty/environment_spawn.dart';
@@ -212,6 +213,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.handoffFiles,
     this.links,
     this.acpRuntimes,
+    this.acpAuth,
     Map<String, String>? hostEnvironment,
     bool? windows,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -269,6 +271,14 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Runs an agent whose adapter speaks ACP (`adapter.acp != null`) in place
   /// of a PTY; null refuses such a launch in words.
   final AcpRuntimeFactory? acpRuntimes;
+
+  /// The login remembered for an ACP installation: the spec authenticating
+  /// with it, and the variables it reads. Null: the descriptor's own spec.
+  final AcpStartAuth Function(
+    AgentInstallation installation,
+    AcpLaunchSpec spec,
+  )?
+  acpAuth;
 
   final Map<String, String> _hostEnvironment;
   final bool _windows;
@@ -697,18 +707,21 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         );
       }
       final access = mcp.accessFor(id, withConfigFile: false, kind: kind);
+      final auth =
+          acpAuth?.call(installation, acp) ??
+          (spec: acp, variables: const <String, String>{});
       final runtime = factory(
         AcpSessionStart(
           sessionId: id,
           hostSessionId: hostSessionIdOf(id),
           agentId: agentId,
           agentName: agentName,
-          spec: acp,
+          spec: auth.spec,
           executable: installation.executable.path,
           arguments: arguments,
           directory: directory,
           environment: environment,
-          variables: {kSessionIdEnvironmentVariable: id},
+          variables: {...auth.variables, kSessionIdEnvironmentVariable: id},
           removed: removed,
           mcpUrl: access?.url,
           resumeSessionId: resumeId,

@@ -65,6 +65,12 @@ class AcpAgentClient {
     await _call(AcpMethods.authenticate, {'methodId': methodId});
   }
 
+  /// Ends the agent's authenticated session; only an agent whose
+  /// capabilities say `auth.logout` answers it.
+  Future<void> logout() async {
+    await _call(AcpMethods.logout, const {});
+  }
+
   /// Throws [AcpAuthenticationRequired] when the agent wants
   /// [authenticate] first.
   Future<NewSessionResult> newSession({

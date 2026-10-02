@@ -30,6 +30,7 @@ import 'package:karmashala_acp/karmashala_acp.dart'
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal;
+import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
@@ -97,6 +98,7 @@ void main() {
     expect(process.agent.initializeParams!['clientCapabilities'], {
       'fs': {'readTextFile': true, 'writeTextFile': true},
       'terminal': false,
+      'auth': {'terminal': true},
     });
     final created = process.agent.newSessionParams.single;
     expect(created['cwd'], temp.path);
@@ -904,16 +906,87 @@ void main() {
     await expectLater(
       runtime.start(),
       throwsA(
-        isA<StateError>().having(
+        isA<AcpLoginRequired>().having(
           (e) => e.message,
           'message',
-          allOf(contains('logged in first'), contains('a, b')),
+          allOf(contains('logged in first'), contains('A, B')),
         ),
       ),
     );
     expect(runtime.lifecycle.hasEnded, isTrue);
     await pump();
     expect(process.killed, isTrue);
+  });
+
+  test("the spec's chosen method is the one authenticated with, among "
+      'several', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      spec: const AcpLaunchSpec(authMethodId: 'b'),
+    );
+    await runtime.start();
+    expect(process.agent.authenticatedWith, 'b');
+    await runtime.stop();
+  });
+
+  test('a terminal method is never passed to authenticate: chosen or sole, '
+      'the start asks for a login instead', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'login', name: 'Log in', type: 'terminal'),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      spec: const AcpLaunchSpec(authMethodId: 'login'),
+    );
+    await expectLater(runtime.start(), throwsA(isA<AcpLoginRequired>()));
+    expect(process.agent.receivedMethods, isNot(contains('authenticate')));
+  });
+
+  test('an authenticate the agent refuses fails the start in its words, as '
+      'a login required', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authenticateRefusal: 'the key was rejected',
+        authMethods: const [AuthMethod(id: 'key', name: 'Key')],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+    );
+    await expectLater(
+      runtime.start(),
+      throwsA(
+        isA<AcpLoginRequired>().having(
+          (e) => e.message,
+          'message',
+          contains('the key was rejected'),
+        ),
+      ),
+    );
   });
 
   test('stop cancels the open turn, closes the peer and kills a process '

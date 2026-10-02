@@ -9,6 +9,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
 import '../data/data_service.dart';
+import '../acp/acp_auth.dart';
 import 'acp_binary_installer.dart';
 import 'agent_registry_holder.dart';
 import 'server_accounts.dart';
@@ -39,6 +40,7 @@ class ServerAgentWork implements AgentWork {
     PathProbe pathProbe = const LocalPathProbe(),
     AgentUsageService Function(CliStoreLocator stores)? usageService,
     ClaudeAuthService? claudeAuth,
+    this.acpAuth,
     this.onItsOwn = true,
   }) : _data = data {
     final generator = ids ?? RandomIdGenerator();
@@ -113,6 +115,15 @@ class ServerAgentWork implements AgentWork {
   late final ServerImports imports;
   late final AcpBinaryInstaller installer;
 
+  /// Logging in to ACP agents; null refuses that work `unavailable`.
+  final ServerAcpAuth? acpAuth;
+
+  ServerAcpAuth get _acpAuth =>
+      acpAuth ??
+      (throw const DataRefused.unavailable(
+        'this server logs in to no ACP agents',
+      ));
+
   /// Answers the clients' agent work from now on.
   void attach() => _data.agentWork = this;
 
@@ -164,35 +175,47 @@ class ServerAgentWork implements AgentWork {
   }
 
   @override
-  Future<Object?> handle(AgentWorkRequest<Object?> request) async =>
-      switch (request) {
-        UsageCurrent() => usage.states(),
-        UsageRefresh(:final accountKey) => await usage.refresh(
-          accountKey: accountKey,
-        ),
-        AccountsCurrent(:final installationId) => await accounts.current(
-          installationId,
-        ),
-        AccountsCapture(:final installationId) => await accounts.capture(
-          installationId,
-        ),
-        AccountsSwitch(:final installationId, :final accountId) =>
-          await () async {
-            await accounts.switchTo(installationId, accountId);
-            return const DataAck();
-          }(),
-        AgentsDetect(:final environmentId) => await detection.detect(
-          environmentId: environmentId,
-        ),
-        AgentsRepair(:final full) => await detection.repair(full: full),
-        AgentsRefreshVersions() => await detection.refreshVersions(),
-        AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
-        final AcpAgentInstall install => await _install(install),
-        ImportsScan() => await imports.scan(),
-        ImportsAdd(:final projects) => await imports.add(projects),
-        ImportsForRepositories(:final repositoryIds) =>
-          await imports.forRepositories(repositoryIds),
-      };
+  Future<Object?> handle(
+    AgentWorkRequest<Object?> request,
+  ) async => switch (request) {
+    UsageCurrent() => usage.states(),
+    UsageRefresh(:final accountKey) => await usage.refresh(
+      accountKey: accountKey,
+    ),
+    AccountsCurrent(:final installationId) => await accounts.current(
+      installationId,
+    ),
+    AccountsCapture(:final installationId) => await accounts.capture(
+      installationId,
+    ),
+    AccountsSwitch(:final installationId, :final accountId) => await () async {
+      await accounts.switchTo(installationId, accountId);
+      return const DataAck();
+    }(),
+    AgentsDetect(:final environmentId) => await detection.detect(
+      environmentId: environmentId,
+    ),
+    AgentsRepair(:final full) => await detection.repair(full: full),
+    AgentsRefreshVersions() => await detection.refreshVersions(),
+    AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
+    final AcpAgentInstall install => await _install(install),
+    AcpAuthMethodsRead(:final installationId) => await _acpAuth.methods(
+      installationId,
+    ),
+    AcpAuthStateRead(:final installationId) => _acpAuth.state(installationId),
+    AcpAuthenticate(:final installationId, :final methodId) =>
+      await _acpAuth.authenticate(installationId, methodId),
+    AcpAuthTerminalLogin(:final installationId, :final methodId) =>
+      await _acpAuth.terminalLogin(installationId, methodId),
+    AcpAuthClear(:final installationId, :final logout) => await _acpAuth.clear(
+      installationId,
+      logout: logout,
+    ),
+    ImportsScan() => await imports.scan(),
+    ImportsAdd(:final projects) => await imports.add(projects),
+    ImportsForRepositories(:final repositoryIds) =>
+      await imports.forRepositories(repositoryIds),
+  };
 }
 
 /// The server's [SqliteRowReader]: read-only, `null` on any failure — a busy

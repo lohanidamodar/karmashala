@@ -13,13 +13,13 @@ import 'acp_transport.dart';
 /// downloads the package first.
 const Duration kAcpVersionProbeTimeout = Duration(seconds: 45);
 
-/// The version an ACP agent reports of itself: `initialize` is sent over the
-/// transport [spawn] opens, `agentInfo.version` is read, and the process is
-/// ended. Null when it did not answer within [timeout], answered without a
-/// version, or failed at any step — nothing here throws, so discovery never
-/// does.
-Future<String?> readAcpAgentVersion(
-  Future<AcpTransport> Function() spawn, {
+/// A short-lived conversation with an ACP agent: the transport [spawn] opens,
+/// `initialize`, then [body] with the peer and the agent's answer, and the
+/// process ended — however it went. Throws what failed, or a
+/// [TimeoutException] once [timeout] has passed.
+Future<T> talkToAcpAgent<T>(
+  Future<AcpTransport> Function() spawn,
+  Future<T> Function(AcpPeer peer, InitializeResult init) body, {
   Duration timeout = kAcpVersionProbeTimeout,
   String clientName = 'Karmashala',
   String clientVersion = kHostVersion,
@@ -42,13 +42,8 @@ Future<String?> readAcpAgentVersion(
           version: clientVersion,
         ).toJson(),
       });
-      final version = InitializeResult.fromJson(
-        _asMap(answer),
-      ).agentInfo?.version.trim();
-      return version == null || version.isEmpty ? null : version;
+      return body(talking, InitializeResult.fromJson(_asMap(answer)));
     }).timeout(timeout);
-  } on Object {
-    return null;
   } finally {
     // Ending it is bounded too: a probe never holds discovery.
     try {
@@ -70,6 +65,33 @@ Future<String?> readAcpAgentVersion(
   }
 }
 
+/// The version an ACP agent reports of itself: `initialize` is sent over the
+/// transport [spawn] opens, `agentInfo.version` is read, and the process is
+/// ended. Null when it did not answer within [timeout], answered without a
+/// version, or failed at any step — nothing here throws, so discovery never
+/// does.
+Future<String?> readAcpAgentVersion(
+  Future<AcpTransport> Function() spawn, {
+  Duration timeout = kAcpVersionProbeTimeout,
+  String clientName = 'Karmashala',
+  String clientVersion = kHostVersion,
+}) async {
+  try {
+    return await talkToAcpAgent(
+      spawn,
+      (_, init) async {
+        final version = init.agentInfo?.version.trim();
+        return version == null || version.isEmpty ? null : version;
+      },
+      timeout: timeout,
+      clientName: clientName,
+      clientVersion: clientVersion,
+    );
+  } on Object {
+    return null;
+  }
+}
+
 const Duration _cleanupPatience = Duration(seconds: 5);
 
 JsonMap _asMap(Object? value) =>
@@ -85,11 +107,37 @@ String? acpProbeDirectory(ExecutionEnvironment environment) =>
       EnvironmentKind.ssh => null,
     };
 
+/// How a short-lived connection starts [installation] in [environment],
+/// from [directory]: executable, then the installation's leading arguments,
+/// then [spec]'s, under the spec's variables and then [variables].
+CommandRequest acpProbeRequest(
+  AgentInstallation installation,
+  AcpLaunchSpec spec,
+  ExecutionEnvironment environment,
+  String directory, {
+  Map<String, String> variables = const {},
+}) => CommandRequest(
+  executable: installation.executable.path,
+  arguments: [
+    ...installation.leadingArguments,
+    ...spec.argumentsFor(
+      linux: AcpLaunchSpec.runsOnLinux(
+        environment.kind,
+        hostIsLinux: Platform.isLinux,
+      ),
+    ),
+  ],
+  workingDirectory: EnvironmentPath(
+    environmentId: environment.id,
+    path: directory,
+  ),
+  environment: {...spec.environment, ...variables},
+);
+
 /// Reads an ACP agent's version for the server's detection: the installation
-/// is started in its environment through that environment's runner —
-/// executable, then the installation's leading arguments, then the spec's,
-/// under the spec's variables — asked `initialize`, and ended. Its `read` is
-/// an `AcpVersionReader`.
+/// is started in its environment through that environment's runner
+/// ([acpProbeRequest]), asked `initialize`, and ended. Its `read` is an
+/// `AcpVersionReader`.
 class AcpVersionProbe {
   AcpVersionProbe({
     required this.runnerFor,
@@ -120,23 +168,7 @@ class AcpVersionProbe {
     final version = await readAcpAgentVersion(
       () async => AcpTransport.process(
         await runner.start(
-          CommandRequest(
-            executable: installation.executable.path,
-            arguments: [
-              ...installation.leadingArguments,
-              ...spec.argumentsFor(
-                linux: AcpLaunchSpec.runsOnLinux(
-                  environment.kind,
-                  hostIsLinux: Platform.isLinux,
-                ),
-              ),
-            ],
-            workingDirectory: EnvironmentPath(
-              environmentId: environment.id,
-              path: directory,
-            ),
-            environment: spec.environment,
-          ),
+          acpProbeRequest(installation, spec, environment, directory),
         ),
       ),
       timeout: timeout,
