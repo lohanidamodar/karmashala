@@ -195,6 +195,11 @@ final class SessionConfigOption {
   /// shown.
   bool get isModel => id == 'model';
 
+  /// An option that is the session's mode again: an agent may expose its
+  /// modes both as `modes` and as a `mode` config option, and the mode
+  /// picker already stands for it.
+  bool get isMode => category == 'mode' || id == 'mode';
+
   /// The choice [currentValue] names, or null when it names none offered.
   SessionConfigChoice? get current {
     for (final choice in choices) {

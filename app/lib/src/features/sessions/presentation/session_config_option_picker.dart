@@ -100,9 +100,12 @@ class SessionConfigPickers extends ConsumerWidget {
   static List<SessionConfigOption> selectable(
     SessionConfigOptionsChanged? announced,
   ) {
+    // Not the mode: the session mode picker already draws it, and an agent
+    // that announces its modes as a config option too made two "Agent" chips.
     final options = [
       for (final option in announced?.options ?? const <SessionConfigOption>[])
-        if (option.isSelect && option.choices.isNotEmpty) option,
+        if (option.isSelect && option.choices.isNotEmpty && !option.isMode)
+          option,
     ];
     options.sort((a, b) => (a.isModel ? 0 : 1) - (b.isModel ? 0 : 1));
     return options;

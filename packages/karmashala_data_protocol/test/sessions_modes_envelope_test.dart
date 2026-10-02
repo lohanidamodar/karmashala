@@ -149,6 +149,16 @@ void main() {
     final model = read.option('model')!;
     expect(model.isSelect, isTrue);
     expect(model.isModel, isTrue);
+    expect(model.isMode, isFalse);
+    expect(
+      const SessionConfigOption(
+        id: 'x',
+        name: 'Mode',
+        type: 'select',
+        category: 'mode',
+      ).isMode,
+      isTrue,
+    );
     expect(model.current?.name, 'Claude Sonnet 5');
     expect(model.choices[1].group, 'Other providers');
     final thinking = read.option('thinking')!;

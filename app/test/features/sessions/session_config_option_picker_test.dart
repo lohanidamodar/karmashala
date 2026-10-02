@@ -28,6 +28,19 @@ void main() {
         type: 'boolean',
         currentValue: false,
       ),
+      // The session's mode again, as some agents also announce it: the mode
+      // picker stands for it, so no second chip.
+      SessionConfigOption(
+        id: 'mode',
+        name: 'Mode',
+        type: 'select',
+        category: 'mode',
+        currentValue: 'agent',
+        choices: [
+          SessionConfigChoice(value: 'agent', name: 'Agent'),
+          SessionConfigChoice(value: 'plan', name: 'Plan'),
+        ],
+      ),
       SessionConfigOption(
         id: 'effort',
         name: 'Effort',
