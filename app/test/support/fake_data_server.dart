@@ -817,9 +817,7 @@ class FakeDataServer {
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
       ),
-      SessionInputRequest() => throw const DataRefused.unavailable(
-        'this fake types into no sessions',
-      ),
+      final SessionInputRequest<Object?> r => sessionWork._input(r),
       SessionSetMode() ||
       SessionSetConfigOption() ||
       StoreRequest() => throw StateError('answered above'),

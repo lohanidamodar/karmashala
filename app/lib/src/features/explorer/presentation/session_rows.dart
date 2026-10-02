@@ -12,6 +12,7 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/read.dart';
+import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -120,7 +121,13 @@ class NativeSessionRow extends ConsumerWidget {
         (rows) => rows[session.id] ?? SessionRowAttention.none,
       ),
     );
-    final lifecycle = status.labelWhen(hostedLive: whereabouts.hostedLive);
+    // An agent spoken to over ACP runs inside the server, which writes the
+    // row from its own runtime: a row of one that says running is seen
+    // running, with no pane of ours to vouch for it.
+    final hostedLive =
+        whereabouts.hostedLive ||
+        (status.claimsLive && ref.watch(isAcpSessionProvider(session.id)));
+    final lifecycle = status.labelWhen(hostedLive: hostedLive);
     // A list the user maintains by hand — five entries, not five hundred — so
     // this costs a rebuild when they add a section and nothing otherwise.
     final hasSections = SectionMembershipDialog.hasManualSections(ref);

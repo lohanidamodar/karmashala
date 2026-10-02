@@ -11,12 +11,18 @@ import 'session_lifecycle_recorder.dart';
 /// they name, and marks the rows it does not hold. The only writer of a hosted
 /// row's lifecycle status; every write is on [changes]. Over the server's
 /// store (`keeperOver` in `store.dart`), or any [SessionStatusStore].
+/// [endsWithServer] names the rows whose agent the server runs outright and
+/// ends with it — never `unknown`, see [SessionLifecycleRecorder].
 class HostedSessionStatusKeeper {
   HostedSessionStatusKeeper(
     this._sessions, {
     required bool Function(Session session) runsOnThisMachine,
+    bool Function(Session session)? endsWithServer,
   }) : _runsHere = runsOnThisMachine,
-       _recorder = SessionLifecycleRecorder(_sessions);
+       _recorder = SessionLifecycleRecorder(
+         _sessions,
+         endsWithServer: endsWithServer,
+       );
 
   final SessionStatusStore _sessions;
   final bool Function(Session session) _runsHere;

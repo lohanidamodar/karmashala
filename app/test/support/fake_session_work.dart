@@ -27,8 +27,35 @@ class FakeSessionWork {
   /// How the server names a new row; `started-<n>` unless a test says.
   String Function()? newId;
 
+  /// Whether `sessions.send` and `sessions.interrupt` are taken here: into a
+  /// session the server runs ([running]), answered as sent over its
+  /// protocol; refused `notFound` for one it does not run, as the server
+  /// refuses. Off, every send is refused as unavailable, as it always was.
+  bool typesSends = false;
+
+  /// Every `sessions.send` taken, in order.
+  final sent = <SessionSend>[];
+
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
+
+  Object? _input(SessionInputRequest<Object?> request) {
+    if (!typesSends) {
+      throw const DataRefused.unavailable('this fake types into no sessions');
+    }
+    final sessionId = switch (request) {
+      SessionSend(:final sessionId) => sessionId,
+      SessionInterrupt(:final sessionId) => sessionId,
+    };
+    if (!running.contains(sessionId)) {
+      throw const DataRefused.notFound('this session is not running here');
+    }
+    if (request case final SessionSend send) {
+      sent.add(send);
+      return const SessionSent(sent: true, via: 'protocol');
+    }
+    return const DataAck();
+  }
 
   Object? _handle(SessionWorkRequest<Object?> request) {
     asked.add(request);

@@ -26,6 +26,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
+import 'acp_session_providers.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_chat_source.dart';
@@ -405,6 +406,11 @@ class SessionActions {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
+    final row = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (row != null && installationSpeaksAcp(_ref, row.agentInstallationId)) {
+      return _continueOverProtocol(row, trimmed, requestId: requestId);
+    }
+
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
     // two views of one session, so there is one write path into the agent. The
     // typist reads the Return back off the screen — a composer that folded it
@@ -475,6 +481,42 @@ class SessionActions {
 
     _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
+  }
+
+  /// Sends [text] to [row]'s agent over its protocol, at the server: a
+  /// session the server no longer runs is resumed there first —
+  /// `session/load` where the agent can, a fresh conversation in the same
+  /// row otherwise — and the message is its next turn. Never typed into a
+  /// pane, never started by this app's own engine: the server owns the
+  /// process.
+  Future<void> _continueOverProtocol(
+    Session row,
+    String text, {
+    String? requestId,
+  }) async {
+    final running =
+        row.status.claimsLive &&
+        _ref.read(sessionRunningOnHostProvider)(row.id);
+    if (!running) {
+      final launched = await _ref
+          .read(sessionLauncherProvider)
+          .resumeAtServer(row.id);
+      final notice = launched.workingDirectoryNotice;
+      _log.info(
+        'Resumed ${row.id} at the server before sending'
+        '${notice == null ? '' : ': $notice'}',
+      );
+    }
+    final sent = await _ref
+        .read(sessionInputProvider)
+        .send(row.id, text, requestId: requestId);
+    if (!sent) {
+      throw StateError(
+        'The server does not run this session, so nothing was sent. Resume '
+        'it and try again.',
+      );
+    }
+    _log.info('Continued ${row.id} over its protocol');
   }
 
   /// Whether [sessionId]'s agent runs outside this app's engine: the server

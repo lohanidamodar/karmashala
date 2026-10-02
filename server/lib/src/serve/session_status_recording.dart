@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:karmashala_session/session.dart' show Session;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     as engine;
 import 'package:karmashala_session_engine/store.dart' as store;
@@ -13,13 +14,19 @@ import 'lifecycle_feed.dart';
 /// watches — the rows it does not hold. Every row written is handed to
 /// [onWritten] — the data service, which tells every client of it on the
 /// data channel.
+///
+/// [endsWithServer] names the rows whose agent this server runs outright (an
+/// agent spoken to over a protocol — `sessionEndsWithServer`): one of those
+/// left `running` by a server that has gone is `completed`, never `unknown`,
+/// since there is no process of it anywhere to lose sight of.
 class SessionStatusRecording {
   SessionStatusRecording(
     this._feed,
     AppDatabase database, {
     required DateTime Function() clock,
     void Function(String sessionId)? onWritten,
-  }) : _keeper = store.keeperOver(database),
+    bool Function(Session session)? endsWithServer,
+  }) : _keeper = store.keeperOver(database, endsWithServer: endsWithServer),
        _now = clock,
        _onWritten = onWritten;
 

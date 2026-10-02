@@ -40,10 +40,19 @@ class SessionLifecycleChange {
 ///   `completed`, `failed` or `cancelled`;
 /// - `cancelled` is kept against a later exit: the request is why it ended;
 /// - otherwise, and always for `running`, the fact wins.
+///
+/// A row whose agent runs inside the server and ends with it
+/// ([endsWithServer]) is never `unknown`: there is no terminal of it to lose
+/// sight of, so an end nobody collected a code for — the server stopping, a
+/// restart finding the row still claiming to run — is its end, `completed`.
 class SessionLifecycleRecorder {
-  SessionLifecycleRecorder(this._sessions);
+  SessionLifecycleRecorder(
+    this._sessions, {
+    bool Function(Session session)? endsWithServer,
+  }) : _endsWithServer = endsWithServer;
 
   final SessionStatusStore _sessions;
+  final bool Function(Session session)? _endsWithServer;
   final Map<String, DateTime> _lastObserved = {};
   final StreamController<SessionLifecycleChange> _changes =
       StreamController.broadcast(sync: true);
@@ -64,7 +73,7 @@ class SessionLifecycleRecorder {
     final row = _sessions.getById(sessionId);
     if (row == null) return null;
     _lastObserved[facts.hostSessionId] = facts.observedAt;
-    return _record(row, lifecycleStatusFrom(facts), facts);
+    return _record(row, _derived(row, lifecycleStatusFrom(facts)), facts);
   }
 
   /// Records a lifecycle event; see [apply].
@@ -84,10 +93,18 @@ class SessionLifecycleRecorder {
   /// now `unknown`; an ending stays.
   SessionLifecycleChange? recordUnseen(String sessionId) {
     final row = _sessions.getById(sessionId);
-    return row == null ? null : _record(row, lifecycleStatusFrom(null), null);
+    if (row == null) return null;
+    return _record(row, _derived(row, lifecycleStatusFrom(null)), null);
   }
 
   Future<void> dispose() => _changes.close();
+
+  /// [derived], or `completed` where it is `unknown` of a row that ends with
+  /// the server.
+  SessionStatus _derived(Session row, SessionStatus derived) =>
+      derived == SessionStatus.unknown && (_endsWithServer?.call(row) ?? false)
+      ? SessionStatus.completed
+      : derived;
 
   SessionLifecycleChange? _record(
     Session row,

@@ -897,6 +897,19 @@ class AcpSessionRuntime implements ScreenSession {
 
   void _exited(int code) {
     _exitCode = code;
+    // Died on its own between turns: said as the agent's failure, with what
+    // it left behind. A turn's own failure is published by `_settle`.
+    if (code != 0 &&
+        !_lifecycle.hasEnded &&
+        !_closeRequested &&
+        !_stoppingWithHost &&
+        _turn == null) {
+      _publish(
+        AgentActivityStatus.failed,
+        failureReason: 'exit',
+        evidence: [_failureWords('exited', 'the process ended')],
+      );
+    }
     _finish(SessionExited(code, _now()));
     unawaited(_tearDown());
   }

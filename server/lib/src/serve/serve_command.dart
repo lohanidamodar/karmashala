@@ -58,6 +58,7 @@ import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/session_input.dart';
+import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
@@ -674,6 +675,12 @@ Future<int> runServe(
     database,
     clock: () => DateTime.now().toUtc(),
     onWritten: (sessionId) => data.announceSessions([sessionId]),
+    // An agent spoken to over ACP runs inside this server: a row of one left
+    // `running` by the server before this one ended with it.
+    endsWithServer: sessionEndsWithServer(
+      rows: checkoutRows,
+      agents: liveAgents,
+    ),
   )..start();
   // A box's sessions start and exit as its host says (slice 5d).
   ssh.onBoxLifecycle = recording.applyRemote;

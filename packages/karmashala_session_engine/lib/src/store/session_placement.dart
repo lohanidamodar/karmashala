@@ -6,12 +6,17 @@ import '../domain/session_placement_rule.dart';
 import '../service/hosted_session_status_keeper.dart';
 import 'session_dao.dart';
 
-/// The daemon's [HostedSessionStatusKeeper] over the store.
-HostedSessionStatusKeeper keeperOver(AppDatabase db) =>
-    HostedSessionStatusKeeper(
-      SessionDao(db),
-      runsOnThisMachine: (session) => sessionRunsOnThisMachine(db, session),
-    );
+/// The daemon's [HostedSessionStatusKeeper] over the store. [endsWithServer]
+/// names the rows the server's own runtimes hold (an agent spoken to over a
+/// protocol): ended with the server, never `unknown`.
+HostedSessionStatusKeeper keeperOver(
+  AppDatabase db, {
+  bool Function(Session session)? endsWithServer,
+}) => HostedSessionStatusKeeper(
+  SessionDao(db),
+  runsOnThisMachine: (session) => sessionRunsOnThisMachine(db, session),
+  endsWithServer: endsWithServer,
+);
 
 /// [runsOnThisMachine] over the store's own tables.
 bool sessionRunsOnThisMachine(AppDatabase db, Session session) =>
@@ -22,11 +27,12 @@ bool sessionRunsOnThisMachine(AppDatabase db, Session session) =>
         'SELECT environment_id FROM repositories WHERE id = ?;',
         [repositoryId],
       ),
-      kindOf: (environmentId) => EnvironmentKind.values.asNameMap()[_firstValue(
-        db,
-        'SELECT kind FROM execution_environments WHERE id = ?;',
-        [environmentId],
-      )],
+      kindOf: (environmentId) =>
+          EnvironmentKind.values.asNameMap()[_firstValue(
+            db,
+            'SELECT kind FROM execution_environments WHERE id = ?;',
+            [environmentId],
+          )],
     );
 
 String? _firstValue(AppDatabase db, String sql, List<Object?> params) {
