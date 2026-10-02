@@ -185,11 +185,12 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
       // cannot serve them has nothing to show.
       if (ref.watch(isAcpSessionProvider(sessionId))) {
         if (viaServer) {
-          yield* serverTranscriptMessages(
-            ref,
-            sessionId,
-            visible: chatTranscriptPollingProvider,
-          );
+          // Watched for as long as it is on screen, not only while a
+          // terminal's chat face is up: this session has no terminal, so no
+          // face ever flips, and that gate left it loading forever. The
+          // server pushes the rows as they are written, so the watch costs
+          // nothing between turns.
+          yield* serverTranscriptMessages(ref, sessionId);
         } else {
           yield const [];
         }
