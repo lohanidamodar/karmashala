@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:io';
@@ -11,6 +12,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala/src/features/sessions/presentation/slow_start_note.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -428,7 +430,9 @@ void main() {
       // a session without a project needs none.
       expect(find.text('No project'), findsOneWidget);
       expect(
-        find.textContaining('Runs in its own folder under ~/karmashala/scratch'),
+        find.textContaining(
+          'Runs in its own folder under ~/karmashala/scratch',
+        ),
         findsOneWidget,
       );
       expect(find.text('Checkout'), findsNothing);
@@ -598,6 +602,29 @@ void main() {
     expect(launcher.requests.single.firstMessage, 'Add pagination to /trails');
     await closeAll(tester);
   });
+
+  testWidgets('a start that takes long says so under the spinner', (
+    tester,
+  ) async {
+    // An agent run through npx is downloaded on its first start; a bare
+    // spinner for minutes looked hung.
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        sessionLauncherProvider.overrideWith((ref) => _HoldingLauncher(ref)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+    await tester.ensureVisible(startButton());
+    await tester.tap(startButton());
+    await tester.pump();
+    expect(find.text(SlowStartNote.text), findsNothing);
+
+    await tester.pump(kSlowStartAfter + const Duration(seconds: 1));
+    expect(find.text(SlowStartNote.text), findsOneWidget);
+    await closeAll(tester);
+  });
 }
 
 /// Records the terminal a launch was asked for, and launches nothing.
@@ -616,4 +643,15 @@ class _RecordingLauncher extends SessionLauncher {
     requests.add(request);
     throw StateError('recorded, not launched');
   }
+}
+
+/// A launch that never comes back, as one waiting on an npx download.
+class _HoldingLauncher extends SessionLauncher {
+  _HoldingLauncher(super.ref);
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) => Completer<SessionLaunchResult>().future;
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +31,7 @@ import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
+import 'slow_start_note.dart';
 import 'filter_menu_field.dart';
 import 'new_dialog_section.dart';
 import 'new_session_agent_cards.dart';
@@ -155,6 +158,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
+
+  /// Set once a start has been busy for a while: an agent run through npx
+  /// is downloaded on its first start, and a silent spinner looked hung.
+  bool _slowStart = false;
+  Timer? _slowStartTimer;
 
   /// The worktree this launch is creating; kept after it ends, so a failed
   /// stage's output stays on screen beside the error.
@@ -383,6 +391,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
 
   @override
   void dispose() {
+    _slowStartTimer?.cancel();
     _titleController.dispose();
     _promptController.dispose();
     _branchController.dispose();
@@ -480,6 +489,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       _busy = true;
       _error = null;
       _creation = null;
+      _slowStart = false;
+    });
+    _slowStartTimer?.cancel();
+    _slowStartTimer = Timer(kSlowStartAfter, () {
+      if (mounted && _busy) setState(() => _slowStart = true);
     });
     // A session without a project gets its folder now, on the agent's own
     // machine, named after what it was asked to do.
@@ -500,6 +514,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         setState(() {
           _error = 'Could not make a scratch folder: $e';
           _busy = false;
+          _slowStart = false;
         });
       }
       return;
@@ -559,7 +574,13 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       if (mounted) setState(() => _error = 'Could not start session: $e');
     } finally {
       await watching?.cancel();
-      if (mounted) setState(() => _busy = false);
+      _slowStartTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _slowStart = false;
+        });
+      }
     }
   }
 
@@ -934,6 +955,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
               DesktopErrorBanner(_error!),
+            ],
+            if (_busy && _slowStart) ...[
+              const SizedBox(height: Insets.md),
+              const SlowStartNote(),
             ],
           ],
         ),
