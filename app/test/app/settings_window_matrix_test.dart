@@ -107,7 +107,7 @@ void main() {
       SshHost(
         id: 'h1',
         name: 'build-box-in-the-basement-with-a-long-name',
-        host: 'build-server-01.internal.corp.example.popupbits.com',
+        host: 'build-server-01.internal.corp.long-example-domain.test',
         port: 2222,
         username: 'dlohani-service-account',
         authMethod: SshAuthMethod.password,
@@ -153,7 +153,7 @@ void main() {
     final host = SshHost(
       id: 'h1',
       name: 'build-box-in-the-basement-with-a-long-name',
-      host: 'build-server-01.internal.corp.example.popupbits.com',
+      host: 'build-server-01.internal.corp.long-example-domain.test',
       port: 2222,
       username: 'dlohani-service-account',
       authMethod: SshAuthMethod.password,
@@ -304,7 +304,7 @@ void main() {
     final host = SshHost(
       id: 'h1',
       name: 'build-box-in-the-basement-with-a-long-name',
-      host: 'build-server-01.internal.corp.example.popupbits.com',
+      host: 'build-server-01.internal.corp.long-example-domain.test',
       port: 22,
       username: 'dlohani',
       authMethod: SshAuthMethod.password,
@@ -495,7 +495,7 @@ void main() {
     final longHost = SshHost(
       id: 'h1',
       name: 'build-box-in-the-basement-with-a-long-name',
-      host: 'build-server-01.internal.corp.example.popupbits.com',
+      host: 'build-server-01.internal.corp.long-example-domain.test',
       port: 22,
       username: 'dlohani',
       authMethod: SshAuthMethod.password,
@@ -703,10 +703,10 @@ const _firewallStep = PrivilegedCommand(
       'sudo firewall-cmd --reload',
   does:
       'Allows inbound TCP 8787 through firewalld on '
-      'build-server-01.internal.corp.example.popupbits.com, and keeps the rule '
+      'build-server-01.internal.corp.long-example-domain.test, and keeps the rule '
       'across restarts.',
   why:
-      '`sudo` on build-server-01.internal.corp.example.popupbits.com asks for '
+      '`sudo` on build-server-01.internal.corp.long-example-domain.test asks for '
       'a password, and Karmashala never asks for one or sends one — so this '
       'is yours to run, in a terminal there.',
 );
@@ -762,7 +762,7 @@ class _RelayBox {
         reason:
             'The relay is running on '
             'build-box-in-the-basement-with-a-long-name. firewalld is running '
-            'on build-server-01.internal.corp.example.popupbits.com and `sudo` '
+            'on build-server-01.internal.corp.long-example-domain.test and `sudo` '
             'there asks for a password, so 8787/tcp was not opened. Run the '
             'command below in a terminal there, then check again.',
         command: _firewallStep.command,

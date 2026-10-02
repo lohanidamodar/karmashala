@@ -317,19 +317,19 @@ void main() {
       // last one, so two different last hops are two clients.
       expect(
         await _getWith('/v1/$_rendezvous', {
-          'x-forwarded-for': '1.1.1.1, 10.0.0.1',
+          'x-forwarded-for': '203.0.113.1, 10.0.0.1',
         }),
         startsWith('404'),
       );
       expect(
         await _getWith('/v1/$_rendezvous', {
-          'x-forwarded-for': '1.1.1.1, 10.0.0.2',
+          'x-forwarded-for': '203.0.113.1, 10.0.0.2',
         }),
         startsWith('404'),
       );
       expect(
         await _getWith('/v1/$_rendezvous', {
-          'x-forwarded-for': '2.2.2.2, 10.0.0.2',
+          'x-forwarded-for': '203.0.113.2, 10.0.0.2',
         }),
         startsWith('429'),
       );

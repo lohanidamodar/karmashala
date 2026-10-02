@@ -168,7 +168,7 @@ void main() {
     importedAt: DateTime.utc(2026, 9, 1),
   );
   final play = PlayAccountSummary(
-    clientEmail: 'robot@popupbits.iam.gserviceaccount.com',
+    clientEmail: 'robot@example.iam.gserviceaccount.com',
     reportsBucket: 'pubsite_prod_rev_0123456789',
     packageNames: const ['com.popupbits.notes'],
     importedAt: DateTime.utc(2026, 9, 1),
