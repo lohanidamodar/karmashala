@@ -116,9 +116,15 @@ class SessionActions {
   Future<String?> deleteNative(String id, {bool deleteFromCli = true}) async {
     final session = _ref.read(sessionsDataProvider).getById(id);
     if (session == null) return null;
-    var fromCliStore = deleteFromCli;
+    // An ACP session's conversation is the server's own rows: no CLI store
+    // holds it, so there is nothing there to look for or delete.
+    final hasCliStore = !installationSpeaksAcp(
+      _ref,
+      session.agentInstallationId,
+    );
+    var fromCliStore = deleteFromCli && hasCliStore;
     String? notice;
-    if (deleteFromCli) {
+    if (fromCliStore) {
       final repo = _ref
           .read(workspaceDataProvider)
           .repository(session.repositoryId);

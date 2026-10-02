@@ -14,6 +14,7 @@ import '../../automations/application/scheduled_resume_providers.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import '../../github/application/pull_request_context_service.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
+import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/presentation/end_session_action.dart';
@@ -159,7 +160,16 @@ Future<void> runNativeSessionMenuAction(
     case 'end':
       await endSessionFromRow(context, ref, session.id, title: session.title);
     case 'delete':
-      unawaited(_deleteNative(context, actions, session));
+      unawaited(
+        _deleteNative(
+          context,
+          actions,
+          session,
+          // An ACP session keeps its conversation in the server's own rows: no
+          // CLI store holds a transcript of it.
+          hasCliStore: !ref.read(isAcpSessionProvider(session.id)),
+        ),
+      );
   }
 }
 
@@ -231,7 +241,12 @@ Future<void> runImportedSessionMenuAction(
     case 'rename':
       await renameImportedSession(context, ref, session);
     case 'delete':
-      final deleteFromCli = await _confirmDelete(context, session.displayTitle);
+      // An imported conversation is a CLI store's transcript by definition.
+      final deleteFromCli = await _confirmDelete(
+        context,
+        session.displayTitle,
+        hasCliStore: true,
+      );
       if (deleteFromCli != null) {
         await actions.deleteImported(session, deleteFromCli: deleteFromCli);
       }
@@ -310,9 +325,14 @@ Future<void> _inTerminal(
 Future<void> _deleteNative(
   BuildContext context,
   SessionActions actions,
-  Session session,
-) async {
-  final deleteFromCli = await _confirmDelete(context, session.title);
+  Session session, {
+  required bool hasCliStore,
+}) async {
+  final deleteFromCli = await _confirmDelete(
+    context,
+    session.title,
+    hasCliStore: hasCliStore,
+  );
   if (deleteFromCli == null) return;
   try {
     final notice = await actions.deleteNative(
@@ -332,16 +352,25 @@ Future<void> _deleteNative(
   }
 }
 
-Future<bool?> _confirmDelete(BuildContext context, String title) {
-  var deleteFromCli = true;
+/// Pops null for cancel, else whether to delete the CLI transcript too.
+/// Without [hasCliStore] — an ACP session, whose conversation is the server's
+/// own rows — there is nothing on disk to offer, and the answer is false.
+Future<bool?> _confirmDelete(
+  BuildContext context,
+  String title, {
+  required bool hasCliStore,
+}) {
+  var deleteFromCli = hasCliStore;
   return showDialog<bool>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const DesktopDialogTitle(
+        title: DesktopDialogTitle(
           icon: AppIcons.trash,
           title: 'Delete session?',
-          subtitle: 'Choose whether to also remove the CLI history.',
+          subtitle: hasCliStore
+              ? 'Choose whether to also remove the CLI history.'
+              : 'Karmashala keeps its conversation; nothing else does.',
         ),
         content: SizedBox(
           width: 400,
@@ -349,19 +378,25 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Remove "$title" from Karmashala.'),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: deleteFromCli,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Also delete from the CLI store'),
-                subtitle: const Text(
-                  'Checked by default. This removes the original transcript.',
-                ),
-                onChanged: (value) =>
-                    setState(() => deleteFromCli = value ?? true),
+              Text(
+                hasCliStore
+                    ? 'Remove "$title" from Karmashala.'
+                    : 'Remove "$title" and its conversation from Karmashala.',
               ),
+              if (hasCliStore) ...[
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: deleteFromCli,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Also delete from the CLI store'),
+                  subtitle: const Text(
+                    'Checked by default. This removes the original transcript.',
+                  ),
+                  onChanged: (value) =>
+                      setState(() => deleteFromCli = value ?? true),
+                ),
+              ],
             ],
           ),
         ),
