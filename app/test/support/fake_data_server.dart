@@ -342,6 +342,14 @@ class FakeDataServer {
   /// When set, `sessions.setMode` is refused `invalid` with these words.
   String? modeRefusal;
 
+  /// The config options each session's agent last announced (seeded through
+  /// [writeAsAnotherClient]); `sessions.setConfigOption` moves `currentValue`.
+  final sessionConfigOptions = <String, SessionConfigOptionsChanged>{};
+
+  /// When set, `sessions.setConfigOption` is refused `invalid` with these
+  /// words.
+  String? configOptionRefusal;
+
   /// When set, answers wait for it — a slow server, or one mid-answer.
   Completer<void>? hold;
 
@@ -442,6 +450,8 @@ class FakeDataServer {
           break;
         case SessionModesChanged(:final sessionId):
           sessionModes[sessionId] = change;
+        case SessionConfigOptionsChanged(:final sessionId):
+          sessionConfigOptions[sessionId] = change;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;
@@ -594,6 +604,36 @@ class FakeDataServer {
         availableModes: before?.availableModes ?? const [],
       );
       sessionModes[sessionId] = after;
+      _tell(null, [after]);
+      return DataReply(const DataAck() as R, revision, const []);
+    }
+    if (request case SessionSetConfigOption(
+      :final sessionId,
+      :final configId,
+      :final value,
+    )) {
+      if (configOptionRefusal case final words?) {
+        throw DataRefused.invalid(words);
+      }
+      final before = sessionConfigOptions[sessionId];
+      final after = SessionConfigOptionsChanged(
+        sessionId: sessionId,
+        options: [
+          for (final option in before?.options ?? const <SessionConfigOption>[])
+            option.id == configId
+                ? SessionConfigOption(
+                    id: option.id,
+                    name: option.name,
+                    type: option.type,
+                    description: option.description,
+                    category: option.category,
+                    currentValue: value,
+                    choices: option.choices,
+                  )
+                : option,
+        ],
+      );
+      sessionConfigOptions[sessionId] = after;
       _tell(null, [after]);
       return DataReply(const DataAck() as R, revision, const []);
     }
@@ -780,7 +820,9 @@ class FakeDataServer {
       SessionInputRequest() => throw const DataRefused.unavailable(
         'this fake types into no sessions',
       ),
-      SessionSetMode() || StoreRequest() => throw StateError('answered above'),
+      SessionSetMode() ||
+      SessionSetConfigOption() ||
+      StoreRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);
     return DataReply(result as R, revision, List.unmodifiable(changes));

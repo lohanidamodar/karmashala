@@ -9,8 +9,9 @@ import '../application/session_modes_providers.dart';
 
 /// **The agent's own modes** (ACP design, C5): what the session's agent offers
 /// at runtime, by name, with the one it is in selected. Nothing at all — no
-/// width either — for a session whose agent has announced none; the permission
-/// chip beside it is Karmashala's rung, which this never replaces.
+/// width either — for a session whose agent has announced none. For an ACP
+/// session this *is* the permission axis: Karmashala's rung only picked the
+/// mode the agent started in, and the PTY permission chip stands down.
 class SessionModePicker extends ConsumerWidget {
   const SessionModePicker({
     required this.sessionId,

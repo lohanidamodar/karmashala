@@ -8,8 +8,10 @@ import '../../agents/application/session_model_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../../agents/presentation/picker_face.dart';
+import '../application/acp_session_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
+import 'session_config_option_picker.dart';
 
 /// Everything the chip draws, resolved from one session's model state. A value
 /// rather than widget code, so the four states can be asserted without a frame.
@@ -234,12 +236,22 @@ class SessionModelChip extends ConsumerWidget {
   final double maxLabelWidth;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _buildModelChip(
-    context,
-    ref,
-    ref.watch(sessionModelProvider(sessionId)),
-    maxLabelWidth: maxLabelWidth,
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    // An ACP agent takes no model flag: its model is a config option it
+    // announces, and so are any other selects — drawn in this chip's place.
+    if (ref.watch(isAcpSessionProvider(sessionId))) {
+      return SessionConfigPickers(
+        sessionId: sessionId,
+        maxLabelWidth: maxLabelWidth,
+      );
+    }
+    return _buildModelChip(
+      context,
+      ref,
+      ref.watch(sessionModelProvider(sessionId)),
+      maxLabelWidth: maxLabelWidth,
+    );
+  }
 }
 
 /// The model a session is **set to** run on, drawn as a fact, not a control. It

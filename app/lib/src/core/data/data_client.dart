@@ -297,6 +297,17 @@ class DataClient {
   Stream<SessionModesChanged> get sessionModeChanges =>
       _sessionModeChanges.stream;
 
+  /// The config options (a model, a flag) each session's agent exposes, by
+  /// session id, as last told. In memory only, like [sessionModes].
+  final sessionConfigOptions = <String, SessionConfigOptionsChanged>{};
+
+  final _sessionConfigOptionChanges =
+      StreamController<SessionConfigOptionsChanged>.broadcast(sync: true);
+
+  /// A session's agent announced or changed its config options.
+  Stream<SessionConfigOptionsChanged> get sessionConfigOptionChanges =>
+      _sessionConfigOptionChanges.stream;
+
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
   /// change.
@@ -970,6 +981,11 @@ class DataClient {
         case final SessionModesChanged change:
           sessionModes[change.sessionId] = change;
           if (!_sessionModeChanges.isClosed) _sessionModeChanges.add(change);
+        case final SessionConfigOptionsChanged change:
+          sessionConfigOptions[change.sessionId] = change;
+          if (!_sessionConfigOptionChanges.isClosed) {
+            _sessionConfigOptionChanges.add(change);
+          }
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1181,6 +1197,7 @@ class DataClient {
     unawaited(_fileChanges.close());
     unawaited(_transcriptChanges.close());
     unawaited(_sessionModeChanges.close());
+    unawaited(_sessionConfigOptionChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());
