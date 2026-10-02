@@ -1,0 +1,22 @@
+name: karmashala_acp
+description: >-
+  The Agent Client Protocol (ACP) as Karmashala speaks it from the client side:
+  a newline-delimited JSON-RPC 2.0 peer, a typed facade over an agent's
+  methods and notifications, the value types on the wire, and a scripted fake
+  agent for tests. Pure Dart; depends on no other Karmashala package.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  meta: ^1.16.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

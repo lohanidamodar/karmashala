@@ -1,0 +1,8 @@
+# Declaring a tag here is what stops `dart test` warning about it; it changes
+# no default behaviour.
+tags:
+  # Starts the real Claude ACP adapter through `npx` inside WSL and spends a
+  # model turn (test/live_acp_test.dart). It skips itself unless
+  # KARMASHALA_LIVE_ACP=1 is set and WSL has npx, so the ordinary gate is
+  # unaffected; `--exclude-tags live-acp` drops it outright.
+  live-acp:
