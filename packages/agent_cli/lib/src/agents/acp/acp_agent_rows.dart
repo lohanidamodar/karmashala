@@ -1,4 +1,5 @@
 import '../adapter/agent_adapter.dart';
+import '../adapter/agent_presentation.dart';
 import '../adapter/data_only_agent_adapter.dart';
 import '../domain/agent_descriptor.dart';
 
@@ -19,6 +20,7 @@ class AcpAgentRow {
     this.env = const {},
     this.source = AcpAgentSource.custom,
     this.registryId,
+    this.iconUrl,
   });
 
   final String id;
@@ -30,6 +32,9 @@ class AcpAgentRow {
 
   /// The registry entry's id when [source] is [AcpAgentSource.registry].
   final String? registryId;
+
+  /// The registry entry's icon (an SVG's URL), when it named one.
+  final String? iconUrl;
   final DateTime createdAt;
 
   /// The adapter id this row is known by everywhere an agent id is kept.
@@ -43,6 +48,8 @@ class AcpAgentRow {
     AcpAgentSource? source,
     String? registryId,
     bool clearRegistryId = false,
+    String? iconUrl,
+    bool clearIconUrl = false,
     DateTime? createdAt,
   }) => AcpAgentRow(
     id: id,
@@ -52,6 +59,7 @@ class AcpAgentRow {
     env: env ?? this.env,
     source: source ?? this.source,
     registryId: clearRegistryId ? null : registryId ?? this.registryId,
+    iconUrl: clearIconUrl ? null : iconUrl ?? this.iconUrl,
     createdAt: createdAt ?? this.createdAt,
   );
 
@@ -65,6 +73,7 @@ class AcpAgentRow {
       _sameMap(other.env, env) &&
       other.source == source &&
       other.registryId == registryId &&
+      other.iconUrl == iconUrl &&
       other.createdAt == createdAt;
 
   @override
@@ -78,6 +87,7 @@ class AcpAgentRow {
     ]),
     source,
     registryId,
+    iconUrl,
     createdAt,
   );
 
@@ -109,9 +119,10 @@ const String acpAgentIdPrefix = 'acp:';
 String acpAgentIdFor(String rowId) => '$acpAgentIdPrefix$rowId';
 
 /// [row] as an agent: a data-only adapter whose descriptor says to run the
-/// command as given, on either platform, with the row's argv as its ACP mode.
-/// Nothing terminal-shaped, and no version probe — the command is a person's,
-/// and running it with `--version` is not something the row promised is safe.
+/// command as given, on either platform, with the row's argv as its ACP mode,
+/// drawn with the icon the registry gave it. Nothing terminal-shaped, and no
+/// version probe — the command is a person's, and running it with
+/// `--version` is not something the row promised is safe.
 AgentAdapter acpAgentAdapter(AcpAgentRow row) => DataOnlyAgentAdapter(
   AgentDescriptor(
     id: row.agentId,
@@ -120,4 +131,5 @@ AgentAdapter acpAgentAdapter(AcpAgentRow row) => DataOnlyAgentAdapter(
     discovery: const AgentDiscoveryRules(probeVersion: false),
     acp: AcpLaunchSpec(arguments: row.args, environment: row.env),
   ),
+  presentation: AgentPresentation.of(row.name, iconUrl: row.iconUrl),
 );

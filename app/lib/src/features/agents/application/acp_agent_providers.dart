@@ -118,6 +118,7 @@ class AcpAgentsSetup extends Notifier<AcpAgentsSetupState> {
     Map<String, String> env = const {},
     AcpAgentSource source = AcpAgentSource.custom,
     String? registryId,
+    String? iconUrl,
   }) async {
     final row = await ref
         .read(acpAgentsDataProvider)
@@ -129,6 +130,7 @@ class AcpAgentsSetup extends Notifier<AcpAgentsSetupState> {
           env: env,
           source: source,
           registryId: registryId,
+          iconUrl: iconUrl,
         );
     if (id == null) unawaited(_discover());
     return row;

@@ -54,6 +54,7 @@ class AcpRegistryEntry {
     this.description,
     this.npx,
     this.binaries = const {},
+    this.icon,
   });
 
   factory AcpRegistryEntry.fromJson(Map<String, Object?> json) {
@@ -72,6 +73,7 @@ class AcpRegistryEntry {
       npx: npx is Map<String, Object?>
           ? AcpNpxDistribution.fromJson(npx)
           : null,
+      icon: _string(json['icon']),
       binaries: {
         if (binary is Map<String, Object?>)
           for (final platform in binary.entries)
@@ -85,6 +87,9 @@ class AcpRegistryEntry {
   final String? name;
   final String? version;
   final String? description;
+
+  /// Where the entry's icon is published — an SVG under the registry's CDN.
+  final String? icon;
 
   /// The npm distribution, when the entry has one.
   final AcpNpxDistribution? npx;

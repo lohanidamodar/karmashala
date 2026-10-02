@@ -9,7 +9,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/presentation/agent_glyph_icon.dart';
+import '../../agents/presentation/agent_logo.dart';
 import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 
@@ -429,16 +429,18 @@ class _SessionTile extends ConsumerWidget {
     return _RowSurface(
       child: Row(
         children: [
-          Icon(
-            subagent
-                ? AppIcons.arrowBendDownRight
-                : agentGlyphIcon(
-                    registry.adapterFor(session.cli)?.presentation.glyph ??
-                        AgentGlyph.robot,
-                  ),
-            size: Chrome.iconAction,
-            color: scheme.onSurfaceVariant,
-          ),
+          if (subagent)
+            Icon(
+              AppIcons.arrowBendDownRight,
+              size: Chrome.iconAction,
+              color: scheme.onSurfaceVariant,
+            )
+          else
+            AgentLogo(
+              agentId: session.cli,
+              size: Chrome.iconAction,
+              color: scheme.onSurfaceVariant,
+            ),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: _NameAndDetail(

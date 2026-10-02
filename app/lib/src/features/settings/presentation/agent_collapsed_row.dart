@@ -15,6 +15,7 @@ class AgentCollapsedRow extends StatelessWidget {
     required this.name,
     required this.health,
     required this.environmentIds,
+    this.logo,
     this.detail,
     this.trailing,
     this.tooltip,
@@ -24,6 +25,9 @@ class AgentCollapsedRow extends StatelessWidget {
   final String name;
   final AgentHealthReading health;
   final Iterable<String> environmentIds;
+
+  /// The agent's own mark, before its name.
+  final Widget? logo;
 
   /// The line under the name, in the row-help hand.
   final Widget? detail;
@@ -54,6 +58,7 @@ class AgentCollapsedRow extends StatelessWidget {
                 runSpacing: Insets.xs,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  ?logo,
                   Text(name, style: SettingsStyles.rowLabel(context)),
                   EnvironmentChips(environmentIds: environmentIds),
                 ],

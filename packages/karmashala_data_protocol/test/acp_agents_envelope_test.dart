@@ -14,6 +14,7 @@ void main() {
     env: const {'HOME_X': '/x'},
     source: AcpAgentSource.registry,
     registryId: 'my-agent',
+    iconUrl: 'https://cdn.example.test/registry/my-agent.svg',
     createdAt: t0,
   );
   final custom = AcpAgentRow(
@@ -26,12 +27,18 @@ void main() {
   Map<String, Object?> overTheWire(Map<String, Object?> json) =>
       (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>();
 
-  test('a row round-trips, with and without a registry id', () {
-    expect(acpAgentRowFromJson(overTheWire(acpAgentRowToJson(row))), row);
+  test('a row round-trips, with and without a registry id and icon', () {
+    final read = acpAgentRowFromJson(overTheWire(acpAgentRowToJson(row)));
+    expect(read, row);
+    expect(read.iconUrl, 'https://cdn.example.test/registry/my-agent.svg');
     final wire = overTheWire(acpAgentRowToJson(custom));
     expect(wire.containsKey('registryId'), isFalse);
+    expect(wire.containsKey('iconUrl'), isFalse);
     expect(wire['source'], 'custom');
     expect(acpAgentRowFromJson(wire), custom);
+    // A row an older server sent, with no icon field at all.
+    final older = overTheWire(acpAgentRowToJson(row))..remove('iconUrl');
+    expect(acpAgentRowFromJson(older).iconUrl, isNull);
   });
 
   test('a row out of shape is refused in words', () {
@@ -67,6 +74,7 @@ void main() {
         env: {'A': '1'},
         source: AcpAgentSource.registry,
         registryId: 'my-agent',
+        iconUrl: 'https://cdn.example.test/registry/my-agent.svg',
       ),
       const AcpAgentPut(id: 'r1', agentName: 'Renamed', command: 'x'),
       const AcpAgentDelete('r1'),
@@ -113,6 +121,10 @@ void main() {
       DataRefusalCode.invalid,
     );
     expect(refusalOf({'name': 'n', 'command': 'c'}), isNull);
+    expect(
+      refusalOf({'name': 'n', 'command': 'c', 'iconUrl': 7})?.code,
+      DataRefusalCode.invalid,
+    );
   });
 
   test('answers carry typed results', () {

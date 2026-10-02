@@ -370,10 +370,14 @@ class QuickOpenRow extends StatefulWidget {
     this.detailIsShortcut = false,
     this.onOpenBeside,
     this.besideTooltip = 'Open to the side',
+    this.leading,
     super.key,
   });
 
   final IconData icon;
+
+  /// Drawn in [icon]'s place when given — an agent's own mark.
+  final Widget? leading;
   final String title;
 
   /// Whether [detail] is a key chord, drawn as a keycap rather than as a
@@ -490,7 +494,8 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
               child: LayoutBuilder(
                 builder: (context, constraints) => Row(
                   children: [
-                    Icon(icon, size: Chrome.icon, color: foreground),
+                    widget.leading ??
+                        Icon(icon, size: Chrome.icon, color: foreground),
                     const SizedBox(width: Insets.md),
                     Expanded(
                       child: Column(

@@ -34,10 +34,13 @@ void main() {
       );
       expect(claude.npx!.args, isEmpty);
       expect(claude.binaries, isEmpty);
+      expect(claude.icon, 'https://cdn.example.test/registry/claude-acp.svg');
 
       final gemini = catalog.byId('gemini')!;
       expect(gemini.npx!.args, ['--acp']);
       expect(gemini.npx!.env, {'GEMINI_ACP': '1'});
+      // An entry that names no icon is drawn with a glyph, not guessed at.
+      expect(gemini.icon, isNull);
     });
 
     test(

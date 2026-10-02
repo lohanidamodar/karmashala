@@ -263,6 +263,7 @@ extension _FakeHosts on FakeDataServer {
         env: r.env,
         source: r.source,
         registryId: r.registryId,
+        iconUrl: r.iconUrl,
         createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
       );
       c.add(acpAgentRows._put(row));

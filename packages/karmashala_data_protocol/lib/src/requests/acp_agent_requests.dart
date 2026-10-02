@@ -20,6 +20,7 @@ DataRequest<Object?>? _acpAgentsRequestFromJson(String kind, _Arguments args) =>
           ),
         },
         registryId: args.optionalString('registryId'),
+        iconUrl: args.optionalString('iconUrl'),
       ),
       AcpAgentDelete.name => AcpAgentDelete(args.string('id')),
       _ => null,
@@ -74,6 +75,7 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
     this.env = const {},
     this.source = AcpAgentSource.custom,
     this.registryId,
+    this.iconUrl,
   });
 
   static const String name = 'acpAgents.put';
@@ -85,6 +87,9 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
   final Map<String, String> env;
   final AcpAgentSource source;
   final String? registryId;
+
+  /// The registry entry's icon URL, kept so the agent is drawn with it.
+  final String? iconUrl;
 
   @override
   String get kind => name;
@@ -98,6 +103,7 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
     'env': env,
     'source': source.name,
     'registryId': ?registryId,
+    'iconUrl': ?iconUrl,
   };
 
   @override

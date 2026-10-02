@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 /// v66: `agent_installations.leading_arguments`, what an `npx` installation
 /// is run with; v67: `acp_agents`, the ACP agents a person added (ACP design,
-/// C2).
+/// C2); v68: `acp_agents.icon_url`, the registry's icon for the row.
 void main() {
   late AppDatabase db;
 
@@ -17,11 +17,11 @@ void main() {
       .map((r) => r['name']! as String)
       .toList();
 
-  test('the head is 67 and the keys stay contiguous', () {
+  test('the head is 68 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 67);
+    expect(db.schemaVersion, 68);
   });
 
   test('v66 adds leading_arguments, null for every row written before', () {
@@ -60,6 +60,8 @@ void main() {
       'source',
       'registry_id',
       'created_at',
+      // v68's column, after the ones v67 made.
+      'icon_url',
     ]);
     db.execute(
       'INSERT INTO acp_agents (id, name, command, source, created_at) '
@@ -77,5 +79,29 @@ void main() {
       ),
       throwsA(anything),
     );
+  });
+
+  test('v68 adds icon_url, null for every row written before', () {
+    expect(columnsOf('acp_agents'), contains('icon_url'));
+    db.execute(
+      'INSERT INTO acp_agents (id, name, command, source, created_at) '
+      "VALUES ('r1', 'Mine', 'mine', 'custom', 't');",
+    );
+    expect(db.query('SELECT icon_url FROM acp_agents;').first, {
+      'icon_url': null,
+    });
+  });
+
+  test('v68 run twice leaves one column', () {
+    final raw = sqlite3.openInMemory();
+    addTearDown(raw.close);
+    for (var v = 1; v <= 68; v++) {
+      schemaMigrations[v]!(raw);
+    }
+    expect(() => schemaMigrations[68]!(raw), returnsNormally);
+    final columns = raw
+        .select('PRAGMA table_info(acp_agents);')
+        .map((r) => r['name'] as String);
+    expect(columns.where((c) => c == 'icon_url'), hasLength(1));
   });
 }

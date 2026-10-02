@@ -42,6 +42,7 @@ class AcpAgentsData {
     Map<String, String> env = const {},
     AcpAgentSource source = AcpAgentSource.custom,
     String? registryId,
+    String? iconUrl,
   }) => _client.write(
     AcpAgentPut(
       id: id,
@@ -51,6 +52,7 @@ class AcpAgentsData {
       env: env,
       source: source,
       registryId: registryId,
+      iconUrl: iconUrl,
     ),
     domain: DataDomain.agents,
   );

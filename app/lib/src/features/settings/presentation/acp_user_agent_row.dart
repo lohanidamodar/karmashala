@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/acp_agent_providers.dart';
+import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import 'acp_agent_dialog.dart';
 import 'acp_builtin_agent_row.dart' show acpAgentsNote;
@@ -64,6 +65,7 @@ class AcpUserAgentRow extends ConsumerWidget {
                     runSpacing: Insets.xs,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      AgentLogo(agentId: row.agentId, size: Chrome.iconAction),
                       Text(row.name, style: SettingsStyles.rowLabel(context)),
                       SettingsChip(
                         label: switch (row.source) {

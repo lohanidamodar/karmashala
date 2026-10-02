@@ -6,6 +6,9 @@ enum AgentGlyph {
 
   /// A terminal program.
   terminal,
+
+  /// A distinct generic glyph for an agent whose mark the app does not ship.
+  rocket,
 }
 
 /// Whose brand mark stands for an agent, where the app has that mark. A hint,
@@ -27,6 +30,7 @@ class AgentPresentation {
     required this.shortName,
     this.glyph = AgentGlyph.robot,
     this.mark,
+    this.iconUrl,
   });
 
   /// The display name's first word ("Claude Code" → "Claude"), with the
@@ -36,10 +40,12 @@ class AgentPresentation {
     String displayName, {
     AgentGlyph glyph = AgentGlyph.robot,
     AgentMark? mark,
+    String? iconUrl,
   }) => AgentPresentation(
     shortName: displayName.split(' ').first,
     glyph: glyph,
     mark: mark,
+    iconUrl: iconUrl,
   );
 
   final String shortName;
@@ -47,4 +53,9 @@ class AgentPresentation {
 
   /// The agent's own mark, or null where it has none and [glyph] stands in.
   final AgentMark? mark;
+
+  /// Where the agent's own icon (an SVG) is published, for an agent whose
+  /// mark the app does not ship — the public ACP registry names one per
+  /// entry. Drawn when fetched; [mark] wins, and [glyph] stands in until then.
+  final String? iconUrl;
 }

@@ -60,7 +60,8 @@ import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart' show WidthClass;
+import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
+import '../../../features/agents/presentation/agent_logo.dart';
 import '../context_sheet.dart';
 import '../karmashala_about_dialog.dart';
 import '../phone_routes.dart';
@@ -1337,6 +1338,10 @@ class QuickOpenSources {
             subtitle: installation.executable.path,
             detail: installation.version,
             icon: AppIcons.robot,
+            leading: AgentLogo(
+              agentId: installation.agentId,
+              size: Chrome.icon,
+            ),
             keywords: [installation.agentId, installation.environmentId],
             weight: _agentWeight,
             opensTab: true,

@@ -82,6 +82,36 @@ void main() {
     expect((lastTold().single as AcpAgentChanged).row, again);
   });
 
+  test('a put keeps the registry icon, trimmed; a blank one is none', () {
+    final withIcon = app
+        .handle(
+          const AcpAgentPut(
+            id: 'i',
+            agentName: 'n',
+            command: 'c',
+            iconUrl: ' https://cdn.example.test/registry/n.svg ',
+          ),
+        )
+        .value;
+    expect(withIcon.iconUrl, 'https://cdn.example.test/registry/n.svg');
+    expect(app.handle(const AcpAgentsList()).value.single.iconUrl, isNotNull);
+    final blank = app
+        .handle(
+          const AcpAgentPut(
+            id: 'i',
+            agentName: 'n',
+            command: 'c',
+            iconUrl: ' ',
+          ),
+        )
+        .value;
+    expect(blank.iconUrl, isNull);
+    final none = app
+        .handle(const AcpAgentPut(id: 'i', agentName: 'n', command: 'c'))
+        .value;
+    expect(none.iconUrl, isNull);
+  });
+
   test('a put under an unknown id creates under that id', () {
     final row = app
         .handle(const AcpAgentPut(id: 'mine', agentName: 'n', command: 'c'))

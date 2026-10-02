@@ -13,7 +13,8 @@
         "npx": {
           "package": "@agentclientprotocol/claude-agent-acp@0.85.1"
         }
-      }
+      },
+      "icon": "https://cdn.example.test/registry/claude-acp.svg"
     },
     {
       "id": "gemini",

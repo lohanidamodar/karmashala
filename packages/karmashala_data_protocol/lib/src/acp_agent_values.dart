@@ -15,6 +15,7 @@ Map<String, Object?> acpAgentRowToJson(AcpAgentRow row) => {
   'env': row.env,
   'source': row.source.name,
   'registryId': ?row.registryId,
+  'iconUrl': ?row.iconUrl,
   'createdAt': row.createdAt.toUtc().toIso8601String(),
 };
 
@@ -26,6 +27,7 @@ AcpAgentRow acpAgentRowFromJson(Map<String, Object?> json) => AcpAgentRow(
   env: acpStringMapFromJson(json['env'], 'env'),
   source: _source(json['source']),
   registryId: _optional(json, 'registryId'),
+  iconUrl: _optional(json, 'iconUrl'),
   createdAt: _date(json['createdAt']),
 );
 

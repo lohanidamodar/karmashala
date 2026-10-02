@@ -703,3 +703,14 @@ void _migrateToV67(Database db) {
     );
   ''');
 }
+
+/// The registry entry's icon URL beside an ACP agent row, so the agent is
+/// drawn with its own icon rather than a generic glyph. Null for a row typed
+/// in by hand or kept before this column.
+void _migrateToV68(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(acp_agents);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('icon_url')) return;
+  db.execute('ALTER TABLE acp_agents ADD COLUMN icon_url TEXT;');
+}

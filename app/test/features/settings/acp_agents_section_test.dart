@@ -25,6 +25,7 @@ void main() {
   const registryJson = '''
 {"agents": [
   {"id": "gemini", "name": "Gemini CLI", "version": "0.9.0",
+   "icon": "https://cdn.example.test/registry/gemini.svg",
    "distribution": {"npx": {"package": "@google/gemini-cli@0.9.0",
                             "args": ["--experimental-acp"]}}},
   {"id": "native", "name": "Native Agent", "version": "1.0.0",
@@ -168,6 +169,8 @@ void main() {
       expect(kept.env, isEmpty);
       expect(kept.source, AcpAgentSource.registry);
       expect(kept.registryId, 'gemini');
+      // The entry's icon travels with the row, so the agent is drawn with it.
+      expect(kept.iconUrl, 'https://cdn.example.test/registry/gemini.svg');
       expect(detections, 1);
       expect(find.byType(AcpAgentDialog), findsNothing);
       expect(find.text('Gemini CLI'), findsOneWidget);

@@ -80,6 +80,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
     final Map<String, String> env;
     final AcpAgentSource source;
     final String? registryId;
+    final String? iconUrl;
     switch (_origin) {
       case AcpAgentOrigin.registry:
         final entry = _picked;
@@ -91,6 +92,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         env = const {};
         source = AcpAgentSource.registry;
         registryId = entry.id;
+        iconUrl = entry.icon;
       case AcpAgentOrigin.custom:
         final refusal = acpAgentFormRefusal(
           name: _name.text,
@@ -107,6 +109,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         env = parseEnvironmentLines(_env.text).env;
         source = existing?.source ?? AcpAgentSource.custom;
         registryId = existing?.registryId;
+        iconUrl = existing?.iconUrl;
     }
     setState(() {
       _saving = true;
@@ -123,6 +126,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
             env: env,
             source: source,
             registryId: registryId,
+            iconUrl: iconUrl,
           );
       if (mounted) Navigator.of(context).pop();
     } on DataRefused catch (e) {

@@ -14,12 +14,13 @@ class AcpAgentDao {
   void upsert(AcpAgentRow row) {
     _db.execute(
       'INSERT INTO acp_agents '
-      '(id, name, command, args, env, source, registry_id, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+      '(id, name, command, args, env, source, registry_id, icon_url, '
+      'created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
       'ON CONFLICT(id) DO UPDATE SET name = excluded.name, '
       'command = excluded.command, args = excluded.args, env = excluded.env, '
       'source = excluded.source, registry_id = excluded.registry_id, '
-      'created_at = excluded.created_at;',
+      'icon_url = excluded.icon_url, created_at = excluded.created_at;',
       [
         row.id,
         row.name,
@@ -28,6 +29,7 @@ class AcpAgentDao {
         jsonEncode(row.env),
         row.source.name,
         row.registryId,
+        row.iconUrl,
         isoFromDate(row.createdAt),
       ],
     );
@@ -56,6 +58,7 @@ class AcpAgentDao {
     env: stringMapFromJson(row['env']),
     source: AcpAgentSource.values.byName(row['source']! as String),
     registryId: row['registry_id'] as String?,
+    iconUrl: row['icon_url'] as String?,
     createdAt: dateFromIso(row['created_at']),
   );
 }

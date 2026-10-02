@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../agents/presentation/agent_logo.dart';
 import '../../agents/presentation/agent_version_label.dart';
 import 'agent_collapsed_row.dart';
 import 'agent_health.dart';
@@ -42,6 +43,7 @@ class TerminalAgentRow extends ConsumerWidget {
     final health = readAgentHealth(ref, installs: installs);
     return AgentCollapsedRow(
       name: agentLabel(ref, descriptor.id),
+      logo: AgentLogo(agentId: descriptor.id, size: Chrome.iconAction),
       health: health,
       environmentIds: installs.map((i) => i.environmentId),
       detail: installs.isEmpty

@@ -39,6 +39,9 @@ class AcpAgentsHandler {
       env: Map.unmodifiable(request.env),
       source: request.source,
       registryId: request.registryId,
+      iconUrl: request.iconUrl?.trim().isEmpty ?? true
+          ? null
+          : request.iconUrl!.trim(),
       createdAt: existing?.createdAt ?? _now(),
     );
     _rows.upsert(row);
