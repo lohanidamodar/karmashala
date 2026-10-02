@@ -10,6 +10,7 @@ import './agent_permission_support.dart';
 import './agent_skill_support.dart';
 import './agent_status.dart';
 
+part 'agent_descriptor/acp_launch_spec.dart';
 part 'agent_descriptor/agent_launch_spec.dart';
 part 'agent_descriptor/agent_mcp_support.dart';
 part 'agent_descriptor/agent_model_support.dart';
@@ -65,6 +66,7 @@ class AgentDescriptor {
     this.plan = const AgentPlanSupport.none(),
     this.skills = const AgentSkillSupport.none(),
     this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
+    this.acp,
   });
 
   final String id;
@@ -145,6 +147,10 @@ class AgentDescriptor {
   /// how Karmashala adds *itself* to one launch. Undeclared by default, and an
   /// undeclared agent reads as unknown rather than as having none.
   final AgentMcpConfigSpec mcpConfig;
+
+  /// How this agent is driven over the Agent Client Protocol, or null for an
+  /// agent that is a terminal program. See [AcpLaunchSpec].
+  final AcpLaunchSpec? acp;
 
   @override
   String toString() => 'AgentDescriptor($id)';

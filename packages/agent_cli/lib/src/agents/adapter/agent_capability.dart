@@ -47,6 +47,9 @@ enum AgentCapability {
 
   /// The CLI's own model list.
   modelListing,
+
+  /// A conversation over the Agent Client Protocol instead of a terminal.
+  acp,
 }
 
 extension AgentCapabilities on AgentAdapter {
@@ -67,6 +70,7 @@ extension AgentCapabilities on AgentAdapter {
     if (storeServer != null) AgentCapability.storeServer,
     if (directoryConversations != null) AgentCapability.directoryConversations,
     if (modelLister != null) AgentCapability.modelListing,
+    if (acp != null) AgentCapability.acp,
   };
 }
 

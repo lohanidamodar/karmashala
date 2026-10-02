@@ -244,12 +244,24 @@ class DiscoveredAgent {
     required this.descriptor,
     required this.executable,
     this.version,
+    this.leadingArguments = const [],
   });
 
   final AgentDescriptor descriptor;
   final EnvironmentPath executable;
   final String? version;
+
+  /// See `AgentInstallation.leadingArguments`: non-empty only when
+  /// [executable] is `npx` standing in for an uninstalled agent.
+  final List<String> leadingArguments;
 }
+
+/// How `npx` is found: node installs `npx` *and* `npx.cmd` on Windows, and
+/// `where npx` lists the shell script first, which nothing can spawn.
+const AgentBinaries npxBinaries = AgentBinaries(
+  windows: ['npx.cmd'],
+  posix: ['npx'],
+);
 
 /// Everything one sweep of one environment established — including the two
 /// facts a bare list of hits cannot express: which agents were asked about and
@@ -326,11 +338,16 @@ class AgentDiscoveryService {
   /// knows which agents are worth asking about says so rather than paying for
   /// the whole registry.
   Future<List<DiscoveredAgent>> probeAll({Set<String>? agentIds}) async {
+    _npx = null;
     // The probes are independent subprocesses. Run them concurrently so a
     // slow or missing CLI does not serially delay every other agent check.
     final probed = await Future.wait(_wanted(agentIds).map(_probe));
     return probed.whereType<DiscoveredAgent>().toList();
   }
+
+  /// One `npx` lookup per sweep, shared by every ACP descriptor that needs
+  /// the fallback. Reset at the start of each sweep so a later install counts.
+  Future<String?>? _npx;
 
   /// Discovered agents as persistable installations.
   ///
@@ -350,6 +367,7 @@ class AgentDiscoveryService {
           // `--version` failed carries no reading, so it carries no time.
           versionReadAt: agent.version == null ? null : clock.nowUtc(),
           createdAt: clock.nowUtc(),
+          leadingArguments: agent.leadingArguments,
         ),
     ];
   }
@@ -360,7 +378,7 @@ class AgentDiscoveryService {
 
     if (path == null) {
       final hit = await _locateAtDeclaredPath(descriptor);
-      if (hit == null) return null;
+      if (hit == null) return _probeNpx(descriptor);
       path = hit.path;
       // Running the file is what proved it exists, so its output is the
       // version we already have; asking again would be a second process for an
@@ -390,6 +408,33 @@ class AgentDiscoveryService {
       executable: EnvironmentPath(environmentId: environment.id, path: path),
       version: version,
     );
+  }
+
+  /// An ACP agent with no binary installed, run from its npm package through
+  /// `npx` when that is on PATH. No version: asking would download the
+  /// package, and the registry's number is the package's, not an install's.
+  Future<DiscoveredAgent?> _probeNpx(AgentDescriptor descriptor) async {
+    final package = descriptor.acp?.npxPackage;
+    if (package == null) return null;
+    final npx = await (_npx ??= _locateNpx());
+    if (npx == null) return null;
+    return DiscoveredAgent(
+      descriptor: descriptor,
+      executable: EnvironmentPath(environmentId: environment.id, path: npx),
+      leadingArguments: ['-y', package],
+    );
+  }
+
+  Future<String?> _locateNpx() async {
+    try {
+      return await locateOnPath(
+        runner,
+        environment.kind,
+        npxBinaries.forKind(environment.kind),
+      );
+    } on CommandException {
+      return null;
+    }
   }
 
   /// Tries each declared binary name in order and returns the first hit.
@@ -529,6 +574,7 @@ class AgentDiscoveryService {
       }
     }
 
+    _npx = null;
     final probed = await Future.wait(wanted.map(_probe));
     final found = probed.whereType<DiscoveredAgent>().toList();
     final foundIds = {for (final agent in found) agent.descriptor.id};

@@ -4,7 +4,17 @@ import 'package:test/test.dart';
 
 void main() {
   test('the built-in ids name real descriptors, in registry order', () {
-    expect(AgentIds.builtIn, ['claudeCode', 'codex', 'antigravity']);
+    // Seven since the ACP runtime: the three terminal agents keep their
+    // places, and the four ACP agents follow them in display order.
+    expect(AgentIds.builtIn, [
+      'claudeCode',
+      'codex',
+      'antigravity',
+      'claude-acp',
+      'codex-acp',
+      'gemini-cli',
+      'grok',
+    ]);
     expect(
       AgentRegistry.builtIn.descriptors.map((d) => d.id),
       AgentIds.builtIn,

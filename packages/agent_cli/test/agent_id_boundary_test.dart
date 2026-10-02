@@ -10,13 +10,25 @@ import 'package:test/test.dart';
 /// a new folder and nothing else. A folder may name its own agent, and only its
 /// own.
 void main() {
-  /// Folder → the one agent id it may name.
+  /// Folder → the agent ids it may name. The ACP folder holds four agents
+  /// that share one runtime, so it may name all four.
   const folders = {
-    'lib/src/agents/claude_code/': 'claudeCode',
-    'lib/src/agents/codex/': 'codex',
-    'lib/src/agents/antigravity/': 'antigravity',
+    'lib/src/agents/claude_code/': {'claudeCode'},
+    'lib/src/agents/codex/': {'codex'},
+    'lib/src/agents/antigravity/': {'antigravity'},
+    'lib/src/agents/acp/': {'claude-acp', 'codex-acp', 'gemini-cli', 'grok'},
   };
-  const ids = ['claudeCode', 'codex', 'antigravity'];
+
+  /// `AgentIds` constant name → the id literal it holds.
+  const ids = {
+    'claudeCode': 'claudeCode',
+    'codex': 'codex',
+    'antigravity': 'antigravity',
+    'claudeAcp': 'claude-acp',
+    'codexAcp': 'codex-acp',
+    'geminiCli': 'gemini-cli',
+    'grok': 'grok',
+  };
 
   /// Where the constants themselves are declared.
   const declaration = 'lib/src/agents/domain/agent_ids.dart';
@@ -32,8 +44,8 @@ void main() {
 
   /// Every id [code] branches on or names through `AgentIds`.
   Set<String> idsNamedIn(String code) => {
-    for (final id in ids)
-      if (RegExp('\\bAgentIds\\.$id\\b').hasMatch(code) ||
+    for (final MapEntry(key: constant, value: id) in ids.entries)
+      if (RegExp('\\bAgentIds\\.$constant\\b').hasMatch(code) ||
           RegExp(
             "(==|!=)\\s*'$id'|'$id'\\s*(==|!=)|\\bcase\\s+'$id'",
           ).hasMatch(code))
@@ -47,12 +59,14 @@ void main() {
     for (final file in lib.listSync(recursive: true).whereType<File>()) {
       final path = file.path.replaceAll(r'\', '/');
       if (!path.endsWith('.dart') || path == declaration) continue;
-      final own = folders.entries
-          .where((entry) => path.startsWith(entry.key))
-          .map((entry) => entry.value)
-          .firstOrNull;
+      final own =
+          folders.entries
+              .where((entry) => path.startsWith(entry.key))
+              .map((entry) => entry.value)
+              .firstOrNull ??
+          const <String>{};
       for (final id in idsNamedIn(codeOf(file))) {
-        if (id != own) found.add('$path names $id');
+        if (!own.contains(id)) found.add('$path names $id');
       }
     }
     expect(

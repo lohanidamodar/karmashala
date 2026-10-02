@@ -68,7 +68,10 @@ class GenericChatProtocol implements AgentChatProtocol {
     final runner = runnerFor(agentLaunch.installation.environmentId);
     final request = CommandRequest(
       executable: agentLaunch.installation.executable.path,
-      arguments: genericLaunchArgs(launch, agentLaunch),
+      arguments: [
+        ...agentLaunch.installation.leadingArguments,
+        ...genericLaunchArgs(launch, agentLaunch),
+      ],
       workingDirectory: agentLaunch.workingDirectory,
     );
     return GenericAgentSession(runner.start(request));
