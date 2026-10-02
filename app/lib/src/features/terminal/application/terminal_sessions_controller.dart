@@ -55,6 +55,7 @@ part 'terminal_sessions_providers.dart';
 part 'terminal_pane_sessions.dart';
 part 'terminal_sessions_tabs.dart';
 part 'terminal_sessions_groups.dart';
+part 'terminal_sessions_beside.dart';
 part 'terminal_sessions_regions.dart';
 part 'terminal_sessions_presets.dart';
 part 'terminal_sessions_panes.dart';
@@ -81,6 +82,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// The group [_activeTabId] belongs to, or the empty group the user split
   /// into and has not filled yet.
   String? _focusedGroupId;
+
+  /// Quick open's "open to the side", waiting for the tab it is about — see
+  /// [TerminalBesidePlacement.openBeside].
+  _BesideRequest? _beside;
 
   /// The tree the store already holds, so a save that changed no group writes
   /// no row — the same record [_writtenGrid] keeps for the grid hint.
@@ -268,10 +273,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // calls: a reconciler reachable from a read writes at a moment Riverpod
     // refuses in debug and swallows in release.
     _reconcileWorkspace();
+    // After the reconcile, which is what puts a just-opened tab in the tree.
+    final movedBeside = _placeBesideIfRequested();
+    if (movedBeside) {
+      _repairFocusedGroup();
+      _syncTabOrder();
+    }
     _titleRevision++;
     _titles.clear();
     _applyIngestTiers();
     state = _snapshot();
+    // A new group is structure: written now, not on the next save that happens.
+    if (movedBeside) persistStructure();
   }
 
   /// Records the tab on screen as the most recent, and forgets tabs that have

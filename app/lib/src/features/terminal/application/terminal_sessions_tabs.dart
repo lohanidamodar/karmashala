@@ -181,7 +181,10 @@ extension TerminalTabVerbs on TerminalSessionsController {
   }
 
   void activateTab(String id) {
-    if (_activeTabId == id) return;
+    if (_activeTabId == id) {
+      _besideOnActiveTab();
+      return;
+    }
     _activeTabId = id;
     _restoreLivePanesIn(id);
     _publish();
