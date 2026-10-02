@@ -67,6 +67,13 @@ String scratchFolderName(DateTime day, String? hint, String id) {
   return [date, if (slug.isNotEmpty) slug, id].join('-');
 }
 
+/// A POSIX shell [script] as a command the runners carry intact: read by
+/// `sh` from its stdin. As an argument it would reach a WSL distribution
+/// through the user's shell, which re-parses the line and breaks on the
+/// quotes and newlines a script is made of (`mkdir: missing operand`).
+CommandRequest _shellScript(String script) =>
+    CommandRequest(executable: 'sh', arguments: ['-s'], stdinText: script);
+
 /// Six hex characters: enough to keep one day's scratch folders apart.
 String scratchId([Random? random]) {
   final r = random ?? Random.secure();
@@ -224,9 +231,7 @@ ROOT="\$HOME/$kKarmashalaFolder/$kScratchFolder"
 TARGET="\$ROOT/$folder"
 mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" && pwd
 ''';
-      final result = await runner.run(
-        CommandRequest(executable: 'sh', arguments: ['-c', script]),
-      );
+      final result = await runner.run(_shellScript(script));
       final lines = result.stdout.trim().split('\n');
       if (!result.ok || lines.length < 2) {
         throw RepositoryDiscoveryException(
@@ -349,9 +354,7 @@ else
 fi
 cd "\$TARGET" && pwd
 ''';
-      final result = await runner.run(
-        CommandRequest(executable: 'sh', arguments: ['-c', cloneScript]),
-      );
+      final result = await runner.run(_shellScript(cloneScript));
       if (!result.ok) {
         throw RepositoryDiscoveryException(
           'Failed to clone repository on ${target.name}: '

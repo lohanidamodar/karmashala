@@ -165,7 +165,10 @@ void main() {
         hint: 'tidy',
       );
 
-      final script = requests.single.arguments.last;
+      // Through stdin, not argv: a WSL distribution re-parses an argument
+      // line in the user's shell, which breaks a quoted, multi-line script.
+      expect(requests.single.arguments, ['-s']);
+      final script = requests.single.stdinText!;
       expect(script, contains('TARGET="\$ROOT/2026-09-27-tidy-'));
       expect(script, isNot(contains("'")));
       expect(

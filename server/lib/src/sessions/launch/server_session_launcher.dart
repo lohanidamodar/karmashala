@@ -401,6 +401,8 @@ class ServerSessionLauncher {
   AgentPaneLaunch? _storedLaunchOf(Session row) {
     final installation = rows.installation(row.agentInstallationId);
     if (installation == null) return null;
+    // An ACP session has no terminal for a pane to attach to.
+    if (agents.adapterOf(installation.agentId)?.acp != null) return null;
     final directory =
         row.workingDirectory ??
         row.worktree ??

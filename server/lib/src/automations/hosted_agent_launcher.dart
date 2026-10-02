@@ -165,7 +165,8 @@ class HostedStart {
   final Session session;
 
   /// The agent launch the terminal runs, its volatile half stripped: what a
-  /// pane stores to name its session. Null only for the external surface.
+  /// pane stores to name its session. Null for the external surface and for
+  /// an ACP session, neither of which has a pane here.
   final AgentPaneLaunch? launch;
 
   /// The command a client opens a terminal window on (the external surface).
@@ -677,16 +678,6 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required void Function(Object? error)? settleWorktree,
   }) async {
     final arguments = [...installation.leadingArguments, ...acp.arguments];
-    final stored = AgentPaneLaunch(
-      agentId: agentId,
-      executable: installation.executable.path,
-      arguments: arguments,
-      workingDirectory: directory.path,
-      wslDistribution: wslDistribution,
-      sshHostId: sshHostId,
-      sessionId: id,
-      title: session.title,
-    );
     try {
       final factory = acpRuntimes;
       if (factory == null) {
@@ -733,7 +724,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       onLaunched?.call(id, agentId, directory.path);
       return HostedStart(
         session: session.copyWith(externalSessionId: outcome.agentSessionId),
-        launch: stored,
+        // No launch: a launch is what a pane attaches a terminal to, and an
+        // ACP session has none — the app shows it in the chat view instead.
+        launch: null,
         credentialNotice: credentialNotice,
         attachNotice: outcome.notices.isEmpty
             ? null

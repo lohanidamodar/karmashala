@@ -128,9 +128,9 @@ void main() {
     expect(registry.find('karmashala_s1'), isNull);
     final runtime = registry.findAcp('karmashala_s1');
     expect(runtime, isNotNull);
-    expect(started.launch?.sessionId, 's1');
-    expect(started.launch?.agentId, AgentIds.claudeAcp);
-    expect(started.launch?.executable, 'npx.cmd');
+    // No launch: a launch is what a pane attaches a terminal to, and this
+    // session has none — the app opens it in the chat view instead.
+    expect(started.launch, isNull);
     expect(
       started.attachNotice,
       contains("Karmashala's tools were not handed"),
