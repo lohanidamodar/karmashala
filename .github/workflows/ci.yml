@@ -121,6 +121,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      # The git suites commit in scratch repositories; a runner has no identity.
+      - run: git config --global user.name "Karmashala CI" && git config --global user.email ci@example.com
       - name: Each member's own suite
         shell: pwsh
         env:
