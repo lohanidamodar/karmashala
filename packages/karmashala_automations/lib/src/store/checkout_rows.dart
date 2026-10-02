@@ -27,6 +27,16 @@ class CheckoutRows {
     );
   }
 
+  /// Whether [projectId] is the Scratch project — the folder sessions without
+  /// a project run in (`Project.scratchKind`, spelled out here so this reader
+  /// stays free of the projects package).
+  bool isScratchProject(String projectId) {
+    final rows = _db.query('SELECT kind FROM projects WHERE id = ?;', [
+      projectId,
+    ]);
+    return rows.isNotEmpty && rows.first['kind'] == 'scratch';
+  }
+
   AgentInstallation? installation(String id) {
     final rows = _db.query('SELECT * FROM agent_installations WHERE id = ?;', [
       id,

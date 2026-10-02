@@ -109,6 +109,7 @@ import '../mcp/tools/verification_tool_set.dart';
 import '../mcp/tools/dev_server_tool_set.dart';
 import '../mcp/tools/github_run_tool_set.dart';
 import '../mcp/tools/workspace_tool_set.dart';
+import '../mcp/tools/session_checkout_tool_set.dart';
 import '../mcp/tools/worktree_tool_set.dart';
 import '../mcp/tools/decision_tool_set.dart';
 import '../mcp/tools/fanout_tool_set.dart';
@@ -553,6 +554,13 @@ Future<int> runServe(
   // Which sessions the person let operate Karmashala: read per call, so
   // a grant given a moment ago counts on the next tool call.
   final grantRows = SessionDao(database);
+  final worktreeTools = WorktreeToolSet(
+    tools,
+    reach: reach,
+    folders: folders,
+    worktrees: worktrees,
+    liveness: liveness,
+  );
   final mcpTools = McpToolRelay(
     operatorGranted: (sessionId) =>
         grantRows.getById(sessionId)?.operatorGranted ?? false,
@@ -576,35 +584,31 @@ Future<int> runServe(
       ),
       GitHubRunToolSet(tools, reach: reach),
       ProjectToolSet(tools, reach: reach, folders: folders),
-      WorktreeToolSet(
-        tools,
-        reach: reach,
-        folders: folders,
-        worktrees: worktrees,
-        liveness: liveness,
-      ),
+      worktreeTools,
+      // An agent attaches the checkouts its session spans — any of them,
+      // when the session has no project of its own.
+      SessionCheckoutToolSet(tools, worktrees: worktreeTools),
       VerificationToolSet(
         ServerVerificationRuns(tools, browser: browser, devices: devices),
       ),
     ]),
   );
-  server = HostServer(
-    registry: registry,
-    ptyLibrary: pty.library,
-    companion: companion,
-    build: hostBuildOf(Platform.resolvedExecutable),
-  )
-    ..prompts = prompts
-    // A client attached to a box's session is relayed its frames (5d).
-    ..boxes = ssh.relay;
+  server =
+      HostServer(
+          registry: registry,
+          ptyLibrary: pty.library,
+          companion: companion,
+          build: hostBuildOf(Platform.resolvedExecutable),
+        )
+        ..prompts = prompts
+        // A client attached to a box's session is relayed its frames (5d).
+        ..boxes = ssh.relay;
   // A desktop client on another machine, over the companion's sealed
   // channel (slice 5e), is one more connection with its pairing's grants.
   final hostServer = server;
   companion.onHostLink = (link) {
     final connection = SealedHostConnection(link);
-    unawaited(
-      hostServer.serveConnection(connection, trust: connection.trust),
-    );
+    unawaited(hostServer.serveConnection(connection, trust: connection.trust));
   };
   server.lifecycle.statusSnapshot = status.snapshot;
   // Every turn's before and after checkpoints, taken here (slice 2b): off the
@@ -971,7 +975,9 @@ Future<int> runServe(
       ),
     )
     // An agent's `open_new_session`, through the one launch path.
-    ..add(LaunchToolSet(tools, launches: launches))
+    ..add(
+      LaunchToolSet(tools, launches: launches, reach: reach, folders: folders),
+    )
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
     ..add(StoreToolSet(storeDesk))
@@ -1065,7 +1071,8 @@ Future<int> runServe(
     Future<void>.delayed(agentScanDelay).then((_) async {
       final hostIds = <String>{};
       for (final row in sessionRows.getClaimingLive()) {
-        final path = row.worktree ?? checkoutRows.repository(row.repositoryId)?.path;
+        final path =
+            row.worktree ?? checkoutRows.repository(row.repositoryId)?.path;
         final hostId = path == null
             ? null
             : checkoutRows.environment(path.environmentId)?.sshHostId;

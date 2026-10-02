@@ -23,7 +23,7 @@
     },
     {
       "name": "list_projects",
-      "description": "List the projects known to Karmashala (name, environment, path).",
+      "description": "List the projects known to Karmashala (name, environment, path). A project with kind \"scratch\" is the folder sessions without a project run in, one per environment.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -1430,7 +1430,7 @@
           },
           "gitUrl": {
             "type": "string",
-            "description": "A repository to clone first. With no path, WSL and SSH clone into ~/karmashala/<repo>; a local environment refuses, because there is no obvious folder to choose."
+            "description": "A repository to clone first. With no path the clone lands in ~/karmashala/<repo> on the environment, beside the scratch folders of sessions without a project."
           },
           "name": {
             "type": "string",
@@ -1690,6 +1690,145 @@
         "readOnlyHint": false,
         "destructiveHint": true,
         "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "session_checkout_attach",
+      "description": "Attach a checkout to a session — yours, unless sessionId names another — so its files show on the session and you can work in it. The checkout comes from list_checkouts; one this machine lacks is cloned first with project_add and a gitUrl. Pass worktree to make a worktree of the checkout on a new branch (as worktree_create does, with the same refusals) and attach that instead, so your work is on a branch of its own. A session in a project may only attach that project's checkouts; a session without a project (one running in Scratch) may attach any.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout to attach, from list_checkouts."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "The session to attach it to. Defaults to the calling session."
+          },
+          "worktree": {
+            "type": "object",
+            "description": "Make a worktree of the checkout first and attach that. name is the folder name, branch the new branch, baseRef what to branch from (defaults to the checkout's HEAD).",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              },
+              "baseRef": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "branch"
+            ]
+          }
+        },
+        "required": [
+          "repositoryId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "isolation": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "object"
+          },
+          "attached": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "repositoryId",
+          "path",
+          "attached"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "session_checkout_detach",
+      "description": "Detach an additional checkout from a session (yours unless sessionId names another). Nothing on disk changes: the worktree or clone stays where it is. The checkout a session runs in cannot be detached.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout to detach, from the session's own list."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Defaults to the calling session."
+          }
+        },
+        "required": [
+          "repositoryId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "detached": {
+            "type": "string"
+          },
+          "attached": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "detached",
+          "attached"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
         "openWorldHint": false,
         "movesAttentionHint": false
       }
@@ -2535,13 +2674,21 @@
     },
     {
       "name": "open_new_session",
-      "description": "Start a NEW agent session (not a resume) in a project, as a terminal tab in Karmashala. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the project's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
+      "description": "Start a NEW agent session (not a resume), as a terminal tab in Karmashala. In a project when projectId is given; without one, or with scratch, in a scratch folder of its own with no project — the new agent attaches whatever repositories it needs. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the session's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id from list_projects."
+            "description": "Project id from list_projects. Omit for a session without a project."
+          },
+          "scratch": {
+            "type": "boolean",
+            "description": "Start without a project, in a scratch folder under ~/karmashala/scratch, even when a projectId is given."
+          },
+          "environmentId": {
+            "type": "string",
+            "description": "For a session without a project: where its folder is made. Defaults to your own environment."
           },
           "cli": {
             "type": "string",
@@ -2578,9 +2725,7 @@
             "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
           }
         },
-        "required": [
-          "projectId"
-        ]
+        "required": []
       },
       "annotations": {
         "readOnlyHint": false,
@@ -5263,6 +5408,14 @@
     "worktree_remove": {
       "category": "workspace",
       "summary": "Delete a worktree — only when it is clean, merged and pushed."
+    },
+    "session_checkout_attach": {
+      "category": "workspace",
+      "summary": "Attach a checkout — or a new worktree of one — to a session."
+    },
+    "session_checkout_detach": {
+      "category": "workspace",
+      "summary": "Detach an additional checkout from a session; nothing on disk changes."
     },
     "verification_start": {
       "category": "verification",

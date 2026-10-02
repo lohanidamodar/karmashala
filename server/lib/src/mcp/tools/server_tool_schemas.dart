@@ -9,6 +9,7 @@ import 'decision_tool_set.dart';
 import 'project_tool_set.dart';
 import 'verification_tool_schemas.dart';
 import 'github_run_tool_set.dart';
+import 'session_checkout_tool_set.dart';
 import 'workspace_tool_set.dart';
 import 'worktree_tool_set.dart';
 import 'fanout_tool_set.dart';
@@ -52,6 +53,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...gitHubRunToolSchemas,
   ...projectToolSchemas,
   ...worktreeToolSchemas,
+  ...sessionCheckoutToolSchemas,
   ...verificationToolSchemas,
   ...checkpointToolSchemas,
   ...checkpointScreenshotToolSchemas,

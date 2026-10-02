@@ -1,5 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' hide Clock;
+import 'package:agent_cli/process.dart' show localHostEnvironmentId;
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -7,9 +8,13 @@ import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/launch.dart';
 
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
+
 import '../../automations/daemon_agents.dart';
 import '../../sessions/launch/server_session_launcher.dart';
 import 'agent_names.dart';
+import 'checkout_reach.dart';
+import 'project_folders.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
@@ -34,7 +39,11 @@ class LaunchToolSet extends ServerToolSet {
     this._context, {
     required this.launches,
     this.agents = const DaemonAgents(),
-  }) : _repositories = RepositoryDao(_context.database) {
+    CheckoutReach? reach,
+    ProjectFolders? folders,
+  }) : _repositories = RepositoryDao(_context.database),
+       _reach = reach,
+       _folders = folders {
     _launches = LaunchDedupe(
       clock: _ContextClock(_context),
       onCollapsed: (tool) => _context.log(
@@ -53,6 +62,11 @@ class LaunchToolSet extends ServerToolSet {
   final ServerSessionLauncher launches;
   final DaemonAgents agents;
   final RepositoryDao _repositories;
+
+  /// Where a session without a project gets its folder; null where this
+  /// server makes none (a fixture), and such a launch is refused in words.
+  final CheckoutReach? _reach;
+  final ProjectFolders? _folders;
 
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
@@ -77,17 +91,27 @@ class LaunchToolSet extends ServerToolSet {
     String? callerSessionId,
   ) async {
     final projectId = args['projectId'] as String?;
-    if (projectId == null) throw ArgumentError('Missing projectId.');
     final repositoryId = args['repositoryId'] as String?;
-    final repos = _repositories.getByProject(projectId);
+    final title = args['title'] as String?;
     final Repository repo;
-    if (repositoryId != null) {
-      repo = repos.firstWhere(
-        (r) => r.id == repositoryId,
-        orElse: () => throw StateError('Repository not found in this project.'),
+    if (projectId == null || args['scratch'] == true) {
+      repo = await _scratchCheckout(
+        environmentId: args['environmentId'] as String?,
+        callerSessionId: callerSessionId,
+        hint: title ?? args['prompt'] as String?,
       );
+    } else if (repositoryId != null) {
+      repo = _repositories
+          .getByProject(projectId)
+          .firstWhere(
+            (r) => r.id == repositoryId,
+            orElse: () =>
+                throw StateError('Repository not found in this project.'),
+          );
     } else {
-      repo = repos.firstOrNull ?? _runLocationOf(projectId);
+      repo =
+          _repositories.getByProject(projectId).firstOrNull ??
+          _runLocationOf(projectId);
     }
     final installs = launches.installationsIn(repo.path.environmentId);
     if (installs.isEmpty) {
@@ -122,7 +146,6 @@ class LaunchToolSet extends ServerToolSet {
       install.agentId,
       callerSessionId,
     );
-    final title = args['title'] as String?;
     final started = await launches.start(
       SessionStartSpec(
         repositoryId: repo.id,
@@ -160,6 +183,43 @@ class LaunchToolSet extends ServerToolSet {
           : 'running in the Karmashala server; $kNoWindowOpen — a window '
                 'shows it when it is opened',
     };
+  }
+
+  /// A folder of its own for a session without a project, in
+  /// [environmentId] — the caller's own environment when none is named, or
+  /// this machine's.
+  Future<Repository> _scratchCheckout({
+    required String? environmentId,
+    required String? callerSessionId,
+    required String? hint,
+  }) async {
+    final reach = _reach, folders = _folders;
+    if (reach == null || folders == null) {
+      throw StateError(
+        'This server cannot make a scratch folder; name a projectId.',
+      );
+    }
+    final caller = callerSessionId == null
+        ? null
+        : SessionDao(_context.database).getById(callerSessionId);
+    final callerEnvironment = caller == null
+        ? null
+        : _repositories.getById(caller.repositoryId)?.path.environmentId;
+    final id = environmentId ?? callerEnvironment ?? localHostEnvironmentId;
+    final environment = reach.environment(id);
+    if (environment == null) {
+      throw StateError(
+        'No environment with id $id. list_agents names the ones this '
+        'workspace knows.',
+      );
+    }
+    if (!reach.reaches(environment)) {
+      throw StateError(
+        '${environment.name} is not reachable from this server, so no '
+        'scratch folder can be made there.',
+      );
+    }
+    return folders.createScratchCheckout(target: environment, hint: hint);
   }
 
   /// Where a session started at [projectId] runs when the workspace records
@@ -275,20 +335,37 @@ const List<Map<String, Object?>> launchToolSchemas = [
   {
     'name': 'open_new_session',
     'description':
-        'Start a NEW agent session (not a resume) in a project, as a terminal '
-        'tab in Karmashala. Choose the agent with agentInstallationId (from '
-        'list_agents) or cli ("claude"/"codex"); omit both to use the '
-        "configured default. repositoryId is optional (defaults to the "
-        "project's first repository). The agent must be installed in the "
-        "project's environment. Sessions you start this way are recorded as "
-        'your children, and nesting is capped: if the call is refused for '
-        'depth, do the work yourself instead of delegating it further.',
+        'Start a NEW agent session (not a resume), as a terminal tab in '
+        'Karmashala. In a project when projectId is given; without one, or '
+        'with scratch, in a scratch folder of its own with no project — the '
+        'new agent attaches whatever repositories it needs. Choose the agent '
+        'with agentInstallationId (from list_agents) or cli ("claude"/'
+        '"codex"); omit both to use the configured default. repositoryId is '
+        "optional (defaults to the project's first repository). The agent "
+        "must be installed in the session's environment. Sessions you start "
+        'this way are recorded as your children, and nesting is capped: if '
+        'the call is refused for depth, do the work yourself instead of '
+        'delegating it further.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'projectId': {
           'type': 'string',
-          'description': 'Project id from list_projects.',
+          'description':
+              'Project id from list_projects. Omit for a session without a '
+              'project.',
+        },
+        'scratch': {
+          'type': 'boolean',
+          'description':
+              'Start without a project, in a scratch folder under '
+              '~/karmashala/scratch, even when a projectId is given.',
+        },
+        'environmentId': {
+          'type': 'string',
+          'description':
+              'For a session without a project: where its folder is made. '
+              'Defaults to your own environment.',
         },
         'cli': {
           'type': 'string',
@@ -330,7 +407,7 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'the user can raise it, from the new session\'s permission chip.',
         },
       },
-      'required': ['projectId'],
+      'required': <String>[],
     },
   },
 ];

@@ -407,6 +407,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         installations.first;
   }
 
+  /// The agent for a session without a project: the one picked, else the
+  /// first installed anywhere — its machine is where the folder goes.
+  AgentInstallation? _agentForScratch(List<AgentInstallation> installations) {
+    final picked = _installation;
+    if (picked != null && installations.contains(picked)) return picked;
+    return installations.firstOrNull;
+  }
+
   /// The terminal an external session opens in: the one picked, while it is
   /// still offered, else the first found.
   SystemTerminal? _terminalFrom(List<SystemTerminal> terminals) =>
@@ -461,8 +469,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
     // An existing branch is checked out in a worktree made for it.
     final useWorktree = newBranch || existingBranch != null;
-    final repo = _destination?.checkout;
-    if (repo == null || installation == null) return;
+    final destination = _destination;
+    if (destination == null || installation == null) return;
+    if (destination.checkout == null && !destination.isScratch) return;
     final terminal = _terminalFrom(
       ref.read(availableSystemTerminalsProvider).asData?.value ?? const [],
     );
@@ -472,6 +481,29 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       _error = null;
       _creation = null;
     });
+    // A session without a project gets its folder now, on the agent's own
+    // machine, named after what it was asked to do.
+    final Repository repo;
+    try {
+      repo =
+          destination.checkout ??
+          await ref
+              .read(projectsControllerProvider.notifier)
+              .scratchCheckout(
+                installation.environmentId,
+                hint: _promptController.text.trim().isEmpty
+                    ? _titleController.text.trim()
+                    : _promptController.text.trim(),
+              );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not make a scratch folder: $e';
+          _busy = false;
+        });
+      }
+      return;
+    }
     // The launcher makes the worktree; this only watches for it, to draw its
     // stages and offer the cancel.
     final creations = ref.read(worktreeCreationsProvider);
@@ -789,16 +821,22 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   Widget build(BuildContext context) {
     final destination = _destination;
     final checkout = destination?.checkout;
+    final scratch = destination?.isScratch ?? false;
 
     // Only the agents installed **where the session will run**: one discovered
-    // on Windows is a Windows path, unresolvable inside a WSL checkout.
-    final installations = checkout == null
+    // on Windows is a Windows path, unresolvable inside a WSL checkout. A
+    // session without a project runs wherever its agent is, so every agent.
+    final installations = scratch
+        ? ref.watch(agentInstallationsControllerProvider)
+        : checkout == null
         ? const <AgentInstallation>[]
         : [
             for (final i in ref.watch(agentInstallationsControllerProvider))
               if (i.environmentId == checkout.path.environmentId) i,
           ];
-    final installation = _agentFor(checkout, installations);
+    final installation = scratch
+        ? _agentForScratch(installations)
+        : _agentFor(checkout, installations);
 
     // A worktree is git's, so it is offered only where there is a repository to
     // take one from. Only a positive [GitPresence.notARepository] withdraws it.
@@ -808,7 +846,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       capabilitiesProvider.select((c) => c.externalTerminalSessions),
     );
 
-    final canStart = !_busy && checkout != null && installation != null;
+    final canStart =
+        !_busy && (checkout != null || scratch) && installation != null;
     void start() => _create(
       installation,
       place: worktreeOffered ? _place : _WorkPlace.checkout,

@@ -169,7 +169,45 @@ void main() {
     });
     expect(stats.lastPromptTokens, 700);
     expect(stats.tokensByModel, isNull, reason: 'one running total, no split');
-    expect(stats.outputTokensPerTurn, isNull);
+    expect(stats.outputTokensPerTurn, [90]);
+  });
+
+  test('output and reasoning per turn are each record\'s step', () async {
+    // Cumulative totals: each turn's share is the difference between the
+    // usage record that closed it and the one before.
+    write('r1', [
+      meta(),
+      userMessage(),
+      tokenCount(input: 100, cached: 0, output: 40, reasoning: 30),
+      tokenCount(input: 200, cached: 0, output: 50, reasoning: 34),
+      agentMessage(),
+      userMessage(),
+      tokenCount(input: 300, cached: 0, output: 110, reasoning: 34),
+      agentMessage(),
+    ]);
+
+    final reader = CodexStatsReader(cache: CodexStatsCache());
+    final stats = (await reader.readSessionStats(rollout('r1')))!;
+
+    expect(stats.tokens.output, 110);
+    expect(stats.tokens.reasoning, 34);
+    expect(stats.outputTokensPerTurn, [50, 60]);
+    expect(stats.reasoningTokensPerTurn, [34, 0]);
+  });
+
+  test('a turn with no usage record yet counts as zero so far', () async {
+    write('r1', [
+      meta(),
+      userMessage(),
+      tokenCount(input: 100, cached: 0, output: 40, reasoning: 30),
+      userMessage(),
+    ]);
+
+    final reader = CodexStatsReader(cache: CodexStatsCache());
+    final stats = (await reader.readSessionStats(rollout('r1')))!;
+
+    expect(stats.outputTokensPerTurn, [40, 0]);
+    expect(stats.reasoningTokensPerTurn, [30, 0]);
   });
 
   test('a rollout with no usage record reports no tokens', () async {
@@ -232,7 +270,14 @@ void main() {
         [
           line(userMessage()),
           line(toolCall('function_call', name: 'late_tool')),
-          line(tokenCount(input: 99999, cached: 0, output: 1, lastInput: 77)),
+          line(
+            tokenCount(
+              input: 99999,
+              cached: 0,
+              output: before.tokens.output! + 5,
+              lastInput: 77,
+            ),
+          ),
         ].join(),
         mode: FileMode.append,
       );
@@ -248,6 +293,15 @@ void main() {
       expect(after.turns, before.turns! + 1);
       expect(after.tokens.input, 99999);
       expect(after.lastPromptTokens, 77);
+      expect(
+        after.outputTokensPerTurn!.length,
+        before.outputTokensPerTurn!.length + 1,
+      );
+      expect(
+        after.outputTokensPerTurn!.last,
+        5,
+        reason: 'the step from the cached total, not from zero',
+      );
       expect(after.toolCallsByName!['late_tool'], 1);
       expect(
         before.toolCallsByName!.containsKey('late_tool'),
@@ -303,43 +357,51 @@ void main() {
 
       expect(stats.turns, 1);
       expect(stats.toolCalls, 1);
-      expect(stats.tokens.total, 990, reason: 'found by reading the tail');
+      expect(stats.tokens.total, 990);
       expect(
         reader.linesDecoded,
         1,
-        reason: 'the only line worth decoding is the last usage record',
+        reason: 'the only line worth decoding is the usage record',
       );
     });
 
-    test('a cold read of a big rollout decodes exactly one line', () async {
-      // Padded past the 64 KB tail window so the backwards read is the one
-      // that answers, and the forward scan decodes nothing at all.
-      write('r1', [
-        meta(),
-        for (var i = 0; i < 300; i++) ...[
-          userMessage(),
-          toolCall('custom_tool_call'),
-          {
-            'type': 'response_item',
-            'payload': {
-              'type': 'message',
-              'role': 'user',
-              'content': 'y' * 900,
+    test(
+      'a cold read of a big rollout decodes only its usage records',
+      () async {
+        // Usage records are a thousandth of a rollout; per-turn tokens need
+        // every one of them, and nothing else is ever decoded.
+        write('r1', [
+          meta(),
+          for (var i = 0; i < 300; i++) ...[
+            userMessage(),
+            toolCall('custom_tool_call'),
+            {
+              'type': 'response_item',
+              'payload': {
+                'type': 'message',
+                'role': 'user',
+                'content': 'y' * 900,
+              },
             },
-          },
-          tokenCount(input: 100 * (i + 1), cached: 0, output: 1),
-        ],
-      ]);
-      expect(File(rollout('r1')).lengthSync(), greaterThan(64 * 1024));
+            tokenCount(input: 100 * (i + 1), cached: 0, output: 1),
+          ],
+        ]);
+        expect(File(rollout('r1')).lengthSync(), greaterThan(64 * 1024));
 
-      final reader = CodexStatsReader(cache: CodexStatsCache());
-      final stats = (await reader.readSessionStats(rollout('r1')))!;
+        final reader = CodexStatsReader(cache: CodexStatsCache());
+        final stats = (await reader.readSessionStats(rollout('r1')))!;
 
-      expect(stats.turns, 300);
-      expect(stats.toolCalls, 300);
-      expect(stats.tokens.input, 30000, reason: 'the newest cumulative total');
-      expect(reader.linesDecoded, 1);
-    });
+        expect(stats.turns, 300);
+        expect(stats.toolCalls, 300);
+        expect(
+          stats.tokens.input,
+          30000,
+          reason: 'the newest cumulative total',
+        );
+        expect(stats.outputTokensPerTurn!.length, 300);
+        expect(reader.linesDecoded, 300);
+      },
+    );
 
     test('a rollout replaced under the same name starts over', () async {
       writeBulky('r1');

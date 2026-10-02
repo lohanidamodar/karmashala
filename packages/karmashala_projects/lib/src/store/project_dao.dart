@@ -13,8 +13,8 @@ class ProjectDao {
     _db.execute(
       'INSERT INTO projects '
       '(id, name, root_environment_id, root_path, created_at, workspace_id, '
-      'default_repository_id) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?);',
+      'default_repository_id, kind) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
       [
         project.id,
         project.name,
@@ -23,6 +23,7 @@ class ProjectDao {
         isoFromDate(project.createdAt),
         project.workspaceId,
         project.defaultRepositoryId,
+        project.kind,
       ],
     );
   }
@@ -30,16 +31,39 @@ class ProjectDao {
   void update(Project project) {
     _db.execute(
       'UPDATE projects SET name = ?, root_environment_id = ?, root_path = ?, '
-      'workspace_id = ?, default_repository_id = ? WHERE id = ?;',
+      'workspace_id = ?, default_repository_id = ?, kind = ? WHERE id = ?;',
       [
         project.name,
         project.root.environmentId,
         project.root.path,
         project.workspaceId,
         project.defaultRepositoryId,
+        project.kind,
         project.id,
       ],
     );
+  }
+
+  /// The scratch project of [environmentId], when one has been made.
+  Project? scratchIn(String environmentId) {
+    final rows = _db.query(
+      'SELECT * FROM projects WHERE kind = ? AND root_environment_id = ? '
+      'ORDER BY created_at, id LIMIT 1;',
+      [Project.scratchKind, environmentId],
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
+  /// How many sessions run with a primary checkout of [projectId]: what keeps
+  /// a scratch project from being deleted.
+  int sessionsIn(String projectId) {
+    final rows = _db.query(
+      'SELECT COUNT(*) AS n FROM sessions s '
+      'JOIN repositories r ON r.id = s.repository_id '
+      'WHERE r.project_id = ?;',
+      [projectId],
+    );
+    return rows.isEmpty ? 0 : (rows.first['n'] as int? ?? 0);
   }
 
   /// Files [id] under [workspaceId], or unassigns it when null. Its own
@@ -109,5 +133,6 @@ class ProjectDao {
     createdAt: dateFromIso(row['created_at']),
     workspaceId: row['workspace_id'] as String?,
     defaultRepositoryId: row['default_repository_id'] as String?,
+    kind: row['kind'] as String?,
   );
 }

@@ -88,3 +88,6 @@ packages/flutter_pty/android/.cxx/
 # a file rather than laundered through a pipe; the logs themselves are a
 # reading of one machine at one moment and are not history.
 .gate/
+
+# Design specs are kept locally and never committed (owner decision, 2026-10-02).
+/docs/superpowers/specs/

@@ -28,7 +28,8 @@ class SessionsHandler {
       _relays = SessionRelayDao(_db),
       _followUps = FollowUpDao(_db),
       _imported = ImportedSessionDao(_db),
-      _repositories = RepositoryDao(_db);
+      _repositories = RepositoryDao(_db),
+      _projects = ProjectDao(_db);
 
   static bool _never(String _) => false;
 
@@ -44,6 +45,7 @@ class SessionsHandler {
   final FollowUpDao _followUps;
   final ImportedSessionDao _imported;
   final RepositoryDao _repositories;
+  final ProjectDao _projects;
 
   /// Whether this server runs [sessionId] now, so records its lifecycle.
   bool runsSession(String sessionId) => _runs(sessionId);
@@ -365,13 +367,15 @@ class SessionsHandler {
       (throw DataRefused.notFound('no checkout with id $id'));
 
   /// [repositoryId], which must be a checkout of [projectId]: a session spans
-  /// checkouts of one project.
+  /// checkouts of one project — unless that project is Scratch, whose
+  /// sessions have no project of their own and may reach into any.
   String _sameProject(String projectId, String repositoryId) {
     final repository = _repositories.getById(repositoryId);
     if (repository == null) {
       throw DataRefused.notFound('no checkout with id $repositoryId');
     }
-    if (repository.projectId != projectId) {
+    if (repository.projectId != projectId &&
+        !(_projects.getById(projectId)?.isScratch ?? false)) {
       throw const DataRefused.invalid(
         'A session can only span repositories within the same project.',
       );

@@ -25,6 +25,8 @@ class UsageSessionRow {
     required this.project,
     required this.agentId,
     this.tokens,
+    this.output,
+    this.reasoning,
     this.tokensByModel,
     this.lastActivityAt,
   });
@@ -39,6 +41,11 @@ class UsageSessionRow {
   /// The whole session's tokens, cache included; null when its file recorded
   /// none (Antigravity's) or could not be found.
   final int? tokens;
+
+  /// Its output tokens, and how many of those were thinking — null where the
+  /// file does not break thinking out, which is not the same as none.
+  final int? output;
+  final int? reasoning;
 
   /// The same tokens by model, where each reply names its model — Claude Code
   /// does; Codex keeps one running total, so this is null for it.
@@ -60,7 +67,14 @@ class UsageBreakdown {
     required this.unsplitByModel,
     required this.heaviest,
     required this.active,
+    this.thinking,
   });
+
+  /// How the output divided between answer and thinking, over the counted
+  /// sessions whose files break thinking out, and how many those were. Null
+  /// when none does: a session that keeps one output figure is left out of
+  /// the share rather than read as all answer.
+  final ({int output, int reasoning, int sessions})? thinking;
 
   /// Sessions whose own file shows activity in the range, whether or not it
   /// recorded tokens. A session whose last activity is unknown is not placed
@@ -108,6 +122,9 @@ UsageBreakdown usageBreakdownOf(
   var uncounted = 0;
   var unsplit = 0;
   var active = 0;
+  var thinkingOutput = 0;
+  var thinkingReasoning = 0;
+  var thinkingSessions = 0;
   for (final row in rows) {
     if (agentId != null && row.agentId != agentId) continue;
     final last = row.lastActivityAt;
@@ -119,6 +136,11 @@ UsageBreakdown usageBreakdownOf(
     }
     if (last == null || last.isBefore(since)) continue;
     counted.add(row);
+    if ((row.output, row.reasoning) case (final output?, final reasoning?)) {
+      thinkingOutput += output;
+      thinkingReasoning += reasoning;
+      thinkingSessions++;
+    }
     byProject[row.project] = (byProject[row.project] ?? 0) + tokens;
     final models = row.tokensByModel;
     if (models == null || models.isEmpty) {
@@ -142,6 +164,13 @@ UsageBreakdown usageBreakdownOf(
     unsplitByModel: unsplit,
     heaviest: counted.take(kUsageHeaviestSessions).toList(),
     active: active,
+    thinking: thinkingSessions == 0
+        ? null
+        : (
+            output: thinkingOutput,
+            reasoning: thinkingReasoning,
+            sessions: thinkingSessions,
+          ),
   );
 }
 
@@ -191,6 +220,8 @@ final usageSessionRowsProvider =
                 .getById(session.agentInstallationId)
                 ?.agentId,
             tokens: counted?.tokens.total,
+            output: counted?.tokens.output,
+            reasoning: counted?.tokens.reasoning,
             tokensByModel: models == null
                 ? null
                 : {

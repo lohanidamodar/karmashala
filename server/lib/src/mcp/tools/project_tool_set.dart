@@ -51,9 +51,8 @@ class ProjectToolSet extends ServerToolSet {
     final gitUrl = _text(args['gitUrl']);
     if (path == null && gitUrl == null) {
       throw ArgumentError(
-        'Pass path, gitUrl, or both. With a gitUrl and no path a WSL or SSH '
-        'environment clones into ~/karmashala/<repo>; a local one needs the '
-        'folder spelled out.',
+        'Pass path, gitUrl, or both. With a gitUrl and no path the clone '
+        'lands in ~/karmashala/<repo> on the environment.',
       );
     }
 
@@ -159,6 +158,7 @@ class ProjectToolSet extends ServerToolSet {
     'name': project.name,
     'environmentId': project.environmentId,
     'path': project.root.path,
+    if (project.kind != null) 'kind': project.kind,
     if (project.workspaceId != null) 'workspaceId': project.workspaceId,
     if (project.defaultRepositoryId != null)
       'defaultRepositoryId': project.defaultRepositoryId,
@@ -211,9 +211,9 @@ const List<Map<String, Object?>> projectToolSchemas = [
         'gitUrl': {
           'type': 'string',
           'description':
-              'A repository to clone first. With no path, WSL and SSH clone '
-              'into ~/karmashala/<repo>; a local environment refuses, because '
-              'there is no obvious folder to choose.',
+              'A repository to clone first. With no path the clone lands in '
+              '~/karmashala/<repo> on the environment, beside the scratch '
+              'folders of sessions without a project.',
         },
         'name': {
           'type': 'string',

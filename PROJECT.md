@@ -387,7 +387,7 @@ Before considering a task complete, try to run, from `app/`:
 
 ```bash
 flutter analyze
-flutter test --exclude-tags=live-ssh,live-wsl
+flutter test --exclude-tags=live-ssh,live-wsl --dart-define-from-file=dart_defines.json
 ```
 
 **Name every directory when you analyze by path**, or one of them rots
@@ -446,7 +446,7 @@ Common commands, `pub get` at the repository root and the rest from `app/`:
 flutter pub get
 flutter pub add <package>
 flutter analyze
-flutter test --exclude-tags=live-ssh,live-wsl
+flutter test --exclude-tags=live-ssh,live-wsl --dart-define-from-file=dart_defines.json
 flutter run -d chrome
 flutter devices
 flutter clean
@@ -634,8 +634,12 @@ breaking the toolchain for everyone else.
 The default gate excludes two tags:
 
 ```bash
-flutter test --exclude-tags=live-ssh,live-wsl
+flutter test --exclude-tags=live-ssh,live-wsl --dart-define-from-file=dart_defines.json
 ```
+
+The define is not optional: the remote-access, relay and pairing suites read
+`KARMASHALA_RELAY_URL` from `app/dart_defines.json`, and without it fifteen of
+them fail on a default relay that is empty. CI passes the same define.
 
 `dart_test.yaml` supplies the measured eight-worker default. Keep the command
 free of a `--concurrency` override so local runs and automation use the same

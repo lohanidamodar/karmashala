@@ -135,15 +135,18 @@ class FakeGitWork {
         ];
       case WorktreeLabels(:final repositoryIds) when runner != null:
         return readCheckoutLabels([
-          for (final id in repositoryIds)
-            ?_server.repositoryRows.getById(id),
+          for (final id in repositoryIds) ?_server.repositoryRows.getById(id),
         ], GitService(runner!).listWorktrees);
       case WorktreeLabels(:final repositoryIds):
-        return {
-          for (final id in repositoryIds) id: ?labels[id],
-        };
+        return {for (final id in repositoryIds) id: ?labels[id]};
       case WorktreeCreationCancel() || WorktreeAgentSettled():
         return const DataAck();
+      case ScratchCheckoutCreate():
+        // Scripted through [answer] by the tests that need one; the default
+        // fake has no disk to make a folder on.
+        throw const DataRefused.unavailable(
+          'no scratch folder can be made here',
+        );
       case WorktreeCleanupPreview() || WorktreeCleanupSweep():
         return cleanupReport ??
             WorktreeCleanupReport(
@@ -207,7 +210,10 @@ class FakeGitWork {
     return factory;
   }
 
-  Future<Object?> _checkout(CheckoutRequest<Object?> r, EnvironmentPath at) async {
+  Future<Object?> _checkout(
+    CheckoutRequest<Object?> r,
+    EnvironmentPath at,
+  ) async {
     final c = Checkout(at);
     final git = runner == null ? null : GitService(runner!);
     if (git != null && (r is WorktreeCreate || r is WorktreeRemove)) {
@@ -287,9 +293,7 @@ class FakeGitWork {
         return mergesInProgress[c] ?? false;
       case GitBlobShas(:final paths):
         final known = blobShas[c] ?? const {};
-        return {
-          for (final p in paths) p: ?known[p],
-        };
+        return {for (final p in paths) p: ?known[p]};
       case GitDelivery():
         return deliveries[c] ?? SessionDelivery.unknown;
       case GitStage() ||
@@ -318,7 +322,8 @@ class FakeGitWork {
                 worktree: GitWorktree(
                   path: EnvironmentPath(
                     environmentId: at.environmentId,
-                    path: '${at.path}/.karmashala-worktrees/'
+                    path:
+                        '${at.path}/.karmashala-worktrees/'
                         '${create.worktreeName}',
                   ),
                   branch: create.branch,
@@ -493,7 +498,10 @@ Future<SessionDelivery> _deliveryVia(
     }
   }
 
-  Future<SessionDelivery> local(EnvironmentPath dir, EnvironmentPath repo) async {
+  Future<SessionDelivery> local(
+    EnvironmentPath dir,
+    EnvironmentPath repo,
+  ) async {
     final status = await orNull(() => git.statusWithBranch(dir));
     if (status == null) return SessionDelivery.unknown;
     final url = await orNull(() => git.remoteUrl(repo));

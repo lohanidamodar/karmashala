@@ -23,11 +23,18 @@ class SessionRepositoriesBar extends ConsumerWidget {
 
     final primary = repos.first;
     final linkedIds = repos.map((r) => r.id).toSet();
-    final attachable = ref
-        .read(workspaceDataProvider)
-        .repositoriesOf(primary.projectId)
-        .where((r) => !linkedIds.contains(r.id))
-        .toList();
+    final workspace = ref.read(workspaceDataProvider);
+    // A session in a project attaches that project's checkouts; one without
+    // a project — running in Scratch — may attach any in the workspace.
+    final scratch = workspace.project(primary.projectId)?.isScratch ?? false;
+    final attachable =
+        (scratch
+                ? workspace.repositories.where(
+                    (r) => r.projectId != primary.projectId,
+                  )
+                : workspace.repositoriesOf(primary.projectId))
+            .where((r) => !linkedIds.contains(r.id))
+            .toList();
 
     final service = ref.read(sessionRepositoriesServiceProvider);
     // Which of these chips is this session's own tree and which is a checkout
@@ -72,7 +79,9 @@ class SessionRepositoriesBar extends ConsumerWidget {
             ),
           if (attachable.isNotEmpty)
             PopupMenuButton<String>(
-              tooltip: 'Add a repository from this project',
+              tooltip: scratch
+                  ? 'Add a repository from the workspace'
+                  : 'Add a repository from this project',
               onSelected: (repoId) async {
                 final messenger = ScaffoldMessenger.of(context);
                 try {
@@ -86,7 +95,12 @@ class SessionRepositoriesBar extends ConsumerWidget {
                 for (final repo in attachable)
                   DesktopMenuItem(
                     value: repo.id,
-                    label: repo.name,
+                    // Across projects two checkouts can share a name; the
+                    // project tells them apart.
+                    label: scratch
+                        ? '${workspace.project(repo.projectId)?.name ?? '?'} · '
+                              '${repo.name}'
+                        : repo.name,
                     icon: AppIcons.linkSimple,
                   ),
               ],

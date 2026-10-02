@@ -13,13 +13,29 @@ import 'filter_menu_field.dart';
 
 /// Where a session is about to run. **A project is not the unit a session runs
 /// in — a checkout is**, so [checkout] is the answer and the project the route.
+///
+/// Or nowhere in particular: [SessionDestination.scratch] is a session
+/// without a project, which gets a folder of its own under the Scratch
+/// project of the machine its agent runs on, made when it starts.
 class SessionDestination {
   const SessionDestination({required this.projectId, this.checkout});
+
+  /// Without a project. The checkout is made at launch, so there is none to
+  /// name here, and the project is whichever machine's Scratch the chosen
+  /// agent lives on.
+  const SessionDestination.scratch()
+    : projectId = scratchProjectId,
+      checkout = null;
+
+  /// What the Project menu's "No project" entry is worth; never a row's id.
+  static const String scratchProjectId = 'no-project';
 
   final String projectId;
   final Repository? checkout;
 
-  bool get isRunnable => checkout != null;
+  bool get isScratch => projectId == scratchProjectId;
+
+  bool get isRunnable => checkout != null || isScratch;
 }
 
 /// The destination a dialog opens on: **whatever the app is already pointed
@@ -111,6 +127,14 @@ class SessionDestinationPicker extends ConsumerWidget {
         FilterMenuField<String?>(
           label: 'Project',
           entries: [
+            // First, so a session that belongs to no project is one pick
+            // away rather than hidden behind forty projects.
+            const FilterMenuEntry(
+              value: SessionDestination.scratchProjectId,
+              label: 'No project',
+              detail: 'A scratch folder of its own, on the agent\'s machine',
+              icon: AppIcons.folderPlus,
+            ),
             for (final project in projects)
               FilterMenuEntry(
                 value: project.id,
@@ -131,6 +155,10 @@ class SessionDestinationPicker extends ConsumerWidget {
           emptyLabel: 'Choose a project',
           onSelected: (id) {
             if (id == null || id == destination.projectId) return;
+            if (id == SessionDestination.scratchProjectId) {
+              onChanged(const SessionDestination.scratch());
+              return;
+            }
             onChanged(
               SessionDestination(
                 projectId: id,
@@ -142,7 +170,14 @@ class SessionDestinationPicker extends ConsumerWidget {
           },
         ),
         const SizedBox(height: Insets.md),
-        if (offered.isEmpty)
+        if (destination.isScratch)
+          Text(
+            'Runs in its own folder under ~/karmashala/scratch on the '
+            'machine the agent is installed on. The agent attaches whatever '
+            'repositories it needs.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else if (offered.isEmpty)
           Text(kNowhereToRunIn, style: Theme.of(context).textTheme.bodySmall)
         else
           FilterMenuField<String?>(

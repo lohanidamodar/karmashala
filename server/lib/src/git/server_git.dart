@@ -170,155 +170,153 @@ class ServerGit implements GitWork {
     }
   }
 
-  Future<Object?> _handle(GitWorkRequest<Object?> request) async =>
-      switch (request) {
-        GitPresenceOf(:final checkouts) => Future.wait([
-          for (final checkout in checkouts)
-            reach.presenceOf(checkout).catchError((Object _) {
-              return GitPresence.unknown;
-            }),
-        ]),
-        WorktreeLabels(:final repositoryIds) => readCheckoutLabels(
-          [
-            for (final id in repositoryIds)
-              ?_repositories.getById(id),
-          ],
-          worktrees.list,
-          familyKey: checkouts.familyKey,
-        ),
-        WorktreeCreationCancel(:final creationId) => () {
-          creations.cancel(creationId);
-          return const DataAck();
-        }(),
-        WorktreeAgentSettled(:final creationId, :final error) => () async {
-          await creations.settleAgent(creationId, error: error);
-          return const DataAck();
-        }(),
-        WorktreeCleanupPreview() => cleanup.preview(),
-        WorktreeCleanupSweep() => cleanup.sweep(automatic: false),
-        WorktreeCleanupLogRead() => cleanup.log,
-        ProjectFoldersCreate(
-          :final projectName,
-          :final root,
-          :final gitUrl,
-          :final workspaceId,
-        ) =>
-          folders.create(
-            name: projectName,
-            target:
-                reach.environment(root.environmentId) ??
-                (throw DataRefused.notFound(
-                  'no environment with id ${root.environmentId}',
-                )),
-            targetPath: root.path,
-            gitUrl: gitUrl,
-            workspaceId: workspaceId,
-          ),
-        ProjectRescan(:final projectId) => folders.rediscover(
-          _project(projectId),
-        ),
-        final ProjectMove r => () {
-          final project = _project(r.projectId);
-          final environmentId =
-              r.root?.environmentId ?? project.root.environmentId;
-          return folders.update(
-            project,
-            target:
-                reach.environment(environmentId) ??
-                (throw DataRefused.notFound(
-                  'no environment with id $environmentId',
-                )),
-            name: r.projectName,
-            root: r.root,
-            defaultRepositoryId: r.defaultRepositoryId,
-            clearDefaultRepository: r.clearDefaultRepository,
-          );
-        }(),
-        final CheckoutRequest<Object?> r => _checkout(r),
-      };
+  Future<Object?> _handle(
+    GitWorkRequest<Object?> request,
+  ) async => switch (request) {
+    GitPresenceOf(:final checkouts) => Future.wait([
+      for (final checkout in checkouts)
+        reach.presenceOf(checkout).catchError((Object _) {
+          return GitPresence.unknown;
+        }),
+    ]),
+    WorktreeLabels(:final repositoryIds) => readCheckoutLabels(
+      [for (final id in repositoryIds) ?_repositories.getById(id)],
+      worktrees.list,
+      familyKey: checkouts.familyKey,
+    ),
+    WorktreeCreationCancel(:final creationId) => () {
+      creations.cancel(creationId);
+      return const DataAck();
+    }(),
+    WorktreeAgentSettled(:final creationId, :final error) => () async {
+      await creations.settleAgent(creationId, error: error);
+      return const DataAck();
+    }(),
+    WorktreeCleanupPreview() => cleanup.preview(),
+    WorktreeCleanupSweep() => cleanup.sweep(automatic: false),
+    WorktreeCleanupLogRead() => cleanup.log,
+    ProjectFoldersCreate(
+      :final projectName,
+      :final root,
+      :final gitUrl,
+      :final workspaceId,
+    ) =>
+      folders.create(
+        name: projectName,
+        target:
+            reach.environment(root.environmentId) ??
+            (throw DataRefused.notFound(
+              'no environment with id ${root.environmentId}',
+            )),
+        targetPath: root.path,
+        gitUrl: gitUrl,
+        workspaceId: workspaceId,
+      ),
+    ProjectRescan(:final projectId) => folders.rediscover(_project(projectId)),
+    ScratchCheckoutCreate(:final environmentId, :final hint) =>
+      folders.createScratchCheckout(
+        target:
+            reach.environment(environmentId) ??
+            (throw DataRefused.notFound(
+              'no environment with id $environmentId',
+            )),
+        hint: hint,
+      ),
+    final ProjectMove r => () {
+      final project = _project(r.projectId);
+      final environmentId = r.root?.environmentId ?? project.root.environmentId;
+      return folders.update(
+        project,
+        target:
+            reach.environment(environmentId) ??
+            (throw DataRefused.notFound(
+              'no environment with id $environmentId',
+            )),
+        name: r.projectName,
+        root: r.root,
+        defaultRepositoryId: r.defaultRepositoryId,
+        clearDefaultRepository: r.clearDefaultRepository,
+      );
+    }(),
+    final CheckoutRequest<Object?> r => _checkout(r),
+  };
 
-  Future<Object?> _checkout(CheckoutRequest<Object?> request) async =>
-      switch (request) {
-        GitStatusOf() ||
-        GitChangesOf() ||
-        GitFileDiffStats() ||
-        GitDiff() ||
-        GitDiffUntracked() ||
-        GitLog() ||
-        GitBranch() ||
-        GitHead() ||
-        GitRevParse() ||
-        GitAheadBehind() ||
-        GitRemoteBranchesContaining() ||
-        GitOriginFacts() ||
-        GitMergeInProgress() ||
-        GitBlobShas() ||
-        GitDelivery() => checkouts.read(request),
-        GitStage() ||
-        GitUnstage() ||
-        GitDiscard() ||
-        GitCommitStaged() ||
-        GitFetch() ||
-        GitPull() ||
-        GitPush() ||
-        GitMerge() ||
-        GitAbortMerge() ||
-        GitMoveBranch() => checkouts.writeOf(request),
-        WorktreesOf(:final checkout) => worktrees.list(
-          checkouts.pathOf(checkout),
-        ),
-        // Through the worktree service, not a plain read: which worktree has
-        // each branch is half of the answer.
-        GitBranches(:final checkout) => worktrees.branches(
-          checkouts.pathOf(checkout),
-        ),
-        final WorktreeCreate r => creations.create(
-          checkouts.pathOf(r.checkout),
-          r,
-        ),
-        WorktreeRemove(:final checkout, :final worktree, :final force) =>
-          () async {
-            final repo = checkouts.pathOf(checkout);
-            try {
-              final teardown = await worktrees.remove(
-                repo,
-                worktree,
-                force: force,
-              );
-              return teardown?.said;
-            } finally {
-              checkouts.touched(repo, CheckoutTouchCause.worktree);
-            }
-          }(),
-        GitHubOverviewOf(:final checkout) => _overview(checkout),
-        GitHubPullRequest(:final checkout, :final branch) => _pullRequest(
-          checkout,
-          branch,
-        ),
-        GitHubMarkReady(:final checkout, :final number) => () async {
-          await checkouts
-              .gitHubFor(checkout)
-              .markPullRequestReady(checkouts.pathOf(checkout), number: number);
-          return const DataAck();
-        }(),
-        GitHubCreatePr(:final checkout, :final title, :final body) => checkouts
-            .gitHubFor(checkout)
-            .createPullRequest(
-              checkouts.pathOf(checkout),
-              title: title,
-              body: body,
-            ),
-        GitHubRuns(:final checkout, :final branch, :final limit) => checkouts
-            .gitHubFor(checkout)
-            .listWorkflowRuns(
-              checkouts.pathOf(checkout),
-              branch: branch,
-              limit: limit.clamp(1, 50),
-            ),
-        GitHubRunLog(:final checkout, :final runId) => checkouts
-            .gitHubFor(checkout)
-            .failedRunLog(checkouts.pathOf(checkout), runId: runId),
-      };
+  Future<Object?> _checkout(
+    CheckoutRequest<Object?> request,
+  ) async => switch (request) {
+    GitStatusOf() ||
+    GitChangesOf() ||
+    GitFileDiffStats() ||
+    GitDiff() ||
+    GitDiffUntracked() ||
+    GitLog() ||
+    GitBranch() ||
+    GitHead() ||
+    GitRevParse() ||
+    GitAheadBehind() ||
+    GitRemoteBranchesContaining() ||
+    GitOriginFacts() ||
+    GitMergeInProgress() ||
+    GitBlobShas() ||
+    GitDelivery() => checkouts.read(request),
+    GitStage() ||
+    GitUnstage() ||
+    GitDiscard() ||
+    GitCommitStaged() ||
+    GitFetch() ||
+    GitPull() ||
+    GitPush() ||
+    GitMerge() ||
+    GitAbortMerge() ||
+    GitMoveBranch() => checkouts.writeOf(request),
+    WorktreesOf(:final checkout) => worktrees.list(checkouts.pathOf(checkout)),
+    // Through the worktree service, not a plain read: which worktree has
+    // each branch is half of the answer.
+    GitBranches(:final checkout) => worktrees.branches(
+      checkouts.pathOf(checkout),
+    ),
+    final WorktreeCreate r => creations.create(checkouts.pathOf(r.checkout), r),
+    WorktreeRemove(:final checkout, :final worktree, :final force) => () async {
+      final repo = checkouts.pathOf(checkout);
+      try {
+        final teardown = await worktrees.remove(repo, worktree, force: force);
+        return teardown?.said;
+      } finally {
+        checkouts.touched(repo, CheckoutTouchCause.worktree);
+      }
+    }(),
+    GitHubOverviewOf(:final checkout) => _overview(checkout),
+    GitHubPullRequest(:final checkout, :final branch) => _pullRequest(
+      checkout,
+      branch,
+    ),
+    GitHubMarkReady(:final checkout, :final number) => () async {
+      await checkouts
+          .gitHubFor(checkout)
+          .markPullRequestReady(checkouts.pathOf(checkout), number: number);
+      return const DataAck();
+    }(),
+    GitHubCreatePr(:final checkout, :final title, :final body) =>
+      checkouts
+          .gitHubFor(checkout)
+          .createPullRequest(
+            checkouts.pathOf(checkout),
+            title: title,
+            body: body,
+          ),
+    GitHubRuns(:final checkout, :final branch, :final limit) =>
+      checkouts
+          .gitHubFor(checkout)
+          .listWorkflowRuns(
+            checkouts.pathOf(checkout),
+            branch: branch,
+            limit: limit.clamp(1, 50),
+          ),
+    GitHubRunLog(:final checkout, :final runId) =>
+      checkouts
+          .gitHubFor(checkout)
+          .failedRunLog(checkouts.pathOf(checkout), runId: runId),
+  };
 
   /// The three parts read side by side, each failing on its own: one `.wait`
   /// over all three turned a repository with issues switched off into a pane
@@ -362,7 +360,9 @@ class ServerGit implements GitWork {
   ) async {
     final gh = checkouts.gitHubFor(checkout);
     final path = checkouts.pathOf(checkout);
-    final snapshot = await _orNull(() => gh.pullRequestFor(path, branch: branch));
+    final snapshot = await _orNull(
+      () => gh.pullRequestFor(path, branch: branch),
+    );
     if (snapshot == null || !snapshot.isOpen) {
       return PullRequestReading(pullRequest: snapshot);
     }

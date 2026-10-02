@@ -7,11 +7,18 @@ import 'chart_support.dart';
 /// A word-sized trend: a line through [values], left to right, with the last
 /// one dotted. No axes and no interaction — a sparkline sits beside a number
 /// that already says what it is.
+///
+/// [secondaryValues] is a part of each reading — thinking inside output, say —
+/// drawn as a filled area under the line on the same scale, so the band's
+/// height against the line's is the share. It is read in step with [values]
+/// and never drawn above them.
 class Sparkline extends StatelessWidget {
   const Sparkline({
     required this.values,
     required this.color,
     required this.semanticsLabel,
+    this.secondaryValues,
+    this.secondaryColor,
     this.minValue = 0,
     this.maxValue,
     this.height = 20,
@@ -22,6 +29,12 @@ class Sparkline extends StatelessWidget {
 
   final List<double> values;
   final Color color;
+
+  /// A part of each of [values], or null for a single series.
+  final List<double>? secondaryValues;
+
+  /// The band's colour; [color] when null.
+  final Color? secondaryColor;
   final double minValue;
 
   /// The top of the scale; the largest value when null.
@@ -55,6 +68,8 @@ class Sparkline extends StatelessWidget {
               painter: SparklinePainter(
                 values: values,
                 color: color,
+                secondaryValues: secondaryValues,
+                secondaryColor: secondaryColor,
                 minValue: minValue,
                 maxValue: maxValue,
                 areaAlpha: area ? ink.areaAlpha : 0,
@@ -72,6 +87,8 @@ class SparklinePainter extends CustomPainter {
   const SparklinePainter({
     required this.values,
     required this.color,
+    this.secondaryValues,
+    this.secondaryColor,
     this.minValue = 0,
     this.maxValue,
     this.areaAlpha = 0,
@@ -79,12 +96,19 @@ class SparklinePainter extends CustomPainter {
 
   final List<double> values;
   final Color color;
+  final List<double>? secondaryValues;
+  final Color? secondaryColor;
   final double minValue;
   final double? maxValue;
   final double areaAlpha;
 
   static const double _stroke = 1.5;
   static const double _dot = 2;
+
+  /// How solid the band is drawn: a part of the line's own reading, so it is
+  /// darker than the line's wash and lighter than the line. Public so a legend
+  /// swatch can match it.
+  static const double bandAlpha = 0.55;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -99,15 +123,18 @@ class SparklinePainter extends CustomPainter {
     final plotHeight = math.max(0.0, size.height - inset * 2);
     final plotWidth = math.max(0.0, size.width - inset * 2);
 
-    Offset at(int i) {
-      final x = finite.length == 1
-          ? size.width - inset
-          : inset + plotWidth * i / (finite.length - 1);
+    double x(int i) => finite.length == 1
+        ? size.width - inset
+        : inset + plotWidth * i / (finite.length - 1);
+
+    double y(double value) {
       final fraction = span <= 0
           ? 0.0
-          : ((finite[i] - minValue) / span).clamp(0.0, 1.0);
-      return Offset(x, inset + plotHeight * (1 - fraction));
+          : ((value - minValue) / span).clamp(0.0, 1.0);
+      return inset + plotHeight * (1 - fraction);
     }
+
+    Offset at(int i) => Offset(x(i), y(finite[i]));
 
     final line = Path();
     for (var i = 0; i < finite.length; i++) {
@@ -125,6 +152,7 @@ class SparklinePainter extends CustomPainter {
         Paint()..color = color.withValues(alpha: areaAlpha),
       );
     }
+    _paintBand(canvas, size, finite, x, y);
     if (finite.length > 1) {
       canvas.drawPath(
         line,
@@ -139,13 +167,48 @@ class SparklinePainter extends CustomPainter {
     canvas.drawCircle(at(finite.length - 1), _dot, Paint()..color = color);
   }
 
+  /// The secondary series as an area from the baseline. Read by index against
+  /// the finite primary readings and capped at each, so a band is never taller
+  /// than the line it is a part of; a reading it lacks, or one that is not a
+  /// number, is drawn as nothing.
+  void _paintBand(
+    Canvas canvas,
+    Size size,
+    List<double> finite,
+    double Function(int) x,
+    double Function(double) y,
+  ) {
+    final band = secondaryValues;
+    if (band == null || finite.length < 2) return;
+    final path = Path()..moveTo(x(0), size.height);
+    for (var i = 0; i < finite.length; i++) {
+      final raw = i < band.length ? band[i] : 0.0;
+      final value = raw.isFinite ? math.min(raw, finite[i]) : 0.0;
+      path.lineTo(x(i), y(math.max(value, minValue)));
+    }
+    path
+      ..lineTo(x(finite.length - 1), size.height)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()..color = (secondaryColor ?? color).withValues(alpha: bandAlpha),
+    );
+  }
+
   @override
   bool shouldRepaint(SparklinePainter oldDelegate) =>
       !_sameValues(oldDelegate.values, values) ||
+      !_sameOptionalValues(oldDelegate.secondaryValues, secondaryValues) ||
       oldDelegate.color != color ||
+      oldDelegate.secondaryColor != secondaryColor ||
       oldDelegate.minValue != minValue ||
       oldDelegate.maxValue != maxValue ||
       oldDelegate.areaAlpha != areaAlpha;
+}
+
+bool _sameOptionalValues(List<double>? a, List<double>? b) {
+  if (a == null || b == null) return a == b;
+  return _sameValues(a, b);
 }
 
 bool _sameValues(List<double> a, List<double> b) {

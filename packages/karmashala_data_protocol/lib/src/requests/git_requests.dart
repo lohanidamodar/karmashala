@@ -117,6 +117,10 @@ DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
         workspaceId: args.optionalString('workspaceId'),
       ),
       ProjectRescan.name => ProjectRescan(args.string('projectId')),
+      ScratchCheckoutCreate.name => ScratchCheckoutCreate(
+        environmentId: args.string('environmentId'),
+        hint: args.optionalString('hint'),
+      ),
       ProjectMove.name => ProjectMove(
         args.string('projectId'),
         projectName: args.optionalString('name'),
@@ -1043,6 +1047,38 @@ final class ProjectFoldersCreate extends GitWorkRequest<ProjectCheckouts> {
   @override
   ProjectCheckouts resultFromJson(Object? json) =>
       _decode(kind, () => ProjectCheckouts.fromJson(_object(json, kind)));
+}
+
+/// A folder for a session without a project: made under the Scratch project
+/// of [environmentId] (`~/karmashala/scratch`, created with the project the
+/// first time), named by the day, the first words of [hint] and a short id,
+/// `git init`ed so checkpoints work, and recorded as a checkout. Answers that
+/// checkout, which the launch then runs in.
+final class ScratchCheckoutCreate extends GitWorkRequest<Repository> {
+  const ScratchCheckoutCreate({required this.environmentId, this.hint});
+
+  static const String name = 'projects.createScratchCheckout';
+
+  final String environmentId;
+
+  /// Words for the folder's name — the opening prompt, or the title.
+  final String? hint;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'hint': ?hint,
+  };
+
+  @override
+  Object? resultToJson(Repository result) => repositoryToJson(result);
+
+  @override
+  Repository resultFromJson(Object? json) =>
+      _decode(kind, () => repositoryFromJson(_object(json, kind)));
 }
 
 /// Scans project [projectId]'s root again and records the repositories it

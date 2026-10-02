@@ -634,3 +634,14 @@ void _migrateToV63(Database db) {
     'ON checkpoint_screenshots (session_id, captured_at);',
   );
 }
+
+/// What kind of project a row is. Null is an ordinary project; `scratch` is
+/// the server-owned folder sessions without a project run in, one per
+/// environment, which the rules key on rather than on its path.
+void _migrateToV64(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(projects);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('kind')) return;
+  db.execute('ALTER TABLE projects ADD COLUMN kind TEXT;');
+}

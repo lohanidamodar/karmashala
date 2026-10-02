@@ -88,6 +88,7 @@ final class ProjectCreate extends DataRequest<ProjectCheckouts> {
     required this.root,
     this.workspaceId,
     this.found = const [],
+    this.projectKind,
   });
 
   factory ProjectCreate._from(_Arguments args) => ProjectCreate(
@@ -95,6 +96,7 @@ final class ProjectCreate extends DataRequest<ProjectCheckouts> {
     root: args.value('root', environmentPathFromJson),
     workspaceId: args.optionalString('workspaceId'),
     found: args.found(),
+    projectKind: args.optionalString('projectKind'),
   );
 
   static const String name = 'projects.create';
@@ -103,6 +105,9 @@ final class ProjectCreate extends DataRequest<ProjectCheckouts> {
   final EnvironmentPath root;
   final String? workspaceId;
   final List<DiscoveredRepository> found;
+
+  /// `Project.kind` of the new row; null makes an ordinary project.
+  final String? projectKind;
 
   @override
   String get kind => name;
@@ -113,6 +118,7 @@ final class ProjectCreate extends DataRequest<ProjectCheckouts> {
     'root': environmentPathToJson(root),
     'workspaceId': ?workspaceId,
     'found': [for (final f in found) discoveredToJson(f)],
+    'projectKind': ?projectKind,
   };
 
   @override

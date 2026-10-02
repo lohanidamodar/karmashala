@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -26,13 +27,50 @@ String repoNameFromUrl(String url) {
   while (cleaned.endsWith('/')) {
     cleaned = cleaned.substring(0, cleaned.length - 1);
   }
-  final slashIndex = cleaned.lastIndexOf('/');
+  // A local path is a URL to git too, and on Windows its separators are
+  // backslashes — without this, `C:\src\repo` would name the repo `\src\repo`.
+  final slashIndex = max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf(r'\'));
   final colonIndex = cleaned.lastIndexOf(':');
   final lastSep = slashIndex > colonIndex ? slashIndex : colonIndex;
   if (lastSep != -1 && lastSep < cleaned.length - 1) {
     return cleaned.substring(lastSep + 1);
   }
   return cleaned;
+}
+
+/// The per-user folder Karmashala makes things in on a machine when nobody
+/// named one: clones land in `~/karmashala/<repo>`, sessions without a
+/// project in `~/karmashala/scratch/<folder>`.
+const String kKarmashalaFolder = 'karmashala';
+
+/// The folder under [kKarmashalaFolder] that sessions without a project run
+/// in, one subfolder each.
+const String kScratchFolder = 'scratch';
+
+/// What a session without a project is called on disk, and so in the
+/// workspace: the day, up to five words of [hint] — lower-case, letters and
+/// digits, hyphenated — and [id], so two sessions with one prompt on one day
+/// keep apart. `2026-09-25-convert-these-pngs-to-webp-a1b2c3`.
+String scratchFolderName(DateTime day, String? hint, String id) {
+  final date = day.toIso8601String().substring(0, 10);
+  final words = <String>[];
+  for (final raw in (hint ?? '').split(RegExp(r'\s+'))) {
+    final word = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (word.isEmpty) continue;
+    words.add(word);
+    if (words.length == 5) break;
+  }
+  var slug = words.join('-');
+  if (slug.length > 40) {
+    slug = slug.substring(0, 40).replaceAll(RegExp(r'-$'), '');
+  }
+  return [date, if (slug.isNotEmpty) slug, id].join('-');
+}
+
+/// Six hex characters: enough to keep one day's scratch folders apart.
+String scratchId([Random? random]) {
+  final r = random ?? Random.secure();
+  return r.nextInt(0x1000000).toRadixString(16).padLeft(6, '0');
 }
 
 /// **What only a machine with the folders can do for a project** — look at
@@ -48,21 +86,50 @@ class ProjectFolders {
     this.discovery = const LocalRepositoryDiscoveryService(),
     this.presence = const LocalCheckoutPresenceProbe(),
     CheckoutsRecorded? onRecorded,
-  }) : _onRecorded = onRecorded;
+    String? localHome,
+    DateTime Function()? now,
+    Random? random,
+  }) : _onRecorded = onRecorded,
+       _localHome = localHome,
+       _now = now ?? DateTime.now,
+       _random = random;
 
   final ServerToolContext _context;
   final CheckoutReach _reach;
   final RepositoryDiscoveryService discovery;
   final CheckoutPresenceProbe presence;
   final CheckoutsRecorded? _onRecorded;
+  final String? _localHome;
+  final DateTime Function() _now;
+  final Random? _random;
 
   /// How deep a scan looks below a project's root.
   static const int maxDepth = 5;
 
+  /// This machine's home folder, where `~/karmashala` is spelled out for the
+  /// local environment: injected by tests, read from the process otherwise.
+  String get localHome {
+    final injected = _localHome;
+    if (injected != null) return injected;
+    final env = Platform.environment;
+    final home = Platform.isWindows
+        ? (env['USERPROFILE'] ?? env['HOME'])
+        : (env['HOME'] ?? env['USERPROFILE']);
+    if (home == null || home.isEmpty) {
+      throw RepositoryDiscoveryException(
+        'Neither HOME nor USERPROFILE is set, so there is no ~/karmashala '
+        'folder to use. Choose a folder path instead.',
+      );
+    }
+    return home;
+  }
+
+  bool _isPosix(ExecutionEnvironment target) =>
+      target.kind == EnvironmentKind.ssh || target.kind == EnvironmentKind.wsl;
+
   /// Creates a project in [target], cloning [gitUrl] first when given. With
-  /// an empty [targetPath] a WSL environment clones into
-  /// `~/karmashala/<repo>`; a local one refuses. Discovery failures throw
-  /// before anything is written.
+  /// an empty [targetPath] the clone lands in `~/karmashala/<repo>`.
+  /// Discovery failures throw before anything is written.
   Future<ProjectCheckouts> create({
     required String name,
     required ExecutionEnvironment target,
@@ -76,14 +143,9 @@ class ProjectFolders {
 
     if (hasGit && path.isEmpty) {
       final repoName = repoNameFromUrl(url);
-      if (target.kind == EnvironmentKind.ssh ||
-          target.kind == EnvironmentKind.wsl) {
-        path = '~/karmashala/$repoName';
-      } else {
-        throw RepositoryDiscoveryException(
-          'Please choose a folder path to clone the repository into.',
-        );
-      }
+      path = _isPosix(target)
+          ? '~/$kKarmashalaFolder/$repoName'
+          : p.join(localHome, kKarmashalaFolder, repoName);
     } else if (path.isEmpty) {
       throw RepositoryDiscoveryException(
         'Please provide a folder path or a Git repository URL.',
@@ -102,6 +164,98 @@ class ProjectFolders {
     );
     await _recorded(created.repositories);
     return created;
+  }
+
+  /// A folder for a session without a project, under [target]'s Scratch
+  /// project — made with the project the first time — `git init`ed so
+  /// checkpoints have a tree to write, and recorded as a checkout named after
+  /// the folder. [hint] gives the folder its words.
+  Future<Repository> createScratchCheckout({
+    required ExecutionEnvironment target,
+    String? hint,
+  }) async {
+    final folder = scratchFolderName(_now(), hint, scratchId(_random));
+    final (:root, :path) = await _makeScratchFolder(target, folder);
+    final scratchRoot = EnvironmentPath(environmentId: target.id, path: root);
+    final location = EnvironmentPath(environmentId: target.id, path: path);
+    final found = [DiscoveredRepository(name: folder, path: location)];
+    final existing = ProjectDao(_context.database).scratchIn(target.id);
+    // The first folder is created with the project, so the root itself is
+    // never recorded as a place to run: each session gets its own beneath it.
+    final List<Repository> added;
+    if (existing == null) {
+      added = _context
+          .write(
+            ProjectCreate(
+              projectName: 'Scratch',
+              root: scratchRoot,
+              projectKind: Project.scratchKind,
+              found: found,
+            ),
+          )
+          .repositories;
+    } else {
+      added = _context.write(
+        CheckoutsAdd(projectId: existing.id, found: found, orRoot: false),
+      );
+    }
+    final checkout =
+        added.firstOrNull ??
+        RepositoryDao(_context.database).getByLocation(location).firstOrNull ??
+        (throw RepositoryDiscoveryException(
+          'The scratch folder $path was made but could not be recorded.',
+        ));
+    await _recorded(added);
+    return checkout;
+  }
+
+  /// Makes `~/karmashala/scratch/<folder>` in [target] with a repository in
+  /// it, and answers both the scratch root and the folder, spelled as that
+  /// environment spells them.
+  Future<({String root, String path})> _makeScratchFolder(
+    ExecutionEnvironment target,
+    String folder,
+  ) async {
+    final runner = _reach.runners.forEnvironment(target);
+    if (_isPosix(target)) {
+      final script =
+          '''
+ROOT="\$HOME/$kKarmashalaFolder/$kScratchFolder"
+TARGET="\$ROOT/${posixQuote(folder)}"
+mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" && pwd
+''';
+      final result = await runner.run(
+        CommandRequest(executable: 'sh', arguments: ['-c', script]),
+      );
+      final lines = result.stdout.trim().split('\n');
+      if (!result.ok || lines.length < 2) {
+        throw RepositoryDiscoveryException(
+          'Could not make a scratch folder on ${target.name}: '
+          '${result.stderr.trim()}',
+        );
+      }
+      return (root: lines[lines.length - 2].trim(), path: lines.last.trim());
+    }
+    final root = p.join(localHome, kKarmashalaFolder, kScratchFolder);
+    final path = p.join(root, folder);
+    Directory(path).createSync(recursive: true);
+    if (!Directory(p.join(path, '.git')).existsSync()) {
+      final result = await runner.run(
+        CommandRequest(
+          executable: 'git',
+          arguments: ['init', '-q', path],
+          environment: kGitChildEnvironment,
+          removedEnvironment: kGitRemovedEnvironment,
+        ),
+      );
+      if (!result.ok) {
+        throw RepositoryDiscoveryException(
+          'Could not initialise a repository in $path: '
+          '${result.stderr.trim()}',
+        );
+      }
+    }
+    return (root: root, path: path);
   }
 
   /// Re-reads [project]'s root for checkouts it does not record, records

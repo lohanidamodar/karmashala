@@ -26,6 +26,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_git/git.dart' show GitPresence;
 import 'package:karmashala_git/repositories.dart';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ScratchCheckoutCreate;
+import 'package:karmashala_projects/karmashala_projects.dart' show Project;
+
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
 import '../../support/fake_command_runner.dart';
@@ -474,6 +478,99 @@ void main() {
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);
     });
   });
+  group('without a project', () {
+    testWidgets('No project is the first pick, and needs no checkout', (
+      tester,
+    ) async {
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('No project'),
+      );
+
+      expect(find.text('Checkout'), findsNothing);
+      expect(
+        find.textContaining(
+          'Runs in its own folder under ~/karmashala/scratch',
+        ),
+        findsOneWidget,
+      );
+      // Where a session runs is still the agent's machine, so every agent is
+      // offered and Start is live.
+      expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
+      await closeAll(tester);
+    });
+
+    testWidgets('Start makes the scratch folder on the agent\'s machine, named '
+        'after the first message, and launches there', (tester) async {
+      // The server's answer: the folder it made, recorded under Scratch.
+      server.gitWork.answer = (request) {
+        if (request is! ScratchCheckoutCreate) return FakeGitWork.unhandled;
+        server.projectRows.insert(
+          project(
+            id: 'ps',
+            name: 'Scratch',
+            path: r'C:\Users\me\karmashala\scratch',
+            kind: Project.scratchKind,
+          ),
+        );
+        final folder = repository(
+          id: 'rs',
+          projectId: 'ps',
+          name: '2026-09-27-tidy-the-downloads-a1b2c3',
+          path:
+              r'C:\Users\me\karmashala\scratch\2026-09-27-tidy-the-downloads-a1b2c3',
+        );
+        server.repositoryRows.insert(folder);
+        return folder;
+      };
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('No project'),
+      );
+      final prompt = find.widgetWithText(TextField, 'First message (optional)');
+      await tester.ensureVisible(prompt);
+      await tester.enterText(prompt, 'Tidy the downloads');
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+
+      final asked = server.gitWork.asked.whereType<ScratchCheckoutCreate>();
+      expect(asked.single.environmentId, 'windows');
+      expect(asked.single.hint, 'Tidy the downloads');
+      expect(db.server.sessionRows.getByRepository('rs'), hasLength(1));
+      expect(find.byType(NewSessionDialog), findsNothing);
+      expect(container.read(selectedProjectIdProvider), 'ps');
+    });
+
+    testWidgets('a folder the server cannot make is said, and nothing starts', (
+      tester,
+    ) async {
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('No project'),
+      );
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Could not make a scratch folder'),
+        findsOneWidget,
+      );
+      expect(db.server.sessionRows.getAll(), isEmpty);
+      await closeAll(tester);
+    });
+  });
+
   testWidgets('a first message goes with the launch, and Ctrl+Enter starts', (
     tester,
   ) async {

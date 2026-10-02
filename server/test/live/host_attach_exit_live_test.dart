@@ -1,4 +1,7 @@
 @Tags(['live'])
+// The first case pays for the host build (`local_host_harness.dart`), which
+// outlasts package:test's default 30 s on a busy machine.
+@Timeout(Duration(minutes: 3))
 library;
 
 import 'dart:async';

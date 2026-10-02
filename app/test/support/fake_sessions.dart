@@ -560,7 +560,13 @@ extension _FakeSessionsHandling on FakeDataServer {
     if (candidate == null) {
       throw DataRefused.notFound('no checkout with id ${r.repositoryId}');
     }
-    if (primary == null || candidate.projectId != primary.projectId) {
+    // The server's rule: one project, unless the session runs in Scratch,
+    // which is a session without a project and may reach into any.
+    final scratch = primary == null
+        ? false
+        : (projectRows.getById(primary.projectId)?.isScratch ?? false);
+    if (primary == null ||
+        (candidate.projectId != primary.projectId && !scratch)) {
       throw const DataRefused.invalid(
         'A session can only span repositories within the same project.',
       );

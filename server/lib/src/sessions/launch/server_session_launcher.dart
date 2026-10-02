@@ -23,6 +23,7 @@ import '../../automations/daemon_checkout_facts.dart';
 import '../../automations/hosted_agent_launcher.dart';
 import '../../domain/session_registry.dart';
 import 'launch_settings.dart';
+import 'scratch_preamble.dart';
 
 /// Asks an agent's own store whether it holds a conversation.
 typedef ConversationPresenceIn =
@@ -235,9 +236,7 @@ class ServerSessionLauncher {
     String? notice;
     if (spec.existingWorktree == null && !spec.worktree) {
       final wanted =
-          spec.workingDirectory ??
-          reused?.workingDirectory ??
-          reused?.worktree;
+          spec.workingDirectory ?? reused?.workingDirectory ?? reused?.worktree;
       if (wanted != null && wanted != repository.path) {
         if (_present(wanted)) {
           workingDirectory = wanted;
@@ -266,9 +265,17 @@ class ServerSessionLauncher {
     final attribution = parent == null
         ? null
         : SessionAttribution(sessionId: parent.id, title: parent.title);
-    final prompt = spec.prompt == null || attribution == null
+    final attributed = spec.prompt == null || attribution == null
         ? spec.prompt
         : attribution.render(spec.prompt!);
+    // A fresh conversation in a scratch folder is told where it is and that
+    // the repositories are its to attach; a resumed one was told already.
+    final freshConversation =
+        !restarting && resumeId == null && spec.forkConversationId == null;
+    final prompt =
+        freshConversation && rows.isScratchProject(repository.projectId)
+        ? withScratchPreamble(launchDirectory.path, attributed)
+        : attributed;
 
     final started = await launcher.startDetailed(
       HostedLaunch(
@@ -334,9 +341,7 @@ class ServerSessionLauncher {
     if (restart) {
       final conversation = row.externalSessionId;
       if (conversation == null || conversation.isEmpty) {
-        final agent = this.rows
-            .installation(row.agentInstallationId)
-            ?.agentId;
+        final agent = this.rows.installation(row.agentInstallationId)?.agentId;
         throw StateError(
           '${agent == null ? 'The agent' : agents.nameOf(agent)} has not '
           'named a conversation for this session yet, so restarting it would '
@@ -388,11 +393,8 @@ class ServerSessionLauncher {
     }
   }
 
-  SessionStarted _adopted(Session row) => SessionStarted(
-    session: row,
-    adopted: true,
-    launch: _storedLaunchOf(row),
-  );
+  SessionStarted _adopted(Session row) =>
+      SessionStarted(session: row, adopted: true, launch: _storedLaunchOf(row));
 
   /// What a pane stores for [row]'s running terminal: enough to name its
   /// session and agent; its command line is the server's.
@@ -535,8 +537,8 @@ class ServerSessionLauncher {
     final agentId = installation.agentId;
     if (!agents.assignsOwnSessionId(agentId)) return null;
     final existing = sessions.getById(conversation);
-    final minted = existing != null &&
-            existing.externalSessionId == conversation
+    final minted =
+        existing != null && existing.externalSessionId == conversation
         ? existing
         : null;
     final row = minted ?? reused;

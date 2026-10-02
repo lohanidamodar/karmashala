@@ -70,6 +70,27 @@ void main() {
             ),
             size,
           );
+          // A second series under the first, and one that is out of step
+          // with it: both paint, neither throws.
+          paintAt(
+            SparklinePainter(
+              values: values,
+              color: Colors.teal,
+              areaAlpha: 0.2,
+              secondaryValues: [for (final v in values) v / 2],
+              secondaryColor: Colors.amber,
+            ),
+            size,
+          );
+          paintAt(
+            SparklinePainter(
+              values: values,
+              color: Colors.teal,
+              secondaryValues: const [1, double.nan, 2],
+              secondaryColor: Colors.amber,
+            ),
+            size,
+          );
           paintAt(
             TimeSeriesPainter(
               geometry: TimeSeriesGeometry(
@@ -202,6 +223,49 @@ void main() {
         }
       }
     }
+  });
+
+  group('a sparkline with a second series', () {
+    test('repaints when only that series changes', () {
+      const before = SparklinePainter(
+        values: [4, 8],
+        color: Colors.teal,
+        secondaryValues: [1, 2],
+        secondaryColor: Colors.amber,
+      );
+      const same = SparklinePainter(
+        values: [4, 8],
+        color: Colors.teal,
+        secondaryValues: [1, 2],
+        secondaryColor: Colors.amber,
+      );
+      const moved = SparklinePainter(
+        values: [4, 8],
+        color: Colors.teal,
+        secondaryValues: [1, 3],
+        secondaryColor: Colors.amber,
+      );
+      expect(same.shouldRepaint(before), isFalse);
+      expect(moved.shouldRepaint(before), isTrue);
+    });
+
+    testWidgets('lays out in a box that measures its content', (tester) async {
+      final overflows = await pumpInBox(
+        tester,
+        width: 200,
+        child: const IntrinsicWidth(
+          child: Sparkline(
+            values: [4, 8, 6],
+            secondaryValues: [1, 5, 2],
+            secondaryColor: Colors.amber,
+            color: Colors.teal,
+            semanticsLabel: 'stacked',
+          ),
+        ),
+      );
+      expect(overflows, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('every chart names itself to a screen reader', (tester) async {
