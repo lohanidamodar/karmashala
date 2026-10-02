@@ -41,19 +41,18 @@ void main() {
         acpArgumentsFor(
           installation('/usr/bin/npx', leading: ['-y', '@example/agent@1']),
           spec,
-          'Agent',
         ),
         ['-y', '@example/agent@1', '--acp'],
       );
       expect(
-        acpArgumentsFor(installation('/home/me/.local/bin/gemini'), spec, 'A'),
+        acpArgumentsFor(installation('/home/me/.local/bin/gemini'), spec),
         ['--acp'],
       );
     });
 
     test('an npx recorded with nothing in front runs the declared package', () {
       for (final path in ['/usr/sbin/npx', r'C:\nodejs\npx.cmd', 'NPX.EXE']) {
-        expect(acpArgumentsFor(installation(path), spec, 'Agent'), [
+        expect(acpArgumentsFor(installation(path), spec), [
           '-y',
           '@example/agent',
           '--acp',
@@ -61,20 +60,16 @@ void main() {
       }
     });
 
-    test('an npx with no package to run is refused in words', () {
+    test('a person\'s own npx row, which names its package itself, is left '
+        'as given', () {
+      // A row from the registry: command `npx`, arguments carrying the
+      // package; it declares no npxPackage of its own.
       expect(
-        () => acpArgumentsFor(
+        acpArgumentsFor(
           installation('/usr/sbin/npx'),
-          const AcpLaunchSpec(arguments: ['--acp']),
-          'My agent',
+          const AcpLaunchSpec(arguments: ['-y', '@github/copilot', '--acp']),
         ),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            allOf(contains('My agent'), contains('npx'), contains('Discover')),
-          ),
-        ),
+        ['-y', '@github/copilot', '--acp'],
       );
     });
   });

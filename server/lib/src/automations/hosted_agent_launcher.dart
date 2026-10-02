@@ -678,7 +678,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required void Function(Object? error)? settleWorktree,
   }) async {
     try {
-      final arguments = acpArgumentsFor(installation, acp, agentName);
+      final arguments = acpArgumentsFor(installation, acp);
       final factory = acpRuntimes;
       if (factory == null) {
         throw StateError(
@@ -881,25 +881,21 @@ String promptFilePointer(String path, {required bool isPacket}) => isPacket
 /// An installation recorded before discovery kept its leading arguments
 /// names `npx` with nothing to run; `npx --acp` then waits on a terminal
 /// nobody has, and the start hangs without a word. The package the
-/// descriptor declares fills that in, and an `npx` with no package to run is
-/// refused in words rather than started.
+/// descriptor declares fills that in. A person's own agent row names its
+/// package among its own arguments and declares none, so it is left as
+/// given.
 List<String> acpArgumentsFor(
   AgentInstallation installation,
   AcpLaunchSpec spec,
-  String agentName,
 ) {
   final leading = installation.leadingArguments;
-  if (leading.isNotEmpty || !_isNpx(installation.executable.path)) {
-    return [...leading, ...spec.arguments];
-  }
   final package = spec.npxPackage;
-  if (package == null) {
-    throw StateError(
-      '$agentName is recorded as npx with no package to run; run Discover '
-      'agents in Settings, or install it on that machine.',
-    );
+  if (leading.isEmpty &&
+      package != null &&
+      _isNpx(installation.executable.path)) {
+    return ['-y', package, ...spec.arguments];
   }
-  return ['-y', package, ...spec.arguments];
+  return [...leading, ...spec.arguments];
 }
 
 bool _isNpx(String executable) {
