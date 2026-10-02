@@ -351,3 +351,6 @@ if ($RelayUrl) {
 }
 
 Install-Karmashala @args
+# Reached only on success: the last check of the binary may have answered
+# "not yet", which must not read as the install having failed.
+$global:LASTEXITCODE = 0
