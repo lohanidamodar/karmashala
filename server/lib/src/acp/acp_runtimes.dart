@@ -83,7 +83,9 @@ class AcpRuntimes {
           executable: start.executable,
           arguments: start.arguments,
           workingDirectory: start.directory,
-          environment: start.variables,
+          // A custom agent's own variables first, so the session id and
+          // anything the launcher withholds still win.
+          environment: {...start.spec.environment, ...start.variables},
           removedEnvironment: start.removed,
         ),
       ),
