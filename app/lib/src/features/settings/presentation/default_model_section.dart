@@ -6,7 +6,6 @@ import 'package:agent_cli/descriptors.dart';
 import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../application/settings_controller.dart';
-import 'agent_label.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
@@ -72,7 +71,7 @@ class _ModelCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  agentLabel(descriptor.id),
+                  descriptor.displayName,
                   style: theme.textTheme.titleSmall,
                 ),
               ),

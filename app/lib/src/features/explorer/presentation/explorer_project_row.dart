@@ -153,6 +153,7 @@ class ExplorerProjectRow extends ConsumerWidget {
             installations: ref
                 .read(agentInstallationsDataProvider)
                 .getByEnvironment(project.root.environmentId),
+            registry: ref.read(agentRegistryProvider),
             canReveal: ref
                 .read(revealInFileManagerProvider)
                 .canReveal(project.root),
@@ -411,6 +412,7 @@ List<PopupMenuEntry<String>> projectMenuItems({
   required List<Workspace> workspaces,
   required Map<String, int> workspaceCounts,
   required List<AgentInstallation> installations,
+  required AgentRegistry registry,
   required bool canReveal,
   required String checkedSuffix,
   bool canOpenExternally = true,
@@ -433,7 +435,7 @@ List<PopupMenuEntry<String>> projectMenuItems({
         value: 'new-with:${installation.id}',
         label:
             'New session with '
-            '${AgentRegistry.builtIn.displayNameFor(installation.agentId)}',
+            '${registry.displayNameFor(installation.agentId)}',
         icon: AppIcons.robot,
       ),
   DesktopMenuItem(

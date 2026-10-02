@@ -86,7 +86,7 @@ class _AccountComparison extends ConsumerWidget {
       bars.add(
         BarDatum(
           label:
-              '${agentLabel(installation.agentId)} · '
+              '${agentLabel(ref, installation.agentId)} · '
               '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}'
               ' · ${tightest.label}',
           value: percent.clamp(0, 100).toDouble(),
@@ -178,7 +178,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = agentLabel(widget.installation.agentId);
+    final label = agentLabel(ref, widget.installation.agentId);
     final usage = _usage;
     final failure = _failure;
     final now = ref.watch(clockProvider).nowUtc();

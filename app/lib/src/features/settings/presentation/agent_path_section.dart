@@ -168,7 +168,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
             children: [
               Expanded(
                 child: Text(
-                  '${agentLabel(install.agentId)} · $environment'
+                  '${agentLabel(ref, install.agentId)} · $environment'
                   '${version == null ? '' : ' · $version'}',
                   style: SettingsStyles.rowLabel(context),
                   overflow: TextOverflow.ellipsis,

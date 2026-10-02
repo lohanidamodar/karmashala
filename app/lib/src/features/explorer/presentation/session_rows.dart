@@ -11,7 +11,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_resume_providers.dart';
@@ -133,6 +132,7 @@ class NativeSessionRow extends ConsumerWidget {
     );
     // A value type: a bump that did not change these words rebuilds nothing.
     final resume = ref.watch(sessionResumeBadgeProvider(session.id));
+    final registry = ref.watch(agentRegistryProvider);
 
     return SessionCard(
       depth: depth,
@@ -143,15 +143,11 @@ class NativeSessionRow extends ConsumerWidget {
       agentMark: agentId == null
           ? null
           : AgentLogo(agentId: agentId, size: ExplorerRow.glyphSize),
-      agentName: agentId == null
-          ? null
-          : AgentRegistry.builtIn.displayNameFor(agentId),
+      agentName: agentId == null ? null : registry.displayNameFor(agentId),
       environment: environment,
       statusLabel: _capitalised(lifecycle),
       agentLabel: [
-        agentId == null
-            ? 'Agent'
-            : AgentRegistry.builtIn.displayNameFor(agentId),
+        agentId == null ? 'Agent' : registry.displayNameFor(agentId),
         // The glyph says the lifecycle; a row claiming to be live with nothing
         // of ours running it still says so in words (`SessionStatus.labelWhen`).
         if (lifecycle != status.name) lifecycle,
@@ -304,7 +300,9 @@ class ImportedSessionRow extends ConsumerWidget {
     final tickEnabled = ref.watch(
       sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
     );
-    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
+    final cliLabel = ref
+        .watch(agentRegistryProvider)
+        .displayNameFor(session.cli);
     final attention = ref.watch(
       sessionRowAttentionProvider.select(
         (rows) => rows[session.id] ?? SessionRowAttention.none,

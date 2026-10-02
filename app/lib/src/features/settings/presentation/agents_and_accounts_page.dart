@@ -26,6 +26,7 @@ import '../../agents/presentation/usage_tab/usage_tab_state.dart'
     show usageAccountId;
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
+import 'acp_agents_section.dart';
 import 'agent_detection_section.dart';
 import 'agent_label.dart';
 import 'agent_path_section.dart';
@@ -120,6 +121,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
             anchor: SettingsAnchor.defaultModel,
             child: SizedBox.shrink(),
           ),
+        const AcpAgentsSection(),
         const SettingsAnchorTarget(
           anchor: SettingsAnchor.usage,
           child: UsageAndLimitsSection(),
@@ -201,7 +203,7 @@ class _AgentBlockState extends ConsumerState<AgentBlock> {
     final registry = ref.watch(agentRegistryProvider);
     final adapter = registry.adapterFor(agentId);
     final store = _AccountStore.of(adapter);
-    final name = agentLabel(agentId);
+    final name = agentLabel(ref, agentId);
     final installs = [
       for (final install in ref.watch(agentInstallationsControllerProvider))
         if (install.agentId == agentId) install,

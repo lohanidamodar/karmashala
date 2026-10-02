@@ -12,7 +12,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../agents/data/agents_data.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -108,20 +108,18 @@ class LensSessionRow extends ConsumerWidget {
 
     // The hover says what the row clips: the whole title, the agent, where it
     // runs and where it lives.
+    final registry = ref.watch(agentRegistryProvider);
     final environmentId = entry.directory?.environmentId;
     final hoverText = [
       entry.title,
       [
-        if (agentId != null) AgentRegistry.builtIn.displayNameFor(agentId),
+        if (agentId != null) registry.displayNameFor(agentId),
         if (environmentId != null)
           ref.watch(environmentLabelForIdProvider(environmentId)),
       ].join('  ·  '),
       clauses.join('  ·  '),
     ].where((line) => line.isNotEmpty).join('\n');
-    Widget hover(Widget child) => Tooltip(
-      message: hoverText,
-      child: child,
-    );
+    Widget hover(Widget child) => Tooltip(message: hoverText, child: child);
 
     final waiting = state == AgentState.needsYou;
     // What it waits on, in one word (board N1): "approve" or "question" when
@@ -258,9 +256,7 @@ class LensSessionRow extends ConsumerWidget {
                     agentMark: agentId == null
                         ? null
                         : Tooltip(
-                            message: AgentRegistry.builtIn.displayNameFor(
-                              agentId,
-                            ),
+                            message: registry.displayNameFor(agentId),
                             child: AgentLogo(
                               agentId: agentId,
                               size: ExplorerRow.glyphSize,
@@ -288,13 +284,9 @@ class LensSessionRow extends ConsumerWidget {
                     children: [
                       if (agentId != null) ...[
                         Tooltip(
-                          message: AgentRegistry.builtIn.displayNameFor(
-                            agentId,
-                          ),
+                          message: registry.displayNameFor(agentId),
                           child: Semantics(
-                            label: AgentRegistry.builtIn.displayNameFor(
-                              agentId,
-                            ),
+                            label: registry.displayNameFor(agentId),
                             child: SizedBox.square(
                               dimension: ExplorerRow.glyphSize,
                               child: Center(

@@ -50,7 +50,7 @@ class DefaultAgentSection extends ConsumerWidget {
                     DropdownMenuItem(
                       value: install.id,
                       child: Text(
-                        '${agentLabel(install.agentId)} · '
+                        '${agentLabel(ref, install.agentId)} · '
                         '${ref.watch(environmentLabelForIdProvider(install.environmentId))}',
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -112,7 +112,7 @@ class AgentUpdatesSection extends ConsumerWidget {
             ),
             for (final (agentId, command) in updatable)
               SettingsRow(
-                label: agentLabel(agentId),
+                label: agentLabel(ref, agentId),
                 control: SettingsValue(
                   label: command.join(' '),
                   mono: true,
