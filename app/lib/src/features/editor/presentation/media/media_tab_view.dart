@@ -27,6 +27,7 @@ class MediaTabView extends ConsumerStatefulWidget {
     this.onOpenExternally,
     this.onAttachToChat,
     this.attachDisabledReason,
+    this.showsAttach = true,
     this.showing = true,
     super.key,
   });
@@ -45,6 +46,11 @@ class MediaTabView extends ConsumerStatefulWidget {
   /// tooltip.
   final VoidCallback? onAttachToChat;
   final String? attachDisabledReason;
+
+  /// False hides "Attach to chat" outright: a phone not granted
+  /// `send_attachment`, where an offered file could only wait in a queue the
+  /// composer will never take it from.
+  final bool showsAttach;
 
   @override
   ConsumerState<MediaTabView> createState() => _MediaTabViewState();
@@ -195,13 +201,14 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
             child: VerticalDivider(width: Insets.md),
           ),
         ],
-        _IconAction(
-          tooltip: attach != null
-              ? 'Attach to chat'
-              : (widget.attachDisabledReason ?? 'Attach to chat'),
-          icon: AppIcons.paperclip,
-          onPressed: attach,
-        ),
+        if (widget.showsAttach)
+          _IconAction(
+            tooltip: attach != null
+                ? 'Attach to chat'
+                : (widget.attachDisabledReason ?? 'Attach to chat'),
+            icon: AppIcons.paperclip,
+            onPressed: attach,
+          ),
         if (copyImage != null)
           _IconAction(
             tooltip: 'Copy image',
@@ -241,6 +248,7 @@ class _MediaTabViewState extends ConsumerState<MediaTabView> {
         onCopyPath: widget.onCopyPath,
         onAttachToChat: widget.onAttachToChat,
         attachDisabledReason: widget.attachDisabledReason,
+        showsAttach: widget.showsAttach,
       );
     }
     if (document.copyProgress case final progress? when !document.isReady) {
@@ -425,11 +433,13 @@ class _NoPlaybackCard extends StatelessWidget {
     required this.onCopyPath,
     this.onAttachToChat,
     this.attachDisabledReason,
+    this.showsAttach = true,
   });
 
   final VoidCallback onCopyPath;
   final VoidCallback? onAttachToChat;
   final String? attachDisabledReason;
+  final bool showsAttach;
 
   @override
   Widget build(BuildContext context) {
@@ -450,7 +460,9 @@ class _NoPlaybackCard extends StatelessWidget {
             icon: const Icon(AppIcons.copySimple),
             label: const Text('Copy path'),
           ),
-          if (onAttachToChat == null && attachDisabledReason != null)
+          if (!showsAttach)
+            const SizedBox.shrink()
+          else if (onAttachToChat == null && attachDisabledReason != null)
             Tooltip(message: attachDisabledReason, child: attach)
           else
             attach,

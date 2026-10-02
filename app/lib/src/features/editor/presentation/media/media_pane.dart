@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/capabilities/capabilities.dart';
 import '../../../explorer/application/session_context.dart';
 import '../../../files/application/server_file_opening.dart';
 import '../../../notes/application/composer_draft.dart';
@@ -48,6 +49,9 @@ class MediaPane extends ConsumerWidget {
     return MediaTabView(
       hostPath: hostPath,
       showing: showing,
+      // The composer's own gate: a phone not granted send_attachment would
+      // queue a file no message box ever takes.
+      showsAttach: ref.watch(capabilitiesProvider).mayAttach,
       onCopyPath: () => copyToClipboard(context, file.path, 'Path'),
       // A file on an SSH host or behind a server elsewhere is brought here
       // first, so this works wherever there is a default app to hand it to.
