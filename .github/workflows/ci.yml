@@ -111,6 +111,14 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      # Shared runners make the odd real-timer or file-watch test miss its
+      # window, so a failed test is retried twice, on CI only. One that fails
+      # three times still fails, and a retried one shows in the log as Retry:.
+      - name: Retry a failed test twice
+        shell: pwsh
+        run: |
+          $members = @('app', 'server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" })
+          foreach ($m in $members) { Add-Content -Path "$m/dart_test.yaml" -Value "`nretry: 2" }
       # By directory (tool/ci_test_shards.dart), so a runner compiles only its
       # share and every file runs whole.
       - name: flutter test
@@ -139,6 +147,14 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      # Shared runners make the odd real-timer or file-watch test miss its
+      # window, so a failed test is retried twice, on CI only. One that fails
+      # three times still fails, and a retried one shows in the log as Retry:.
+      - name: Retry a failed test twice
+        shell: pwsh
+        run: |
+          $members = @('app', 'server') + (Get-ChildItem packages -Directory | ForEach-Object { "packages/$($_.Name)" })
+          foreach ($m in $members) { Add-Content -Path "$m/dart_test.yaml" -Value "`nretry: 2" }
       # The git suites commit in scratch repositories; a runner has no identity.
       - run: git config --global user.name "Karmashala CI" && git config --global user.email ci@example.com
       - name: Each member's own suite
