@@ -46,9 +46,11 @@ each release.
 
 ## Platforms
 
-Windows is the primary target and the best tested. Windows, macOS and Linux
-builds are attached to every GitHub release; the macOS build is ad-hoc signed
-and not notarised. The phone app targets Android first, then iOS.
+Windows is the primary target and the best tested. Windows, macOS, Linux and
+Android builds are attached to every GitHub release; the macOS build is ad-hoc
+signed and not notarised. Linux comes as a tarball and as an AppImage, which
+carries its own libraries but uses the system's GTK 3 and OpenGL. The phone app
+targets Android first, then iOS.
 
 ## Requirements
 
@@ -106,11 +108,11 @@ distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
   them.
 - Publishing a GitHub release runs
   [`release-build.yml`](.github/workflows/release-build.yml), which attaches the
-  Windows installer and portable zip, the macOS DMG, the Linux tarball and the
-  server bundles, and
-  [`android-release.yml`](.github/workflows/android-release.yml), which attaches
-  the Android APK and AAB and ships to Google Play's internal track. Either can
-  also be run by hand.
+  Windows installer and portable zip, the macOS DMG, the Linux tarball and
+  AppImage ([`tool/package_appimage.sh`](tool/package_appimage.sh)), the server
+  bundles and the Android APK.
+- [`android-release.yml`](.github/workflows/android-release.yml) uploads to
+  Google Play, and only when run by hand.
 
 [`tool/build_release.bat`](tool/build_release.bat) and
 [`tool/build_release.sh`](tool/build_release.sh) build the same desktop
