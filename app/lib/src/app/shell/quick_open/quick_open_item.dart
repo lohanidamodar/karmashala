@@ -69,6 +69,7 @@ class QuickOpenItem {
     this.detail,
     this.keywords = const [],
     this.weight = 0,
+    this.opensTab = false,
   });
 
   /// Stable across rebuilds, so the selected row survives a refresh in place.
@@ -91,6 +92,13 @@ class QuickOpenItem {
   /// A per-item prior, added to the match score. Recency and "you are already
   /// here" live here; nothing about the *query* does.
   final double weight;
+
+  /// Whether [onSelect] lands in a workbench tab — a session, a file, a
+  /// Settings page — and so can be opened **to the side** (Ctrl+Enter, or the
+  /// row's own button). Said by the row rather than guessed from its group:
+  /// "New session…" is a session row that opens a dialog. False rows treat
+  /// Ctrl+Enter as Enter.
+  final bool opensTab;
 
   final VoidCallback onSelect;
 }

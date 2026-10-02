@@ -9,6 +9,8 @@ import 'package:karmashala_git/git.dart';
 
 import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show SplitAxis;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -143,6 +145,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   /// The steps gone down into, innermost last; empty is the full list.
   final List<_StepFrame> _steps = [];
 
+  /// True only while a row picked "to the side" runs: what [_sources]'
+  /// `dismiss` reads to run the row's action as an open beside.
+  bool _openingBeside = false;
+
   @override
   void initState() {
     super.initState();
@@ -229,8 +235,16 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       // *after* quick open has popped, and a route on its way out is no host.
       context: navigator.context,
       dismiss: (action) {
+        // Resolved before the pop: an unmounted element has no `ref` to read.
+        final terminals = _openingBeside
+            ? ref.read(terminalSessionsControllerProvider.notifier)
+            : null;
         navigator.pop();
-        action();
+        if (terminals == null) {
+          action();
+        } else {
+          terminals.openBeside(action);
+        }
       },
       push: _push,
       phone: ref.read(phoneShellRouterProvider).current,
@@ -677,12 +691,55 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     if (target != null) _scroll.jumpTo(target);
   }
 
-  void _activate() {
+  void _activate({bool beside = false}) {
     if (_flat.isEmpty) return;
-    _flat[_selected].item.onSelect();
+    _pick(_flat[_selected].item, beside: beside);
+  }
+
+  /// Runs [item]; [beside] opens its tab to the side where that is offered,
+  /// and is plain Enter everywhere else — a dialog has no side to open on.
+  void _pick(QuickOpenItem item, {bool beside = false}) {
+    if (!beside || !_offersBeside(item)) {
+      item.onSelect();
+      return;
+    }
+    _openingBeside = true;
+    try {
+      item.onSelect();
+    } finally {
+      _openingBeside = false;
+    }
+  }
+
+  /// Whether this window can put a tab beside the work at all: never on a
+  /// phone, which shows one group, nor in a window too narrow to split, nor
+  /// before there is a group to be beside.
+  bool get _besideAvailable =>
+      ref.read(phoneShellRouterProvider).current == null &&
+      !WidthClass.of(MediaQuery.sizeOf(context).width).isCompact &&
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .canSplitWorkspace(SplitAxis.horizontal);
+
+  bool _offersBeside(QuickOpenItem item) => item.opensTab && _besideAvailable;
+
+  /// Ctrl+Enter — ⌘Enter on macOS — VS Code's "open to the side".
+  static bool _isBesideChord(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final keyboard = HardwareKeyboard.instance;
+    return commandActivator(
+          LogicalKeyboardKey.enter,
+        ).accepts(event, keyboard) ||
+        commandActivator(
+          LogicalKeyboardKey.numpadEnter,
+        ).accepts(event, keyboard);
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (_isBesideChord(event)) {
+      _activate(beside: true);
+      return KeyEventResult.handled;
+    }
     // Backspace on an empty box goes back a step. A press, not a repeat: a held
     // key that has just emptied the query must not carry on up the stack.
     if (event is KeyDownEvent &&
@@ -713,6 +770,14 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   Widget build(BuildContext context) {
     final count = _flat.length;
     final step = _steps.lastOrNull?.step;
+    final besideAvailable = _besideAvailable;
+    // Said only while the highlighted row can do it, so the footer never
+    // offers a key that would do what Enter does.
+    final besideHint =
+        besideAvailable && _flat.isNotEmpty && _flat[_selected].item.opensTab
+        ? '${commandChordLabel('Enter')}  open to the side   ·   '
+        : '';
+    final rows = _rows(besideAvailable: besideAvailable);
     return QuickOpenFrame(
       // Wide enough for a path and its shortcut on one row, narrow enough that
       // the eye does not travel from a title to a chip across the window.
@@ -734,8 +799,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
           : ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.zero,
-              itemCount: _rows.length,
-              itemBuilder: (context, index) => _rows[index],
+              itemCount: rows.length,
+              itemBuilder: (context, index) => rows[index],
             ),
       footer: QuickOpenFooter(
         leading: Row(
@@ -751,10 +816,11 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         // The sigils are a hint, not a control: at a narrow width they
         // ellipsise rather than push the result count off the row.
         hint: step != null
-            ? 'Enter  open   ·   Backspace  back   ·   Esc  close'
+            ? 'Enter  open   ·   ${besideHint}Backspace  back   ·   Esc  close'
             : _commandRows.isNotEmpty && _controller.text.trim().isNotEmpty
             ? 'Tab  complete   ·   Enter  run   ·   Esc  close'
-            : r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
+            : '$besideHint'
+                  r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
                   r'/  files   ·   $  snippets   ·   ~  presets',
       ),
     );
@@ -766,8 +832,10 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 
   /// Headers and rows, flattened once per build so the list and the offset
-  /// arithmetic cannot drift apart.
-  List<Widget> get _rows {
+  /// arithmetic cannot drift apart. [besideAvailable] gives each row that
+  /// opens a tab its "open to the side" button.
+  List<Widget> _rows({required bool besideAvailable}) {
+    final besideTooltip = 'Open to the side (${commandChordLabel('Enter')})';
     final widgets = <Widget>[];
     var seen = 0;
     for (final section in _sections) {
@@ -791,8 +859,15 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
             selected: index == _selected,
             onTap: () {
               setState(() => _selected = index);
-              result.item.onSelect();
+              _pick(result.item);
             },
+            besideTooltip: besideTooltip,
+            onOpenBeside: besideAvailable && result.item.opensTab
+                ? () {
+                    setState(() => _selected = index);
+                    _pick(result.item, beside: true);
+                  }
+                : null,
           ),
         );
       }

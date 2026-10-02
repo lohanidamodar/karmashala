@@ -356,7 +356,7 @@ class _Breadcrumb extends StatelessWidget {
 
 /// One row of a filtered list: a glyph, a title with the matches picked out,
 /// where it lives, and a trailing note. Plain fields, so two lists share it.
-class QuickOpenRow extends StatelessWidget {
+class QuickOpenRow extends StatefulWidget {
   const QuickOpenRow({
     required this.icon,
     required this.title,
@@ -368,6 +368,8 @@ class QuickOpenRow extends StatelessWidget {
     this.trailing,
     this.enabled = true,
     this.detailIsShortcut = false,
+    this.onOpenBeside,
+    this.besideTooltip = 'Open to the side',
     super.key,
   });
 
@@ -397,11 +399,42 @@ class QuickOpenRow extends StatelessWidget {
 
   final VoidCallback onTap;
 
+  /// Opens what the row names **to the side** — VS Code's split button at the
+  /// end of a quick-pick row. Drawn only while the row is hovered or is the
+  /// keyboard's; null for a row that opens no tab.
+  final VoidCallback? onOpenBeside;
+
+  /// What the [onOpenBeside] button says, with the chord that does the same.
+  final String besideTooltip;
+
   /// The most of the row a [detail] may take.
   static const _detailShare = 0.4;
 
   @override
+  State<QuickOpenRow> createState() => _QuickOpenRowState();
+}
+
+class _QuickOpenRowState extends State<QuickOpenRow> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final QuickOpenRow(
+      :icon,
+      :title,
+      :selected,
+      :onTap,
+      :titlePositions,
+      :subtitle,
+      :detail,
+      :trailing,
+      :enabled,
+      :detailIsShortcut,
+      :onOpenBeside,
+    ) = widget;
+    final beside = onOpenBeside == null || !(_hovered || selected)
+        ? null
+        : _BesideButton(tooltip: widget.besideTooltip, onPressed: onOpenBeside);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
@@ -434,6 +467,9 @@ class QuickOpenRow extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
+            onHover: (hovered) {
+              if (hovered != _hovered) setState(() => _hovered = hovered);
+            },
             borderRadius: radius,
             hoverColor: StateLayers.hover(scheme),
             child: Container(
@@ -447,7 +483,9 @@ class QuickOpenRow extends StatelessWidget {
               ),
               padding: EdgeInsets.only(
                 left: Insets.sm,
-                right: trailing == null ? Insets.sm : Insets.xs,
+                right: trailing == null && beside == null
+                    ? Insets.sm
+                    : Insets.xs,
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) => Row(
@@ -467,7 +505,7 @@ class QuickOpenRow extends StatelessWidget {
                           ),
                           if (subtitle != null)
                             Text(
-                              subtitle!,
+                              subtitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: subtle,
@@ -482,12 +520,13 @@ class QuickOpenRow extends StatelessWidget {
                       // overflowing.
                       ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxWidth: constraints.maxWidth * _detailShare,
+                          maxWidth:
+                              constraints.maxWidth * QuickOpenRow._detailShare,
                         ),
                         child: detailIsShortcut
-                            ? QuickOpenKeyChip(detail!)
+                            ? QuickOpenKeyChip(detail)
                             : Text(
-                                detail!,
+                                detail,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: subtle,
@@ -496,13 +535,50 @@ class QuickOpenRow extends StatelessWidget {
                     ],
                     if (trailing != null) ...[
                       const SizedBox(width: Insets.xs),
-                      trailing!,
+                      trailing,
+                    ],
+                    if (beside != null) ...[
+                      const SizedBox(width: Insets.xs),
+                      beside,
                     ],
                   ],
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// [QuickOpenRow.onOpenBeside] as a glyph at the row's end. Never focusable:
+/// the keyboard stays in the box, where Ctrl+Enter already does the same.
+class _BesideButton extends StatelessWidget {
+  const _BesideButton({required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: Chrome.control,
+      child: Focus(
+        canRequestFocus: false,
+        descendantsAreFocusable: false,
+        child: IconButton(
+          tooltip: tooltip,
+          visualDensity: VisualDensity.compact,
+          iconSize: Chrome.iconSmall,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(
+            width: Chrome.control,
+            height: Chrome.control,
+          ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          icon: const Icon(AppIcons.squareSplitHorizontal),
+          onPressed: onPressed,
         ),
       ),
     );

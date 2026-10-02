@@ -182,6 +182,11 @@ String _commandLabel(String key, {bool shift = false, bool alt = false}) =>
     ? '${alt ? '⌥' : ''}${shift ? '⇧' : ''}⌘$key'
     : 'Ctrl+${alt ? 'Alt+' : ''}${shift ? 'Shift+' : ''}$key';
 
+/// [_commandLabel] for a chord a surface handles itself rather than through
+/// this table — quick open's Ctrl+Enter, "open to the side".
+String commandChordLabel(String key, {bool shift = false, bool alt = false}) =>
+    _commandLabel(key, shift: shift, alt: alt);
+
 const _digits = [
   LogicalKeyboardKey.digit1,
   LogicalKeyboardKey.digit2,

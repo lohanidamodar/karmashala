@@ -1,5 +1,6 @@
 import '../../../core/capabilities/capabilities.dart';
 import '../../../features/workspaces/data/workspace_data.dart';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -146,8 +147,10 @@ class QuickOpenSources {
   final BuildContext context;
 
   /// Closes the surface before acting, so a dialog opened from here is not
-  /// stacked underneath it.
-  final void Function(VoidCallback action) dismiss;
+  /// stacked underneath it. An [action] that returns a future — a session's
+  /// resume — is still in progress until it completes, which is how an
+  /// "open to the side" knows how long to wait for its tab.
+  final void Function(FutureOr<void> Function() action) dismiss;
 
   /// Goes down a level, the palette staying open: a project lists what can be
   /// done with it rather than jumping to it (owner, 2026-10-01).
@@ -235,6 +238,7 @@ class QuickOpenSources {
     String? subtitle,
     String? shortcut,
     List<String> keywords = const [],
+    bool opensTab = false,
   }) => QuickOpenItem(
     id: 'command/$label',
     group: QuickOpenGroup.commands,
@@ -244,6 +248,7 @@ class QuickOpenSources {
     icon: icon,
     keywords: keywords,
     weight: _commandWeight,
+    opensTab: opensTab,
     onSelect: () => dismiss(onSelect),
   );
 
@@ -287,6 +292,7 @@ class QuickOpenSources {
           subtitle: all == 1 ? '1 waiting' : '$all waiting',
           icon: AppIcons.clock,
           keywords: keywords,
+          opensTab: true,
           onSelect: () =>
               openSettingsTab(ref, anchor: SettingsAnchor.scheduledResumes),
         ),
@@ -335,6 +341,8 @@ class QuickOpenSources {
             'save for later',
             'scratchpad',
           ],
+          // The note opens in a tab of its own.
+          opensTab: true,
           onSelect: _onPhone
               ? _seen(() => writeNewNote(ref))
               : () {
@@ -514,6 +522,7 @@ class QuickOpenSources {
         icon: AppIcons.folderOpen,
         shortcut: shellCommandLabel('files.browse'),
         keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
+        opensTab: true,
         onSelect: _seen(() => openFilesTabHere(ref)),
       ),
       _command(
@@ -521,6 +530,7 @@ class QuickOpenSources {
         icon: AppIcons.gearSix,
         shortcut: shellCommandLabel('settings.open'),
         keywords: const ['preferences', 'options'],
+        opensTab: true,
         onSelect: () => openSettingsTab(ref),
       ),
       _command(
@@ -529,6 +539,7 @@ class QuickOpenSources {
         icon: AppIcons.chartBar,
         shortcut: shellCommandLabel('usage.open'),
         keywords: const ['usage', 'quota', 'limits', 'tokens', 'rate limit'],
+        opensTab: true,
         onSelect: () => openUsageTab(ref),
       ),
       _command(
@@ -544,6 +555,7 @@ class QuickOpenSources {
           'ratings',
           'downloads',
         ],
+        opensTab: true,
         onSelect: () => openStoresTab(ref),
       ),
     ];
@@ -890,6 +902,7 @@ class QuickOpenSources {
       subtitle: where.path,
       icon: AppIcons.terminal,
       keywords: const ['shell', 'terminal', 'console'],
+      opensTab: true,
       onSelect: () => dismiss(
         _seen(
           () => openTerminalOn(ref, environment, workingDirectory: where.path),
@@ -906,6 +919,7 @@ class QuickOpenSources {
     subtitle: where.path,
     icon: AppIcons.folderOpen,
     keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
+    opensTab: true,
     onSelect: () => dismiss(
       _seen(() => openFilesTabOn(ref, where.environmentId, path: where.path)),
     ),
@@ -981,6 +995,7 @@ class QuickOpenSources {
                 ?session.worktree?.path,
               ],
               weight: _sessionWeight + here + recency,
+              opensTab: true,
               onSelect: () =>
                   dismiss(() => focusSession(session.id, imported: false)),
             ),
@@ -1009,6 +1024,7 @@ class QuickOpenSources {
               icon: AppIcons.clockCounterClockwise,
               keywords: [agent, 'imported', session.preview],
               weight: _sessionWeight + here + recency,
+              opensTab: true,
               onSelect: () =>
                   dismiss(() => focusSession(session.id, imported: true)),
             ),
@@ -1125,6 +1141,7 @@ class QuickOpenSources {
           weight:
               _conversationWeight +
               _conversationRankSpread * (1 - rank / hits.length),
+          opensTab: true,
           onSelect: () =>
               dismiss(() => focusSession(openId, imported: native == null)),
         ),
@@ -1197,6 +1214,7 @@ class QuickOpenSources {
             icon: documentIconFor(tab) ?? AppIcons.terminal,
             keywords: const ['terminal', 'tab'],
             weight: _tabWeight,
+            opensTab: true,
             onSelect: () => dismiss(
               _seen(() {
                 sessions.activateTab(tab.id);
@@ -1225,6 +1243,8 @@ class QuickOpenSources {
         detail: changedPaths.contains(file.relativePath) ? 'modified' : null,
         icon: AppIcons.article,
         weight: changedPaths.contains(file.relativePath) ? 6 : 0,
+        // An editor tab, or a diff tab when it has changes.
+        opensTab: true,
         onSelect: () => dismiss(
           _seen(
             () => _openFile(
@@ -1317,6 +1337,7 @@ class QuickOpenSources {
           icon: AppIcons.robot,
           keywords: [installation.agentId, installation.environmentId],
           weight: _agentWeight,
+          opensTab: true,
           // Lands on the Agents section — the entry is an agent, and a jump
           // to the top of Appearance would be a jump to nowhere.
           onSelect: () => dismiss(
@@ -1360,6 +1381,7 @@ class QuickOpenSources {
               icon: page.icon,
               keywords: keywords,
               weight: weight,
+              opensTab: true,
               onSelect: () => dismiss(open),
             ),
       );
