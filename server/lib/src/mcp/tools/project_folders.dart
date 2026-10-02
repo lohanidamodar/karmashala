@@ -221,7 +221,7 @@ class ProjectFolders {
       final script =
           '''
 ROOT="\$HOME/$kKarmashalaFolder/$kScratchFolder"
-TARGET="\$ROOT/${posixQuote(folder)}"
+TARGET="\$ROOT/$folder"
 mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" && pwd
 ''';
       final result = await runner.run(

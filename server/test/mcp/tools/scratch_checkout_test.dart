@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host/src/mcp/tools/checkout_reach.dart';
 import 'package:karmashala_host/src/mcp/tools/project_folders.dart';
 import 'package:karmashala_host/src/mcp/tools/session_checkout_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/worktree_tool_set.dart';
@@ -123,6 +124,58 @@ void main() {
       final project = ProjectDao(fixture.database).getById(checkout.projectId)!;
       expect(Project.fromJson(project.toJson()).isScratch, isTrue);
       expect(Project.fromJson(project.toJson()), project);
+    });
+  });
+
+  group('createScratchCheckout in a POSIX environment', () {
+    test('spells the folder into the shell script unquoted, inside the '
+        'quoted path', () async {
+      // `TARGET="$ROOT/'name'"` once put the quotes into the path, which the
+      // shell read as an empty one: mkdir: cannot create directory ''.
+      final requests = <CommandRequest>[];
+      final wsl = ExecutionEnvironment(
+        id: 'wsl:arch',
+        kind: EnvironmentKind.wsl,
+        name: 'arch',
+        wslDistribution: 'arch',
+        createdAt: RepoToolFixture.now,
+      );
+      fixture.data.ensureEnvironment(wsl);
+      final folders = ProjectFolders(
+        fixture.context,
+        CheckoutReach(
+          fixture.database,
+          runners: _Answering((request) {
+            requests.add(request);
+            return const CommandResult(
+              exitCode: 0,
+              stdout:
+                  '/home/me/karmashala/scratch\n'
+                  '/home/me/karmashala/scratch/2026-09-27-tidy-abc123\n',
+              stderr: '',
+            );
+          }),
+        ),
+        localHome: fixture.home,
+        now: () => RepoToolFixture.now,
+      );
+
+      final checkout = await folders.createScratchCheckout(
+        target: wsl,
+        hint: 'tidy',
+      );
+
+      final script = requests.single.arguments.last;
+      expect(script, contains('TARGET="\$ROOT/2026-09-27-tidy-'));
+      expect(script, isNot(contains("'")));
+      expect(
+        checkout.path.path,
+        '/home/me/karmashala/scratch/2026-09-27-tidy-abc123',
+      );
+      expect(
+        ProjectDao(fixture.database).getById(checkout.projectId)!.root.path,
+        '/home/me/karmashala/scratch',
+      );
     });
   });
 
@@ -306,4 +359,34 @@ void main() {
       expect(answer.error, contains('sessionId is required'));
     });
   });
+}
+
+/// A runner factory whose every environment answers from one responder.
+class _Answering extends CommandRunnerFactory {
+  const _Answering(this.responder);
+
+  final CommandResult Function(CommandRequest request) responder;
+
+  @override
+  bool get canReachRemote => true;
+
+  @override
+  CommandRunner forEnvironment(ExecutionEnvironment environment) =>
+      _AnsweringRunner(responder, environment.id);
+}
+
+class _AnsweringRunner implements CommandRunner {
+  const _AnsweringRunner(this.responder, this.environmentId);
+
+  final CommandResult Function(CommandRequest request) responder;
+
+  @override
+  final String environmentId;
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async => responder(request);
+
+  @override
+  Future<ProcessHandle> start(CommandRequest request) =>
+      throw UnsupportedError('not started here');
 }

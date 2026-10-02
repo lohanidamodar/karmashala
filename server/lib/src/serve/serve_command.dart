@@ -65,6 +65,7 @@ import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
 import '../agents/server_agents.dart';
+import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
 import 'package:karmashala_session/events.dart'
@@ -365,6 +366,10 @@ Future<int> runServe(
   // added, recomposed as those rows change (ACP design, C2).
   final agentRegistry = AgentRegistryHolder.composed(data.acpAgents)
     ..follow(data);
+  // The launch path asks this, so a session can start with an agent added
+  // a moment ago; the automations and the companion still hold the shipped
+  // registry.
+  final liveAgents = DaemonAgents.live(() => agentRegistry.current);
   final prompts = DaemonPromptAnswers(
     status: status,
     database: database,
@@ -854,6 +859,7 @@ Future<int> runServe(
   data.sessionModes = AcpSessionModes(runtimeOf: status.acpRuntimeOf);
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
+    agents: liveAgents,
     sessions: sessionRows,
     mcp: SessionMcpAccessPoint(
       mcp: mcp,
@@ -884,6 +890,7 @@ Future<int> runServe(
   );
   final checkoutFacts = DaemonCheckoutFacts(
     checkoutRows,
+    agents: liveAgents,
     reachesBox: ssh.remote.reaches,
   );
   final presence = ConversationPresenceReader(
@@ -902,6 +909,7 @@ Future<int> runServe(
   );
   final launches = ServerSessionLauncher(
     launcher: hostedLauncher,
+    agents: liveAgents,
     registry: registry,
     sessions: sessionRows,
     rows: checkoutRows,
@@ -1019,7 +1027,13 @@ Future<int> runServe(
     )
     // An agent's `open_new_session`, through the one launch path.
     ..add(
-      LaunchToolSet(tools, launches: launches, reach: reach, folders: folders),
+      LaunchToolSet(
+        tools,
+        launches: launches,
+        agents: liveAgents,
+        reach: reach,
+        folders: folders,
+      ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
