@@ -28,9 +28,6 @@ const double kStoreCardMinWidth = 360;
 /// The list's width beside an open detail.
 const double kStoresListWidth = 360;
 
-/// How long the overview takes to fade from one state to the next.
-const Duration _kSwap = Duration(milliseconds: 180);
-
 void _openStoreSettings(WidgetRef ref) =>
     openSettingsTab(ref, anchor: SettingsAnchor.storeCredentials);
 
@@ -274,7 +271,9 @@ class _StatusRow extends ConsumerWidget {
         ? ' · reading ${dashboard.done} of $total'
         : '';
     final apps = dashboard.view.apps.length;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    // How long the overview takes to fade from one state to the next; nothing
+    // under reduced motion.
+    final swap = Motion.of(context).base;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -328,11 +327,11 @@ class _StatusRow extends ConsumerWidget {
           height: 2,
           child: AnimatedOpacity(
             opacity: refreshing ? 1 : 0,
-            duration: reduceMotion ? Duration.zero : _kSwap,
+            duration: swap,
             child: refreshing
                 ? TweenAnimationBuilder<double>(
                     tween: Tween(end: total > 0 ? dashboard.done / total : 0),
-                    duration: reduceMotion ? Duration.zero : _kSwap,
+                    duration: swap,
                     builder: (context, value, _) => LinearProgressIndicator(
                       value: total > 0 ? value : null,
                       minHeight: 2,
@@ -357,7 +356,9 @@ class _Dashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groups = dashboard.groups;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    // How long the overview takes to fade from one state to the next; nothing
+    // under reduced motion.
+    final swap = Motion.of(context).base;
     if (groups.isEmpty) {
       final Widget body;
       if (dashboard.refreshing) {
@@ -372,10 +373,7 @@ class _Dashboard extends ConsumerWidget {
               : 'The stores list no apps for these credentials.',
         );
       }
-      return AnimatedSwitcher(
-        duration: reduceMotion ? Duration.zero : _kSwap,
-        child: body,
-      );
+      return AnimatedSwitcher(duration: swap, child: body);
     }
     final selection = ref.watch(storesSelectionProvider);
     StoreAppGroup? selected;
@@ -521,7 +519,9 @@ class _Overview extends ConsumerWidget {
       ));
     }
     final shown = sections.fold(0, (sum, section) => sum + section.$2.length);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    // How long the overview takes to fade from one state to the next; nothing
+    // under reduced motion.
+    final swap = Motion.of(context).base;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -533,7 +533,7 @@ class _Overview extends ConsumerWidget {
         ),
         const SizedBox(height: Insets.lg),
         AnimatedSwitcher(
-          duration: reduceMotion ? Duration.zero : _kSwap,
+          duration: swap,
           child: KeyedSubtree(
             key: ValueKey(filter),
             child: shown == 0
