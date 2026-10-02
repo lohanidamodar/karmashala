@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import '../../environments/application/environments_controller.dart';
@@ -26,7 +26,6 @@ class NewSessionAgentCards extends StatelessWidget {
   final AgentInstallation? selected;
   final ValueChanged<AgentInstallation> onSelected;
   final bool enabled;
-
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -82,7 +81,10 @@ class _AgentCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final name = AgentRegistry.builtIn.displayNameFor(installation.agentId);
+    // The composed registry, so an agent added in Settings shows its name.
+    final name = ref
+        .watch(agentRegistryProvider)
+        .displayNameFor(installation.agentId);
     final where = ref.watch(
       environmentLabelForIdProvider(installation.environmentId),
     );

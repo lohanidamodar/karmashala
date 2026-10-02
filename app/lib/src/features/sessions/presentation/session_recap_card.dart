@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import 'package:agent_cli/descriptors.dart';
+import '../../agents/application/agent_providers.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_providers.dart';
 import '../application/session_recap_service.dart';
@@ -185,7 +185,7 @@ class SessionRecapCard extends ConsumerWidget {
     required int? turnsNow,
   }) {
     final now = ref.read(clockProvider).nowUtc();
-    final agent = AgentRegistry.builtIn.displayNameFor(recap.agentId);
+    final agent = ref.read(agentRegistryProvider).displayNameFor(recap.agentId);
     final model = recap.model == null ? '' : ' (${recap.model})';
     final age = describeAge(now.difference(recap.writtenAt));
     final over = '${recap.turnCount} turn${recap.turnCount == 1 ? '' : 's'}';
