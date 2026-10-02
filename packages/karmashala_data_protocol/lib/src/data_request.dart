@@ -341,6 +341,13 @@ final class _Arguments {
     throw DataRefused.invalid('$kind: "$key" must be a string or absent');
   }
 
+  /// A string or a bool: a `select` choice's value, or a flag.
+  Object stringOrBool(String key) {
+    final value = values[key];
+    if (value is String || value is bool) return value!;
+    throw DataRefused.invalid('$kind: "$key" must be a string or a bool');
+  }
+
   int? optionalInt(String key) {
     final value = values[key];
     if (value == null || value is int) return value as int?;

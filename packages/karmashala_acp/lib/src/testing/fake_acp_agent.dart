@@ -40,7 +40,10 @@ class FakeAcpAgent {
   final bool requireAuthentication;
   final List<AuthMethod> authMethods;
   final SessionModeState? modes;
-  final List<ConfigOption>? configOptions;
+
+  /// The options `session/new` and `session/load` answer with;
+  /// `session/set_config_option` moves the one it names and answers them all.
+  List<ConfigOption>? configOptions;
   final String sessionIdPrefix;
   final bool supportsLoadSession;
 
@@ -157,6 +160,7 @@ class FakeAcpAgent {
           );
         case AcpMethods.sessionSetConfigOption:
           configChanges.add(params);
+          _moveConfigOption(params.string('configId'), params['value']);
           request.respond({
             'configOptions': [
               for (final o in configOptions ?? const <ConfigOption>[])
@@ -178,6 +182,28 @@ class FakeAcpAgent {
     if (notification.method != AcpMethods.sessionCancel) return;
     cancels++;
     _activeTurn?.cancel();
+  }
+
+  /// The option [configId] now holds [value]; one this agent does not hold
+  /// is left alone, as the list it answers with says.
+  void _moveConfigOption(String? configId, Object? value) {
+    final options = configOptions;
+    if (options == null || configId == null) return;
+    configOptions = [
+      for (final option in options)
+        if (option.id == configId)
+          ConfigOption(
+            id: option.id,
+            name: option.name,
+            type: option.type,
+            description: option.description,
+            category: option.category,
+            currentValue: value,
+            options: option.options,
+          )
+        else
+          option,
+    ];
   }
 
   Future<void> _runTurn(AcpIncomingRequest request, String sessionId) async {

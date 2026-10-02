@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionModesChanged;
+    show SessionConfigOptionsChanged, SessionModesChanged;
 import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
 
 import '../checkpoints/daemon_checkpoints.dart';
@@ -155,6 +155,10 @@ class ServerAcpHost extends AcpRuntimeHost {
 
   @override
   void modesChanged(SessionModesChanged change) => data.announce([change]);
+
+  @override
+  void configOptionsChanged(SessionConfigOptionsChanged change) =>
+      data.announce([change]);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

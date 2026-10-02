@@ -527,6 +527,7 @@ class DataService {
         SessionTranscriptRequest() ||
         SessionInputRequest() ||
         SessionSetMode() ||
+        SessionSetConfigOption() ||
         EnvVaultRequest() ||
         StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
@@ -742,6 +743,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionTranscriptRequest ||
       request is SessionInputRequest ||
       request is SessionSetMode ||
+      request is SessionSetConfigOption ||
       request is EnvVaultRequest ||
       request is StoreRequest;
 
@@ -829,6 +831,14 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     }
     if (request case SessionSetMode(:final sessionId, :final modeId)) {
       await _service.sessionModes.setMode(sessionId, modeId);
+      return DataReply(const DataAck() as R, _service._revision);
+    }
+    if (request case SessionSetConfigOption(
+      :final sessionId,
+      :final configId,
+      :final value,
+    )) {
+      await _service.sessionModes.setConfigOption(sessionId, configId, value);
       return DataReply(const DataAck() as R, _service._revision);
     }
     if (request case final SessionTranscriptRequest<Object?> asked) {
@@ -1023,8 +1033,10 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   };
   if (denied != null || grants == null) return denied;
   final needed = switch (request) {
-    SessionSend() || SessionInterrupt() || SessionSetMode() =>
-      Capability.sendPrompt,
+    SessionSend() ||
+    SessionInterrupt() ||
+    SessionSetMode() ||
+    SessionSetConfigOption() => Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to
     // sessions: no more than the phone may do itself.
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>

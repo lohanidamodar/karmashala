@@ -7,7 +7,12 @@ import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal, kPromptChangedRefusal;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionModeOption, SessionModesChanged;
+    show
+        SessionConfigChoice,
+        SessionConfigOption,
+        SessionConfigOptionsChanged,
+        SessionModeOption,
+        SessionModesChanged;
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionMessageDao;
 
@@ -143,6 +148,7 @@ class AcpSessionRuntime implements ScreenSession {
   StreamSubscription<SessionUpdateEvent>? _updates;
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
+  List<ConfigOption>? _configOptions;
   String? _agentSessionId;
   Future<StopReason>? _turn;
   Completer<StopReason?>? _turnSettled;
@@ -165,8 +171,13 @@ class AcpSessionRuntime implements ScreenSession {
   /// answered.
   String? get agentSessionId => _agentSessionId;
 
-  /// The agent's modes as last announced, or null when it offers none.
+  /// The agent's modes as last announced, or null before it has started.
   SessionModesChanged? get modes => _modesChange(_modes);
+
+  /// The agent's config options (a model, a flag) as last announced, or null
+  /// before it has started.
+  SessionConfigOptionsChanged? get configOptions =>
+      _configOptionsChange(_configOptions);
 
   bool get inTurn => _turn != null;
 
@@ -233,6 +244,7 @@ class AcpSessionRuntime implements ScreenSession {
       final resume = resumeSessionId;
       var resumed = false;
       SessionModeState? modes;
+      List<ConfigOption>? options;
       if (resume != null && resume.isNotEmpty && _capabilities.loadSession) {
         _loading = true;
         try {
@@ -248,6 +260,7 @@ class AcpSessionRuntime implements ScreenSession {
             ),
           );
           modes = loaded.modes;
+          options = loaded.configOptions;
         } finally {
           _loading = false;
         }
@@ -269,8 +282,11 @@ class AcpSessionRuntime implements ScreenSession {
         );
         _agentSessionId = created.sessionId;
         modes = created.modes;
+        options = created.configOptions;
       }
       await _applyInitialMode(modes, notices);
+      _configOptions = options;
+      _announceConfigOptions();
       _publish(
         AgentActivityStatus.idle,
         detail: resumed ? AcpMethods.sessionLoad : AcpMethods.sessionNew,
@@ -352,6 +368,63 @@ class AcpSessionRuntime implements ScreenSession {
     );
     _announceModes();
   }
+
+  /// `session/set_config_option`: [value] is a choice's value for a `select`
+  /// option, a bool for a `boolean` one. Throws [StateError] in words for an
+  /// option the agent does not expose or a value it does not offer. The
+  /// options as the agent then holds them are announced.
+  Future<void> setConfigOption(String configId, Object value) async {
+    final options = _configOptions;
+    final client = _client;
+    final agent = _agentSessionId;
+    if (options == null || options.isEmpty || client == null || agent == null) {
+      throw StateError('$agentName exposes no config options to set');
+    }
+    final option = options.where((o) => o.id == configId).firstOrNull;
+    if (option == null) {
+      throw StateError(
+        '$agentName exposes no config option "$configId"; it exposes '
+        '${options.map((o) => o.id).join(', ')}',
+      );
+    }
+    final List<ConfigOption> answered;
+    if (option.isBoolean) {
+      if (value is! bool) {
+        throw StateError('"${option.name}" takes true or false, not "$value"');
+      }
+      answered = await client.setConfigOption(agent, configId, flag: value);
+    } else {
+      if (value is! String) {
+        throw StateError('"${option.name}" takes one of its choices');
+      }
+      if (option.options.isNotEmpty &&
+          !option.options.any((choice) => choice.value == value)) {
+        throw StateError(
+          '$agentName offers no "$value" for "${option.name}"; it offers '
+          '${option.options.map((choice) => choice.value).join(', ')}',
+        );
+      }
+      answered = await client.setConfigOption(agent, configId, valueId: value);
+    }
+    // An agent that answers with no list has still taken the value.
+    _configOptions = answered.isNotEmpty
+        ? answered
+        : [
+            for (final o in options)
+              if (o.id == configId) _moved(o, value) else o,
+          ];
+    _announceConfigOptions();
+  }
+
+  static ConfigOption _moved(ConfigOption option, Object value) => ConfigOption(
+    id: option.id,
+    name: option.name,
+    type: option.type,
+    description: option.description,
+    category: option.category,
+    currentValue: value,
+    options: option.options,
+  );
 
   /// Answers the open permission request: allow with the first `allow_once`
   /// (else `allow_always`) option, reject with `reject_once` (else
@@ -477,6 +550,11 @@ class AcpSessionRuntime implements ScreenSession {
       }
       return;
     }
+    if (update is ConfigOptionUpdate) {
+      _configOptions = update.configOptions;
+      _announceConfigOptions();
+      return;
+    }
     if (update is ToolCallUpdate) {
       final before = _writer.toolCall(update.toolCallId);
       _writer.update(update);
@@ -592,6 +670,52 @@ class AcpSessionRuntime implements ScreenSession {
           ),
       ],
     );
+  }
+
+  void _announceConfigOptions() =>
+      host.configOptionsChanged(_configOptionsChange(_configOptions)!);
+
+  SessionConfigOptionsChanged? _configOptionsChange(
+    List<ConfigOption>? options,
+  ) {
+    if (options == null && !_started) return null;
+    return SessionConfigOptionsChanged(
+      sessionId: sessionId,
+      options: [
+        for (final option in options ?? const <ConfigOption>[])
+          SessionConfigOption(
+            id: option.id,
+            name: option.name,
+            type: option.type,
+            description: option.description,
+            category: option.category,
+            currentValue: switch (option.currentValue) {
+              final String value => value,
+              final bool value => value,
+              _ => null,
+            },
+            choices: [
+              for (final choice in option.options)
+                SessionConfigChoice(
+                  value: choice.value,
+                  name: choice.name,
+                  description: choice.description,
+                  group: choice.group,
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  /// The agent is gone, so it offers nothing to set: a client's picker for
+  /// this session clears until a start announces again.
+  void _announceGone() {
+    if (!_started) return;
+    _modes = null;
+    _configOptions = null;
+    _announceModes();
+    _announceConfigOptions();
   }
 
   // Permissions.
@@ -797,6 +921,7 @@ class AcpSessionRuntime implements ScreenSession {
     await _updates?.cancel();
     _writer.close();
     _resolvePending(const PermissionOutcome.cancelled());
+    _announceGone();
     await _client?.close();
     final transport = _transport;
     if (transport == null) return;

@@ -2,7 +2,13 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_acp/karmashala_acp.dart'
-    show SessionMode, SessionModeState, StopReason, ToolKind;
+    show
+        ConfigOption,
+        ConfigSelectOption,
+        SessionMode,
+        SessionModeState,
+        StopReason,
+        ToolKind;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -307,6 +313,74 @@ void main() {
       ),
     );
   });
+
+  test('sessions.setConfigOption reaches the agent, is refused in words for '
+      'a value it does not offer, and the greeting tells a late client what '
+      'runs here', () async {
+    const modes = SessionModeState(
+      currentModeId: 'agent',
+      availableModes: [SessionMode(id: 'agent', name: 'Agent')],
+    );
+    const options = [
+      ConfigOption(
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        currentValue: 'sonnet',
+        options: [
+          ConfigSelectOption(value: 'sonnet', name: 'Sonnet'),
+          ConfigSelectOption(value: 'opus', name: 'Opus'),
+        ],
+      ),
+    ];
+    final process = FakeAcpProcess(
+      FakeAcpAgent(modes: modes, configOptions: options),
+    );
+    final runtime = await open(process);
+    final changer = AcpSessionModes(
+      runtimeOf: status.acpRuntimeOf,
+      running: () => registry.acpRuntimes,
+    );
+
+    final greeting = changer.greeting();
+    expect(
+      greeting.whereType<SessionModesChanged>().single.currentModeId,
+      'agent',
+    );
+    expect(
+      greeting
+          .whereType<SessionConfigOptionsChanged>()
+          .single
+          .option('model')
+          ?.currentValue,
+      'sonnet',
+    );
+
+    await changer.setConfigOption('s1', 'model', 'opus');
+    expect(process.agent.configChanges.single['value'], 'opus');
+    expect(runtime.configOptions?.option('model')?.currentValue, 'opus');
+    await expectLater(
+      changer.setConfigOption('s1', 'model', 'haiku'),
+      throwsA(
+        isA<DataRefused>()
+            .having((r) => r.code, 'code', DataRefusalCode.invalid)
+            .having((r) => r.message, 'message', contains('offers no "haiku"')),
+      ),
+    );
+    await expectLater(
+      changer.setConfigOption('nope', 'model', 'opus'),
+      throwsA(
+        isA<DataRefused>().having(
+          (r) => r.code,
+          'code',
+          DataRefusalCode.notFound,
+        ),
+      ),
+    );
+
+    await runtime.stop();
+    expect(changer.greeting(), isEmpty);
+  });
 }
 
 /// The server's host for a runtime, cut to what these cases observe.
@@ -330,6 +404,9 @@ final class _DaemonHost extends AcpRuntimeHost {
 
   @override
   void modesChanged(SessionModesChanged change) {}
+
+  @override
+  void configOptionsChanged(SessionConfigOptionsChanged change) {}
 
   @override
   void messagesChanged(String sessionId) {}

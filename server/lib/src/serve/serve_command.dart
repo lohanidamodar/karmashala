@@ -856,7 +856,15 @@ Future<int> runServe(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
   );
-  data.sessionModes = AcpSessionModes(runtimeOf: status.acpRuntimeOf);
+  // A client that subscribes after an ACP agent started is greeted with the
+  // modes and options the runtime announced before it arrived.
+  final acpModes = AcpSessionModes(
+    runtimeOf: status.acpRuntimeOf,
+    running: () => registry.acpRuntimes,
+  );
+  data
+    ..sessionModes = acpModes
+    ..greeters.add(acpModes.greeting);
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,

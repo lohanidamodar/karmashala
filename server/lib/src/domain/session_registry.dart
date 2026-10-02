@@ -104,6 +104,12 @@ class SessionRegistry {
     _ => null,
   };
 
+  /// The ACP runtimes held, running or ended.
+  Iterable<AcpSessionRuntime> get acpRuntimes => [
+    for (final process in _processes.values)
+      if (process is AcpProcess) process.runtime,
+  ];
+
   /// What the previous host left behind, read once at construction. A record
   /// that says *running* comes back ended with no exit code and a reason, never
   /// as a session somebody could type into.

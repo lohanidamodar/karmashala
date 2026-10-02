@@ -4,7 +4,7 @@ import 'package:agent_cli/descriptors.dart'
     show AcpLaunchSpec, AgentStatusReport, PermissionRisk;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionModesChanged;
+    show SessionConfigOptionsChanged, SessionModesChanged;
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_runtime_host.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
@@ -18,6 +18,7 @@ class RecordingHost extends AcpRuntimeHost {
   final touched = <String>[];
   final prompts = <String>[];
   final modes = <SessionModesChanged>[];
+  final configOptions = <SessionConfigOptionsChanged>[];
   var messagesChangedCount = 0;
   final logged = <String>[];
 
@@ -44,6 +45,10 @@ class RecordingHost extends AcpRuntimeHost {
 
   @override
   void modesChanged(SessionModesChanged change) => modes.add(change);
+
+  @override
+  void configOptionsChanged(SessionConfigOptionsChanged change) =>
+      configOptions.add(change);
 
   @override
   void messagesChanged(String sessionId) => messagesChangedCount++;

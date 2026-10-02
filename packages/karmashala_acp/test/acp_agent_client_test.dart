@@ -374,6 +374,9 @@ void main() {
       valueId: 'big',
     );
     expect(options.single.id, 'model');
+    // The fake moves the value it was handed and answers the list as it stands.
+    expect(options.single.currentValue, 'big');
+    expect(agent.configOptions!.single.currentValue, 'big');
     expect(agent.configChanges.single, {
       'sessionId': 'old',
       'configId': 'model',

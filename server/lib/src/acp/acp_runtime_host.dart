@@ -1,10 +1,11 @@
 import 'package:agent_cli/descriptors.dart' show AgentStatusReport;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionModesChanged;
+    show SessionConfigOptionsChanged, SessionModesChanged;
 
 /// What an [AcpSessionRuntime] asks of the server around it: where its
-/// status goes, the checkpoint hold before a write, who hears of its modes
-/// and its rows. One interface so a test hands the runtime a recorder.
+/// status goes, the checkpoint hold before a write, who hears of its modes,
+/// its config options and its rows. One interface so a test hands the
+/// runtime a recorder.
 abstract class AcpRuntimeHost {
   const AcpRuntimeHost();
 
@@ -26,6 +27,9 @@ abstract class AcpRuntimeHost {
 
   /// The agent announced or changed its modes.
   void modesChanged(SessionModesChanged change);
+
+  /// The agent announced or changed its config options (a model, a flag).
+  void configOptionsChanged(SessionConfigOptionsChanged change);
 
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);
@@ -50,6 +54,9 @@ final class _NoHost extends AcpRuntimeHost {
 
   @override
   void modesChanged(SessionModesChanged change) {}
+
+  @override
+  void configOptionsChanged(SessionConfigOptionsChanged change) {}
 
   @override
   void messagesChanged(String sessionId) {}

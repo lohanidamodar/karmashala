@@ -14,6 +14,9 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         AcpRpcError,
         AgentMessageChunk,
         AuthMethod,
+        ConfigOption,
+        ConfigOptionUpdate,
+        ConfigSelectOption,
         ContentBlock,
         JsonRpcErrorCodes,
         PermissionSelected,
@@ -617,6 +620,193 @@ void main() {
       await runtime.stop();
     },
   );
+
+  group('config options', () {
+    const options = [
+      ConfigOption(
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'claude-sonnet-5',
+        options: [
+          ConfigSelectOption(
+            value: 'claude-sonnet-5',
+            name: 'Claude Sonnet 5',
+            description: 'Fast and capable.',
+          ),
+          ConfigSelectOption(value: 'gpt-6', name: 'GPT-6', group: 'OpenAI'),
+        ],
+      ),
+      ConfigOption(
+        id: 'thinking',
+        name: 'Extended thinking',
+        type: 'boolean',
+        currentValue: false,
+      ),
+    ];
+
+    test('session/new\'s options are announced whole; a set moves the value, '
+        'the agent\'s answer is announced, and a value or option not '
+        'offered is refused in words', () async {
+      final process = FakeAcpProcess(FakeAcpAgent(configOptions: options));
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        host: host,
+        mcpUrl: 'http://127.0.0.1:1/mcp/t',
+      );
+      await runtime.start();
+      final announced = host.configOptions.single;
+      expect(announced.sessionId, 's1');
+      expect(announced.options.map((o) => o.id), ['model', 'thinking']);
+      final model = announced.option('model')!;
+      expect(model.isSelect, isTrue);
+      expect(model.currentValue, 'claude-sonnet-5');
+      expect(model.current?.name, 'Claude Sonnet 5');
+      expect(model.choices.map((c) => c.value), ['claude-sonnet-5', 'gpt-6']);
+      expect(announced.option('thinking')?.currentValue, false);
+      expect(runtime.configOptions, isNotNull);
+
+      await runtime.setConfigOption('model', 'gpt-6');
+      expect(process.agent.configChanges.single, {
+        'sessionId': 'fake-session',
+        'configId': 'model',
+        'value': 'gpt-6',
+      });
+      expect(host.configOptions.last.option('model')?.currentValue, 'gpt-6');
+      expect(runtime.configOptions?.option('model')?.currentValue, 'gpt-6');
+
+      await runtime.setConfigOption('thinking', true);
+      expect(process.agent.configChanges.last['type'], 'boolean');
+      expect(host.configOptions.last.option('thinking')?.currentValue, true);
+
+      Matcher refused(String words) => throwsA(
+        isA<StateError>().having((e) => e.message, 'message', contains(words)),
+      );
+      await expectLater(
+        runtime.setConfigOption('model', 'haiku'),
+        refused('offers no "haiku" for "Model"'),
+      );
+      await expectLater(
+        runtime.setConfigOption('thinking', 'yes'),
+        refused('takes true or false'),
+      );
+      await expectLater(
+        runtime.setConfigOption('temperature', '1'),
+        refused('exposes no config option "temperature"'),
+      );
+      await expectLater(
+        runtime.setConfigOption('model', true),
+        refused('takes one of its choices'),
+      );
+      await runtime.stop();
+    });
+
+    test('a config_option_update mid-turn replaces the list, and the end of '
+        'the agent announces nothing to set', () async {
+      const moved = ConfigOption(
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        currentValue: 'gpt-6',
+        options: [
+          ConfigSelectOption(value: 'claude-sonnet-5', name: 'Claude Sonnet 5'),
+          ConfigSelectOption(value: 'gpt-6', name: 'GPT-6'),
+        ],
+      );
+      final process = FakeAcpProcess(
+        FakeAcpAgent(
+          configOptions: options,
+          turns: const [
+            FakeTurn([
+              FakeStep.update(ConfigOptionUpdate([moved])),
+            ]),
+          ],
+        ),
+      );
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        host: host,
+        mcpUrl: 'http://127.0.0.1:1/mcp/t',
+      );
+      await runtime.start();
+      await runtime.send('Switch model');
+      await runtime.awaitTurn();
+      expect(host.configOptions.last.options.map((o) => o.id), ['model']);
+      expect(host.configOptions.last.option('model')?.currentValue, 'gpt-6');
+
+      await runtime.stop();
+      expect(host.configOptions.last.options, isEmpty);
+      expect(host.modes.last.availableModes, isEmpty);
+      expect(host.modes.last.currentModeId, isNull);
+    });
+
+    test('an agent with no options announces an empty list, and a set is '
+        'refused in words', () async {
+      final process = FakeAcpProcess(FakeAcpAgent());
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        host: host,
+        mcpUrl: 'http://127.0.0.1:1/mcp/t',
+      );
+      await runtime.start();
+      expect(host.configOptions.single.options, isEmpty);
+      await expectLater(
+        runtime.setConfigOption('model', 'x'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('exposes no config options to set'),
+          ),
+        ),
+      );
+      await runtime.stop();
+    });
+
+    test('session/load announces the loaded modes and options', () async {
+      const modes = SessionModeState(
+        currentModeId: 'agent',
+        availableModes: [
+          SessionMode(id: 'agent', name: 'Agent'),
+          SessionMode(id: 'plan', name: 'Plan'),
+        ],
+      );
+      final process = FakeAcpProcess(
+        FakeAcpAgent(
+          supportsLoadSession: true,
+          modes: modes,
+          configOptions: options,
+        ),
+      );
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        host: host,
+        resumeSessionId: 'old-conversation',
+        mcpUrl: 'http://127.0.0.1:1/mcp/t',
+      );
+      final outcome = await runtime.start();
+      expect(outcome.resumed, isTrue);
+      expect(host.modes.single.currentModeId, 'agent');
+      expect(host.modes.single.availableModes.map((m) => m.id), [
+        'agent',
+        'plan',
+      ]);
+      expect(
+        host.configOptions.single.option('model')?.currentValue,
+        'claude-sonnet-5',
+      );
+      await runtime.stop();
+    });
+  });
 
   test('session/load continues the row\'s conversation when the agent '
       'advertises it, and its replay writes no rows', () async {
