@@ -19,7 +19,9 @@ import 'package:path/path.dart' as p;
 class RepoToolFixture {
   RepoToolFixture._(this.root, this.database, this.data, this.context)
     : reach = CheckoutReach(database, runners: const _NoGitHub()) {
-    folders = ProjectFolders(context, reach);
+    // The "home" a `~/karmashala` default lands in: the temp folder, never
+    // the machine's own.
+    folders = ProjectFolders(context, reach, localHome: home, now: () => now);
     worktrees = WorktreeService(
       runnerFactory: const _NoGitHub(),
       environmentOf: reach.environmentOf,
@@ -64,6 +66,9 @@ class RepoToolFixture {
 
   /// [relative] under the temp folder.
   String path(String relative) => p.join(root.path, p.normalize(relative));
+
+  /// What stands in for the user's home: `~/karmashala` is under it.
+  String get home => path('home');
 
   /// [directory] on this machine, as a row spells it.
   EnvironmentPath here(String directory) =>

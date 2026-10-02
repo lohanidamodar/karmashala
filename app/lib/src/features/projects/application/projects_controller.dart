@@ -165,7 +165,10 @@ class ProjectsController extends Notifier<List<Project>> {
     if (windows == null || target == null) {
       throw StateError('No execution environments available.');
     }
-    final picked = EnvironmentPath(environmentId: windows.id, path: windowsPath);
+    final picked = EnvironmentPath(
+      environmentId: windows.id,
+      path: windowsPath,
+    );
     final root = target.id == windows.id
         ? picked
         : const PathTranslator().translate(picked, from: windows, to: target);
@@ -269,6 +272,20 @@ class ProjectsController extends Notifier<List<Project>> {
     final added = await _workspace.write(CheckoutsAdd(projectId: project.id));
     final checkout =
         added.firstOrNull ?? _workspace.repositoriesOf(project.id).first;
+    ref.read(sessionsRevisionProvider.notifier).bump();
+    return checkout;
+  }
+
+  /// A folder of its own for a session without a project, under the Scratch
+  /// project of [environmentId] — made with the project the first time, and
+  /// named after [hint]. The server's own changes bring both rows here.
+  Future<Repository> scratchCheckout(
+    String environmentId, {
+    String? hint,
+  }) async {
+    final checkout = await ref
+        .read(gitDataProvider)
+        .createScratchCheckout(environmentId, hint: hint);
     ref.read(sessionsRevisionProvider.notifier).bump();
     return checkout;
   }

@@ -79,7 +79,10 @@ class GitData {
       _ => false,
     };
     final folders = switch (request) {
-      ProjectFoldersCreate() || ProjectRescan() || ProjectMove() => true,
+      ProjectFoldersCreate() ||
+      ProjectRescan() ||
+      ProjectMove() ||
+      ScratchCheckoutCreate() => true,
       _ => false,
     };
     return switch (r.code) {
@@ -148,8 +151,10 @@ class GitData {
 
   /// Commits on [repo]'s branch that [base] does not have; null when git
   /// could not say.
-  Future<int?> commitsAhead(EnvironmentPath repo, {required String base}) async =>
-      (await aheadBehind(repo, base: base))?.ahead;
+  Future<int?> commitsAhead(
+    EnvironmentPath repo, {
+    required String base,
+  }) async => (await aheadBehind(repo, base: base))?.ahead;
 
   Future<List<String>?> remoteBranchesContaining(
     EnvironmentPath repo,
@@ -228,8 +233,11 @@ class GitData {
     List<String> untracked = const [],
   }) => _ask(GitDiscard(_at(repo), tracked: tracked, untracked: untracked));
 
-  Future<void> commit(EnvironmentPath repo, String message, {bool all = false}) =>
-      _ask(GitCommitStaged(_at(repo), message, all: all));
+  Future<void> commit(
+    EnvironmentPath repo,
+    String message, {
+    bool all = false,
+  }) => _ask(GitCommitStaged(_at(repo), message, all: all));
 
   Future<void> fetch(EnvironmentPath repo) => _ask(GitFetch(_at(repo)));
 
@@ -296,10 +304,9 @@ class GitData {
     creations?.add(t);
     unawaited(
       t.cancelled.then(
-        (_) => _client.send(WorktreeCreationCancel(id)).then<void>(
-          (_) {},
-          onError: (Object _) {},
-        ),
+        (_) => _client
+            .send(WorktreeCreationCancel(id))
+            .then<void>((_) {}, onError: (Object _) {}),
       ),
     );
     try {
@@ -392,6 +399,13 @@ class GitData {
   /// Scans [projectId]'s root again; answers the checkouts it added.
   Future<List<Repository>> rescanProject(String projectId) =>
       _ask(ProjectRescan(projectId));
+
+  /// A folder of its own for a session without a project, under
+  /// [environmentId]'s Scratch project; [hint] names it.
+  Future<Repository> createScratchCheckout(
+    String environmentId, {
+    String? hint,
+  }) => _ask(ScratchCheckoutCreate(environmentId: environmentId, hint: hint));
 
   /// Edits a project whose moved root must be scanned first.
   Future<ProjectUpdated> moveProject(

@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/sessions/data/sessions_data.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala/src/features/sessions/application/session_repositories_service.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_data.dart';
+import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_data_server.dart';
@@ -62,6 +63,58 @@ void main() {
 
     await service.detach('s1', 'r1'); // primary is protected
     expect(service.forSession('s1').map((r) => r.id), ['r1']);
+  });
+
+  group('a session without a project', () {
+    setUp(() {
+      // Running in Scratch, which is a project to the rows and to nobody else.
+      server.projectRows.insert(
+        project(
+          id: 'ps',
+          name: 'Scratch',
+          path: r'C:\Users\me\karmashala\scratch',
+          kind: Project.scratchKind,
+        ),
+      );
+      server.repositoryRows.insert(
+        repository(
+          id: 'rs',
+          projectId: 'ps',
+          name: '2026-09-27-tidy-a1b2c3',
+          path: r'C:\Users\me\karmashala\scratch\2026-09-27-tidy-a1b2c3',
+        ),
+      );
+      server.sessionRows.insert(session(id: 's2', repositoryId: 'rs'));
+    });
+
+    test('attaches a checkout of any project', () async {
+      await service.attach('s2', 'rX');
+      await service.attach('s2', 'r1');
+      expect(service.forSession('s2').map((r) => r.id), ['rs', 'r1', 'rX']);
+    });
+
+    testWidgets('the Add repo menu offers every checkout, by project', (
+      tester,
+    ) async {
+      final container = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(container.dispose);
+      container.read(selectedSessionIdProvider.notifier).select('s2');
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: SessionRepositoriesBar(sessionId: 's2')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add repo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DesktopMenuItem<String>), findsNWidgets(3));
+      expect(find.text('Demo · app'), findsOneWidget);
+      expect(find.text('Other · other'), findsOneWidget);
+    });
   });
 
   test('a session deleted elsewhere takes its checkouts off the list', () {

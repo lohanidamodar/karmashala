@@ -142,6 +142,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     destructive: true,
     movesAttention: false,
   ),
+  // Linking a checkout to a session changes where it works, nothing on disk;
+  // with a worktree asked for it makes one, so neither call is idempotent.
+  'session_checkout_attach': McpToolAnnotations(movesAttention: false),
+  'session_checkout_detach': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
 
   // Sessions.
   'list_sessions': McpToolAnnotations.read,
@@ -746,6 +753,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'worktree_remove': McpToolListing(
     McpToolCategory.workspace,
     'Delete a worktree — only when it is clean, merged and pushed.',
+  ),
+  'session_checkout_attach': McpToolListing(
+    McpToolCategory.workspace,
+    'Attach a checkout — or a new worktree of one — to a session.',
+  ),
+  'session_checkout_detach': McpToolListing(
+    McpToolCategory.workspace,
+    'Detach an additional checkout from a session; nothing on disk changes.',
   ),
 
   // Checkpoints.

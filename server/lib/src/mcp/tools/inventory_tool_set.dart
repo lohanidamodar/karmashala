@@ -77,6 +77,7 @@ class InventoryToolSet extends ServerToolSet {
         'name': project.name,
         'environmentId': project.environmentId,
         'path': project.root.path,
+        if (project.kind != null) 'kind': project.kind,
       },
   ];
 
@@ -285,7 +286,9 @@ const List<Map<String, Object?>> inventoryToolSchemas = [
   {
     'name': 'list_projects',
     'description':
-        'List the projects known to Karmashala (name, environment, path).',
+        'List the projects known to Karmashala (name, environment, path). '
+        'A project with kind "scratch" is the folder sessions without a '
+        'project run in, one per environment.',
     'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
   },
   {

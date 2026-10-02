@@ -13,10 +13,21 @@ class Project {
     required this.createdAt,
     this.workspaceId,
     this.defaultRepositoryId,
+    this.kind,
   });
+
+  /// The [kind] of the server-owned project sessions without a project run
+  /// in: one per environment, rooted at `~/karmashala/scratch`, each session
+  /// in its own folder beneath. The rules key on this, never on the path.
+  static const String scratchKind = 'scratch';
 
   final String id;
   final String name;
+
+  /// What kind of project this is; null is an ordinary one.
+  final String? kind;
+
+  bool get isScratch => kind == scratchKind;
 
   /// The project's root folder, bound to its execution environment.
   final EnvironmentPath root;
@@ -48,6 +59,7 @@ class Project {
     createdAt: createdAt ?? this.createdAt,
     workspaceId: workspaceId ?? this.workspaceId,
     defaultRepositoryId: defaultRepositoryId ?? this.defaultRepositoryId,
+    kind: kind,
   );
 
   /// [copyWith] cannot express "unassign", because null there means "leave it".
@@ -57,6 +69,7 @@ class Project {
     root: root,
     createdAt: createdAt,
     defaultRepositoryId: defaultRepositoryId,
+    kind: kind,
   );
 
   /// [copyWith] cannot express "back to the picker's first row" either.
@@ -66,6 +79,7 @@ class Project {
     root: root,
     createdAt: createdAt,
     workspaceId: workspaceId,
+    kind: kind,
   );
 
   /// The wire shape: dates as ISO-8601 UTC, absent fields omitted.
@@ -76,6 +90,7 @@ class Project {
     'createdAt': createdAt.toUtc().toIso8601String(),
     'workspaceId': ?workspaceId,
     'defaultRepositoryId': ?defaultRepositoryId,
+    'kind': ?kind,
   };
 
   /// Throws [FormatException] on a map that is not a project.
@@ -93,6 +108,7 @@ class Project {
       createdAt: DateTime.parse(createdAt).toUtc(),
       workspaceId: json['workspaceId'] as String?,
       defaultRepositoryId: json['defaultRepositoryId'] as String?,
+      kind: json['kind'] as String?,
     );
   }
 
@@ -104,11 +120,19 @@ class Project {
       other.root == root &&
       other.createdAt == createdAt &&
       other.workspaceId == workspaceId &&
-      other.defaultRepositoryId == defaultRepositoryId;
+      other.defaultRepositoryId == defaultRepositoryId &&
+      other.kind == kind;
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, root, createdAt, workspaceId, defaultRepositoryId);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    root,
+    createdAt,
+    workspaceId,
+    defaultRepositoryId,
+    kind,
+  );
 
   @override
   String toString() => 'Project($id, $name, $root)';

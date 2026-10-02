@@ -93,12 +93,16 @@ void main() {
       expect(repositories.getAll().single.path.path, target);
     });
 
-    test('a gitUrl with no path is refused locally, in words', () async {
-      final answer = await call('project_add', {
-        'gitUrl': 'https://example.com/o/repo.git',
-      });
-      expect(answer.error, contains('choose a folder path'));
-      expect(projects.getAll(), isEmpty);
+    test('a gitUrl with no path lands in ~/karmashala/<repo>', () async {
+      final source = fixture.repository(fixture.path('source'));
+
+      final answer = await call('project_add', {'gitUrl': source});
+
+      expect(answer.error, isNull);
+      final expected = p.join(fixture.home, 'karmashala', 'source');
+      expect((answer.value! as Map)['path'], expected);
+      expect(Directory(p.join(expected, '.git')).existsSync(), isTrue);
+      expect(projects.getAll().single.name, 'source');
     });
 
     test(
