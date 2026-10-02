@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// What the toolbar asks of an [ImageViewer]: fit it, show it pixel for pixel,
 /// or step the zoom. Notifies when the scale changes, so a label can follow.
@@ -29,10 +30,10 @@ class ImageViewerController extends ChangeNotifier {
 /// a resize keeps it there. [free] is "where the reader left it".
 enum _Placement { auto, fit, actual, free }
 
-/// One image, pannable and zoomable: Ctrl+wheel, the wheel and a pinch zoom
-/// about the pointer, a drag pans. It opens fitted to the pane, or at 100%
+/// One image, pannable and zoomable: Ctrl+wheel and a pinch zoom about the
+/// pointer; the wheel, a trackpad scroll and a drag pan. It opens fitted to the pane, or at 100%
 /// when that is smaller. New [bytes] for the same file keep the reader's
-/// zoom and position — a re-rendered screenshot is compared, not re-found.
+/// zoom and position â€” a re-rendered screenshot is compared, not re-found.
 class ImageViewer extends StatefulWidget {
   const ImageViewer({
     required this.bytes,
@@ -110,7 +111,7 @@ class _ImageViewerState extends State<ImageViewer> {
     _listener = null;
   }
 
-  /// Decodes beside `Image.memory` — the same [MemoryImage], so one decode —
+  /// Decodes beside `Image.memory` â€” the same [MemoryImage], so one decode â€”
   /// for the size that placing and the status line need.
   void _resolve() {
     _unlisten();
@@ -185,7 +186,12 @@ class _ImageViewerState extends State<ImageViewer> {
   }
 
   /// Steps the zoom about the pane's centre, where a toolbar click means.
-  void _zoomBy(double factor) {
+  void _zoomBy(double factor) =>
+      _zoomAbout(_viewport.center(Offset.zero), factor);
+
+  /// Zooms by [factor] keeping the scene point under [focal] (pane
+  /// coordinates) where it is.
+  void _zoomAbout(Offset focal, double factor) {
     if (_image == null || _viewport.isEmpty) return;
     final now = _scale;
     final next = (now * factor).clamp(
@@ -193,14 +199,61 @@ class _ImageViewerState extends State<ImageViewer> {
       ImageViewer.maxScale,
     );
     if (next == now) return;
-    final centre = _viewport.center(Offset.zero);
-    final scene = _transform.toScene(centre);
+    final scene = _transform.toScene(focal);
     final k = next / now;
     _placement = _Placement.free;
     _transform.value = _transform.value.clone()
       ..translateByDouble(scene.dx, scene.dy, 0, 1)
       ..scaleByDouble(k, k, 1, 1)
       ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
+  }
+
+  /// Moves the picture by [delta] pane pixels.
+  void _panBy(Offset delta) {
+    if (_image == null || delta == Offset.zero) return;
+    _placement = _Placement.free;
+    _transform.value = Matrix4.identity()
+      ..translateByDouble(delta.dx, delta.dy, 0, 1)
+      ..multiply(_transform.value);
+  }
+
+  /// The mouse wheel, as an editor's image preview takes it: the wheel pans
+  /// (Shift turns it sideways), Ctrl or Cmd with the wheel zooms about the
+  /// pointer. A trackpad's two-finger scroll is panned by [InteractiveViewer]
+  /// itself and is left to it.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScaleEvent) {
+      _zoomAbout(event.localPosition, event.scale);
+      return;
+    }
+    if (event is! PointerScrollEvent) return;
+    if (event.kind == PointerDeviceKind.trackpad) return;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isMetaPressed) {
+      if (event.scrollDelta.dy == 0) return;
+      _zoomAbout(event.localPosition, math.exp(-event.scrollDelta.dy / 200));
+      return;
+    }
+    final delta = keys.isShiftPressed && event.scrollDelta.dx == 0
+        ? Offset(event.scrollDelta.dy, 0)
+        : event.scrollDelta;
+    _panBy(-delta);
+  }
+
+  /// The pinch's scale as of the last update: [ScaleUpdateDetails.scale] is
+  /// since the gesture began, and the zoom is applied a step at a time.
+  double _pinch = 1;
+
+  /// A two-finger pinch (a touchscreen, or a trackpad's pan-zoom), which
+  /// [InteractiveViewer] hands over untouched because its own scaling is off â€”
+  /// off so that it does not also zoom on a plain wheel.
+  void _onInteractionUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount < 2) return;
+    final step = details.scale / _pinch;
+    _pinch = details.scale;
+    // Zoom only: an update [InteractiveViewer] reads as a pan it has already
+    // moved, and moving it here too would double the drag.
+    if (step != 1) _zoomAbout(details.localFocalPoint, step);
   }
 
   @override
@@ -216,35 +269,46 @@ class _ImageViewerState extends State<ImageViewer> {
         }
         final image = _image;
         return ClipRect(
-          child: InteractiveViewer(
-            transformationController: _transform,
-            constrained: false,
-            boundaryMargin: const EdgeInsets.all(double.infinity),
-            minScale: ImageViewer.minScale,
-            maxScale: ImageViewer.maxScale,
-            onInteractionStart: (_) => _placement = _Placement.free,
-            child: SizedBox(
-              width: image?.width ?? viewport.width,
-              height: image?.height ?? viewport.height,
-              child: image == null
-                  ? const SizedBox.shrink()
-                  : CustomPaint(
-                      painter: _Checkerboard(
-                        transform: _transform,
-                        viewport: viewport,
-                        light: scheme.surfaceContainerHigh,
-                        dark: scheme.surfaceContainerHighest,
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: InteractiveViewer(
+              transformationController: _transform,
+              constrained: false,
+              boundaryMargin: const EdgeInsets.all(double.infinity),
+              minScale: ImageViewer.minScale,
+              maxScale: ImageViewer.maxScale,
+              // Its own scaling would zoom on every plain wheel turn; the wheel
+              // and the pinch are handled here instead (`_onPointerSignal`,
+              // `_onInteractionUpdate`). Panning stays its own.
+              scaleEnabled: false,
+              onInteractionStart: (_) {
+                _placement = _Placement.free;
+                _pinch = 1;
+              },
+              onInteractionUpdate: _onInteractionUpdate,
+              child: SizedBox(
+                width: image?.width ?? viewport.width,
+                height: image?.height ?? viewport.height,
+                child: image == null
+                    ? const SizedBox.shrink()
+                    : CustomPaint(
+                        painter: _Checkerboard(
+                          transform: _transform,
+                          viewport: viewport,
+                          light: scheme.surfaceContainerHigh,
+                          dark: scheme.surfaceContainerHighest,
+                        ),
+                        child: Image.memory(
+                          widget.bytes,
+                          fit: BoxFit.fill,
+                          gaplessPlayback: true,
+                          filterQuality: FilterQuality.medium,
+                          // The listener above reports a failure; this keeps the
+                          // frame blank rather than drawing Flutter's error box.
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
                       ),
-                      child: Image.memory(
-                        widget.bytes,
-                        fit: BoxFit.fill,
-                        gaplessPlayback: true,
-                        filterQuality: FilterQuality.medium,
-                        // The listener above reports a failure; this keeps the
-                        // frame blank rather than drawing Flutter's error box.
-                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                      ),
-                    ),
+              ),
             ),
           ),
         );
