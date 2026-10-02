@@ -186,7 +186,7 @@ void main() {
     expect(find.byTooltip(reason), findsOneWidget);
     final attach = tester.widget<IconButton>(
       find.ancestor(
-        of: find.byIcon(AppIcons.chat),
+        of: find.byIcon(AppIcons.paperclip),
         matching: find.byType(IconButton),
       ),
     );
