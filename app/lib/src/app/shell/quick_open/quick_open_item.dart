@@ -54,6 +54,23 @@ enum QuickOpenGroup {
   /// Whether the group is left out of an empty, unrestricted box — listed only
   /// once a query asks for it.
   bool get onlyWhenSearched => this == QuickOpenGroup.settings;
+
+  /// Whether a row of the group is listed only when the query appears whole
+  /// in its title, subtitle or a keyword — as Settings' own search matches —
+  /// rather than as any scattered subsequence. A hundred settings rows would
+  /// otherwise answer every short word ("note" in "Launcher hotkey") and bury
+  /// the verb it was typed for.
+  bool get matchesWholeOnly => this == QuickOpenGroup.settings;
+}
+
+/// Whether [query] appears whole, ignoring case, in [item]'s title, subtitle
+/// or one of its keywords.
+bool _containsWhole(String query, QuickOpenItem item) {
+  final needle = query.toLowerCase();
+  bool has(String text) => text.toLowerCase().contains(needle);
+  return has(item.title) ||
+      (item.subtitle != null && has(item.subtitle!)) ||
+      item.keywords.any(has);
 }
 
 /// One findable thing. [onSelect] is a closure because every jump already has
@@ -194,6 +211,11 @@ List<QuickOpenSection> rankQuickOpen(
   for (final item in items) {
     if (query.only != null && item.group != query.only) continue;
     if (query.isEmpty && query.only == null && item.group.onlyWhenSearched) {
+      continue;
+    }
+    if (!query.isEmpty &&
+        item.group.matchesWholeOnly &&
+        !_containsWhole(query.text, item)) {
       continue;
     }
     final result = query.isEmpty
