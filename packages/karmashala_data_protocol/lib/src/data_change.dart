@@ -39,6 +39,7 @@ import 'package:karmashala_verification/verification.dart'
         verificationRunFromJson,
         verificationRunToJson;
 
+import 'acp_agent_values.dart';
 import 'agent_work_values.dart';
 import 'git_values.dart';
 import 'session_values.dart';
@@ -73,6 +74,7 @@ part 'changes/attention_changes.dart';
 part 'changes/intents_changes.dart';
 part 'changes/transcripts_changes.dart';
 part 'changes/quick_access_changes.dart';
+part 'changes/acp_agent_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -616,7 +618,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _attentionChangeFromJson(name, json) ??
     _intentsChangeFromJson(name, json) ??
     _transcriptsChangeFromJson(name, json) ??
-    _quickAccessChangeFromJson(name, json);
+    _quickAccessChangeFromJson(name, json) ??
+    _acpAgentsChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

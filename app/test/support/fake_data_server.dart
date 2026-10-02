@@ -239,6 +239,16 @@ class FakeDataServer {
     (row) => InstallationRemoved(row.id),
     compareInstallations,
   );
+  late final acpAgentRows = FakeHostRows<AcpAgentRow>._(
+    this,
+    (row) => row.id,
+    AcpAgentChanged.new,
+    (row) => AcpAgentRemoved(row.id),
+    (a, b) {
+      final byTime = a.createdAt.compareTo(b.createdAt);
+      return byTime != 0 ? byTime : a.id.compareTo(b.id);
+    },
+  );
   late final claudeAccountRows = FakeHostRows<ClaudeAccount>._(
     this,
     (row) => row.id,
@@ -398,6 +408,12 @@ class FakeDataServer {
           _applySession(change);
         case final HostsDomainChange change:
           _applyHosts(change);
+        case AcpAgentChanged(:final row):
+          acpAgentRows._put(row);
+        case AcpAgentRemoved(:final id):
+          if (acpAgentRows.getById(id) case final row?) {
+            acpAgentRows._remove(row);
+          }
         case final WorktreesChange change:
           worktreeRows._apply(change);
         case final AutomationsChange change:
@@ -724,6 +740,7 @@ class FakeDataServer {
       ClaudeAccountDelete() ||
       CodexAccountDelete() ||
       UsageHistory() => _handleHosts(request, changes),
+      final AcpAgentsRequest r => _handleAcpAgents(r, changes),
       AgentWorkRequest() ||
       FlutterWorkRequest() ||
       BrowserWorkRequest() ||

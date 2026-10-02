@@ -672,3 +672,34 @@ void _migrateToV65(Database db) {
     'ON session_messages (session_id, revision);',
   );
 }
+
+/// What an installation's executable is run with before any launch's own
+/// arguments — `["-y", "<package>"]` when the executable is `npx` standing in
+/// for an uninstalled ACP agent. A JSON list; null is none.
+void _migrateToV66(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(agent_installations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('leading_arguments')) return;
+  db.execute(
+    'ALTER TABLE agent_installations ADD COLUMN leading_arguments TEXT;',
+  );
+}
+
+/// The ACP agents a person added — typed in (`custom`) or picked from the
+/// public registry (`registry`) — each a command, its argv and environment
+/// (ACP design, C2). The server composes its agent registry from these.
+void _migrateToV67(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS acp_agents (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      command      TEXT NOT NULL,
+      args         TEXT NOT NULL DEFAULT '[]',
+      env          TEXT NOT NULL DEFAULT '{}',
+      source       TEXT NOT NULL,
+      registry_id  TEXT,
+      created_at   TEXT NOT NULL
+    );
+  ''');
+}

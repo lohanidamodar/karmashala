@@ -11,6 +11,7 @@ class AcpLaunchSpec {
     this.authMethodId,
     this.clientName = 'Karmashala',
     this.npxPackage,
+    this.environment = const {},
   });
 
   /// Argv that puts the binary into ACP stdio mode — `['--acp']`,
@@ -32,6 +33,10 @@ class AcpLaunchSpec {
   /// The npm package `npx -y <package>` runs when no binary is installed, or
   /// null for an agent that must be installed first.
   final String? npxPackage;
+
+  /// Variables layered over the launched process's environment — what a
+  /// person-added agent's row declares. Empty for the shipped agents.
+  final Map<String, String> environment;
 
   /// The first of [risk]'s candidates among [availableModeIds], in the
   /// agent's own spelling, or null when it offers none of them.

@@ -33,6 +33,7 @@ export 'src/agents/adapter/directory_conversation_attribution.dart';
 export 'src/agents/adapter/directory_resume_plan.dart';
 export 'src/agents/adapter/transcript_media_block.dart';
 export 'src/agents/adapter/usage_limit_evidence.dart';
+export 'src/agents/acp/acp_agent_rows.dart';
 export 'src/agents/acp/acp_agents.dart';
 export 'src/agents/acp/acp_registry.dart';
 export 'src/agents/acp/claude_acp_descriptor.dart';

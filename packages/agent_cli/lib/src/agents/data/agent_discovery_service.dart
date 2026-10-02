@@ -444,12 +444,14 @@ class AgentDiscoveryService {
   /// not run tells us nothing, and `probeEnvironment` already reports
   /// reachability separately so a sweep never deletes on this answer.
   Future<String?> _locateOnPath(AgentDescriptor descriptor) async {
+    final names = descriptor.binaries.forKind(environment.kind);
+    // A person-added agent may name its command by an absolute path, which
+    // PATH knows nothing about: it is taken as given.
+    for (final name in names) {
+      if (p.posix.isAbsolute(name) || p.windows.isAbsolute(name)) return name;
+    }
     try {
-      return await locateOnPath(
-        runner,
-        environment.kind,
-        descriptor.binaries.forKind(environment.kind),
-      );
+      return await locateOnPath(runner, environment.kind, names);
     } on CommandException {
       return null;
     }

@@ -40,6 +40,7 @@ import 'package:karmashala_session_engine/store.dart'
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../mcp/tools/continuation_tool_set.dart';
@@ -356,6 +357,10 @@ Future<int> runServe(
       return onBox != null && !onBox.lifecycle.hasEnded;
     },
   )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
+  // The agents' registry: the shipped agents plus the ACP agents a person
+  // added, recomposed as those rows change (ACP design, C2).
+  final agentRegistry = AgentRegistryHolder.composed(data.acpAgents)
+    ..follow(data);
   final prompts = DaemonPromptAnswers(
     status: status,
     database: database,
@@ -424,6 +429,7 @@ Future<int> runServe(
     // a test's server: its temporary HOME holds no credentials, and its
     // schedule would reach for this machine's Keychain whatever HOME says.
     onItsOwn: hostEnvironment[kAgentWorkVariable] != 'off',
+    registry: agentRegistry.current,
   )..attach();
   final companion = DaemonCompanion(
     database: database,
@@ -466,6 +472,7 @@ Future<int> runServe(
   // Agents' tools: the server runs every one that needs no desktop UI
   // itself (slice 2b); the rest are forwarded to the app.
   final tools = ServerToolContext(
+    registry: agentRegistry,
     database: database,
     data: data,
     dataDirectory: dataDirectory,
@@ -1025,7 +1032,8 @@ Future<int> runServe(
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
   // desktop app on this machine; the server looks for its agent CLIs now.
-  final agents = (agentsFor ?? (data) => ServerAgents(data: data))(data);
+  final agents = (agentsFor ??
+      (data) => ServerAgents(data: data, registryHolder: agentRegistry))(data);
   server.data = data;
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,

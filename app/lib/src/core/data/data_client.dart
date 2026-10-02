@@ -212,6 +212,9 @@ class DataClient {
   /// The agents: every installation, and the saved accounts **without their
   /// credentials** — a token bundle never leaves the server.
   final installations = KeyedReplica<AgentInstallation>();
+
+  /// The ACP agents a person added (ACP design, C2), by row id.
+  final acpAgents = KeyedReplica<AcpAgentRow>();
   final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
   final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
 
@@ -683,6 +686,9 @@ class DataClient {
     installations.replaceAll({
       for (final i in snapshot.installations) i.id: i,
     }, revision);
+    acpAgents.replaceAll({
+      for (final r in snapshot.acpAgents) r.id: r,
+    }, revision);
     usageStates.replaceAll({
       for (final u in snapshot.usage) u.accountKey: u,
     }, revision);
@@ -900,6 +906,10 @@ class DataClient {
           devices.applyAt(id, null, batch.revision);
         case final HostsDomainChange change:
           applyHostsChange(change, batch.revision);
+        case AcpAgentChanged(:final row):
+          acpAgents.applyAt(row.id, row, batch.revision);
+        case AcpAgentRemoved(:final id):
+          acpAgents.applyAt(id, null, batch.revision);
         case WorktreeSetupChanged(:final repositoryId, :final setup):
           worktreeSetups.applyAt(repositoryId, setup, batch.revision);
         case WorktreeRunRecorded(:final report):

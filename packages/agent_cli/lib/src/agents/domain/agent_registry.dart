@@ -13,6 +13,17 @@ class AgentRegistry {
   /// The agents shipped with the app.
   static const AgentRegistry builtIn = AgentRegistry(builtInAgentAdapters);
 
+  /// The shipped agents plus [extra] — the person-added ACP agents a server
+  /// keeps as rows. On a repeated id the later adapter wins, in the earlier
+  /// one's place; [builtIn] itself is untouched.
+  static AgentRegistry withExtra(Iterable<AgentAdapter> extra) {
+    final byId = <String, AgentAdapter>{};
+    for (final adapter in builtInAgentAdapters.followedBy(extra)) {
+      byId[adapter.id] = adapter;
+    }
+    return AgentRegistry(List.unmodifiable(byId.values));
+  }
+
   final List<AgentAdapter> adapters;
 
   /// Each adapter's descriptor, in registry order.

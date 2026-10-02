@@ -3,6 +3,7 @@
 /// JSON envelope that carries them over any transport.
 library;
 
+export 'src/acp_agent_values.dart';
 export 'src/agent_work_values.dart';
 export 'src/attention_values.dart';
 export 'src/automation_values.dart';

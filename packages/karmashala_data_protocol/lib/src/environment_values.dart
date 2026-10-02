@@ -3,6 +3,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 
+import 'acp_agent_values.dart';
 import 'agent_work_values.dart';
 
 /// Where agents run, as one snapshot: the execution environments, the saved
@@ -42,6 +43,7 @@ final class AgentsSnapshot {
     this.claudeAccounts = const [],
     this.codexAccounts = const [],
     this.usage = const [],
+    this.acpAgents = const [],
   });
 
   final List<AgentInstallation> installations;
@@ -51,11 +53,15 @@ final class AgentsSnapshot {
   /// Every account's usage as the server last read it (`usage.current`).
   final List<AccountUsageState> usage;
 
+  /// The ACP agents a person added, oldest first (ACP design, C2).
+  final List<AcpAgentRow> acpAgents;
+
   Map<String, Object?> toJson() => {
     'installations': [for (final i in installations) installationToJson(i)],
     'claudeAccounts': [for (final a in claudeAccounts) claudeAccountToJson(a)],
     'codexAccounts': [for (final a in codexAccounts) codexAccountToJson(a)],
     'usage': [for (final u in usage) u.toJson()],
+    'acpAgents': [for (final r in acpAgents) acpAgentRowToJson(r)],
   };
 
   static AgentsSnapshot fromJson(Map<String, Object?> json) => AgentsSnapshot(
@@ -65,6 +71,9 @@ final class AgentsSnapshot {
     usage: json['usage'] == null
         ? const []
         : _list(json['usage'], AccountUsageState.fromJson),
+    acpAgents: json['acpAgents'] == null
+        ? const []
+        : _list(json['acpAgents'], acpAgentRowFromJson),
   );
 }
 

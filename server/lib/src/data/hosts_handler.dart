@@ -170,19 +170,22 @@ class HostsHandler {
 
   // Installations.
 
-  AgentsSnapshot agents({List<AccountUsageState> usage = const []}) =>
-      AgentsSnapshot(
-        usage: usage,
-        installations: _installations.getAll(),
-        claudeAccounts: [
-          for (final a in _claudeAccounts.getAll())
-            claudeAccountWithoutCredentials(a),
-        ],
-        codexAccounts: [
-          for (final a in _codexAccounts.getAll())
-            codexAccountWithoutCredentials(a),
-        ],
-      );
+  AgentsSnapshot agents({
+    List<AccountUsageState> usage = const [],
+    List<AcpAgentRow> acpAgents = const [],
+  }) => AgentsSnapshot(
+    usage: usage,
+    acpAgents: acpAgents,
+    installations: _installations.getAll(),
+    claudeAccounts: [
+      for (final a in _claudeAccounts.getAll())
+        claudeAccountWithoutCredentials(a),
+    ],
+    codexAccounts: [
+      for (final a in _codexAccounts.getAll())
+        codexAccountWithoutCredentials(a),
+    ],
+  );
 
   /// Every installation recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>

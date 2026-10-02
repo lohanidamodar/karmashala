@@ -570,10 +570,17 @@ void main() {
         windowsEnv(),
         wslEnv(id: 'wsl:archlinux', distro: 'archlinux'),
       ]);
+      // The three terminal agents only: these cases count what a start
+      // probes for, and the ACP agents' own discovery (npx fallback included)
+      // is agent_cli's to test.
       sweep = world.sweep(
         runnerFor: (environment) => environment.kind == EnvironmentKind.ssh
             ? throw StateError('a start does not dial an SSH host')
             : runner,
+        registry: AgentRegistry([
+          for (final adapter in builtInAgentAdapters)
+            if (adapter.acp == null) adapter,
+        ]),
       );
     });
 

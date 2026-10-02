@@ -3,6 +3,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 
 import '../data/data_service.dart';
+import 'agent_registry_holder.dart';
 
 /// One installation as a server reports it: the row, and what the registry
 /// calls its agent.
@@ -49,18 +50,27 @@ class ServerAgentScan {
 class ServerAgents {
   ServerAgents({
     required DataService data,
-    this.registry = AgentRegistry.builtIn,
+    AgentRegistry registry = AgentRegistry.builtIn,
+    AgentRegistryHolder? registryHolder,
     CommandRunner? runner,
     Clock? clock,
     IdGenerator? ids,
     Map<String, String>? hostEnvironment,
   }) : _data = data,
+       _registry = registry,
+       _registryHolder = registryHolder,
        _runner = runner ?? const LocalCommandRunner(),
        _clock = clock ?? const SystemClock(),
        _ids = ids ?? RandomIdGenerator(),
        _hostEnvironment = hostEnvironment;
 
-  final AgentRegistry registry;
+  final AgentRegistry _registry;
+  final AgentRegistryHolder? _registryHolder;
+
+  /// The registry as it stands at each probe — with a holder, the one the
+  /// person-added ACP agents are composed into.
+  AgentRegistry get registry => _registryHolder?.current ?? _registry;
+
   final DataService _data;
   final CommandRunner _runner;
   final Clock _clock;
@@ -114,6 +124,7 @@ class ServerAgents {
           version: agent.version,
           versionReadAt: agent.version == null ? null : now,
           createdAt: now,
+          leadingArguments: agent.leadingArguments,
         ),
     ], now);
     final addedIds = {for (final row in written.added) row.id};
@@ -147,6 +158,8 @@ class ServerAgents {
       'path': installation.executable.path,
       'version': ?installation.version,
       'versionReadAt': ?installation.versionReadAt?.toIso8601String(),
+      if (installation.leadingArguments.isNotEmpty)
+        'leadingArguments': installation.leadingArguments,
       'added': agent.added,
     };
   }

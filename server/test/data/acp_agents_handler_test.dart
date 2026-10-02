@@ -1,0 +1,140 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host/data.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:test/test.dart';
+
+/// The ACP agents a person added, at the server: list, put, delete, the
+/// refusals, and what every other client is told.
+void main() {
+  late AppDatabase db;
+  late DataService service;
+  late DataSession app;
+  late List<DataChanges> told;
+  var now = DateTime.utc(2026, 10, 2, 12);
+  var ids = 0;
+
+  setUp(() {
+    now = DateTime.utc(2026, 10, 2, 12);
+    ids = 0;
+    db = AppDatabase.memory();
+    service = DataService(db, clock: () => now, newId: () => 'id-${++ids}');
+    app = service.open((_) {});
+    told = [];
+    service.open(told.add).handle(const DataSubscribe());
+  });
+  tearDown(() => db.close());
+
+  Matcher refused(DataRefusalCode code, String words) => throwsA(
+    isA<DataRefused>()
+        .having((r) => r.code, 'code', code)
+        .having((r) => r.message, 'message', contains(words)),
+  );
+
+  List<DataChange> lastTold() => told.last.changes;
+
+  const put = AcpAgentPut(
+    agentName: ' My Agent ',
+    command: ' my-agent ',
+    args: ['--acp'],
+    env: {'A': '1'},
+    source: AcpAgentSource.registry,
+    registryId: 'my-agent',
+  );
+
+  test('a put with no id creates under a server id, trimmed, and is told', () {
+    final row = app.handle(put).value;
+    expect(row.id, 'id-1');
+    expect(row.name, 'My Agent');
+    expect(row.command, 'my-agent');
+    expect(row.args, ['--acp']);
+    expect(row.env, {'A': '1'});
+    expect(row.source, AcpAgentSource.registry);
+    expect(row.registryId, 'my-agent');
+    expect(row.createdAt, now);
+    expect((lastTold().single as AcpAgentChanged).row, row);
+    expect(app.handle(const AcpAgentsList()).value, [row]);
+    expect(service.acpAgents, [row]);
+  });
+
+  test('a put naming a row rewrites it in place, keeping when it was made', () {
+    final first = app.handle(put).value;
+    now = now.add(const Duration(hours: 1));
+    final again = app
+        .handle(
+          AcpAgentPut(
+            id: first.id,
+            agentName: 'Renamed',
+            command: '/opt/agent',
+            source: AcpAgentSource.custom,
+          ),
+        )
+        .value;
+    expect(again.id, first.id);
+    expect(again.name, 'Renamed');
+    expect(again.command, '/opt/agent');
+    expect(again.args, isEmpty);
+    expect(again.registryId, isNull);
+    expect(again.createdAt, first.createdAt);
+    expect(app.handle(const AcpAgentsList()).value, [again]);
+    expect((lastTold().single as AcpAgentChanged).row, again);
+  });
+
+  test('a put under an unknown id creates under that id', () {
+    final row = app
+        .handle(const AcpAgentPut(id: 'mine', agentName: 'n', command: 'c'))
+        .value;
+    expect(row.id, 'mine');
+    expect(ids, 0);
+  });
+
+  test('a blank name or command is refused in words', () {
+    expect(
+      () => app.handle(const AcpAgentPut(agentName: '  ', command: 'c')),
+      refused(DataRefusalCode.invalid, 'needs a name'),
+    );
+    expect(
+      () => app.handle(const AcpAgentPut(agentName: 'n', command: ' ')),
+      refused(DataRefusalCode.invalid, 'needs a command'),
+    );
+    expect(app.handle(const AcpAgentsList()).value, isEmpty);
+    expect(told, isEmpty);
+  });
+
+  test('the list is oldest first', () {
+    app.handle(const AcpAgentPut(id: 'b', agentName: 'B', command: 'b'));
+    now = now.add(const Duration(minutes: 1));
+    app.handle(const AcpAgentPut(id: 'a', agentName: 'A', command: 'a'));
+    expect(app.handle(const AcpAgentsList()).value.map((r) => r.id), [
+      'b',
+      'a',
+    ]);
+  });
+
+  test('a delete removes and is told; one already gone is acknowledged', () {
+    final row = app.handle(put).value;
+    expect(app.handle(AcpAgentDelete(row.id)).value, isA<DataAck>());
+    expect((lastTold().single as AcpAgentRemoved).id, row.id);
+    expect(app.handle(const AcpAgentsList()).value, isEmpty);
+    final before = told.length;
+    expect(app.handle(AcpAgentDelete(row.id)).value, isA<DataAck>());
+    expect(told.length, before);
+  });
+
+  test('the agents snapshot carries the rows', () {
+    final row = app.handle(put).value;
+    expect(app.handle(const AgentsList()).value.acpAgents, [row]);
+  });
+
+  test('the request and its answer survive the wire', () {
+    final read = DataEnvelope.readRequest(DataEnvelope.request(1, put));
+    expect(read.refusal, isNull);
+    expect(read.request!.argumentsToJson(), put.argumentsToJson());
+    final reply = app.handle(put);
+    final answer = DataEnvelope.readAnswer(
+      DataEnvelope.answer(1, put, reply),
+      put,
+    );
+    expect(answer.value, reply.value);
+    expect(answer.changes.single, isA<AcpAgentChanged>());
+  });
+}

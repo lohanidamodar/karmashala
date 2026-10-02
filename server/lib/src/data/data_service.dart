@@ -22,6 +22,7 @@ import '../sessions/session_transcripts.dart';
 import '../stores/store_desk.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
+import 'acp_agents_handler.dart';
 import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
@@ -77,6 +78,7 @@ class DataService {
     _sessions = SessionsHandler(database, _now, runs: runsSession);
     _hosts = HostsHandler(database, _now, opens: opens);
     _evidence = EvidenceHandler(database, _now);
+    _acpAgents = AcpAgentsHandler(database, _now, newId ?? newUuid);
     conversations = ConversationsHandler(database, _Clock(_now));
     _workspace = WorkspaceHandler(
       database,
@@ -185,6 +187,7 @@ class DataService {
   late final SessionsHandler _sessions;
   late final HostsHandler _hosts;
   late final EvidenceHandler _evidence;
+  late final AcpAgentsHandler _acpAgents;
 
   /// The conversation index: searched by every client, kept once [serve]
   /// starts it with the agents' stores.
@@ -343,6 +346,10 @@ class DataService {
       _worktrees.setupOf(repositoryId);
 
   /// The installations recorded in [environmentId], oldest first.
+  /// The ACP agents a person added, oldest first — what the server's agent
+  /// registry is composed from (`AgentRegistryHolder`).
+  List<AcpAgentRow> get acpAgents => _acpAgents.list();
+
   List<AgentInstallation> installationsIn(String environmentId) =>
       _hosts.installationsIn(environmentId);
 
@@ -545,6 +552,11 @@ class DataService {
           final ReviewThreadSetStatus r => _worktrees.setStatus(r, changes),
         },
         final QuickAccessRequest r => _quickAccess.handle(r, changes),
+        final AcpAgentsRequest r => switch (r) {
+          AcpAgentsList() => _acpAgents.list(),
+          final AcpAgentPut r => _acpAgents.put(r, changes),
+          final AcpAgentDelete r => _acpAgents.delete(r, changes),
+        },
         final SnippetsRequest r => switch (r) {
           SnippetsList() => _snippets.list(),
           final SnippetAdd r => _snippets.add(r, changes),
@@ -627,6 +639,7 @@ class DataService {
         final KnownHostForget r => _hosts.forgetKey(r, changes),
         AgentsList() => _hosts.agents(
           usage: agentWork?.usageStates() ?? const [],
+          acpAgents: _acpAgents.list(),
         ),
         final InstallationSetPath r => _hosts.setPath(r, changes),
         final ClaudeAccountDelete r => _hosts.deleteClaudeAccount(r, changes),
