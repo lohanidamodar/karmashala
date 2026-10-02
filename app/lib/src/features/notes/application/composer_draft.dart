@@ -8,6 +8,7 @@ import 'package:agent_cli/process.dart'
         posixQuote;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
+import 'package:karmashala_terminal_core/profiles.dart' show TerminalShell;
 
 import '../../agents/data/agents_data.dart';
 import '../../environments/data/environments_data.dart';
@@ -123,7 +124,7 @@ SessionOfferOutcome offerToSessionWith(
 }) => _offer(
   _Reader(read),
   sessionId: sessionId,
-  typed: text,
+  typed: (_) => text,
   park: (ref) =>
       ref.read(composerDraftProvider.notifier).queue(sessionId, text),
 );
@@ -156,7 +157,7 @@ SessionOfferOutcome offerFileToSessionWith(
   return _offer(
     reader,
     sessionId: sessionId,
-    typed: _quotedFor(read, spelled),
+    typed: (target) => _quotedFor(read, spelled, target),
     park: (ref) => ref
         .read(composerAttachmentsProvider.notifier)
         .queue(sessionId, spelled),
@@ -198,17 +199,49 @@ EnvironmentPath? agentPathOf(
   }
 }
 
-/// [path] as it is typed at a prompt in its environment — the environment's
-/// kind decides, a [EnvironmentKind.windowsNative] one being PowerShell's and
-/// any other (or one this client has no row for) a POSIX shell's.
+/// How a prompt reads a quoted path.
+enum PromptQuoting {
+  /// PowerShell, and an agent CLI on Windows: `'…'`, quotes doubled.
+  powerShell,
+
+  /// cmd.exe: `"…"`. Windows forbids `"` in a name, so nothing needs escaping
+  /// inside; `%NAME%` still expands there, and cmd offers no quoting that
+  /// stops it at an interactive prompt — a path holding one is rare enough to
+  /// leave as it is.
+  commandPrompt,
+
+  /// bash, zsh, fish, WSL, an SSH host: [posixQuote].
+  posix,
+}
+
+/// [path] as it is typed at the prompt of [target], the pane it is typed into.
+/// A **shell pane** says which shell it runs (the same reading snippets take,
+/// [snippetTargetFor]), and that shell's quoting is used. An **agent pane**,
+/// or a pane whose shell is unknown, falls back to the environment's kind: a
+/// [EnvironmentKind.windowsNative] one PowerShell's, any other (or one this
+/// client has no row for) a POSIX shell's.
 String _quotedFor(
   T Function<T>(ProviderListenable<T> provider) read,
   EnvironmentPath path,
+  SnippetTarget? target,
 ) {
+  final byShell = target == null || target.isAgentPane
+      ? null
+      : switch (target.shell) {
+          TerminalShell.powerShell => PromptQuoting.powerShell,
+          TerminalShell.commandPrompt => PromptQuoting.commandPrompt,
+          TerminalShell.wsl ||
+          TerminalShell.posix ||
+          TerminalShell.ssh => PromptQuoting.posix,
+          null => null,
+        };
   final kind = read(environmentsDataProvider).getById(path.environmentId)?.kind;
-  return quotePathForPrompt(
+  return quotePathFor(
     path.path,
-    windows: kind == EnvironmentKind.windowsNative,
+    byShell ??
+        (kind == EnvironmentKind.windowsNative
+            ? PromptQuoting.powerShell
+            : PromptQuoting.posix),
   );
 }
 
@@ -226,22 +259,36 @@ final _bareSafe = RegExp(r'^[A-Za-z0-9_./:\\-]+$');
 /// Nothing is submitted, so this is not about injection: an unbalanced quote
 /// would leave the prompt waiting for more, and `$x` would have the path
 /// mangled the moment the user pressed Enter.
-String quotePathForPrompt(String path, {required bool windows}) {
+String quotePathForPrompt(String path, {required bool windows}) => quotePathFor(
+  path,
+  windows ? PromptQuoting.powerShell : PromptQuoting.posix,
+);
+
+/// [quotePathForPrompt] for any [PromptQuoting], cmd.exe's included.
+String quotePathFor(String path, PromptQuoting style) {
   if (_bareSafe.hasMatch(path)) return path;
-  if (!windows) return posixQuote(path);
-  final doubled = path.replaceAllMapped(
-    RegExp('[\'‘’‚‛]'),
-    (quote) => '${quote[0]}${quote[0]}',
-  );
-  return "'$doubled'";
+  switch (style) {
+    case PromptQuoting.posix:
+      return posixQuote(path);
+    case PromptQuoting.commandPrompt:
+      return '"$path"';
+    case PromptQuoting.powerShell:
+      final doubled = path.replaceAllMapped(
+        RegExp('[\'‘’‚‛]'),
+        (quote) => '${quote[0]}${quote[0]}',
+      );
+      return "'$doubled'";
+  }
 }
 
 /// The one body behind every offer: [typed] into the session's terminal when
-/// that is the face on screen, else [park]ed for its composer.
+/// that is the face on screen, else [park]ed for its composer. [typed] is
+/// asked of the pane it will be typed into, so a path can be quoted for the
+/// shell that pane runs.
 SessionOfferOutcome _offer(
   _Reader ref, {
   required String sessionId,
-  required String typed,
+  required String Function(SnippetTarget? target) typed,
   required void Function(_Reader ref) park,
 }) {
   // Answered before the terminals are read at all: a session no window ever
@@ -266,7 +313,7 @@ SessionOfferOutcome _offer(
       insertSnippet(
         terminals: terminals,
         state: state,
-        snippet: _offered(typed),
+        snippet: _offered(typed(snippetTargetFor(terminals, state, paneId))),
         paneId: paneId,
       ).delivered) {
     return SessionOfferOutcome.typedIntoTerminal;

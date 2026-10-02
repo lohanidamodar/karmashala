@@ -141,6 +141,23 @@ void main() {
   /// No pane: the routing never reaches the terminals, so a plain container
   /// over the fake server is enough to pin where the file goes and how it is
   /// spelled.
+  group('quotePathFor cmd.exe', () {
+    test('a plain path stays bare', () {
+      expect(
+        quotePathFor(r'C:\src\shot.png', PromptQuoting.commandPrompt),
+        r'C:\src\shot.png',
+      );
+    });
+
+    test('anything else is double-quoted, a single quote left alone', () {
+      expect(
+        quotePathFor(r"C:\a b\it's.png", PromptQuoting.commandPrompt),
+        r'''"C:\a b\it's.png"''',
+      );
+      expect(quotePathFor('a&b.mp4', PromptQuoting.commandPrompt), '"a&b.mp4"');
+    });
+  });
+
   group('offerFileToSessionWith, with no pane showing the session', () {
     Future<ProviderContainer> containerWith({
       required String agentEnvironmentId,
