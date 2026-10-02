@@ -9,7 +9,7 @@
 # @BIN@, @DATA_DIR@ and @PATH@ are filled in by install.sh.
 [Unit]
 Description=Karmashala server
-Documentation=https://github.com/lohanidamodar/karmashala-app/blob/main/server/README.md
+Documentation=https://github.com/lohanidamodar/karmashala/blob/main/server/README.md
 After=network-online.target
 Wants=network-online.target
 

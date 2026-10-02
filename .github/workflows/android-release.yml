@@ -1,9 +1,8 @@
 # Builds the Android App Bundle and uploads it to Google Play through fastlane.
 #
-# Inline rather than calling popupbits/.github's publish-to-play-store.yml:
-# this repo is private under lohanidamodar, and a private repository may call
-# only its own owner's reusable workflows. The steps follow that workflow;
-# keep the two in step.
+# Inline rather than calling popupbits/.github's publish-to-play-store.yml, so
+# the differences below live in one file. The steps follow that workflow; keep
+# the two in step.
 #
 # Differences from it:
 #   - the Flutter project is app/, inside a pub workspace resolved at the root;

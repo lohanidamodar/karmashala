@@ -119,7 +119,7 @@ if not defined GH (
   ) else (
     for /f "delims=" %%w in ('wsl.exe wslpath -a "%CD%\%RELEASE%"') do set WSLRELEASE=%%w
     echo downloading through WSL's gh into !WSLRELEASE! >> "%LOG%"
-    wsl.exe -e gh release download v!APPVERSHORT! -R lohanidamodar/karmashala-app -p "karmashala_host-*-linux-*" -D "!WSLRELEASE!" >> "%LOG%" 2>&1
+    wsl.exe -e gh release download v!APPVERSHORT! -R lohanidamodar/karmashala -p "karmashala_host-*-linux-*" -D "!WSLRELEASE!" >> "%LOG%" 2>&1
   )
   if errorlevel 1 (
     echo     could not download linux host bundles from release v!APPVERSHORT! - SSH hosts get whatever older bundle is already in %RELEASE%

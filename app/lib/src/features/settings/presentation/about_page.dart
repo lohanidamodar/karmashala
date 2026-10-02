@@ -19,7 +19,7 @@ class AboutSection extends StatelessWidget {
   const AboutSection({super.key});
 
   /// Where the code lives; the same address the About dialog gives.
-  static const repository = 'https://github.com/lohanidamodar/karmashala-app';
+  static const repository = 'https://github.com/lohanidamodar/karmashala';
 
   @override
   Widget build(BuildContext context) {

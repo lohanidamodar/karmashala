@@ -16,7 +16,7 @@ class KarmashalaAboutDialog extends StatelessWidget {
     builder: (_) => const KarmashalaAboutDialog(),
   );
 
-  static const _repository = 'https://github.com/lohanidamodar/karmashala-app';
+  static const _repository = 'https://github.com/lohanidamodar/karmashala';
 
   @override
   Widget build(BuildContext context) {
