@@ -6,11 +6,12 @@ import 'package:test/test.dart';
 
 final _t0 = DateTime.utc(2026, 10, 2, 12);
 
-/// A row whose agent runs inside the server and ends with it is never
-/// `unknown`: an end with no code and nobody asking — the server stopping —
-/// and a row found still claiming to run at start are both `completed`. Every
-/// other rule stands: a code says what it says, a close is a cancel, an
-/// ending is kept.
+/// A row whose agent runs inside the server is never `unknown`: the resolver
+/// says what a host's silence means — here, as the server decides it, a
+/// clean end (no host holding it at start, the server's own stop) is
+/// `completed` and an end with no code for any other reason is `failed`.
+/// Every other rule stands: a code says what it says, a close is a cancel,
+/// an ending is kept, and a row the resolver leaves alone is `unknown`.
 void main() {
   late AppDatabase db;
   late SessionDao dao;
@@ -33,8 +34,15 @@ void main() {
     dao = SessionDao(db);
     keeper = keeperOver(
       db,
-      // Decided per row — at the server by the installation's adapter.
-      endsWithServer: (session) => session.agentInstallationId == 'acp',
+      // Decided per row — at the server by the installation's adapter — and
+      // per reason, in the server's own vocabulary.
+      resolveUnknown: (session, facts) {
+        if (session.agentInstallationId != 'acp') return SessionStatus.unknown;
+        if (facts == null || facts.reason == 'the host stopped') {
+          return SessionStatus.completed;
+        }
+        return SessionStatus.failed;
+      },
     );
   });
   tearDown(() async {
@@ -71,16 +79,37 @@ void main() {
 
   SessionStatus statusOf(String id) => dao.getById(id)!.status;
 
-  test('an exit with no code, not asked for, completes a row that ends with '
-      'the server and loses sight of one that does not', () {
-    insert('acp', 'acp');
+  test('an exit with no code is read by its reason for a row that ends with '
+      'the server — the host\'s stop completes it, a refused start fails it '
+      '— and loses sight of one that does not', () {
+    insert('stopped', 'acp');
+    insert('refused', 'acp');
     insert('pty', 'pty');
 
-    keeper.applyEvent(exited('acp', reason: 'host stopped'));
-    keeper.applyEvent(exited('pty', reason: 'host stopped'));
+    keeper.applyEvent(exited('stopped', reason: 'the host stopped'));
+    keeper.applyEvent(
+      exited('refused', reason: 'Agent asks to be logged in first'),
+    );
+    keeper.applyEvent(exited('pty', reason: 'the host stopped'));
 
-    expect(statusOf('acp'), SessionStatus.completed);
+    expect(statusOf('stopped'), SessionStatus.completed);
+    expect(statusOf('refused'), SessionStatus.failed);
     expect(statusOf('pty'), SessionStatus.unknown);
+  });
+
+  test('a failed start stays failed whichever write lands last', () {
+    insert('refused', 'acp');
+
+    keeper.applyEvent(exited('refused', reason: 'could not be started'));
+    expect(statusOf('refused'), SessionStatus.failed);
+    // The launcher's own write, before or after: the same word.
+    dao.updateStatus('refused', SessionStatus.failed);
+    expect(statusOf('refused'), SessionStatus.failed);
+
+    insert('refused-late', 'acp');
+    dao.updateStatus('refused-late', SessionStatus.failed);
+    keeper.applyEvent(exited('refused-late', reason: 'could not be started'));
+    expect(statusOf('refused-late'), SessionStatus.failed);
   });
 
   test('a row not held at start is completed when it ends with the server, '

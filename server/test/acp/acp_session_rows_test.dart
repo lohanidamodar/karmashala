@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_host/karmashala_host.dart';
@@ -57,7 +58,7 @@ void main() {
         clock: () => DateTime.now().toUtc(),
         onWritten: (id) =>
             written.add('$id ${SessionDao(database).getById(id)!.status.name}'),
-        endsWithServer: sessionEndsWithServer(
+        resolveUnknown: sessionEndsWithServer(
           rows: CheckoutRows(database),
           agents: const DaemonAgents(),
         ),
@@ -275,5 +276,50 @@ void main() {
     // A row this server runs again is running, as before.
     await start('acp');
     expect(statusOf('acp'), SessionStatus.running);
+  });
+
+  test('a start the agent refuses — a login demanded — ends the row failed '
+      'through the lifecycle, never completed: the runtime ended without '
+      'a code, and the reason is a failure', () async {
+    row('s1', installation: 'acp1');
+    recording.start();
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      sessionId: 's1',
+      agentId: AgentIds.claudeAcp,
+    );
+    registry.openAcp('karmashala_s1', runtime);
+
+    await expectLater(
+      runtime.start(),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('asks to be logged in first'),
+        ),
+      ),
+    );
+    await pump();
+
+    expect(runtime.lifecycle.hasEnded, isTrue);
+    expect(runtime.lifecycle.exitCode, isNull);
+    expect(statusOf('s1'), SessionStatus.failed);
+    expect(written, ['s1 running', 's1 failed']);
+    // The launcher's own `failed`, landing after: the same word.
+    SessionDao(database).updateStatus('s1', SessionStatus.failed);
+    expect(statusOf('s1'), SessionStatus.failed);
   });
 }

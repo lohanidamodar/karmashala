@@ -7,7 +7,9 @@ import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/acp/acp_runtimes.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
+import 'package:karmashala_host/src/automations/daemon_agents.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
+import 'package:karmashala_host/src/sessions/session_ends_with_server.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -29,6 +31,7 @@ void main() {
   late List<AcpSessionStart> starts;
   late FakeAcpProcess process;
   late RecordingHost host;
+  late SessionStatusRecording recording;
 
   setUp(() {
     database = AppDatabase.memory();
@@ -56,6 +59,17 @@ void main() {
     );
     pty = FakePtyLauncher();
     registry = SessionRegistry(launcher: pty);
+    // The rows are written as the server writes them: by the launcher, and
+    // by the lifecycle of what the registry holds, whichever lands last.
+    recording = SessionStatusRecording(
+      LifecycleFeed(registry, clock: () => DateTime.now().toUtc()),
+      database,
+      clock: () => DateTime.now().toUtc(),
+      resolveUnknown: sessionEndsWithServer(
+        rows: CheckoutRows(database),
+        agents: const DaemonAgents(),
+      ),
+    )..start();
     starts = [];
     process = FakeAcpProcess(
       FakeAcpAgent(
@@ -69,6 +83,7 @@ void main() {
   });
 
   tearDown(() async {
+    await recording.close();
     for (final handle in pty.handles) {
       handle.finish(0);
     }
@@ -231,8 +246,9 @@ void main() {
     expect(registry.findProcess('karmashala_s1'), isNull);
   });
 
-  test('a runtime that cannot start leaves the row failed and the registry '
-      'holding its ended process', () async {
+  test('a runtime that cannot start leaves the row failed — through the '
+      'launcher and through the lifecycle of its ended process alike — and '
+      'the registry holding that process', () async {
     process = FakeAcpProcess(
       FakeAcpAgent(
         requireAuthentication: true,
@@ -243,6 +259,8 @@ void main() {
       ),
     );
     final rows = CheckoutRows(database);
+    final written = <String>[];
+    recording.changes.listen((c) => written.add(c.to.name));
     await expectLater(
       launcher().start(
         HostedLaunch(
@@ -251,9 +269,21 @@ void main() {
           title: 'Cart',
         ),
       ),
-      throwsA(isA<StateError>()),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('asks to be logged in first'),
+        ),
+      ),
     );
+    // The lifecycle's write, whether it lands before or after the
+    // launcher's, says failed too — never completed.
+    await pump();
     expect(row('s1').status, SessionStatus.failed);
-    expect(registry.findProcess('karmashala_s1')?.lifecycle.hasEnded, isTrue);
+    expect(written, everyElement('failed'));
+    final ended = registry.findProcess('karmashala_s1')!.lifecycle;
+    expect(ended.hasEnded, isTrue);
+    expect(ended.exitCode, isNull, reason: 'it never ran a turn to exit');
   });
 }

@@ -4,18 +4,19 @@ import 'package:karmashala_store/database.dart';
 
 import '../domain/session_placement_rule.dart';
 import '../service/hosted_session_status_keeper.dart';
+import '../service/session_lifecycle_recorder.dart';
 import 'session_dao.dart';
 
-/// The daemon's [HostedSessionStatusKeeper] over the store. [endsWithServer]
-/// names the rows the server's own runtimes hold (an agent spoken to over a
-/// protocol): ended with the server, never `unknown`.
+/// The daemon's [HostedSessionStatusKeeper] over the store. [resolveUnknown]
+/// says what a host's silence means for the rows the server's own runtimes
+/// hold (an agent spoken to over a protocol) — an end, never `unknown`.
 HostedSessionStatusKeeper keeperOver(
   AppDatabase db, {
-  bool Function(Session session)? endsWithServer,
+  UnknownResolver? resolveUnknown,
 }) => HostedSessionStatusKeeper(
   SessionDao(db),
   runsOnThisMachine: (session) => sessionRunsOnThisMachine(db, session),
-  endsWithServer: endsWithServer,
+  resolveUnknown: resolveUnknown,
 );
 
 /// [runsOnThisMachine] over the store's own tables.

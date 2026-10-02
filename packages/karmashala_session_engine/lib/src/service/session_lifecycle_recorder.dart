@@ -27,6 +27,11 @@ class SessionLifecycleChange {
       'SessionLifecycleChange($sessionId, ${from.name} -> ${to.name})';
 }
 
+/// What to record for [Session] instead of `unknown`, from [SessionFacts] —
+/// null when no host holds the session — or `unknown` to keep it.
+typedef UnknownResolver =
+    SessionStatus Function(Session row, SessionFacts? facts);
+
 /// Applies host facts to session rows: the only writer of lifecycle status for
 /// a hosted session.
 ///
@@ -41,18 +46,17 @@ class SessionLifecycleChange {
 /// - `cancelled` is kept against a later exit: the request is why it ended;
 /// - otherwise, and always for `running`, the fact wins.
 ///
-/// A row whose agent runs inside the server and ends with it
-/// ([endsWithServer]) is never `unknown`: there is no terminal of it to lose
-/// sight of, so an end nobody collected a code for — the server stopping, a
-/// restart finding the row still claiming to run — is its end, `completed`.
+/// `unknown` is what a host's silence derives to; [resolveUnknown] may say
+/// what it means instead for a row — an agent the server runs outright has
+/// no process anybody could still be running out of sight, so its end with
+/// no code is an end, clean or failed by its reason. The resolver answers
+/// `unknown` to leave the rule as it is.
 class SessionLifecycleRecorder {
-  SessionLifecycleRecorder(
-    this._sessions, {
-    bool Function(Session session)? endsWithServer,
-  }) : _endsWithServer = endsWithServer;
+  SessionLifecycleRecorder(this._sessions, {UnknownResolver? resolveUnknown})
+    : _resolveUnknown = resolveUnknown;
 
   final SessionStatusStore _sessions;
-  final bool Function(Session session)? _endsWithServer;
+  final UnknownResolver? _resolveUnknown;
   final Map<String, DateTime> _lastObserved = {};
   final StreamController<SessionLifecycleChange> _changes =
       StreamController.broadcast(sync: true);
@@ -73,7 +77,7 @@ class SessionLifecycleRecorder {
     final row = _sessions.getById(sessionId);
     if (row == null) return null;
     _lastObserved[facts.hostSessionId] = facts.observedAt;
-    return _record(row, _derived(row, lifecycleStatusFrom(facts)), facts);
+    return _record(row, _derived(row, facts), facts);
   }
 
   /// Records a lifecycle event; see [apply].
@@ -94,17 +98,17 @@ class SessionLifecycleRecorder {
   SessionLifecycleChange? recordUnseen(String sessionId) {
     final row = _sessions.getById(sessionId);
     if (row == null) return null;
-    return _record(row, _derived(row, lifecycleStatusFrom(null)), null);
+    return _record(row, _derived(row, null), null);
   }
 
   Future<void> dispose() => _changes.close();
 
-  /// [derived], or `completed` where it is `unknown` of a row that ends with
-  /// the server.
-  SessionStatus _derived(Session row, SessionStatus derived) =>
-      derived == SessionStatus.unknown && (_endsWithServer?.call(row) ?? false)
-      ? SessionStatus.completed
-      : derived;
+  /// What [facts] say of [row], with `unknown` put to the resolver.
+  SessionStatus _derived(Session row, SessionFacts? facts) {
+    final derived = lifecycleStatusFrom(facts);
+    if (derived != SessionStatus.unknown) return derived;
+    return _resolveUnknown?.call(row, facts) ?? derived;
+  }
 
   SessionLifecycleChange? _record(
     Session row,

@@ -677,7 +677,7 @@ Future<int> runServe(
     onWritten: (sessionId) => data.announceSessions([sessionId]),
     // An agent spoken to over ACP runs inside this server: a row of one left
     // `running` by the server before this one ended with it.
-    endsWithServer: sessionEndsWithServer(
+    resolveUnknown: sessionEndsWithServer(
       rows: checkoutRows,
       agents: liveAgents,
     ),
