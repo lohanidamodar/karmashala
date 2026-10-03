@@ -78,8 +78,81 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     args.string('sessionId'),
     requestId: args.optionalString('requestId'),
   ),
+  SessionSetMode.name => SessionSetMode(
+    sessionId: args.string('sessionId'),
+    modeId: args.string('modeId'),
+  ),
+  SessionSetConfigOption.name => SessionSetConfigOption(
+    sessionId: args.string('sessionId'),
+    configId: args.string('configId'),
+    value: args.stringOrBool('value'),
+  ),
   _ => null,
 };
+
+/// Puts session [sessionId]'s agent into mode [modeId] — one of the
+/// `availableModes` a `SessionModesChanged` offered (ACP `session/set_mode`).
+/// Refused `invalid` for a session whose agent offers no modes.
+final class SessionSetMode extends DataRequest<DataAck> {
+  const SessionSetMode({required this.sessionId, required this.modeId});
+
+  static const String name = 'sessions.setMode';
+
+  final String sessionId;
+  final String modeId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'modeId': modeId,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Sets config option [configId] of session [sessionId]'s agent to [value]:
+/// a choice's value for a `select` option, a bool for a `boolean` one (ACP
+/// `session/set_config_option`). The options as they then stand are told as
+/// a `SessionConfigOptionsChanged`. Refused `invalid` for a session whose
+/// agent offers no such option or no such value.
+final class SessionSetConfigOption extends DataRequest<DataAck> {
+  const SessionSetConfigOption({
+    required this.sessionId,
+    required this.configId,
+    required this.value,
+  });
+
+  static const String name = 'sessions.setConfigOption';
+
+  final String sessionId;
+  final String configId;
+
+  /// A `String` or a `bool`.
+  final Object value;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'configId': configId,
+    'value': value,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
 
 /// Sessions the server starts and runs; answered when done.
 sealed class SessionWorkRequest<R> extends DataRequest<R> {
@@ -447,12 +520,25 @@ final class SessionInterrupt extends SessionInputRequest<DataAck> {
 /// What `sessions.send` answers. [via] is [readBack] when the Return was read
 /// back off the server's screen, [unverified] when the agent's composer could
 /// not be read and Return was pressed once.
+///
+/// [resumed] says the server resumed the session to take the message — an
+/// agent it speaks to over a protocol, sent to while nothing ran it — and
+/// [notice] is what a person should know of that resume (a fresh
+/// conversation in the same session, a directory that had gone). Both are
+/// left out of the wire when unset; an older server never sends them.
 final class SessionSent {
-  const SessionSent({required this.sent, required this.via});
+  const SessionSent({
+    required this.sent,
+    required this.via,
+    this.resumed = false,
+    this.notice,
+  });
 
   factory SessionSent.fromJson(Map<String, Object?> json) => SessionSent(
     sent: json['sent'] == true,
     via: json['via'] is String ? json['via']! as String : unverified,
+    resumed: json['resumed'] == true,
+    notice: json['notice'] is String ? json['notice']! as String : null,
   );
 
   static const String readBack = 'readBack';
@@ -460,6 +546,13 @@ final class SessionSent {
 
   final bool sent;
   final String via;
+  final bool resumed;
+  final String? notice;
 
-  Map<String, Object?> toJson() => {'sent': sent, 'via': via};
+  Map<String, Object?> toJson() => {
+    'sent': sent,
+    'via': via,
+    if (resumed) 'resumed': true,
+    'notice': ?notice,
+  };
 }

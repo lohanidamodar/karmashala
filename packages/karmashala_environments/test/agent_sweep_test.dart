@@ -368,6 +368,101 @@ void main() {
       ]);
     });
 
+    test('drops a stored row of a kind no shipped agent has any more, and '
+        'nothing breaks on it', () async {
+      // An installation an older build recorded for an agent this one no
+      // longer ships (`gemini-cli`): a kind the registry cannot name.
+      world.installations.insert(
+        agentInstallation(
+          id: 'g1',
+          agentId: 'gemini-cli',
+          path: r'C:\bin\gemini.cmd',
+          version: '0.62.0',
+        ),
+      );
+      expect(AgentRegistry.builtIn.byId('gemini-cli'), isNull);
+
+      final report = await sweep.sweep();
+
+      expect(report.removedCount, 1);
+      expect(report.foundCount, 1);
+      expect(report.environments.single.removed.single.agentId, 'gemini-cli');
+      expect(world.installations.getAll().map((i) => i.agentId), [
+        AgentIds.claudeCode,
+      ]);
+      // A second sweep has nothing left to say about it.
+      expect((await sweep.sweep()).removedCount, 0);
+    });
+
+    test('drops a row whose agent the registry no longer knows', () async {
+      // An ACP agent a person added and then removed: the registry forgets
+      // its kind while its row — and its command — are still there.
+      final row = AcpAgentRow(
+        id: 'r1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: testTime,
+      );
+      var current = AgentRegistry([...registry.adapters, acpAgentAdapter(row)]);
+      final runner = hostRunner();
+      sweep = world.sweep(
+        runnerFor: (_) => runner,
+        registry: registry,
+        registryNow: () => current,
+      );
+      installed['mine'] = '1.0.0';
+      await sweep.sweep();
+      expect(
+        world.installations.getAll().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+
+      current = registry;
+      final report = await sweep.sweep();
+
+      expect(report.removedCount, 1);
+      expect(world.installations.getAll().map((i) => i.agentId), [
+        AgentIds.claudeCode,
+      ]);
+    });
+
+    test('reads an ACP agent\'s version over the protocol, and reports '
+        'it', () async {
+      final row = AcpAgentRow(
+        id: 'r1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: testTime,
+      );
+      final asked = <String>[];
+      final runner = hostRunner();
+      sweep = world.sweep(
+        runnerFor: (_) => runner,
+        registry: AgentRegistry([...registry.adapters, acpAgentAdapter(row)]),
+        readAcpVersion: (installation, descriptor, environment) async {
+          asked.add('${descriptor.id}@${environment.id}');
+          return '1.0.91';
+        },
+      );
+      installed['mine'] = 'never asked --version';
+
+      final report = await sweep.sweep();
+
+      // Only the ACP agent; Claude Code answered --version as before.
+      expect(asked, ['${row.agentId}@windows']);
+      final mine = world.installations.getAll().singleWhere(
+        (i) => i.agentId == row.agentId,
+      );
+      expect(mine.version, '1.0.91');
+      expect(mine.versionReadAt, testTime);
+      final scan = report.environments.single;
+      expect(
+        scan.found.singleWhere((i) => i.agentId == row.agentId).version,
+        '1.0.91',
+      );
+      expect(scan.updated.single.to, '1.0.91');
+    });
+
     test('records a changed version in place', () async {
       await sweep.sweep();
       final before = world.installations.getAll().single;
@@ -570,10 +665,17 @@ void main() {
         windowsEnv(),
         wslEnv(id: 'wsl:archlinux', distro: 'archlinux'),
       ]);
+      // The three terminal agents only: these cases count what a start
+      // probes for, and the ACP agents' own discovery (npx fallback included)
+      // is agent_cli's to test.
       sweep = world.sweep(
         runnerFor: (environment) => environment.kind == EnvironmentKind.ssh
             ? throw StateError('a start does not dial an SSH host')
             : runner,
+        registry: AgentRegistry([
+          for (final adapter in builtInAgentAdapters)
+            if (adapter.acp == null) adapter,
+        ]),
       );
     });
 

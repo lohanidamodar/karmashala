@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/presentation/agent_logo.dart';
+import '../../agents/presentation/acp_usage_note.dart';
+import '../../agents/presentation/agent_version_label.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import '../../environments/application/environments_controller.dart';
 
@@ -26,7 +29,6 @@ class NewSessionAgentCards extends StatelessWidget {
   final AgentInstallation? selected;
   final ValueChanged<AgentInstallation> onSelected;
   final bool enabled;
-
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -82,11 +84,16 @@ class _AgentCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final name = AgentRegistry.builtIn.displayNameFor(installation.agentId);
+    // The composed registry, so an agent added in Settings shows its name.
+    final name = ref
+        .watch(agentRegistryProvider)
+        .displayNameFor(installation.agentId);
     final where = ref.watch(
       environmentLabelForIdProvider(installation.environmentId),
     );
-    final version = installation.version;
+    // An agent run through npx and not yet asked says so, never npx's own
+    // version.
+    final version = describeInstallVersion(installation);
     final muted = theme.textTheme.labelSmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
@@ -117,13 +124,24 @@ class _AgentCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    AgentLogo(
+                      agentId: installation.agentId,
+                      size: Chrome.iconAction,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 Text(
                   version == null ? where : '$where · $version',
@@ -153,6 +171,12 @@ class _AgentUsageLine extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An agent spoken to over ACP has no account to read: the protocol
+    // carries no limits, only what a running session reports of itself.
+    final registry = ref.watch(agentRegistryProvider);
+    if (agentSpeaksAcp(registry, installation.agentId)) {
+      return Text(kAcpUsageLimitsNote, style: muted);
+    }
     final usage = ref.watch(agentUsageProvider(installation));
     final value = usage.value;
     if (value == null) {

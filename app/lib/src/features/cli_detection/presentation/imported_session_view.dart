@@ -169,6 +169,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                       ),
                     ),
                 emptyHint: emptyHint,
+                agentId: session.cli,
                 footer: MessageComposer(
                   // Continuing starts the session, then sends to it.
                   enabled: caps.mayStart && caps.maySend,

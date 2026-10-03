@@ -192,7 +192,9 @@ DateTime? quietAt(AgentStatusReport? report) {
     return null;
   }
   return switch (report.source) {
+    // A protocol report is the agent's own word, dated like a hook's.
     AgentStatusSource.hook ||
+    AgentStatusSource.protocol ||
     AgentStatusSource.stateFile => report.evidenceAt.add(kQuietAfter),
     AgentStatusSource.terminalGrid || AgentStatusSource.none => null,
   };

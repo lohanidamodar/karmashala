@@ -34,7 +34,7 @@ class _Machines extends ConsumerWidget {
         for (final install in installs)
           install.id: store.signIn(ref, install).asData?.value.savedId,
     };
-    final newest = _newestVersion(installs);
+    final newest = newestAgentVersion(installs);
     final latest = ref.watch(agentLatestVersionsProvider).latestOf(agentId);
     final latestSource = ref
         .watch(agentRegistryProvider)
@@ -290,14 +290,6 @@ class _MachineRow extends ConsumerWidget {
       'Switched $environment to ${picked.title}.',
     );
   }
-}
-
-/// The newest of [installs]' versions, or null when fewer than two machines
-/// have one — a flag needs something to be behind.
-String? _newestVersion(List<AgentInstallation> installs) {
-  final versions = [for (final install in installs) ?install.version];
-  if (versions.length < 2) return null;
-  return versions.reduce((a, b) => compareAgentVersions(a, b) >= 0 ? a : b);
 }
 
 /// **The agent's latest release** (board: "Latest X · checked 3h ago", Check

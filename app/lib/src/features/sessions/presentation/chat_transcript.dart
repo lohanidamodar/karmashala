@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import '../../agents/presentation/agent_logo.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:agent_cli/stream.dart';
@@ -111,10 +112,15 @@ class ChatTranscriptView extends StatefulWidget {
     this.earlier = 0,
     this.onLoadEarlier,
     this.firstOrdinal = 0,
+    this.agentId,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// The agent this conversation is with, when known: the empty state wears
+  /// its mark rather than a generic glyph.
+  final String? agentId;
 
   /// Messages before [messages] that are not held here but can be asked
   /// for with [onLoadEarlier] — a server-read transcript arrives a page at a
@@ -201,8 +207,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   void _revealFocused() {
     final context = FocusManager.instance.primaryFocus?.context;
     if (!mounted || context == null || !_scroll.hasClients) return;
-    if (FocusManager.instance.highlightMode !=
-        FocusHighlightMode.traditional) {
+    if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) {
       return;
     }
     if (context.findAncestorStateOfType<_ChatTranscriptViewState>() != this) {
@@ -338,7 +343,10 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                     Positioned.fill(
                       child: FocusTraversalGroup(
                         child: total == 0
-                            ? _ChatEmptyState(hint: widget.emptyHint)
+                            ? _ChatEmptyState(
+                                hint: widget.emptyHint,
+                                agentId: widget.agentId,
+                              )
                             : Align(
                                 alignment: Alignment.topCenter,
                                 child: ConstrainedBox(
@@ -524,9 +532,10 @@ IconData _toolIcon(String? name) {
 /// What the conversation says when it has nothing to say yet. The four prompt
 /// cards that sat here overflowed their row at phone width and are gone.
 class _ChatEmptyState extends StatelessWidget {
-  const _ChatEmptyState({required this.hint});
+  const _ChatEmptyState({required this.hint, this.agentId});
 
   final String hint;
+  final String? agentId;
 
   /// Centred while it fits, scrollable the moment it does not. `minHeight` is
   /// what keeps the centring: a scroll view hands its child unbounded height.
@@ -563,13 +572,24 @@ class _ChatEmptyState extends StatelessWidget {
             children: [
               // `Chrome.iconHero` is the token for exactly this glyph; the
               // bordered circle each branch invented was chrome around it.
-              Icon(
-                isTerminalNotice ? AppIcons.terminal : AppIcons.robot,
-                size: Chrome.iconHero,
-                color: isTerminalNotice
-                    ? scheme.onSurfaceVariant
-                    : scheme.primary,
-              ),
+              if (isTerminalNotice)
+                Icon(
+                  AppIcons.terminal,
+                  size: Chrome.iconHero,
+                  color: scheme.onSurfaceVariant,
+                )
+              else if (agentId case final agentId?)
+                AgentLogo(
+                  agentId: agentId,
+                  size: Chrome.iconHero,
+                  color: scheme.primary,
+                )
+              else
+                Icon(
+                  AppIcons.robot,
+                  size: Chrome.iconHero,
+                  color: scheme.primary,
+                ),
               const SizedBox(height: Insets.sm),
               if (!isTerminalNotice) ...[
                 Text(

@@ -212,6 +212,9 @@ class DataClient {
   /// The agents: every installation, and the saved accounts **without their
   /// credentials** — a token bundle never leaves the server.
   final installations = KeyedReplica<AgentInstallation>();
+
+  /// The ACP agents a person added, by row id.
+  final acpAgents = KeyedReplica<AcpAgentRow>();
   final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
   final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
 
@@ -281,6 +284,41 @@ class DataClient {
   /// A server terminal started, moved (title, folder, last command) or
   /// ended, or was forgotten.
   Stream<TerminalChange> get terminalChanges => _terminalChanges.stream;
+
+  /// The modes each session's agent offers, by session id,
+  /// as last told. In memory only: the agent announces them again on resume.
+  final sessionModes = <String, SessionModesChanged>{};
+
+  final _sessionModeChanges = StreamController<SessionModesChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent announced or changed its modes.
+  Stream<SessionModesChanged> get sessionModeChanges =>
+      _sessionModeChanges.stream;
+
+  /// The config options (a model, a flag) each session's agent exposes, by
+  /// session id, as last told. In memory only, like [sessionModes].
+  final sessionConfigOptions = <String, SessionConfigOptionsChanged>{};
+
+  final _sessionConfigOptionChanges =
+      StreamController<SessionConfigOptionsChanged>.broadcast(sync: true);
+
+  /// A session's agent announced or changed its config options.
+  Stream<SessionConfigOptionsChanged> get sessionConfigOptionChanges =>
+      _sessionConfigOptionChanges.stream;
+
+  /// What each session's agent last reported of its context and cost, by
+  /// session id. In memory only, like [sessionModes].
+  final sessionUsage = <String, SessionUsageChanged>{};
+
+  final _sessionUsageChanges = StreamController<SessionUsageChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent reported its usage.
+  Stream<SessionUsageChanged> get sessionUsageChanges =>
+      _sessionUsageChanges.stream;
 
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
@@ -387,6 +425,14 @@ class DataClient {
 
   /// How far a refresh under way has got, once per app read.
   Stream<({int done, int total})> get storesProgress => _storesProgress.stream;
+
+  final _acpInstallProgress = StreamController<AcpInstallProgress>.broadcast(
+    sync: true,
+  );
+
+  /// Each step of an ACP agent install the server is doing, as told.
+  Stream<AcpInstallProgress> get acpInstallProgress =>
+      _acpInstallProgress.stream;
 
   /// The Flutter apps the server is attached to, as last told (slice 3d);
   /// null until the server has said.
@@ -683,6 +729,9 @@ class DataClient {
     installations.replaceAll({
       for (final i in snapshot.installations) i.id: i,
     }, revision);
+    acpAgents.replaceAll({
+      for (final r in snapshot.acpAgents) r.id: r,
+    }, revision);
     usageStates.replaceAll({
       for (final u in snapshot.usage) u.accountKey: u,
     }, revision);
@@ -900,6 +949,10 @@ class DataClient {
           devices.applyAt(id, null, batch.revision);
         case final HostsDomainChange change:
           applyHostsChange(change, batch.revision);
+        case AcpAgentChanged(:final row):
+          acpAgents.applyAt(row.id, row, batch.revision);
+        case AcpAgentRemoved(:final id):
+          acpAgents.applyAt(id, null, batch.revision);
         case WorktreeSetupChanged(:final repositoryId, :final setup):
           worktreeSetups.applyAt(repositoryId, setup, batch.revision);
         case WorktreeRunRecorded(:final report):
@@ -945,6 +998,17 @@ class DataClient {
           if (!_fileChanges.isClosed) _fileChanges.add(change);
         case final TranscriptChanged change:
           if (!_transcriptChanges.isClosed) _transcriptChanges.add(change);
+        case final SessionModesChanged change:
+          sessionModes[change.sessionId] = change;
+          if (!_sessionModeChanges.isClosed) _sessionModeChanges.add(change);
+        case final SessionConfigOptionsChanged change:
+          sessionConfigOptions[change.sessionId] = change;
+          if (!_sessionConfigOptionChanges.isClosed) {
+            _sessionConfigOptionChanges.add(change);
+          }
+        case final SessionUsageChanged change:
+          sessionUsage[change.sessionId] = change;
+          if (!_sessionUsageChanges.isClosed) _sessionUsageChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -964,6 +1028,10 @@ class DataClient {
         case StoresProgress(:final done, :final total):
           if (!_storesProgress.isClosed) {
             _storesProgress.add((done: done, total: total));
+          }
+        case final AcpInstallProgress progress:
+          if (!_acpInstallProgress.isClosed) {
+            _acpInstallProgress.add(progress);
           }
         case final AttentionChange change:
           _applyAttention(change);
@@ -1150,11 +1218,15 @@ class DataClient {
     unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());
+    unawaited(_acpInstallProgress.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
     unawaited(_intents.close());
     unawaited(_fileChanges.close());
     unawaited(_transcriptChanges.close());
+    unawaited(_sessionModeChanges.close());
+    unawaited(_sessionConfigOptionChanges.close());
+    unawaited(_sessionUsageChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());

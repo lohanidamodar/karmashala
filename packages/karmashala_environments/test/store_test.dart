@@ -107,6 +107,21 @@ void main() {
       );
     });
 
+    test('finds every installation of one agent, on every machine', () {
+      dao.insert(installation(id: 'win', agentId: 'acp:r1'));
+      dao.insert(
+        installation(
+          id: 'wsl',
+          agentId: 'acp:r1',
+          environmentId: 'wsl:Ubuntu',
+          path: '/usr/bin/mine',
+        ),
+      );
+      dao.insert(installation(id: 'other'));
+      expect(dao.getByAgent('acp:r1').map((i) => i.id), ['win', 'wsl']);
+      expect(dao.getByAgent('acp:r2'), isEmpty);
+    });
+
     test('the same (agent, environment, executable) twice is refused', () {
       dao.insert(installation(id: 'a1'));
       expect(
@@ -136,6 +151,17 @@ void main() {
       expect(dao.updatePath('a2', r'C:\real\c.exe', byUser: true), isFalse);
       expect(dao.getById('a2')!.executable.path, r'C:\two\c.exe');
     });
+
+    test(
+      'runner arguments are updated in place, and empty reads back empty',
+      () {
+        dao.insert(installation(id: 'a1'));
+        dao.updateLeadingArguments('a1', ['-y', 'pkg']);
+        expect(dao.getById('a1')!.leadingArguments, ['-y', 'pkg']);
+        dao.updateLeadingArguments('a1', const []);
+        expect(dao.getById('a1')!.leadingArguments, isEmpty);
+      },
+    );
 
     test('a null version reading is never written', () {
       dao.insert(installation());

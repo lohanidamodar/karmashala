@@ -6,6 +6,7 @@ class _WorkbenchSession {
     required this.title,
     required this.paneId,
     required this.native,
+    this.chatOnly = false,
   });
 
   final String id;
@@ -15,6 +16,10 @@ class _WorkbenchSession {
   /// one opened in an external terminal, and one whose pane has been ended.
   final String? paneId;
   final bool native;
+
+  /// The conversation is this session's only face: its agent is spoken to
+  /// over ACP, so there is no terminal and nothing to toggle to.
+  final bool chatOnly;
 }
 
 /// The terminal rendering of a session: the panes, and nothing over them. A
@@ -38,10 +43,7 @@ class _TerminalSurface extends StatelessWidget {
     if (selected != null && selected.paneId == null) {
       return _NoPaneForSession(session: selected, groupId: groupId);
     }
-    return TerminalPaneStack(
-      groupId: groupId,
-      groupFocused: groupFocused,
-    );
+    return TerminalPaneStack(groupId: groupId, groupFocused: groupFocused);
   }
 }
 

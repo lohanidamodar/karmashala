@@ -235,6 +235,29 @@ final class OpenAiSignIn extends AgentSignIn {
   );
 }
 
+/// What `acpAgents.install` answers: where the executable landed, spelled
+/// for the machine it is on, and what looking for the agent again found when
+/// the request named one.
+final class AcpAgentInstalled {
+  const AcpAgentInstalled({required this.executablePath, this.report});
+
+  final String executablePath;
+  final AgentDiscoveryReport? report;
+
+  Map<String, Object?> toJson() => {
+    'executablePath': executablePath,
+    if (report case final report?) 'report': discoveryReportToJson(report),
+  };
+
+  factory AcpAgentInstalled.fromJson(Map<String, Object?> json) =>
+      AcpAgentInstalled(
+        executablePath: _string(json, 'executablePath'),
+        report: json['report'] == null
+            ? null
+            : discoveryReportFromJson(_object(json['report'])),
+      );
+}
+
 // Detection reports.
 
 Map<String, Object?> discoveryReportToJson(AgentDiscoveryReport report) => {

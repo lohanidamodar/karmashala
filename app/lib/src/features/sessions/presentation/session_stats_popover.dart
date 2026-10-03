@@ -191,12 +191,12 @@ class SessionStatsPopover extends ConsumerWidget {
   ) {
     final reason = view.unavailable;
     final stats = view.stats;
+    final notABill = stats?.reportedCost == null
+        ? 'Counts only — not a bill.'
+        : 'Counts, and the cost as the agent reported it — not a bill.';
     final footer = [
       const SizedBox(height: Insets.md),
-      Text(
-        '${sessionStatsProvenance(view)}. Counts only — not a bill.',
-        style: meta,
-      ),
+      Text('${sessionStatsProvenance(view)}. $notABill', style: meta),
     ];
     if (reason != null || stats == null) {
       return [
@@ -215,9 +215,18 @@ class SessionStatsPopover extends ConsumerWidget {
     }
     final byName = stats.toolCallsByName;
     final perTurn = stats.outputTokensPerTurn;
+    final contextPerTurn = stats.contextUsedPerTurn;
+    final agent = view.agentName.isEmpty ? 'the agent' : view.agentName;
     return [
       const _GroupLabel('Context'),
       _ContextHeader(stats: stats, agentName: view.agentName, meta: meta),
+      if (stats.reportedCost case final cost?) ...[
+        const SizedBox(height: Insets.xs),
+        Text(
+          '${formatReportedCost(cost)} so far, as $agent reported it.',
+          style: meta,
+        ),
+      ],
       const SizedBox(height: Insets.md),
       _FigureRow(stats: stats, meta: meta),
       const _GroupLabel('Tokens by kind'),
@@ -237,23 +246,38 @@ class SessionStatsPopover extends ConsumerWidget {
         )
       else
         _ToolCalls(byName: byName, total: stats.toolCalls, meta: meta),
-      const _GroupLabel('Output per turn'),
-      if (perTurn == null)
-        Text('Output per turn is $kStatNotRecorded.', style: meta)
-      else if (perTurn.length < 2)
-        Text(
-          perTurn.isEmpty
-              ? 'No turn has finished yet.'
-              : 'One turn so far: ${formatCompactCount(perTurn.single)} '
-                    'output tokens.',
-          style: meta,
-        )
-      else
-        _OutputPerTurn(
-          perTurn: perTurn,
-          reasoningPerTurn: stats.reasoningTokensPerTurn,
-          meta: meta,
-        ),
+      if (perTurn == null && contextPerTurn != null) ...[
+        const _GroupLabel('Context per turn'),
+        if (contextPerTurn.length < 2)
+          Text(
+            contextPerTurn.isEmpty
+                ? 'No turn has finished yet.'
+                : 'One turn so far: '
+                      '${formatCompactCount(contextPerTurn.single)} tokens '
+                      'in context.',
+            style: meta,
+          )
+        else
+          ContextPerTurn(perTurn: contextPerTurn),
+      ] else ...[
+        const _GroupLabel('Output per turn'),
+        if (perTurn == null)
+          Text('Output per turn is $kStatNotRecorded.', style: meta)
+        else if (perTurn.length < 2)
+          Text(
+            perTurn.isEmpty
+                ? 'No turn has finished yet.'
+                : 'One turn so far: ${formatCompactCount(perTurn.single)} '
+                      'output tokens.',
+            style: meta,
+          )
+        else
+          _OutputPerTurn(
+            perTurn: perTurn,
+            reasoningPerTurn: stats.reasoningTokensPerTurn,
+            meta: meta,
+          ),
+      ],
       const _GroupLabel('This project’s week'),
       _ProjectWeekSection(sessionId: sessionId, width: inner, meta: meta),
       ...footer,

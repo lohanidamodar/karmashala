@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:io';
@@ -11,6 +12,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala/src/features/sessions/presentation/slow_start_note.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -27,7 +29,12 @@ import 'package:karmashala_git/git.dart' show GitPresence;
 import 'package:karmashala_git/repositories.dart';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ScratchCheckoutCreate;
+    show
+        AcpAuthMethod,
+        AcpAuthMethods,
+        DataRefusalCode,
+        DataRefused,
+        ScratchCheckoutCreate;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 
 import '../../support/fake_data_server.dart';
@@ -220,6 +227,25 @@ void main() {
       expect(find.text('Alpha'), findsOneWidget);
       expect(find.textContaining('alpha-app'), findsOneWidget);
       expect(find.textContaining('beta-app'), findsNothing);
+    });
+
+    testWidgets('offering no card for an agent the registry has forgotten', (
+      tester,
+    ) async {
+      // A removed ACP agent's leftover installation row: no name to show.
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'ghost',
+          agentId: 'acp:gone',
+          path: r'C:\gone\agent.exe',
+        ),
+      );
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+
+      expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('agent-card:ghost')), findsNothing);
+      expect(find.text('acp:gone'), findsNothing);
     });
 
     testWidgets('and at the first project when nothing is selected', (
@@ -417,22 +443,25 @@ void main() {
   });
 
   group('a workspace with nothing to run in', () {
-    testWidgets('says so instead of offering an empty dropdown', (
-      tester,
-    ) async {
+    testWidgets('opens on No project, and can start there', (tester) async {
       server.projectRows
         ..delete('p1')
         ..delete('p2');
       final container = containerFor();
       await open(tester, container);
 
-      expect(find.textContaining('no projects yet'), findsOneWidget);
-      expect(find.text('Add project…'), findsOneWidget);
+      // A workspace with no projects is not a workspace with nowhere to go:
+      // a session without a project needs none.
+      expect(find.text('No project'), findsOneWidget);
       expect(
-        tester.widget<FilledButton>(startButton()).onPressed,
-        isNull,
-        reason: 'there is nowhere to start it',
+        find.textContaining(
+          'Runs in its own folder under ~/karmashala/scratch',
+        ),
+        findsOneWidget,
       );
+      expect(find.text('Checkout'), findsNothing);
+      expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
+      await closeAll(tester);
     });
 
     /// **A project with no checkout is not a project with nowhere to run.**
@@ -597,6 +626,75 @@ void main() {
     expect(launcher.requests.single.firstMessage, 'Add pagination to /trails');
     await closeAll(tester);
   });
+
+  testWidgets('a start that takes long says so under the spinner', (
+    tester,
+  ) async {
+    // An agent run through npx is downloaded on its first start; a bare
+    // spinner for minutes looked hung.
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        sessionLauncherProvider.overrideWith((ref) => _HoldingLauncher(ref)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+    await tester.ensureVisible(startButton());
+    await tester.tap(startButton());
+    await tester.pump();
+    expect(find.text(SlowStartNote.text), findsNothing);
+
+    await tester.pump(kSlowStartAfter + const Duration(seconds: 1));
+    expect(find.text(SlowStartNote.text), findsOneWidget);
+    await closeAll(tester);
+  });
+  testWidgets('an agent that asks to be logged in first offers Log in, '
+      'which lists its methods', (tester) async {
+    server.agentWork.acpAuthMethods['a1'] = const AcpAuthMethods(
+      installationId: 'a1',
+      methods: [AcpAuthMethod(id: 'oauth', name: 'Log in with the browser')],
+    );
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        sessionLauncherProvider.overrideWith((ref) => _LoginRequired(ref)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+    expect(find.text('Log in…'), findsNothing);
+    await tester.ensureVisible(startButton());
+    await tester.tap(startButton());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('asks to be logged in first'), findsOneWidget);
+    await tester.ensureVisible(find.text('Log in…'));
+    await tester.tap(find.text('Log in…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Log in with the browser'), findsOneWidget);
+
+    await tester.tap(find.text('Log in with the browser'));
+    await tester.pumpAndSettle();
+    expect(server.agentWork.acpAuthenticates, [('a1', 'oauth')]);
+    expect(find.textContaining('asks to be logged in first'), findsNothing);
+    expect(find.text('Logged in via Log in with the browser.'), findsOneWidget);
+    await closeAll(tester);
+  });
+}
+
+/// A start the server refused because the agent wants a login first.
+class _LoginRequired extends SessionLauncher {
+  _LoginRequired(super.ref);
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async => throw const DataRefused(
+    DataRefusalCode.loginRequired,
+    'Antigravity asks to be logged in first.',
+  );
 }
 
 /// Records the terminal a launch was asked for, and launches nothing.
@@ -615,4 +713,15 @@ class _RecordingLauncher extends SessionLauncher {
     requests.add(request);
     throw StateError('recorded, not launched');
   }
+}
+
+/// A launch that never comes back, as one waiting on an npx download.
+class _HoldingLauncher extends SessionLauncher {
+  _HoldingLauncher(super.ref);
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) => Completer<SessionLaunchResult>().future;
 }

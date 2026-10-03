@@ -227,6 +227,7 @@ class AgentNotificationPolicy {
   /// counts; a state file may have looked like this for hours.
   bool _justHappened(AgentStatusTransition transition) =>
       transition.source == AgentStatusSource.hook ||
+      transition.source == AgentStatusSource.protocol ||
       (transition.from != null &&
           transition.from != AgentActivityStatus.unknown);
 

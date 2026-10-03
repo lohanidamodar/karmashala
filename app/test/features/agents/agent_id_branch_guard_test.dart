@@ -11,7 +11,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// pattern to copy — this test fails on the first one to appear.
 void main() {
   /// The ids of the shipped agents, as the literals a branch would spell.
-  const ids = ['claudeCode', 'codex', 'antigravity'];
+  const ids = [
+    'claudeCode',
+    'codex',
+    'antigravity',
+    'claudeAcp',
+    'codexAcp',
+    'antigravityAcp',
+    'grok',
+    'claude-acp',
+    'codex-acp',
+    'antigravity-acp',
+  ];
   final idAlternation = ids.join('|');
 
   /// Each way of asking "is this agent X?" without asking its adapter.

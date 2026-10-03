@@ -18,6 +18,10 @@ enum AgentStatusSource {
   /// The rendered bottom of the agent's own terminal screen.
   terminalGrid,
 
+  /// The runtime speaking the agent's protocol (ACP) said so itself. As
+  /// authoritative as [hook]: the agent reported it, nobody inferred it.
+  protocol,
+
   /// Nothing could tell us anything.
   none,
 }

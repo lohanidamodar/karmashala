@@ -11,6 +11,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/repositories.dart';
+import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -95,6 +96,16 @@ class ExplorerActions {
         ExplorerOutcome.reattached,
         message: '"${twin.title}" is already running this conversation.',
       );
+    }
+
+    // An ACP session has no CLI conversation to look for: its conversation is
+    // the server's own rows. It opens in its chat tab, and a message sent
+    // there resumes it at the server when it is not running.
+    if (installationSpeaksAcp(_ref, session.agentInstallationId)) {
+      _ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .openChatTab(sessionId);
+      return const ExplorerResult(ExplorerOutcome.selected);
     }
 
     var externalId = session.externalSessionId;

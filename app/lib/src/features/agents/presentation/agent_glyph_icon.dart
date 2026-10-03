@@ -6,4 +6,5 @@ import 'package:karmashala_ui/icons.dart';
 IconData agentGlyphIcon(AgentGlyph glyph) => switch (glyph) {
   AgentGlyph.robot => AppIcons.robot,
   AgentGlyph.terminal => AppIcons.terminal,
+  AgentGlyph.rocket => AppIcons.rocketLaunch,
 };

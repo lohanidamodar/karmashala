@@ -168,6 +168,12 @@ class DaemonCompanion implements CompanionHandler {
   String? Function(String sessionId)? attentionOf;
   String? Function(String sessionId)? usageLimitOf;
 
+  /// Sends a phone's message to a session whose agent the server speaks to
+  /// over a protocol — resuming it when nothing runs it — set by `serve`:
+  /// true once sent, false for a session typed into instead. Throws
+  /// [StateError] in words when it is refused.
+  Future<bool> Function(String sessionId, String text)? sendOverProtocol;
+
   /// Every agent record on this machine, `agentId/conversationId` → path
   /// (the conversation index's walk), set by `serve`: a phone's
   /// transcript is read from the agent's own record through it. Unset, every
@@ -197,6 +203,17 @@ class DaemonCompanion implements CompanionHandler {
     return path == null || agentId == null
         ? null
         : (path: path, agentId: agentId);
+  }
+
+  /// [sendOverProtocol], its refusal in the companion API's terms.
+  Future<bool> _sendOverProtocol(String sessionId, String text) async {
+    final send = sendOverProtocol;
+    if (send == null) return false;
+    try {
+      return await send(sessionId, text);
+    } on StateError catch (error) {
+      throw RemoteApiRefusal(ErrorCode.badRequest, error.message);
+    }
   }
 
   final Duration transcriptPollInterval;
@@ -240,7 +257,7 @@ class DaemonCompanion implements CompanionHandler {
 
   late final RemoteHostBindings bindings = hostCompanionBindings(
     hostName: hostName,
-    hosted: prompts == null ? null : CompanionPrompts(prompts!.answers),
+    hosted: prompts == null ? null : CompanionPrompts(prompts!.answering),
     holds: prompts?.holds,
     workspace: HostedWorkspace(
       rows: WorkspaceRows(database),
@@ -269,6 +286,7 @@ class DaemonCompanion implements CompanionHandler {
       records: _records,
       attachments: attachments,
       attachmentSupportOf: attachments == null ? null : _attachmentSupport,
+      deliverOverProtocol: _sendOverProtocol,
       clock: _now,
     ),
     notes: () async => notesSnapshot(

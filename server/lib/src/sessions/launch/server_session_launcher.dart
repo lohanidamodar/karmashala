@@ -102,7 +102,7 @@ class ServerSessionLauncher {
 
   /// Whether this server runs session [sessionId] right now.
   bool runsHere(String sessionId) {
-    final session = registry.find(hostSessionIdOf(sessionId));
+    final session = registry.findProcess(hostSessionIdOf(sessionId));
     return session != null && !session.lifecycle.hasEnded;
   }
 
@@ -376,7 +376,7 @@ class ServerSessionLauncher {
   /// nothing runs it (unless [quietly]).
   Future<void> end(String sessionId, {bool quietly = false}) async {
     final hostId = hostSessionIdOf(sessionId);
-    final session = registry.find(hostId);
+    final session = registry.findProcess(hostId);
     if (session == null || session.lifecycle.hasEnded) {
       if (quietly) return;
       throw const LaunchTargetMissing(
@@ -401,6 +401,8 @@ class ServerSessionLauncher {
   AgentPaneLaunch? _storedLaunchOf(Session row) {
     final installation = rows.installation(row.agentInstallationId);
     if (installation == null) return null;
+    // An ACP session has no terminal for a pane to attach to.
+    if (agents.adapterOf(installation.agentId)?.acp != null) return null;
     final directory =
         row.workingDirectory ??
         row.worktree ??

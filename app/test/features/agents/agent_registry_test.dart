@@ -202,6 +202,45 @@ const List<_AgentGolden> _goldens = [
   ),
 ];
 
+/// The agents that speak the Agent Client Protocol, after the terminal ones.
+/// They have no command-line vocabulary to pin — a prompt, a mode and a resume
+/// all travel over the protocol — so their golden is the identity and the
+/// arguments that put the binary into ACP mode.
+const List<
+  ({
+    String id,
+    String displayName,
+    String executable,
+    List<String> acpArguments,
+  })
+>
+_acpGoldens = [
+  (
+    id: 'claude-acp',
+    displayName: 'Claude (ACP)',
+    executable: 'claude-agent-acp',
+    acpArguments: [],
+  ),
+  (
+    id: 'codex-acp',
+    displayName: 'Codex (ACP)',
+    executable: 'codex-acp',
+    acpArguments: [],
+  ),
+  (
+    id: 'antigravity-acp',
+    displayName: 'Antigravity (ACP)',
+    executable: 'agy_acp_server.exe',
+    acpArguments: [],
+  ),
+  (
+    id: 'grok',
+    displayName: 'Grok',
+    executable: 'grok',
+    acpArguments: ['agent', 'stdio'],
+  ),
+];
+
 void main() {
   const registry = AgentRegistry.builtIn;
 
@@ -209,18 +248,40 @@ void main() {
       PermissionSelection.parse(canonical)!;
 
   test('ships exactly the golden agents, in order', () {
-    expect(registry.descriptors.map((d) => d.id), _goldens.map((g) => g.id));
-    expect(
-      registry.descriptors.map((d) => d.displayName),
-      _goldens.map((g) => g.displayName),
-    );
-    // Each shipped agent is its own adapter, and the registry is nothing but
-    // those adapters.
-    expect(
-      registry.adapters.map((a) => a.runtimeType),
-      _goldens.map((g) => g.adapter),
-    );
+    expect(registry.descriptors.map((d) => d.id), [
+      ..._goldens.map((g) => g.id),
+      ..._acpGoldens.map((g) => g.id),
+    ]);
+    expect(registry.descriptors.map((d) => d.displayName), [
+      ..._goldens.map((g) => g.displayName),
+      ..._acpGoldens.map((g) => g.displayName),
+    ]);
+    // Each terminal agent is its own adapter; an ACP agent is data alone,
+    // because the runtime speaks to every one of them the same way.
+    expect(registry.adapters.map((a) => a.runtimeType), [
+      ..._goldens.map((g) => g.adapter),
+      for (final _ in _acpGoldens) DataOnlyAgentAdapter,
+    ]);
     expect(registry.byId('nope'), isNull);
+  });
+
+  test('an ACP agent carries its protocol arguments and no terminal rules', () {
+    for (final golden in _acpGoldens) {
+      final descriptor = registry.byId(golden.id)!;
+      final acp = descriptor.acp;
+      expect(acp, isNotNull, reason: golden.id);
+      expect(acp!.arguments, golden.acpArguments, reason: golden.id);
+      expect(descriptor.binaries.forKind(EnvironmentKind.windowsNative), [
+        golden.executable,
+      ], reason: golden.id);
+      expect(
+        descriptor.statusStrategy,
+        AgentStatusStrategy.none,
+        reason: golden.id,
+      );
+      expect(descriptor.hooks, isNull, reason: golden.id);
+      expect(registry.adapterFor(golden.id)!.acp, same(acp), reason: golden.id);
+    }
   });
 
   test('probes the golden executable name on both platforms', () {

@@ -123,9 +123,10 @@ void main() {
     );
     expect(find.text('Enter to run'), findsOneWidget);
 
-    // Tab from the preview takes the first usable agent.
+    // Tab from the preview takes the first usable agent — typed by its whole
+    // name, since Claude (ACP) shares its first word.
     await press(tester, LogicalKeyboardKey.tab);
-    expect(boxText(tester), 'start Karmashala claude ');
+    expect(boxText(tester), 'start Karmashala claude-code ');
 
     await press(tester, LogicalKeyboardKey.enter);
 
@@ -133,7 +134,7 @@ void main() {
     expect(find.byType(QuickOpen), findsNothing);
     // Fully resolved, so it can be run again from an empty box.
     expect(TypedCommandHistory(server.store).list(), [
-      'start Karmashala claude',
+      'start Karmashala claude-code',
     ]);
     expect(container.read(selectedProjectIdProvider), 'p1');
   });
@@ -165,7 +166,8 @@ void main() {
 
     await type(tester, 'start Karmashala anti');
     expect(find.text('antigravity'), findsOneWidget);
-    expect(find.textContaining('not installed in'), findsOneWidget);
+    // Antigravity and Antigravity (ACP) both match, and neither is installed.
+    expect(find.textContaining('not installed in'), findsNWidgets(2));
 
     await press(tester, LogicalKeyboardKey.tab);
     expect(boxText(tester), 'start Karmashala anti');

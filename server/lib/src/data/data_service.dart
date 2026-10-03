@@ -17,11 +17,13 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
+import '../sessions/session_modes.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
 import '../stores/store_desk.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
+import 'acp_agents_handler.dart';
 import 'automations_handler.dart';
 import 'conversations_handler.dart';
 import 'evidence_handler.dart';
@@ -77,6 +79,7 @@ class DataService {
     _sessions = SessionsHandler(database, _now, runs: runsSession);
     _hosts = HostsHandler(database, _now, opens: opens);
     _evidence = EvidenceHandler(database, _now);
+    _acpAgents = AcpAgentsHandler(database, _now, newId ?? newUuid);
     conversations = ConversationsHandler(database, _Clock(_now));
     _workspace = WorkspaceHandler(
       database,
@@ -88,6 +91,7 @@ class DataService {
         final worktrees = _worktrees.checkoutsGoing(ids);
         return () => [...sessions(), ...comparisons(), ...worktrees()];
       },
+      liveAcpSessions: () => liveAcpSessions(),
     );
   }
 
@@ -163,6 +167,16 @@ class DataService {
   /// A client's chat sends and Stop, typed as host keys (Stage 2 step 2);
   /// refused `unavailable` without it.
   SessionInput? sessionInput;
+
+  /// Where `sessions.setMode` lands (ACP design, C5): the ACP runtime replaces
+  /// the default, which refuses every session as having no modes.
+  SessionModeChanger sessionModes = const NoSessionModes();
+
+  /// The session ids an ACP runtime of this server runs right now; set by
+  /// `serve`. A project holding one is not deleted.
+  Set<String> Function() liveAcpSessions = _noLiveAcpSessions;
+
+  static Set<String> _noLiveAcpSessions() => const {};
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
@@ -185,6 +199,7 @@ class DataService {
   late final SessionsHandler _sessions;
   late final HostsHandler _hosts;
   late final EvidenceHandler _evidence;
+  late final AcpAgentsHandler _acpAgents;
 
   /// The conversation index: searched by every client, kept once [serve]
   /// starts it with the agents' stores.
@@ -303,13 +318,22 @@ class DataService {
 
   /// Records the agent CLIs the server found on this machine ([here]) by
   /// the one reconciliation rule, and tells every client what it wrote.
+  /// [forgotten] names the agent kinds the registry no longer knows, whose
+  /// leftover rows go.
   InstallationsReconciled recordAgentsFound(
     ExecutionEnvironment here,
     List<AgentInstallation> found,
-    DateTime readAt,
-  ) {
+    DateTime readAt, {
+    Set<String> forgotten = const {},
+  }) {
     final changes = <DataChange>[];
-    final result = _hosts.recordFound(here, found, readAt, changes);
+    final result = _hosts.recordFound(
+      here,
+      found,
+      readAt,
+      changes,
+      forgotten: forgotten,
+    );
     announce(changes);
     return result;
   }
@@ -341,6 +365,10 @@ class DataService {
   /// What checkout [repositoryId] asks of a new worktree.
   WorktreeSetup worktreeSetupOf(String repositoryId) =>
       _worktrees.setupOf(repositoryId);
+
+  /// The ACP agents a person added, oldest first — what the server's agent
+  /// registry is composed from (`AgentRegistryHolder`).
+  List<AcpAgentRow> get acpAgents => _acpAgents.list();
 
   /// The installations recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>
@@ -514,6 +542,8 @@ class DataService {
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
         SessionInputRequest() ||
+        SessionSetMode() ||
+        SessionSetConfigOption() ||
         EnvVaultRequest() ||
         StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
@@ -545,6 +575,11 @@ class DataService {
           final ReviewThreadSetStatus r => _worktrees.setStatus(r, changes),
         },
         final QuickAccessRequest r => _quickAccess.handle(r, changes),
+        final AcpAgentsRequest r => switch (r) {
+          AcpAgentsList() => _acpAgents.list(),
+          final AcpAgentPut r => _acpAgents.put(r, changes),
+          final AcpAgentDelete r => _acpAgents.delete(r, changes),
+        },
         final SnippetsRequest r => switch (r) {
           SnippetsList() => _snippets.list(),
           final SnippetAdd r => _snippets.add(r, changes),
@@ -627,6 +662,7 @@ class DataService {
         final KnownHostForget r => _hosts.forgetKey(r, changes),
         AgentsList() => _hosts.agents(
           usage: agentWork?.usageStates() ?? const [],
+          acpAgents: _acpAgents.list(),
         ),
         final InstallationSetPath r => _hosts.setPath(r, changes),
         final ClaudeAccountDelete r => _hosts.deleteClaudeAccount(r, changes),
@@ -722,6 +758,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
       request is SessionInputRequest ||
+      request is SessionSetMode ||
+      request is SessionSetConfigOption ||
       request is EnvVaultRequest ||
       request is StoreRequest;
 
@@ -806,6 +844,18 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
           ));
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
+    }
+    if (request case SessionSetMode(:final sessionId, :final modeId)) {
+      await _service.sessionModes.setMode(sessionId, modeId);
+      return DataReply(const DataAck() as R, _service._revision);
+    }
+    if (request case SessionSetConfigOption(
+      :final sessionId,
+      :final configId,
+      :final value,
+    )) {
+      await _service.sessionModes.setConfigOption(sessionId, configId, value);
+      return DataReply(const DataAck() as R, _service._revision);
     }
     if (request case final SessionTranscriptRequest<Object?> asked) {
       if (!transcripts) {
@@ -999,7 +1049,10 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   };
   if (denied != null || grants == null) return denied;
   final needed = switch (request) {
-    SessionSend() || SessionInterrupt() => Capability.sendPrompt,
+    SessionSend() ||
+    SessionInterrupt() ||
+    SessionSetMode() ||
+    SessionSetConfigOption() => Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to
     // sessions: no more than the phone may do itself.
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>

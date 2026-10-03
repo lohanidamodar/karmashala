@@ -1,7 +1,19 @@
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 
 import 'values_json.dart';
+
+/// The agent kinds among [stored] that [registry] no longer knows — an ACP
+/// agent whose row was removed. A probe judges them as asked about and
+/// found nowhere, so their rows go on the next sweep.
+Set<String> forgottenAgentKinds(
+  AgentRegistry registry,
+  Iterable<AgentInstallation> stored,
+) => {
+  for (final row in stored)
+    if (registry.adapterFor(row.agentId) == null) row.agentId,
+};
 
 /// **The one reconciliation of a probe with the recorded installations** —
 /// what the server applies to every sweep, the desktop's across its
@@ -73,7 +85,20 @@ InstallationPlan planReconcile({
           InstallationVersionChange(agentId, atThisPath.version, version),
         );
       }
-      plan.present.add(asRead(atThisPath, version));
+      // The runner's arguments follow what discovery found: a row written
+      // before they were recorded, or an agent that moved into npx.
+      if (!_sameArguments(
+        atThisPath.leadingArguments,
+        agent.leadingArguments,
+      )) {
+        plan.leadingArguments[atThisPath.id] = agent.leadingArguments;
+      }
+      plan.present.add(
+        asRead(
+          atThisPath,
+          version,
+        ).copyWith(leadingArguments: agent.leadingArguments),
+      );
       continue;
     }
 
@@ -107,11 +132,15 @@ InstallationPlan planReconcile({
           InstallationVersionChange(agentId, moved.version, version),
         );
       }
+      if (!_sameArguments(moved.leadingArguments, agent.leadingArguments)) {
+        plan.leadingArguments[moved.id] = agent.leadingArguments;
+      }
       plan.present.add(
-        asRead(
-          moved,
-          version,
-        ).copyWith(executable: agent.executable, executableByUser: false),
+        asRead(moved, version).copyWith(
+          executable: agent.executable,
+          executableByUser: false,
+          leadingArguments: agent.leadingArguments,
+        ),
       );
       continue;
     }
@@ -123,6 +152,7 @@ InstallationPlan planReconcile({
       version: version,
       versionReadAt: version == null ? null : (agent.versionReadAt ?? readAt),
       createdAt: agent.createdAt,
+      leadingArguments: agent.leadingArguments,
     );
     plan.inserts.add(installation);
     plan.present.add(installation);
@@ -147,6 +177,14 @@ InstallationPlan planReconcile({
   return plan;
 }
 
+bool _sameArguments(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 /// What [planReconcile] decided: the writes, and what they amount to.
 final class InstallationPlan {
   InstallationPlan._();
@@ -159,6 +197,10 @@ final class InstallationPlan {
 
   /// Versions read now, by row id.
   final versions = <String, String>{};
+
+  /// Rows whose runner arguments (`AgentInstallation.leadingArguments`) now
+  /// read differently, by row id.
+  final leadingArguments = <String, List<String>>{};
 
   /// Rows of an agent the probe asked about that it did not find anywhere.
   final absent = <AgentInstallation>[];

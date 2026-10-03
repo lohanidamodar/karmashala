@@ -58,6 +58,35 @@ void main() {
       },
     );
 
+    test('an agent spoken to over ACP has one, with no transcript file', () {
+      // The server keeps its conversation as rows, so the
+      // chat view is built without a store — asked of the adapter, never of
+      // the id.
+      const acp = DataOnlyAgentAdapter(
+        AgentDescriptor(
+          id: 'acp:custom',
+          displayName: 'Custom ACP agent',
+          binaries: AgentBinaries(windows: ['agent'], posix: ['agent']),
+          acp: AcpLaunchSpec(arguments: ['--acp']),
+        ),
+      );
+      expect(acp.transcripts?.buildsChatView ?? false, isFalse);
+      expect(agentSupportsChatView(acp), isTrue);
+      expect(defaultViewFor(acp), SessionView.chat);
+      for (final id in [
+        AgentIds.claudeAcp,
+        AgentIds.codexAcp,
+        AgentIds.antigravityAcp,
+        AgentIds.grok,
+      ]) {
+        expect(
+          agentSupportsChatView(registry.adapterFor(id)),
+          isTrue,
+          reason: id,
+        );
+      }
+    });
+
     test('an unknown agent has none, and does not throw', () {
       expect(agentSupportsChatView(null), isFalse);
       expect(defaultViewFor(null), SessionView.terminal);

@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../../agents/agent_registry_holder.dart';
 import '../../data/data_service.dart';
 import '../../domain/uuid.dart';
 
@@ -14,11 +15,14 @@ class ServerToolContext {
     required this.database,
     required this.data,
     required this.dataDirectory,
-    this.agents = AgentRegistry.builtIn,
+    AgentRegistry agents = AgentRegistry.builtIn,
+    AgentRegistryHolder? registry,
     DateTime Function()? clock,
     String Function()? newId,
     void Function(String message)? log,
-  }) : _now = clock ?? _utcNow,
+  }) : _agents = agents,
+       _registry = registry,
+       _now = clock ?? _utcNow,
        newId = newId ?? newUuid,
        log = log ?? _silent,
        _writes = data.open(_ignore);
@@ -28,7 +32,12 @@ class ServerToolContext {
 
   /// `<data dir>`: verification evidence, attachments, MCP configs.
   final String dataDirectory;
-  final AgentRegistry agents;
+  final AgentRegistry _agents;
+  final AgentRegistryHolder? _registry;
+
+  /// The agents' adapters as they stand now — with a holder, including the
+  /// ACP agents a person added since the server started.
+  AgentRegistry get agents => _registry?.current ?? _agents;
   final String Function() newId;
   final void Function(String message) log;
   final DateTime Function() _now;

@@ -61,30 +61,45 @@ void main() {
       );
     });
 
-    test('a request without stdin is the same host request as before', () async {
-      final spawner = _RecordingSpawner();
-      final runner = WslCommandRunner(
-        environmentId: 'wsl:Ubuntu',
-        distribution: 'Ubuntu',
-        spawner: spawner,
-      );
-      await runner.run(
-        const CommandRequest(
-          executable: 'git',
-          arguments: ['status'],
-          timeout: kProbeTimeout,
-          runInShell: true,
-        ),
-      );
-      final host = spawner.requests.single;
-      expect(host.executable, 'wsl.exe');
-      expect(host.arguments, ['-d', 'Ubuntu', '--', 'git', 'status']);
-      // Null stdin keeps `Process.run`, and the WSL runner has never carried a
-      // timeout or runInShell; neither changes here.
-      expect(host.stdinText, isNull);
-      expect(host.timeout, isNull);
-      expect(host.runInShell, isFalse);
+    test('the timeout reaches the wsl.exe request in both modes', () async {
+      for (final exec in [false, true]) {
+        final spawner = _RecordingSpawner();
+        await WslCommandRunner(
+          environmentId: 'wsl:Ubuntu',
+          distribution: 'Ubuntu',
+          spawner: spawner,
+          exec: exec,
+        ).run(const CommandRequest(executable: 'git', timeout: kProbeTimeout));
+        expect(spawner.requests.single.timeout, kProbeTimeout, reason: '$exec');
+      }
     });
+
+    test(
+      'a request without stdin is the same host request as before',
+      () async {
+        final spawner = _RecordingSpawner();
+        final runner = WslCommandRunner(
+          environmentId: 'wsl:Ubuntu',
+          distribution: 'Ubuntu',
+          spawner: spawner,
+        );
+        await runner.run(
+          const CommandRequest(
+            executable: 'git',
+            arguments: ['status'],
+            timeout: kProbeTimeout,
+            runInShell: true,
+          ),
+        );
+        final host = spawner.requests.single;
+        expect(host.executable, 'wsl.exe');
+        expect(host.arguments, ['-d', 'Ubuntu', '--', 'git', 'status']);
+        // runInShell is the Windows shell's, and wsl.exe needs none.
+        expect(host.stdinText, isNull);
+        expect(host.timeout, kProbeTimeout);
+        expect(host.runInShell, isFalse);
+      },
+    );
   });
 
   group('against a real WSL distribution', () {
@@ -150,6 +165,60 @@ void main() {
       expect(result.exitCode, 0, reason: result.stderr);
       expect(result.stdout.trim(), '0');
     });
+
+    // Opt-in: these start real processes in the distribution and wait on a
+    // kill.
+    final live = Platform.environment['KARMASHALA_LIVE_WSL'] == '1'
+        ? null
+        : 'set KARMASHALA_LIVE_WSL=1 to run against WSL';
+
+    for (final exec in [false, true]) {
+      test('a variable with \$, ;, spaces and quotes reaches the command '
+          'unchanged (exec: $exec)', () async {
+        final wsl = runner();
+        if (wsl == null) return;
+        const value =
+            r'a b;$HOME "q" '
+            "'"
+            r'$(id)`x` \ end';
+        final result =
+            await WslCommandRunner(
+              environmentId: wsl.environmentId,
+              distribution: wsl.distribution,
+              spawner: spawner,
+              exec: exec,
+            ).run(
+              const CommandRequest(
+                executable: 'printenv',
+                arguments: ['KARMASHALA_PROBE_VALUE'],
+                environment: {'KARMASHALA_PROBE_VALUE': value},
+                timeout: Duration(seconds: 60),
+              ),
+            );
+        expect(result.exitCode, 0, reason: result.stderr);
+        expect(result.stdout, '$value\n');
+      }, skip: live);
+    }
+
+    test('a command that outlives its timeout is killed', () async {
+      final wsl = runner();
+      if (wsl == null) return;
+      final started = DateTime.now();
+      await expectLater(
+        wsl.run(
+          const CommandRequest(
+            executable: 'sleep',
+            arguments: ['60'],
+            timeout: Duration(seconds: 3),
+          ),
+        ),
+        throwsA(isA<CommandException>()),
+      );
+      expect(
+        DateTime.now().difference(started),
+        lessThan(const Duration(seconds: 30)),
+      );
+    }, skip: live);
 
     test('without stdin text, stdin is still closed at once', () async {
       final wsl = runner();

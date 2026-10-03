@@ -77,7 +77,8 @@ class TerminalSessionsState {
   final Map<String, String?> workingDirectories;
 
   /// Every pane of this window → the session it was opened to run, null for a
-  /// shell. Moves only when a pane comes or goes; see [paneSessionsProvider].
+  /// shell; a chat pane names the session it reads. Moves only when a pane
+  /// comes or goes; see [paneSessionsProvider].
   final Map<String, String?> launchedSessions;
 
   /// Incremented on every publish so title and metadata watchers can detect

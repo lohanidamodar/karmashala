@@ -13,13 +13,19 @@ import 'lifecycle_feed.dart';
 /// watches — the rows it does not hold. Every row written is handed to
 /// [onWritten] — the data service, which tells every client of it on the
 /// data channel.
+///
+/// [resolveUnknown] says what a host's silence means for the rows whose
+/// agent this server runs outright (an agent spoken to over a protocol —
+/// `sessionEndsWithServer`): an end, clean or failed by its reason, never
+/// `unknown`, since there is no process of it anywhere to lose sight of.
 class SessionStatusRecording {
   SessionStatusRecording(
     this._feed,
     AppDatabase database, {
     required DateTime Function() clock,
     void Function(String sessionId)? onWritten,
-  }) : _keeper = store.keeperOver(database),
+    engine.UnknownResolver? resolveUnknown,
+  }) : _keeper = store.keeperOver(database, resolveUnknown: resolveUnknown),
        _now = clock,
        _onWritten = onWritten;
 

@@ -645,3 +645,108 @@ void _migrateToV64(Database db) {
   if (columns.contains('kind')) return;
   db.execute('ALTER TABLE projects ADD COLUMN kind TEXT;');
 }
+
+/// An ACP session's conversation, written by the server from the agent's
+/// `session/update` stream. `revision` is per session, so a
+/// client naming the one it holds is sent only the rows that moved.
+void _migrateToV65(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_messages (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+      ordinal     INTEGER NOT NULL,
+      role        TEXT NOT NULL,
+      text        TEXT NOT NULL DEFAULT '',
+      thinking    TEXT,
+      tool_json   TEXT,
+      plan_json   TEXT,
+      message_id  TEXT,
+      revision    INTEGER NOT NULL,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      UNIQUE (session_id, ordinal)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_messages_revision '
+    'ON session_messages (session_id, revision);',
+  );
+}
+
+/// What an installation's executable is run with before any launch's own
+/// arguments — `["-y", "<package>"]` when the executable is `npx` standing in
+/// for an uninstalled ACP agent. A JSON list; null is none.
+void _migrateToV66(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(agent_installations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('leading_arguments')) return;
+  db.execute(
+    'ALTER TABLE agent_installations ADD COLUMN leading_arguments TEXT;',
+  );
+}
+
+/// The ACP agents a person added — typed in (`custom`) or picked from the
+/// public registry (`registry`) — each a command, its argv and environment
+///. The server composes its agent registry from these.
+void _migrateToV67(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS acp_agents (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      command      TEXT NOT NULL,
+      args         TEXT NOT NULL DEFAULT '[]',
+      env          TEXT NOT NULL DEFAULT '{}',
+      source       TEXT NOT NULL,
+      registry_id  TEXT,
+      created_at   TEXT NOT NULL
+    );
+  ''');
+}
+
+/// The registry entry's icon URL beside an ACP agent row, so the agent is
+/// drawn with its own icon rather than a generic glyph. Null for a row typed
+/// in by hand or kept before this column.
+void _migrateToV68(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(acp_agents);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('icon_url')) return;
+  db.execute('ALTER TABLE acp_agents ADD COLUMN icon_url TEXT;');
+}
+
+/// What an ACP session's agent reported of its own usage (`usage_update`):
+/// the latest context used of its size and the cumulative cost, and one
+/// entry per turn in `turns_json` — the last report before the turn ended.
+/// Nothing is computed here; a column is null until the agent said it.
+void _migrateToV69(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_usage (
+      session_id    TEXT PRIMARY KEY
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      context_used  INTEGER,
+      context_size  INTEGER,
+      cost_amount   REAL,
+      cost_currency TEXT,
+      turns_json    TEXT NOT NULL DEFAULT '[]',
+      updated_at    TEXT NOT NULL
+    );
+  ''');
+}
+
+/// The auth method a person chose for an ACP installation, so the next start
+/// authenticates with it: the method's id and name as the agent advertised
+/// them, and when `authenticate` last succeeded with it — null for a login
+/// the person completed in a terminal, which the protocol cannot confirm.
+void _migrateToV70(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS acp_auth_choices (
+      installation_id  TEXT PRIMARY KEY
+        REFERENCES agent_installations (id) ON DELETE CASCADE,
+      method_id        TEXT NOT NULL,
+      method_name      TEXT NOT NULL,
+      authenticated_at TEXT,
+      chosen_at        TEXT NOT NULL
+    );
+  ''');
+}

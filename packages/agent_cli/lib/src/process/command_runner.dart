@@ -43,8 +43,8 @@ class CommandRequest {
   final String? stdinText;
 
   /// Variables set for this process, over the environment it would inherit.
-  /// Every runner honours them where the process runs: in WSL or over SSH they
-  /// are an `env` prefix, because this app's own environment never gets there.
+  /// Every runner honours them where the process runs: in WSL they cross by
+  /// `WSLENV`, over SSH as a quoted `env` prefix.
   final Map<String, String> environment;
 
   /// Variables this process must not inherit, applied before [environment].
@@ -64,7 +64,8 @@ class CommandRequest {
 }
 
 /// `env -u NAME … NAME=value …`, the words that give a POSIX command [request]'s
-/// environment wherever it runs; empty when the request names none.
+/// environment; empty when the request names none. Unquoted: a caller that
+/// hands them to a shell quotes each one.
 List<String> posixEnvironmentPrefix(CommandRequest request) {
   if (request.environment.isEmpty && request.removedEnvironment.isEmpty) {
     return const [];

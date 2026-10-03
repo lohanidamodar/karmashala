@@ -90,6 +90,177 @@ void main() {
   tearDown(() => db.close());
 
   group('agents.detect', () {
+    test(
+      'probes an agent added while the server runs, on the next detect',
+      () async {
+        // The registry as the holder would hand it: built-ins first, then a
+        // row a person added from Settings.
+        var registry = AgentRegistry.builtIn;
+        const copilotPath = r'C:\bin\copilot.exe';
+        runner = ScriptedRunner((request) {
+          if (request.executable == 'where' &&
+              request.arguments.first == 'copilot') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: '$copilotPath\n',
+              stderr: '',
+            );
+          }
+          return claudeOnly(request);
+        });
+        disk = SetPathProbe({newPath, copilotPath});
+        detection = ServerDetection(
+          data: service,
+          runnerFor: (_) => runner,
+          ids: CountingIds('found'),
+          clock: clock,
+          pathProbe: disk,
+          registryNow: () => registry,
+        );
+        service.agentWork = _DetectionWork(detection);
+
+        final before = (await app.handleLater(const AgentsDetect())).value;
+        expect(
+          before.environments.single.added.single.agentId,
+          AgentIds.claudeCode,
+        );
+
+        final row = AcpAgentRow(
+          id: 'row-1',
+          name: 'GitHub Copilot',
+          command: 'copilot',
+          args: const ['--acp'],
+          env: const {},
+          source: AcpAgentSource.custom,
+          createdAt: now,
+        );
+        registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+
+        final after = (await app.handleLater(const AgentsDetect())).value;
+        expect(
+          after.environments.single.added.map((i) => i.agentId),
+          [row.agentId],
+          reason:
+              'the sweep read the registry again rather than the one it began with',
+        );
+        expect(
+          rows().map((i) => i.agentId),
+          containsAll([AgentIds.claudeCode, row.agentId]),
+        );
+      },
+    );
+
+    test('drops the installations of an agent the registry has forgotten, '
+        'command or no command', () async {
+      var registry = AgentRegistry.builtIn;
+      const minePath = r'C:\bin\mine.exe';
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+      );
+      service.agentWork = _DetectionWork(detection);
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      await app.handleLater(const AgentsDetect());
+      expect(
+        rows().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+
+      // The row is gone from the registry; its command is still on PATH.
+      registry = AgentRegistry.builtIn;
+      told.clear();
+      final report = (await app.handleLater(const AgentsDetect())).value;
+
+      expect(report.environments.single.removed.map((i) => i.agentId), [
+        row.agentId,
+      ]);
+      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+      expect(toldChanges().whereType<InstallationRemoved>(), hasLength(1));
+    });
+
+    test('reads an ACP agent\'s version over the protocol once it is found, '
+        'and records it as read now', () async {
+      const minePath = r'C:\bin\mine.exe';
+      final asked = <String>[];
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      final registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+        acpVersion: (installation, descriptor, environment) async {
+          asked.add(
+            '${descriptor.id}@${environment.id}:'
+            '${installation.executable.path}',
+          );
+          return '1.0.91';
+        },
+      );
+      service.agentWork = _DetectionWork(detection);
+
+      final report = (await app.handleLater(const AgentsDetect())).value;
+
+      // Only the ACP agent was asked; the terminal agent answered --version.
+      expect(asked, ['${row.agentId}@windows:$minePath']);
+      final mine = rows().singleWhere((i) => i.agentId == row.agentId);
+      expect(mine.version, '1.0.91');
+      expect(mine.versionReadAt, now);
+      final scan = report.environments.single;
+      expect(
+        scan.found.singleWhere((i) => i.agentId == row.agentId).version,
+        '1.0.91',
+      );
+      expect(scan.updated.single.to, '1.0.91');
+      expect(
+        toldChanges().whereType<InstallationChanged>().map(
+          (c) => c.installation.version,
+        ),
+        contains('1.0.91'),
+      );
+    });
+
     test('writes what answered, tells every other client, and logs the '
         'search under the server\'s own key', () async {
       final report = (await app.handleLater(const AgentsDetect())).value;
@@ -98,9 +269,11 @@ void main() {
       expect(scan.added.single.agentId, AgentIds.claudeCode);
       expect(scan.added.single.executable.path, newPath);
       expect(scan.added.single.version, '2.1.0');
+      // Every built-in but the one found, the ACP agents included.
       expect(scan.missing, [
-        for (final id in [AgentIds.codex, AgentIds.antigravity])
-          AgentRegistry.builtIn.displayNameFor(id),
+        for (final id in AgentIds.builtIn)
+          if (id != AgentIds.claudeCode)
+            AgentRegistry.builtIn.displayNameFor(id),
       ]);
 
       expect(rows().single.agentId, AgentIds.claudeCode);
@@ -229,6 +402,52 @@ void main() {
       );
     });
 
+    test('a full rescan — what Discover agents and Rescan ask — probes an '
+        'ACP agent added since the server started', () async {
+      var registry = AgentRegistry.builtIn;
+      const minePath = r'C:\bin\mine.exe';
+      runner = ScriptedRunner((request) {
+        if (request.executable == 'where' &&
+            request.arguments.first == 'mine') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '$minePath\n',
+            stderr: '',
+          );
+        }
+        return claudeOnly(request);
+      });
+      disk = SetPathProbe({newPath, minePath});
+      detection = ServerDetection(
+        data: service,
+        runnerFor: (_) => runner,
+        ids: CountingIds('found'),
+        clock: clock,
+        pathProbe: disk,
+        registryNow: () => registry,
+      );
+      service.agentWork = _DetectionWork(detection);
+      await app.handleLater(const AgentsRepair(full: true));
+      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+
+      final row = AcpAgentRow(
+        id: 'row-1',
+        name: 'Mine',
+        command: 'mine',
+        createdAt: now,
+      );
+      registry = AgentRegistry.withExtra([acpAgentAdapter(row)]);
+      final report = (await app.handleLater(
+        const AgentsRepair(full: true),
+      )).value;
+
+      expect(report.scan!.addedCount, 1);
+      expect(
+        rows().map((i) => i.agentId),
+        containsAll([AgentIds.claudeCode, row.agentId]),
+      );
+    });
+
     test('nothing broken asks nothing — unless it is full', () async {
       final quiet = (await app.handleLater(const AgentsRepair())).value;
       expect(quiet.checkedAt, now);
@@ -298,7 +517,8 @@ void main() {
         if (script.contains('exit 0')) {
           return const CommandResult(exitCode: 0, stdout: '', stderr: '');
         }
-        if (script.contains('command -v claude')) {
+        // The word itself, not a prefix: `claude-agent-acp` is probed too.
+        if (RegExp(r'command -v claude(\s|$)').hasMatch(script)) {
           return const CommandResult(
             exitCode: 0,
             stdout: '/home/dev/.local/bin/claude\n',

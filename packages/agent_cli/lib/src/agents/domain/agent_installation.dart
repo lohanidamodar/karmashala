@@ -16,6 +16,7 @@ class AgentInstallation {
     this.version,
     this.versionReadAt,
     this.executableByUser = false,
+    this.leadingArguments = const [],
   });
 
   final String id;
@@ -55,6 +56,11 @@ class AgentInstallation {
   /// detected, because at that point discovery is what chose it.
   final bool executableByUser;
 
+  /// Arguments that go before any launch's own, for an executable that is a
+  /// runner rather than the agent: `['-y', '<package>']` when [executable] is
+  /// `npx`. Empty for a binary that is the agent itself.
+  final List<String> leadingArguments;
+
   final DateTime createdAt;
 
   /// The environment this installation lives in (derived from [executable]).
@@ -68,6 +74,7 @@ class AgentInstallation {
     DateTime? versionReadAt,
     DateTime? createdAt,
     bool? executableByUser,
+    List<String>? leadingArguments,
   }) => AgentInstallation(
     id: id ?? this.id,
     agentId: agentId ?? this.agentId,
@@ -76,6 +83,7 @@ class AgentInstallation {
     versionReadAt: versionReadAt ?? this.versionReadAt,
     createdAt: createdAt ?? this.createdAt,
     executableByUser: executableByUser ?? this.executableByUser,
+    leadingArguments: leadingArguments ?? this.leadingArguments,
   );
 
   @override
@@ -87,7 +95,8 @@ class AgentInstallation {
       other.version == version &&
       other.versionReadAt == versionReadAt &&
       other.createdAt == createdAt &&
-      other.executableByUser == executableByUser;
+      other.executableByUser == executableByUser &&
+      _sameArguments(other.leadingArguments, leadingArguments);
 
   @override
   int get hashCode => Object.hash(
@@ -98,7 +107,16 @@ class AgentInstallation {
     versionReadAt,
     createdAt,
     executableByUser,
+    Object.hashAll(leadingArguments),
   );
+
+  static bool _sameArguments(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   String toString() => 'AgentInstallation($id, $agentId, $executable)';

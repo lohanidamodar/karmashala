@@ -170,19 +170,22 @@ class HostsHandler {
 
   // Installations.
 
-  AgentsSnapshot agents({List<AccountUsageState> usage = const []}) =>
-      AgentsSnapshot(
-        usage: usage,
-        installations: _installations.getAll(),
-        claudeAccounts: [
-          for (final a in _claudeAccounts.getAll())
-            claudeAccountWithoutCredentials(a),
-        ],
-        codexAccounts: [
-          for (final a in _codexAccounts.getAll())
-            codexAccountWithoutCredentials(a),
-        ],
-      );
+  AgentsSnapshot agents({
+    List<AccountUsageState> usage = const [],
+    List<AcpAgentRow> acpAgents = const [],
+  }) => AgentsSnapshot(
+    usage: usage,
+    acpAgents: acpAgents,
+    installations: _installations.getAll(),
+    claudeAccounts: [
+      for (final a in _claudeAccounts.getAll())
+        claudeAccountWithoutCredentials(a),
+    ],
+    codexAccounts: [
+      for (final a in _codexAccounts.getAll())
+        codexAccountWithoutCredentials(a),
+    ],
+  );
 
   /// Every installation recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>
@@ -236,13 +239,16 @@ class HostsHandler {
   /// What the server found on this machine itself: recorded by the same
   /// rules, judging no leftover row — a CLI that has gone is the desktop's
   /// to reconcile with the person — and reading this machine's disk for the
-  /// paths already recorded.
+  /// paths already recorded. [forgotten] names the agent kinds the registry
+  /// no longer knows: their rows are judged, and go when nothing points at
+  /// them.
   InstallationsReconciled recordFound(
     ExecutionEnvironment here,
     List<AgentInstallation> found,
     DateTime readAt,
-    List<DataChange> changes,
-  ) {
+    List<DataChange> changes, {
+    Set<String> forgotten = const {},
+  }) {
     ensureEnvironment(here, changes);
     final stored = _installations.getByEnvironment(here.id);
     return _apply(
@@ -250,7 +256,7 @@ class HostsHandler {
         environmentId: here.id,
         stored: stored,
         found: found,
-        probed: const {},
+        probed: forgotten,
         readings: {
           for (final row in stored)
             row.id: _opens(row.executable.path)
@@ -280,6 +286,10 @@ class HostsHandler {
       });
       plan.versions.forEach((id, version) {
         _installations.recordVersion(id, version, readAt: readAt);
+        touched.add(id);
+      });
+      plan.leadingArguments.forEach((id, arguments) {
+        _installations.updateLeadingArguments(id, arguments);
         touched.add(id);
       });
       for (final row in plan.inserts) {

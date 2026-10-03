@@ -87,6 +87,7 @@ class QuickOpenItem {
     this.keywords = const [],
     this.weight = 0,
     this.opensTab = false,
+    this.leading,
   });
 
   /// Stable across rebuilds, so the selected row survives a refresh in place.
@@ -102,6 +103,9 @@ class QuickOpenItem {
   final String? detail;
 
   final IconData icon;
+
+  /// Drawn in [icon]'s place when the row has a mark of its own — an agent's.
+  final Widget? leading;
 
   /// Extra text that should match but is not worth showing.
   final List<String> keywords;

@@ -11,8 +11,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
-import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
+import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -121,7 +121,13 @@ class NativeSessionRow extends ConsumerWidget {
         (rows) => rows[session.id] ?? SessionRowAttention.none,
       ),
     );
-    final lifecycle = status.labelWhen(hostedLive: whereabouts.hostedLive);
+    // An agent spoken to over ACP runs inside the server, which writes the
+    // row from its own runtime: a row of one that says running is seen
+    // running, with no pane of ours to vouch for it.
+    final hostedLive =
+        whereabouts.hostedLive ||
+        (status.claimsLive && ref.watch(isAcpSessionProvider(session.id)));
+    final lifecycle = status.labelWhen(hostedLive: hostedLive);
     // A list the user maintains by hand — five entries, not five hundred — so
     // this costs a rebuild when they add a section and nothing otherwise.
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
@@ -133,6 +139,7 @@ class NativeSessionRow extends ConsumerWidget {
     );
     // A value type: a bump that did not change these words rebuilds nothing.
     final resume = ref.watch(sessionResumeBadgeProvider(session.id));
+    final registry = ref.watch(agentRegistryProvider);
 
     return SessionCard(
       depth: depth,
@@ -143,15 +150,11 @@ class NativeSessionRow extends ConsumerWidget {
       agentMark: agentId == null
           ? null
           : AgentLogo(agentId: agentId, size: ExplorerRow.glyphSize),
-      agentName: agentId == null
-          ? null
-          : AgentRegistry.builtIn.displayNameFor(agentId),
+      agentName: agentId == null ? null : registry.displayNameFor(agentId),
       environment: environment,
       statusLabel: _capitalised(lifecycle),
       agentLabel: [
-        agentId == null
-            ? 'Agent'
-            : AgentRegistry.builtIn.displayNameFor(agentId),
+        agentId == null ? 'Agent' : registry.displayNameFor(agentId),
         // The glyph says the lifecycle; a row claiming to be live with nothing
         // of ours running it still says so in words (`SessionStatus.labelWhen`).
         if (lifecycle != status.name) lifecycle,
@@ -304,7 +307,9 @@ class ImportedSessionRow extends ConsumerWidget {
     final tickEnabled = ref.watch(
       sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
     );
-    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
+    final cliLabel = ref
+        .watch(agentRegistryProvider)
+        .displayNameFor(session.cli);
     final attention = ref.watch(
       sessionRowAttentionProvider.select(
         (rows) => rows[session.id] ?? SessionRowAttention.none,

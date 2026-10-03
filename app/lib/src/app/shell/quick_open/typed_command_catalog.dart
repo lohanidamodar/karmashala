@@ -198,7 +198,8 @@ CommandCatalog readCommandCatalog(
     final environmentId = project.environmentId;
     final installed = [
       for (final i in installations)
-        if (i.environmentId == environmentId)
+        if (i.environmentId == environmentId &&
+            registry.adapterFor(i.agentId) != null)
           CommandInstallation(id: i.id, agentId: i.agentId),
     ];
     final lastUsed = lastUsedInstallation[project.id];
@@ -279,15 +280,25 @@ String _sessionToken(String title) {
 }
 
 /// One entry per agent the registry knows, typed by the first word of its
-/// name — `claude`, `codex`, `antigravity` — or its id when two would clash.
+/// name — `codex`, `antigravity`, `grok`. Where two agents share that word,
+/// as Claude Code and Claude (ACP) do, each is typed by its whole name
+/// instead — `claude-code`, `claude-acp` — and only a clash that survives
+/// even that falls back to the id.
 List<CommandAgent> _agents(AgentRegistry registry) {
+  final firstWords = <String, int>{};
+  for (final descriptor in registry.descriptors) {
+    final word = _firstWordSlug(registry.displayNameFor(descriptor.id));
+    firstWords[word] = (firstWords[word] ?? 0) + 1;
+  }
   final named = [
     for (final descriptor in registry.descriptors)
       (
         id: descriptor.id,
-        token: commandSlug(
-          registry.displayNameFor(descriptor.id).split(' ').first,
-        ),
+        token: switch (registry.displayNameFor(descriptor.id)) {
+          final name when (firstWords[_firstWordSlug(name)] ?? 0) > 1 =>
+            commandSlug(name),
+          final name => _firstWordSlug(name),
+        },
       ),
   ];
   final tokens = uniqueTokens([
@@ -302,6 +313,9 @@ List<CommandAgent> _agents(AgentRegistry registry) {
       ),
   ];
 }
+
+String _firstWordSlug(String displayName) =>
+    commandSlug(displayName.split(' ').first);
 
 List<CommandEnvironment> _environments(List<ExecutionEnvironment> all) {
   final tokens = uniqueTokens([

@@ -6,6 +6,7 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/launch.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../data/server_transcripts.dart';
+import 'acp_session_providers.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
@@ -126,6 +127,10 @@ final sessionAgentPlanProvider = Provider.autoDispose
         return const AgentPlanReading.absent(AgentPlanAbsence.noRecord);
       }
 
+      // An ACP agent's plan arrives as a protocol update the server files on
+      // a row's tool: no tool name to know, no file to own.
+      final acp = ref.watch(isAcpSessionProvider(sessionId));
+
       // The capability answer comes first and costs nothing: an agent that
       // keeps no plan must never reach a transcript subscription to learn that.
       final agentId = ref
@@ -137,14 +142,14 @@ final sessionAgentPlanProvider = Provider.autoDispose
               ? null
               : ref.read(agentRegistryProvider).byId(agentId)?.plan) ??
           const AgentPlanSupport.none();
-      if (!support.isSupported) {
+      if (!acp && !support.isSupported) {
         return AgentPlanReading.absent(
           AgentPlanAbsence.agentPublishesNone,
           refusal: support.refusal,
         );
       }
 
-      if (row.surface != SessionSurface.pane) {
+      if (!acp && row.surface != SessionSurface.pane) {
         return const AgentPlanReading.absent(
           AgentPlanAbsence.noRecord,
           refusal:

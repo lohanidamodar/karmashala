@@ -147,6 +147,7 @@ extension _FakeHosts on FakeDataServer {
 
   AgentsSnapshot _agentsSnapshot() => AgentsSnapshot(
     usage: [...agentWork.usage.values],
+    acpAgents: acpAgentRows.getAll(),
     installations: installationRows.getAll(),
     claudeAccounts: [
       for (final a in claudeAccountRows.getAll())
@@ -238,6 +239,43 @@ extension _FakeHosts on FakeDataServer {
     changes.add(CodexAccountChanged(stripped));
     return stripped;
   }
+
+  /// The person-added ACP agents, by the server's rules: a blank name or
+  /// command is refused; a put under an unknown or absent id creates.
+  Object? _handleAcpAgents(
+    AcpAgentsRequest<Object?> request,
+    List<DataChange> c,
+  ) => switch (request) {
+    AcpAgentsList() => acpAgentRows.getAll(),
+    final AcpAgentPut r => () {
+      if (r.agentName.trim().isEmpty) {
+        throw const DataRefused.invalid('An ACP agent needs a name.');
+      }
+      if (r.command.trim().isEmpty) {
+        throw const DataRefused.invalid('An ACP agent needs a command to run.');
+      }
+      final existing = r.id == null ? null : acpAgentRows.getById(r.id!);
+      final row = AcpAgentRow(
+        id: existing?.id ?? r.id ?? _freshId('acp'),
+        name: r.agentName.trim(),
+        command: r.command.trim(),
+        args: r.args,
+        env: r.env,
+        source: r.source,
+        registryId: r.registryId,
+        iconUrl: r.iconUrl,
+        createdAt: existing?.createdAt ?? DateTime.now().toUtc(),
+      );
+      c.add(acpAgentRows._put(row));
+      return row;
+    }(),
+    AcpAgentDelete(:final id) => () {
+      if (acpAgentRows.getById(id) case final row?) {
+        c.add(acpAgentRows._remove(row));
+      }
+      return const DataAck();
+    }(),
+  };
 
   Object? _handleHosts(DataRequest<Object?> request, List<DataChange> c) =>
       switch (request) {

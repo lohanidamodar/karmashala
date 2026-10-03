@@ -37,7 +37,9 @@ import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import '../application/acp_session_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -249,6 +251,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         );
   }
 
+  /// The agent this session is with, for the empty state's mark; null for a
+  /// session whose installation is not known here.
+  String? _agentId() {
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    return ref
+        .read(agentInstallationsDataProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+  }
+
   /// The server the agent runs on, for the composer's attachments: browsed in
   /// the environment the session's agent runs in, a WSL or SSH one included.
   PickServer _pickServer() {
@@ -427,9 +440,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
     // (see `SessionTranscriptLocator`): stdout carries no structured stream.
-    final fromPty = session?.surface == SessionSurface.pane;
-    final active =
-        fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
+    // An ACP session's is the server's rows, read down the same path.
+    final acp = ref.watch(isAcpSessionProvider(widget.sessionId));
+    final fromPty = acp || session?.surface == SessionSurface.pane;
+    // An ACP row is live only while its row says so: a failed or ended one
+    // is resumed by the next message, and the hint says that.
+    final active = acp
+        ? session?.status.claimsLive ?? false
+        : fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     final footer = _footerFor(active);
     final recapShare = CompactWorkbenchScope.of(context)
         ? _recapShareCompact
@@ -550,10 +568,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           earlier: earlier,
                           firstOrdinal: window?.from ?? 0,
                           // Whether there is a terminal to point at: the user
-                          // can switch, so the sentences must be true.
-                          hasTerminal:
-                              sessionTerminalPane(ref, widget.sessionId) !=
-                              null,
+                          // can switch, so the sentences must be true. A chat
+                          // pane is this view, not a terminal.
+                          hasTerminal: switch (sessionTerminalPane(
+                            ref,
+                            widget.sessionId,
+                          )) {
+                            final paneId? => !isChatPane(paneId),
+                            null => false,
+                          },
                           onLinkTap: onLinkTap,
                           footer: footer,
                         );
@@ -611,6 +634,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               )
             : null,
         firstOrdinal: firstOrdinal,
+        agentId: _agentId(),
         turn: turn,
         resolveHostPath: resolveHostPath,
         // Paths in the conversation are clickable, and a click reveals

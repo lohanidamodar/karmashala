@@ -9,7 +9,7 @@ import 'package:agent_cli/process.dart'
         localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
-    show ExecutionEnvironmentDao;
+    show AcpAuthChoiceDao, ExecutionEnvironmentDao;
 
 import 'package:karmashala_checkpoints/store.dart'
     show
@@ -19,9 +19,12 @@ import 'package:karmashala_checkpoints/store.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
+        DataRefused,
         DecisionAppend,
         DecisionRecorded,
         OpenSessionTab,
+        OpenTerminalTab,
+        SessionSend,
         TerminalOpen,
         UsageLimitNotice,
         UsageLimitNoticed,
@@ -36,10 +39,18 @@ import 'package:karmashala_session_engine/store.dart'
         DecisionRecordDao,
         ImportedSessionDao,
         SessionDao,
-        SessionRepositoryDao;
+        SessionMessageDao,
+        SessionRepositoryDao,
+        SessionUsageDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../acp/acp_auth.dart';
+import '../acp/acp_runtimes.dart';
+import '../acp/acp_transport.dart';
+import '../acp/acp_session_modes.dart';
+import '../acp/acp_version_probe.dart';
+import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../mcp/tools/continuation_tool_set.dart';
@@ -53,13 +64,16 @@ import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/session_input.dart';
+import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
+import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
 import '../agents/server_agents.dart';
+import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
 import 'package:karmashala_session/events.dart'
@@ -351,11 +365,19 @@ Future<int> runServe(
     database,
     runsSession: (sessionId) {
       final id = hostSessionIdOf(sessionId);
-      if (registry.find(id) != null) return true;
+      if (registry.findProcess(id) != null) return true;
       final onBox = boxSessions?.byId(id);
       return onBox != null && !onBox.lifecycle.hasEnded;
     },
   )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
+  // The agents' registry: the shipped agents plus the ACP agents a person
+  // added, recomposed as those rows change (ACP design, C2).
+  final agentRegistry = AgentRegistryHolder.composed(data.acpAgents)
+    ..follow(data);
+  // The launch path asks this, so a session can start with an agent added
+  // a moment ago; the automations and the companion still hold the shipped
+  // registry.
+  final liveAgents = DaemonAgents.live(() => agentRegistry.current);
   final prompts = DaemonPromptAnswers(
     status: status,
     database: database,
@@ -416,14 +438,63 @@ Future<int> runServe(
     remote: ssh.remote,
   );
   data.terminalWork = terminals;
+  // An ACP agent says its version over the protocol: detection asks each one
+  // it finds, in that agent's own environment.
+  final acpVersions = AcpVersionProbe(
+    runnerFor: ssh.runners.forEnvironment,
+    log: sink.writeln,
+  );
+  // Logging in to an ACP agent: a short-lived connection for its methods and
+  // `authenticate`, a terminal tab for a login it runs itself, and the
+  // method remembered for its next start.
+  final acpAuth = ServerAcpAuth(
+    installations: () => data.installations,
+    environments: () => data.environments,
+    registry: () => agentRegistry.current,
+    choices: AcpAuthChoiceDao(database),
+    spawn: (environment, request) async => AcpTransport.process(
+      await ssh.runners.forEnvironment(environment).start(request),
+    ),
+    vault: envVault.overlay,
+    openTerminal: (login) {
+      final paneId = 'acp-login-${newUuid()}';
+      final opened = terminals.open(
+        TerminalOpen(
+          paneId: paneId,
+          environmentId: login.environment.id,
+          agentLaunch: AgentPaneLaunch(
+            agentId: login.agentId,
+            executable: login.executable,
+            arguments: login.arguments,
+            environment: login.variables,
+            workingDirectory: login.directory,
+            wslDistribution: login.environment.kind == EnvironmentKind.wsl
+                ? login.environment.wslDistribution
+                : null,
+            title: login.title,
+          ),
+          columns: 120,
+          rows: 40,
+        ),
+      );
+      return data.tellIntent(
+        OpenTerminalTab(paneId: paneId, title: opened.title),
+      );
+    },
+  );
   final agentWork = ServerAgentWork(
     data: data,
+    acpAuth: acpAuth,
     runners: ssh.runners,
+    acpVersion: acpVersions.read,
     hostEnvironment: hostEnvironment,
     // `off`: work only when asked — no usage schedule, no start-up check. For
     // a test's server: its temporary HOME holds no credentials, and its
     // schedule would reach for this machine's Keychain whatever HOME says.
     onItsOwn: hostEnvironment[kAgentWorkVariable] != 'off',
+    registry: agentRegistry.current,
+    // Detection probes the agents added since, not the ones at start.
+    registryHolder: agentRegistry,
   )..attach();
   final companion = DaemonCompanion(
     database: database,
@@ -466,6 +537,7 @@ Future<int> runServe(
   // Agents' tools: the server runs every one that needs no desktop UI
   // itself (slice 2b); the rest are forwarded to the app.
   final tools = ServerToolContext(
+    registry: agentRegistry,
     database: database,
     data: data,
     dataDirectory: dataDirectory,
@@ -479,7 +551,7 @@ Future<int> runServe(
     onRecorded: agentWork.imports.checkoutsRecorded,
   );
   final liveness = SessionLiveness(
-    (id) => registry.find(hostSessionIdOf(id)) != null,
+    (id) => registry.findProcess(hostSessionIdOf(id)) != null,
   );
   final worktrees = daemonWorktrees(
     database: database,
@@ -617,7 +689,7 @@ Future<int> runServe(
   final checkpoints = DaemonCheckpoints(
     database: database,
     data: data,
-    heldHere: (id) => status.runningSessionOf(id) != null,
+    heldHere: status.runsHere,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   data.checkpointWork = checkpoints.handle;
@@ -648,6 +720,12 @@ Future<int> runServe(
     database,
     clock: () => DateTime.now().toUtc(),
     onWritten: (sessionId) => data.announceSessions([sessionId]),
+    // An agent spoken to over ACP runs inside this server: a row of one left
+    // `running` by the server before this one ended with it.
+    resolveUnknown: sessionEndsWithServer(
+      rows: checkoutRows,
+      agents: liveAgents,
+    ),
   )..start();
   // A box's sessions start and exit as its host says (slice 5d).
   ssh.onBoxLifecycle = recording.applyRemote;
@@ -689,7 +767,7 @@ Future<int> runServe(
     // A project added or rescanned by a client imports the CLI history of
     // its new checkouts, as an agent's does.
     folders: folders,
-    hostsSession: (id) => registry.find(hostSessionIdOf(id)) != null,
+    hostsSession: (id) => registry.findProcess(hostSessionIdOf(id)) != null,
     livePaneDirectories: () => [
       for (final pane in sessionSync.panes.all)
         if (pane.live) ?pane.workingDirectory,
@@ -822,8 +900,40 @@ Future<int> runServe(
   final sessionRows = SessionDao(database);
   LaunchSettings launchSettings() =>
       LaunchSettings.parse(database.readMetadata(kLaunchSettingsKey));
+  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
+  // a PTY: its conversation is `session_messages`, its status its own word.
+  final sessionMessages = SessionMessageDao(database);
+  final acpHost = ServerAcpHost(
+    agentStatus: status,
+    checkpoints: checkpoints,
+    data: data,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final sessionUsage = SessionUsageDao(database);
+  final acpRuntimes = AcpRuntimes(
+    messages: sessionMessages,
+    usage: sessionUsage,
+    host: acpHost,
+    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
+      environment ?? localHostEnvironment(DateTime.now().toUtc()),
+    ),
+  );
+  // A client that subscribes after an ACP agent started is greeted with the
+  // modes and options the runtime announced before it arrived.
+  final acpModes = AcpSessionModes(
+    runtimeOf: status.acpRuntimeOf,
+    running: () => registry.acpRuntimes,
+  );
+  data
+    ..sessionModes = acpModes
+    ..greeters.add(acpModes.greeting);
+  data.liveAcpSessions = () => {
+    for (final runtime in registry.acpRuntimes)
+      if (!runtime.lifecycle.hasEnded) runtime.sessionId,
+  };
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
+    agents: liveAgents,
     sessions: sessionRows,
     mcp: SessionMcpAccessPoint(
       mcp: mcp,
@@ -849,10 +959,13 @@ Future<int> runServe(
       Directory(p.join(dataDirectory, 'handoff')),
     ),
     links: SessionRepositoryDao(database),
+    acpRuntimes: acpRuntimes.start,
+    acpAuth: acpAuth.startAuth,
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(
     checkoutRows,
+    agents: liveAgents,
     reachesBox: ssh.remote.reaches,
   );
   final presence = ConversationPresenceReader(
@@ -871,6 +984,7 @@ Future<int> runServe(
   );
   final launches = ServerSessionLauncher(
     launcher: hostedLauncher,
+    agents: liveAgents,
     registry: registry,
     sessions: sessionRows,
     rows: checkoutRows,
@@ -905,11 +1019,34 @@ Future<int> runServe(
   );
   // A client's chat sends and Stop (`sessions.send`, `.interrupt`), typed by
   // the same typist as MCP `session_send`.
-  data.sessionInput = SessionInput(
+  // An agent spoken to over ACP that nothing runs is resumed here to take a
+  // client's message, whichever client sent it.
+  final speaksAcp = sessionSpeaksAcp(
+    rows: checkoutRows,
+    agents: liveAgents,
+    sessionOf: sessionRows.getById,
+  );
+  final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
+    resumesOnSend: speaksAcp,
+    resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  data.sessionInput = sessionInput;
+  // A phone on the older companion API sends to such a session the same way.
+  companion.sendOverProtocol = (sessionId, text) async {
+    if (!speaksAcp(sessionId)) return false;
+    try {
+      await sessionInput.handle(
+        SessionSend(sessionId: sessionId, text: text),
+        null,
+      );
+    } on DataRefused catch (refusal) {
+      throw StateError(refusal.message);
+    }
+    return true;
+  };
   // Sessions' transcripts for any client (`sessions.transcript`): read here,
   // where the agents write them.
   final sessionTranscripts = SessionTranscripts(
@@ -921,7 +1058,11 @@ Future<int> runServe(
       locate: transcripts.recordFor,
       registry: transcripts.registry,
     ),
+    // An ACP session's transcript is the rows its runtime wrote (C3).
+    messages: SessionMessageTranscriptSource(sessionMessages),
+    servesFromMessages: speaksAcp,
   );
+  acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
   data.sessionTranscripts = sessionTranscripts;
   // Rewind points, changed files and the open question (Stage 0 step 7):
   // the adapters' readers of raw lines, run over the same records; and each
@@ -934,6 +1075,10 @@ Future<int> runServe(
     runners: ssh.runners,
     storeHome: transcripts.storeHome,
     readRows: readSqliteRows,
+    // An ACP session's counts come from the rows and usage this server kept.
+    messages: sessionMessages,
+    usage: sessionUsage,
+    speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
   // Sessions' pictures (Stage 0 step 10), extracted from the same records.
@@ -976,7 +1121,13 @@ Future<int> runServe(
     )
     // An agent's `open_new_session`, through the one launch path.
     ..add(
-      LaunchToolSet(tools, launches: launches, reach: reach, folders: folders),
+      LaunchToolSet(
+        tools,
+        launches: launches,
+        agents: liveAgents,
+        reach: reach,
+        folders: folders,
+      ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
@@ -1025,7 +1176,13 @@ Future<int> runServe(
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
   // desktop app on this machine; the server looks for its agent CLIs now.
-  final agents = (agentsFor ?? (data) => ServerAgents(data: data))(data);
+  final agents =
+      (agentsFor ??
+      (data) => ServerAgents(
+        data: data,
+        registryHolder: agentRegistry,
+        acpVersion: acpVersions.read,
+      ))(data);
   server.data = data;
   server.admin = ServerAdministration(
     companion: companionServing ? companion : null,

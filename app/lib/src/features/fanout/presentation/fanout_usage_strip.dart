@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/presentation/acp_usage_note.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import '../../agents/presentation/usage_chip.dart';
@@ -103,9 +104,15 @@ class _AccountUsage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The composed registry, so an agent added in Settings shows its name.
+    final registry = ref.watch(agentRegistryProvider);
     final account =
-        '${AgentRegistry.builtIn.displayNameFor(installation.agentId)} · '
+        '${registry.displayNameFor(installation.agentId)} · '
         '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}';
+    // An agent spoken to over ACP has no account to read.
+    if (agentSpeaksAcp(registry, installation.agentId)) {
+      return _UsageUnavailable(account: account, reason: kAcpUsageLimitsNote);
+    }
     final usage = ref.watch(agentUsageProvider(installation));
     final error = usage.error;
     final now = ref.watch(clockProvider).nowUtc();

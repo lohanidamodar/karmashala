@@ -7,6 +7,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/picker_face.dart';
+import '../application/acp_session_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import '../application/session_signals.dart';
@@ -50,6 +51,12 @@ class PermissionModeChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An ACP agent's permission axis is its own mode, drawn by
+    // `SessionModePicker` beside this; Karmashala's rung only picked the
+    // mode it started in.
+    if (ref.watch(isAcpSessionProvider(sessionId))) {
+      return const SizedBox.shrink();
+    }
     // The row is what the mode lives on, and only a write to *this* row redraws
     // it: `setPermissionMode` publishes `reconfigured` against the same id.
     ref.watchSession(sessionId);

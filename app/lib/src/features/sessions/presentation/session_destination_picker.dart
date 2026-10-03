@@ -39,7 +39,9 @@ class SessionDestination {
 }
 
 /// The destination a dialog opens on: **whatever the app is already pointed
-/// at**, else the first project the Explorer would draw, else `null`.
+/// at**, else the first project the Explorer would draw, else no project at
+/// all — a workspace with nothing in it can still start a session in a
+/// scratch folder.
 final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected != null) {
@@ -49,7 +51,7 @@ final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
     );
   }
   final project = ref.watch(workspaceScopedProjectsProvider).firstOrNull;
-  if (project == null) return null;
+  if (project == null) return const SessionDestination.scratch();
   return SessionDestination(
     projectId: project.id,
     checkout: ref.watch(checkoutsInProjectProvider(project.id)).firstOrNull,

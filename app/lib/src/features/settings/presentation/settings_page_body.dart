@@ -23,6 +23,7 @@ import '../../ssh/presentation/ssh_hosts_section.dart';
 import '../../stores/presentation/stores_settings_section.dart';
 import 'agent_detection_section.dart';
 import 'agents_and_accounts_page.dart';
+import 'usage_and_limits_section.dart';
 import 'agent_path_section.dart';
 import 'agent_tools_section.dart';
 import 'agents_pages.dart';
@@ -199,10 +200,15 @@ class SettingsAnchorScope extends InheritedWidget {
   const SettingsAnchorScope({
     required this.keys,
     required super.child,
+    this.revealing,
     super.key,
   });
 
   final Map<SettingsAnchor, GlobalKey> keys;
+
+  /// The anchor a deep link is scrolling to, so a collapsed card holding it
+  /// opens instead of being scrolled to shut.
+  final SettingsAnchor? revealing;
 
   static GlobalKey? keyFor(BuildContext context, SettingsAnchor anchor) {
     final scope = context
@@ -213,9 +219,13 @@ class SettingsAnchorScope extends InheritedWidget {
     );
   }
 
+  static SettingsAnchor? revealingOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<SettingsAnchorScope>()
+      ?.revealing;
+
   @override
   bool updateShouldNotify(SettingsAnchorScope oldWidget) =>
-      !identical(keys, oldWidget.keys);
+      !identical(keys, oldWidget.keys) || revealing != oldWidget.revealing;
 }
 
 /// A section a deep link can land on.

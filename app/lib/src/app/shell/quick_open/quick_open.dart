@@ -847,6 +847,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         widgets.add(
           QuickOpenRow(
             icon: result.item.icon,
+            leading: result.item.leading,
             title: result.item.title,
             titlePositions: result.titlePositions,
             subtitle: result.item.subtitle,

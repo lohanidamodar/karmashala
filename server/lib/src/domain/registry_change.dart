@@ -1,21 +1,22 @@
-import 'host_session.dart';
+import 'hosted_process.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 
-/// What the registry did to its set of sessions. An exit is not one of these:
-/// it is observed on [HostSession.ended], which a closed session also reaches.
+/// What the registry did to its set of processes. An exit is not one of
+/// these: it is observed on [HostedProcess.ended], which a closed one also
+/// reaches.
 sealed class RegistryChange {
   const RegistryChange();
 }
 
 class SessionOpened extends RegistryChange {
-  const SessionOpened(this.session);
-  final HostSession session;
+  const SessionOpened(this.process);
+  final HostedProcess process;
 }
 
 /// Ended and dropped because somebody asked, never because a client left.
 class SessionClosed extends RegistryChange {
-  const SessionClosed(this.session, this.end, {required this.endedByClose});
-  final HostSession session;
+  const SessionClosed(this.process, this.end, {required this.endedByClose});
+  final HostedProcess process;
   final SessionLifecycle end;
 
   /// Whether the close ended a running process. False when a client only let

@@ -93,6 +93,8 @@ Map<String, Object?> installationToJson(AgentInstallation installation) => {
     'versionReadAt': _time(installation.versionReadAt!),
   'createdAt': _time(installation.createdAt),
   'byUser': installation.executableByUser,
+  if (installation.leadingArguments.isNotEmpty)
+    'leadingArguments': installation.leadingArguments,
 };
 
 AgentInstallation installationFromJson(Map<String, Object?> json) =>
@@ -106,6 +108,7 @@ AgentInstallation installationFromJson(Map<String, Object?> json) =>
           : _date(json['versionReadAt']),
       createdAt: _date(json['createdAt']),
       executableByUser: json['byUser'] == true,
+      leadingArguments: _strings(json, 'leadingArguments'),
     );
 
 /// [account] as the wire carries it: the token bundle and the identity
@@ -201,6 +204,16 @@ String? _optional(Map<String, Object?> json, String key) {
   final value = json[key];
   if (value == null || value is String) return value as String?;
   throw FormatException('"$key" must be a string or absent');
+}
+
+/// The list of strings under [key], or none when absent.
+List<String> _strings(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value == null) return const [];
+  if (value is List && value.every((item) => item is String)) {
+    return List.unmodifiable(value.cast<String>());
+  }
+  throw FormatException('"$key" must be a list of strings or absent');
 }
 
 int _int(Map<String, Object?> json, String key) {

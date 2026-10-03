@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,10 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../../app/widgets/full_screen_form.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/acp_login_dialog.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused, DataRefusalCode;
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_values.dart'
     show EnvironmentPath;
@@ -29,6 +35,7 @@ import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
+import 'slow_start_note.dart';
 import 'filter_menu_field.dart';
 import 'new_dialog_section.dart';
 import 'new_session_agent_cards.dart';
@@ -155,6 +162,18 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
+
+  /// The installation whose agent asked to be logged in before it would
+  /// start, which the error then offers to log in.
+  AgentInstallation? _loginFor;
+
+  /// What the last login said, shown until the next start.
+  String? _loginNotice;
+
+  /// Set once a start has been busy for a while: an agent run through npx
+  /// is downloaded on its first start, and a silent spinner looked hung.
+  bool _slowStart = false;
+  Timer? _slowStartTimer;
 
   /// The worktree this launch is creating; kept after it ends, so a failed
   /// stage's output stays on screen beside the error.
@@ -383,6 +402,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
 
   @override
   void dispose() {
+    _slowStartTimer?.cancel();
     _titleController.dispose();
     _promptController.dispose();
     _branchController.dispose();
@@ -479,7 +499,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _loginFor = null;
+      _loginNotice = null;
       _creation = null;
+      _slowStart = false;
+    });
+    _slowStartTimer?.cancel();
+    _slowStartTimer = Timer(kSlowStartAfter, () {
+      if (mounted && _busy) setState(() => _slowStart = true);
     });
     // A session without a project gets its folder now, on the agent's own
     // machine, named after what it was asked to do.
@@ -500,6 +527,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         setState(() {
           _error = 'Could not make a scratch folder: $e';
           _busy = false;
+          _slowStart = false;
         });
       }
       return;
@@ -556,10 +584,42 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     } on WorktreeCreationCancelled catch (e) {
       if (mounted) setState(() => _error = 'Cancelled. ${e.cleanup}');
     } catch (e) {
-      if (mounted) setState(() => _error = 'Could not start session: $e');
+      if (!mounted) return;
+      setState(() {
+        if (e is DataRefused && e.code == DataRefusalCode.loginRequired) {
+          _error = e.message;
+          _loginFor = installation;
+        } else {
+          _error = 'Could not start session: $e';
+        }
+      });
     } finally {
       await watching?.cancel();
-      if (mounted) setState(() => _busy = false);
+      _slowStartTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _slowStart = false;
+        });
+      }
+    }
+  }
+
+  /// Opens [installation]'s login; once it is done, the refusal is stale.
+  Future<void> _logIn(AgentInstallation installation) async {
+    final said = await AcpLoginDialog.show(
+      context,
+      installationId: installation.id,
+      agentName: ref
+          .read(agentRegistryProvider)
+          .displayNameFor(installation.agentId),
+    );
+    if (said != null && mounted) {
+      setState(() {
+        _error = null;
+        _loginFor = null;
+        _loginNotice = said;
+      });
     }
   }
 
@@ -795,45 +855,28 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     );
   }
 
-  /// The workspace has nothing to run a session in, and says so instead of
-  /// offering an empty dropdown.
-  Widget _noProjects() => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'There are no projects yet, so there is nowhere to start a session. '
-        'Add a project first — a folder with your Git checkouts in it.',
-      ),
-      const SizedBox(height: Insets.md),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.tonalIcon(
-          onPressed: () => NewProjectDialog.show(context),
-          icon: const Icon(AppIcons.folderPlus, size: Chrome.iconAction),
-          label: const Text('Add project…'),
-        ),
-      ),
-    ],
-  );
-
   @override
   Widget build(BuildContext context) {
-    final destination = _destination;
-    final checkout = destination?.checkout;
-    final scratch = destination?.isScratch ?? false;
+    // Never null since a workspace with no projects opens on "No project";
+    // kept nullable for the moment before the first frame reads the default.
+    final destination = _destination ?? const SessionDestination.scratch();
+    final checkout = destination.checkout;
+    final scratch = destination.isScratch;
 
     // Only the agents installed **where the session will run**: one discovered
     // on Windows is a Windows path, unresolvable inside a WSL checkout. A
     // session without a project runs wherever its agent is, so every agent.
-    final installations = scratch
-        ? ref.watch(agentInstallationsControllerProvider)
-        : checkout == null
-        ? const <AgentInstallation>[]
-        : [
-            for (final i in ref.watch(agentInstallationsControllerProvider))
-              if (i.environmentId == checkout.path.environmentId) i,
-          ];
+    // An installation of an agent the registry no longer knows (a removed ACP
+    // agent's leftover row) is not offered.
+    final registry = ref.watch(agentRegistryProvider);
+    final installations = [
+      for (final i in ref.watch(agentInstallationsControllerProvider))
+        if (registry.adapterFor(i.agentId) != null &&
+            (scratch ||
+                (checkout != null &&
+                    i.environmentId == checkout.path.environmentId)))
+          i,
+    ];
     final installation = scratch
         ? _agentForScratch(installations)
         : _agentFor(checkout, installations);
@@ -881,85 +924,98 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         ),
         // Four labelled parts in the order the choice is made (spec
         // §5): who runs, on what, where the work lands, what it is told.
-        destination == null
-            ? _noProjects()
-            : Column(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NewDialogSection(
+              label: 'Agent',
+              first: true,
+              child: installations.isEmpty
+                  ? _noAgents(checkout)
+                  : NewSessionAgentCards(
+                      installations: installations,
+                      selected: installation,
+                      enabled: !_busy,
+                      onSelected: (v) => setState(() => _installation = v),
+                    ),
+            ),
+            NewDialogSection(
+              label: 'Project & machine',
+              child: SessionDestinationPicker(
+                destination: destination,
+                enabled: !_busy,
+                onChanged: (picked) {
+                  setState(() {
+                    _error = null;
+                    _destination = picked;
+                    // The agent belongs to the environment we are
+                    // leaving. Cleared so `_agentFor` re-resolves
+                    // the default.
+                    _installation = null;
+                  });
+                  _afterDestinationChanged();
+                },
+              ),
+            ),
+            if (externalOffered || worktreeOffered)
+              NewDialogSection(
+                label: 'Where it works',
+                child: _whereItWorks(
+                  worktreeOffered,
+                  checkout,
+                  externalOffered: externalOffered,
+                ),
+              ),
+            NewDialogSection(
+              label: 'First prompt',
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  NewDialogSection(
-                    label: 'Agent',
-                    first: true,
-                    child: installations.isEmpty
-                        ? _noAgents(checkout)
-                        : NewSessionAgentCards(
-                            installations: installations,
-                            selected: installation,
-                            enabled: !_busy,
-                            onSelected: (v) =>
-                                setState(() => _installation = v),
-                          ),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
                   ),
-                  NewDialogSection(
-                    label: 'Project & machine',
-                    child: SessionDestinationPicker(
-                      destination: destination,
-                      enabled: !_busy,
-                      onChanged: (picked) {
-                        setState(() {
-                          _error = null;
-                          _destination = picked;
-                          // The agent belongs to the environment we are
-                          // leaving. Cleared so `_agentFor` re-resolves
-                          // the default.
-                          _installation = null;
-                        });
-                        _afterDestinationChanged();
-                      },
+                  const SizedBox(height: Insets.md),
+                  TextField(
+                    controller: _promptController,
+                    minLines: 2,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'First message (optional)',
+                      hintText: 'What should the agent start on?',
                     ),
                   ),
-                  if (externalOffered || worktreeOffered)
-                    NewDialogSection(
-                      label: 'Where it works',
-                      child: _whereItWorks(
-                        worktreeOffered,
-                        checkout,
-                        externalOffered: externalOffered,
-                      ),
-                    ),
-                  NewDialogSection(
-                    label: 'First prompt',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                          controller: _titleController,
-                          decoration: const InputDecoration(labelText: 'Title'),
-                        ),
-                        const SizedBox(height: Insets.md),
-                        TextField(
-                          controller: _promptController,
-                          minLines: 2,
-                          maxLines: 6,
-                          decoration: const InputDecoration(
-                            labelText: 'First message (optional)',
-                            hintText: 'What should the agent start on?',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_creation != null) ...[
-                    const SizedBox(height: Insets.md),
-                    WorktreeCreationLiveView(tracker: _creation!),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: Insets.md),
-                    DesktopErrorBanner(_error!),
-                  ],
                 ],
               ),
+            ),
+            if (_creation != null) ...[
+              const SizedBox(height: Insets.md),
+              WorktreeCreationLiveView(tracker: _creation!),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: Insets.md),
+              DesktopErrorBanner(_error!),
+            ],
+            if (_loginFor case final login?)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: _busy ? null : () => _logIn(login),
+                  child: const Text('Log in…'),
+                ),
+              ),
+            if (_loginNotice case final notice?) ...[
+              const SizedBox(height: Insets.md),
+              Text(notice, style: Theme.of(context).textTheme.bodySmall),
+            ],
+            if (_busy && _slowStart) ...[
+              const SizedBox(height: Insets.md),
+              const SlowStartNote(),
+            ],
+          ],
+        ),
       ],
     );
     if (fullScreen) {

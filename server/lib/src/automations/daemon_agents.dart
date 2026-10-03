@@ -5,12 +5,22 @@ import 'package:karmashala_session/launch.dart';
 /// and its descriptor. It asks what an agent declares and never which agent it
 /// is: no branch on an agent id belongs here or anywhere else in the host.
 class DaemonAgents {
-  const DaemonAgents([this._registry = AgentRegistry.builtIn]);
+  const DaemonAgents([this._registry = AgentRegistry.builtIn]) : _now = null;
+
+  /// Over a registry that changes while the server runs — the shipped agents
+  /// plus the ACP agents a person adds — read at every question, so a session
+  /// can start with an agent added a moment ago.
+  const DaemonAgents.live(AgentRegistry Function() now)
+    : _registry = AgentRegistry.builtIn,
+      _now = now;
 
   final AgentRegistry _registry;
+  final AgentRegistry Function()? _now;
+
+  AgentRegistry get _current => _now?.call() ?? _registry;
 
   /// Everything agent-specific the daemon may ask, behind one boundary.
-  AgentAdapter? adapterOf(String agentId) => _registry.adapterFor(agentId);
+  AgentAdapter? adapterOf(String agentId) => _current.adapterFor(agentId);
 
   AgentDescriptor? descriptorOf(String agentId) =>
       adapterOf(agentId)?.descriptor;

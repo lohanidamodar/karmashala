@@ -80,6 +80,17 @@ extension SessionStartVerbs on SessionLauncher {
   Future<SessionLaunchResult> showStarted(SessionStarted started) =>
       _show(started);
 
+  /// Opens [sessionId]'s conversation as a tab, or brings its tab forward.
+  String _showChatTab(String sessionId) {
+    final tabId = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .openChatTab(sessionId);
+    // Where this session is on screen moved; the workbench follows it.
+    _publish(SessionChange.moved(sessionId));
+    _log.info('Showing $sessionId as a chat tab: no terminal runs it here.');
+    return tabId;
+  }
+
   /// Shows what the server started: its pane brought forward, a tab attached
   /// to it, a terminal window, or — for SSH — a pane this client runs.
   Future<SessionLaunchResult> _show(
@@ -126,8 +137,14 @@ extension SessionStartVerbs on SessionLauncher {
     }
     final launch = started.launch;
     if (launch == null) {
+      // No terminal to attach: an agent spoken to over ACP runs inside the
+      // server, and its conversation is the tab.
+      final tabId = installationSpeaksAcp(_ref, session.agentInstallationId)
+          ? _showChatTab(session.id)
+          : null;
       return SessionLaunchResult(
         session: session,
+        tabId: tabId,
         workingDirectoryNotice: started.workingDirectoryNotice,
       );
     }

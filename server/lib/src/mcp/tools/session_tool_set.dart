@@ -7,7 +7,8 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session_engine/store.dart'
+    show SessionDao, SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import '../../domain/session_registry.dart';
 import '../../status/daemon_prompt_answers.dart';
@@ -136,9 +137,9 @@ class SessionToolSet extends ServerToolSet {
     return null;
   }
 
-  /// Whether this server runs the session [sessionId] in its own PTY.
-  bool _runsHere(String sessionId) =>
-      prompts.status.runningSessionOf(sessionId) != null;
+  /// Whether this server runs the session [sessionId] itself: a PTY, or an
+  /// agent over ACP.
+  bool _runsHere(String sessionId) => prompts.status.runsHere(sessionId);
 
   static String _onBoxRefusal(String act) =>
       'That session is still running on an SSH box, and this tool cannot '
@@ -161,7 +162,7 @@ class SessionToolSet extends ServerToolSet {
     _session(sessionId);
     final SessionApprovalAnswer answer;
     try {
-      answer = await prompts.answers.answer(
+      answer = await prompts.answer(
         ApprovalAnswerRequest(
           sessionId: sessionId,
           approve: decision == 'approve',
@@ -270,10 +271,22 @@ class SessionToolSet extends ServerToolSet {
         : SessionAttribution(sessionId: sender.id, title: sender.title);
     final message = attribution == null ? text : attribution.render(text);
     // Not running: the message is its resume's opening prompt, as the app's
-    // composer resumed a stopped session with what was typed.
-    final delivered = held
-        ? await typist.send(sessionId, message)
-        : await resumeWith!(sessionId, message).then((_) => true);
+    // composer resumed a stopped session with what was typed. An agent over
+    // ACP takes it as `session/prompt`, one turn at a time.
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    final bool delivered;
+    if (runtime != null) {
+      try {
+        await runtime.send(message);
+      } on StateError catch (error) {
+        throw StateError('NOTHING WAS SENT: ${error.message}.');
+      }
+      delivered = true;
+    } else {
+      delivered = held
+          ? await typist.send(sessionId, message)
+          : await resumeWith!(sessionId, message).then((_) => true);
+    }
     if (!delivered) {
       throw StateError(
         'That session\'s process ended before the message could be typed '
@@ -347,6 +360,21 @@ class SessionToolSet extends ServerToolSet {
     final recent = events.length > capped
         ? events.sublist(events.length - capped)
         : events;
+    // An agent spoken to over ACP keeps no event log: its conversation is
+    // the rows its runtime wrote, live or ended.
+    final messages = events.isEmpty
+        ? [
+            for (final row in SessionMessageDao(
+              _context.database,
+            ).listAfter(sessionId))
+              if (row.role != SessionMessageRole.tool &&
+                  row.text.trim().isNotEmpty)
+                row,
+          ]
+        : const <SessionMessage>[];
+    final recentMessages = messages.length > capped
+        ? messages.sublist(messages.length - capped)
+        : messages;
     final screen = held
         ? prompts.status.liveScreenOf(sessionId)?.tailText(capped)
         : null;
@@ -381,14 +409,26 @@ class SessionToolSet extends ServerToolSet {
             'at': event.createdAt.toIso8601String(),
             'text': _textOf(event.payload),
           },
+        for (final row in recentMessages)
+          <String, Object?>{
+            'seq': row.ordinal,
+            'role': row.role == SessionMessageRole.user ? 'user' : 'agent',
+            'at': row.createdAt.toIso8601String(),
+            'text': row.text,
+          },
       ],
-      'omittedTurns': events.length - recent.length,
+      'omittedTurns': events.isNotEmpty
+          ? events.length - recent.length
+          : messages.length - recentMessages.length,
       // Two honest absences, said differently on purpose: the log holds
       // nothing for a PTY session, and the screen cannot be read with nothing
       // running.
-      'turnsSource': events.isEmpty
-          ? 'not recorded — this session has no event log; read screen instead'
-          : 'session event log',
+      'turnsSource': events.isNotEmpty
+          ? 'session event log'
+          : messages.isNotEmpty
+          ? "the conversation the server keeps for an agent it speaks to "
+                'over ACP'
+          : 'not recorded — this session has no event log; read screen instead',
       'screen': screen,
       'screenSource': screen == null
           ? 'not recorded — no live pane to read'

@@ -13,7 +13,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_store/database.dart';
 
 import '../data/data_service.dart';
-import '../domain/host_session.dart';
+import '../domain/screen_session.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
@@ -242,7 +242,9 @@ class DaemonSessionSync {
     return tail.length <= lines ? tail : tail.sublist(tail.length - lines);
   }
 
-  HostSession? _hosted(Session row) => registry.find(hostSessionIdOf(row.id));
+  /// The screen of [row]'s own process here, a PTY's or an ACP runtime's.
+  ScreenSession? _hosted(Session row) =>
+      registry.findProcess(hostSessionIdOf(row.id))?.screen;
 
   /// Whether [row]'s agent runs now: a host session of it runs here, or its
   /// pane is live and running what it launched.

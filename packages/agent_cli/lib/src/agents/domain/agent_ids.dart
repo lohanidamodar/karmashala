@@ -11,6 +11,21 @@ abstract final class AgentIds {
   static const String codex = 'codex';
   static const String antigravity = 'antigravity';
 
-  /// The three shipped ids, in registry order.
-  static const List<String> builtIn = [claudeCode, codex, antigravity];
+  /// The agents spoken to over the Agent Client Protocol (`agents/acp/`).
+  static const String claudeAcp = 'claude-acp';
+  static const String codexAcp = 'codex-acp';
+  static const String antigravityAcp = 'antigravity-acp';
+  static const String grok = 'grok';
+
+  /// The shipped ids, in registry order: the three terminal agents, then the
+  /// four ACP ones.
+  static const List<String> builtIn = [
+    claudeCode,
+    codex,
+    antigravity,
+    claudeAcp,
+    codexAcp,
+    antigravityAcp,
+    grok,
+  ];
 }

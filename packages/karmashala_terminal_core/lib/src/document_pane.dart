@@ -162,8 +162,7 @@ bool isFilesPane(String paneId) => filesPaneSides(paneId) != null;
 const String kDevicePreviewPanePrefix = '${kDocumentPanePrefix}device-preview:';
 
 /// The pane id for the live preview of the device with [serial].
-String devicePreviewPaneId(String serial) =>
-    '$kDevicePreviewPanePrefix$serial';
+String devicePreviewPaneId(String serial) => '$kDevicePreviewPanePrefix$serial';
 
 /// The serial [paneId] previews, or null when it is not a device preview.
 String? devicePreviewSerial(String paneId) {
@@ -174,3 +173,22 @@ String? devicePreviewSerial(String paneId) {
 
 /// Whether [paneId] is a device's live preview.
 bool isDevicePreviewPane(String paneId) => devicePreviewSerial(paneId) != null;
+
+/// The prefix a session's **chat pane** carries: a conversation with no
+/// terminal behind it, for an agent the server speaks to over a protocol and
+/// runs itself. The session id follows, so restore reopens the conversation
+/// and closing the pane leaves the session running where it runs.
+const String kChatPanePrefix = '${kDocumentPanePrefix}chat:';
+
+/// The pane id for the conversation of session [sessionId].
+String chatPaneId(String sessionId) => '$kChatPanePrefix$sessionId';
+
+/// The session [paneId]'s chat shows, or null when it is not a chat pane.
+String? chatPaneSessionId(String paneId) {
+  if (!paneId.startsWith(kChatPanePrefix)) return null;
+  final id = paneId.substring(kChatPanePrefix.length);
+  return id.isEmpty ? null : id;
+}
+
+/// Whether [paneId] is a session's chat pane.
+bool isChatPane(String paneId) => chatPaneSessionId(paneId) != null;

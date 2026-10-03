@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_host/src/mcp/tools/checkout_reach.dart';
 import 'package:karmashala_host/src/mcp/tools/project_folders.dart';
 import 'package:karmashala_host/src/mcp/tools/session_checkout_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/worktree_tool_set.dart';
@@ -126,6 +127,60 @@ void main() {
     });
   });
 
+  group('createScratchCheckout in a POSIX environment', () {
+    test('spells the folder into the shell script unquoted, inside the '
+        'quoted path', () async {
+      // Quotes inside the quoted path would become part of the folder name.
+      final requests = <CommandRequest>[];
+      final wsl = ExecutionEnvironment(
+        id: 'wsl:arch',
+        kind: EnvironmentKind.wsl,
+        name: 'arch',
+        wslDistribution: 'arch',
+        createdAt: RepoToolFixture.now,
+      );
+      fixture.data.ensureEnvironment(wsl);
+      final folders = ProjectFolders(
+        fixture.context,
+        CheckoutReach(
+          fixture.database,
+          runners: _Answering((request) {
+            requests.add(request);
+            return const CommandResult(
+              exitCode: 0,
+              stdout:
+                  '/home/me/karmashala/scratch\n'
+                  '/home/me/karmashala/scratch/2026-09-27-tidy-abc123\n',
+              stderr: '',
+            );
+          }),
+        ),
+        localHome: fixture.home,
+        now: () => RepoToolFixture.now,
+      );
+
+      final checkout = await folders.createScratchCheckout(
+        target: wsl,
+        hint: 'tidy',
+      );
+
+      // Through stdin, not argv: a WSL distribution re-parses an argument
+      // line in the user's shell, which breaks a quoted, multi-line script.
+      expect(requests.single.arguments, ['-s']);
+      final script = requests.single.stdinText!;
+      expect(script, contains('TARGET="\$ROOT/2026-09-27-tidy-'));
+      expect(script, isNot(contains("'")));
+      expect(
+        checkout.path.path,
+        '/home/me/karmashala/scratch/2026-09-27-tidy-abc123',
+      );
+      expect(
+        ProjectDao(fixture.database).getById(checkout.projectId)!.root.path,
+        '/home/me/karmashala/scratch',
+      );
+    });
+  });
+
   group('what a session may span', () {
     test('an ordinary session stays within its project', () async {
       final a = fixture.project('a', fixture.repository(fixture.path('a')));
@@ -165,26 +220,17 @@ void main() {
       ]);
     });
 
-    test('Scratch cannot be deleted while a session runs in it', () async {
+    test('Scratch is removed like any project, its sessions with it', () async {
+      // The explorer's confirmation already says the sessions go with it.
       final scratch = await fixture.folders.createScratchCheckout(
         target: host(),
       );
       session('s1', scratch.id);
 
-      expect(
-        () => fixture.context.write(ProjectDelete(scratch.projectId)),
-        throwsA(
-          isA<DataRefused>().having(
-            (r) => r.message,
-            'message',
-            contains('holds 1 session'),
-          ),
-        ),
-      );
-      expect(
-        ProjectDao(fixture.database).getById(scratch.projectId),
-        isNotNull,
-      );
+      fixture.context.write(ProjectDelete(scratch.projectId));
+
+      expect(ProjectDao(fixture.database).getById(scratch.projectId), isNull);
+      expect(SessionDao(fixture.database).getById('s1'), isNull);
     });
   });
 
@@ -306,4 +352,34 @@ void main() {
       expect(answer.error, contains('sessionId is required'));
     });
   });
+}
+
+/// A runner factory whose every environment answers from one responder.
+class _Answering extends CommandRunnerFactory {
+  const _Answering(this.responder);
+
+  final CommandResult Function(CommandRequest request) responder;
+
+  @override
+  bool get canReachRemote => true;
+
+  @override
+  CommandRunner forEnvironment(ExecutionEnvironment environment) =>
+      _AnsweringRunner(responder, environment.id);
+}
+
+class _AnsweringRunner implements CommandRunner {
+  const _AnsweringRunner(this.responder, this.environmentId);
+
+  final CommandResult Function(CommandRequest request) responder;
+
+  @override
+  final String environmentId;
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async => responder(request);
+
+  @override
+  Future<ProcessHandle> start(CommandRequest request) =>
+      throw UnsupportedError('not started here');
 }

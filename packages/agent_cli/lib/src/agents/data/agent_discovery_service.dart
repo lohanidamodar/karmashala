@@ -9,6 +9,7 @@ import '../../util/id_generator.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/environment_path.dart';
 import '../../environments/execution_environment.dart';
+import '../acp/acp_managed_install.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_registry.dart';
@@ -244,11 +245,32 @@ class DiscoveredAgent {
     required this.descriptor,
     required this.executable,
     this.version,
+    this.leadingArguments = const [],
   });
 
   final AgentDescriptor descriptor;
   final EnvironmentPath executable;
   final String? version;
+
+  /// See `AgentInstallation.leadingArguments`: non-empty only when
+  /// [executable] is `npx` standing in for an uninstalled agent.
+  final List<String> leadingArguments;
+}
+
+/// How `npx` is found: node installs `npx` *and* `npx.cmd` on Windows, and
+/// `where npx` lists the shell script first, which nothing can spawn.
+const AgentBinaries npxBinaries = AgentBinaries(
+  windows: ['npx.cmd'],
+  posix: ['npx'],
+);
+
+/// Whether [executable] is `npx` itself, by its file name in either spelling
+/// — whatever its leading arguments ask it to run, if anything.
+bool isNpxExecutable(String executable) {
+  final name = executable.split(RegExp(r'[\\/]')).last.toLowerCase();
+  return name == 'npx.exe' ||
+      npxBinaries.windows.contains(name) ||
+      npxBinaries.posix.contains(name);
 }
 
 /// Everything one sweep of one environment established — including the two
@@ -326,11 +348,16 @@ class AgentDiscoveryService {
   /// knows which agents are worth asking about says so rather than paying for
   /// the whole registry.
   Future<List<DiscoveredAgent>> probeAll({Set<String>? agentIds}) async {
+    _npx = null;
     // The probes are independent subprocesses. Run them concurrently so a
     // slow or missing CLI does not serially delay every other agent check.
     final probed = await Future.wait(_wanted(agentIds).map(_probe));
     return probed.whereType<DiscoveredAgent>().toList();
   }
+
+  /// One `npx` lookup per sweep, shared by every ACP descriptor that needs
+  /// the fallback. Reset at the start of each sweep so a later install counts.
+  Future<String?>? _npx;
 
   /// Discovered agents as persistable installations.
   ///
@@ -350,6 +377,7 @@ class AgentDiscoveryService {
           // `--version` failed carries no reading, so it carries no time.
           versionReadAt: agent.version == null ? null : clock.nowUtc(),
           createdAt: clock.nowUtc(),
+          leadingArguments: agent.leadingArguments,
         ),
     ];
   }
@@ -359,8 +387,10 @@ class AgentDiscoveryService {
     String? version;
 
     if (path == null) {
-      final hit = await _locateAtDeclaredPath(descriptor);
-      if (hit == null) return null;
+      final hit =
+          await _locateAtDeclaredPath(descriptor) ??
+          await _locateManaged(descriptor);
+      if (hit == null) return _probeNpx(descriptor);
       path = hit.path;
       // Running the file is what proved it exists, so its output is the
       // version we already have; asking again would be a second process for an
@@ -392,6 +422,60 @@ class AgentDiscoveryService {
     );
   }
 
+  /// An ACP agent the registry ships as an archive, where Karmashala installs
+  /// it (`~/karmashala/acp/<registry id>/<version>/`): the newest version
+  /// folder, whose name is the version — the registry's at install, and what
+  /// the agent answers over ACP confirms it later. One process, no
+  /// `--version` spawn.
+  Future<({String path, String? version})?> _locateManaged(
+    AgentDescriptor descriptor,
+  ) async {
+    final registryId = descriptor.acp?.registryId;
+    if (registryId == null) return null;
+    final request = acpManagedLocateRequest(
+      environment.kind,
+      registryId,
+      descriptor.binaries.forKind(environment.kind),
+      hostEnvironment: hostEnvironment,
+    );
+    if (request == null) return null;
+    try {
+      // `ls` and `where` exit non-zero when a name has no match, having
+      // printed the ones that do, so the output is read whatever the code.
+      final result = await runner.run(request);
+      return newestAcpManagedInstall(result.stdout);
+    } on CommandException {
+      return null;
+    }
+  }
+
+  /// An ACP agent with no binary installed, run from its npm package through
+  /// `npx` when that is on PATH. No version: asking would download the
+  /// package, and the registry's number is the package's, not an install's.
+  Future<DiscoveredAgent?> _probeNpx(AgentDescriptor descriptor) async {
+    final package = descriptor.acp?.npxPackage;
+    if (package == null) return null;
+    final npx = await (_npx ??= _locateNpx());
+    if (npx == null) return null;
+    return DiscoveredAgent(
+      descriptor: descriptor,
+      executable: EnvironmentPath(environmentId: environment.id, path: npx),
+      leadingArguments: ['-y', package],
+    );
+  }
+
+  Future<String?> _locateNpx() async {
+    try {
+      return await locateOnPath(
+        runner,
+        environment.kind,
+        npxBinaries.forKind(environment.kind),
+      );
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// Tries each declared binary name in order and returns the first hit.
   ///
   /// An unreachable environment is treated as "not installed" *here*, which is
@@ -399,12 +483,14 @@ class AgentDiscoveryService {
   /// not run tells us nothing, and `probeEnvironment` already reports
   /// reachability separately so a sweep never deletes on this answer.
   Future<String?> _locateOnPath(AgentDescriptor descriptor) async {
+    final names = descriptor.binaries.forKind(environment.kind);
+    // A person-added agent may name its command by an absolute path, which
+    // PATH knows nothing about: it is taken as given.
+    for (final name in names) {
+      if (p.posix.isAbsolute(name) || p.windows.isAbsolute(name)) return name;
+    }
     try {
-      return await locateOnPath(
-        runner,
-        environment.kind,
-        descriptor.binaries.forKind(environment.kind),
-      );
+      return await locateOnPath(runner, environment.kind, names);
     } on CommandException {
       return null;
     }
@@ -529,6 +615,7 @@ class AgentDiscoveryService {
       }
     }
 
+    _npx = null;
     final probed = await Future.wait(wanted.map(_probe));
     final found = probed.whereType<DiscoveredAgent>().toList();
     final foundIds = {for (final agent in found) agent.descriptor.id};

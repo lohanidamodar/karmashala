@@ -49,4 +49,22 @@ const Set<String> kServerFeatures = <String>{
   // `quickAccess.*`: folders pinned to every file browser, kept here for
   // every client and greeted with `quickAccessChanged`.
   'quickAccess',
+
+  // Sessions whose agent speaks ACP: the server owns the process and the
+  // conversation, which `sessions.transcript` serves from its own rows
+  // (ACP design, C3).
+  'acpSessions',
+  // `sessions.send` to an ACP session nothing runs resumes it here and sends
+  // the message as its first turn, answering `resumed` and any notice.
+  'sessions.send.resumes',
+  // `sessions.setMode` and `.setConfigOption`: an ACP session's mode and
+  // options, as its agent announces them.
+  'sessions.setMode',
+  'sessions.setConfigOption',
+  // `acpAgents.list`, `.put`, `.delete`: the ACP agents a person adds;
+  // `acpAgents.install`: one the registry ships as an archive, installed here.
+  'acpAgents',
+  'acpAgents.install',
+  // `acpAuth.*`: an ACP agent's login methods, chosen and remembered here.
+  'acpAuth',
 };

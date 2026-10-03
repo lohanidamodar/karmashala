@@ -1,5 +1,6 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
+import '../../acp/acp_login_required.dart';
 import '../../data/session_work.dart';
 import 'server_session_launcher.dart';
 import 'session_continuations.dart';
@@ -67,6 +68,8 @@ class ServerSessionWork implements SessionWork {
       };
     } on DataRefused {
       rethrow;
+    } on AcpLoginRequired catch (login) {
+      throw DataRefused(DataRefusalCode.loginRequired, login.message);
     } on LaunchTargetMissing catch (missing) {
       throw DataRefused.notFound(missing.message);
     } on StateError catch (error) {

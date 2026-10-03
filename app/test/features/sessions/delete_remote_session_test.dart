@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -124,6 +125,38 @@ void main() {
         .deleteNative('s-local', deleteFromCli: false);
 
     expect(db.server.sessionRows.getById('s-local'), isNull);
+    expect(notice, isNull);
+    expect(mutator.deleted, isEmpty);
+  });
+
+  test('an ACP session is removed with no CLI store to look in', () async {
+    // Its conversation is the server's own rows; the CLI path refused it
+    // with "The CLI session could not be identified".
+    server.installationRows.insert(
+      agentInstallation(
+        id: 'acp',
+        agentId: AgentIds.claudeAcp,
+        path: r'C:\Users\me\.bin\npx.cmd',
+      ),
+    );
+    db.server.sessionRows.insert(
+      Session(
+        id: 's-acp',
+        repositoryId: 'r1',
+        agentInstallationId: 'acp',
+        title: 'Over ACP',
+        useWorktree: false,
+        status: SessionStatus.completed,
+        createdAt: testTime,
+      ),
+    );
+    final (:container, :mutator) = mount();
+
+    final notice = await container
+        .read(sessionActionsProvider)
+        .deleteNative('s-acp');
+
+    expect(db.server.sessionRows.getById('s-acp'), isNull);
     expect(notice, isNull);
     expect(mutator.deleted, isEmpty);
   });

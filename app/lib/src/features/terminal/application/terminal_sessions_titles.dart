@@ -71,6 +71,10 @@ extension TerminalPaneTitles on TerminalSessionsController {
       }
       return 'Note';
     }
+    // A chat pane is named for its session, read live like an agent pane's.
+    if (chatPaneSessionId(paneId) case final sessionId?) {
+      return _sessionTitle(sessionId) ?? 'Session';
+    }
     // git prints a relative path with `/` whatever the host separator is.
     if (diffPaneTarget(paneId) case final diff?) {
       return p.posix.basename(diff.path);

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
+import 'package:karmashala/src/features/agents/presentation/acp_usage_note.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -473,5 +474,49 @@ void main() {
       because: 'a usage row must not clip the account it names',
     );
     container.dispose();
+  });
+
+  testWidgets('an ACP agent a person added is named, and reads no account', (
+    tester,
+  ) async {
+    seeded();
+    final data = await seededWorkspace();
+    final row = AcpAgentRow(
+      id: 'r1',
+      name: 'Native Agent',
+      command: 'native-agent',
+      source: AcpAgentSource.custom,
+      createdAt: testTime,
+    );
+    workspaceServer.acpAgentRows.insert(row);
+    final container = ProviderContainer(
+      overrides: [
+        data,
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+        ),
+        hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: FanOutUsageStrip(
+              installations: [
+                agentInstallation(id: 'a9', agentId: row.agentId),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Native Agent'), findsOneWidget);
+    expect(find.textContaining(kAcpUsageLimitsNote), findsOneWidget);
   });
 }

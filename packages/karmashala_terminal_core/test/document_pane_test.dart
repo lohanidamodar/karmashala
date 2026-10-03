@@ -168,4 +168,21 @@ void main() {
       expect(isFilesPane(editorPaneId('/a/b.md')), isFalse);
     });
   });
+
+  group('a chat pane id', () {
+    test('round-trips the session it shows, and is a document', () {
+      final id = chatPaneId('acp-1');
+      expect(chatPaneSessionId(id), 'acp-1');
+      expect(isChatPane(id), isTrue);
+      expect(isDocumentPane(id), isTrue);
+      expect(isEditorPane(id), isFalse);
+    });
+
+    test('names no session when the id is not one', () {
+      expect(chatPaneSessionId(kChatPanePrefix), isNull);
+      expect(chatPaneSessionId(kSettingsPaneId), isNull);
+      expect(chatPaneSessionId('shell:1'), isNull);
+      expect(isChatPane(notePaneId('n1')), isFalse);
+    });
+  });
 }

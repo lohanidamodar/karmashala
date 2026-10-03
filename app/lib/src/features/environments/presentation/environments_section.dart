@@ -6,8 +6,9 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/agent_installations_controller.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/agent_logo.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
@@ -142,12 +143,15 @@ class _EnvironmentCard extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Row(
                   children: [
-                    const Icon(AppIcons.robot, size: Chrome.iconAction),
+                    AgentLogo(
+                      agentId: installation.agentId,
+                      size: Chrome.iconAction,
+                    ),
                     const SizedBox(width: Insets.sm),
                     Text(
-                      AgentRegistry.builtIn.displayNameFor(
-                        installation.agentId,
-                      ),
+                      ref
+                          .watch(agentRegistryProvider)
+                          .displayNameFor(installation.agentId),
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(width: Insets.sm),

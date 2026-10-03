@@ -89,6 +89,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   SettingsAnchor? _pendingReveal;
+
+  /// The last anchor asked for; the page's collapsed cards open on it. Set
+  /// before the build that follows each request, never cleared by a scroll.
+  SettingsAnchor? _revealAnchor;
   double? _lastRevealTop;
   int _revealFrames = 0;
 
@@ -98,6 +102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// user ends it.
   void _revealAfterBuild(SettingsAnchor? anchor) {
     if (anchor == null) return;
+    _revealAnchor = anchor;
     _pendingReveal = anchor;
     _lastRevealTop = null;
     _revealFrames = 0;
@@ -212,6 +217,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         },
         child: SettingsAnchorScope(
           keys: _anchorKeys,
+          revealing: _revealAnchor?.page == section ? _revealAnchor : null,
           child: _SectionContent(section: section),
         ),
       );

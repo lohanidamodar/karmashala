@@ -45,7 +45,9 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
           detail: _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
               ? null
               : 'not running',
-          icon: documentIconFor(tab) ?? AppIcons.terminal,
+          icon:
+              documentIconFor(tab) ??
+              (_isChatTab(tab) ? AppIcons.chatCircle : AppIcons.terminal),
           onSelect: () => activateTerminalTab(ref, tab.id),
         ),
         active: onPanes && tab.id == active,
@@ -85,11 +87,17 @@ bool _tabHasConflictedNote(WidgetRef ref, TerminalTab tab) {
 /// Whether every pane in [tab] is a surface the workbench draws itself.
 bool _isDocumentTab(TerminalTab tab) => tab.layout.panes.every(isDocumentPane);
 
+/// Whether [tab] is one session's conversation and nothing else.
+bool _isChatTab(TerminalTab tab) =>
+    tab.layout.panes.length == 1 && isChatPane(tab.layout.panes.single);
+
 /// The glyph a document tab wears in place of a liveness dot, or null when the
 /// tab holds a process. One table, so the strip and the picker cannot disagree.
 IconData? documentIconFor(TerminalTab tab) {
   if (tab.layout.panes.length != 1) return null;
   final paneId = tab.layout.panes.single;
+  // A chat pane wears its session's status, as an agent's terminal tab does.
+  if (isChatPane(paneId)) return null;
   if (isSettingsPane(paneId)) return AppIcons.gearSix;
   if (isDevicePane(paneId)) return AppIcons.deviceMobile;
   if (isDevicePreviewPane(paneId)) return AppIcons.deviceMobile;

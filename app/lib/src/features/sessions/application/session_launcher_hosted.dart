@@ -37,6 +37,14 @@ extension SessionHostedVerbs on SessionLauncher {
   /// when it runs none (or a pane of ours already shows it — [reveal] that).
   Future<SessionLaunchResult?> attachHosted(String sessionId) async {
     if (!heldByHostOnly(sessionId)) return null;
+    return resumeAtServer(sessionId);
+  }
+
+  /// Continues [sessionId] at the server — its own conversation, in its own
+  /// row — and shows what came back: a pane attached to the terminal, or the
+  /// chat tab of an agent spoken to over a protocol. One already running is
+  /// answered as it is, never started twice.
+  Future<SessionLaunchResult> resumeAtServer(String sessionId) async {
     final started = await _ref.read(sessionsClientProvider).resume(sessionId);
     return _show(started);
   }

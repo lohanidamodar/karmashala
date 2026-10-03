@@ -239,6 +239,16 @@ class FakeDataServer {
     (row) => InstallationRemoved(row.id),
     compareInstallations,
   );
+  late final acpAgentRows = FakeHostRows<AcpAgentRow>._(
+    this,
+    (row) => row.id,
+    AcpAgentChanged.new,
+    (row) => AcpAgentRemoved(row.id),
+    (a, b) {
+      final byTime = a.createdAt.compareTo(b.createdAt);
+      return byTime != 0 ? byTime : a.id.compareTo(b.id);
+    },
+  );
   late final claudeAccountRows = FakeHostRows<ClaudeAccount>._(
     this,
     (row) => row.id,
@@ -325,6 +335,21 @@ class FakeDataServer {
   /// Every request answered, by kind, in order.
   final requests = <String>[];
 
+  /// The modes each session's agent last announced (seeded through
+  /// [writeAsAnotherClient]); `sessions.setMode` moves `currentModeId`.
+  final sessionModes = <String, SessionModesChanged>{};
+
+  /// When set, `sessions.setMode` is refused `invalid` with these words.
+  String? modeRefusal;
+
+  /// The config options each session's agent last announced (seeded through
+  /// [writeAsAnotherClient]); `sessions.setConfigOption` moves `currentValue`.
+  final sessionConfigOptions = <String, SessionConfigOptionsChanged>{};
+
+  /// When set, `sessions.setConfigOption` is refused `invalid` with these
+  /// words.
+  String? configOptionRefusal;
+
   /// When set, answers wait for it — a slow server, or one mid-answer.
   Completer<void>? hold;
 
@@ -388,6 +413,9 @@ class FakeDataServer {
           notes.remove(id);
         case TodoChanged(:final todo):
           todos[todo.id] = todo;
+        // Not a row: nothing of it is kept.
+        case AcpInstallProgress():
+          break;
         case TodoRemoved(:final id):
           todos.remove(id);
         case PreferenceChanged(:final key, :final value):
@@ -398,6 +426,12 @@ class FakeDataServer {
           _applySession(change);
         case final HostsDomainChange change:
           _applyHosts(change);
+        case AcpAgentChanged(:final row):
+          acpAgentRows._put(row);
+        case AcpAgentRemoved(:final id):
+          if (acpAgentRows.getById(id) case final row?) {
+            acpAgentRows._remove(row);
+          }
         case final WorktreesChange change:
           worktreeRows._apply(change);
         case final AutomationsChange change:
@@ -416,6 +450,13 @@ class FakeDataServer {
           break;
         case FilesChange() || TranscriptChanged():
           // A watch's news is one link's.
+          break;
+        case SessionModesChanged(:final sessionId):
+          sessionModes[sessionId] = change;
+        case SessionConfigOptionsChanged(:final sessionId):
+          sessionConfigOptions[sessionId] = change;
+        case SessionUsageChanged():
+          // Told, never kept: a late client reads it from `sessions.stats`.
           break;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
@@ -560,6 +601,48 @@ class FakeDataServer {
 
   DataReply<R> _handle<R>(FakeDataLink origin, DataRequest<R> request) {
     requests.add(request.kind);
+    if (request case SessionSetMode(:final sessionId, :final modeId)) {
+      if (modeRefusal case final words?) throw DataRefused.invalid(words);
+      final before = sessionModes[sessionId];
+      final after = SessionModesChanged(
+        sessionId: sessionId,
+        currentModeId: modeId,
+        availableModes: before?.availableModes ?? const [],
+      );
+      sessionModes[sessionId] = after;
+      _tell(null, [after]);
+      return DataReply(const DataAck() as R, revision, const []);
+    }
+    if (request case SessionSetConfigOption(
+      :final sessionId,
+      :final configId,
+      :final value,
+    )) {
+      if (configOptionRefusal case final words?) {
+        throw DataRefused.invalid(words);
+      }
+      final before = sessionConfigOptions[sessionId];
+      final after = SessionConfigOptionsChanged(
+        sessionId: sessionId,
+        options: [
+          for (final option in before?.options ?? const <SessionConfigOption>[])
+            option.id == configId
+                ? SessionConfigOption(
+                    id: option.id,
+                    name: option.name,
+                    type: option.type,
+                    description: option.description,
+                    category: option.category,
+                    currentValue: value,
+                    choices: option.choices,
+                  )
+                : option,
+        ],
+      );
+      sessionConfigOptions[sessionId] = after;
+      _tell(null, [after]);
+      return DataReply(const DataAck() as R, revision, const []);
+    }
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
     }
@@ -724,6 +807,7 @@ class FakeDataServer {
       ClaudeAccountDelete() ||
       CodexAccountDelete() ||
       UsageHistory() => _handleHosts(request, changes),
+      final AcpAgentsRequest r => _handleAcpAgents(r, changes),
       AgentWorkRequest() ||
       FlutterWorkRequest() ||
       BrowserWorkRequest() ||
@@ -739,9 +823,9 @@ class FakeDataServer {
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
       ),
-      SessionInputRequest() => throw const DataRefused.unavailable(
-        'this fake types into no sessions',
-      ),
+      final SessionInputRequest<Object?> r => sessionWork._input(r),
+      SessionSetMode() ||
+      SessionSetConfigOption() ||
       StoreRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);

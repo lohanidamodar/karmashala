@@ -27,8 +27,54 @@ class FakeSessionWork {
   /// How the server names a new row; `started-<n>` unless a test says.
   String Function()? newId;
 
+  /// Whether `sessions.send` and `sessions.interrupt` are taken here: into a
+  /// session the server runs ([running]), answered as sent over its
+  /// protocol; refused `notFound` for one it does not run, as the server
+  /// refuses. Off, every send is refused as unavailable, as it always was.
+  bool typesSends = false;
+
+  /// Every `sessions.send` taken, in order.
+  final sent = <SessionSend>[];
+
+  /// A send to a session it does not run resumes it first, as a server that
+  /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
+  bool resumesOnSend = false;
+
+  /// Set to refuse a send's resume in these words, as the server refuses an
+  /// agent that would not start — a login it asks for first.
+  String? resumeOnSendRefusesWith;
+
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
+
+  Object? _input(SessionInputRequest<Object?> request) {
+    if (!typesSends) {
+      throw const DataRefused.unavailable('this fake types into no sessions');
+    }
+    final sessionId = switch (request) {
+      SessionSend(:final sessionId) => sessionId,
+      SessionInterrupt(:final sessionId) => sessionId,
+    };
+    var resumed = false;
+    if (!running.contains(sessionId)) {
+      final row = _server.sessionRows.getById(sessionId);
+      if (request is! SessionSend || !resumesOnSend || row == null) {
+        throw const DataRefused.notFound('this session is not running here');
+      }
+      if (resumeOnSendRefusesWith case final words?) {
+        throw DataRefused(DataRefusalCode.failed, words);
+      }
+      // As a server that resumes on send (`sessions.send.resumes`).
+      running.add(sessionId);
+      _server.sessionRows.put(row.copyWith(status: SessionStatus.running));
+      resumed = true;
+    }
+    if (request case final SessionSend send) {
+      sent.add(send);
+      return SessionSent(sent: true, via: 'protocol', resumed: resumed);
+    }
+    return const DataAck();
+  }
 
   Object? _handle(SessionWorkRequest<Object?> request) {
     asked.add(request);
@@ -40,7 +86,9 @@ class FakeSessionWork {
       case final SessionResume r:
         final row =
             _server.sessionRows.getById(r.sessionId) ??
-            (throw const DataRefused.notFound('This session no longer exists.'));
+            (throw const DataRefused.notFound(
+              'This session no longer exists.',
+            ));
         final conversation = row.externalSessionId;
         if (r.restart && (conversation == null || conversation.isEmpty)) {
           throw const DataRefused.invalid(
@@ -142,7 +190,8 @@ class FakeSessionWork {
     final repository = _server.repositoryRows.getById(spec.repositoryId);
     // A worktree of its own is the server's to make; here it is named, as
     // the server's `sessionWorktreeName` names it, and not created.
-    final worktree = spec.existingWorktree ??
+    final worktree =
+        spec.existingWorktree ??
         (spec.worktree && repository != null
             ? EnvironmentPath(
                 environmentId: repository.path.environmentId,
@@ -164,9 +213,7 @@ class FakeSessionWork {
       // is named after its row; a fork's is the CLI's to mint.
       externalSessionId:
           spec.resumeConversationId ??
-          (spec.forkConversationId == null && _assignsOwnId(spec)
-              ? id
-              : null),
+          (spec.forkConversationId == null && _assignsOwnId(spec) ? id : null),
       parentSessionId: spec.parentSessionId,
       parentLink: spec.parentLink,
       permissionMode: spec.permissionMode,
@@ -178,10 +225,7 @@ class FakeSessionWork {
         ?.agentId;
     if (failsFor.contains(agentId)) {
       _server.sessionRows.insert(row.copyWith(status: SessionStatus.failed));
-      throw DataRefused(
-        DataRefusalCode.failed,
-        'could not start $agentId',
-      );
+      throw DataRefused(DataRefusalCode.failed, 'could not start $agentId');
     }
     _server.sessionRows.insert(row);
     running.add(id);
@@ -201,10 +245,17 @@ class FakeSessionWork {
             false);
   }
 
-  AgentPaneLaunch _launchOf(Session row) {
+  /// Null for an agent spoken to over ACP, as the server answers: it runs the
+  /// agent itself, so there is no terminal for a pane to attach to.
+  AgentPaneLaunch? _launchOf(Session row) {
     final installation = _server.installationRows.getById(
       row.agentInstallationId,
     );
+    final agentId = installation?.agentId;
+    if (agentId != null &&
+        AgentRegistry.builtIn.adapterFor(agentId)?.acp != null) {
+      return null;
+    }
     final directory =
         row.workingDirectory ??
         row.worktree ??

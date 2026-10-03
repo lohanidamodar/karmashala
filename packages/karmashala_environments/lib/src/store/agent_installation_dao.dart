@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
+
+import 'acp_agent_dao.dart' show stringListFromJson;
 
 /// Data-access for [AgentInstallation] rows. Hand-written SQL, no codegen;
 /// `UNIQUE(agent_kind, environment_id, executable_path)` is the row identity.
@@ -15,8 +19,8 @@ class AgentInstallationDao {
     _db.execute(
       'INSERT INTO agent_installations '
       '(id, agent_kind, environment_id, executable_path, version, '
-      'version_read_at, created_at, executable_by_user) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+      'version_read_at, created_at, executable_by_user, leading_arguments) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         installation.id,
         installation.agentId,
@@ -28,6 +32,9 @@ class AgentInstallationDao {
             : isoFromDate(installation.versionReadAt!),
         isoFromDate(installation.createdAt),
         intFromBool(installation.executableByUser),
+        installation.leadingArguments.isEmpty
+            ? null
+            : jsonEncode(installation.leadingArguments),
       ],
     );
   }
@@ -71,6 +78,16 @@ class AgentInstallationDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every installation of [agentId], in every environment.
+  List<AgentInstallation> getByAgent(String agentId) {
+    final rows = _db.query(
+      'SELECT * FROM agent_installations WHERE agent_kind = ? '
+      'ORDER BY created_at, id;',
+      [agentId],
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// Records what the CLI answered and **when it was asked** — a confirmed
   /// reading is a fresh reading. A null [version] is refused, never written.
   void recordVersion(String id, String? version, {required DateTime readAt}) {
@@ -79,6 +96,14 @@ class AgentInstallationDao {
       'UPDATE agent_installations SET version = ?, version_read_at = ? '
       'WHERE id = ?;',
       [version, isoFromDate(readAt), id],
+    );
+  }
+
+  /// Records the runner arguments discovery now finds before the executable.
+  void updateLeadingArguments(String id, List<String> arguments) {
+    _db.execute(
+      'UPDATE agent_installations SET leading_arguments = ? WHERE id = ?;',
+      [arguments.isEmpty ? null : jsonEncode(arguments), id],
     );
   }
 
@@ -129,5 +154,6 @@ class AgentInstallationDao {
         : dateFromIso(row['version_read_at']),
     createdAt: dateFromIso(row['created_at']),
     executableByUser: boolFromInt(row['executable_by_user'] ?? 0),
+    leadingArguments: stringListFromJson(row['leading_arguments']),
   );
 }

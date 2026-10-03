@@ -20,6 +20,7 @@ import '../../features/explorer/application/session_context.dart';
 import '../../features/explorer/application/where_you_are.dart';
 import '../../features/notes/application/note_drafts.dart';
 import '../../features/notes/application/note_tabs.dart';
+import '../../features/sessions/application/acp_session_providers.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';
@@ -30,6 +31,7 @@ import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
+import '../../features/sessions/presentation/session_mode_picker.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
 import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
@@ -110,7 +112,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // A restored layout can put an agent pane on screen before anything is
       // selected; the context panel should describe that session.
       if (active != null) ref.read(sessionContextProvider).follow(active);
-      if (selected != null) _showSurfaceFor(_shownPane, selected);
+      if (selected != null) _openSession(selected);
       _hostSelection();
     });
   }
@@ -134,9 +136,18 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       showTerminalFor(ref, paneId, sessionId);
 
   /// Opens [sessionId] on the surface a session *is*: its terminal. No branch on
-  /// whether it has a pane — one that has none gets [_NoPaneForSession].
-  void _openSession(String sessionId) =>
-      _showSurfaceFor(sessionTerminalPane(ref, sessionId), sessionId);
+  /// whether it has a pane — one that has none gets [_NoPaneForSession] — except
+  /// a session with no terminal to have: its conversation becomes the tab.
+  void _openSession(String sessionId) {
+    var paneId = sessionTerminalPane(ref, sessionId);
+    if (paneId == null && ref.read(isAcpSessionProvider(sessionId))) {
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .openChatTab(sessionId);
+      paneId = chatPaneId(sessionId);
+    }
+    _showSurfaceFor(paneId, sessionId);
+  }
 
   /// Follows the selected session onto the pane it acquires, or loses: the
   /// Explorer selects a row *before* it resumes it, so the pane arrives late.
@@ -278,10 +289,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         sizing: StackFit.expand,
         children: [
           for (final group in groups)
-            _WorkspaceGroup(
-              key: ValueKey(group.id),
-              groupId: group.id,
-            ),
+            _WorkspaceGroup(key: ValueKey(group.id), groupId: group.id),
         ],
       );
     }

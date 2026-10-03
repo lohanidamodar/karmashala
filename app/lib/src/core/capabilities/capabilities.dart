@@ -264,6 +264,11 @@ final class Capabilities {
   /// [readsServerDisk].
   bool get mediaViaServer => serverOffers('sessions.media');
 
+  /// The server runs ACP agents as sessions of its own and serves their
+  /// conversation from its rows; without it the New Session
+  /// dialog offers none.
+  bool get acpSessions => serverOffers('acpSessions');
+
   /// An approval names the prompt it answers, and the server refuses it when
   /// another is open by the time it lands (Stage 2 step 1).
   bool get answersCarryAsk => serverOffers('prompt.answer.ask');
@@ -273,6 +278,11 @@ final class Capabilities {
   /// or resizes its terminal to send.
   bool get sendViaServer =>
       serverOffers('sessions.send') && serverOffers('sessions.interrupt');
+
+  /// A send to an ACP session nothing runs is resumed by the server itself,
+  /// so this client sends and asks for no resume of its own.
+  bool get sendResumesAtServer =>
+      sendViaServer && serverOffers('sessions.send.resumes');
 
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.

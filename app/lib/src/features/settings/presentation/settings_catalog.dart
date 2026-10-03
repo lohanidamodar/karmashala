@@ -473,11 +473,12 @@ enum SettingsAnchor {
     'reset',
     'continue',
   ]),
-  // Agents and accounts, in the order the page draws them (spec §6, board
-  // N5): Defaults, then each agent's block — Claude's and Codex's anchors land
-  // on theirs, and the default model on the first agent's behaviour — then
-  // usage, updates, executables and detection. Titles are the headings the
-  // page draws, so a search hit names the section it opens.
+  // Agents and accounts, in the order the page draws them: Defaults (the
+  // header strip), then the terminal agents as cards — Claude's and Codex's
+  // anchors and the default model open the card they belong to, executables
+  // lands on the group — then usage, updates and detection at the end.
+  // Titles are the headings the page draws, so a search hit names the
+  // section it opens.
   defaultAgent(SettingsSectionId.agents, 'Defaults', [
     'default agent',
     'defaults',

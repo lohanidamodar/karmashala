@@ -34,6 +34,7 @@ workspace:
   - app
   - server
   - packages/agent_cli
+  - packages/karmashala_acp
   - packages/karmashala_agent_reporting
   - packages/karmashala_agent_status
   - packages/karmashala_automations

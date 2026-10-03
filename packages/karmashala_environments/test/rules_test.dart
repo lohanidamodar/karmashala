@@ -218,6 +218,35 @@ void main() {
       expect(p.present.single.versionReadAt, t0);
     });
 
+    test('the same path with other runner arguments takes them; a new row '
+        'carries its own', () {
+      const npx = r'C:\npm\npx.cmd';
+      final p = plan(
+        [row('a', npx), row('b', r'C:\c.exe')],
+        [
+          row('new', npx).copyWith(leadingArguments: ['-y', 'pkg']),
+          row('same', r'C:\c.exe'),
+          row(
+            'fresh',
+            r'C:\other\npx.cmd',
+            agentId: 'other',
+          ).copyWith(leadingArguments: ['-y', 'other-pkg']),
+        ],
+      );
+      expect(p.leadingArguments, {
+        'a': ['-y', 'pkg'],
+      });
+      expect(p.present.firstWhere((r) => r.id == 'a').leadingArguments, [
+        '-y',
+        'pkg',
+      ]);
+      expect(
+        p.present.firstWhere((r) => r.id == 'b').leadingArguments,
+        isEmpty,
+      );
+      expect(p.inserts.single.leadingArguments, ['-y', 'other-pkg']);
+    });
+
     test('a pinned path that is not observed broken is not overruled', () {
       final p = plan(
         [row('mine', r'C:\mine.exe', byUser: true)],

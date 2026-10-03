@@ -4,10 +4,14 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_environments/sweep.dart' show AcpVersionReader;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../data/agent_work.dart';
 import '../data/data_service.dart';
+import '../acp/acp_auth.dart';
+import 'acp_binary_installer.dart';
+import 'agent_registry_holder.dart';
 import 'server_accounts.dart';
 import 'server_detection.dart';
 import 'server_imports.dart';
@@ -30,10 +34,13 @@ class ServerAgentWork implements AgentWork {
     Clock clock = const SystemClock(),
     IdGenerator? ids,
     AgentRegistry registry = AgentRegistry.builtIn,
+    AgentRegistryHolder? registryHolder,
+    AcpVersionReader? acpVersion,
     Map<String, String> hostEnvironment = const {},
     PathProbe pathProbe = const LocalPathProbe(),
     AgentUsageService Function(CliStoreLocator stores)? usageService,
     ClaudeAuthService? claudeAuth,
+    this.acpAuth,
     this.onItsOwn = true,
   }) : _data = data {
     final generator = ids ?? RandomIdGenerator();
@@ -68,12 +75,17 @@ class ServerAgentWork implements AgentWork {
       registry: registry,
       claude: claudeAuth,
     );
+    // Detection alone reads the registry live: it is the one part that must
+    // see an ACP agent added after start. Usage, accounts and imports are
+    // about the shipped agents' stores.
     detection = ServerDetection(
       data: data,
       runnerFor: runnerFor,
       ids: generator,
       clock: clock,
       registry: registry,
+      registryNow: registryHolder == null ? null : () => registryHolder.current,
+      acpVersion: acpVersion,
       pathProbe: pathProbe,
       hostEnvironment: hostEnvironment,
     );
@@ -84,6 +96,10 @@ class ServerAgentWork implements AgentWork {
       ids: generator,
       clock: clock,
       registry: registry,
+    );
+    installer = AcpBinaryInstaller(
+      runnerFor: runnerFor,
+      hostEnvironment: hostEnvironment,
     );
   }
 
@@ -97,6 +113,16 @@ class ServerAgentWork implements AgentWork {
   late final ServerAccounts accounts;
   late final ServerDetection detection;
   late final ServerImports imports;
+  late final AcpBinaryInstaller installer;
+
+  /// Logging in to ACP agents; null refuses that work `unavailable`.
+  final ServerAcpAuth? acpAuth;
+
+  ServerAcpAuth get _acpAuth =>
+      acpAuth ??
+      (throw const DataRefused.unavailable(
+        'this server logs in to no ACP agents',
+      ));
 
   /// Answers the clients' agent work from now on.
   void attach() => _data.agentWork = this;
@@ -120,35 +146,76 @@ class ServerAgentWork implements AgentWork {
   @override
   List<AccountUsageState> usageStates() => usage.states();
 
+  /// Installs a registry archive into one environment's managed folder,
+  /// telling each step, then — for a shipped agent — looks for it there so
+  /// the installation is recorded.
+  Future<AcpAgentInstalled> _install(AcpAgentInstall request) async {
+    final environment = _data.environments
+        .where((e) => e.id == request.environmentId)
+        .firstOrNull;
+    if (environment == null) {
+      throw DataRefused.notFound(
+        'no environment with id ${request.environmentId}',
+      );
+    }
+    void tell(AcpInstallStep step) => _data.announce([
+      AcpInstallProgress(
+        environmentId: request.environmentId,
+        registryId: request.registryId,
+        step: step,
+      ),
+    ]);
+    final path = await installer.install(environment, request, onStep: tell);
+    AgentDiscoveryReport? report;
+    if (request.agentId != null) {
+      tell(AcpInstallStep.detecting);
+      report = await detection.detect(environmentId: environment.id);
+    }
+    return AcpAgentInstalled(executablePath: path, report: report);
+  }
+
   @override
-  Future<Object?> handle(AgentWorkRequest<Object?> request) async =>
-      switch (request) {
-        UsageCurrent() => usage.states(),
-        UsageRefresh(:final accountKey) => await usage.refresh(
-          accountKey: accountKey,
-        ),
-        AccountsCurrent(:final installationId) => await accounts.current(
-          installationId,
-        ),
-        AccountsCapture(:final installationId) => await accounts.capture(
-          installationId,
-        ),
-        AccountsSwitch(:final installationId, :final accountId) =>
-          await () async {
-            await accounts.switchTo(installationId, accountId);
-            return const DataAck();
-          }(),
-        AgentsDetect(:final environmentId) => await detection.detect(
-          environmentId: environmentId,
-        ),
-        AgentsRepair(:final full) => await detection.repair(full: full),
-        AgentsRefreshVersions() => await detection.refreshVersions(),
-        AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
-        ImportsScan() => await imports.scan(),
-        ImportsAdd(:final projects) => await imports.add(projects),
-        ImportsForRepositories(:final repositoryIds) =>
-          await imports.forRepositories(repositoryIds),
-      };
+  Future<Object?> handle(
+    AgentWorkRequest<Object?> request,
+  ) async => switch (request) {
+    UsageCurrent() => usage.states(),
+    UsageRefresh(:final accountKey) => await usage.refresh(
+      accountKey: accountKey,
+    ),
+    AccountsCurrent(:final installationId) => await accounts.current(
+      installationId,
+    ),
+    AccountsCapture(:final installationId) => await accounts.capture(
+      installationId,
+    ),
+    AccountsSwitch(:final installationId, :final accountId) => await () async {
+      await accounts.switchTo(installationId, accountId);
+      return const DataAck();
+    }(),
+    AgentsDetect(:final environmentId) => await detection.detect(
+      environmentId: environmentId,
+    ),
+    AgentsRepair(:final full) => await detection.repair(full: full),
+    AgentsRefreshVersions() => await detection.refreshVersions(),
+    AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
+    final AcpAgentInstall install => await _install(install),
+    AcpAuthMethodsRead(:final installationId) => await _acpAuth.methods(
+      installationId,
+    ),
+    AcpAuthStateRead(:final installationId) => _acpAuth.state(installationId),
+    AcpAuthenticate(:final installationId, :final methodId) =>
+      await _acpAuth.authenticate(installationId, methodId),
+    AcpAuthTerminalLogin(:final installationId, :final methodId) =>
+      await _acpAuth.terminalLogin(installationId, methodId),
+    AcpAuthClear(:final installationId, :final logout) => await _acpAuth.clear(
+      installationId,
+      logout: logout,
+    ),
+    ImportsScan() => await imports.scan(),
+    ImportsAdd(:final projects) => await imports.add(projects),
+    ImportsForRepositories(:final repositoryIds) =>
+      await imports.forRepositories(repositoryIds),
+  };
 }
 
 /// The server's [SqliteRowReader]: read-only, `null` on any failure — a busy

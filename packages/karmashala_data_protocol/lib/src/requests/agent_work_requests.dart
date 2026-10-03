@@ -6,35 +6,59 @@ part of '../data_request.dart';
 // every one is answered when its work is done (`DataSession.handleLater`),
 // and what it writes is told to every client as the rows it wrote.
 
-DataRequest<Object?>? _agentWorkRequestFromJson(String kind, _Arguments args) =>
-    switch (kind) {
-      UsageCurrent.name => const UsageCurrent(),
-      UsageRefresh.name => UsageRefresh(
-        accountKey: args.optionalString('accountKey'),
-      ),
-      AccountsCurrent.name => AccountsCurrent(args.string('installationId')),
-      AccountsCapture.name => AccountsCapture(args.string('installationId')),
-      AccountsSwitch.name => AccountsSwitch(
-        installationId: args.string('installationId'),
-        accountId: args.string('accountId'),
-      ),
-      AgentsDetect.name => AgentsDetect(
-        environmentId: args.optionalString('environmentId'),
-      ),
-      AgentsRepair.name => AgentsRepair(
-        full: args.boolean('full', orElse: false),
-      ),
-      AgentsRefreshVersions.name => const AgentsRefreshVersions(),
-      AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
-      ImportsScan.name => const ImportsScan(),
-      ImportsAdd.name => ImportsAdd(
-        args.objects('projects', detectedProjectFromJson),
-      ),
-      ImportsForRepositories.name => ImportsForRepositories(
-        args.strings('repositoryIds'),
-      ),
-      _ => null,
-    };
+DataRequest<Object?>? _agentWorkRequestFromJson(
+  String kind,
+  _Arguments args,
+) => switch (kind) {
+  UsageCurrent.name => const UsageCurrent(),
+  UsageRefresh.name => UsageRefresh(
+    accountKey: args.optionalString('accountKey'),
+  ),
+  AccountsCurrent.name => AccountsCurrent(args.string('installationId')),
+  AccountsCapture.name => AccountsCapture(args.string('installationId')),
+  AccountsSwitch.name => AccountsSwitch(
+    installationId: args.string('installationId'),
+    accountId: args.string('accountId'),
+  ),
+  AgentsDetect.name => AgentsDetect(
+    environmentId: args.optionalString('environmentId'),
+  ),
+  AgentsRepair.name => AgentsRepair(full: args.boolean('full', orElse: false)),
+  AgentsRefreshVersions.name => const AgentsRefreshVersions(),
+  AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
+  AcpAgentInstall.name => AcpAgentInstall(
+    environmentId: args.string('environmentId'),
+    registryId: args.string('registryId'),
+    version: args.string('version'),
+    archive: args.string('archive'),
+    command: args.string('command'),
+    args: args.strings('args', orEmpty: true),
+    sha256: args.optionalString('sha256'),
+    agentId: args.optionalString('agentId'),
+  ),
+  ImportsScan.name => const ImportsScan(),
+  ImportsAdd.name => ImportsAdd(
+    args.objects('projects', detectedProjectFromJson),
+  ),
+  ImportsForRepositories.name => ImportsForRepositories(
+    args.strings('repositoryIds'),
+  ),
+  AcpAuthMethodsRead.name => AcpAuthMethodsRead(args.string('installationId')),
+  AcpAuthStateRead.name => AcpAuthStateRead(args.string('installationId')),
+  AcpAuthenticate.name => AcpAuthenticate(
+    installationId: args.string('installationId'),
+    methodId: args.string('methodId'),
+  ),
+  AcpAuthTerminalLogin.name => AcpAuthTerminalLogin(
+    installationId: args.string('installationId'),
+    methodId: args.string('methodId'),
+  ),
+  AcpAuthClear.name => AcpAuthClear(
+    args.string('installationId'),
+    logout: args.boolean('logout', orElse: false),
+  ),
+  _ => null,
+};
 
 /// Work the server does on its own machine for its agents; answered when
 /// done.
@@ -280,6 +304,67 @@ final class AgentsDiscoverUnprobed
   });
 }
 
+/// Downloads the archive the public ACP registry ships for one agent and one
+/// platform into [environmentId]'s managed folder
+/// (`~/karmashala/acp/<registryId>/<version>/`), checks it against [sha256]
+/// when the registry gives one, unpacks it and marks [command] executable.
+/// With [agentId], the server then looks for that agent there again so the
+/// installation is recorded. Told as it goes ([AcpInstallProgress]);
+/// answered with where the executable landed. Refused in the shell's words
+/// when a step fails.
+final class AcpAgentInstall extends AgentWorkRequest<AcpAgentInstalled> {
+  const AcpAgentInstall({
+    required this.environmentId,
+    required this.registryId,
+    required this.version,
+    required this.archive,
+    required this.command,
+    this.args = const [],
+    this.sha256,
+    this.agentId,
+  });
+
+  static const String name = 'acpAgents.install';
+
+  final String environmentId;
+  final String registryId;
+  final String version;
+
+  /// The archive's URL, as the registry's binary distribution gives it.
+  final String archive;
+
+  /// The command inside the archive (`./agy_acp_server.par`), and the argv
+  /// the registry says to start it with.
+  final String command;
+  final List<String> args;
+  final String? sha256;
+
+  /// The shipped agent this installs, when it is one.
+  final String? agentId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'environmentId': environmentId,
+    'registryId': registryId,
+    'version': version,
+    'archive': archive,
+    'command': command,
+    'args': args,
+    'sha256': ?sha256,
+    'agentId': ?agentId,
+  };
+
+  @override
+  Object? resultToJson(AcpAgentInstalled result) => result.toJson();
+
+  @override
+  AcpAgentInstalled resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAgentInstalled.fromJson(_object(json, kind)));
+}
+
 // The CLI import.
 
 /// Reads every agent's own store on the server's machine and answers the
@@ -356,4 +441,139 @@ final class ImportsForRepositories extends AgentWorkRequest<ImportSummary> {
   @override
   ImportSummary resultFromJson(Object? json) =>
       _decode(kind, () => ImportSummary.fromJson(_object(json, kind)));
+}
+
+// Logging in to an ACP agent. ACP v1 names methods, not accounts, so nothing
+// here says who is logged in.
+
+/// The auth methods installation [installationId] advertises on
+/// `initialize`, read over a connection the server opens and ends.
+final class AcpAuthMethodsRead extends AgentWorkRequest<AcpAuthMethods> {
+  const AcpAuthMethodsRead(this.installationId);
+
+  static const String name = 'acpAuth.methods';
+
+  final String installationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'installationId': installationId};
+
+  @override
+  Object? resultToJson(AcpAuthMethods result) => result.toJson();
+
+  @override
+  AcpAuthMethods resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthMethods.fromJson(_object(json, kind)));
+}
+
+/// The method remembered for installation [installationId]; null when none
+/// was chosen.
+final class AcpAuthStateRead extends AgentWorkRequest<AcpAuthState?> {
+  const AcpAuthStateRead(this.installationId);
+
+  static const String name = 'acpAuth.state';
+
+  final String installationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'installationId': installationId};
+
+  @override
+  Object? resultToJson(AcpAuthState? result) => result?.toJson();
+
+  @override
+  AcpAuthState? resultFromJson(Object? json) => json == null
+      ? null
+      : _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Asks installation [installationId] to `authenticate` with [methodId] over
+/// a short-lived connection, and remembers the method once it succeeded.
+/// Refused `failed` in the agent's own words when it did not.
+final class AcpAuthenticate extends AgentWorkRequest<AcpAuthState> {
+  const AcpAuthenticate({required this.installationId, required this.methodId});
+
+  static const String name = 'acpAuth.authenticate';
+
+  final String installationId;
+  final String methodId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'methodId': methodId,
+  };
+
+  @override
+  Object? resultToJson(AcpAuthState result) => result.toJson();
+
+  @override
+  AcpAuthState resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Opens a terminal on installation [installationId]'s machine running the
+/// login terminal method [methodId] names, shown as a tab in the window a
+/// person last used, and remembers the method unconfirmed.
+final class AcpAuthTerminalLogin extends AgentWorkRequest<AcpAuthState> {
+  const AcpAuthTerminalLogin({
+    required this.installationId,
+    required this.methodId,
+  });
+
+  static const String name = 'acpAuth.terminalLogin';
+
+  final String installationId;
+  final String methodId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'methodId': methodId,
+  };
+
+  @override
+  Object? resultToJson(AcpAuthState result) => result.toJson();
+
+  @override
+  AcpAuthState resultFromJson(Object? json) =>
+      _decode(kind, () => AcpAuthState.fromJson(_object(json, kind)));
+}
+
+/// Forgets the method remembered for installation [installationId]; with
+/// [logout], an agent that answers `logout` is asked to end its login too.
+final class AcpAuthClear extends AgentWorkRequest<DataAck> {
+  const AcpAuthClear(this.installationId, {this.logout = false});
+
+  static const String name = 'acpAuth.clear';
+
+  final String installationId;
+  final bool logout;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'logout': logout,
+  };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
 }

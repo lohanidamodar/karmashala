@@ -40,6 +40,7 @@ class SessionsAtRest {
     this.records,
     this.attachments,
     this.attachmentSupportOf,
+    this.deliverOverProtocol,
     ScreenTranscripts? transcripts,
     DateTime Function()? clock,
   }) : transcripts = transcripts ?? ScreenTranscripts(clock: clock),
@@ -51,6 +52,13 @@ class SessionsAtRest {
   /// What a file sent to a row's session may be — its agent's declared
   /// support, and whether a path here is one it can open. Null: none may.
   final RemoteAttachmentSupport Function(Session row)? attachmentSupportOf;
+
+  /// Sends a phone's message to a session by the protocol its agent
+  /// speaks — resuming it first when nothing runs it — and answers true;
+  /// false for a session with no such agent, which is typed into its screen.
+  /// Throws [RemoteApiRefusal] in words when it is refused.
+  final Future<bool> Function(String sessionId, String text)?
+  deliverOverProtocol;
 
   /// The rows — the server's store, read through the same interface a
   /// client's copy answers.
@@ -267,7 +275,7 @@ class SessionsAtRest {
       );
     }
     if (attachment == null) {
-      await screens.type(_hostIdOf(sessionId), text);
+      await _deliver(sessionId, text);
       return RemotePromptDelivery.sent;
     }
     final store = attachments;
@@ -286,8 +294,15 @@ class SessionsAtRest {
     } on AttachmentUploadException catch (failure) {
       throw RemoteApiRefusal(ErrorCode.badRequest, failure.message);
     }
-    await screens.type(_hostIdOf(sessionId), attachmentPromptBody(text, path));
+    await _deliver(sessionId, attachmentPromptBody(text, path));
     return RemotePromptDelivery.sent;
+  }
+
+  /// Over the agent's protocol when it speaks one, else typed into its
+  /// screen.
+  Future<void> _deliver(String sessionId, String text) async {
+    if (await deliverOverProtocol?.call(sessionId, text) ?? false) return;
+    await screens.type(_hostIdOf(sessionId), text);
   }
 
   /// The host session a phone's id runs as: a row's id maps to its host id,

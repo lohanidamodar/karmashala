@@ -1,11 +1,7 @@
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/database/sqlite_row_reader.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show
-        DataRefusalCode,
-        DataRefused,
-        SessionStatsGap,
-        SessionStatsReading;
+    show DataRefusalCode, DataRefused, SessionStatsGap, SessionStatsReading;
 import 'package:riverpod/riverpod.dart';
 
 import '../data/server_session_stats.dart';
@@ -177,7 +173,8 @@ class SessionStatsService {
     }
     return SessionStatsView.unavailable(
       switch (reading.gap) {
-        SessionStatsGap.unknownSession => SessionStatsUnavailable.unknownSession,
+        SessionStatsGap.unknownSession =>
+          SessionStatsUnavailable.unknownSession,
         SessionStatsGap.agentKeepsNoCounts =>
           SessionStatsUnavailable.agentRecordsNoCounts,
         SessionStatsGap.recordNotFound ||
@@ -308,8 +305,11 @@ class SessionStatsService {
 }
 
 /// Whether an agent's own records hold anything countable — a question for its
-/// adapter, so an agent that declares no stats answers "no", not zeros.
-bool agentStoreRecordsStats(AgentAdapter? adapter) => adapter?.stats != null;
+/// adapter, so an agent that declares no stats answers "no", not zeros. An
+/// agent spoken to over ACP counts too: the server keeps its conversation and
+/// what it reports of its own context.
+bool agentStoreRecordsStats(AgentAdapter? adapter) =>
+    adapter?.stats != null || adapter?.acp != null;
 
 /// One stats reader per agent per app, so the incremental caches behind them
 /// are shared with the store scan rather than rebuilt per dialog.

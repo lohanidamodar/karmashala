@@ -98,6 +98,11 @@ class MemoryInstallations {
         if (row == null) return;
         _replace(row.copyWith(version: version, versionReadAt: readAt));
       });
+      plan.leadingArguments.forEach((id, arguments) {
+        final row = getById(id);
+        if (row == null) return;
+        _replace(row.copyWith(leadingArguments: arguments));
+      });
       plan.inserts.forEach(insert);
     } on Object {
       _rows
@@ -174,6 +179,8 @@ class SweepWorld {
     PathProbe? pathProbe,
     Clock? clock,
     AgentRegistry registry = AgentRegistry.builtIn,
+    AgentRegistry Function()? registryNow,
+    AcpVersionReader? readAcpVersion,
     Map<String, String> hostEnvironment = const {},
   }) => AgentSweep(
     environments: () => [...environments],
@@ -185,6 +192,8 @@ class SweepWorld {
     ids: SequentialIdGenerator(),
     clock: clock ?? FixedClock(testTime),
     registry: registry,
+    registryNow: registryNow,
+    readAcpVersion: readAcpVersion,
     pathProbe: pathProbe ?? FakePathProbe(),
     hostEnvironment: hostEnvironment,
   );

@@ -97,7 +97,15 @@ void main() {
     ).locate([windowsEnv(), wslEnv()]);
 
     final wsl = stores.firstWhere((s) => s.environmentId == 'wsl:Ubuntu');
-    expect(wsl.homesByAgentId.keys, ['claudeCode', 'codex', 'antigravity']);
+    // The ACP agents whose CLIs keep a home declare it too; Grok declares none.
+    expect(wsl.homesByAgentId.keys, [
+      'claudeCode',
+      'codex',
+      'antigravity',
+      'claude-acp',
+      'codex-acp',
+      'antigravity-acp',
+    ]);
     expect(
       wsl.homeFor(AgentIds.claudeCode),
       r'\\wsl.localhost\Ubuntu\home\me\.claude',

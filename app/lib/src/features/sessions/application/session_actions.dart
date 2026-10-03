@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/directory_resume_providers.dart';
@@ -26,6 +27,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
+import 'acp_session_providers.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
 import 'session_chat_source.dart';
@@ -115,9 +117,15 @@ class SessionActions {
   Future<String?> deleteNative(String id, {bool deleteFromCli = true}) async {
     final session = _ref.read(sessionsDataProvider).getById(id);
     if (session == null) return null;
-    var fromCliStore = deleteFromCli;
+    // An ACP session's conversation is the server's own rows: no CLI store
+    // holds it, so there is nothing there to look for or delete.
+    final hasCliStore = !installationSpeaksAcp(
+      _ref,
+      session.agentInstallationId,
+    );
+    var fromCliStore = deleteFromCli && hasCliStore;
     String? notice;
-    if (deleteFromCli) {
+    if (fromCliStore) {
       final repo = _ref
           .read(workspaceDataProvider)
           .repository(session.repositoryId);
@@ -405,6 +413,11 @@ class SessionActions {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
+    final row = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (row != null && installationSpeaksAcp(_ref, row.agentInstallationId)) {
+      return _continueOverProtocol(row, trimmed, requestId: requestId);
+    }
+
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
     // two views of one session, so there is one write path into the agent. The
     // typist reads the Return back off the screen — a composer that folded it
@@ -475,6 +488,45 @@ class SessionActions {
 
     _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
+  }
+
+  /// Sends [text] to [row]'s agent over its protocol, at the server: a
+  /// session the server no longer runs is resumed there first —
+  /// `session/load` where the agent can, a fresh conversation in the same
+  /// row otherwise — and the message is its next turn. Never typed into a
+  /// pane, never started by this app's own engine: the server owns the
+  /// process.
+  Future<void> _continueOverProtocol(
+    Session row,
+    String text, {
+    String? requestId,
+  }) async {
+    // A server that resumes on send does it in the same request, for every
+    // client alike; only an older one is asked to resume first.
+    final running =
+        _ref.read(capabilitiesProvider).sendResumesAtServer ||
+        (row.status.claimsLive &&
+            _ref.read(sessionRunningOnHostProvider)(row.id));
+    if (!running) {
+      final launched = await _ref
+          .read(sessionLauncherProvider)
+          .resumeAtServer(row.id);
+      final notice = launched.workingDirectoryNotice;
+      _log.info(
+        'Resumed ${row.id} at the server before sending'
+        '${notice == null ? '' : ': $notice'}',
+      );
+    }
+    final sent = await _ref
+        .read(sessionInputProvider)
+        .send(row.id, text, requestId: requestId);
+    if (!sent) {
+      throw StateError(
+        'The server does not run this session, so nothing was sent. Resume '
+        'it and try again.',
+      );
+    }
+    _log.info('Continued ${row.id} over its protocol');
   }
 
   /// Whether [sessionId]'s agent runs outside this app's engine: the server

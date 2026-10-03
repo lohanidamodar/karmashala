@@ -84,6 +84,10 @@ abstract class AgentAdapter {
         model: model,
       );
 
+  /// How the agent is driven over the Agent Client Protocol, or null for a
+  /// terminal program. Consumers branch on this, never on [id].
+  AcpLaunchSpec? get acp => descriptor.acp;
+
   /// The agent's own conversation store — sessions, presence, rename and
   /// delete — or null when it keeps none this package can read.
   AgentStore? get store => null;

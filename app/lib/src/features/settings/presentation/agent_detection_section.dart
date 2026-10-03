@@ -63,13 +63,13 @@ class AgentDetectionSection extends ConsumerWidget {
 }
 
 /// The per-environment breakdown, shown only once there is one to show.
-class _DetectionBreakdown extends StatelessWidget {
+class _DetectionBreakdown extends ConsumerWidget {
   const _DetectionBreakdown({required this.report});
 
   final AgentDiscoveryReport report;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: Insets.sm),
@@ -98,7 +98,7 @@ class _DetectionBreakdown extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: Insets.xs),
                 child: Text(
                   '${environment.environmentName}: '
-                  '${agentLabel(install.agentId)} is installed at '
+                  '${agentLabel(ref, install.agentId)} is installed at '
                   '${install.executable.path} but cannot be reached',
                   style: MonoStyles.small.copyWith(
                     color: theme.colorScheme.error,

@@ -83,6 +83,9 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byType(SettingsPageBody), findsOneWidget);
         expect(find.text(page.description), findsOneWidget);
+        // Agents and accounts folds each terminal agent into a card; its
+        // account and behaviour headings are drawn once the card is open.
+        await expandAgentCards(tester);
         for (final anchor in page.anchors) {
           expect(
             find.byWidgetPredicate(
@@ -283,3 +286,15 @@ void main() {
 /// Sections that draw nothing, heading included, when there is nothing to
 /// show in the empty database these tests use: no agent is installed.
 const _drawsNothingWhenEmpty = {SettingsAnchor.executables};
+
+/// Opens every folded agent card on the page, by its Expand button.
+Future<void> expandAgentCards(WidgetTester tester) async {
+  Finder expand() => find.byWidgetPredicate(
+    (w) => w is IconButton && (w.tooltip?.startsWith('Expand ') ?? false),
+  );
+  while (expand().evaluate().isNotEmpty) {
+    await tester.ensureVisible(expand().first);
+    await tester.tap(expand().first);
+    await tester.pumpAndSettle();
+  }
+}

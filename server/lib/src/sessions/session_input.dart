@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
+import '../acp/acp_session_runtime.dart';
 import '../status/daemon_prompt_answers.dart';
 
 /// **A client's chat sends and Stop, typed here as host keys** (Stage 2
@@ -12,16 +13,33 @@ import '../status/daemon_prompt_answers.dart';
 /// `session_send` uses, so the Return is read back off this server's screen.
 /// Every session the server holds is served: its own PTYs and its copies of
 /// sessions on SSH boxes.
+///
+/// A session whose agent the server speaks to over a protocol
+/// ([resumesOnSend]) and that nothing runs any more is resumed here to take
+/// the message ([resume]: `session/load` where the agent can, a fresh
+/// conversation in the same row otherwise), so every client — a phone,
+/// another desktop, an agent's `session_send` — continues it alike. A resume
+/// refused is answered in its words, and nothing is sent.
 class SessionInput {
   SessionInput({
     required this.prompts,
     required this.typist,
+    this.resumesOnSend,
+    this.resume,
     this.log,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
   final DaemonPromptAnswers prompts;
   final SessionMessageTypist typist;
+
+  /// Whether row [String] is resumed by a send when nothing runs it.
+  final bool Function(String sessionId)? resumesOnSend;
+
+  /// Resumes row [String] at the server, starting it with [prompt] as its
+  /// first turn — `ServerSessionLauncher.resume`.
+  final Future<SessionStarted> Function(String sessionId, String prompt)?
+  resume;
   final void Function(String message)? log;
   final DateTime Function() _now;
 
@@ -64,11 +82,23 @@ class SessionInput {
     return answer;
   }
 
-  Future<Object?> _run(SessionInputRequest<Object?> request) =>
-      switch (request) {
+  /// Every refusal is logged as well as answered: the sender's only other
+  /// trace of it is a snackbar.
+  Future<Object?> _run(SessionInputRequest<Object?> request) async {
+    try {
+      return await switch (request) {
         final SessionSend r => _send(r.sessionId, r.text),
         SessionInterrupt(:final sessionId) => _interrupt(sessionId),
       };
+    } on DataRefused catch (refusal) {
+      final sessionId = switch (request) {
+        SessionSend(:final sessionId) => sessionId,
+        SessionInterrupt(:final sessionId) => sessionId,
+      };
+      log?.call('${request.kind} $sessionId refused: ${refusal.message}');
+      rethrow;
+    }
+  }
 
   void _forgetOld() {
     final cutoff = _now().subtract(keep);
@@ -94,9 +124,19 @@ class SessionInput {
     'send',
   );
 
+  /// How a message reached an agent spoken to over ACP: as `session/prompt`,
+  /// with no screen to read a Return back off.
+  static const String viaProtocol = 'protocol';
+
   Future<SessionSent> _send(String sessionId, String text) async {
     if (text.trim().isEmpty) {
       throw const DataRefused.invalid('there is no message to send');
+    }
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    if (runtime != null) return _sendOverProtocol(runtime, text);
+    final resume = this.resume;
+    if (resume != null && (resumesOnSend?.call(sessionId) ?? false)) {
+      return _resumeToSend(sessionId, text, resume);
     }
     if (!prompts.status.holds(sessionId)) throw _notHere;
     final report = prompts.status.statusOf(sessionId)?.report;
@@ -125,7 +165,80 @@ class SessionInput {
     }
   }
 
+  /// The protocol takes one turn at a time; a message during one would be
+  /// refused by the agent, so it is refused here, in words.
+  static Future<SessionSent> _sendOverProtocol(
+    AcpSessionRuntime runtime,
+    String text, {
+    bool resumed = false,
+    String? notice,
+  }) async {
+    try {
+      await runtime.send(text);
+    } on StateError catch (error) {
+      throw DataRefused(DataRefusalCode.conflict, error.message);
+    }
+    return SessionSent(
+      sent: true,
+      via: viaProtocol,
+      resumed: resumed,
+      notice: notice,
+    );
+  }
+
+  /// Resumes [sessionId] with [text] as its first turn. One that came to run
+  /// meanwhile is answered as it is, and sent to.
+  Future<SessionSent> _resumeToSend(
+    String sessionId,
+    String text,
+    Future<SessionStarted> Function(String, String) resume,
+  ) async {
+    // Said before it starts: an agent's start can take minutes.
+    log?.call(
+      'sessions.send $sessionId: nothing runs it; resuming it at the server '
+      'to take the message',
+    );
+    final SessionStarted started;
+    try {
+      started = await resume(sessionId, text);
+    } on DataRefused {
+      rethrow;
+    } on Object catch (error) {
+      final words = switch (error) {
+        StateError(:final message) => message,
+        ArgumentError(:final message) => '$message',
+        _ => '$error',
+      };
+      throw DataRefused(
+        DataRefusalCode.failed,
+        'This session is not running and could not be resumed to take the '
+        'message, so nothing was sent: $words',
+      );
+    }
+    final notice = started.workingDirectoryNotice;
+    log?.call(
+      'sessions.send $sessionId: resumed at the server to take the message'
+      '${notice == null ? '' : ' ($notice)'}',
+    );
+    if (started.adopted) {
+      final runtime = prompts.status.acpRuntimeOf(sessionId);
+      if (runtime == null) throw _notHere;
+      return _sendOverProtocol(runtime, text, resumed: false, notice: notice);
+    }
+    return SessionSent(
+      sent: true,
+      via: viaProtocol,
+      resumed: true,
+      notice: notice,
+    );
+  }
+
   Future<DataAck> _interrupt(String sessionId) async {
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    if (runtime != null) {
+      runtime.cancel();
+      return const DataAck();
+    }
     if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }

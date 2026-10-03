@@ -26,7 +26,8 @@ class WorkbenchFaceToggle extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final session = _groupSessionOf(ref, groupId);
-    if (session == null) return const SizedBox.shrink();
+    // One face, nothing to toggle to.
+    if (session == null || session.chatOnly) return const SizedBox.shrink();
     final onTerminal = ref.watch(terminalVisibleInGroupProvider(groupId));
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     return _ViewToggle(
@@ -186,6 +187,7 @@ class _SessionSheet extends StatelessWidget {
               children: [
                 SessionModelChip(sessionId: sessionId),
                 PermissionModeChip(sessionId: sessionId),
+                SessionModePicker(sessionId: sessionId, leadingGap: false),
                 OperatorChip(sessionId: sessionId),
                 SessionStatsButton(sessionId: sessionId),
                 ScheduledResumeChip(sessionId: sessionId),

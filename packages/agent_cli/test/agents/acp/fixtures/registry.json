@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "claude-acp",
+      "name": "Claude Agent",
+      "version": "0.85.1",
+      "description": "Claude Code over ACP.",
+      "repository": "https://github.com/agentclientprotocol/claude-agent-acp",
+      "authors": ["Anthropic"],
+      "license": "Apache-2.0",
+      "distribution": {
+        "npx": {
+          "package": "@agentclientprotocol/claude-agent-acp@0.85.1"
+        }
+      },
+      "icon": "https://cdn.example.test/registry/claude-acp.svg"
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini CLI",
+      "version": "0.62.0",
+      "distribution": {
+        "npx": {
+          "package": "@google/gemini-cli@0.62.0",
+          "args": ["--acp"],
+          "env": {"GEMINI_ACP": "1"}
+        }
+      }
+    },
+    {
+      "id": "native-agent",
+      "name": "Native Agent",
+      "version": "2.1.1",
+      "distribution": {
+        "binary": {
+          "darwin-aarch64": {
+            "archive": "https://example.test/native-agent-darwin-aarch64.tar.gz",
+            "sha256": "0a1b",
+            "cmd": "native-agent",
+            "args": ["--stdio"]
+          },
+          "windows-x86_64": {
+            "archive": "https://example.test/native-agent-windows-x86_64.zip",
+            "sha256": "2c3d",
+            "command": "native-agent.exe",
+            "args": []
+          },
+          "plan9-mips": {
+            "archive": "https://example.test/native-agent-plan9.tgz"
+          }
+        }
+      }
+    },
+    {
+      "id": "sparse"
+    },
+    "not an entry",
+    {
+      "name": "No id at all",
+      "distribution": {"npx": {"args": ["--acp"]}}
+    }
+  ],
+  "extensions": []
+}

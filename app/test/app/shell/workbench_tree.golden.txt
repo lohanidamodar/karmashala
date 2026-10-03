@@ -2961,6 +2961,8 @@ WorkbenchView
                                                                                                                                                                   SizedBox
                                                                                                                                                                     Center
                                                                                                                                                                       RichText
+                                                                                        SessionModePicker
+                                                                                          SizedBox
                                                                                         SizedBox
                                                                                         OperatorChip
                                                                                           Tooltip tooltip="This agent reads Karmashala but cannot act on it. Click to let it operate Karmashala — or start a message with /operator."
@@ -4238,6 +4240,8 @@ WorkbenchView
                                                                                                                                                                   SizedBox
                                                                                                                                                                     Center
                                                                                                                                                                       RichText
+                                                                                        SessionModePicker
+                                                                                          SizedBox
                                                                                         SizedBox
                                                                                         OperatorChip
                                                                                           Tooltip tooltip="This agent reads Karmashala but cannot act on it. Click to let it operate Karmashala — or start a message with /operator."
@@ -5104,6 +5108,8 @@ WorkbenchView
                                                                                                                                                                   SizedBox
                                                                                                                                                                     Center
                                                                                                                                                                       RichText
+                                                                                        SessionModePicker
+                                                                                          SizedBox
                                                                                         SizedBox
                                                                                         OperatorChip
                                                                                           Tooltip tooltip="This agent reads Karmashala but cannot act on it. Click to let it operate Karmashala — or start a message with /operator."
@@ -5928,6 +5934,8 @@ WorkbenchView
                                                                                                                         SizedBox
                                                                                                                           Center
                                                                                                                             RichText
+                                              SessionModePicker
+                                                SizedBox
                                               SizedBox
                                               Flexible
                                                 OperatorChip

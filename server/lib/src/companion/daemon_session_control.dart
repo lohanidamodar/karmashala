@@ -365,7 +365,7 @@ class DaemonSessionControl implements HostedSessionControl {
   }
 
   bool _runningHere(String rowId) {
-    final session = registry.find(hostSessionIdOf(rowId));
+    final session = registry.findProcess(hostSessionIdOf(rowId));
     return session != null && !session.lifecycle.hasEnded;
   }
 
