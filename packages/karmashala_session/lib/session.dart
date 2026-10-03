@@ -4,6 +4,7 @@
 library;
 
 export 'src/queued_message.dart';
+export 'src/session_agent_span.dart';
 export 'src/session.dart';
 export 'src/session_attribution.dart';
 export 'src/session_checkouts.dart';

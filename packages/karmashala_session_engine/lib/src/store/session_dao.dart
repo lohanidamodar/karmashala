@@ -202,6 +202,20 @@ class SessionDao implements SessionStatusStore {
     return rows.map(_fromRow).toList();
   }
 
+  /// Points row [id] at another agent and that agent's conversation (null for
+  /// a new one) — a switch in place. Nothing else on the row moves.
+  void switchAgent(
+    String id, {
+    required String installationId,
+    required String? externalSessionId,
+  }) {
+    _db.execute(
+      'UPDATE sessions SET agent_installation_id = ?, external_session_id = ? '
+      'WHERE id = ?;',
+      [installationId, externalSessionId, id],
+    );
+  }
+
   void updateExternalSessionId(String id, String externalSessionId) {
     _db.execute('UPDATE sessions SET external_session_id = ? WHERE id = ?;', [
       externalSessionId,
