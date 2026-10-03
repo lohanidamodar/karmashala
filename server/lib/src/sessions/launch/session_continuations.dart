@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:agent_cli/read.dart' show readCliTranscript;
+import 'package:agent_cli/read.dart'
+    show TranscriptMessage, kAgentSwitchRole, readCliTranscript;
+import 'package:karmashala_host_protocol/protocol.dart'
+    show SessionEndedWithoutCode;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_checkpoints/checkpoints.dart';
@@ -17,7 +20,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart'
-    show DecisionRecordDao, SessionDao;
+    show DecisionRecordDao, SessionAgentSpanDao, SessionDao;
 
 import '../../automations/daemon_agents.dart';
 import '../../checkpoints/daemon_checkpoints.dart';
@@ -40,6 +43,7 @@ class HandoffTarget {
     required this.permission,
     required this.isSameAgent,
     this.refusal,
+    this.resumesConversation = false,
   });
 
   final AgentInstallation installation;
@@ -52,6 +56,10 @@ class HandoffTarget {
 
   /// Why this target cannot receive a handoff, or null when it can.
   final String? refusal;
+
+  /// For a switch in place: this agent ran the session before, and its own
+  /// conversation is resumed rather than a new one started.
+  final bool resumesConversation;
 
   bool get canReceive => refusal == null;
 }
@@ -78,10 +86,16 @@ class SessionContinuations {
     this.forks,
     this.waits,
     this.send,
+    this.spans,
+    this.conversationOf,
+    this.turnRunning,
+    this.nextMessageOrdinal,
+    this.onSwitched,
     this.agents = const DaemonAgents(),
     this.registry = AgentRegistry.builtIn,
     this.log,
-  });
+    DateTime Function()? now,
+  }) : _now = now ?? (() => DateTime.now().toUtc());
 
   final ServerSessionLauncher launches;
   final SessionDao sessions;
@@ -103,14 +117,35 @@ class SessionContinuations {
   /// Types a message into a session the server runs; false when nothing runs
   /// it.
   final Future<bool> Function(String sessionId, String text)? send;
+
+  /// Each agent a session ran under; null refuses a switch in place.
+  final SessionAgentSpanDao? spans;
+
+  /// A session's transcript as the server serves it — stitched across its
+  /// agents, each row tagged — for a switch's recap; null reads the agent's
+  /// own file as a handoff does.
+  final Future<List<TranscriptMessage>> Function(String sessionId)?
+  conversationOf;
+
+  /// Whether a session's turn is running, or a message is on its way to it.
+  final bool Function(String sessionId)? turnRunning;
+
+  /// The ordinal the next `session_messages` row of a session takes.
+  final int Function(String sessionId)? nextMessageOrdinal;
+
+  /// Told once a session's agent was switched and the new one started.
+  final void Function(String sessionId, List<SessionAgentSpan> spans)?
+  onSwitched;
   final DaemonAgents agents;
   final AgentRegistry registry;
   final void Function(String message)? log;
+  final DateTime Function() _now;
 
   // --- what can be offered ---------------------------------------------------
 
-  /// The agents [sessionId] could be continued in, in registry order.
-  List<HandoffTarget> targetsFor(String sessionId) {
+  /// The agents [sessionId] could be continued in, in registry order. [inPlace]
+  /// judges each as a switch of this session rather than a new one.
+  List<HandoffTarget> targetsFor(String sessionId, {bool inPlace = false}) {
     final session = sessions.getById(sessionId);
     if (session == null) return const [];
     final repository = rows.repository(session.repositoryId);
@@ -122,34 +157,53 @@ class SessionContinuations {
       for (final installation in launches.installationsIn(
         repository.path.environmentId,
       ))
-        _target(sessionId, installation, sourceAgentId),
+        _target(session, installation, sourceAgentId, inPlace: inPlace),
     ];
   }
 
   HandoffTarget _target(
-    String sessionId,
+    Session session,
     AgentInstallation installation,
-    String? sourceAgentId,
-  ) {
+    String? sourceAgentId, {
+    bool inPlace = false,
+  }) {
     final descriptor = registry.byId(installation.agentId);
     final name = registry.displayNameFor(installation.agentId);
-    final starting = _startingMode(sessionId, installation.agentId);
+    final starting = _startingMode(session.id, installation.agentId);
+    final same = installation.agentId == sourceAgentId;
     return HandoffTarget(
       installation: installation,
       descriptor: descriptor,
       agentName: name,
       permission: carryPermission(starting.risk, descriptor, targetName: name),
-      isSameAgent: installation.agentId == sourceAgentId,
-      refusal: _refusalFor(descriptor, name),
+      isSameAgent: same,
+      refusal: inPlace
+          ? (same
+                ? '$name already runs this session.'
+                : _refusalFor(
+                    descriptor,
+                    name,
+                    speaksAcp: _speaksAcp(installation.agentId),
+                  ))
+          : _refusalFor(descriptor, name),
+      resumesConversation:
+          inPlace && _earlierConversation(session, installation.id) != null,
     );
   }
 
-  String? _refusalFor(AgentDescriptor? descriptor, String name) {
+  bool _speaksAcp(String agentId) => agents.adapterOf(agentId)?.acp != null;
+
+  String? _refusalFor(
+    AgentDescriptor? descriptor,
+    String name, {
+    bool speaksAcp = false,
+  }) {
     if (descriptor == null) {
       return 'Karmashala has no descriptor for this agent, so it cannot be '
           'told anything at launch.';
     }
-    if (!descriptor.launch.acceptsPromptArgument) {
+    // Over ACP the packet is the first prompt, never argv.
+    if (!speaksAcp && !descriptor.launch.acceptsPromptArgument) {
       return '$name takes no opening prompt, so the handoff packet could not '
           'be delivered — the new session would start knowing nothing.';
     }
@@ -185,6 +239,8 @@ class SessionContinuations {
     HandoffSourceBrief? sourceBrief,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
+    List<TranscriptMessage>? conversation,
+    String? missedBy,
   }) async {
     final session =
         sessions.getById(sessionId) ??
@@ -197,12 +253,18 @@ class SessionContinuations {
     final directory =
         session.workingDirectory ?? session.worktree ?? repository?.path;
     final recorded = _decisionsFor(sessionId, decisionBudget);
-    final recap = await _recapFor(
-      session,
-      agentId,
-      sourceName,
-      budget.reducedBy(recorded.cost),
-    );
+    final recap = conversation != null
+        ? _recapOf(
+            missedTurns(conversation, missedBy),
+            sourceName,
+            budget.reducedBy(recorded.cost),
+          )
+        : await _recapFor(
+            session,
+            agentId,
+            sourceName,
+            budget.reducedBy(recorded.cost),
+          );
     final changes = directory == null ? null : await _changesIn(directory);
     final delivery = repository == null
         ? null
@@ -378,6 +440,47 @@ class SessionContinuations {
     } on Object {
       return (turns: const <HandoffTurn>[], omitted: 0, unreadable: true);
     }
+  }
+
+  /// [conversation]'s spoken turns, each agent's named by its own row tag.
+  ({List<HandoffTurn> turns, int omitted, bool unreadable}) _recapOf(
+    List<TranscriptMessage> conversation,
+    String sourceName,
+    HandoffRecapBudget budget,
+  ) {
+    final names = <String, String>{};
+    String speaker(TranscriptMessage message) {
+      if (message.role == 'user') return 'The user';
+      final installation = message.agentInstallationId;
+      if (installation == null) return sourceName;
+      return names[installation] ??= switch (rows
+          .installation(installation)
+          ?.agentId) {
+        final String agentId => registry.displayNameFor(agentId),
+        null => sourceName,
+      };
+    }
+
+    final trimmed = trimRecap([
+      for (final message in conversation)
+        if (message.role == 'user' || message.role == 'agent')
+          if (message.text.trim().isNotEmpty)
+            HandoffTurn(speaker: speaker(message), text: message.text.trim()),
+    ], budget);
+    return (turns: trimmed.turns, omitted: trimmed.omitted, unreadable: false);
+  }
+
+  /// The installation [session] would resume [installationId]'s own
+  /// conversation under: the one it left when it last switched away.
+  String? _earlierConversation(Session session, String installationId) {
+    if (session.agentInstallationId == installationId) return null;
+    final known = spans?.forSession(session.id) ?? const <SessionAgentSpan>[];
+    for (final span in known.reversed) {
+      if (span.agentInstallationId != installationId) continue;
+      final id = span.externalSessionId;
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
   }
 
   Future<List<HandoffChange>?> _changesIn(EnvironmentPath directory) async {
@@ -610,6 +713,145 @@ class SessionContinuations {
     );
     _carryDecisions(from: sessionId, into: started.sessionId);
     return started;
+  }
+
+  /// **Hands [sessionId] to [targetInstallationId] in place**: the same row
+  /// and chat, the running agent stopped (`switched`), the new one started
+  /// with what it missed — resuming its own conversation when it ran this
+  /// session before and can resume, else a new one with the whole packet.
+  /// Refused mid-turn, on an archived or external session, and for an agent
+  /// that could not be told anything.
+  Future<SessionStarted> switchAgent({
+    required String sessionId,
+    required String targetInstallationId,
+    String instruction = '',
+    String? permissionMode,
+  }) async {
+    final ledger =
+        spans ??
+        (throw StateError('This server cannot switch a session\'s agent.'));
+    final session =
+        sessions.getById(sessionId) ??
+        (throw const LaunchTargetMissing('This session no longer exists.'));
+    if (session.isArchived) {
+      throw StateError('This session is archived; restore it to switch.');
+    }
+    if (session.surface == SessionSurface.external) {
+      throw StateError(
+        'This session runs in a terminal window Karmashala does not own, so '
+        'its agent cannot be stopped to switch.',
+      );
+    }
+    final context = _contextFor(session, targetInstallationId);
+    final sourceAgentId = rows
+        .installation(session.agentInstallationId)
+        ?.agentId;
+    final target = _target(
+      session,
+      context.installation,
+      sourceAgentId,
+      inPlace: true,
+    );
+    if (target.refusal case final refusal?) throw StateError(refusal);
+    if (turnRunning?.call(sessionId) ?? false) {
+      throw StateError(
+        'A turn is running in this session. Switch once it settles, or stop '
+        'it first.',
+      );
+    }
+
+    final targetAcp = _speaksAcp(context.installation.agentId);
+    final sourceAcp = sourceAgentId != null && _speaksAcp(sourceAgentId);
+    final earlier = _earlierConversation(session, targetInstallationId);
+    final resumable =
+        earlier != null &&
+        (targetAcp ||
+            (context.descriptor?.launch.resume.isSupported ?? false));
+    final conversation = await _conversationOf(sessionId);
+    final said = instruction.trim().isEmpty
+        ? kSwitchInstruction
+        : instruction.trim();
+    final packet = await buildPacket(
+      sessionId: sessionId,
+      targetAgentName: context.agentName,
+      instruction: said,
+      conversation: conversation,
+      missedBy: resumable ? targetInstallationId : null,
+    );
+    final carried = _resolvePermission(
+      sessionId: sessionId,
+      descriptor: context.descriptor,
+      targetAgentId: context.installation.agentId,
+      targetName: context.agentName,
+      chosen: permissionMode == null
+          ? null
+          : PermissionSelection.parse(permissionMode),
+    );
+    final rendered = packet.render();
+    final support =
+        context.descriptor?.launch.systemPromptFile ??
+        const AgentSystemPromptFileSupport.unchecked();
+    // A resumed conversation is told only what it missed, as its next turn.
+    final asFile = !resumable && !targetAcp && support.isSupported;
+    log?.call(
+      'Switch of $sessionId from ${sourceAgentId ?? 'unknown'} to '
+      '${context.installation.agentId}: '
+      '${resumable ? 'resuming $earlier' : 'new conversation'} '
+      'packet=${rendered.length} chars '
+      'delivery=${asFile ? support.token : 'typed'} '
+      'mode=${carried?.canonical ?? 'default'}',
+    );
+
+    await launches.end(
+      sessionId,
+      quietly: true,
+      reason: SessionEndedWithoutCode.switched,
+    );
+    final firstSwitch = !ledger.hasSpans(sessionId);
+    final span = ledger.recordSwitch(
+      session: session,
+      toInstallationId: targetInstallationId,
+      toExternalSessionId: resumable ? earlier : null,
+      at: _now(),
+      firstMessageOrdinal: targetAcp
+          ? nextMessageOrdinal?.call(sessionId) ?? 0
+          : null,
+      leavingFirstMessageOrdinal: sourceAcp ? 0 : null,
+      carriedPacket: rendered,
+    );
+    // The row's mode and model were the last agent's words for them.
+    sessions
+      ..updatePermissionMode(sessionId, carried?.canonical)
+      ..updateModel(sessionId, null);
+    final SessionStarted started;
+    try {
+      started = await launches.resume(
+        sessionId,
+        prompt: asFile ? said : rendered,
+        systemPrompt: asFile ? rendered : null,
+      );
+    } on Object {
+      ledger.undoSwitch(
+        session,
+        fromSeq: firstSwitch ? 0 : span.seq,
+      );
+      sessions.updatePermissionMode(sessionId, session.permissionMode);
+      sessions.updateModel(sessionId, session.modelId);
+      onSwitched?.call(sessionId, ledger.forSession(sessionId));
+      rethrow;
+    }
+    onSwitched?.call(sessionId, ledger.forSession(sessionId));
+    return started;
+  }
+
+  Future<List<TranscriptMessage>?> _conversationOf(String sessionId) async {
+    final read = conversationOf;
+    if (read == null) return null;
+    try {
+      return await read(sessionId);
+    } on Object {
+      return null;
+    }
   }
 
   Future<SessionStarted> _continue({
@@ -943,4 +1185,27 @@ class SessionContinuations {
       log?.call('Could not carry decisions from $from: $error');
     }
   }
+}
+
+/// What an agent switched in is asked to do when the person said nothing.
+const String kSwitchInstruction =
+    'You are taking over this session in place. Pick the work up where the '
+    'conversation stands: if the last request is finished, say so in a line '
+    'and wait for the next message.';
+
+/// The turns of [conversation] after [installationId] last spoke in it —
+/// all of them when it never did, or when [installationId] is null.
+List<TranscriptMessage> missedTurns(
+  List<TranscriptMessage> conversation,
+  String? installationId,
+) {
+  if (installationId == null) return conversation;
+  for (var i = conversation.length - 1; i >= 0; i--) {
+    final message = conversation[i];
+    if (message.agentInstallationId == installationId &&
+        message.role != kAgentSwitchRole) {
+      return conversation.sublist(i + 1);
+    }
+  }
+  return conversation;
 }

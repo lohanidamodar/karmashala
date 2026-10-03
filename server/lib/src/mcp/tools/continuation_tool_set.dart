@@ -66,6 +66,7 @@ class ContinuationToolSet extends ServerToolSet {
         unresolved: (args['unresolved'] as List?)?.whereType<String>().toList(),
         newWorktree: args['newWorktree'] == true,
         preview: args['preview'] == true,
+        inPlace: args['inPlace'] == true,
       ),
     ),
     'session_fork' => runTool(
@@ -107,8 +108,12 @@ class ContinuationToolSet extends ServerToolSet {
     List<String>? unresolved,
     bool newWorktree = false,
     bool preview = false,
+    bool inPlace = false,
   }) async {
     if (sessionId == null) throw ArgumentError('Missing sessionId.');
+    if (inPlace) {
+      return _switch(sessionId, cli, agentInstallationId, instruction, preview);
+    }
     if (instruction == null || instruction.trim().isEmpty) {
       throw ArgumentError(
         'Missing instruction. The packet carries the conversation; the '
@@ -156,6 +161,49 @@ class ContinuationToolSet extends ServerToolSet {
       'permission': target.permission.summary,
       if (started.session.worktree != null)
         'worktree': started.session.worktree!.path,
+      'where': _show(started.sessionId, started: started),
+    };
+  }
+
+  /// `inPlace: true`: the session itself switches agent, as the composer's
+  /// Switch agent does.
+  Future<Object?> _switch(
+    String sessionId,
+    String? cli,
+    String? agentInstallationId,
+    String? instruction,
+    bool preview,
+  ) async {
+    final targets = continuations.targetsFor(sessionId, inPlace: true);
+    if (targets.isEmpty) {
+      throw StateError(
+        'No agent is installed in that session\'s environment, or the session '
+        'no longer exists.',
+      );
+    }
+    final target = _target(targets, cli, agentInstallationId);
+    if (!target.canReceive) throw StateError(target.refusal!);
+    if (preview) {
+      return {
+        'preview': true,
+        'inPlace': true,
+        'target': target.agentName,
+        'resumesConversation': target.resumesConversation,
+        'permissionMode': target.permission.selection.canonical,
+        'permission': target.permission.summary,
+      };
+    }
+    final started = await continuations.switchAgent(
+      sessionId: sessionId,
+      targetInstallationId: target.installation.id,
+      instruction: instruction ?? '',
+    );
+    return {
+      'sessionId': started.sessionId,
+      'inPlace': true,
+      'target': target.agentName,
+      'resumesConversation': target.resumesConversation,
+      'permissionMode': target.permission.selection.canonical,
       'where': _show(started.sessionId, started: started),
     };
   }
@@ -306,6 +354,17 @@ const List<Map<String, Object?>> sessionHandoffToolSchemas = [
           'description':
               'Return the packet without starting anything. Read it before '
               'handing over work you care about.',
+        },
+        'inPlace': {
+          'type': 'boolean',
+          'description':
+              'Switch the session itself to the other agent instead of '
+              'starting a new one: the same session and chat, its agent '
+              'stopped and the new one started with what it missed (its own '
+              'earlier conversation resumed when it ran this session '
+              'before). Instruction optional. Refused while a turn runs, so '
+              'a session cannot switch itself mid-turn. newWorktree is '
+              'ignored.',
         },
       },
       'required': ['sessionId', 'instruction'],

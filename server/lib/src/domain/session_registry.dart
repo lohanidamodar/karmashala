@@ -253,7 +253,11 @@ class SessionRegistry {
   }
 
   /// Ends a session and drops it. Explicit, never a side effect of a disconnect.
-  Future<SessionLifecycle> close(String id, {int signal = 15}) async {
+  Future<SessionLifecycle> close(
+    String id, {
+    int signal = 15,
+    String? reason,
+  }) async {
     final process = requireProcess(id);
     // Taken before the terminate: whether this close is what ended the process,
     // or only lets go of the record of one that had already ended. Marked on
@@ -263,7 +267,9 @@ class SessionRegistry {
     _processes.remove(id);
     // Closed on purpose, so the record goes too; a disconnect never reaches here.
     store?.forget(id);
-    _changes.add(SessionClosed(process, end, endedByClose: endedByClose));
+    _changes.add(
+      SessionClosed(process, end, endedByClose: endedByClose, reason: reason),
+    );
     return end;
   }
 

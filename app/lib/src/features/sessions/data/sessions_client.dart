@@ -57,6 +57,9 @@ class SessionsClient {
   Future<SessionStarted> handoff(SessionHandoff request) => _send(request);
 
   Future<SessionStarted> fork(SessionFork request) => _send(request);
+
+  Future<SessionStarted> switchAgent(SessionSwitchAgent request) =>
+      _send(request);
 }
 
 final sessionsClientProvider = Provider<SessionsClient>(

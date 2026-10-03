@@ -333,6 +333,14 @@ class DataClient {
   Stream<SessionQueueChanged> get sessionQueueChanges =>
       _sessionQueueChanges.stream;
 
+  final _sessionAgentChanges = StreamController<SessionAgentChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent was switched in place, with every agent it ran under.
+  Stream<SessionAgentChanged> get sessionAgentChanges =>
+      _sessionAgentChanges.stream;
+
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
   /// change.
@@ -1025,6 +1033,8 @@ class DataClient {
         case final SessionQueueChanged change:
           sessionQueues[change.sessionId] = change.messages;
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
+        case final SessionAgentChanged change:
+          if (!_sessionAgentChanges.isClosed) _sessionAgentChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1245,6 +1255,7 @@ class DataClient {
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
     unawaited(_sessionQueueChanges.close());
+    unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());

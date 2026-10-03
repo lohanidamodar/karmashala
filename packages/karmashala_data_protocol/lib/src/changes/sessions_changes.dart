@@ -26,6 +26,7 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
       ),
       'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
       'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
+      'sessionAgentChanged' => SessionAgentChanged.fromJson(json),
       _ => null,
     };
 
@@ -345,5 +346,39 @@ final class SessionQueueChanged extends DataChange {
     'change': 'sessionQueueChanged',
     'sessionId': sessionId,
     'messages': [for (final message in messages) message.toJson()],
+  };
+}
+
+/// Session [sessionId]'s agent was switched in place (`sessions.switchAgent`):
+/// its row now names [agentInstallationId], and [spans] are every agent it
+/// ran under, in order. A client re-reads what follows the row's agent — its
+/// kind, its transcript, its panes.
+final class SessionAgentChanged extends DataChange {
+  const SessionAgentChanged({
+    required this.sessionId,
+    required this.agentInstallationId,
+    required this.spans,
+  });
+
+  factory SessionAgentChanged.fromJson(Map<String, Object?> json) =>
+      SessionAgentChanged(
+        sessionId: json['sessionId']! as String,
+        agentInstallationId: json['agentInstallationId']! as String,
+        spans: [
+          for (final row in (json['spans'] as List?) ?? const [])
+            SessionAgentSpan.fromJson((row as Map).cast<String, Object?>()),
+        ],
+      );
+
+  final String sessionId;
+  final String agentInstallationId;
+  final List<SessionAgentSpan> spans;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionAgentChanged',
+    'sessionId': sessionId,
+    'agentInstallationId': agentInstallationId,
+    'spans': [for (final span in spans) span.toJson()],
   };
 }

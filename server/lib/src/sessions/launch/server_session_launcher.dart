@@ -335,6 +335,7 @@ class ServerSessionLauncher {
     String sessionId, {
     bool restart = false,
     String? prompt,
+    String? systemPrompt,
     int columns = 120,
     int rows = 40,
   }) {
@@ -342,6 +343,7 @@ class ServerSessionLauncher {
       sessionId,
       restart: restart,
       prompt: prompt,
+      systemPrompt: systemPrompt,
       columns: columns,
       rows: rows,
     );
@@ -368,6 +370,7 @@ class ServerSessionLauncher {
     required String? prompt,
     required int columns,
     required int rows,
+    String? systemPrompt,
   }) async {
     final row =
         sessions.getById(sessionId) ??
@@ -399,6 +402,7 @@ class ServerSessionLauncher {
         existingWorktree: row.worktree,
         workingDirectory: row.workingDirectory,
         prompt: prompt,
+        systemPrompt: systemPrompt,
         columns: columns,
         rows: rows,
       ),
@@ -408,7 +412,11 @@ class ServerSessionLauncher {
   /// Ends the agent behind [sessionId]; the row and transcript stay, and the
   /// ending is recorded as the server's. Throws [LaunchTargetMissing] when
   /// nothing runs it (unless [quietly]).
-  Future<void> end(String sessionId, {bool quietly = false}) async {
+  Future<void> end(
+    String sessionId, {
+    bool quietly = false,
+    String? reason,
+  }) async {
     final hostId = hostSessionIdOf(sessionId);
     final session = registry.findProcess(hostId);
     if (session == null || session.lifecycle.hasEnded) {
@@ -418,7 +426,7 @@ class ServerSessionLauncher {
       );
     }
     try {
-      await registry.close(hostId);
+      await registry.close(hostId, reason: reason);
     } on UnknownSession {
       if (quietly) return;
       throw const LaunchTargetMissing(

@@ -8,6 +8,7 @@ library;
 export 'src/store/decision_record_dao.dart';
 export 'src/store/follow_up_dao.dart';
 export 'src/store/imported_session_dao.dart';
+export 'src/store/session_agent_span_dao.dart';
 export 'src/store/session_dao.dart';
 export 'src/store/session_event_dao.dart';
 export 'src/store/session_message_dao.dart';

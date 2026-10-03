@@ -4664,6 +4664,10 @@
           "preview": {
             "type": "boolean",
             "description": "Return the packet without starting anything. Read it before handing over work you care about."
+          },
+          "inPlace": {
+            "type": "boolean",
+            "description": "Switch the session itself to the other agent instead of starting a new one: the same session and chat, its agent stopped and the new one started with what it missed (its own earlier conversation resumed when it ran this session before). Instruction optional. Refused while a turn runs, so a session cannot switch itself mid-turn. newWorktree is ignored."
           }
         },
         "required": [

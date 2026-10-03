@@ -130,6 +130,7 @@ void main() {
           environments: () => const [],
         ),
         carryDecision: (_) {},
+        spans: SessionAgentSpanDao(database),
       ),
     );
   });
@@ -151,6 +152,34 @@ void main() {
           as Map<String, Object?>;
 
   group('session_handoff', () {
+    test('inPlace previews a switch of the session itself and starts '
+        'nothing', () async {
+      final answer = await call('session_handoff', {
+        'sessionId': 's1',
+        'inPlace': true,
+        'preview': true,
+      });
+      expect(answer['inPlace'], isTrue);
+      expect(answer['target'], contains('Codex'));
+      expect(answer['resumesConversation'], isFalse);
+      expect(pty.started, isEmpty);
+    });
+
+    test('inPlace switches the same session, no instruction needed', () async {
+      final answer = await call('session_handoff', {
+        'sessionId': 's1',
+        'inPlace': true,
+      });
+      expect(answer['sessionId'], 's1');
+      expect(answer['inPlace'], isTrue);
+      final row = SessionDao(database).getById('s1')!;
+      expect(
+        CheckoutRows(database).installation(row.agentInstallationId)?.agentId,
+        AgentIds.codex,
+      );
+      expect(SessionAgentSpanDao(database).forSession('s1'), hasLength(2));
+    });
+
     test('preview picks another agent and starts nothing', () async {
       final answer = await call('session_handoff', {
         'sessionId': 's1',

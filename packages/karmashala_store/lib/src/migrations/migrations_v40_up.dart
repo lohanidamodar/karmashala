@@ -776,3 +776,22 @@ void _migrateToV71(Database db) {
     'ON session_queued_messages (session_id, state, seq);',
   );
 }
+
+/// Each agent a session has run under, in switch order: the row keeps only
+/// the active one, so the earlier ones' conversations are named here. A row
+/// with none ran one agent; span 0 is written at the first switch.
+void _migrateToV72(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_agent_spans (
+      session_id            TEXT NOT NULL
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      seq                   INTEGER NOT NULL,
+      agent_installation_id TEXT NOT NULL,
+      external_session_id   TEXT,
+      started_at            TEXT NOT NULL,
+      first_message_ordinal INTEGER,
+      carried_packet        TEXT,
+      PRIMARY KEY (session_id, seq)
+    );
+  ''');
+}
