@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart' show DataService;
@@ -41,9 +42,11 @@ void main() {
   late ServerToolContext context;
   late LaunchToolSet tools;
   var ids = 0;
+  late List<(String, EnvironmentPath)> trusted;
 
   setUp(() {
     ids = 0;
+    trusted = [];
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
     database.execute(
@@ -101,6 +104,8 @@ void main() {
         installationsIn: context.data.installationsIn,
         pathProbe: const _Everywhere(),
         directoryPresent: (_) => true,
+        trustScratchFolder: (installation, folder) async =>
+            trusted.add((installation.id, folder)),
       ),
     );
   });
@@ -181,6 +186,32 @@ void main() {
         '[message from the Karmashala session "Orchestrator caller" (caller)]',
       ),
     );
+  });
+
+  test('an agent starting in a scratch folder has it marked trusted first; '
+      'one in an ordinary project does not', () async {
+    insertCaller('caller');
+    await tools.call('open_new_session', {
+      'projectId': 'p1',
+      'title': 'Ordinary',
+    }, 'caller');
+    expect(trusted, isEmpty);
+
+    database.execute(
+      'INSERT INTO projects (id, name, root_environment_id, root_path, '
+      'created_at, kind) VALUES (?, ?, ?, ?, ?, ?);',
+      ['p1', 'Scratch', 'local', '/src/shop', '$t0', 'scratch'],
+    );
+    await tools.call('open_new_session', {
+      'projectId': 'p1',
+      'title': 'In scratch',
+    }, 'caller');
+    expect(trusted, [
+      (
+        'a1',
+        const EnvironmentPath(environmentId: 'local', path: '/src/shop/api'),
+      ),
+    ]);
   });
 
   test('refuses past the spawn depth, nothing started', () async {

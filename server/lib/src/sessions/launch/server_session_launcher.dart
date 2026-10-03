@@ -68,6 +68,7 @@ class ServerSessionLauncher {
     this.directoryPresent,
     this.agents = const DaemonAgents(),
     this.registryOfAgents = AgentRegistry.builtIn,
+    this.trustScratchFolder,
     this.log,
   });
 
@@ -96,6 +97,14 @@ class ServerSessionLauncher {
   final bool Function(EnvironmentPath directory)? directoryPresent;
   final DaemonAgents agents;
   final AgentRegistry registryOfAgents;
+
+  /// Marks a scratch folder trusted in the agent's own settings before it
+  /// starts there, so it does not ask about a folder made for it.
+  final Future<void> Function(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  )?
+  trustScratchFolder;
   final void Function(String message)? log;
 
   LaunchSettings get _settings => settings?.call() ?? LaunchSettings.none;
@@ -272,10 +281,11 @@ class ServerSessionLauncher {
     // the repositories are its to attach; a resumed one was told already.
     final freshConversation =
         !restarting && resumeId == null && spec.forkConversationId == null;
-    final prompt =
-        freshConversation && rows.isScratchProject(repository.projectId)
+    final inScratch = rows.isScratchProject(repository.projectId);
+    final prompt = freshConversation && inScratch
         ? withScratchPreamble(launchDirectory.path, attributed)
         : attributed;
+    if (inScratch) await _trustScratch(installation, launchDirectory);
 
     final started = await launcher.startDetailed(
       HostedLaunch(
@@ -591,6 +601,24 @@ class ServerSessionLauncher {
       recordedDirectory: recorded.path,
       launchDirectory: launchDirectory.path,
     );
+  }
+
+  /// [trustScratchFolder] for [folder], never failing the launch: an agent
+  /// that still asks about the folder is a prompt, not a refusal.
+  Future<void> _trustScratch(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  ) async {
+    final trust = trustScratchFolder;
+    if (trust == null) return;
+    try {
+      await trust(installation, folder);
+    } on Object catch (error) {
+      log?.call(
+        '${folder.path} could not be marked trusted for '
+        '${installation.agentId}: $error',
+      );
+    }
   }
 
   bool _present(EnvironmentPath directory) {

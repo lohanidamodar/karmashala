@@ -50,6 +50,7 @@ import '../acp/acp_runtimes.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
 import '../acp/acp_version_probe.dart';
+import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
@@ -983,6 +984,32 @@ Future<int> runServe(
         if (checkoutFacts.isHere(environment)) environment,
     ],
   );
+  // Where an agent's settings are on the machine a scratch folder is on: the
+  // folder's machine, with this one and Windows beside it, which a WSL home
+  // is reached through.
+  final scratchTrust = AgentFolderTrust(
+    storeHome: (environmentId, agentId) async {
+      final environments = [
+        for (final e in data.environments)
+          if (e.id == environmentId ||
+              e.kind == EnvironmentKind.windowsNative ||
+              e.kind == EnvironmentKind.localPosix)
+            e,
+      ];
+      final stores = await CliStoreLocator(
+        runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+          checkoutRows.environment(id) ??
+              localHostEnvironment(DateTime.now().toUtc()),
+        ),
+        installations: data.installations,
+        environment: hostEnvironment,
+      ).locate(environments);
+      return stores
+          .where((s) => s.environmentId == environmentId)
+          .firstOrNull
+          ?.homeFor(agentId);
+    },
+  );
   final launches = ServerSessionLauncher(
     launcher: hostedLauncher,
     agents: liveAgents,
@@ -995,6 +1022,17 @@ Future<int> runServe(
     presenceOf: presence.presenceOf,
     repairAgents: () async {
       await agentWork.detection.repair();
+    },
+    trustScratchFolder: (installation, folder) async {
+      final where = data.environments
+          .where((e) => e.id == folder.environmentId)
+          .firstOrNull;
+      if (where == null) return;
+      await scratchTrust.trust(
+        agentId: installation.agentId,
+        folder: folder,
+        windowsAgent: where.kind == EnvironmentKind.windowsNative,
+      );
     },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
