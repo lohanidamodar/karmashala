@@ -39,17 +39,23 @@ class ChildTurnOutcome {
 /// is merely ready for input: one that has not started its turn yet looks the
 /// same. It settles once the agent has worked and stopped, or has an answer
 /// recorded since [firstTurn]'s `since`; on a prompt or question it is
-/// blocked; on the process ending, ended; at the bound, still running.
+/// blocked; on the process ending, ended; at the bound, still running. A turn
+/// the server decides is over ([settled], `TurnSettlement`) settles it too.
 class ChildTurnWait {
   ChildTurnWait({
     required this.waits,
     required this.answerOf,
+    this.settled,
     WaitDeadline? deadline,
     this.recheck = const Duration(seconds: 2),
   }) : _deadline = deadline ?? ((bound) => Future<void>.delayed(bound));
 
   final HostedSessionWait waits;
   final AnswerOf answerOf;
+
+  /// Each session whose turn settled: the one word on a turn whose reader
+  /// says only working or unknown, which no status here would end.
+  final Stream<String>? settled;
 
   /// How often an agent that never reported working is looked at again, for
   /// one whose status never moves or that finished before the wait began.
@@ -106,6 +112,22 @@ class ChildTurnWait {
     final changes = status.changes
         .where((moved) => moved.sessionId == sessionId)
         .listen((moved) => unawaited(consider(moved.report)));
+    // Settled over a status that says nothing (unknown) is the quiet screen
+    // of a turn seen working; any other status is read as it says.
+    final quiet = this.settled
+        ?.where((id) => id == sessionId)
+        .listen((_) {
+          final report = status.statusOf(sessionId)?.report;
+          if (report == null || report.status == AgentActivityStatus.unknown) {
+            worked = true;
+            if (waits.blockedOn(sessionId) == null &&
+                status.liveScreenOf(sessionId) != null) {
+              settle(const ChildTurnOutcome(ChildTurnState.done));
+            }
+            return;
+          }
+          unawaited(consider(report));
+        });
     final again = Timer.periodic(recheck, (_) {
       unawaited(consider(status.statusOf(sessionId)?.report));
     });
@@ -131,6 +153,7 @@ class ChildTurnWait {
     } finally {
       again.cancel();
       await changes.cancel();
+      await quiet?.cancel();
     }
   }
 

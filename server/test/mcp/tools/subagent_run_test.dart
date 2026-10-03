@@ -49,6 +49,7 @@ void main() {
   late Map<String, String> answers;
   late HostedSessionWait waits;
   late LaunchToolSet tools;
+  late StreamController<String> settledTurns;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -61,6 +62,7 @@ void main() {
 
   setUp(() {
     ids = 0;
+    settledTurns = StreamController<String>.broadcast(sync: true);
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -126,6 +128,7 @@ void main() {
       turns: ChildTurnWait(
         waits: waits,
         answerOf: answerOf,
+        settled: settledTurns.stream,
         deadline: (_) => deadline.future,
         recheck: const Duration(milliseconds: 5),
       ),
@@ -238,6 +241,36 @@ void main() {
     final result = await answer.timeout(const Duration(seconds: 5));
     expect(result['state'], 'done');
     expect(result['finalAnswer'], '42 files.');
+  });
+
+  test('a turn the server settles over a screen it cannot read is done, '
+      'not waited out', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Quiet job'}, screen: 'codex-tui');
+    expect(
+      status.statusOf('new-1')?.report.status,
+      anyOf(isNull, AgentActivityStatus.unknown),
+    );
+    answers['new-1'] = 'Done quietly.';
+    settledTurns.add('new-1');
+    final result = await answer.timeout(const Duration(seconds: 5));
+    expect(result['state'], 'done');
+    expect(result['finalAnswer'], 'Done quietly.');
+  });
+
+  test('a settled turn over a status that says ready is read as it says', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Not started'});
+    status.hook(hook('Stop'));
+    await pumpEventQueue();
+    var finished = false;
+    unawaited(answer.then((_) => finished = true));
+    settledTurns.add('new-1');
+    await pumpEventQueue();
+    // Ready and never seen working, with no answer: not yet its turn's end.
+    expect(finished, isFalse);
+    deadline.complete();
+    expect((await answer)['state'], 'running');
   });
 
   test('at its bound it answers running, and says how to continue', () async {

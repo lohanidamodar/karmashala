@@ -1268,7 +1268,11 @@ Future<int> runServe(
     }
   }
 
-  final childTurns = ChildTurnWait(waits: sessionWaits, answerOf: answerOf);
+  final childTurns = ChildTurnWait(
+    waits: sessionWaits,
+    answerOf: answerOf,
+    settled: turnSettlement.settled,
+  );
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
