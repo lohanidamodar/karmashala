@@ -185,8 +185,13 @@ List<StreamSubscription<Object?>> followOpenTurns(
   }),
 ];
 
-/// One cut-off turn and why it is not continued.
-typedef InterruptedTurnSkip = ({String sessionId, String reason});
+/// One cut-off turn, why it is not continued, and whether a person should
+/// hear of it: a row they stopped, archived or handed on is their own doing.
+typedef InterruptedTurnSkip = ({
+  String sessionId,
+  String reason,
+  bool forAPerson,
+});
 
 /// What a boot does with the turns it found open.
 typedef InterruptedTurnPlan = ({
@@ -216,31 +221,42 @@ InterruptedTurnPlan planInterruptedTurns(
     if (reason == null) {
       resume.add((sessionId: id, turn: turn));
     } else {
-      skipped.add((sessionId: id, reason: reason));
+      skipped.add((
+        sessionId: id,
+        reason: reason.text,
+        forAPerson: reason.forAPerson,
+      ));
     }
   }
   return (resume: resume, skipped: skipped);
 }
 
-String? _refusal(
+({String text, bool forAPerson})? _refusal(
   Session? session,
   OpenTurn turn, {
   required List<Session> Function(String sessionId) childrenOf,
   required bool Function(String sessionId) runsHere,
   required DateTime now,
 }) {
-  if (session == null) return 'it is no longer in the workspace';
-  if (session.isArchived) return 'it was archived';
+  ({String text, bool forAPerson}) own(String text) =>
+      (text: text, forAPerson: false);
+  if (session == null) return own('it is no longer in the workspace');
+  if (session.isArchived) return own('it was archived');
   // A row the server's stop left is `unknown`, or `completed` for an agent
   // that runs inside the server; these two only ever come from elsewhere.
-  if (session.status == SessionStatus.cancelled) return 'it was stopped';
-  if (session.status == SessionStatus.failed) return 'it ended in error';
+  if (session.status == SessionStatus.cancelled) return own('it was stopped');
+  if (session.status == SessionStatus.failed) return own('it ended in error');
   if (childrenOf(
     session.id,
   ).any((child) => child.parentLink == SessionLink.handoff)) {
-    return 'its work was handed off';
+    return own('its work was handed off');
   }
-  if (runsHere(session.id)) return 'it is already running';
+  if (runsHere(session.id)) return own('it is already running');
+  final reason = _staleness(session, turn, now);
+  return reason == null ? null : (text: reason, forAPerson: true);
+}
+
+String? _staleness(Session session, OpenTurn turn, DateTime now) {
   final conversation = session.externalSessionId;
   if (conversation == null || conversation.isEmpty) {
     return 'its agent never named a conversation to resume';
@@ -255,11 +271,16 @@ String? _refusal(
   return null;
 }
 
+/// What the inbox says of a turn the session host's stop cut off.
+const String kTurnCutOffLead =
+    'The session host stopped while this turn was running.';
+
 /// **Turns a server stop or crash cut off, continued at the next boot**
 /// without asking (owner, 2026-10-03): each session resumed and told its turn
 /// was cut off — on its command line or as its first ACP prompt; an agent
 /// that takes no opening message is reopened and the log says it was not
-/// told. Once per boot: the record is cleared before any resume starts.
+/// told. Once per boot: the record is cleared before any resume starts. Each
+/// session continued, or left for a person, is [report]ed for the inbox.
 class InterruptedTurnContinuer {
   InterruptedTurnContinuer({
     required this.turns,
@@ -270,6 +291,7 @@ class InterruptedTurnContinuer {
     required this.resume,
     required this.now,
     this.enabled,
+    this.report,
     this.log,
   });
 
@@ -285,6 +307,9 @@ class InterruptedTurnContinuer {
 
   /// Settings; null is on.
   final bool Function()? enabled;
+
+  /// Files what happened to row [String]'s cut-off turn, in plain words.
+  final void Function(String sessionId, String detail)? report;
   final void Function(String message)? log;
 
   bool _ran = false;
@@ -297,13 +322,6 @@ class InterruptedTurnContinuer {
     _ran = true;
     final open = turns.takeAll();
     if (open.isEmpty) return const [];
-    if (!(enabled?.call() ?? true)) {
-      log?.call(
-        'interrupted turns: ${open.length} cut off by the last stop, not '
-        'continued — switched off in Settings',
-      );
-      return const [];
-    }
     final plan = planInterruptedTurns(
       open,
       sessionOf: sessionOf,
@@ -315,6 +333,17 @@ class InterruptedTurnContinuer {
       log?.call(
         'interrupted turns: ${skip.sessionId} not continued — ${skip.reason}',
       );
+      if (skip.forAPerson) _left(skip.sessionId, skip.reason);
+    }
+    if (!(enabled?.call() ?? true)) {
+      log?.call(
+        'interrupted turns: ${open.length} cut off by the last stop, not '
+        'continued — switched off in Settings',
+      );
+      for (final (:sessionId, turn: _) in plan.resume) {
+        _left(sessionId, 'continuing them is switched off in Settings');
+      }
+      return const [];
     }
     final continued = <String>[];
     final runs = <Future<void>>[];
@@ -328,6 +357,11 @@ class InterruptedTurnContinuer {
     await Future.wait(runs);
     return continued;
   }
+
+  void _left(String sessionId, String reason) => report?.call(
+    sessionId,
+    '$kTurnCutOffLead It was not continued: $reason.',
+  );
 
   Future<void> _continue(
     String sessionId,
@@ -344,8 +378,18 @@ class InterruptedTurnContinuer {
             : 'interrupted turns: $sessionId resumed; its agent takes no '
                   'opening message, so it was not told its turn was cut off',
       );
+      report?.call(
+        sessionId,
+        told
+            ? '$kTurnCutOffLead Karmashala continued it and told the agent '
+                  'its turn was cut off.'
+            : '$kTurnCutOffLead Karmashala reopened the session, but its '
+                  'agent takes no opening message, so it was not asked to '
+                  'continue.',
+      );
     } on Object catch (error) {
       log?.call('interrupted turns: $sessionId could not be resumed: $error');
+      _left(sessionId, 'reopening the session failed');
     }
   }
 }

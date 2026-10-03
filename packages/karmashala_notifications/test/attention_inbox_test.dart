@@ -31,6 +31,37 @@ void main() {
   SessionAttention waiting(WatchedSession s, [AttentionKind? kind]) =>
       SessionAttention(session: s, kind: kind ?? AttentionKind.needsInput);
 
+  group('a cut-off turn on the wire', () {
+    final item = InboxItem(
+      session: session('a'),
+      kind: InboxItemKind.turnCutOff,
+      at: t0,
+      detail: 'The session host stopped while this turn was running.',
+    );
+
+    test('travels as a follow-up a released client can read', () {
+      final json = item.toJson();
+      expect(json['kind'], 'followUp');
+      expect(json['kindName'], 'turnCutOff');
+    });
+
+    test('reads back as itself, and leaves when its session is looked at', () {
+      final read = InboxItem.fromJson(item.toJson());
+      expect(read, item);
+      expect(read.kind.retirement, InboxRetirement.viewing);
+    });
+
+    test('an older kind writes no second name', () {
+      final finished = InboxItem(
+        session: session('a'),
+        kind: InboxItemKind.finished,
+        at: t0,
+      );
+      expect(finished.toJson().containsKey('kindName'), isFalse);
+      expect(InboxItem.fromJson(finished.toJson()), finished);
+    });
+  });
+
   group('what enters the inbox', () {
     test('every kind of news, whatever the toast decided', () {
       final a = session('a');

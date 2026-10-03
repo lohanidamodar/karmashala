@@ -1120,11 +1120,22 @@ Future<int> runServe(
               (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
                   false);
         },
-        resume: (sessionId, prompt) =>
-            launches.resume(sessionId, prompt: prompt),
+        // A window connected by the time the agent is back shows it, as
+        // `session_send`'s resume does; the inbox item covers one that is not.
+        resume: (sessionId, prompt) async {
+          final started = await launches.resume(sessionId, prompt: prompt);
+          data.tellIntent(
+            OpenSessionTab(
+              sessionId: started.sessionId,
+              title: started.session.title,
+              launch: started.launch,
+            ),
+          );
+        },
         now: () => DateTime.now().toUtc(),
         enabled: () =>
             continuesInterruptedTurns(database.readMetadata('settings.v1')),
+        report: attention.turnCutOff,
         log: (message) => errSink.writeln('karmashala_host: $message'),
       ).run(),
     );

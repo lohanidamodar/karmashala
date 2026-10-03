@@ -197,6 +197,21 @@ class DaemonAttention {
       installation.id: installation.agentId,
   };
 
+  /// Files what happened to row [sessionId]'s turn that the session host's
+  /// stop cut off ([detail]); nothing for a row that is gone.
+  void turnCutOff(String sessionId, String detail) {
+    final session = _watchedSessionOf(sessionId);
+    if (session == null) return;
+    attention.raise(
+      InboxItem(
+        session: session,
+        kind: InboxItemKind.turnCutOff,
+        at: DateTime.now().toUtc(),
+        detail: detail,
+      ),
+    );
+  }
+
   /// Row [sessionId] in the inbox's terms, keyed as its hooks key it.
   WatchedSession? _watchedSessionOf(String sessionId) {
     final session = _sessions.getById(sessionId);
