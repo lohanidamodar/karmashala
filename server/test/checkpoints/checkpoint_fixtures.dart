@@ -47,6 +47,7 @@ class SlowRunners extends CommandRunnerFactory {
 
   var slow = false;
   var failAdd = false;
+  var slowRecord = false;
   Duration delay = const Duration(milliseconds: 600);
 
   @override
@@ -71,6 +72,10 @@ class _SlowRunner implements CommandRunner {
     // `add` is where a capture reads the working tree (into its private
     // index): held back here, the snapshot is of the tree as it is after.
     if (_owner.slow && request.arguments.contains('add')) {
+      await Future<void>.delayed(_owner.delay);
+    }
+    // `commit-tree` is where a snapshot becomes a recorded checkpoint.
+    if (_owner.slowRecord && request.arguments.contains('commit-tree')) {
       await Future<void>.delayed(_owner.delay);
     }
     return _inner.run(request);

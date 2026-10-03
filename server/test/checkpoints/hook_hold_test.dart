@@ -75,6 +75,25 @@ void main() {
       skip: hasGit ? false : 'git is not on PATH',
     );
 
+    test('a tool is held for the snapshots, never for the recording of the '
+        'checkpoint before it', () async {
+      // Recording a checkpoint (commit, ref, what changed) longer than the
+      // hold: a tool held for it would be released with its hold expired.
+      w.runners
+        ..slowRecord = true
+        ..delay = const Duration(seconds: 2);
+      final file = p.join(w.app, 'main.txt');
+      await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
+      await w.hook('PreToolUse', w.edit(file));
+      File(file).writeAsStringSync('one\nTWO\nthree\n');
+      w.runners.slowRecord = false;
+      await w.untilCheckpoints(w.app, 1);
+      final nested = w.ofRepo(w.app);
+      expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
+      expect(nested.first.label, isNull, reason: 'the hold was met');
+      expect(w.log.where((l) => l.contains('released a tool')), isEmpty);
+    }, skip: hasGit ? false : 'git is not on PATH');
+
     test('another event is answered at once', () async {
       w.runners
         ..slow = true
