@@ -366,6 +366,38 @@ void main() {
         );
       },
     );
+
+    test('is refused while an ACP session of its runs, and goes once it '
+        'has stopped', () {
+      final made = create();
+      db.execute('PRAGMA foreign_keys = OFF;');
+      db.execute(
+        'INSERT INTO sessions (id, repository_id, agent_installation_id, '
+        'title, use_worktree, status, created_at) '
+        'VALUES (?, ?, ?, ?, 0, ?, ?);',
+        [
+          's1',
+          made.repositories.single.id,
+          'a1',
+          'Over ACP',
+          'running',
+          '$now',
+        ],
+      );
+      db.execute('PRAGMA foreign_keys = ON;');
+      var live = {'s1', 'elsewhere'};
+      service.liveAcpSessions = () => live;
+
+      expect(
+        () => app.handle(ProjectDelete(made.project.id)),
+        refused(DataRefusalCode.invalid, '1 ACP session running'),
+      );
+      expect(snapshot().projects, hasLength(1));
+
+      live = {'elsewhere'};
+      app.handle(ProjectDelete(made.project.id));
+      expect(snapshot().projects, isEmpty);
+    });
   });
 
   group('checkouts', () {

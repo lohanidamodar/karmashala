@@ -18,7 +18,9 @@ class WorkspaceHandler {
     this._newId, {
     List<DataChange> Function() Function(List<String> checkoutIds)?
     checkoutsGoing,
+    Set<String> Function()? liveAcpSessions,
   }) : _checkoutsGoing = checkoutsGoing,
+       _liveAcpSessions = liveAcpSessions,
        _workspaces = WorkspaceDao(_db),
        _projects = ProjectDao(_db),
        _repositories = RepositoryDao(_db),
@@ -34,6 +36,11 @@ class WorkspaceHandler {
   /// the delete and told after it.
   final List<DataChange> Function() Function(List<String> checkoutIds)?
   _checkoutsGoing;
+
+  /// The session ids an ACP runtime of the server is running right now. The
+  /// server owns those processes; a project is not deleted out from under
+  /// one, whose rows it would go on writing.
+  final Set<String> Function()? _liveAcpSessions;
   final WorkspaceDao _workspaces;
   final ProjectDao _projects;
   final RepositoryDao _repositories;
@@ -219,8 +226,27 @@ class WorkspaceHandler {
   /// cascades — everything recorded against them go; its notes and todos
   /// stay, unfiled, and every subscribed client is told all of it.
   DataAck deleteProject(ProjectDelete request, List<DataChange> changes) {
-    _project(request.id);
+    final project = _project(request.id);
     final checkouts = _repositories.getByProject(request.id);
+    final live = _liveAcpSessions?.call() ?? const <String>{};
+    if (live.isNotEmpty) {
+      final checkoutIds = {for (final checkout in checkouts) checkout.id};
+      final running = _db
+          .query(
+            'SELECT id, repository_id FROM sessions WHERE id IN '
+            '(${List.filled(live.length, '?').join(', ')});',
+            live.toList(),
+          )
+          .where((row) => checkoutIds.contains(row['repository_id']))
+          .length;
+      if (running > 0) {
+        throw DataRefused.invalid(
+          '${project.name} has $running ACP '
+          '${running == 1 ? 'session' : 'sessions'} running. Stop '
+          '${running == 1 ? 'it' : 'them'} first, then remove the project.',
+        );
+      }
+    }
     final notes = [
       for (final note in _notes.list())
         if (note.projectId == request.id) note.id,

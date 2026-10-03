@@ -153,6 +153,42 @@ void main() {
     expect(told.length, before);
   });
 
+  test('a delete is refused while a session runs under the agent', () {
+    // Without the row its sessions would stop reading as ACP sessions, and
+    // their transcript, resume and status hang on that.
+    final row = app.handle(put).value;
+    final windows = ExecutionEnvironment(
+      id: 'windows',
+      kind: EnvironmentKind.windowsNative,
+      name: 'Windows',
+      createdAt: now,
+    );
+    service.recordAgentsFound(windows, [
+      AgentInstallation(
+        id: 'w',
+        agentId: row.agentId,
+        executable: const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\mine.exe',
+        ),
+        createdAt: now,
+      ),
+    ], now);
+    db.execute('PRAGMA foreign_keys = OFF;');
+    db.execute(
+      'INSERT INTO sessions (id, repository_id, agent_installation_id, '
+      'title, use_worktree, status, created_at) '
+      'VALUES (?, ?, ?, ?, 0, ?, ?);',
+      ['s1', 'r1', 'w', 'Over ACP', 'completed', '$now'],
+    );
+
+    expect(
+      () => app.handle(AcpAgentDelete(row.id)),
+      refused(DataRefusalCode.invalid, 'has 1 session'),
+    );
+    expect(app.handle(const AcpAgentsList()).value, hasLength(1));
+  });
+
   test('a delete takes the agent\'s installations with it, on every '
       'machine, told as removed', () {
     final row = app.handle(put).value;

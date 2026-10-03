@@ -1,6 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:flutter/material.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -30,16 +32,23 @@ class AcpUserAgentRow extends ConsumerWidget {
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
     final setup = ref.read(acpAgentsSetupProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showConfirmDialog(
       context,
       title: 'Remove ${row.name}?',
       message:
-          'Karmashala forgets how to start it. Sessions already recorded '
-          'with it stay.',
+          'Karmashala forgets how to start it. An agent that still has '
+          'sessions is kept until they are deleted.',
       confirmLabel: 'Remove',
       destructive: true,
     );
-    if (confirmed) await setup.remove(row.id);
+    if (!confirmed) return;
+    try {
+      await setup.remove(row.id);
+    } on DataRefused catch (refusal) {
+      // The server's words: it keeps an agent its sessions still need.
+      messenger.showSnackBar(SnackBar(content: Text(refusal.message)));
+    }
   }
 
   @override

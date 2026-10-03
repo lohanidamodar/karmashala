@@ -927,6 +927,10 @@ Future<int> runServe(
   data
     ..sessionModes = acpModes
     ..greeters.add(acpModes.greeting);
+  data.liveAcpSessions = () => {
+    for (final runtime in registry.acpRuntimes)
+      if (!runtime.lifecycle.hasEnded) runtime.sessionId,
+  };
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,

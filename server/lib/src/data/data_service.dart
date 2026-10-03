@@ -91,6 +91,7 @@ class DataService {
         final worktrees = _worktrees.checkoutsGoing(ids);
         return () => [...sessions(), ...comparisons(), ...worktrees()];
       },
+      liveAcpSessions: () => liveAcpSessions(),
     );
   }
 
@@ -170,6 +171,12 @@ class DataService {
   /// Where `sessions.setMode` lands (ACP design, C5): the ACP runtime replaces
   /// the default, which refuses every session as having no modes.
   SessionModeChanger sessionModes = const NoSessionModes();
+
+  /// The session ids an ACP runtime of this server runs right now; set by
+  /// `serve`. A project holding one is not deleted.
+  Set<String> Function() liveAcpSessions = _noLiveAcpSessions;
+
+  static Set<String> _noLiveAcpSessions() => const {};
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;
