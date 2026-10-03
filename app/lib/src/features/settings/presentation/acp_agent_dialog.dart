@@ -76,7 +76,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
   /// Whether [entry] has no launch for this machine and is installed first.
   bool _installsFirst(AcpRegistryEntry entry) {
     final platform = ref.read(acpRegistryPlatformProvider);
-    return entry.launchFor(platform) == null &&
+    return entry.launch == null &&
         acpInstallableBinary(entry, platform) != null;
   }
 
@@ -101,7 +101,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         final entry = _picked;
         if (entry == null) return;
         final platform = ref.read(acpRegistryPlatformProvider);
-        final launch = entry.launchFor(platform);
+        final launch = entry.launch;
         final binary = acpInstallableBinary(entry, platform);
         if (launch == null && binary == null) return;
         name = entry.label;
@@ -416,7 +416,7 @@ class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
                   itemCount: shown.length,
                   itemBuilder: (context, index) {
                     final entry = shown[index];
-                    final launch = entry.launchFor(platform);
+                    final launch = entry.launch;
                     final binary = acpInstallableBinary(entry, platform);
                     final detail = [
                       ?entry.version,

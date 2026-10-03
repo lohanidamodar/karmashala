@@ -94,12 +94,23 @@ void main() {
       expect(newestAcpManagedInstall('  \n'), isNull);
     });
 
-    test('version order', () {
-      expect(compareVersionStrings('1.10.0', '1.9.3'), greaterThan(0));
-      expect(compareVersionStrings('1.3.0', '1.3.0'), 0);
-      expect(compareVersionStrings('1.3', '1.3.0'), lessThan(0));
-      expect(compareVersionStrings('1.3.0-beta', '1.3.0'), lessThan(0));
-      expect(compareVersionStrings('latest', '1.3.0'), lessThan(0));
+    test('orders folders as agent versions: a release over its pre-release, '
+        'a numbered folder over one that is not', () {
+      expect(
+        newestAcpManagedInstall(
+          '/home/me/karmashala/acp/a/1.3.0/agy\n'
+          '/home/me/karmashala/acp/a/1.3.0-beta/agy\n'
+          '/home/me/karmashala/acp/a/latest/agy\n',
+        )?.version,
+        '1.3.0',
+      );
+      expect(
+        newestAcpManagedInstall(
+          '/home/me/karmashala/acp/a/latest/agy\n'
+          '/home/me/karmashala/acp/a/0.9.0/agy\n',
+        )?.version,
+        '0.9.0',
+      );
     });
   });
 

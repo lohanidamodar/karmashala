@@ -95,11 +95,11 @@ void main() {
     });
   });
 
-  group('launchFor', () {
+  group('launch', () {
     final catalog = AcpRegistryCatalog.parse(fixture);
 
-    test('prefers npx wherever the entry has one', () {
-      final gemini = catalog.byId('gemini')!.launchFor('windows-x86_64')!;
+    test('is npx wherever the entry has one', () {
+      final gemini = catalog.byId('gemini')!.launch!;
       expect(gemini.command, 'npx');
       expect(gemini.args, ['-y', '@google/gemini-cli@0.62.0', '--acp']);
     });
@@ -107,12 +107,10 @@ void main() {
     test('a binary distribution is not a launch: it is installed first', () {
       final native = catalog.byId('native-agent')!;
       // The archive's command names a file inside it, not a program here.
-      expect(native.launchFor('darwin-aarch64'), isNull);
+      expect(native.launch, isNull);
       expect(native.binaries['darwin-aarch64']!.command, 'native-agent');
-      expect(native.launchFor('linux-x86_64'), isNull);
-      expect(native.launchFor('plan9-mips'), isNull);
       // An npx block without a package is not npx.
-      expect(catalog.agents.last.launchFor('linux-x86_64'), isNull);
+      expect(catalog.agents.last.launch, isNull);
     });
   });
 

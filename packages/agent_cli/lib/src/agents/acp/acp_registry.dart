@@ -101,12 +101,12 @@ class AcpRegistryEntry {
   /// What a picker shows for this entry.
   String get label => name ?? id ?? 'Unnamed agent';
 
-  /// How to start this agent as it stands: `npx -y <package> …` when the
-  /// entry has an npm distribution — it runs anywhere node does — else null.
-  /// A binary distribution is not a launch: its command (`./agent`) names a
-  /// file inside an archive that has to be installed first, and the launch
-  /// is then the installed path.
-  AcpLaunchCommand? launchFor(String platform) {
+  /// How to start this agent as it stands, on any platform:
+  /// `npx -y <package> …` when the entry has an npm distribution — it runs
+  /// anywhere node does — else null. A binary distribution is not a launch:
+  /// its command (`./agent`) names a file inside an archive that has to be
+  /// installed first, and the launch is then the installed path.
+  AcpLaunchCommand? get launch {
     final npx = this.npx;
     if (npx?.package == null) return null;
     return (command: 'npx', args: ['-y', npx!.package!, ...npx.args]);

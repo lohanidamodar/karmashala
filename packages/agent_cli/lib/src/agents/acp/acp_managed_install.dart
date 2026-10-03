@@ -1,12 +1,13 @@
 import '../../environments/environment_kind.dart';
 import '../../process/command_runner.dart';
 import '../data/agent_discovery_service.dart' show expandWindowsPath;
+import '../domain/agent_version_reading.dart' show compareAgentVersions;
 
 /// Where Karmashala installs an ACP agent the registry ships as a prebuilt
 /// archive, under the environment's home:
 /// `~/karmashala/acp/<registry id>/<version>/`. One folder per version, so
-/// an upgrade sits beside the
-/// build it replaces and discovery takes the newest.
+/// an upgrade sits beside the build it replaces and discovery takes the
+/// newest.
 const String kAcpManagedFolder = 'karmashala/acp';
 
 /// The folder's segments after the home, spelled for [kind].
@@ -64,37 +65,9 @@ CommandRequest? acpManagedLocateRequest(
     final segments = path.split(RegExp(r'[\\/]'));
     if (segments.length < 2) continue;
     final version = segments[segments.length - 2];
-    if (newest == null || compareVersionStrings(version, newest.version) > 0) {
+    if (newest == null || compareAgentVersions(version, newest.version) > 0) {
       newest = (path: path, version: version);
     }
   }
   return newest;
 }
-
-/// Orders versions by their numeric parts (`1.10.0` after `1.9.3`); a part
-/// that is not a number is compared as text, so `1.3.0` sorts after
-/// `1.3.0-beta`.
-int compareVersionStrings(String a, String b) {
-  final left = a.split(RegExp(r'[.\-+]'));
-  final right = b.split(RegExp(r'[.\-+]'));
-  final length = left.length > right.length ? left.length : right.length;
-  for (var i = 0; i < length; i++) {
-    final x = i < left.length ? left[i] : null;
-    final y = i < right.length ? right[i] : null;
-    if (x == null) return _isNumber(y) ? -1 : 1;
-    if (y == null) return _isNumber(x) ? 1 : -1;
-    final xn = int.tryParse(x);
-    final yn = int.tryParse(y);
-    final order = xn != null && yn != null
-        ? xn.compareTo(yn)
-        : xn != null
-        ? 1
-        : yn != null
-        ? -1
-        : x.compareTo(y);
-    if (order != 0) return order;
-  }
-  return 0;
-}
-
-bool _isNumber(String? part) => part != null && int.tryParse(part) != null;
