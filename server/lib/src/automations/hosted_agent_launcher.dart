@@ -923,13 +923,8 @@ List<String> acpArgumentsFor(
   final mode = spec.argumentsFor(linux: linux);
   if (leading.isEmpty &&
       package != null &&
-      _isNpx(installation.executable.path)) {
+      isNpxExecutable(installation.executable.path)) {
     return ['-y', package, ...mode];
   }
   return [...leading, ...mode];
-}
-
-bool _isNpx(String executable) {
-  final name = executable.split(RegExp(r'[\\/]')).last.toLowerCase();
-  return name == 'npx' || name == 'npx.cmd' || name == 'npx.exe';
 }

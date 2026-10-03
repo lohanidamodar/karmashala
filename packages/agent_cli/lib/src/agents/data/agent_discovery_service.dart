@@ -264,6 +264,15 @@ const AgentBinaries npxBinaries = AgentBinaries(
   posix: ['npx'],
 );
 
+/// Whether [executable] is `npx` itself, by its file name in either spelling
+/// — whatever its leading arguments ask it to run, if anything.
+bool isNpxExecutable(String executable) {
+  final name = executable.split(RegExp(r'[\\/]')).last.toLowerCase();
+  return name == 'npx.exe' ||
+      npxBinaries.windows.contains(name) ||
+      npxBinaries.posix.contains(name);
+}
+
 /// Everything one sweep of one environment established — including the two
 /// facts a bare list of hits cannot express: which agents were asked about and
 /// not installed, and whether the environment could be reached at all.
