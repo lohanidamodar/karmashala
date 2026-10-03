@@ -14,12 +14,15 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'reads it as a request from a peer rather than as an instruction from '
         'the user; the line is built from the session the transport '
         'authenticated, so you can neither borrow another name nor drop your '
-        'own. Refused while the target has an approval prompt open: the '
-        'keystrokes would land in that prompt instead — answer it with '
-        'session_answer, or wait. Pass wait: true to block until the session '
-        'settles afterwards — the common send-then-wait shape. The block is '
-        'checked BEFORE the send, so a target already waiting on a person is '
-        'refused with nothing sent.',
+        'own. While the target is working — mid-turn, or stopped at an '
+        'approval — the message is queued at the server and delivered when '
+        'its turn ends, one per turn, in order: the result says queued: true '
+        'with its position, and it must not be sent again. Pass wait: true to '
+        'block until the session settles afterwards — the common '
+        'send-then-wait shape; a queued message is waited for until it is '
+        'delivered, within the same bound. The block is checked BEFORE the '
+        'send, so a target already waiting on a person is refused with '
+        'nothing sent.',
     'inputSchema': {
       'type': 'object',
       'properties': {

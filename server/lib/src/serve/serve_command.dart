@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart'
     show
         CommandRunnerFactory,
@@ -24,6 +26,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         DecisionRecorded,
         OpenSessionTab,
         OpenTerminalTab,
+        SessionQueueChanged,
         SessionSend,
         TerminalOpen,
         UsageLimitNotice,
@@ -40,6 +43,7 @@ import 'package:karmashala_session_engine/store.dart'
         ImportedSessionDao,
         SessionDao,
         SessionMessageDao,
+        SessionQueueDao,
         SessionRepositoryDao,
         SessionUsageDao;
 import 'package:karmashala_store/database.dart';
@@ -65,6 +69,7 @@ import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
+import '../sessions/session_queue.dart';
 import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
@@ -79,6 +84,7 @@ import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
+import 'package:karmashala_session/session.dart' show QueuedMessageOrigin;
 import 'package:karmashala_session/events.dart'
     show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
@@ -868,6 +874,24 @@ Future<int> runServe(
     ),
     openAgent: openAgent,
   );
+  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
+  // a PTY: its conversation is `session_messages`, its status its own word.
+  final sessionMessages = SessionMessageDao(database);
+  final acpHost = ServerAcpHost(
+    agentStatus: status,
+    checkpoints: checkpoints,
+    data: data,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final sessionUsage = SessionUsageDao(database);
+  final acpRuntimes = AcpRuntimes(
+    messages: sessionMessages,
+    usage: sessionUsage,
+    host: acpHost,
+    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
+      environment ?? localHostEnvironment(DateTime.now().toUtc()),
+    ),
+  );
   final automations = await _startAutomations(
     database: database,
     data: data,
@@ -891,6 +915,9 @@ Future<int> runServe(
     openAgent: openAgent,
     // Automations and resumes fire on an SSH box it reaches (slice 5d).
     reachesBox: ssh.remote.reaches,
+    // A resume of an ACP session that ended starts it again over ACP.
+    acpRuntimes: acpRuntimes.start,
+    acpAuth: acpAuth.startAuth,
   );
   // Event rules and usage limits follow every status the server keeps,
   // app or no app.
@@ -903,24 +930,6 @@ Future<int> runServe(
   final sessionRows = SessionDao(database);
   LaunchSettings launchSettings() =>
       LaunchSettings.parse(database.readMetadata(kLaunchSettingsKey));
-  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
-  // a PTY: its conversation is `session_messages`, its status its own word.
-  final sessionMessages = SessionMessageDao(database);
-  final acpHost = ServerAcpHost(
-    agentStatus: status,
-    checkpoints: checkpoints,
-    data: data,
-    log: (message) => errSink.writeln('karmashala_host: $message'),
-  );
-  final sessionUsage = SessionUsageDao(database);
-  final acpRuntimes = AcpRuntimes(
-    messages: sessionMessages,
-    usage: sessionUsage,
-    host: acpHost,
-    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
-      environment ?? localHostEnvironment(DateTime.now().toUtc()),
-    ),
-  );
   // A client that subscribes after an ACP agent started is greeted with the
   // modes and options the runtime announced before it arrived.
   final acpModes = AcpSessionModes(
@@ -1025,11 +1034,23 @@ Future<int> runServe(
     agents: liveAgents,
     sessionOf: sessionRows.getById,
   );
+  // Every send — a client's, an agent's `session_send`, the older companion
+  // API's — waits here while the session's turn runs.
+  final sessionQueue = SessionQueue(
+    dao: SessionQueueDao(database),
+    status: prompts.status,
+    resumesOnSend: speaksAcp,
+    announce: (sessionId, open) => data.announce([
+      SessionQueueChanged(sessionId: sessionId, messages: open),
+    ]),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
     resumesOnSend: speaksAcp,
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
+    queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // Turns the last stop or crash cut off are continued now, each resume
@@ -1072,14 +1093,25 @@ Future<int> runServe(
     runsHere: status.runsHere,
     clock: () => DateTime.now().toUtc(),
   );
+  sessionQueue.start();
   data.sessionInput = sessionInput;
-  // A phone on the older companion API sends to such a session the same way.
+  // A phone on the older companion API sends to such a session the same way;
+  // to a PTY session it types its own keys, so only the queue's decision is
+  // taken here.
   companion.sendOverProtocol = (sessionId, text) async {
-    if (!speaksAcp(sessionId)) return false;
+    if (!speaksAcp(sessionId)) {
+      return sessionQueue.queueIfBusy(
+            sessionId,
+            text,
+            origin: QueuedMessageOrigin.companion,
+          ) !=
+          null;
+    }
     try {
       await sessionInput.handle(
         SessionSend(sessionId: sessionId, text: text),
         null,
+        origin: QueuedMessageOrigin.companion,
       );
     } on DataRefused catch (refusal) {
       throw StateError(refusal.message);
@@ -1181,6 +1213,7 @@ Future<int> runServe(
         prompts: prompts,
         registry: registry,
         waits: sessionWaits,
+        queue: sessionQueue,
         typist: typist,
         answerOf: answerOf,
         resumeWith: (sessionId, prompt) async {
@@ -1416,6 +1449,7 @@ Future<int> runServe(
   await ssh.close();
   storeDesk.close();
   await attention.close();
+  await sessionQueue.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await statusFollow?.cancel();

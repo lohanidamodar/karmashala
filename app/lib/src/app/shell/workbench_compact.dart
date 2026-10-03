@@ -13,6 +13,10 @@ class CompactWorkbenchScope extends InheritedWidget {
   bool updateShouldNotify(CompactWorkbenchScope oldWidget) => false;
 }
 
+/// The most a waiting resume takes of the phone's bar row: its countdown and
+/// cancel, leaving the delivery line its words.
+const double _compactResumeChipWidth = 180;
+
 /// **Chat / Terminal** in the phone's app bar: the bar's [_ViewToggle], moved
 /// up for the focused group, which is the only one a phone shows.
 class WorkbenchFaceToggle extends ConsumerWidget {
@@ -101,7 +105,14 @@ class _CompactSessionBar extends StatelessWidget {
                         ),
                       ),
                       // The mode chip is in the sheet: at phone width it
-                      // squeezed the delivery line to a word.
+                      // squeezed the delivery line to a word. A waiting
+                      // resume is not: its countdown and cancel stay in view.
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: _compactResumeChipWidth,
+                        ),
+                        child: ScheduledResumeChip(sessionId: sessionId),
+                      ),
                       const SizedBox(width: Insets.xs),
                       _SessionSheetButton(sessionId: sessionId),
                     ],
@@ -156,7 +167,7 @@ class _SessionSheetButton extends StatelessWidget {
 }
 
 /// What the wide status line holds beyond the phone's row: the model, the
-/// stats, the scheduled resume, every delivery step, and ⋯'s verbs.
+/// stats, every delivery step, and ⋯'s verbs.
 class _SessionSheet extends StatelessWidget {
   const _SessionSheet({required this.sessionId});
 
@@ -190,7 +201,6 @@ class _SessionSheet extends StatelessWidget {
                 SessionModePicker(sessionId: sessionId, leadingGap: false),
                 OperatorChip(sessionId: sessionId),
                 SessionStatsButton(sessionId: sessionId),
-                ScheduledResumeChip(sessionId: sessionId),
               ],
             ),
           ),

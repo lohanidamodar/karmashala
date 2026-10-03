@@ -975,8 +975,18 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'When an agent hits its usage limit',
     anchor: SettingsAnchor.scheduledResumes,
-    description: 'Ask, always schedule a resume, or do nothing.',
-    keywords: ['usage limit', 'rate limit', 'codex', 'claude'],
+    description:
+        'Resume automatically at the reset (the default), ask first, or do '
+        'nothing — where automatic resume is turned off.',
+    keywords: [
+      'usage limit',
+      'rate limit',
+      'automatic resume',
+      'auto resume',
+      'turn off',
+      'codex',
+      'claude',
+    ],
   ),
   SettingsEntry(
     'Default resume message',

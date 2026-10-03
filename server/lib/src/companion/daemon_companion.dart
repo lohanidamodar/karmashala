@@ -170,8 +170,8 @@ class DaemonCompanion implements CompanionHandler {
 
   /// Sends a phone's message to a session whose agent the server speaks to
   /// over a protocol — resuming it when nothing runs it — set by `serve`:
-  /// true once sent, false for a session typed into instead. Throws
-  /// [StateError] in words when it is refused.
+  /// true once sent or queued behind a running turn, false for a session
+  /// typed into instead. Throws [StateError] in words when it is refused.
   Future<bool> Function(String sessionId, String text)? sendOverProtocol;
 
   /// Every agent record on this machine, `agentId/conversationId` → path

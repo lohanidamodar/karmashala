@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
-    show formatResetClock;
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
@@ -47,7 +45,7 @@ void main() {
   );
 
   group('the session bar chip', () {
-    testWidgets('takes no room until a resume is armed, then says when', (
+    testWidgets('takes no room until a resume is armed, then counts down', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -55,29 +53,69 @@ void main() {
       );
       expect(tester.getSize(find.byType(ScheduledResumeChip)).width, 0);
 
-      final resume = arm();
+      arm();
       await tester.pump();
-      expect(
-        find.text(
-          'resumes ${formatResetClock(resume.fireAt, h.now.toLocal())}',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Resumes in 2h 5m'), findsOneWidget);
       expect(find.byTooltip(RegExp('sends "continue"')), findsOneWidget);
+      expect(find.byTooltip('Cancel scheduled resume'), findsOneWidget);
     });
 
-    testWidgets('its menu cancels, and the chip goes', (tester) async {
+    testWidgets('the countdown follows the clock: each minute, then seconds '
+        'under one', (tester) async {
+      h.controller.schedule(
+        ResumeRequest(
+          sessionId: 's1',
+          fireAt: h.now.add(const Duration(hours: 1, minutes: 12)),
+        ),
+      );
+      await tester.pumpWidget(
+        host(const Row(children: [ScheduledResumeChip(sessionId: 's1')])),
+      );
+      expect(find.text('Resumes in 1h 12m'), findsOneWidget);
+
+      Future<void> pass(Duration by) async {
+        h.clock.advance(by);
+        await tester.pump(by);
+      }
+
+      await pass(const Duration(seconds: 59));
+      expect(find.text('Resumes in 1h 12m'), findsOneWidget);
+      await pass(const Duration(seconds: 1));
+      expect(find.text('Resumes in 1h 11m'), findsOneWidget);
+      await pass(const Duration(hours: 1, minutes: 10, seconds: 18));
+      expect(find.text('Resumes in 42s'), findsOneWidget);
+      await pass(const Duration(seconds: 1));
+      expect(find.text('Resumes in 41s'), findsOneWidget);
+      await pass(const Duration(seconds: 41));
+      expect(find.text('Resuming…'), findsOneWidget);
+    });
+
+    testWidgets('one click on its × cancels, and the chip goes', (
+      tester,
+    ) async {
       arm();
       await tester.pumpWidget(
         host(const Row(children: [ScheduledResumeChip(sessionId: 's1')])),
       );
-      await tester.tap(find.textContaining('resumes'));
+      await tester.tap(find.byKey(const ValueKey('scheduled-resume-cancel')));
+      await tester.pump();
+
+      expect(h.live('s1'), isNull);
+      expect(find.textContaining('Resumes'), findsNothing);
+    });
+
+    testWidgets('its menu cancels too, and the chip goes', (tester) async {
+      arm();
+      await tester.pumpWidget(
+        host(const Row(children: [ScheduledResumeChip(sessionId: 's1')])),
+      );
+      await tester.tap(find.textContaining('Resumes'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel scheduled resume'));
       await tester.pumpAndSettle();
 
       expect(h.live('s1'), isNull);
-      expect(find.textContaining('resumes'), findsNothing);
+      expect(find.textContaining('Resumes'), findsNothing);
     });
 
     testWidgets('and opens the dialog to change it', (tester) async {
@@ -85,7 +123,7 @@ void main() {
       await tester.pumpWidget(
         host(const Row(children: [ScheduledResumeChip(sessionId: 's1')])),
       );
-      await tester.tap(find.textContaining('resumes'));
+      await tester.tap(find.textContaining('Resumes'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Change scheduled resume…'));
       await tester.pumpAndSettle();
@@ -172,6 +210,7 @@ void main() {
       await tester.pumpWidget(host(const ScheduledResumesSection()));
       expect(find.text('No resume is waiting.'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Resume now'));
       await tester.tap(find.text('Resume now'));
       await tester.pump();
       final again = h.live('s1')!;
@@ -185,14 +224,16 @@ void main() {
       await tester.pumpWidget(host(const ScheduledResumesSection()));
       expect(find.text('No resume is waiting.'), findsOneWidget);
 
-      await tester.tap(find.text('Ask'));
+      expect(find.textContaining('to turn automatic resume off'), findsOne);
+      await tester.tap(find.text('Resume automatically at the reset'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Always schedule a resume').last);
+      await tester.tap(find.text('Do nothing').last);
       await tester.pumpAndSettle();
       expect(
         h.container.read(settingsControllerProvider).usageLimitBehavior,
-        UsageLimitBehavior.schedule,
+        UsageLimitBehavior.nothing,
       );
+      expect(find.textContaining('Automatic resume is off'), findsOne);
 
       await tester.enterText(find.byType(TextField), 'carry on');
       expect(

@@ -627,7 +627,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'session_send': McpToolListing(
     McpToolCategory.sessions,
-    'Send a message to a session, as typing into its message box would.',
+    'Send a message to a session; queued at the server while it works.',
   ),
   'session_draft': McpToolListing(
     McpToolCategory.sessions,

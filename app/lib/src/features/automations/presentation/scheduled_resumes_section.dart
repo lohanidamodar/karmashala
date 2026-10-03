@@ -40,12 +40,16 @@ class ScheduledResumesSection extends ConsumerWidget {
           SettingsRow(
             label: 'When an agent hits its usage limit',
             help: switch (settings.usageLimitBehavior) {
-              UsageLimitBehavior.ask =>
-                'The session\'s bar says so and offers to resume at the reset.',
               UsageLimitBehavior.schedule =>
-                'A resume is armed at the reset without asking, where the '
-                    'session\'s mode does not stop to ask.',
-              UsageLimitBehavior.nothing => 'Nothing is said or scheduled.',
+                'A resume is armed at the reset, with a countdown and Cancel '
+                    'in the session\'s bar, where the session\'s mode does '
+                    'not stop to ask. Choose Ask first or Do nothing to turn '
+                    'automatic resume off.',
+              UsageLimitBehavior.ask =>
+                'Automatic resume is off: the session\'s bar says so and '
+                    'offers to resume at the reset.',
+              UsageLimitBehavior.nothing =>
+                'Automatic resume is off: nothing is said or scheduled.',
             },
             controlMaxWidth: 320,
             control: DropdownButtonFormField<UsageLimitBehavior>(

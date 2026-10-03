@@ -1,0 +1,385 @@
+import 'dart:async';
+
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionQueueDao;
+
+import '../domain/uuid.dart';
+import '../status/daemon_agent_status.dart';
+
+/// What [SessionQueue.admit] decided for one message.
+sealed class QueueAdmission {
+  const QueueAdmission();
+}
+
+/// Deliver it now. The session is held busy until the caller reports the
+/// delivery with [SessionQueue.afterImmediate].
+final class AdmitNow extends QueueAdmission {
+  const AdmitNow();
+}
+
+/// It waits at the server as [message], [position] among the session's
+/// waiting messages (from 1).
+final class AdmitQueued extends QueueAdmission {
+  const AdmitQueued(this.message, this.position);
+
+  final QueuedMessage message;
+  final int position;
+}
+
+/// **Every message sent to a session goes through here**: a client's
+/// `sessions.send`, an agent's `session_send`, a phone on the older API.
+/// While the session's turn runs — or earlier messages still wait — the
+/// message is kept in `session_queued_messages`; each time a turn ends, the
+/// head is delivered, one per turn.
+///
+/// A stopped ACP session is resumed to take its head ([resumesOnSend]); a
+/// stopped PTY session holds its queue until it runs and goes idle again.
+class SessionQueue {
+  SessionQueue({
+    required this.dao,
+    required this.status,
+    this.resumesOnSend,
+    this.announce,
+    this.log,
+    this.turnStartGrace = const Duration(seconds: 10),
+    DateTime Function()? now,
+    String Function()? newId,
+  }) : _now = now ?? (() => DateTime.now().toUtc()),
+       _newId = newId ?? newUuid;
+
+  final SessionQueueDao dao;
+  final DaemonAgentStatus status;
+
+  /// Whether row [String] speaks ACP, so a send resumes it when nothing runs
+  /// it.
+  final bool Function(String sessionId)? resumesOnSend;
+
+  /// Told the session's open messages each time they move.
+  final void Function(String sessionId, List<QueuedMessage> open)? announce;
+  final void Function(String message)? log;
+
+  /// How long a PTY session that was typed into counts as busy while its
+  /// screen has not yet shown the turn start: the status is read every tick,
+  /// so the next message would otherwise be typed into the same turn.
+  final Duration turnStartGrace;
+
+  /// Delivers [text] as an immediate send would — set by `SessionInput`.
+  /// Throws [DataRefused] when it cannot.
+  Future<void> Function(String sessionId, String text)? deliver;
+
+  final DateTime Function() _now;
+  final String Function() _newId;
+
+  /// Sessions with a delivery in progress, immediate or drained.
+  final _inFlight = <String>{};
+
+  /// Sessions whose agent was seen working during the delivery in flight.
+  final _sawWorking = <String>{};
+
+  /// PTY sessions typed into and not yet seen working.
+  final _awaitingTurn = <String, Timer>{};
+
+  /// Sessions known to have a row still queued, so a status tick costs no
+  /// query for the rest.
+  final _withQueued = <String>{};
+  final _waiters = <String, List<Completer<QueuedMessage>>>{};
+  StreamSubscription<HostedAgentStatus>? _statuses;
+  var _closed = false;
+
+  static const interruptedError =
+      'The server stopped while this message was being delivered, so it was '
+      'not sent again: the agent may already have it.';
+
+  /// Fails what a stopped server left `delivering`, and starts following
+  /// every status the server keeps.
+  void start() {
+    for (final sessionId in dao.failInterrupted(
+      now: _now(),
+      error: interruptedError,
+    )) {
+      log?.call('queue $sessionId: a delivery a stop interrupted is failed');
+      _announce(sessionId);
+    }
+    _withQueued.addAll(dao.sessionsWithQueued());
+    _statuses ??= status.changes.listen(_onStatus);
+  }
+
+  Future<void> close() async {
+    _closed = true;
+    await _statuses?.cancel();
+    for (final timer in _awaitingTurn.values) {
+      timer.cancel();
+    }
+    _awaitingTurn.clear();
+  }
+
+  /// Whether [sessionId]'s agent is mid-turn, or a message is on its way.
+  bool busy(String sessionId) {
+    if (_inFlight.contains(sessionId)) return true;
+    final runtime = status.acpRuntimeOf(sessionId);
+    if (runtime != null) return runtime.inTurn;
+    if (_awaitingTurn.containsKey(sessionId)) return true;
+    return _working(status.statusOf(sessionId)?.report.status);
+  }
+
+  /// Queues [text] when [sessionId] is busy or has messages waiting;
+  /// otherwise claims the session for an immediate delivery. A [requestId]
+  /// already queued answers its row again.
+  QueueAdmission admit(
+    String sessionId,
+    String text, {
+    required QueuedMessageOrigin origin,
+    String? originId,
+    String? requestId,
+  }) {
+    final queued = queueIfBusy(
+      sessionId,
+      text,
+      origin: origin,
+      originId: originId,
+      requestId: requestId,
+    );
+    if (queued != null) return queued;
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    return const AdmitNow();
+  }
+
+  /// [admit] for a caller that delivers by its own means: null means "send
+  /// it now", and nothing is claimed.
+  AdmitQueued? queueIfBusy(
+    String sessionId,
+    String text, {
+    required QueuedMessageOrigin origin,
+    String? originId,
+    String? requestId,
+  }) {
+    if (requestId != null && requestId.isNotEmpty) {
+      final existing = dao.byRequest(sessionId, requestId);
+      if (existing != null) {
+        return AdmitQueued(existing, dao.positionOf(sessionId, existing.seq));
+      }
+    }
+    if (!busy(sessionId) && !dao.hasWaiting(sessionId)) return null;
+    final message = dao.enqueue(
+      id: _newId(),
+      sessionId: sessionId,
+      text: text,
+      origin: origin,
+      originId: originId,
+      requestId: requestId,
+      now: _now(),
+    );
+    _withQueued.add(sessionId);
+    log?.call('queue $sessionId: ${message.id} queued behind the running turn');
+    _announce(sessionId);
+    // Nothing may be running to end a turn: a stopped ACP session is resumed.
+    _kick(sessionId);
+    return AdmitQueued(message, dao.positionOf(sessionId, message.seq));
+  }
+
+  /// Reports the immediate delivery [admit] allowed.
+  void afterImmediate(String sessionId, {required bool delivered}) {
+    _inFlight.remove(sessionId);
+    if (delivered) _awaitTurnStart(sessionId);
+    _kick(sessionId);
+  }
+
+  /// The messages [sessionId] holds, queued, delivering or failed, in order.
+  List<QueuedMessage> list(String sessionId) => dao.open(sessionId);
+
+  /// Replaces queued message [id]'s text; refused once it is on its way.
+  QueuedMessage edit(String sessionId, String id, String text) {
+    if (text.trim().isEmpty) {
+      throw const DataRefused.invalid('there is no message to send');
+    }
+    final message = _own(sessionId, id);
+    if (!dao.editText(id, text, now: _now())) {
+      throw DataRefused(
+        DataRefusalCode.conflict,
+        'this message is already ${_words(message.state)}, so it can no '
+        'longer be edited',
+      );
+    }
+    _announce(sessionId);
+    return dao.getById(id)!;
+  }
+
+  /// Cancels queued message [id], or dismisses a failed one.
+  QueuedMessage cancel(String sessionId, String id) {
+    final message = _own(sessionId, id);
+    final from = message.state;
+    final movable =
+        from == QueuedMessageState.queued || from == QueuedMessageState.failed;
+    if (!movable ||
+        !dao.transition(
+          id,
+          from: from,
+          to: QueuedMessageState.cancelled,
+          now: _now(),
+        )) {
+      throw DataRefused(
+        DataRefusalCode.conflict,
+        'this message is already ${_words(message.state)}, so it can no '
+        'longer be cancelled',
+      );
+    }
+    final cancelled = dao.getById(id)!;
+    _settle(cancelled);
+    _announce(sessionId);
+    _kick(sessionId);
+    return cancelled;
+  }
+
+  /// Completes when message [id] is delivered, failed or cancelled.
+  Future<QueuedMessage> settled(String id) {
+    final now = dao.getById(id);
+    if (now != null &&
+        now.state != QueuedMessageState.queued &&
+        now.state != QueuedMessageState.delivering) {
+      return Future.value(now);
+    }
+    final waiter = Completer<QueuedMessage>();
+    (_waiters[id] ??= []).add(waiter);
+    return waiter.future;
+  }
+
+  QueuedMessage _own(String sessionId, String id) {
+    final message = dao.getById(id);
+    if (message == null || message.sessionId != sessionId) {
+      throw const DataRefused.notFound('this session holds no such message');
+    }
+    return message;
+  }
+
+  static String _words(QueuedMessageState state) => switch (state) {
+    QueuedMessageState.queued => 'queued',
+    QueuedMessageState.delivering => 'being delivered',
+    QueuedMessageState.delivered => 'delivered',
+    QueuedMessageState.cancelled => 'cancelled',
+    QueuedMessageState.failed => 'failed',
+  };
+
+  static bool _working(AgentActivityStatus? status) =>
+      status == AgentActivityStatus.working ||
+      status == AgentActivityStatus.awaitingApproval;
+
+  void _onStatus(HostedAgentStatus change) {
+    final sessionId = change.sessionId;
+    if (_working(change.report.status)) {
+      if (_inFlight.contains(sessionId)) _sawWorking.add(sessionId);
+      _awaitingTurn.remove(sessionId)?.cancel();
+      return;
+    }
+    if (_withQueued.contains(sessionId)) _kick(sessionId);
+  }
+
+  void _awaitTurnStart(String sessionId) {
+    if (_sawWorking.remove(sessionId)) return;
+    if (status.acpRuntimeOf(sessionId) != null) return;
+    _awaitingTurn.remove(sessionId)?.cancel();
+    _awaitingTurn[sessionId] = Timer(turnStartGrace, () {
+      _awaitingTurn.remove(sessionId);
+      _kick(sessionId);
+    });
+  }
+
+  /// Whether [sessionId] can take its head now.
+  bool _ready(String sessionId) {
+    if (_inFlight.contains(sessionId)) return false;
+    final runtime = status.acpRuntimeOf(sessionId);
+    if (runtime != null) return !runtime.inTurn;
+    if (resumesOnSend?.call(sessionId) ?? false) return true;
+    if (!status.holds(sessionId)) return false;
+    if (_awaitingTurn.containsKey(sessionId)) return false;
+    final report = status.statusOf(sessionId)?.report;
+    if (report == null) return true;
+    return !_working(report.status) &&
+        !report.hasOpenPrompt &&
+        !report.hasOpenQuestion;
+  }
+
+  // Deferred: a turn's end is published from inside the runtime that ended
+  // it, which must finish settling before the next turn opens.
+  void _kick(String sessionId) {
+    if (_closed) return;
+    scheduleMicrotask(() => unawaited(_drain(sessionId)));
+  }
+
+  Future<void> _drain(String sessionId) async {
+    final deliver = this.deliver;
+    if (_closed || deliver == null || !_ready(sessionId)) return;
+    final head = dao.head(sessionId);
+    if (head == null) {
+      _withQueued.remove(sessionId);
+      return;
+    }
+    if (!dao.transition(
+      head.id,
+      from: QueuedMessageState.queued,
+      to: QueuedMessageState.delivering,
+      now: _now(),
+    )) {
+      return;
+    }
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    _announce(sessionId);
+    var delivered = false;
+    try {
+      await deliver(sessionId, head.text);
+      delivered = true;
+      _finish(head, QueuedMessageState.delivered);
+      log?.call('queue $sessionId: ${head.id} delivered');
+    } on DataRefused catch (refusal) {
+      if (refusal.code == DataRefusalCode.notFound ||
+          refusal.code == DataRefusalCode.conflict) {
+        // Nothing was typed: it waits for the next turn's end.
+        dao.transition(
+          head.id,
+          from: QueuedMessageState.delivering,
+          to: QueuedMessageState.queued,
+          now: _now(),
+        );
+        log?.call('queue $sessionId: ${head.id} held: ${refusal.message}');
+      } else {
+        _finish(head, QueuedMessageState.failed, error: refusal.message);
+      }
+    } on Object catch (error) {
+      _finish(head, QueuedMessageState.failed, error: '$error');
+    } finally {
+      _inFlight.remove(sessionId);
+      if (delivered) _awaitTurnStart(sessionId);
+      if (dao.head(sessionId) == null) _withQueued.remove(sessionId);
+      _announce(sessionId);
+    }
+    if (delivered) _kick(sessionId);
+  }
+
+  void _finish(QueuedMessage head, QueuedMessageState to, {String? error}) {
+    dao.transition(
+      head.id,
+      from: QueuedMessageState.delivering,
+      to: to,
+      now: _now(),
+      error: error,
+    );
+    if (to == QueuedMessageState.failed) {
+      log?.call('queue ${head.sessionId}: ${head.id} failed: $error');
+    }
+    final row = dao.getById(head.id);
+    if (row != null) _settle(row);
+  }
+
+  void _settle(QueuedMessage message) {
+    for (final waiter in _waiters.remove(message.id) ?? const []) {
+      if (!waiter.isCompleted) waiter.complete(message);
+    }
+  }
+
+  void _announce(String sessionId) =>
+      announce?.call(sessionId, dao.open(sessionId));
+}

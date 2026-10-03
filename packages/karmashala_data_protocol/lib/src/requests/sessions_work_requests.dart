@@ -78,6 +78,16 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     args.string('sessionId'),
     requestId: args.optionalString('requestId'),
   ),
+  SessionQueueList.name => SessionQueueList(args.string('sessionId')),
+  SessionQueueEdit.name => SessionQueueEdit(
+    sessionId: args.string('sessionId'),
+    id: args.string('id'),
+    text: args.string('text'),
+  ),
+  SessionQueueCancel.name => SessionQueueCancel(
+    sessionId: args.string('sessionId'),
+    id: args.string('id'),
+  ),
   SessionSetMode.name => SessionSetMode(
     sessionId: args.string('sessionId'),
     modeId: args.string('modeId'),
@@ -451,8 +461,111 @@ final class SessionForkFromCheckpoint
 sealed class SessionInputRequest<R> extends DataRequest<R> {
   const SessionInputRequest();
 
+  String get sessionId;
+
   /// Minted by the client once per act and kept for its retry.
   String? get requestId;
+}
+
+// A message sent while a turn runs is queued at the server and delivered one
+// per turn (`sessions.queue` in `welcome.features`). Only a `queued` message
+// may be edited or cancelled; a `failed` one may be cancelled to dismiss it.
+// Refusals: `notFound` for a message the session does not hold, `conflict`
+// for one already on its way or delivered.
+
+/// The messages session [sessionId] holds — queued, delivering or failed —
+/// in the order they go.
+final class SessionQueueList extends SessionInputRequest<List<QueuedMessage>> {
+  const SessionQueueList(this.sessionId);
+
+  static const String name = 'sessions.queue.list';
+
+  @override
+  final String sessionId;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(List<QueuedMessage> result) => [
+    for (final message in result) message.toJson(),
+  ];
+
+  @override
+  List<QueuedMessage> resultFromJson(Object? json) => _decode(kind, () {
+    return [
+      for (final row in _objects(json, kind)) QueuedMessage.fromJson(row),
+    ];
+  });
+}
+
+/// Replaces queued message [id]'s [text]; answers the message as it now is.
+final class SessionQueueEdit extends SessionInputRequest<QueuedMessage> {
+  const SessionQueueEdit({
+    required this.sessionId,
+    required this.id,
+    required this.text,
+  });
+
+  static const String name = 'sessions.queue.edit';
+
+  @override
+  final String sessionId;
+  final String id;
+  final String text;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'id': id,
+    'text': text,
+  };
+
+  @override
+  Object? resultToJson(QueuedMessage result) => result.toJson();
+
+  @override
+  QueuedMessage resultFromJson(Object? json) =>
+      _decode(kind, () => QueuedMessage.fromJson(_object(json, kind)));
+}
+
+/// Cancels queued message [id], or dismisses a failed one; answers it.
+final class SessionQueueCancel extends SessionInputRequest<QueuedMessage> {
+  const SessionQueueCancel({required this.sessionId, required this.id});
+
+  static const String name = 'sessions.queue.cancel';
+
+  @override
+  final String sessionId;
+  final String id;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId, 'id': id};
+
+  @override
+  Object? resultToJson(QueuedMessage result) => result.toJson();
+
+  @override
+  QueuedMessage resultFromJson(Object? json) =>
+      _decode(kind, () => QueuedMessage.fromJson(_object(json, kind)));
 }
 
 /// Types [text] into session [sessionId]'s composer and presses Return until
@@ -466,6 +579,7 @@ final class SessionSend extends SessionInputRequest<SessionSent> {
 
   static const String name = 'sessions.send';
 
+  @override
   final String sessionId;
   final String text;
 
@@ -496,6 +610,7 @@ final class SessionInterrupt extends SessionInputRequest<DataAck> {
 
   static const String name = 'sessions.interrupt';
 
+  @override
   final String sessionId;
 
   @override
@@ -519,19 +634,25 @@ final class SessionInterrupt extends SessionInputRequest<DataAck> {
 
 /// What `sessions.send` answers. [via] is [readBack] when the Return was read
 /// back off the server's screen, [unverified] when the agent's composer could
-/// not be read and Return was pressed once.
+/// not be read and Return was pressed once, [queuedVia] when the session's
+/// turn was running and the message waits at the server.
 ///
 /// [resumed] says the server resumed the session to take the message — an
 /// agent it speaks to over a protocol, sent to while nothing ran it — and
 /// [notice] is what a person should know of that resume (a fresh
 /// conversation in the same session, a directory that had gone). Both are
 /// left out of the wire when unset; an older server never sends them.
+///
+/// A queued message is [sent] — the server took it — with [queuedId] its row
+/// and [position] its place among the session's waiting messages, from 1.
 final class SessionSent {
   const SessionSent({
     required this.sent,
     required this.via,
     this.resumed = false,
     this.notice,
+    this.queuedId,
+    this.position,
   });
 
   factory SessionSent.fromJson(Map<String, Object?> json) => SessionSent(
@@ -539,20 +660,29 @@ final class SessionSent {
     via: json['via'] is String ? json['via']! as String : unverified,
     resumed: json['resumed'] == true,
     notice: json['notice'] is String ? json['notice']! as String : null,
+    queuedId: json['queuedId'] is String ? json['queuedId']! as String : null,
+    position: (json['position'] as num?)?.toInt(),
   );
 
   static const String readBack = 'readBack';
   static const String unverified = 'unverified';
+  static const String queuedVia = 'queued';
 
   final bool sent;
   final String via;
   final bool resumed;
   final String? notice;
+  final String? queuedId;
+  final int? position;
+
+  bool get queued => queuedId != null;
 
   Map<String, Object?> toJson() => {
     'sent': sent,
     'via': via,
     if (resumed) 'resumed': true,
     'notice': ?notice,
+    'queuedId': ?queuedId,
+    'position': ?position,
   };
 }

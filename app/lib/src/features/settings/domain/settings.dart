@@ -96,7 +96,7 @@ class Settings {
     this.editorWordWrap = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
-    this.usageLimitBehavior = UsageLimitBehavior.ask,
+    this.usageLimitBehavior = UsageLimitBehavior.schedule,
     this.resumeMessage = kDefaultResumeMessage,
     this.resumeMessages = const {},
     this.continueInterruptedTurns = true,
@@ -578,7 +578,7 @@ class Settings {
     'editorWordWrap': editorWordWrap,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
-    'usageLimitBehavior': usageLimitBehavior.name,
+    kUsageLimitSettingKey: usageLimitBehavior.name,
     'resumeMessage': resumeMessage,
     if (resumeMessages.isNotEmpty) 'resumeMessages': resumeMessages,
     'continueInterruptedTurns': continueInterruptedTurns,
@@ -720,9 +720,7 @@ class Settings {
           ? json['editorWordWrap'] as bool
           : false,
       editorAutoSave: EditorAutoSave.fromName(json['editorAutoSave']),
-      usageLimitBehavior: UsageLimitBehavior.fromName(
-        json['usageLimitBehavior'],
-      ),
+      usageLimitBehavior: UsageLimitBehavior.fromSettingsJson(json),
       resumeMessage: json['resumeMessage'] is String
           ? json['resumeMessage'] as String
           : kDefaultResumeMessage,

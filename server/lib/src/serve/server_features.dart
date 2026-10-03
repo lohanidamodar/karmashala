@@ -57,6 +57,10 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.send` to an ACP session nothing runs resumes it here and sends
   // the message as its first turn, answering `resumed` and any notice.
   'sessions.send.resumes',
+  // `sessions.send` while a turn runs is queued here and delivered one per
+  // turn; `sessions.queue.*` lists, edits and cancels, told by
+  // `sessionQueueChanged`.
+  'sessions.queue',
   // `sessions.setMode` and `.setConfigOption`: an ACP session's mode and
   // options, as its agent announces them.
   'sessions.setMode',

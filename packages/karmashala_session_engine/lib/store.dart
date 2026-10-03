@@ -12,6 +12,7 @@ export 'src/store/session_dao.dart';
 export 'src/store/session_event_dao.dart';
 export 'src/store/session_message_dao.dart';
 export 'src/store/session_placement.dart';
+export 'src/store/session_queue_dao.dart';
 export 'src/store/session_recap_dao.dart';
 export 'src/store/session_relay_dao.dart';
 export 'src/store/session_repository_dao.dart';

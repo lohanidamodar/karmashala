@@ -34,6 +34,8 @@ import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
+import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
+    show kProtocolUsageLimitReason;
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -353,6 +355,48 @@ void main() {
       await runtime.stop();
     },
   );
+
+  test('a prompt refused on a usage limit fails with that reason, carrying '
+      'only the agent\'s words', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: [
+          const FakeTurn(
+            [FakeStep.message('Working…')],
+            error: FakeTurnError(
+              JsonRpcErrorCodes.internalError,
+              "You've hit your usage limit. Try again in 2h 5m.",
+              data: {'resetsAt': '2026-10-03T14:05:00Z'},
+            ),
+          ),
+          const FakeTurn([], error: FakeTurnError(-32603, 'tool crashed')),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+    );
+    await runtime.start();
+    await runtime.send('Go on');
+    await runtime.awaitTurn();
+    final limited = host.statuses.last;
+    expect(limited.status, AgentActivityStatus.failed);
+    expect(limited.source, AgentStatusSource.protocol);
+    expect(limited.failureReason, kProtocolUsageLimitReason);
+    expect(limited.evidence, [
+      "You've hit your usage limit. Try again in 2h 5m.",
+      '{"resetsAt":"2026-10-03T14:05:00Z"}',
+    ]);
+
+    // Any other error is the failure it always was.
+    await runtime.send('Again');
+    await runtime.awaitTurn();
+    expect(host.statuses.last.failureReason, 'error -32603');
+    await runtime.stop();
+  });
 
   test('a cancel ends the turn cancelled and idle, answering an open '
       'permission request cancelled', () async {
