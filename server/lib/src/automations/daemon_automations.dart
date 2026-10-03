@@ -9,6 +9,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/records.dart';
+import 'package:karmashala_automations/resumes.dart'
+    show ScheduledResume, ScheduledResumeState;
 import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -96,7 +98,10 @@ class DaemonAutomations implements ChecksWork {
     final now = clock ?? _utcNow;
     final ids = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
-    final resumes = ToldResumes(ScheduledResumeDao(database), _told);
+    final resumes = _resumeRows = ToldResumes(
+      ScheduledResumeDao(database),
+      _told,
+    );
     final projectChecks = ProjectCheckDao(database);
     final sessions = SessionDao(database);
     final rows = CheckoutRows(database);
@@ -329,6 +334,16 @@ class DaemonAutomations implements ChecksWork {
     if (_stopped) return;
     eventRules.observe(entry);
     usageLimits.observe(entry);
+  }
+
+  late final ToldResumes _resumeRows;
+
+  /// Cancels [sessionId]'s armed resume, saying [reason]: null when none was
+  /// waiting, or it is already firing.
+  ScheduledResume? cancelResumeOf(String sessionId, String reason) {
+    final live = _resumeRows.liveFor(sessionId);
+    if (live == null || live.state == ScheduledResumeState.firing) return null;
+    return scheduler.endResume(live, ScheduledResumeState.cancelled, reason);
   }
 
   /// Fires scheduled resumes at this server.

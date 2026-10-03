@@ -105,6 +105,7 @@ class SessionSubagents {
     this.sessionTokens,
     this.subagentTokens,
     this.speaksAcp,
+    this.switched,
     Future<DateTime?> Function(String path)? modifiedAt,
     Future<String?> Function(String path)? subagentAnswerOf,
   }) : _modifiedAt = modifiedAt ?? _fileModified,
@@ -127,6 +128,10 @@ class SessionSubagents {
   final Future<SubagentTokens> Function(String sessionId, String path)?
   subagentTokens;
   final bool Function(String sessionId)? speaksAcp;
+
+  /// Whether a session ran under more than one agent: its earlier agents'
+  /// delegates are listed from their own records whatever runs it now.
+  final bool Function(String sessionId)? switched;
   final Future<DateTime?> Function(String path) _modifiedAt;
 
   static Future<DateTime?> _fileModified(String path) async {
@@ -143,7 +148,8 @@ class SessionSubagents {
     final sessionId = request.sessionId;
     final acp = speaksAcp?.call(sessionId) ?? false;
     final entries = <SessionSubagent>[
-      if (!acp) ...await _recorded(sessionId),
+      if (!acp || (switched?.call(sessionId) ?? false))
+        ...await _recorded(sessionId),
       for (final child in childrenOf(sessionId)) await _child(child),
     ];
     entries.sort((a, b) {

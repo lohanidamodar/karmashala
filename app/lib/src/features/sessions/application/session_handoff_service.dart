@@ -18,6 +18,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 import '../../../core/data/data_providers.dart';
 import '../data/sessions_client.dart';
+import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
@@ -181,9 +182,7 @@ class SessionHandoffService {
   }) async {
     // Every pane, not just a live one: a pane opened behind the chat and never
     // shown has not attached yet, and was left behind as "Session ended".
-    final outgoing = _ref
-        .read(paneSessionsProvider)
-        .terminalPanesOf(sessionId);
+    final outgoing = _ref.read(paneSessionsProvider).terminalPanesOf(sessionId);
     _switching.add(sessionId);
     try {
       final started = await _server.switchAgent(
@@ -217,9 +216,7 @@ class SessionHandoffService {
         DateTime.now().difference(here) < const Duration(seconds: 10)) {
       return;
     }
-    final outgoing = _ref
-        .read(paneSessionsProvider)
-        .terminalPanesOf(sessionId);
+    final outgoing = _ref.read(paneSessionsProvider).terminalPanesOf(sessionId);
     if (outgoing.isEmpty) return;
     final SessionStarted started;
     try {
@@ -277,6 +274,11 @@ class SessionHandoffService {
           ? 'this agent'
           : registry.displayNameFor(agentId),
       externalSessionId: session.externalSessionId,
+      // Read off the chat when it is open: a switched thread tags its turns.
+      switched:
+          (_ref.read(sessionChatTranscriptProvider(sessionId)).value ??
+                  const [])
+              .any((message) => message.agentInstallationId != null),
     );
   }
 

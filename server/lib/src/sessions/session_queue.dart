@@ -106,6 +106,18 @@ class SessionQueue {
   /// Sessions with a delivery in progress, immediate or drained.
   final _inFlight = <String>{};
 
+  /// Sessions held busy by [hold]: their sends queue and nothing drains.
+  final _held = <String>{};
+
+  /// Holds [sessionId] busy while something else owns it — a switch of its
+  /// agent — so a send in the meantime queues rather than races the start.
+  void hold(String sessionId) => _held.add(sessionId);
+
+  /// Lets [sessionId] go again, delivering what queued meanwhile.
+  void release(String sessionId) {
+    if (_held.remove(sessionId)) _kick(sessionId);
+  }
+
   /// Sessions whose agent was seen working during the delivery in flight.
   final _sawWorking = <String>{};
 
@@ -162,7 +174,9 @@ class SessionQueue {
 
   /// Whether [sessionId]'s agent is mid-turn, or a message is on its way.
   bool busy(String sessionId) {
-    if (_inFlight.contains(sessionId)) return true;
+    if (_inFlight.contains(sessionId) || _held.contains(sessionId)) {
+      return true;
+    }
     if (status.acpRuntimeOf(sessionId) == null &&
         _awaitingTurn.containsKey(sessionId)) {
       return true;
@@ -335,7 +349,9 @@ class SessionQueue {
 
   /// Whether [sessionId] can take its head now.
   bool _ready(String sessionId) {
-    if (_inFlight.contains(sessionId)) return false;
+    if (_inFlight.contains(sessionId) || _held.contains(sessionId)) {
+      return false;
+    }
     final runtime = status.acpRuntimeOf(sessionId);
     if (runtime != null) return !runtime.inTurn;
     if (_awaitingTurn.containsKey(sessionId)) return false;
@@ -359,6 +375,7 @@ class SessionQueue {
   bool _stopped(String sessionId) =>
       resumeStopped != null &&
       !_inFlight.contains(sessionId) &&
+      !_held.contains(sessionId) &&
       !_resumedForHead.contains(sessionId) &&
       status.acpRuntimeOf(sessionId) == null &&
       !(resumesOnSend?.call(sessionId) ?? false) &&

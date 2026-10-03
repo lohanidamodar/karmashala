@@ -73,12 +73,15 @@ class _SwitchAgentControlState extends ConsumerState<SwitchAgentControl> {
         setState(() => _switching = true);
         final messenger = ScaffoldMessenger.maybeOf(context);
         try {
-          await ref
+          final started = await ref
               .read(sessionHandoffServiceProvider)
               .switchAgent(
                 sessionId: widget.sessionId,
                 targetInstallationId: target.installation.id,
               );
+          if (started.switchNotice case final notice?) {
+            messenger?.showSnackBar(SnackBar(content: Text(notice)));
+          }
         } on Object catch (error) {
           messenger?.showSnackBar(
             SnackBar(
