@@ -422,6 +422,8 @@ class SessionQueue implements ResumeQueue {
     if (_closed || deliver == null || _inFlight.contains(sessionId)) return;
     if (dao.head(sessionId) == null) {
       _withQueued.remove(sessionId);
+      // Nothing left to hold: a later message is not born paused.
+      _paused.remove(sessionId);
       return;
     }
     final hold = _holdOf(sessionId);
