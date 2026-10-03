@@ -1085,6 +1085,9 @@ Future<int> runServe(
           (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
               false);
     },
+    // A message is not typed over what a person is typing in the pane.
+    personTypedAt: (sessionId) =>
+        prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
     // A limit holds the queue until its resume, which sends the head.
     limitHold: (sessionId) {
       final session = sessionRows.getById(sessionId);

@@ -453,6 +453,56 @@ void main() {
     });
   });
 
+  group('a person typing in the pane', () {
+    late DateTime clock;
+    DateTime? typedAt;
+
+    setUp(() async {
+      await queue.close();
+      clock = t0;
+      typedAt = null;
+      queue = SessionQueue(
+        dao: dao,
+        status: status,
+        personTypedAt: (_) => typedAt,
+        typingGrace: const Duration(milliseconds: 100),
+        announce: (_, open) => announced.add(open),
+        turnStartGrace: const Duration(seconds: 30),
+        now: () => clock,
+      )..deliver = (_, text) async => delivered.add(text);
+      queue.start();
+      await runAgent();
+      hook('UserPromptSubmit');
+      send('a');
+    });
+
+    test('holds a delivery until they have stopped typing', () async {
+      typedAt = clock;
+      hook('Stop');
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+
+      clock = clock.add(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await pumpEventQueue();
+      expect(delivered, ['a']);
+    });
+
+    test('never holds it past the limit, however often the pane '
+        'writes', () async {
+      typedAt = clock;
+      hook('Stop');
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+
+      clock = clock.add(SessionQueue.typingHoldLimit);
+      typedAt = clock;
+      queue.refreshAll();
+      await pumpEventQueue();
+      expect(delivered, ['a']);
+    });
+  });
+
   group('endedOnUsageLimit', () {
     AgentStatusReport report(
       AgentActivityStatus kind, {

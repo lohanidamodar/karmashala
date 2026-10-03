@@ -478,3 +478,79 @@ String queueHoldWords(QueueHold hold, DateTime now) {
     QueueHoldKind.stopped => "Waiting — this session isn't running",
   };
 }
+
+/// The session bar's word on what waits — `2 queued`, `Paused · 2` — seen
+/// from the terminal view too, where the strip is not. Nothing, and no width,
+/// while nothing waits.
+class QueuedCountChip extends ConsumerWidget {
+  const QueuedCountChip({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messages = ref.watch(sessionQueueProvider(sessionId));
+    final waiting = messages
+        .where((m) => m.state != QueuedMessageState.failed)
+        .length;
+    final failed = messages.length - waiting;
+    if (messages.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final hold = queueHoldOf(messages);
+    final now = ref.watch(clockProvider).nowUtc().toLocal();
+    final label = switch (hold?.kind) {
+      _ when waiting == 0 => '$failed not sent',
+      QueueHoldKind.paused => 'Paused · $waiting',
+      QueueHoldKind.stopped => 'Waiting · $waiting',
+      QueueHoldKind.limit || QueueHoldKind.scheduled => 'Held · $waiting',
+      null => '$waiting queued',
+    };
+    final tooltip = [
+      waiting == 1 ? '1 message waits' : '$waiting messages wait',
+      if (hold != null) queueHoldWords(hold, now),
+      if (failed > 0 && waiting > 0) '$failed not sent',
+    ].join(' · ');
+    final color = waiting == 0 ? scheme.error : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(right: Insets.xs),
+      child: Tooltip(
+        message: tooltip,
+        child: Semantics(
+          label: tooltip,
+          excludeSemantics: true,
+          child: Container(
+            key: const ValueKey('queued-count'),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: 3,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hold?.kind == QueueHoldKind.paused
+                      ? AppIcons.pause
+                      : AppIcons.stack,
+                  size: Chrome.iconSmall,
+                  color: color,
+                ),
+                const SizedBox(width: Insets.xs),
+                Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall?.copyWith(color: color),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

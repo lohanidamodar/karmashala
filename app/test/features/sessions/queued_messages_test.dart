@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/presentation/queued_messages_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -78,6 +79,7 @@ void main() {
     required Size size,
     bool queues = true,
     SessionActivity? activity,
+    bool withBar = false,
   }) async {
     ticking = activity != null;
     tester.view.physicalSize = size;
@@ -120,8 +122,18 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(body: SessionTranscriptView(sessionId: 'acp-1')),
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                // The session bar's chip, as the terminal view shows it.
+                if (withBar) const QueuedCountChip(sessionId: 'acp-1'),
+                const Expanded(
+                  child: SessionTranscriptView(sessionId: 'acp-1'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -316,6 +328,30 @@ void main() {
       expect(composer.controller?.text, 'run the tests');
       expect(server.sessionWork.queues['acp-1'], isEmpty);
       expect(find.text('Not sent'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, the session bar counts what waits and says what '
+        'holds it', (tester) async {
+      await pump(tester, size: size, withBar: true);
+      expect(find.byKey(const ValueKey('queued-count')), findsNothing);
+
+      await send(tester, 'first');
+      await send(tester, 'second');
+      expect(find.text('2 queued'), findsOneWidget);
+
+      server.sessionWork.holdQueue(
+        'acp-1',
+        const QueueHold(QueueHoldKind.paused),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Paused · 2'), findsOneWidget);
+      expect(
+        find.byTooltip(RegExp('^2 messages wait · Paused')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   }

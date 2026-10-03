@@ -57,6 +57,8 @@ class SessionQueue implements ResumeQueue {
     this.resumeStopped,
     this.takesOpeningMessage,
     this.limitHold,
+    this.personTypedAt,
+    this.typingGrace = const Duration(seconds: 5),
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
@@ -99,6 +101,13 @@ class SessionQueue implements ResumeQueue {
   /// resume, or null.
   final QueueHold? Function(String sessionId)? limitHold;
 
+  /// When a person last typed into row [String]'s terminal, or null: a
+  /// message typed then would land in their draft.
+  final DateTime? Function(String sessionId)? personTypedAt;
+
+  /// How long after a person's keystroke a PTY delivery waits.
+  final Duration typingGrace;
+
   /// Told the session's open messages each time they move.
   final void Function(String sessionId, List<QueuedMessage> open)? announce;
   final void Function(String message)? log;
@@ -137,6 +146,13 @@ class SessionQueue implements ResumeQueue {
 
   /// Sessions whose person stopped or ended them with messages waiting.
   final _paused = <String>{};
+
+  /// PTY sessions whose delivery waits on a person typing, since when.
+  final _typingHolds = <String, ({DateTime since, Timer timer})>{};
+
+  /// The longest typing holds a delivery: a pane's own replies to the
+  /// agent's terminal queries must not starve the queue.
+  static const typingHoldLimit = Duration(seconds: 30);
   final _subscriptions = <StreamSubscription<Object?>>[];
   var _closed = false;
 
@@ -172,6 +188,9 @@ class SessionQueue implements ResumeQueue {
     _closed = true;
     for (final subscription in _subscriptions) {
       await subscription.cancel();
+    }
+    for (final hold in _typingHolds.values) {
+      hold.timer.cancel();
     }
     for (final timer in _awaitingTurn.values) {
       timer.cancel();
@@ -367,6 +386,7 @@ class SessionQueue implements ResumeQueue {
     if (_awaitingTurn.containsKey(sessionId)) return false;
     if (resumesOnSend?.call(sessionId) ?? false) return true;
     if (!status.holds(sessionId)) return false;
+    if (_personTyping(sessionId)) return false;
     final report = status.statusOf(sessionId)?.report;
     if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
       return false;
@@ -436,6 +456,7 @@ class SessionQueue implements ResumeQueue {
     _inFlight.add(sessionId);
     _sawWorking.remove(sessionId);
     _resumedForHead.remove(sessionId);
+    _typingHolds.remove(sessionId)?.timer.cancel();
     _announce(sessionId);
     var delivered = false;
     String? why;
@@ -629,6 +650,27 @@ class SessionQueue implements ResumeQueue {
     for (final sessionId in _withQueued) {
       if (hostSessionIdOf(sessionId) == hostSessionId) _kick(sessionId);
     }
+  }
+
+  /// Whether a person typed into [sessionId]'s terminal within
+  /// [typingGrace]; the queue then looks again once they stop.
+  bool _personTyping(String sessionId) {
+    final typed = personTypedAt?.call(sessionId);
+    final now = _now();
+    final quietAt = typed?.add(typingGrace);
+    final held = _typingHolds[sessionId];
+    if (quietAt == null || !quietAt.isAfter(now)) {
+      _typingHolds.remove(sessionId)?.timer.cancel();
+      return false;
+    }
+    final since = held?.since ?? now;
+    if (now.difference(since) >= typingHoldLimit) return false;
+    held?.timer.cancel();
+    _typingHolds[sessionId] = (
+      since: since,
+      timer: Timer(quietAt.difference(now), () => _kick(sessionId)),
+    );
+    return true;
   }
 
   QueueHold? _holdOf(String sessionId) {
