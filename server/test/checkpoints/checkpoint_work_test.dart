@@ -62,6 +62,23 @@ void main() {
       expect(await w.ask(const CheckpointCapture('no-such-session')), isNull);
     }, skip: hasGit ? false : 'git is not on PATH');
 
+    test('two sessions in one checkout capturing at once both record, never '
+        'one locked out of the private index', () async {
+      w.addSession('s2', workingDirectory: w.hub);
+      for (var round = 0; round < 8; round++) {
+        writeReadme('hub $round\n');
+        for (var k = 0; k < 20; k++) {
+          File(p.join(w.hub, 'f$k.txt')).writeAsStringSync('$round $k\n');
+        }
+        final both = await Future.wait([
+          w.checkpoints.recorder.captureNow('s1'),
+          w.checkpoints.recorder.captureNow('s2'),
+        ]);
+        expect(both, everyElement(isNotNull), reason: 'round $round');
+      }
+      expect(w.log.where((line) => line.contains('could not')), isEmpty);
+    }, skip: hasGit ? false : 'git is not on PATH');
+
     test('without a recorder the request is refused, not left open', () async {
       w.data.checkpointWork = null;
       await expectLater(

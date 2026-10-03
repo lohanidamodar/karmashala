@@ -142,8 +142,27 @@ class CheckpointService {
     final git = _gitFor(repo);
     final key = '${repo.environmentId}\u0000${repo.path}';
     final dirs = _dirs[key] ??= await git.checkpointDirs(repo);
-    await git.ensureCheckpointDirs(repo, dirs);
-    return git.writeWorkingTree(repo, dirs);
+    return _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+  }
+
+  final Map<String, Future<void>> _indexUsers = {};
+
+  /// Runs [work] alone on [repo]'s private index and scratch patch. Sessions
+  /// share a checkout, and git refuses a second writer of one index outright.
+  Future<T> _exclusive<T>(EnvironmentPath repo, Future<T> Function() work) {
+    final key = '${repo.environmentId}\u0000${repo.path}';
+    final result = (_indexUsers[key] ?? Future<void>.value()).then(
+      (_) => work(),
+    );
+    final tail = result.then<void>((_) {}, onError: (Object _) {});
+    _indexUsers[key] = tail;
+    tail.whenComplete(() {
+      if (identical(_indexUsers[key], tail)) _indexUsers.remove(key);
+    });
+    return result;
   }
 
   /// Records [tree], a [snapshot] of [repo], as a checkpoint of [sessionId]:
@@ -336,9 +355,10 @@ class CheckpointService {
     final repo = checkpoint.repository;
     final git = _gitFor(repo);
     final dirs = await git.checkpointDirs(repo);
-    await git.ensureCheckpointDirs(repo, dirs);
-
-    final current = await git.writeWorkingTree(repo, dirs);
+    final current = await _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
     final latest = latestCheckpointIn(
       await records.forSession(checkpoint.sessionId),
       repository: checkpoint.repository,
@@ -392,7 +412,10 @@ class CheckpointService {
 
     // The patch describes checkpoint -> now, so applying it backwards turns now
     // into the checkpoint, without this code writing to the working tree itself.
-    await git.applyPatch(repo, dirs, wanted, reverse: true);
+    await _exclusive(
+      repo,
+      () => git.applyPatch(repo, dirs, wanted, reverse: true),
+    );
 
     final changed = await git.diffNameStatus(
       repo,
@@ -433,11 +456,10 @@ class CheckpointService {
     final git = _gitFor(repo);
     final patch = buildPatch(splitUnifiedDiff(await git.diff(repo)), selection);
     if (patch.trim().isEmpty) return;
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      cached: true,
+      () => git.applyPatch(repo, dirs, patch, cached: true),
     );
   }
 
@@ -452,12 +474,10 @@ class CheckpointService {
       selection,
     );
     if (patch.trim().isEmpty) return;
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      cached: true,
-      reverse: true,
+      () => git.applyPatch(repo, dirs, patch, cached: true, reverse: true),
     );
   }
 
@@ -479,11 +499,10 @@ class CheckpointService {
         label: 'before reverting hunks',
       );
     }
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      reverse: true,
+      () => git.applyPatch(repo, dirs, patch, reverse: true),
     );
   }
 
