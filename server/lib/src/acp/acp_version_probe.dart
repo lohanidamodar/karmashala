@@ -27,11 +27,14 @@ Future<T> talkToAcpAgent<T>(
   Future<AcpTransport>? spawning;
   AcpTransport? transport;
   AcpPeer? peer;
+  StreamSubscription<String>? stderr;
   try {
     return await Future(() async {
       spawning = spawn();
       final opened = await spawning!;
       transport = opened;
+      // Drained, or a chatty agent fills the pipe and blocks before it answers.
+      stderr = opened.errorLines.listen((_) {}, onError: (Object _) {});
       final talking = AcpPeer(opened.output, opened.input);
       peer = talking;
       final answer = await talking.call(AcpMethods.initialize, {
@@ -62,6 +65,7 @@ Future<T> talkToAcpAgent<T>(
       // once it is there, not left to run.
       unawaited(late.then((started) => started.kill(), onError: (Object _) {}));
     }
+    unawaited(stderr?.cancel());
   }
 }
 

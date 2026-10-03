@@ -49,6 +49,31 @@ void main() {
       },
     );
 
+    test('its stderr is drained while it talks, and let go after', () async {
+      final agent = FakeAcpAgent(
+        agentInfo: const AgentInfo(name: 'fake', version: '1.0.0'),
+      );
+      var listened = false;
+      var cancelled = false;
+      final errors = StreamController<String>(
+        onListen: () => listened = true,
+        onCancel: () => cancelled = true,
+      );
+      final version = await readAcpAgentVersion(
+        () async => AcpTransport.streams(
+          output: agent.toClient,
+          input: agent.fromClient,
+          exitCode: Completer<int>().future,
+          errorLines: errors.stream,
+          kill: agent.close,
+        ),
+      );
+      await pump();
+      expect(version, '1.0.0');
+      expect(listened, isTrue);
+      expect(cancelled, isTrue);
+    });
+
     test('an agent that never answers is given up on, and ended', () async {
       final output = StreamController<List<int>>();
       final input = StreamController<List<int>>();
