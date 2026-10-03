@@ -87,16 +87,19 @@ void main() {
     expect(find.textContaining('nothing in progress is lost'), findsOneWidget);
   });
 
-  testWidgets('promises to reopen, and explicitly not to resume the turn', (
+  testWidgets('promises to reopen, and says which cut-off turn continues', (
     tester,
   ) async {
     await show(tester, [interrupted()]);
     expect(find.text('Open these again next time'), findsOneWidget);
-    expect(find.textContaining('does not send anything'), findsOneWidget);
+    expect(find.textContaining('sends them nothing'), findsOneWidget);
     expect(
-      find.textContaining('does not resume the turn that stops here'),
+      find.textContaining(
+        'because the session host stops with Karmashala is continued',
+      ),
       findsOneWidget,
     );
+    expect(find.textContaining('does not resume the turn'), findsNothing);
   });
 
   testWidgets('Cancel holds the quit, and keeps the box\'s answer', (

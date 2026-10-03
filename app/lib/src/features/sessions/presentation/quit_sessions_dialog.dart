@@ -185,12 +185,14 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: const Text('Open these again next time'),
-              // The whole of the promise, and no more of it: Karmashala can
-              // reopen a conversation, not finish the turn it interrupted.
+              // A session ended here is not continued; one whose host stops
+              // with the app is, by the host's next start (its own setting).
               subtitle: Text(
                 'Next launch reopens the ones that still exist and are not '
-                'already open. It does not send anything, and it does not '
-                'resume the turn that stops here.',
+                'already open, and sends them nothing. A turn stopped only '
+                'because the session host stops with Karmashala is continued '
+                'when the host starts again, unless that is switched off in '
+                'Settings.',
                 style: muted,
               ),
             ),
