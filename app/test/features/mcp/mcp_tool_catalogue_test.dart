@@ -97,6 +97,8 @@ void main() {
     const movers = <String>{
       // Opens an agent tab, makes it the active tab, focuses its pane.
       'open_new_session',
+      // The same launch, then a wait for the child's answer.
+      'subagent_run',
       // Reattaches and focuses the pane and rewrites the selected session; an
       // imported session opens an external terminal window instead.
       'open_session',

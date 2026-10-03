@@ -71,4 +71,7 @@ const Set<String> kServerFeatures = <String>{
   'acpAgents.install',
   // `acpAuth.*`: an ACP agent's login methods, chosen and remembered here.
   'acpAuth',
+  // `sessions.subagents`: a session's subagents and child sessions, each
+  // with its state, timing, tokens and last answer.
+  'sessions.subagents',
 };

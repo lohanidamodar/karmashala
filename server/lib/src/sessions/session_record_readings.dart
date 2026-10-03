@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:path/path.dart' as p;
+
 import 'package:agent_cli/descriptors.dart'
     show
         AgentQuestionSet,
@@ -19,7 +21,12 @@ import 'package:agent_cli/descriptors.dart'
 import 'package:agent_cli/process.dart'
     show CommandRequest, CommandRunnerFactory;
 import 'package:agent_cli/read.dart'
-    show FileEditRecord, SqliteRowReader, noSqliteBinding;
+    show
+        FileEditRecord,
+        SqliteRowReader,
+        noSqliteBinding,
+        subagentsDirectoryFor,
+        transcriptFileFor;
 import 'package:agent_cli/usage.dart'
     show LifetimeStats, LifetimeStatsUnavailable, SessionStats;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
@@ -31,6 +38,7 @@ import 'package:karmashala_session_engine/store.dart'
 
 import 'acp_session_stats.dart';
 import 'session_records.dart';
+import 'session_subagents.dart' show SubagentTokens;
 
 /// **The readers of a session's raw record lines, run here for any client**
 /// (Stage 0 step 7): its agent's rewind points, the files it changed and the
@@ -204,6 +212,53 @@ class SessionRecordReadings {
     final gap = read == null ? LifetimeStatsUnavailable.sourceNotFound : null;
     _lifetimes[key] = (at: _now(), stats: read, gap: gap);
     return (read, gap);
+  }
+
+  /// Every token bucket session [sessionId]'s record counts, added up.
+  Future<SubagentTokens> tokensOf(String sessionId) async {
+    final total = (await _statsOf(
+      sessionId,
+      lifetime: false,
+    )).stats?.tokens.total;
+    return (
+      total: total,
+      gap: total == null ? SubagentTokensGap.notRecorded : null,
+    );
+  }
+
+  /// The tokens of the subagent of [sessionId] recorded at [path], counted
+  /// by its parent agent's own reader. A record over [maxBytes] is not read
+  /// on a request: one session's delegates came to 1,485 MiB.
+  Future<SubagentTokens> subagentTokensOf(
+    String sessionId,
+    String path, {
+    int maxBytes = 16 * 1024 * 1024,
+  }) async {
+    const SubagentTokens unread = (
+      total: null,
+      gap: SubagentTokensGap.notRecorded,
+    );
+    final found = await lookUp(sessionId);
+    final agentId = found.agentId;
+    final storePath = found.path;
+    if (agentId == null || storePath == null) return unread;
+    final record = transcriptFileFor(storePath, agentId) ?? storePath;
+    final file = p.normalize(path);
+    if (!p.isWithin(subagentsDirectoryFor(record), file)) return unread;
+    final stats = registry.adapterFor(agentId)?.stats;
+    if (stats == null) return unread;
+    try {
+      if (await File(file).length() > maxBytes) {
+        return (total: null, gap: SubagentTokensGap.tooLarge);
+      }
+      final counted = await _sessionReaders
+          .putIfAbsent(agentId, stats.sessionStatsReader)
+          .readSessionStats(file);
+      final total = counted?.tokens.total;
+      return total == null ? unread : (total: total, gap: null);
+    } on Object {
+      return unread;
+    }
   }
 
   Future<AgentRewindPoints?> rewindPoints(String sessionId) async {

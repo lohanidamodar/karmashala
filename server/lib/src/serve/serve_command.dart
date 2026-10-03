@@ -75,7 +75,9 @@ import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
+import '../sessions/session_subagents.dart';
 import '../sessions/session_transcripts.dart';
+import '../status/child_turn_wait.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
 import '../agents/server_agents.dart';
@@ -1169,6 +1171,42 @@ Future<int> runServe(
     registry: transcripts.registry,
     root: p.join(dataDirectory, 'media'),
   );
+  // A session's subagents and child sessions, from the same records and the
+  // status this server keeps.
+  final sessionSubagents = SessionSubagents(
+    messagesOf: sessionTranscripts.messagesOf,
+    childrenOf: sessionRows.childrenOf,
+    liveStateOf: (sessionId) => status.holds(sessionId)
+        ? liveSubagentState(status.statusOf(sessionId)?.report)
+        : null,
+    agentNameOf: (session) {
+      final agentId = checkoutRows
+          .installation(session.agentInstallationId)
+          ?.agentId;
+      return agentId == null ? null : liveAgents.nameOf(agentId);
+    },
+    sessionTokens: sessionRecordReadings.tokensOf,
+    subagentTokens: sessionRecordReadings.subagentTokensOf,
+    speaksAcp: speaksAcp,
+  );
+  data.sessionSubagents = sessionSubagents;
+  // What a session said last, read from its record: `subagent_run`'s answer
+  // and `session_wait`'s.
+  Future<({String text, DateTime? at})?> answerOf(
+    String sessionId, {
+    DateTime? since,
+  }) async {
+    try {
+      return lastAgentAnswer(
+        await sessionTranscripts.messagesOf(sessionId),
+        since: since,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  final childTurns = ChildTurnWait(waits: sessionWaits, answerOf: answerOf);
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1190,6 +1228,7 @@ Future<int> runServe(
         waits: sessionWaits,
         queue: sessionQueue,
         typist: typist,
+        answerOf: answerOf,
         resumeWith: (sessionId, prompt) async {
           final started = await launches.resume(sessionId, prompt: prompt);
           data.tellIntent(
@@ -1202,7 +1241,8 @@ Future<int> runServe(
         },
       ),
     )
-    // An agent's `open_new_session`, through the one launch path.
+    // An agent's `open_new_session` and `subagent_run`, through the one
+    // launch path.
     ..add(
       LaunchToolSet(
         tools,
@@ -1210,6 +1250,9 @@ Future<int> runServe(
         agents: liveAgents,
         reach: reach,
         folders: folders,
+        turns: childTurns,
+        tokensOf: (sessionId) async =>
+            (await sessionRecordReadings.tokensOf(sessionId)).total,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).

@@ -17,12 +17,12 @@ class _MovingClock implements Clock {
   DateTime nowUtc() => now;
 }
 
-
 void main() {
   group('which tools a retry must not repeat', () {
-    test('the three that start an agent, and no others', () {
+    test('the ones that start an agent, and no others', () {
       for (final tool in [
         'open_new_session',
+        'subagent_run',
         'session_handoff',
         'session_fork',
       ]) {

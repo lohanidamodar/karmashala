@@ -86,6 +86,7 @@ import 'package:store_console/store_console.dart' show StoreKind;
 import 'attention_values.dart';
 import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import 'session_work_values.dart';
+import 'subagent_values.dart';
 import 'transcript_values.dart';
 
 part 'requests/subscription_requests.dart';
@@ -114,6 +115,7 @@ part 'requests/attention_requests.dart';
 part 'requests/sessions_work_requests.dart';
 part 'requests/session_transcript_requests.dart';
 part 'requests/session_media_requests.dart';
+part 'requests/session_subagents_requests.dart';
 part 'requests/intents_requests.dart';
 part 'requests/quick_access_requests.dart';
 part 'requests/acp_agent_requests.dart';
@@ -313,6 +315,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _sessionWorkRequestFromJson(kind, args) ??
     _sessionTranscriptRequestFromJson(kind, args) ??
     _sessionMediaRequestFromJson(kind, args) ??
+    _sessionSubagentsRequestFromJson(kind, args) ??
     _intentsRequestFromJson(kind, args) ??
     _quickAccessRequestFromJson(kind, args) ??
     _acpAgentsRequestFromJson(kind, args) ??
