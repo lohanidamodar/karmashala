@@ -37,6 +37,7 @@ void main() {
         listOf([
           SubagentState.done,
           SubagentState.failed,
+          SubagentState.stopped,
           SubagentState.unknown,
         ]),
       ),

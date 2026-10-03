@@ -44,6 +44,18 @@ void main() {
         childSessionId: 'c1',
         link: 'spawn',
       ),
+      SessionSubagent(
+        kind: SubagentKind.childSession,
+        id: 'c2',
+        title: 'Carry the refactor',
+        state: SubagentState.stopped,
+        agent: 'Claude Code',
+        model: 'opus',
+        tokens: 900,
+        finalResult: 'Renamed half of them.',
+        childSessionId: 'c2',
+        link: 'handoff',
+      ),
     ],
   );
 
@@ -101,12 +113,107 @@ void main() {
     // Still running: its duration counts to now, and no tokens are guessed.
     expect(
       find.text(
-        'Codex · default model · Running · 3m 00s · tokens not recorded',
+        'Codex · model not recorded · Running · 3m 00s · tokens not recorded',
       ),
       findsOneWidget,
     );
     expect(find.text('child session'), findsOneWidget);
     expect(find.textContaining('are not listed'), findsOneWidget);
+    // Ended on request mid-turn: its earlier answer does not make it Done.
+    expect(
+      find.text('Claude Code · opus · Stopped · 900 tokens'),
+      findsOneWidget,
+    );
+    expect(find.text('handed off'), findsOneWidget);
+    expect(find.text('handoff'), findsNothing);
+  });
+
+  test('a link reads in words, never as its stored name', () {
+    expect(subagentLinkLabel('spawn'), 'child session');
+    expect(subagentLinkLabel(null), 'child session');
+    expect(subagentLinkLabel('handoff'), 'handed off');
+    expect(subagentLinkLabel('fork'), 'forked');
+    expect(subagentLinkLabel('something newer'), 'child session');
+  });
+
+  testWidgets('a failure the server gave no words for is said plainly, not '
+      'spun on', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionSubagentsProvider.overrideWith(
+            (ref, _) => Stream.error(StateError('socket closed: errno 104')),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SessionSubagentsPanel(sessionId: 's1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(kSubagentsUnreadable), findsOneWidget);
+    expect(find.textContaining('errno'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  for (final size in const [Size(390, 844), Size(1440, 900)]) {
+    testWidgets('the status line counts child sessions at '
+        '${size.width.toInt()} wide, and opens the panel', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionChildCountProvider.overrideWith(
+              (ref, _) => (count: 2, running: 1),
+            ),
+            sessionSubagentsProvider.overrideWith(
+              (ref, _) => Stream.value(list),
+            ),
+            clockProvider.overrideWithValue(_FixedClock(t0)),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(child: SessionSubagentsBadge(sessionId: 's1')),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('2 · 1 working'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('2 child sessions, 1 working')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSize(find.byType(SessionSubagentsBadge)).height,
+        lessThanOrEqualTo(32),
+      );
+      await tester.tap(find.byKey(const ValueKey('session-subagents-badge')));
+      await tester.pumpAndSettle();
+      expect(find.byType(SessionSubagentsPanel), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('with no child sessions the badge takes no room', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sessionChildCountProvider.overrideWith(
+            (ref, _) => (count: 0, running: 0),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Center(child: SessionSubagentsBadge(sessionId: 's1')),
+          ),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(SessionSubagentsBadge)), Size.zero);
   });
 
   testWidgets('on a phone it is a bottom sheet', (tester) async {

@@ -244,10 +244,21 @@ class SessionSubagents {
     }
     final answer = lastAgentAnswer(messages);
     final live = liveStateOf(child.id);
+    // Ended on request: done only when its record ends on its answer, so a
+    // turn stopped midway does not read as an earlier turn's success.
+    final stopped =
+        child.status == SessionStatus.cancelled &&
+        messages.reversed
+                .where((m) => m.text.trim().isNotEmpty)
+                .firstOrNull
+                ?.role !=
+            'agent';
     final state =
         live ??
         (child.status == SessionStatus.failed
             ? SubagentState.failed
+            : stopped
+            ? SubagentState.stopped
             : answer != null
             ? SubagentState.done
             : SubagentState.unknown);
