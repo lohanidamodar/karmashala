@@ -83,6 +83,7 @@ void main() {
               'sessions.interrupt',
               'sessions.send.resumes',
               if (queues) 'sessions.queue',
+              if (queues) 'sessions.queue.control',
             },
           ),
         ),
@@ -158,6 +159,33 @@ void main() {
 
       server.sessionWork.holdQueue('acp-1', null);
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('queue-hold')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, a queue paused by Stop offers Send next and '
+        'Cancel all', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'first');
+      await send(tester, 'second');
+      server.sessionWork.holdQueue(
+        'acp-1',
+        const QueueHold(QueueHoldKind.paused),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Paused'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('queue-send-next')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.map((s) => s.text), ['first']);
+      expect(find.text('second'), findsOneWidget);
+      expect(find.textContaining('Paused'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('queue-cancel-all')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.queues['acp-1'], isEmpty);
       expect(find.byKey(const ValueKey('queue-hold')), findsNothing);
       expect(tester.takeException(), isNull);
     });

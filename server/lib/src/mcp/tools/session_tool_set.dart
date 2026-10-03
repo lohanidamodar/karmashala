@@ -586,6 +586,8 @@ class SessionToolSet extends ServerToolSet {
         'host is not running it, so there is nothing to end.',
       );
     }
+    // What waits for it is paused, so the queue never resumes it.
+    queue?.pause(sessionId);
     try {
       await registry.close(hostSessionIdOf(sessionId));
     } on UnknownSession {

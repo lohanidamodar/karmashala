@@ -6,6 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../application/session_queue_providers.dart';
@@ -33,7 +34,8 @@ class QueuedMessagesStrip extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (hold != null) _HoldLine(hold: hold),
+          if (hold != null)
+            _HoldLine(sessionId: sessionId, hold: hold, messages: messages),
           for (final message in messages)
             _QueuedBubble(
               key: ValueKey('queued-${message.id}'),
@@ -50,37 +52,102 @@ class QueuedMessagesStrip extends ConsumerWidget {
 
 /// Why the queue waits past the turn's end, over its messages.
 class _HoldLine extends ConsumerWidget {
-  const _HoldLine({required this.hold});
+  const _HoldLine({
+    required this.sessionId,
+    required this.hold,
+    required this.messages,
+  });
 
+  final String sessionId;
   final QueueHold hold;
+  final List<QueuedMessage> messages;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = ref.watch(clockProvider).nowUtc().toLocal();
+    final controls = ref.watch(
+      capabilitiesProvider.select((c) => c.sessionQueueControl),
+    );
+    final actions = !controls
+        ? const <Widget>[]
+        : switch (hold.kind) {
+            QueueHoldKind.paused => [
+              TextButton(
+                key: const ValueKey('queue-send-next'),
+                onPressed: () => _sendNext(context, ref),
+                child: const Text('Send next'),
+              ),
+              TextButton(
+                key: const ValueKey('queue-cancel-all'),
+                onPressed: () => _cancelAll(context, ref),
+                child: const Text('Cancel all'),
+              ),
+            ],
+            _ => const <Widget>[],
+          };
     return Padding(
       key: const ValueKey('queue-hold'),
       padding: const EdgeInsets.only(bottom: Insets.xs),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            hold.kind == QueueHoldKind.paused ? AppIcons.pause : AppIcons.clock,
-            size: Touch.iconSmall,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              queueHoldWords(hold, now),
-              style: theme.textTheme.labelMedium?.copyWith(
+          Row(
+            children: [
+              Icon(
+                hold.kind == QueueHoldKind.paused
+                    ? AppIcons.pause
+                    : AppIcons.clock,
+                size: Touch.iconSmall,
                 color: scheme.onSurfaceVariant,
               ),
-            ),
+              const SizedBox(width: Insets.xs),
+              Expanded(
+                child: Text(
+                  queueHoldWords(hold, now),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (actions.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(spacing: Insets.xs, children: actions),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _sendNext(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await ref.read(sessionQueueActionsProvider).sendNext(sessionId);
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not send it: ${refusal.message}')),
+      );
+    }
+  }
+
+  Future<void> _cancelAll(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await ref
+          .read(sessionQueueActionsProvider)
+          .cancelAll(sessionId, messages);
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text('Could not cancel them all: ${refusal.message}'),
+        ),
+      );
+    }
   }
 }
 

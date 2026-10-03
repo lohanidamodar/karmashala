@@ -1029,7 +1029,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 ///
 /// Then by the pairing's [grants] (Stage 3 step 3), in the companion's words:
 /// `send_prompt` — [SessionSend], [SessionInterrupt], [SessionQueueEdit],
-/// [SessionQueueCancel]; `start_session` —
+/// [SessionQueueCancel], [SessionQueueSendNext]; `start_session` —
 /// [SessionStart], [SessionResume], [SessionFork], [SessionForkFromCheckpoint],
 /// [SessionHandoff], [SessionSwitchAgent]; `send_attachment` — [FilesUploadBegin]; `add_project` —
 /// [ProjectCreate], [ProjectFoldersCreate], [ImportsAdd]; `view_usage` —
@@ -1058,6 +1058,7 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionInterrupt() ||
     SessionQueueEdit() ||
     SessionQueueCancel() ||
+    SessionQueueSendNext() ||
     SessionSetMode() ||
     SessionSetConfigOption() => Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to

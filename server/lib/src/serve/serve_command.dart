@@ -1047,10 +1047,11 @@ Future<int> runServe(
     },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
-  data.sessionWork = ServerSessionWork(
+  final sessionWork = ServerSessionWork(
     launches: launches,
     continuations: continuations,
   );
+  data.sessionWork = sessionWork;
   // A client's chat sends and Stop (`sessions.send`, `.interrupt`), typed by
   // the same typist as MCP `session_send`.
   // An agent spoken to over ACP that nothing runs is resumed here to take a
@@ -1103,6 +1104,8 @@ Future<int> runServe(
   automations
     ?..resumeQueue = sessionQueue
     ..resumesMoved = sessionQueue.refreshAll;
+  // A person's End pauses what waits, so nothing resumes what they ended.
+  sessionWork.ending = sessionQueue.pause;
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,

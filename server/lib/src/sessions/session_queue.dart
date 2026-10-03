@@ -132,6 +132,9 @@ class SessionQueue implements ResumeQueue {
 
   /// The hold each session's clients were last told.
   final _toldHold = <String, QueueHold?>{};
+
+  /// Sessions whose person stopped or ended them with messages waiting.
+  final _paused = <String>{};
   final _subscriptions = <StreamSubscription<Object?>>[];
   var _closed = false;
 
@@ -221,6 +224,8 @@ class SessionQueue implements ResumeQueue {
         return AdmitQueued(existing, dao.positionOf(sessionId, existing.seq));
       }
     }
+    // Sending again is going on: it joins the end and delivery resumes.
+    _paused.remove(sessionId);
     if (!busy(sessionId) &&
         !dao.hasWaiting(sessionId) &&
         !_holdsNewMessages(sessionId)) {
@@ -572,7 +577,51 @@ class SessionQueue implements ResumeQueue {
     }
   }
 
-  QueueHold? _holdOf(String sessionId) => limitHold?.call(sessionId);
+  /// Holds [sessionId]'s waiting messages after the person stopped or ended
+  /// it, until they send again or ask for the next one ([sendNext]).
+  void pause(String sessionId) {
+    if (!dao.hasWaiting(sessionId) || !_paused.add(sessionId)) return;
+    log?.call('queue $sessionId: paused, as the session was stopped');
+    _announce(sessionId);
+  }
+
+  /// Delivers [sessionId]'s head now, past any hold — resuming a session
+  /// nothing runs to take it — and answers the row as it then stands. A
+  /// pause stays for the messages behind it.
+  Future<QueuedMessage> sendNext(String sessionId) async {
+    final head =
+        dao.head(sessionId) ??
+        (throw const DataRefused.notFound('nothing waits in this queue'));
+    if (busy(sessionId)) {
+      throw const DataRefused(
+        DataRefusalCode.conflict,
+        "the session's turn is still running; the next message goes when "
+        'it ends',
+      );
+    }
+    if (_stopped(sessionId)) {
+      await _resumeFor(sessionId);
+    } else if (status.acpRuntimeOf(sessionId) == null &&
+        !(resumesOnSend?.call(sessionId) ?? false) &&
+        !status.holds(sessionId)) {
+      throw const DataRefused.notFound(
+        "this session isn't running, and this server cannot resume it",
+      );
+    } else {
+      final why = await _deliverHead(sessionId);
+      if (why != null && dao.getById(head.id)?.state == head.state) {
+        throw DataRefused(DataRefusalCode.conflict, why);
+      }
+    }
+    return dao.getById(head.id)!;
+  }
+
+  QueueHold? _holdOf(String sessionId) {
+    if (_paused.contains(sessionId)) {
+      return const QueueHold(QueueHoldKind.paused);
+    }
+    return limitHold?.call(sessionId);
+  }
 
   /// A resume armed for the reset takes even a new message's place.
   bool _holdsNewMessages(String sessionId) =>

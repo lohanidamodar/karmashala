@@ -94,6 +94,7 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     sessionId: args.string('sessionId'),
     id: args.string('id'),
   ),
+  SessionQueueSendNext.name => SessionQueueSendNext(args.string('sessionId')),
   SessionSetMode.name => SessionSetMode(
     sessionId: args.string('sessionId'),
     modeId: args.string('modeId'),
@@ -565,6 +566,35 @@ final class SessionQueueCancel extends SessionInputRequest<QueuedMessage> {
 
   @override
   Map<String, Object?> argumentsToJson() => {'sessionId': sessionId, 'id': id};
+
+  @override
+  Object? resultToJson(QueuedMessage result) => result.toJson();
+
+  @override
+  QueuedMessage resultFromJson(Object? json) =>
+      _decode(kind, () => QueuedMessage.fromJson(_object(json, kind)));
+}
+
+/// Delivers session [sessionId]'s next queued message now, past a pause or a
+/// hold, resuming a session nothing runs to take it; answers that message.
+/// `sessions.queue.control` in `welcome.features`. Refused `conflict` while
+/// a turn runs, `notFound` when nothing waits.
+final class SessionQueueSendNext extends SessionInputRequest<QueuedMessage> {
+  const SessionQueueSendNext(this.sessionId);
+
+  static const String name = 'sessions.queue.sendNext';
+
+  @override
+  final String sessionId;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
 
   @override
   Object? resultToJson(QueuedMessage result) => result.toJson();

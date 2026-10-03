@@ -116,6 +116,15 @@ class FakeSessionWork {
             .copyWith(state: QueuedMessageState.cancelled);
         _tellQueue(request.sessionId);
         return cancelled;
+      case SessionQueueSendNext(:final sessionId):
+        if (queue.isEmpty) {
+          throw const DataRefused.notFound('nothing waits in this queue');
+        }
+        final head = queue.removeAt(0);
+        running.add(sessionId);
+        sent.add(SessionSend(sessionId: sessionId, text: head.text));
+        _tellQueue(sessionId);
+        return head.copyWith(state: QueuedMessageState.delivered);
       case SessionSend() || SessionInterrupt():
         return null;
     }
@@ -123,7 +132,10 @@ class FakeSessionWork {
 
   Object? _input(SessionInputRequest<Object?> request) {
     if (request
-        case SessionQueueList() || SessionQueueEdit() || SessionQueueCancel()) {
+        case SessionQueueList() ||
+            SessionQueueEdit() ||
+            SessionQueueCancel() ||
+            SessionQueueSendNext()) {
       return _queueRequest(request);
     }
     if (request case SessionSend(

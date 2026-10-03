@@ -62,6 +62,26 @@ class SessionQueueActions {
   Future<void> cancel(String sessionId, String id) => _ref
       .read(dataClientProvider)
       .send(SessionQueueCancel(sessionId: sessionId, id: id));
+
+  /// Delivers the next one now, past a pause or a hold; a session nothing
+  /// runs is resumed to take it.
+  Future<void> sendNext(String sessionId) =>
+      _ref.read(dataClientProvider).send(SessionQueueSendNext(sessionId));
+
+  /// Cancels every message still waiting, the first refusal thrown after
+  /// the rest were tried.
+  Future<void> cancelAll(String sessionId, List<QueuedMessage> messages) async {
+    DataRefused? refused;
+    for (final message in messages) {
+      if (!message.editable) continue;
+      try {
+        await cancel(sessionId, message.id);
+      } on DataRefused catch (refusal) {
+        refused ??= refusal;
+      }
+    }
+    if (refused != null) throw refused;
+  }
 }
 
 final sessionQueueActionsProvider = Provider<SessionQueueActions>(

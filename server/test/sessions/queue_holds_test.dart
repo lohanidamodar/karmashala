@@ -2,15 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionMessageTypist;
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefusalCode, DataRefused;
+    show DataRefusalCode, DataRefused, SessionInterrupt, SessionQueueSendNext;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
 import 'package:karmashala_host/src/automations/server_usage_limits.dart';
+import 'package:karmashala_host/src/sessions/session_input.dart';
 import 'package:karmashala_host/src/sessions/session_queue.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
+import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -283,6 +287,109 @@ void main() {
 
       queue.releaseClaimed(queue.claimHeadForResume('s1')!, sent: true);
       expect(dao.getById('h')!.state, QueuedMessageState.delivered);
+    });
+  });
+
+  group('Stop and End pause the queue', () {
+    late SessionInput input;
+
+    setUp(() {
+      input = SessionInput(
+        prompts: DaemonPromptAnswers(status: status, database: database),
+        typist: SessionMessageTypist(
+          readScreen: (_) => null,
+          markersFor: (_) => null,
+          type: (_, _) => false,
+          press: (_, _) => false,
+        ),
+        queue: queue,
+      );
+      // SessionInput sets the queue's delivery; these cases watch it.
+      queue.deliver = (_, text) async => delivered.add(text);
+    });
+
+    Future<void> stoppedWithTwoWaiting() async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      send('a');
+      send('b');
+      await input.handle(const SessionInterrupt('s1'), null);
+      hook('Stop');
+      await pumpEventQueue();
+    }
+
+    test('the turn\'s end Stop causes sends nothing, and says it is '
+        'paused', () async {
+      await stoppedWithTwoWaiting();
+      expect(delivered, isEmpty);
+      expect(
+        announced.last.map((m) => m.hold),
+        everyElement(const QueueHold(QueueHoldKind.paused)),
+      );
+    });
+
+    test('sending again joins the end and delivery resumes', () async {
+      await stoppedWithTwoWaiting();
+      expect(send('c'), isA<AdmitQueued>());
+      await pumpEventQueue();
+      expect(delivered, ['a']);
+      expect(queue.list('s1').map((m) => (m.text, m.hold)), [
+        ('b', null),
+        ('c', null),
+      ]);
+    });
+
+    test('Send next delivers the head and keeps the rest paused', () async {
+      await stoppedWithTwoWaiting();
+      final sent = await input.handle(const SessionQueueSendNext('s1'), null);
+      expect((sent! as QueuedMessage).state, QueuedMessageState.delivered);
+      expect(delivered, ['a']);
+      hook('UserPromptSubmit');
+      hook('Stop');
+      await pumpEventQueue();
+      expect(delivered, ['a']);
+      expect(queue.list('s1').single.hold?.kind, QueueHoldKind.paused);
+    });
+
+    test('Send next while a turn runs is refused in words', () async {
+      await stoppedWithTwoWaiting();
+      hook('UserPromptSubmit');
+      await expectLater(
+        queue.sendNext('s1'),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.code,
+            'code',
+            DataRefusalCode.conflict,
+          ),
+        ),
+      );
+    });
+
+    test('a session ended with messages waiting is not resumed for '
+        'them', () async {
+      final resumed = <String>[];
+      await queue.close();
+      queue = SessionQueue(
+        dao: dao,
+        status: status,
+        resumesOnSend: (_) => true,
+        announce: (_, open) => announced.add(open),
+        now: () => t0,
+      )..deliver = (_, text) async => resumed.add(text);
+      queue.start();
+      dao.enqueue(
+        id: 'w',
+        sessionId: 's1',
+        text: 'waiting',
+        origin: QueuedMessageOrigin.app,
+        now: t0,
+      );
+      queue.pause('s1');
+      queue.refreshAll();
+      await pumpEventQueue();
+      expect(resumed, isEmpty);
+      expect(announced.last.single.hold?.kind, QueueHoldKind.paused);
     });
   });
 
