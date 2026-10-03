@@ -338,11 +338,12 @@ class DaemonCheckpoints {
 
   // Forks from a checkpoint (`session_fork_from_checkpoint`).
 
-  /// The checkpoint a fork of [sessionId] names — by [checkpointId] or by
-  /// [turn] (the one taken as that turn started) — refused rather than
-  /// guessed: `ArgumentError` for naming neither or both, `StateError` for
-  /// one that is not there or not that session's, in the tool's words.
-  Checkpoint forkCheckpoint({
+  /// The checkpoints a fork of [sessionId] names — the one [checkpointId]
+  /// names, or by [turn] one per repository that turn touched, each taken as
+  /// the turn started ([checkpointsAtTurn]) — refused rather than guessed:
+  /// `ArgumentError` for naming neither or both, `StateError` for one that is
+  /// not there or not that session's, in the tool's words.
+  List<Checkpoint> forkCheckpoints({
     required String sessionId,
     String? checkpointId,
     int? turn,
@@ -363,11 +364,11 @@ class DaemonCheckpoints {
           '${checkpoint.sessionId}, not $sessionId.',
         );
       }
-      return checkpoint;
+      return [checkpoint];
     }
     final chain = _dao.forSession(sessionId);
-    final checkpoint = checkpointAtTurn(chain, turn!);
-    if (checkpoint == null) {
+    final checkpoints = checkpointsAtTurn(chain, turn!);
+    if (checkpoints.isEmpty) {
       final available = forkableTurns(chain);
       throw StateError(
         available.isEmpty
@@ -378,7 +379,18 @@ class DaemonCheckpoints {
                   '${available.join(', ')}.',
       );
     }
-    return checkpoint;
+    return checkpoints;
+  }
+
+  /// The conflict restoring [checkpoint] without confirm would be refused
+  /// with, asked in its session's queue and writing no file — so a fork over
+  /// several repositories can stop before it changes any of them.
+  Future<CheckpointConflict?> forkConflict(Checkpoint checkpoint) {
+    _reachable(checkpoint.repository);
+    return recorder.queued(
+      checkpoint.sessionId,
+      () => service.restoreConflict(checkpoint),
+    );
   }
 
   /// Why the working-tree half of forking [sessionId] from [checkpoint]
@@ -427,32 +439,6 @@ class DaemonCheckpoints {
       _heldHere(session.id) ||
       recorder.inTurn(session.id) ||
       (!session.isOver && session.status.claimsLive);
-
-  /// Restores [checkpoint]'s tree into its checkout for a fork — call only
-  /// when [forkFileRefusal] said null, and before starting the fork. A tree
-  /// that moved without [confirm] throws `StateError` in the fork's words
-  /// (nothing changed, no session started, where the current tree was
-  /// saved).
-  Future<RestoreOutcome> restoreForFork(
-    Checkpoint checkpoint, {
-    bool confirm = false,
-    String? requestedBy,
-  }) async {
-    final answer = await restore(
-      checkpoint,
-      confirm: confirm,
-      requestedBy: requestedBy,
-    );
-    final conflict = answer.conflict;
-    if (conflict != null) {
-      throw StateError(
-        '${conflict.message} Nothing was changed and no session was '
-        'started. The current working tree is saved as checkpoint '
-        '${conflict.safetyCheckpoint?.id}.',
-      );
-    }
-    return answer.outcome!;
-  }
 }
 
 final class _FunctionClock implements Clock {

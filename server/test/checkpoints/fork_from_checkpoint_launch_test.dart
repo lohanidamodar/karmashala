@@ -4,6 +4,7 @@ import 'package:agent_cli/discovery.dart' show PathProbe;
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart' show CheckpointDao;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
@@ -148,4 +149,136 @@ void main() {
     expect(message, contains('already restored'));
     expect(message, contains(later.id), reason: 'the undo point is named');
   }, skip: hasGit ? false : 'git is not on PATH');
+
+  group('a fork by turn, when the turn touched two repositories', () {
+    File main() => File(p.join(w.app, 'main.txt'));
+
+    /// Turn 1 changed README.md in the hub and main.txt in the app: both
+    /// repositories have a start and an end checkpoint of it.
+    Future<({String hubEnd, String appEnd})> turnInBoth() async {
+      final service = w.checkpoints.service;
+      for (final path in [w.hub, w.app]) {
+        await service.capture(
+          w.local(path),
+          sessionId: 's1',
+          reason: CheckpointReason.turnStart,
+          turn: 1,
+        );
+      }
+      readme().writeAsStringSync('hub\nedited\n');
+      main().writeAsStringSync('one\nedited\n');
+      final hubEnd = await service.capture(
+        w.local(w.hub),
+        sessionId: 's1',
+        turn: 1,
+      );
+      final appEnd = await service.capture(
+        w.local(w.app),
+        sessionId: 's1',
+        turn: 1,
+      );
+      return (hubEnd: hubEnd!.id, appEnd: appEnd!.id);
+    }
+
+    List<Map<String, Object?>> repositoriesOf(Map<String, Object?> answer) => [
+      for (final r in answer['repositories']! as List<Object?>)
+        r! as Map<String, Object?>,
+    ];
+
+    test('restores both, each with its own way back', () async {
+      final ends = await turnInBoth();
+
+      final answer = await continuations.forkFromCheckpoint(
+        sessionId: 's1',
+        turn: 1,
+      );
+
+      expect(readme().readAsStringSync(), 'hub\n');
+      expect(main().readAsStringSync(), 'one\ntwo\n');
+      final repositories = repositoriesOf(answer);
+      expect([for (final r in repositories) r['repository']], [w.hub, w.app]);
+      expect([for (final r in repositories) r['restored']], [true, true]);
+      expect(
+        [for (final r in repositories) r['undoCheckpointId']],
+        [ends.hubEnd, ends.appEnd],
+      );
+      expect(answer.containsKey('files'), isFalse);
+      final delivered = answer['delivered']! as List<Object?>;
+      expect(
+        delivered,
+        contains(contains('checkpoint_restore ${ends.hubEnd}')),
+      );
+      expect(
+        delivered,
+        contains(contains('checkpoint_restore ${ends.appEnd}')),
+      );
+      expect(answer['notDelivered'], [kForkCarriesTheWholeConversation]);
+      expect(pty.started, hasLength(1));
+    }, skip: hasGit ? false : 'git is not on PATH');
+
+    test('one another live session works in is left as it is, and named; the '
+        'other is still restored', () async {
+      await turnInBoth();
+      w.addSession('s2', workingDirectory: w.app, title: 'App work');
+
+      final answer = await continuations.forkFromCheckpoint(
+        sessionId: 's1',
+        turn: 1,
+      );
+
+      expect(readme().readAsStringSync(), 'hub\n');
+      expect(main().readAsStringSync(), 'one\nedited\n');
+      final repositories = repositoriesOf(answer);
+      expect([for (final r in repositories) r['restored']], [true, false]);
+      expect(repositories.last['reason'], contains('"App work" is working'));
+      expect(
+        answer['notDelivered'],
+        contains(
+          allOf(startsWith('${w.app}: '), contains('"App work" is working')),
+        ),
+      );
+    }, skip: hasGit ? false : 'git is not on PATH');
+
+    test('a tree moved in either stops the fork before any file changes, and '
+        'confirm restores both', () async {
+      await turnInBoth();
+      main().writeAsStringSync('one\nedited\nunsaved\n');
+
+      Object? thrown;
+      try {
+        await continuations.forkFromCheckpoint(sessionId: 's1', turn: 1);
+      } on StateError catch (error) {
+        thrown = error;
+      }
+      final message = (thrown! as StateError).message;
+      expect(
+        message,
+        startsWith(
+          'Nothing was changed and no session was '
+          'started: this fork restores 2 repositories',
+        ),
+      );
+      expect(message, contains(w.app));
+      expect(message, isNot(contains('${w.hub} has')));
+      expect(message, contains('confirm true'));
+      expect(readme().readAsStringSync(), 'hub\nedited\n');
+      expect(main().readAsStringSync(), 'one\nedited\nunsaved\n');
+      expect(pty.started, isEmpty);
+
+      final answer = await continuations.forkFromCheckpoint(
+        sessionId: 's1',
+        turn: 1,
+        confirm: true,
+      );
+      expect(readme().readAsStringSync(), 'hub\n');
+      expect(main().readAsStringSync(), 'one\ntwo\n');
+      final app = repositoriesOf(answer).last;
+      expect(app['restored'], isTrue);
+      // The unsaved edit was saved before the restore, and is the way back.
+      final undo = CheckpointDao(
+        w.db,
+      ).getById(app['undoCheckpointId']! as String)!;
+      expect(undo.reason, CheckpointReason.safety);
+    }, skip: hasGit ? false : 'git is not on PATH');
+  });
 }

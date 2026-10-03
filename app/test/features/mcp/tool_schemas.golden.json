@@ -4734,7 +4734,7 @@
           },
           "turn": {
             "type": "number",
-            "description": "Fork from the state that turn began in — the turnStart checkpoint of that turn, or the earliest one recorded for it."
+            "description": "Fork from the state that turn began in, in EVERY repository the turn touched: each goes back to its own checkpoint from the start of that turn. \"repositories\" in the result reports each one — restored with its own undoCheckpointId, or left as it is with the reason. A tree that has moved in any of them stops the whole fork before a file changes, unless \"confirm\"."
           },
           "instruction": {
             "type": "string",

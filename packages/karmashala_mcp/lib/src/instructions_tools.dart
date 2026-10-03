@@ -199,6 +199,12 @@ from here, and when `newWorktree` is true, because a checkpoint restores only
 into the checkout it was taken in. `preview: true` reports both decisions
 without touching a file.
 
+A fork by `turn` restores **every repository that turn touched**, each from its
+own checkpoint at the turn's start. `repositories` reports each one: restored,
+with its own `undoCheckpointId`, or left as it is with the reason, also in
+`notDelivered`. A tree that has moved in any of them stops the whole fork before
+a file changes, unless `confirm`.
+
 **Starting sessions is capped on purpose.** Sessions you start with
 `open_new_session` or `subagent_run` are recorded as your children and nesting
 is limited. If a call is refused for depth, that is the answer: do the work

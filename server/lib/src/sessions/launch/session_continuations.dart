@@ -768,8 +768,7 @@ class SessionContinuations {
     final earlier = _earlierConversation(session, targetInstallationId);
     final resumable =
         earlier != null &&
-        (targetAcp ||
-            (context.descriptor?.launch.resume.isSupported ?? false));
+        (targetAcp || (context.descriptor?.launch.resume.isSupported ?? false));
     final conversation = await _conversationOf(sessionId);
     final said = instruction.trim().isEmpty
         ? kSwitchInstruction
@@ -835,10 +834,7 @@ class SessionContinuations {
         systemPrompt: asFile ? rendered : null,
       );
     } on Object {
-      ledger.undoSwitch(
-        session,
-        fromSeq: firstSwitch ? 0 : span.seq,
-      );
+      ledger.undoSwitch(session, fromSeq: firstSwitch ? 0 : span.seq);
       sessions.updatePermissionMode(sessionId, session.permissionMode);
       sessions.updateModel(sessionId, session.modelId);
       onSwitched?.call(sessionId, ledger.forSession(sessionId));
@@ -933,9 +929,11 @@ class SessionContinuations {
     return started;
   }
 
-  /// Forks [sessionId] **and** puts its working tree back to a checkpoint;
-  /// answers both halves separately, as `session_fork_from_checkpoint` reads
-  /// them, never a fork that only half happened described as whole.
+  /// Forks [sessionId] **and** puts its working tree back to a checkpoint —
+  /// by turn, every repository that turn touched, each from its own
+  /// checkpoint; answers both halves separately and per repository, as
+  /// `session_fork_from_checkpoint` reads them, never a fork that only half
+  /// happened described as whole.
   Future<Map<String, Object?>> forkFromCheckpoint({
     required String sessionId,
     String? checkpointId,
@@ -949,50 +947,134 @@ class SessionContinuations {
     final work =
         forks ??
         (throw StateError('This server keeps no checkpoints to fork from.'));
-    final checkpoint = work.forkCheckpoint(
+    final checkpoints = work.forkCheckpoints(
       sessionId: sessionId,
       checkpointId: checkpointId,
       turn: turn,
     );
     final plan = forkPlanFor(sessionId);
-    final fileRefusal = work.forkFileRefusal(
-      checkpoint,
-      sessionId: sessionId,
-      intoNewWorktree: newWorktree,
-      requestedBy: requestedBy,
-    );
+    final asked = [
+      for (final checkpoint in checkpoints)
+        (
+          checkpoint: checkpoint,
+          refusal: work.forkFileRefusal(
+            checkpoint,
+            sessionId: sessionId,
+            intoNewWorktree: newWorktree,
+            requestedBy: requestedBy,
+          ),
+        ),
+    ];
     if (preview) {
+      final repositories = [
+        for (final (:checkpoint, :refusal) in asked)
+          {
+            'repository': checkpoint.repository.path,
+            'environmentId': checkpoint.repository.environmentId,
+            'checkpoint': _checkpointJson(checkpoint),
+            'wouldRestore': refusal == null,
+            'reason': ?refusal,
+          },
+      ];
       return {
         'preview': true,
         'route': plan.kind.name,
         'explanation': plan.explanation,
-        'checkpoint': _checkpointJson(checkpoint),
+        'checkpoint': _checkpointJson(checkpoints.first),
         'conversation': _conversationJson(),
-        'files': {
-          'wouldRestore': fileRefusal == null,
-          'repository': checkpoint.repository.path,
-          'reason': ?fileRefusal,
-        },
+        'repositories': repositories,
+        if (repositories.length == 1) 'files': repositories.single,
       };
     }
     if (plan.isRefused) throw StateError(plan.explanation);
+
+    // Every moved tree is found before any is written: a fork that would need
+    // confirm in one repository changes none of them.
+    if (!confirm) {
+      final conflicts =
+          <({Checkpoint checkpoint, CheckpointConflict conflict})>[];
+      for (final (:checkpoint, :refusal) in asked) {
+        if (refusal != null) continue;
+        final conflict = await work.forkConflict(checkpoint);
+        if (conflict != null) {
+          conflicts.add((checkpoint: checkpoint, conflict: conflict));
+        }
+      }
+      if (conflicts.isNotEmpty) {
+        throw StateError(_forkConflictMessage(conflicts, of: asked.length));
+      }
+    }
+
     // The files first: a refusal here must not leave a session behind.
-    RestoreOutcome? restored;
-    Checkpoint? undo;
-    if (fileRefusal == null) {
+    final done = <({ForkedRepository forked, bool attempted})>[];
+    final outcomes = <RestoreOutcome?>[];
+    for (final (:checkpoint, :refusal) in asked) {
+      if (refusal != null) {
+        done.add((
+          forked: ForkedRepository(checkpoint, refusal: refusal),
+          attempted: false,
+        ));
+        outcomes.add(null);
+        continue;
+      }
       // No safety checkpoint is taken of a tree already recorded; then the
       // latest checkpoint is the way back.
       final before = latestCheckpointIn(
-        work.forSession(sessionId),
+        work.forSession(checkpoint.sessionId),
         repository: checkpoint.repository,
       );
-      restored = await work.restoreForFork(
-        checkpoint,
-        confirm: confirm,
-        requestedBy: requestedBy,
-      );
-      undo = restored.safetyCheckpoint ?? before;
+      String? failed;
+      RestoreOutcome? outcome;
+      try {
+        final answer = await work.restore(
+          checkpoint,
+          confirm: confirm,
+          requestedBy: requestedBy,
+        );
+        outcome = answer.outcome;
+        if (answer.conflict case final conflict?) {
+          failed =
+              'The files were left as they are: they changed while the fork '
+              'was being made. Their current tree is saved as checkpoint '
+              '${conflict.safetyCheckpoint?.id ?? before?.id}; run the fork '
+              'again with confirm true to restore anyway.';
+        }
+      } on Object catch (error) {
+        failed =
+            'The files were left as they are: restoring them failed: $error';
+      }
+      done.add((
+        forked: ForkedRepository(
+          checkpoint,
+          refusal: failed,
+          alreadyThere: outcome?.alreadyThere,
+          restoredFiles: outcome?.files.length ?? 0,
+          undoCheckpointId: outcome == null || outcome.alreadyThere
+              ? null
+              : (outcome.safetyCheckpoint ?? before)?.id,
+        ),
+        attempted: true,
+      ));
+      outcomes.add(outcome);
     }
+    final wrote = [
+      for (final d in done)
+        if (d.forked.restored) d.forked,
+    ];
+    final failures = [
+      for (final d in done)
+        if (d.attempted && d.forked.refusal != null) d.forked,
+    ];
+    if (wrote.isEmpty && failures.isNotEmpty) {
+      final why = [
+        for (final f in failures)
+          '${f.checkpoint.repository.path}: ${f.refusal}',
+      ];
+      throw StateError(
+        'No session was started and no file was changed. ${why.join(' ')}',
+      );
+    }
+
     final SessionStarted started;
     try {
       started = await fork(
@@ -1001,25 +1083,20 @@ class SessionContinuations {
         intoNewWorktree: newWorktree,
       );
     } on Object catch (error) {
-      if (restored == null || restored.alreadyThere) rethrow;
-      final count = restored.files.length;
+      if (wrote.isEmpty) rethrow;
       throw StateError(
-        'No session was started: $error. The files were already restored '
-        'to checkpoint ${checkpoint.sequence} ($count file'
-        '${count == 1 ? '' : 's'}) in ${checkpoint.repository.path}'
-        '${undo == null ? '.' : '; checkpoint_restore ${undo.id} puts them '
-                  'back as they were.'}',
+        'No session was started: $error. The files were already restored: '
+        '${[for (final r in wrote) _restoredClause(r)].join(' ')}',
       );
     }
-    final wrote = restored != null && !restored.alreadyThere;
     final halves = checkpointForkHalves(
       route: plan.kind.name,
-      checkpoint: checkpoint,
-      fileRefusal: fileRefusal,
-      alreadyThere: restored?.alreadyThere,
-      restoredFiles: restored?.files.length ?? 0,
-      undoCheckpointId: wrote ? undo?.id : null,
+      repositories: [for (final d in done) d.forked],
     );
+    final repositories = [
+      for (final (i, d) in done.indexed)
+        _forkedRepositoryJson(d.forked, outcomes[i]),
+    ];
     return {
       'sessionId': started.sessionId,
       'title': started.session.title,
@@ -1027,27 +1104,77 @@ class SessionContinuations {
       'link': SessionLink.fork.name,
       'route': plan.kind.name,
       'explanation': plan.explanation,
-      'checkpoint': _checkpointJson(checkpoint),
+      'checkpoint': _checkpointJson(checkpoints.first),
       'delivered': halves.delivered,
       'notDelivered': halves.notDelivered,
       'conversation': _conversationJson(),
-      'files': {
-        'restored': restored != null && !restored.alreadyThere,
-        'repository': checkpoint.repository.path,
-        'reason': ?fileRefusal,
-        if (restored != null) ...{
-          'alreadyThere': restored.alreadyThere,
-          'safetyCheckpointId': restored.safetyCheckpoint?.id,
-          if (wrote) 'undoCheckpointId': undo?.id,
-          'paths': [
-            for (final file in restored.files)
-              {'path': file.path, 'status': file.type.name},
-          ],
-        },
-      },
+      'repositories': repositories,
+      if (repositories.length == 1) 'files': repositories.single,
       if (started.session.worktree != null)
         'worktree': started.session.worktree!.path,
     };
+  }
+
+  static Map<String, Object?> _forkedRepositoryJson(
+    ForkedRepository forked,
+    RestoreOutcome? outcome,
+  ) => {
+    'repository': forked.checkpoint.repository.path,
+    'environmentId': forked.checkpoint.repository.environmentId,
+    'checkpoint': _checkpointJson(forked.checkpoint),
+    'restored': forked.restored,
+    'reason': ?forked.refusal,
+    if (outcome != null) ...{
+      'alreadyThere': outcome.alreadyThere,
+      'safetyCheckpointId': outcome.safetyCheckpoint?.id,
+      if (forked.restored) 'undoCheckpointId': forked.undoCheckpointId,
+      'paths': [
+        for (final file in outcome.files)
+          {'path': file.path, 'status': file.type.name},
+      ],
+    },
+  };
+
+  /// One restored repository and its way back, for a fork that then failed.
+  static String _restoredClause(ForkedRepository r) {
+    final count = r.restoredFiles;
+    final undo = r.undoCheckpointId == null
+        ? '.'
+        : '; checkpoint_restore ${r.undoCheckpointId} puts them back as they '
+              'were.';
+    return '${r.checkpoint.repository.path} to checkpoint '
+        '${r.checkpoint.sequence} ($count file${count == 1 ? '' : 's'})$undo';
+  }
+
+  /// Why a fork stopped before writing anything: the repositories whose tree
+  /// moved since their last checkpoint, and where each was saved.
+  static String _forkConflictMessage(
+    List<({Checkpoint checkpoint, CheckpointConflict conflict})> conflicts, {
+    required int of,
+  }) {
+    if (of == 1) {
+      final conflict = conflicts.single.conflict;
+      return '${conflict.message} Nothing was changed and no session was '
+          'started. The current working tree is saved as checkpoint '
+          '${conflict.safetyCheckpoint?.id}.';
+    }
+    final which = [
+      for (final (:checkpoint, :conflict) in conflicts)
+        if (conflict.safetyCheckpoint case final saved?)
+          '${checkpoint.repository.path} has changed since its last '
+              'checkpoint; its current tree is saved as checkpoint '
+              '${saved.id}.'
+        else
+          '${checkpoint.repository.path} has changed since its last '
+              'checkpoint.',
+    ];
+    final count = conflicts.length == 1
+        ? 'one of them has'
+        : '${conflicts.length} of them have';
+    return 'Nothing was changed and no session was started: this fork '
+        'restores $of repositories, and $count changes that are not in the '
+        'checkpoint. ${which.join(' ')} Nothing is lost either way; fork again '
+        'with confirm true to restore them all anyway.';
   }
 
   static Map<String, Object?> _checkpointJson(Checkpoint checkpoint) => {

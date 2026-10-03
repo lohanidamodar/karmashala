@@ -362,6 +362,38 @@ class CheckpointService {
 
   // --- restore ---------------------------------------------------------------
 
+  /// The conflict [restore] of [checkpoint] would refuse with unless
+  /// `confirm` — a tree moved since its last checkpoint, saved first exactly as
+  /// a refused restore saves it — or null when it would go ahead. Writes no
+  /// file of the working tree, so several repositories can be asked first.
+  Future<CheckpointConflict?> restoreConflict(Checkpoint checkpoint) async {
+    final repo = checkpoint.repository;
+    final git = _gitFor(repo);
+    final dirs = await git.checkpointDirs(repo);
+    final current = await _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+    final latest = latestCheckpointIn(
+      await records.forSession(checkpoint.sessionId),
+      repository: repo,
+    );
+    if (latest == null || latest.treeSha == current) return null;
+    final safety = await capture(
+      repo,
+      sessionId: checkpoint.sessionId,
+      reason: CheckpointReason.safety,
+      label: 'before restoring checkpoint ${checkpoint.sequence}',
+    );
+    final refusal = checkpointRestoreRefusal(
+      treeMovedSinceLastCheckpoint: true,
+      safetySequence: safety?.sequence,
+    );
+    return refusal == null
+        ? null
+        : CheckpointConflict(refusal, safetyCheckpoint: safety);
+  }
+
   /// Puts [repo]'s working tree back to what [checkpoint] holds. A safety
   /// checkpoint is taken first, and a moved tree is refused without [confirm].
   Future<RestoreOutcome> restore(
