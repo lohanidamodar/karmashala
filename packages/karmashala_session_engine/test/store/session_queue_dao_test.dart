@@ -21,16 +21,15 @@ void main() {
   });
   tearDown(() => db.close());
 
-  QueuedMessage add(String id, String text, {String? requestId}) =>
-      dao.enqueue(
-        id: id,
-        sessionId: 's1',
-        text: text,
-        origin: QueuedMessageOrigin.mcp,
-        originId: 'caller',
-        requestId: requestId,
-        now: t0,
-      );
+  QueuedMessage add(String id, String text, {String? requestId}) => dao.enqueue(
+    id: id,
+    sessionId: 's1',
+    text: text,
+    origin: QueuedMessageOrigin.mcp,
+    originId: 'caller',
+    requestId: requestId,
+    now: t0,
+  );
 
   test('messages queue in order and read back whole', () {
     final first = add('q1', 'one', requestId: 'r1');

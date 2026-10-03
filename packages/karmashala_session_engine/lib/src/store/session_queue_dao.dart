@@ -22,13 +22,11 @@ class SessionQueueDao {
     String? requestId,
   }) => _db.transaction(() {
     final seq =
-        (_db
-                    .query(
-                      'SELECT MAX(seq) AS seq FROM session_queued_messages '
-                      'WHERE session_id = ?;',
-                      [sessionId],
-                    )
-                    .first['seq']
+        (_db.query(
+                  'SELECT MAX(seq) AS seq FROM session_queued_messages '
+                  'WHERE session_id = ?;',
+                  [sessionId],
+                ).first['seq']
                 as int? ??
             0) +
         1;
@@ -94,13 +92,11 @@ class SessionQueueDao {
       .toList();
 
   /// Whether [sessionId] has a message still to deliver or on its way.
-  bool hasWaiting(String sessionId) => _db
-      .query(
-        'SELECT 1 FROM session_queued_messages WHERE session_id = ? '
-        'AND state IN $_waiting LIMIT 1;',
-        [sessionId],
-      )
-      .isNotEmpty;
+  bool hasWaiting(String sessionId) => _db.query(
+    'SELECT 1 FROM session_queued_messages WHERE session_id = ? '
+    'AND state IN $_waiting LIMIT 1;',
+    [sessionId],
+  ).isNotEmpty;
 
   /// The next message to deliver for [sessionId], or null.
   QueuedMessage? head(String sessionId) {
@@ -114,13 +110,11 @@ class SessionQueueDao {
 
   /// How many of [sessionId]'s waiting messages go no later than [seq].
   int positionOf(String sessionId, int seq) =>
-      _db
-              .query(
-                'SELECT COUNT(*) AS n FROM session_queued_messages '
-                'WHERE session_id = ? AND state IN $_waiting AND seq <= ?;',
-                [sessionId, seq],
-              )
-              .first['n']
+      _db.query(
+            'SELECT COUNT(*) AS n FROM session_queued_messages '
+            'WHERE session_id = ? AND state IN $_waiting AND seq <= ?;',
+            [sessionId, seq],
+          ).first['n']
           as int;
 
   /// Every session with a message still queued.

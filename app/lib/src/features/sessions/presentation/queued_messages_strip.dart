@@ -1,0 +1,243 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+
+import '../../../app/widgets/adaptive_modal.dart';
+import '../application/session_queue_providers.dart';
+
+/// The messages [sessionId] holds at the server, below the transcript: each
+/// a bubble on the sender's side, marked queued, with Edit and Cancel while
+/// it waits. A delivered one leaves here and shows in the transcript.
+class QueuedMessagesStrip extends ConsumerWidget {
+  const QueuedMessagesStrip({super.key, required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messages = ref.watch(sessionQueueProvider(sessionId));
+    if (messages.isEmpty) return const SizedBox.shrink();
+    var place = 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.md,
+        vertical: Insets.xs,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final message in messages)
+            _QueuedBubble(
+              key: ValueKey('queued-${message.id}'),
+              message: message,
+              place: message.state == QueuedMessageState.failed
+                  ? null
+                  : ++place,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueuedBubble extends ConsumerWidget {
+  const _QueuedBubble({super.key, required this.message, required this.place});
+
+  final QueuedMessage message;
+
+  /// Its turn among the waiting messages, from 1; null for a failed one.
+  final int? place;
+
+  static const _corners = BorderRadius.only(
+    topLeft: Radius.circular(Radii.lg),
+    topRight: Radius.circular(Radii.lg),
+    bottomLeft: Radius.circular(Radii.lg),
+    bottomRight: Radius.circular(Insets.xs),
+  );
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final failed = message.state == QueuedMessageState.failed;
+    final label = switch (message.state) {
+      QueuedMessageState.delivering => 'Sending…',
+      QueuedMessageState.failed => 'Not sent',
+      _ => place == 1 ? 'Queued · next' : 'Queued · $place',
+    };
+    final labelColor = failed ? scheme.error : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: LayoutBuilder(
+        builder: (context, box) => Align(
+          alignment: Alignment.centerRight,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: box.maxWidth * Chrome.chatBubbleShare,
+            ),
+            child: DecoratedBox(
+              // Outlined, not filled: it has not reached the agent yet.
+              decoration: BoxDecoration(
+                borderRadius: _corners,
+                border: Border.all(
+                  color: failed ? scheme.error : scheme.outlineVariant,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Radii.lg,
+                  Insets.sm,
+                  Insets.sm,
+                  Insets.xs,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          failed ? AppIcons.warningCircle : AppIcons.clock,
+                          size: Touch.iconSmall,
+                          color: labelColor,
+                        ),
+                        const SizedBox(width: Insets.xs),
+                        Text(
+                          label,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: labelColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: Insets.xs),
+                    Text(message.text, style: theme.textTheme.bodyMedium),
+                    if (failed && message.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: Insets.xs),
+                        child: Text(
+                          message.error!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.error,
+                          ),
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: Insets.xs,
+                        children: [
+                          if (message.editable)
+                            TextButton(
+                              key: ValueKey('queued-edit-${message.id}'),
+                              onPressed: () => _edit(context, ref),
+                              child: const Text('Edit'),
+                            ),
+                          if (message.editable || failed)
+                            TextButton(
+                              key: ValueKey('queued-cancel-${message.id}'),
+                              onPressed: () => _cancel(context, ref),
+                              child: Text(failed ? 'Dismiss' : 'Cancel'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await ref
+          .read(sessionQueueActionsProvider)
+          .cancel(message.sessionId, message.id);
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not cancel it: ${refusal.message}')),
+      );
+    }
+  }
+
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final actions = ref.read(sessionQueueActionsProvider);
+    final text = await showAdaptiveModal<String>(
+      context: context,
+      title: 'Edit queued message',
+      builder: (context) => _EditQueuedBody(initial: message.text),
+    );
+    if (text == null || text.trim().isEmpty || text == message.text) return;
+    try {
+      await actions.edit(message.sessionId, message.id, text);
+    } on DataRefused catch (refusal) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not edit it: ${refusal.message}')),
+      );
+    }
+  }
+}
+
+class _EditQueuedBody extends StatefulWidget {
+  const _EditQueuedBody({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_EditQueuedBody> createState() => _EditQueuedBodyState();
+}
+
+class _EditQueuedBodyState extends State<_EditQueuedBody> {
+  late final _text = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const ValueKey('queued-edit-field'),
+          controller: _text,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 8,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: Insets.md),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Keep it'),
+            ),
+            const SizedBox(width: Insets.sm),
+            FilledButton(
+              key: const ValueKey('queued-edit-save'),
+              onPressed: () => Navigator.of(context).pop(_text.text),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}

@@ -1017,7 +1017,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// checks, Flutter and the browser. Admin and SSH prompts are refused by `LinkTrust`, not here.
 ///
 /// Then by the pairing's [grants] (Stage 3 step 3), in the companion's words:
-/// `send_prompt` — [SessionSend], [SessionInterrupt]; `start_session` —
+/// `send_prompt` — [SessionSend], [SessionInterrupt], [SessionQueueEdit],
+/// [SessionQueueCancel]; `start_session` —
 /// [SessionStart], [SessionResume], [SessionFork], [SessionForkFromCheckpoint],
 /// [SessionHandoff]; `send_attachment` — [FilesUploadBegin]; `add_project` —
 /// [ProjectCreate], [ProjectFoldersCreate], [ImportsAdd]; `view_usage` —
@@ -1044,6 +1045,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
   final needed = switch (request) {
     SessionSend() ||
     SessionInterrupt() ||
+    SessionQueueEdit() ||
+    SessionQueueCancel() ||
     SessionSetMode() ||
     SessionSetConfigOption() => Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to

@@ -24,6 +24,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         DecisionRecorded,
         OpenSessionTab,
         OpenTerminalTab,
+        SessionQueueChanged,
         SessionSend,
         TerminalOpen,
         UsageLimitNotice,
@@ -40,6 +41,7 @@ import 'package:karmashala_session_engine/store.dart'
         ImportedSessionDao,
         SessionDao,
         SessionMessageDao,
+        SessionQueueDao,
         SessionRepositoryDao,
         SessionUsageDao;
 import 'package:karmashala_store/database.dart';
@@ -64,6 +66,7 @@ import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/session_input.dart';
+import '../sessions/session_queue.dart';
 import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
@@ -76,6 +79,7 @@ import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
+import 'package:karmashala_session/session.dart' show QueuedMessageOrigin;
 import 'package:karmashala_session/events.dart'
     show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
@@ -1022,21 +1026,44 @@ Future<int> runServe(
     agents: liveAgents,
     sessionOf: sessionRows.getById,
   );
+  // Every send — a client's, an agent's `session_send`, the older companion
+  // API's — waits here while the session's turn runs.
+  final sessionQueue = SessionQueue(
+    dao: SessionQueueDao(database),
+    status: prompts.status,
+    resumesOnSend: speaksAcp,
+    announce: (sessionId, open) => data.announce([
+      SessionQueueChanged(sessionId: sessionId, messages: open),
+    ]),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
     resumesOnSend: speaksAcp,
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
+    queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  sessionQueue.start();
   data.sessionInput = sessionInput;
-  // A phone on the older companion API sends to such a session the same way.
+  // A phone on the older companion API sends to such a session the same way;
+  // to a PTY session it types its own keys, so only the queue's decision is
+  // taken here.
   companion.sendOverProtocol = (sessionId, text) async {
-    if (!speaksAcp(sessionId)) return false;
+    if (!speaksAcp(sessionId)) {
+      return sessionQueue.queueIfBusy(
+            sessionId,
+            text,
+            origin: QueuedMessageOrigin.companion,
+          ) !=
+          null;
+    }
     try {
       await sessionInput.handle(
         SessionSend(sessionId: sessionId, text: text),
         null,
+        origin: QueuedMessageOrigin.companion,
       );
     } on DataRefused catch (refusal) {
       throw StateError(refusal.message);
@@ -1102,6 +1129,7 @@ Future<int> runServe(
         prompts: prompts,
         registry: registry,
         waits: sessionWaits,
+        queue: sessionQueue,
         typist: typist,
         resumeWith: (sessionId, prompt) async {
           final started = await launches.resume(sessionId, prompt: prompt);
@@ -1328,6 +1356,7 @@ Future<int> runServe(
   await ssh.close();
   storeDesk.close();
   await attention.close();
+  await sessionQueue.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await statusFollow?.cancel();

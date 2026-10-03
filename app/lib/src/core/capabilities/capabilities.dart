@@ -284,6 +284,10 @@ final class Capabilities {
   bool get sendResumesAtServer =>
       sendViaServer && serverOffers('sessions.send.resumes');
 
+  /// A send while the turn runs waits at the server, shown as queued with
+  /// edit and cancel; without it, nothing is listed.
+  bool get sessionQueue => sendViaServer && serverOffers('sessions.queue');
+
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.
   bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;

@@ -39,8 +39,13 @@ class SessionInput {
               requestId: requestId ?? newSessionInputId(),
             ),
           );
-      _log.info('Sent to $sessionId through the server: ${reply.value.via}');
-      return reply.value.sent;
+      final sent = reply.value;
+      _log.info(
+        sent.queued
+            ? 'Queued for $sessionId at the server, place ${sent.position}'
+            : 'Sent to $sessionId through the server: ${sent.via}',
+      );
+      return sent.sent;
     } on DataRefused catch (refusal) {
       if (refusal.code != DataRefusalCode.notFound) {
         throw SessionPromptRefusal(refusal.message);
