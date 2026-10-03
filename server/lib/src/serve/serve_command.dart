@@ -988,6 +988,7 @@ Future<int> runServe(
   // folder's machine, with this one and Windows beside it, which a WSL home
   // is reached through.
   final scratchTrust = AgentFolderTrust(
+    registry: () => agentRegistry.current,
     storeHome: (environmentId, agentId) async {
       final environments = [
         for (final e in data.environments)

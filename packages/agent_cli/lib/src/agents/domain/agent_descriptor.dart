@@ -23,7 +23,11 @@ part 'agent_descriptor/agent_resume_support.dart';
 /// all, is the agent adapter's `AgentStore`. A home with no store capability
 /// behind it is located and listed, and read as nothing.
 class AgentStoreSpec {
-  const AgentStoreSpec({required this.homeDirectoryName, this.homeVariable});
+  const AgentStoreSpec({
+    required this.homeDirectoryName,
+    this.homeVariable,
+    this.folderTrust,
+  });
 
   /// Directory name under the environment's home, e.g. `.claude`.
   final String homeDirectoryName;
@@ -31,6 +35,36 @@ class AgentStoreSpec {
   /// The variable that moves the home elsewhere when set, e.g.
   /// `CLAUDE_CONFIG_DIR`. Asked of an SSH host; see `RemoteAgentHomes`.
   final String? homeVariable;
+
+  /// Where and how the agent remembers a folder it was told to trust, for
+  /// an agent that asks before it works in a new one; null for one that
+  /// does not ask, or whose record was never read.
+  final AgentFolderTrustSpec? folderTrust;
+}
+
+/// How an agent's record of a trusted folder is written.
+enum AgentFolderTrustFormat {
+  /// `projects.<folder>.hasTrustDialogAccepted: true` in a JSON object,
+  /// the folder keyed with forward slashes on every machine.
+  jsonProjects,
+
+  /// A `[projects."<folder>"]` TOML table with `trust_level = "trusted"`,
+  /// the folder keyed in lower case, as a literal string, on Windows.
+  tomlProjects,
+}
+
+/// Where an agent remembers the folders it was told to trust.
+class AgentFolderTrustSpec {
+  const AgentFolderTrustSpec({
+    required this.format,
+    required this.settingsFile,
+  });
+
+  final AgentFolderTrustFormat format;
+
+  /// The file, relative to the store home: `../.claude.json` beside
+  /// `~/.claude`, `config.toml` inside `~/.codex`.
+  final String settingsFile;
 }
 
 /// The best status source an agent supports. The status service falls back down

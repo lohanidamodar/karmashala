@@ -441,6 +441,11 @@ const codexDescriptor = AgentDescriptor(
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',
     homeVariable: 'CODEX_HOME',
+    // What 0.160.0 writes when its trust prompt is answered.
+    folderTrust: AgentFolderTrustSpec(
+      format: AgentFolderTrustFormat.tomlProjects,
+      settingsFile: 'config.toml',
+    ),
   ),
   // **Codex has hooks**, and they are the only source that can say a turn
   // started. The backlog recorded this agent as configurable only through TOML;

@@ -416,6 +416,11 @@ const claudeCodeDescriptor = AgentDescriptor(
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
     homeVariable: 'CLAUDE_CONFIG_DIR',
+    // Keyed per git root, read from 2.1.287's own check.
+    folderTrust: AgentFolderTrustSpec(
+      format: AgentFolderTrustFormat.jsonProjects,
+      settingsFile: '../.claude.json',
+    ),
   ),
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
