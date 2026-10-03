@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' hide Clock;
-import 'package:agent_cli/process.dart' show localHostEnvironmentId;
+import 'package:agent_cli/process.dart'
+    show EnvironmentPath, localHostEnvironmentId;
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -144,6 +145,7 @@ class LaunchToolSet extends ServerToolSet {
       },
       callerSessionId,
       modelId: model == null || model.isEmpty ? null : model,
+      inCallerTree: true,
     );
     final session = opened.session;
     final outcome = await turns.firstTurn(
@@ -233,12 +235,39 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> args,
     String? callerSessionId, {
     String? modelId,
+    bool inCallerTree = false,
   }) async {
     final projectId = args['projectId'] as String?;
     final repositoryId = args['repositoryId'] as String?;
     final title = args['title'] as String?;
+    final newWorktree = args['useWorktree'] == true;
+    // With [inCallerTree] and no place named, the child shares the caller's
+    // tree, as an agent's own subagents do.
+    final caller = inCallerTree && projectId == null && args['scratch'] != true
+        ? (callerSessionId == null
+              ? null
+              : SessionDao(_context.database).getById(callerSessionId))
+        : null;
+    final callerWorktree = caller == null || caller.isArchived
+        ? null
+        : caller.worktree;
+    EnvironmentPath? existingWorktree;
+    EnvironmentPath? workingDirectory;
     final Repository repo;
-    if (projectId == null || args['scratch'] == true) {
+    if (caller != null) {
+      repo =
+          _repositories.getById(caller.repositoryId) ??
+          (throw StateError(
+            "Your session's checkout is no longer in the workspace; name a "
+            'projectId, or pass scratch.',
+          ));
+      if (!newWorktree) {
+        existingWorktree = callerWorktree;
+        workingDirectory = callerWorktree == null
+            ? caller.workingDirectory
+            : null;
+      }
+    } else if (projectId == null || args['scratch'] == true) {
       repo = await _scratchCheckout(
         environmentId: args['environmentId'] as String?,
         callerSessionId: callerSessionId,
@@ -298,7 +327,9 @@ class LaunchToolSet extends ServerToolSet {
             ? 'Agent session'
             : title.trim(),
         prompt: args['prompt'] as String?,
-        worktree: args['useWorktree'] == true,
+        worktree: newWorktree,
+        existingWorktree: existingWorktree,
+        workingDirectory: workingDirectory,
         permissionMode: permission.selection?.canonical,
         modelId: modelId,
         parentSessionId: callerSessionId,
@@ -561,9 +592,12 @@ const List<Map<String, Object?>> launchToolSchemas = [
     'description':
         'Run a subagent: start a NEW session on any installed agent and '
         'model with prompt as its task, wait for its first turn to finish, '
-        'and get its final answer back. It is started exactly as '
-        'open_new_session starts one — recorded as your child, under the same '
-        'nesting cap and permission ceiling — and stays open as a session '
+        'and get its final answer back. Unless you name a projectId (or '
+        'scratch) it works in YOUR checkout and directory — your worktree, '
+        'if you are in one — so it sees the files you see; useWorktree gives '
+        'it a worktree of its own instead. It is launched as open_new_session '
+        'launches one — recorded as your child, under the same nesting cap '
+        'and permission ceiling — and stays open as a session '
         'you can follow up with session_send. state is done, failed, blocked '
         '(it stopped for an approval or a question: blockedOn says which), '
         'ended, or running when timeoutSeconds ran out first — then continue '
@@ -599,21 +633,26 @@ const List<Map<String, Object?>> launchToolSchemas = [
         'projectId': {
           'type': 'string',
           'description':
-              'Project id from list_projects. Omit to run in a scratch folder '
-              'of its own, as open_new_session does.',
+              'Project id from list_projects, to run there instead of in '
+              'your own checkout and directory.',
         },
         'repositoryId': {'type': 'string'},
-        'scratch': {'type': 'boolean'},
+        'scratch': {
+          'type': 'boolean',
+          'description':
+              'Run in a scratch folder of its own, with no project, instead '
+              'of your checkout.',
+        },
         'environmentId': {
           'type': 'string',
-          'description':
-              'For a run without a project: where its folder is made.',
+          'description': 'With scratch: where its folder is made.',
         },
         'useWorktree': {
           'type': 'boolean',
           'description':
-              'Run in a Git worktree of its own — for a subagent that edits '
-              'files while you keep working in the same repository.',
+              'Run in a new Git worktree of its own rather than sharing your '
+              'tree — for a subagent whose edits must not land in your files '
+              'while you work.',
         },
         'title': {
           'type': 'string',

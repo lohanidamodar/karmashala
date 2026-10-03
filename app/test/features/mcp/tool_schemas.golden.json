@@ -2737,7 +2737,7 @@
     },
     {
       "name": "subagent_run",
-      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. It is started exactly as open_new_session starts one — recorded as your child, under the same nesting cap and permission ceiling — and stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, or running when timeoutSeconds ran out first — then continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
+      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. Unless you name a projectId (or scratch) it works in YOUR checkout and directory — your worktree, if you are in one — so it sees the files you see; useWorktree gives it a worktree of its own instead. It is launched as open_new_session launches one — recorded as your child, under the same nesting cap and permission ceiling — and stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, or running when timeoutSeconds ran out first — then continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2759,21 +2759,22 @@
           },
           "projectId": {
             "type": "string",
-            "description": "Project id from list_projects. Omit to run in a scratch folder of its own, as open_new_session does."
+            "description": "Project id from list_projects, to run there instead of in your own checkout and directory."
           },
           "repositoryId": {
             "type": "string"
           },
           "scratch": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Run in a scratch folder of its own, with no project, instead of your checkout."
           },
           "environmentId": {
             "type": "string",
-            "description": "For a run without a project: where its folder is made."
+            "description": "With scratch: where its folder is made."
           },
           "useWorktree": {
             "type": "boolean",
-            "description": "Run in a Git worktree of its own — for a subagent that edits files while you keep working in the same repository."
+            "description": "Run in a new Git worktree of its own rather than sharing your tree — for a subagent whose edits must not land in your files while you work."
           },
           "title": {
             "type": "string",

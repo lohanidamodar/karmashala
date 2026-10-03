@@ -203,6 +203,12 @@ without touching a file.
 is limited. If a call is refused for depth, that is the answer: do the work
 yourself rather than looking for another way to delegate it.
 
+**`subagent_run` shares your tree unless told otherwise.** With no
+`projectId` and no `scratch`, the child runs in your own checkout and
+directory — your worktree when you are in one — so what it edits is what you
+see. Two agents editing the same files at once collide; pass `useWorktree` for
+a child that edits while you keep working.
+
 **`subagent_run` returns an answer only when the child's turn finished.**
 `finalAnswer` is the child's last message from its own record; when none was
 recorded it says so rather than handing you an empty string. `running` means

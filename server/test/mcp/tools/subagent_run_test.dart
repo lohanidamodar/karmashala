@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
@@ -142,13 +143,20 @@ void main() {
     database.close();
   });
 
-  void insertCaller(String id, {String? parent}) => SessionDao(database).insert(
+  void insertCaller(
+    String id, {
+    String? parent,
+    EnvironmentPath? worktree,
+    EnvironmentPath? workingDirectory,
+  }) => SessionDao(database).insert(
     Session(
       id: id,
       repositoryId: 'r1',
       agentInstallationId: 'a1',
       title: 'Orchestrator $id',
-      useWorktree: false,
+      useWorktree: worktree != null,
+      worktree: worktree,
+      workingDirectory: workingDirectory,
       status: SessionStatus.running,
       createdAt: t0,
       parentSessionId: parent,
@@ -264,6 +272,63 @@ void main() {
     expect(result['state'], 'ended');
     expect(result['exitCode'], 3);
     expect(result['exitCodeKnown'], isTrue);
+  });
+
+  /// Runs [arguments] as [caller] until the child is started, then lets the
+  /// bound run out, and answers the child's row.
+  Future<Session> childOf(String caller, Map<String, Object?> arguments) async {
+    final answer = tools.call('subagent_run', {
+      'prompt': 'Review it',
+      ...arguments,
+    }, caller)!;
+    for (var i = 0; i < 20 && pty.handles.isEmpty; i++) {
+      await pumpEventQueue();
+    }
+    deadline.complete();
+    final result =
+        (await answer.timeout(const Duration(seconds: 5)))!
+            as Map<String, Object?>;
+    return SessionDao(database).getById(result['childSessionId']! as String)!;
+  }
+
+  test('with no project named, the child works in the caller\'s own '
+      'directory', () async {
+    const directory = EnvironmentPath(
+      environmentId: 'local',
+      path: '/src/shop/api/packages/cart',
+    );
+    insertCaller('caller', workingDirectory: directory);
+    final child = await childOf('caller', const {});
+    expect(child.repositoryId, 'r1');
+    expect(child.workingDirectory, directory);
+    expect(pty.started.single.workingDirectory, directory.path);
+  });
+
+  test(
+    'with no project named, the child joins the caller\'s worktree',
+    () async {
+      const worktree = EnvironmentPath(
+        environmentId: 'local',
+        path: '/src/shop/worktrees/caller',
+      );
+      insertCaller('caller', worktree: worktree);
+      final child = await childOf('caller', const {});
+      expect(child.repositoryId, 'r1');
+      expect(child.worktree, worktree);
+      expect(pty.started.single.workingDirectory, worktree.path);
+    },
+  );
+
+  test('a named project still decides where the child runs', () async {
+    insertCaller(
+      'caller',
+      workingDirectory: const EnvironmentPath(
+        environmentId: 'local',
+        path: '/src/shop/api/packages/cart',
+      ),
+    );
+    await childOf('caller', const {'projectId': 'p1'});
+    expect(pty.started.single.workingDirectory, '/src/shop/api');
   });
 
   test('refuses past the spawn depth, nothing started', () async {
