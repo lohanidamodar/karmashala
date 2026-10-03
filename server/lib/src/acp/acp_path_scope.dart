@@ -17,6 +17,7 @@ class AcpPathScope {
     required this.root,
     p.Context? context,
     String Function(String path)? toHost,
+    this.hostSplitsBackslash = false,
   }) : _context = context ?? p.context,
        _toHost = toHost ?? _same;
 
@@ -24,6 +25,10 @@ class AcpPathScope {
   final String root;
   final p.Context _context;
   final String Function(String path) _toHost;
+
+  /// Whether this machine reads `\` as a separator where the agent does not:
+  /// a WSL agent's `..\..\x` is one name to it, and two steps up here.
+  final bool hostSplitsBackslash;
 
   /// This machine's own paths for a local environment; the distribution's
   /// UNC share for a WSL one.
@@ -51,6 +56,7 @@ class AcpPathScope {
             to: windows,
           )
           .path,
+      hostSplitsBackslash: true,
     );
   }
 
@@ -61,8 +67,9 @@ class AcpPathScope {
     final resolved = _context.normalize(
       _context.isAbsolute(path) ? path : _context.join(root, path),
     );
-    if (!_context.equals(resolved, normalRoot) &&
-        !_context.isWithin(normalRoot, resolved)) {
+    if ((hostSplitsBackslash && path.contains(r'\')) ||
+        (!_context.equals(resolved, normalRoot) &&
+            !_context.isWithin(normalRoot, resolved))) {
       throw AcpRpcError(
         JsonRpcErrorCodes.invalidParams,
         "the path $path is outside the session's working directory ($root), "

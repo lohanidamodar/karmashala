@@ -56,6 +56,27 @@ void main() {
     }
   });
 
+  test('a WSL agent\'s backslash is refused: one name to it, a separator '
+      'on the share it lands on', () {
+    final scope = AcpPathScope.forEnvironment(wsl, '/mnt/c/src/repo');
+    for (final escaping in [
+      r'..\..\..\Windows\x',
+      r'/mnt/c/src/repo/..\..\x',
+    ]) {
+      expect(
+        () => scope.resolve(escaping, verb: 'written'),
+        throwsA(
+          isA<AcpRpcError>().having(
+            (e) => e.code,
+            'code',
+            JsonRpcErrorCodes.invalidParams,
+          ),
+        ),
+        reason: escaping,
+      );
+    }
+  });
+
   test('a local environment, or none, keeps this machine\'s own paths', () {
     final root = p.current;
     for (final environment in [
