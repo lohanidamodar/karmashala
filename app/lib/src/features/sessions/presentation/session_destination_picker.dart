@@ -41,16 +41,22 @@ class SessionDestination {
 /// The destination a dialog opens on: **whatever the app is already pointed
 /// at**, else the first project the Explorer would draw, else no project at
 /// all — a workspace with nothing in it can still start a session in a
-/// scratch folder.
+/// scratch folder. A Scratch project is never a destination of its own:
+/// pointed at one of its folders, the dialog opens on No project.
 final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
+  final projects = ref.watch(workspaceScopedProjectsProvider);
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected != null) {
+    final inScratch = projects.any(
+      (p) => p.id == selected.projectId && p.isScratch,
+    );
+    if (inScratch) return const SessionDestination.scratch();
     return SessionDestination(
       projectId: selected.projectId,
       checkout: selected,
     );
   }
-  final project = ref.watch(workspaceScopedProjectsProvider).firstOrNull;
+  final project = projects.where((p) => !p.isScratch).firstOrNull;
   if (project == null) return const SessionDestination.scratch();
   return SessionDestination(
     projectId: project.id,
@@ -137,17 +143,20 @@ class SessionDestinationPicker extends ConsumerWidget {
               detail: 'A scratch folder of its own, on the agent\'s machine',
               icon: AppIcons.folderPlus,
             ),
+            // Scratch is reached through No project, never picked as one:
+            // its folders are each a session's own.
             for (final project in projects)
-              FilterMenuEntry(
-                value: project.id,
-                label: project.name,
-                // Two projects can share a name; the machine and folder tell
-                // them apart, and typing either narrows the list.
-                detail:
-                    '${ref.watch(environmentLabelForIdProvider(project.root.environmentId))}'
-                    '  ·  ${project.root.path}',
-                icon: AppIcons.folder,
-              ),
+              if (!project.isScratch)
+                FilterMenuEntry(
+                  value: project.id,
+                  label: project.name,
+                  // Two projects can share a name; the machine and folder tell
+                  // them apart, and typing either narrows the list.
+                  detail:
+                      '${ref.watch(environmentLabelForIdProvider(project.root.environmentId))}'
+                      '  ·  ${project.root.path}',
+                  icon: AppIcons.folder,
+                ),
           ],
           // A project the scope no longer lists draws as "Choose a project"
           // rather than asserting, as a dropdown value outside its items did.

@@ -508,6 +508,53 @@ void main() {
     });
   });
   group('without a project', () {
+    void seedScratch() {
+      server.projectRows.insert(
+        project(
+          id: 'p-scratch',
+          name: 'Scratch',
+          path: r'C:\Users\me\karmashala\scratch',
+          kind: Project.scratchKind,
+        ),
+      );
+      server.repositoryRows.insert(
+        repository(
+          id: 'r-scratch',
+          projectId: 'p-scratch',
+          name: '2026-10-03-new-session-a1b2c3',
+          path: r'C:\Users\me\karmashala\scratch\2026-10-03-new-session-a1b2c3',
+        ),
+      );
+    }
+
+    testWidgets('Scratch is never offered as a project: No project is the '
+        'way into it', (tester) async {
+      seedScratch();
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await tester.tap(find.text('Alpha').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('No project'), findsWidgets);
+      expect(find.text('Beta'), findsWidgets);
+      expect(find.text('Scratch'), findsNothing);
+      await tester.tap(find.text('Beta').last);
+      await tester.pumpAndSettle();
+      await closeAll(tester);
+    });
+
+    testWidgets('opened on a scratch session\'s checkout, it starts on No '
+        'project', (tester) async {
+      seedScratch();
+      final container = containerFor(selected: 'r-scratch');
+      await open(tester, container);
+
+      expect(find.text('No project'), findsOneWidget);
+      expect(find.text('Scratch'), findsNothing);
+      expect(find.text('Checkout'), findsNothing);
+      await closeAll(tester);
+    });
+
     testWidgets('No project is the first pick, and needs no checkout', (
       tester,
     ) async {
