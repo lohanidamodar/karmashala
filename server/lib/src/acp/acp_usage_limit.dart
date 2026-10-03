@@ -16,6 +16,21 @@ final RegExp _limitWords = RegExp(
   caseSensitive: false,
 );
 
+final RegExp _usageWords = RegExp(
+  r'usage[ _-]?limit|limit reached|hit your( \w+)? limit|quota'
+  r'|resource[ _]exhausted',
+  caseSensitive: false,
+);
+
+/// A bare rate limit is a usage limit only when its reset is at least this
+/// far off; a shorter wait is a passing throttle.
+const Duration kProtocolLimitMinimumWait = Duration(minutes: 5);
+
+/// Whether [words] speak of a spent usage allowance or quota, not just a
+/// request rate.
+bool hasUsageLimitWording(Iterable<String> words) =>
+    _usageWords.hasMatch(words.join('\n'));
+
 /// Whether [error] is an agent refusing a turn on a usage or rate limit, by
 /// its message or data — never by which agent said it.
 bool isUsageLimitError(AcpRpcError error) =>

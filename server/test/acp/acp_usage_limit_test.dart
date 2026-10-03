@@ -44,6 +44,21 @@ void main() {
     });
   });
 
+  test('hasUsageLimitWording: usage or quota words, not a bare rate limit', () {
+    for (final words in [
+      'Usage limit reached',
+      'RESOURCE_EXHAUSTED',
+      'Quota exceeded',
+      "You've hit your weekly limit",
+      'limit reached|1759500000',
+    ]) {
+      expect(hasUsageLimitWording([words]), isTrue, reason: words);
+    }
+    for (final words in ['429 Too Many Requests', 'rate_limit_error']) {
+      expect(hasUsageLimitWording([words]), isFalse, reason: words);
+    }
+  });
+
   group('usageLimitResetIn', () {
     test('epoch seconds', () {
       final at = now.add(const Duration(hours: 3));

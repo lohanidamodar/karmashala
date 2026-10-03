@@ -440,6 +440,42 @@ void main() {
         expect(resume.resetsAt, now.add(const Duration(hours: 4)));
       });
 
+      Future<void> refusedWith(String words) async {
+        seed(AgentIds.claudeAcp);
+        automations.observeStatus(
+          second(
+            AgentIds.claudeAcp,
+            (id) => protocolFailure(id, words: [words]),
+          ),
+        );
+        await pump();
+      }
+
+      test('a passing rate limit with a short retry is no usage limit: '
+          'nothing armed, nothing filed', () async {
+        await refusedWith('429 Too Many Requests: rate limited, retry in 45s');
+        expect(ScheduledResumeDao(db).liveFor('s2'), isNull);
+        expect(notices, isEmpty);
+        expect(raised, isEmpty);
+      });
+
+      test('usage wording arms it whatever the wait', () async {
+        await refusedWith('Usage limit reached, resets in 2h');
+        expect(
+          ScheduledResumeDao(db).liveFor('s2')!.resetsAt,
+          now.add(const Duration(hours: 2)),
+        );
+        expect(raised, hasLength(1));
+      });
+
+      test('a rate limit whose reset is minutes away is one too', () async {
+        await refusedWith('429 Too Many Requests, retry in 30 minutes');
+        expect(
+          ScheduledResumeDao(db).liveFor('s2')!.resetsAt,
+          now.add(const Duration(minutes: 30)),
+        );
+      });
+
       test('words with no reset in them, or any other protocol failure, arm '
           'nothing', () async {
         seed(AgentIds.claudeAcp);

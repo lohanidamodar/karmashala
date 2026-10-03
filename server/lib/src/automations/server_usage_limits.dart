@@ -13,7 +13,11 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../acp/acp_usage_limit.dart'
-    show kProtocolUsageLimitReason, usageLimitResetIn;
+    show
+        hasUsageLimitWording,
+        kProtocolLimitMinimumWait,
+        kProtocolUsageLimitReason,
+        usageLimitResetIn;
 import 'server_resume_runner.dart' show ResumeUsage, formatResumeClock;
 
 /// How old an agent's rate-limit record may be and still explain *this*
@@ -231,17 +235,26 @@ class ServerUsageLimits {
     final at = now();
     // A protocol turn the agent refused on a limit, in its own words: a
     // spent window in a reading names the reset when one can be read, else
-    // the words themselves when they carry it.
+    // the words themselves when they carry it. A bare rate limit with a short
+    // retry is a passing throttle, not a limit to resume after.
     if (entry.report.source == AgentStatusSource.protocol &&
         entry.report.failureReason == kProtocolUsageLimitReason) {
-      final window =
-          await _spentWindow(installation, at) ??
-          switch (usageLimitResetIn(entry.report.evidence, at)) {
-            final resets? => UsageWindow(label: 'usage', resetsAt: resets),
-            null => null,
-          };
-      if (window == null) return null;
-      return (sessionId: session.id, agentName: name, window: window);
+      final spent = await _spentWindow(installation, at);
+      if (spent != null) {
+        return (sessionId: session.id, agentName: name, window: spent);
+      }
+      final words = entry.report.evidence;
+      final resets = usageLimitResetIn(words, at);
+      if (resets == null) return null;
+      if (!hasUsageLimitWording(words) &&
+          resets.difference(at) < kProtocolLimitMinimumWait) {
+        return null;
+      }
+      return (
+        sessionId: session.id,
+        agentName: name,
+        window: UsageWindow(label: 'usage', resetsAt: resets),
+      );
     }
     switch (evidence) {
       case HookFailureReasonEvidence(:final reason):
