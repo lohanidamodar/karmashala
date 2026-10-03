@@ -2,6 +2,8 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/installation_labels.dart';
+import '../../environments/data/environments_data.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
@@ -10,10 +12,13 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionHandoff,
         SessionHandoffPreview,
         SessionStarted,
+        SessionAgentChanged,
         SessionSwitchAgent;
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
+import '../../../core/data/data_providers.dart';
 import '../data/sessions_client.dart';
+import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
@@ -28,6 +33,7 @@ class HandoffTarget {
     required this.agentName,
     required this.permission,
     required this.isSameAgent,
+    this.isCurrent = false,
     this.followsDefault = false,
     this.refusal,
     this.resumesConversation = false,
@@ -42,6 +48,9 @@ class HandoffTarget {
 
   /// Whether this is the agent already running the session.
   final bool isSameAgent;
+
+  /// Whether this very installation runs the session now.
+  final bool isCurrent;
 
   /// Whether [permission] is the Settings default rather than a choice — the
   /// dialog has to say so, because a default moves when the setting does.
@@ -122,79 +131,121 @@ class SessionHandoffService {
   List<HandoffTarget> switchTargetsFor(
     String sessionId, {
     Set<String> used = const {},
+    String? busy,
   }) {
     final current = _ref
         .read(sessionsDataProvider)
         .getById(sessionId)
         ?.agentInstallationId;
     final registry = _ref.read(agentRegistryProvider);
+    final targets = targetsFor(sessionId);
+    // Two installations of one agent are told apart by where they live.
+    final labels = installationLabels(
+      [for (final target in targets) target.installation],
+      registry: registry,
+      environmentName: (id) =>
+          _ref.read(environmentsDataProvider).getById(id)?.name,
+    );
     return [
-      for (final target in targetsFor(sessionId))
-        HandoffTarget(
-          installation: target.installation,
-          descriptor: target.descriptor,
-          agentName: target.agentName,
-          permission: target.permission,
-          isSameAgent: target.isSameAgent,
-          followsDefault: target.followsDefault,
-          refusal: target.isSameAgent
-              ? '${target.agentName} already runs this session.'
-              : agentSpeaksAcp(registry, target.installation.agentId) &&
-                    target.descriptor != null
-              ? null
-              : target.refusal,
-          resumesConversation:
-              target.installation.id != current &&
-              used.contains(target.installation.id),
-        ),
+      for (final target in targets)
+        if (labels[target.installation.id] case final name?)
+          HandoffTarget(
+            installation: target.installation,
+            descriptor: target.descriptor,
+            agentName: name,
+            permission: target.permission,
+            isSameAgent: target.isSameAgent,
+            isCurrent: target.installation.id == current,
+            followsDefault: target.followsDefault,
+            refusal: target.installation.id == current
+                ? '$name already runs this session.'
+                : busy ??
+                      (agentSpeaksAcp(registry, target.installation.agentId) &&
+                              target.descriptor != null
+                          ? null
+                          : target.refusal),
+            resumesConversation:
+                target.installation.id != current &&
+                used.contains(target.installation.id),
+          ),
     ];
   }
 
   /// Switches [sessionId] to [targetInstallationId] in place — the same row
-  /// and chat — then puts it on screen: the chat stays the primary view, and
-  /// a terminal agent's pane is opened, or reused, behind it.
+  /// and chat — then puts it on screen: the outgoing agent's terminal closes,
+  /// the chat tab stays in front, and a terminal agent's new pane opens
+  /// behind it.
   Future<SessionStarted> switchAgent({
     required String sessionId,
     required String targetInstallationId,
     String instruction = '',
   }) async {
-    final launcher = _ref.read(sessionLauncherProvider);
-    final oldPane = launcher.livePaneFor(sessionId);
-    final started = await _server.switchAgent(
-      SessionSwitchAgent(
-        sessionId: sessionId,
-        targetInstallationId: targetInstallationId,
-        instruction: instruction,
-      ),
-    );
-    _place(sessionId, started, oldPane);
-    return started;
+    // Every pane, not just a live one: a pane opened behind the chat and never
+    // shown has not attached yet, and was left behind as "Session ended".
+    final outgoing = _ref.read(paneSessionsProvider).terminalPanesOf(sessionId);
+    _switching.add(sessionId);
+    try {
+      final started = await _server.switchAgent(
+        SessionSwitchAgent(
+          sessionId: sessionId,
+          targetInstallationId: targetInstallationId,
+          instruction: instruction,
+        ),
+      );
+      _place(sessionId, started, outgoing);
+      return started;
+    } finally {
+      _switching.remove(sessionId);
+      _switchedHere[sessionId] = DateTime.now();
+    }
   }
 
-  void _place(String sessionId, SessionStarted started, String? oldPane) {
-    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
-    final launch = started.launch;
-    if (launch == null) {
-      // Over ACP the conversation is the tab; the old terminal has nothing
-      // left to show.
-      if (oldPane != null) terminals.closePane(oldPane, detach: true);
-      terminals.openChatTab(sessionId);
-    } else {
-      final reused = oldPane == null
-          ? null
-          : terminals.startAgentInPane(oldPane, launch);
-      final String paneId;
-      if (reused != null) {
-        paneId = oldPane!;
-        terminals.revealConversationForPane(paneId);
-      } else {
-        if (oldPane != null) terminals.closePane(oldPane, detach: true);
-        paneId = terminals.openAgentTab(launch).paneId;
-        // The terminal is secondary: the chat tab comes back to the front.
-        terminals.openChatTab(sessionId);
-      }
-      _ref.read(sessionsDataProvider).updatePaneId(sessionId, paneId);
+  /// Sessions this window is switching, and when it last did: the server's
+  /// announcement of a switch made here must not place it a second time.
+  final _switching = <String>{};
+  final _switchedHere = <String, DateTime>{};
+
+  /// Follows a switch made from another client — a phone, an agent's
+  /// `session_handoff` — as one made here would be placed, where this window
+  /// shows the outgoing agent's terminal. A chat alone follows the row itself.
+  Future<void> followSwitch(SessionAgentChanged change) async {
+    final sessionId = change.sessionId;
+    if (_switching.contains(sessionId)) return;
+    final here = _switchedHere[sessionId];
+    if (here != null &&
+        DateTime.now().difference(here) < const Duration(seconds: 10)) {
+      return;
     }
+    final outgoing = _ref.read(paneSessionsProvider).terminalPanesOf(sessionId);
+    if (outgoing.isEmpty) return;
+    final SessionStarted started;
+    try {
+      // The new agent already runs at the server: this attaches to it.
+      started = await _server.resume(sessionId);
+    } on Object {
+      final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+      for (final paneId in outgoing) {
+        terminals.closePane(paneId, detach: true);
+      }
+      return;
+    }
+    _place(sessionId, started, outgoing);
+  }
+
+  void _place(String sessionId, SessionStarted started, List<String> outgoing) {
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    // The chat first, so the session keeps a place on screen while the old
+    // terminal goes; its Restart would have relaunched the old agent.
+    terminals.openChatTab(sessionId);
+    for (final paneId in outgoing) {
+      terminals.closePane(paneId, detach: true);
+    }
+    String? paneId;
+    if (started.launch case final launch?) {
+      paneId = terminals.openAgentTab(launch).paneId;
+      terminals.openChatTab(sessionId);
+    }
+    _ref.read(sessionsDataProvider).updatePaneId(sessionId, paneId);
     _ref.publishSessionChange(
       SessionChange(
         sessionId: sessionId,
@@ -223,6 +274,15 @@ class SessionHandoffService {
           ? 'this agent'
           : registry.displayNameFor(agentId),
       externalSessionId: session.externalSessionId,
+      // Read off the chat when it is open: a switched thread tags its turns.
+      switched:
+          ((_ref.exists(sessionChatTranscriptProvider(sessionId))
+                      ? _ref
+                            .read(sessionChatTranscriptProvider(sessionId))
+                            .value
+                      : null) ??
+                  const [])
+              .any((message) => message.agentInstallationId != null),
     );
   }
 
@@ -336,6 +396,17 @@ class SessionHandoffService {
 final sessionHandoffServiceProvider = Provider<SessionHandoffService>(
   (ref) => SessionHandoffService(ref),
 );
+
+/// Places every switch the server announces — [SessionHandoffService.followSwitch].
+/// Watched by the shell, so it hears switches made from other clients.
+final sessionSwitchFollowerProvider = Provider<void>((ref) {
+  final service = ref.watch(sessionHandoffServiceProvider);
+  final subscription = ref
+      .watch(dataClientProvider)
+      .sessionAgentChanges
+      .listen((change) => service.followSwitch(change));
+  ref.onDispose(subscription.cancel);
+});
 
 /// Everything the composer needs to decide whether — and how — a session can be
 /// continued elsewhere, out of one read of the same three rows.

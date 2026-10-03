@@ -1106,15 +1106,23 @@ class QuickOpenSources {
 
     final items = <QuickOpenItem>[];
     final seen = <String>{};
+    // One row per thread: a switched one holds several conversations.
+    final opened = <String>{};
     for (var rank = 0; rank < hits.length; rank++) {
       final hit = hits[rank];
       if (!seen.add(hit.sessionId)) continue;
-      final native = sessionDao.getByExternalSessionId(hit.sessionId);
+      // An earlier agent's part of a switched thread opens its session.
+      final native =
+          sessionDao.getByExternalSessionId(hit.sessionId) ??
+          switch (hit.rowId) {
+            final rowId? => sessionDao.getById(rowId),
+            null => null,
+          };
       final imported = native == null
           ? importedDao.getByExternal(hit.cli, hit.sessionId)
           : null;
       final openId = native?.id ?? imported?.id;
-      if (openId == null) continue;
+      if (openId == null || !opened.add(openId)) continue;
       final title = native?.title ?? imported!.displayTitle;
       final agent = registry.displayNameFor(hit.cli);
       // A ranked page carries its own count; a raw turn list counts itself.

@@ -60,6 +60,7 @@ void main() {
     List<Session> children = const [],
     Map<String, SubagentState> live = const {},
     bool acp = false,
+    bool switched = false,
     Map<String, String> subagentAnswers = const {},
   }) => SessionSubagents(
     subagentAnswerOf: (path) async => subagentAnswers[path],
@@ -72,6 +73,7 @@ void main() {
         ? (total: null, gap: SubagentTokensGap.tooLarge)
         : (total: 42, gap: null),
     speaksAcp: (_) => acp,
+    switched: (_) => switched,
     modifiedAt: (_) async => t0.add(const Duration(minutes: 5)),
   );
 
@@ -253,6 +255,19 @@ void main() {
     ).read(const SessionSubagentsRead('s1'));
     expect(list.entries.single.kind, SubagentKind.childSession);
     expect(list.note, contains('ACP'));
+  });
+
+  test('a session switched to an ACP agent still lists the delegates its '
+      'earlier terminal agent recorded', () async {
+    final list = await reader(
+      messages: {
+        's1': [task('t1', output: 'x')],
+      },
+      acp: true,
+      switched: true,
+    ).read(const SessionSubagentsRead('s1'));
+    expect(list.entries.single.kind, SubagentKind.subagent);
+    expect(list.entries.single.title, 'Look for t1');
   });
 
   test('the live state follows the status report', () {

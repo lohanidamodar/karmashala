@@ -22,6 +22,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/installation_labels.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -904,16 +905,22 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
-  TranscriptAgent? _agentOf(String installationId) {
-    final agentId = ref
-        .read(agentInstallationsDataProvider)
-        .getById(installationId)
-        ?.agentId;
-    if (agentId == null) return null;
-    return (
-      name: ref.read(agentRegistryProvider).displayNameFor(agentId),
-      agentId: agentId,
+  /// Each agent of a switched thread by name — with where it lives when two
+  /// installations of one agent took turns in it.
+  TranscriptAgent? Function(String) _agentsIn(List<TranscriptMessage> messages) {
+    final rows = ref.read(agentInstallationsDataProvider);
+    final labels = installationLabelsOf(
+      {for (final message in messages) ?message.agentInstallationId},
+      rows: rows,
+      environments: ref.read(environmentsDataProvider),
+      registry: ref.read(agentRegistryProvider),
     );
+    return (installationId) {
+      final agentId = rows.getById(installationId)?.agentId;
+      final name = labels[installationId];
+      if (agentId == null || name == null) return null;
+      return (name: name, agentId: agentId);
+    };
   }
 
   /// The agent's own transcript as chat messages. The subagent a row spawned
@@ -927,7 +934,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       messages,
       subagents: subagents,
       earlier: earlier,
-      agentOf: _agentOf,
+      agentOf: _agentsIn(messages),
     );
     if (!mapEquals(subagents, _subagents)) {
       _subagents = subagents;
@@ -1206,8 +1213,10 @@ List<ChatMessage> chatMessagesFromTranscript(
     );
   }
 
-  // In a switched session the first agent row of each turn names its agent.
-  var nameNext = true;
+  // In a switched session an agent is named where it starts speaking — the
+  // thread's first agent row, and the first after each switch — not on every
+  // turn it goes on taking: the divider already says who took over.
+  String? lastNamed;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
     final reference = message.subagent;
@@ -1216,10 +1225,14 @@ List<ChatMessage> chatMessagesFromTranscript(
     final switching = message.role == kAgentSwitchRole;
     final named =
         installation != null &&
-        (switching || (message.role == 'agent' && nameNext));
+        (switching ||
+            (message.role == 'agent' && installation != lastNamed));
     final agent = named ? agentOf?.call(installation) : null;
-    if (message.role == 'user' || switching) nameNext = true;
-    if (message.role == 'agent') nameNext = false;
+    if (switching) {
+      lastNamed = null;
+    } else if (named) {
+      lastNamed = installation;
+    }
     out.add(
       ChatMessage(
         role: switching ? kAgentSwitchNoticeRole : message.role,

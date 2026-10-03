@@ -175,6 +175,20 @@ void main() {
       expect(delivered, ['second']);
     });
 
+    test('a held session queues every send and delivers once let go',
+        () async {
+      await runAgent();
+      queue.hold('s1');
+      expect(queue.busy('s1'), isTrue);
+      expect(send('while switching'), isA<AdmitQueued>());
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+
+      queue.release('s1');
+      await pumpEventQueue();
+      expect(delivered, ['while switching']);
+    });
+
     test('messages sent mid-turn go one per turn, in order', () async {
       await runAgent();
       hook('UserPromptSubmit');

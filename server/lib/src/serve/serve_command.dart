@@ -1031,6 +1031,10 @@ Future<int> runServe(
     conversationOf: (sessionId) async =>
         await switchTranscripts?.messagesOf(sessionId) ?? const [],
     turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
+    cancelResume: (sessionId, reason) =>
+        automations?.cancelResumeOf(sessionId, reason) != null,
+    holdQueue: (sessionId) => switchQueue?.hold(sessionId),
+    releaseQueue: (sessionId) => switchQueue?.release(sessionId),
     nextMessageOrdinal: sessionMessages.countForSession,
     onSwitched: (sessionId, spans) {
       data.announceSessions([sessionId]);
@@ -1250,6 +1254,7 @@ Future<int> runServe(
     sessionTokens: sessionRecordReadings.tokensOf,
     subagentTokens: sessionRecordReadings.subagentTokensOf,
     speaksAcp: speaksAcp,
+    switched: agentSpans.hasSpans,
   );
   data.sessionSubagents = sessionSubagents;
   // What a session said last, read from its record: `subagent_run`'s answer

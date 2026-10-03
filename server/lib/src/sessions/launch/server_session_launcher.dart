@@ -160,7 +160,10 @@ class ServerSessionLauncher {
 
   /// Starts what [spec] asks for. Throws [LaunchTargetMissing], or
   /// [StateError] / [ArgumentError] in the words a person or agent reads.
-  Future<SessionStarted> start(SessionStartSpec spec) async {
+  Future<SessionStarted> start(
+    SessionStartSpec spec, {
+    String? freshConversationId,
+  }) async {
     if (spec.restartSessionId != null &&
         (spec.resumeConversationId != null ||
             spec.forkConversationId != null)) {
@@ -296,6 +299,7 @@ class ServerSessionLauncher {
         recordDirectory: recordDirectory,
         resuming: reused,
         fresh: restarting,
+        freshConversationId: restarting ? freshConversationId : null,
         resumeConversationId: restarting ? null : resumeId,
         forkConversationId: spec.forkConversationId,
         parentSessionId: spec.parentSessionId,
@@ -336,6 +340,7 @@ class ServerSessionLauncher {
     bool restart = false,
     String? prompt,
     String? systemPrompt,
+    String? freshConversationId,
     int columns = 120,
     int rows = 40,
   }) {
@@ -344,6 +349,7 @@ class ServerSessionLauncher {
       restart: restart,
       prompt: prompt,
       systemPrompt: systemPrompt,
+      freshConversationId: freshConversationId,
       columns: columns,
       rows: rows,
     );
@@ -371,6 +377,7 @@ class ServerSessionLauncher {
     required int columns,
     required int rows,
     String? systemPrompt,
+    String? freshConversationId,
   }) async {
     final row =
         sessions.getById(sessionId) ??
@@ -406,6 +413,7 @@ class ServerSessionLauncher {
         columns: columns,
         rows: rows,
       ),
+      freshConversationId: freshConversationId,
     );
   }
 

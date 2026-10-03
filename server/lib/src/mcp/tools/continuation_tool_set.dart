@@ -205,6 +205,7 @@ class ContinuationToolSet extends ServerToolSet {
       'resumesConversation': target.resumesConversation,
       'permissionMode': target.permission.selection.canonical,
       'where': _show(started.sessionId, started: started),
+      'notice': ?started.switchNotice,
     };
   }
 

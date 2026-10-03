@@ -10,7 +10,10 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/presentation/usage_window_meter.dart';
+import '../../agents/application/agent_providers.dart';
 import '../application/project_week.dart';
+import '../application/session_chat_source.dart';
+import '../application/session_providers.dart';
 import '../application/session_stats_providers.dart';
 import 'session_stats_dialog.dart'
     show
@@ -68,6 +71,30 @@ int? turnsLeftEstimate(SessionStats stats) {
 /// closes as it opens. The width is fixed; the meters and bars are painters
 /// that ask nothing; the one chart that does lay out by constraints, the
 /// week's [BarChart], sits in [_TightChartBox], which answers for it.
+/// What a switched session's counts cover, in words, or null for a session
+/// one agent ran: the record they are read from is the running agent's
+/// alone. Read off the chat when it is open, whose turns name their agent.
+String? statsSinceSwitchNote(WidgetRef ref, String sessionId) {
+  final messages =
+      (ref.exists(sessionChatTranscriptProvider(sessionId))
+          ? ref.read(sessionChatTranscriptProvider(sessionId)).value
+          : null) ??
+      const [];
+  if (!messages.any((m) => m.agentInstallationId != null)) return null;
+  final installation = ref
+      .read(sessionsDataProvider)
+      .getById(sessionId)
+      ?.agentInstallationId;
+  final agentId = installation == null
+      ? null
+      : ref.read(agentInstallationsDataProvider).getById(installation)?.agentId;
+  final name = agentId == null
+      ? 'the current agent'
+      : ref.read(agentRegistryProvider).displayNameFor(agentId);
+  return 'Since switching to $name — earlier agents of this thread are '
+      'not counted.';
+}
+
 class SessionStatsPopover extends ConsumerWidget {
   const SessionStatsPopover({required this.sessionId, super.key});
 
@@ -98,6 +125,7 @@ class SessionStatsPopover extends ConsumerWidget {
     final async = ref.watch(sessionStatsProvider(sessionId));
     final view = async.asData?.value;
     final title = view?.sessionTitle?.trim();
+    final since = statsSinceSwitchNote(ref, sessionId);
 
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,6 +147,8 @@ class SessionStatsPopover extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
             style: meta,
           ),
+        if (since != null)
+          Text(since, key: const ValueKey('stats-since-switch'), style: meta),
       ],
     );
 

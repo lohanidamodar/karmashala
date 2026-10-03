@@ -224,9 +224,8 @@ class FakeSessionWork {
         _server.sessionRows.put(
           before.copyWith(agentInstallationId: r.targetInstallationId),
         );
-        return SessionStarted(
-          session: _server.sessionRows.getById(r.sessionId)!,
-        );
+        final row = _server.sessionRows.getById(r.sessionId)!;
+        return SessionStarted(session: row, launch: _launchOf(row));
       case SessionForkFromCheckpoint():
         throw const DataRefused.invalid('not scripted');
     }

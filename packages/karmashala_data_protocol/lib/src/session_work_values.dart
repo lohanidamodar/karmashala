@@ -235,6 +235,7 @@ final class SessionStarted {
     this.workingDirectoryNotice,
     this.credentialNotice,
     this.depth,
+    this.switchNotice,
   });
 
   /// The row as the server wrote it.
@@ -259,6 +260,22 @@ final class SessionStarted {
   /// How deep the new session is in its spawn chain, when it has a parent.
   final int? depth;
 
+  /// What a switch of agent changed besides the agent, in a person's words —
+  /// a scheduled resume of the leaving agent it cancelled.
+  final String? switchNotice;
+
+  /// This answer with [notice] as its [switchNotice].
+  SessionStarted withNotice(String notice) => SessionStarted(
+    session: session,
+    launch: launch,
+    external: external,
+    adopted: adopted,
+    workingDirectoryNotice: workingDirectoryNotice,
+    credentialNotice: credentialNotice,
+    depth: depth,
+    switchNotice: notice,
+  );
+
   String get sessionId => session.id;
 
   /// The terminal session a pane attaches to — on an SSH box too: the
@@ -274,6 +291,7 @@ final class SessionStarted {
     'workingDirectoryNotice': ?workingDirectoryNotice,
     'credentialNotice': ?credentialNotice,
     'depth': ?depth,
+    'switchNotice': ?switchNotice,
   };
 
   static SessionStarted fromJson(Map<String, Object?> json) => SessionStarted(
@@ -292,6 +310,7 @@ final class SessionStarted {
     workingDirectoryNotice: json['workingDirectoryNotice'] as String?,
     credentialNotice: json['credentialNotice'] as String?,
     depth: json['depth'] as int?,
+    switchNotice: json['switchNotice'] as String?,
   );
 }
 

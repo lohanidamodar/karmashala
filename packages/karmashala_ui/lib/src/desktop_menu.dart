@@ -172,6 +172,7 @@ class DesktopMenuDetailItem<T> extends PopupMenuItem<T> {
     required String label,
     required String detail,
     IconData? icon,
+    Widget? leading,
     String? badge,
     Color? badgeColor,
     int? detailMaxLines,
@@ -186,6 +187,7 @@ class DesktopMenuDetailItem<T> extends PopupMenuItem<T> {
            label: label,
            detail: detail,
            icon: icon,
+           leading: leading,
            badge: badge,
            badgeColor: badgeColor,
            detailMaxLines: detailMaxLines,
@@ -211,6 +213,7 @@ class DesktopMenuDetailRow extends StatelessWidget {
     required this.label,
     required this.detail,
     this.icon,
+    this.leading,
     this.badge,
     this.badgeColor,
     this.detailMaxLines,
@@ -226,6 +229,10 @@ class DesktopMenuDetailRow extends StatelessWidget {
 
   /// The leading glyph, replaced by a check while [selected].
   final IconData? icon;
+
+  /// A leading widget in [icon]'s place — an agent's logo — replaced by a
+  /// check while [selected] like the glyph.
+  final Widget? leading;
 
   /// A short qualifier after the label — "approximate", "not enforced".
   final String? badge;
@@ -265,7 +272,9 @@ class DesktopMenuDetailRow extends StatelessWidget {
         // at a time does not shuffle its labels sideways as the answer moves.
         SizedBox(
           width: Chrome.icon,
-          child: glyph == null
+          child: glyph == null && !selected && leading != null
+              ? leading
+              : glyph == null
               ? null
               : Icon(glyph, size: Chrome.icon, color: color),
         ),

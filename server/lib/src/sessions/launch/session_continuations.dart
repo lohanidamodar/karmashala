@@ -25,6 +25,7 @@ import 'package:karmashala_session_engine/store.dart'
 import '../../automations/daemon_agents.dart';
 import '../../checkpoints/daemon_checkpoints.dart';
 import '../../data/conversations_handler.dart' show TranscriptStores;
+import '../../domain/uuid.dart';
 import '../../mcp/tools/checkout_delivery.dart';
 import '../../mcp/tools/checkout_reach.dart';
 import '../../status/hosted_session_wait.dart';
@@ -94,6 +95,9 @@ class SessionContinuations {
     this.turnRunning,
     this.nextMessageOrdinal,
     this.onSwitched,
+    this.cancelResume,
+    this.holdQueue,
+    this.releaseQueue,
     this.agents = const DaemonAgents(),
     this.registry = AgentRegistry.builtIn,
     this.log,
@@ -135,6 +139,16 @@ class SessionContinuations {
 
   /// The ordinal the next `session_messages` row of a session takes.
   final int Function(String sessionId)? nextMessageOrdinal;
+
+  /// Cancels a session's armed resume with the reason given; true when one
+  /// was waiting. A switch cancels the leaving agent's: at its reset the
+  /// resume would type that agent's message into another.
+  final bool Function(String sessionId, String reason)? cancelResume;
+
+  /// Holds a session's queue busy while its agent is switched, and lets it
+  /// go: a send meanwhile waits for the new agent.
+  final void Function(String sessionId)? holdQueue;
+  final void Function(String sessionId)? releaseQueue;
 
   /// Told once a session's agent was switched and the new one started.
   final void Function(String sessionId, List<SessionAgentSpan> spans)?
@@ -180,8 +194,10 @@ class SessionContinuations {
       agentName: name,
       permission: carryPermission(starting.risk, descriptor, targetName: name),
       isSameAgent: same,
+      // Another installation of the same agent is a switch like any other:
+      // it starts its own conversation, never the other one's.
       refusal: inPlace
-          ? (same
+          ? (installation.id == session.agentInstallationId
                 ? '$name already runs this session.'
                 : _refusalFor(
                     descriptor,
@@ -226,6 +242,7 @@ class SessionContinuations {
           ? 'this agent'
           : registry.displayNameFor(agentId),
       externalSessionId: session.externalSessionId,
+      switched: spans?.hasSpans(sessionId) ?? false,
     );
   }
 
@@ -256,9 +273,16 @@ class SessionContinuations {
     final directory =
         session.workingDirectory ?? session.worktree ?? repository?.path;
     final recorded = _decisionsFor(sessionId, decisionBudget);
-    final recap = conversation != null
+    // A switched session's thread is every agent's turns, stitched; the
+    // current agent's own record holds only its part.
+    final thread =
+        conversation ??
+        (spans?.hasSpans(sessionId) ?? false
+            ? await _conversationOf(sessionId)
+            : null);
+    final recap = thread != null
         ? _recapOf(
-            missedTurns(conversation, missedBy),
+            missedTurns(thread, missedBy),
             sourceName,
             budget.reducedBy(recorded.cost),
           )
@@ -762,6 +786,39 @@ class SessionContinuations {
         'it first.',
       );
     }
+    // Held busy until the new agent runs: a send meanwhile queues for it
+    // rather than racing its start.
+    holdQueue?.call(sessionId);
+    try {
+      return await _switchHeld(
+        session: session,
+        context: context,
+        ledger: ledger,
+        sourceAgentId: sourceAgentId,
+        instruction: instruction,
+        permissionMode: permissionMode,
+      );
+    } finally {
+      releaseQueue?.call(sessionId);
+    }
+  }
+
+  Future<SessionStarted> _switchHeld({
+    required Session session,
+    required ({
+      Repository repository,
+      AgentInstallation installation,
+      AgentDescriptor? descriptor,
+      String agentName,
+    })
+    context,
+    required SessionAgentSpanDao ledger,
+    required String? sourceAgentId,
+    required String instruction,
+    required String? permissionMode,
+  }) async {
+    final sessionId = session.id;
+    final targetInstallationId = context.installation.id;
 
     final targetAcp = _speaksAcp(context.installation.agentId);
     final sourceAcp = sourceAgentId != null && _speaksAcp(sourceAgentId);
@@ -826,22 +883,62 @@ class SessionContinuations {
     sessions
       ..updatePermissionMode(sessionId, carried?.canonical)
       ..updateModel(sessionId, null);
+    // An agent that takes our id starts under the row's — unless an earlier
+    // agent of this row already holds it, as another installation of the
+    // same agent does: one id is never claimed by two conversations.
+    final rowIdTaken = ledger
+        .forSession(sessionId)
+        .any((s) => s.externalSessionId == sessionId);
     final SessionStarted started;
     try {
       started = await launches.resume(
         sessionId,
         prompt: asFile ? said : rendered,
         systemPrompt: asFile ? rendered : null,
+        freshConversationId: !resumable && rowIdTaken ? newUuid() : null,
       );
-    } on Object {
+    } on Object catch (error) {
       ledger.undoSwitch(session, fromSeq: firstSwitch ? 0 : span.seq);
       sessions.updatePermissionMode(sessionId, session.permissionMode);
       sessions.updateModel(sessionId, session.modelId);
       onSwitched?.call(sessionId, ledger.forSession(sessionId));
-      rethrow;
+      // The agent that was stopped for the switch is started again, so a
+      // failed switch leaves the session as it found it where it can.
+      final previous = _agentNameOf(session);
+      final why = error is StateError ? error.message : '$error';
+      var restored = false;
+      try {
+        await launches.resume(sessionId);
+        restored = true;
+      } on Object catch (again) {
+        log?.call(
+          'Switch of $sessionId failed, and $previous did not '
+          'start again either: $again',
+        );
+      }
+      throw StateError(
+        restored
+            ? '${context.agentName} did not start ($why). $previous runs '
+                  'this session again.'
+            : '${context.agentName} did not start ($why), and $previous, '
+                  'stopped for the switch, did not start again. Send a '
+                  'message, or resume it, to continue with $previous.',
+      );
     }
     onSwitched?.call(sessionId, ledger.forSession(sessionId));
-    return started;
+    final leaving = _agentNameOf(session);
+    final cancelled =
+        cancelResume?.call(
+          sessionId,
+          'The session switched from $leaving to ${context.agentName}, so '
+          'the resume scheduled for $leaving was cancelled.',
+        ) ??
+        false;
+    if (!cancelled) return started;
+    return started.withNotice(
+      'The resume scheduled for $leaving was cancelled: it would have '
+      'typed $leaving\'s message into ${context.agentName}.',
+    );
   }
 
   Future<List<TranscriptMessage>?> _conversationOf(String sessionId) async {

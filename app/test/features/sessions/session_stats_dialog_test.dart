@@ -846,4 +846,30 @@ void main() {
       expect(find.text('Stats'), findsOneWidget);
     });
   });
+
+  testWidgets('a switched session says its counts start at the switch', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SessionStatsBody(
+                view: SessionStatsView.computed(codexSession, 'Codex'),
+                sinceSwitch:
+                    'Since switching to Codex — earlier agents of this '
+                    'thread are not counted.',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(text('earlier agents of this thread are not counted'), findsOne);
+    expect(tester.takeException(), isNull);
+  });
 }

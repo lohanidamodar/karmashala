@@ -84,6 +84,40 @@ void main() {
     for (final hit in page.hits) hit.sessionId,
   ];
 
+
+  group('a switched thread', () {
+    test('an earlier agent\'s conversation is still found, and opens the '
+        'session that holds it', () {
+      // The row moved on to another agent's conversation; a span keeps the
+      // first one.
+      conversation('codex-now', ['tests added for the cache']);
+      conversation('claude-before', [
+        'cached the cart totals',
+      ], withSession: false);
+      db.execute(
+        'INSERT INTO session_agent_spans (session_id, seq, '
+        'agent_installation_id, external_session_id, started_at) '
+        'VALUES (?, ?, ?, ?, ?);',
+        ['s0', 0, 'a1', 'claude-before', '2026-09-21T10:00:00.000Z'],
+      );
+
+      final hit = search.search('cart totals').hits.single;
+      expect(hit.sessionId, 'claude-before');
+      expect(hit.rowId, 's0');
+      // Filtered to its repository, it is still that repository's.
+      expect(
+        search
+            .search(
+              'cart totals',
+              filter: const SessionSearchFilter(repositoryId: 'r1'),
+            )
+            .hits,
+        hasLength(1),
+      );
+      // A conversation a row names carries no row id.
+      expect(search.search('tests added').hits.single.rowId, isNull);
+    });
+  });
   group('ranking', () {
     test('BM25 decides the order, not which was indexed first', () {
       conversation('weak', [

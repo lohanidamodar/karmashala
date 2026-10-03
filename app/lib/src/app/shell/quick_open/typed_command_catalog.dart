@@ -268,6 +268,10 @@ List<ConversationMatch> _saidIn(
   return [
     for (final hit in hits)
       if (sessionDao.getByExternalSessionId(hit.sessionId)?.id ??
+              switch (hit.rowId) {
+                final rowId? => sessionDao.getById(rowId)?.id,
+                null => null,
+              } ??
               importedDao.getByExternal(hit.cli, hit.sessionId)?.id
           case final openId?)
         (sessionId: openId, excerpt: hit.excerpt),

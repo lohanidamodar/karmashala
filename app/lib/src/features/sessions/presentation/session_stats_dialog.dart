@@ -68,6 +68,7 @@ class SessionStatsDialog extends ConsumerWidget {
           AsyncValue(:final value?) => SessionStatsBody(
             view: value,
             status: AgentStatusBadge(sessionId: sessionId, showLabel: true),
+            sinceSwitch: statsSinceSwitchNote(ref, sessionId),
           ),
           _ => const Padding(
             padding: EdgeInsets.symmetric(vertical: Insets.xl),
@@ -100,10 +101,18 @@ class SessionStatsDialog extends ConsumerWidget {
 /// The dialog's body for one [view]: this session, then all time, then the
 /// caveat. [status] is the live badge, a slot so the body stays a plain value.
 class SessionStatsBody extends StatelessWidget {
-  const SessionStatsBody({required this.view, this.status, super.key});
+  const SessionStatsBody({
+    required this.view,
+    this.status,
+    this.sinceSwitch,
+    super.key,
+  });
 
   final SessionStatsView view;
   final Widget? status;
+
+  /// What a switched session's counts cover; null for one agent's.
+  final String? sinceSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +122,10 @@ class SessionStatsBody extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _MetaLine(view: view, status: status),
+        if (sinceSwitch case final note?) ...[
+          const SizedBox(height: Insets.sm),
+          _Notice(note),
+        ],
         // Two sections, one scroll, never a tab strip: they come from different
         // books, can honestly disagree, and each carries its own provenance.
         _SessionSection(view: view),
