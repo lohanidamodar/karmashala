@@ -31,12 +31,76 @@ enum QueuedMessageOrigin {
 
   /// An agent's `session_send`; [QueuedMessage.originId] is the calling
   /// session, when there is one.
-  mcp;
+  mcp,
+
+  /// A scheduled resume the server fired.
+  automation;
 
   static QueuedMessageOrigin fromName(String? name) => values.firstWhere(
     (origin) => origin.name == name,
     orElse: () => QueuedMessageOrigin.app,
   );
+}
+
+/// Why a session's queued messages wait although no turn of its runs.
+enum QueueHoldKind {
+  /// The agent stopped on its usage limit; [QueueHold.until] is the resume
+  /// armed for its reset, when one is.
+  limit,
+
+  /// A resume is scheduled for [QueueHold.until], at a chosen time.
+  scheduled,
+
+  /// The person stopped or ended the session: nothing more goes until they
+  /// send again or ask for the next one.
+  paused,
+
+  /// Nothing runs the session, so nothing goes until it is resumed.
+  stopped;
+
+  static QueueHoldKind? fromName(String? name) {
+    for (final kind in values) {
+      if (kind.name == name) return kind;
+    }
+    return null;
+  }
+}
+
+/// What holds a session's queue, and until when where that is known.
+class QueueHold {
+  const QueueHold(this.kind, {this.until});
+
+  /// Null for a kind this build does not know.
+  static QueueHold? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final kind = QueueHoldKind.fromName(json['kind'] as String?);
+    if (kind == null) return null;
+    return QueueHold(
+      kind,
+      until: switch (json['until']) {
+        final String at => DateTime.tryParse(at),
+        _ => null,
+      },
+    );
+  }
+
+  final QueueHoldKind kind;
+  final DateTime? until;
+
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'until': ?until?.toUtc().toIso8601String(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is QueueHold && other.kind == kind && other.until == until;
+
+  @override
+  int get hashCode => Object.hash(kind, until);
+
+  @override
+  String toString() => 'QueueHold(${kind.name}, until: $until)';
 }
 
 /// A message sent while its session's turn ran, kept at the server and
@@ -55,6 +119,7 @@ class QueuedMessage {
     this.deliveredAt,
     this.requestId,
     this.error,
+    this.hold,
   });
 
   factory QueuedMessage.fromJson(Map<String, Object?> json) => QueuedMessage(
@@ -73,6 +138,7 @@ class QueuedMessage {
     },
     requestId: json['requestId'] as String?,
     error: json['error'] as String?,
+    hold: QueueHold.fromJson(json['hold']),
   );
 
   final String id;
@@ -92,6 +158,10 @@ class QueuedMessage {
   /// Why a [QueuedMessageState.failed] row failed, in words.
   final String? error;
 
+  /// What keeps a queued message waiting past the running turn: never
+  /// stored, told by the server as it stands.
+  final QueueHold? hold;
+
   bool get editable => state == QueuedMessageState.queued;
 
   QueuedMessage copyWith({
@@ -100,6 +170,7 @@ class QueuedMessage {
     DateTime? updatedAt,
     DateTime? deliveredAt,
     String? error,
+    QueueHold? hold,
   }) => QueuedMessage(
     id: id,
     sessionId: sessionId,
@@ -113,6 +184,7 @@ class QueuedMessage {
     deliveredAt: deliveredAt ?? this.deliveredAt,
     requestId: requestId,
     error: error ?? this.error,
+    hold: hold ?? this.hold,
   );
 
   Map<String, Object?> toJson() => {
@@ -128,6 +200,7 @@ class QueuedMessage {
     'deliveredAt': ?deliveredAt?.toUtc().toIso8601String(),
     'requestId': ?requestId,
     'error': ?error,
+    'hold': ?hold?.toJson(),
   };
 
   @override
@@ -144,7 +217,8 @@ class QueuedMessage {
       other.updatedAt == updatedAt &&
       other.deliveredAt == deliveredAt &&
       other.requestId == requestId &&
-      other.error == error;
+      other.error == error &&
+      other.hold == hold;
 
   @override
   int get hashCode => Object.hash(
@@ -160,5 +234,6 @@ class QueuedMessage {
     deliveredAt,
     requestId,
     error,
+    hold,
   );
 }

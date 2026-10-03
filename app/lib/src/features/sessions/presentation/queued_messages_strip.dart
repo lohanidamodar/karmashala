@@ -6,6 +6,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../application/session_queue_providers.dart';
 
 /// The messages [sessionId] holds at the server, below the transcript: each
@@ -20,6 +22,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = ref.watch(sessionQueueProvider(sessionId));
     if (messages.isEmpty) return const SizedBox.shrink();
+    final hold = queueHoldOf(messages);
     var place = 0;
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -30,6 +33,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (hold != null) _HoldLine(hold: hold),
           for (final message in messages)
             _QueuedBubble(
               key: ValueKey('queued-${message.id}'),
@@ -38,6 +42,42 @@ class QueuedMessagesStrip extends ConsumerWidget {
                   ? null
                   : ++place,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Why the queue waits past the turn's end, over its messages.
+class _HoldLine extends ConsumerWidget {
+  const _HoldLine({required this.hold});
+
+  final QueueHold hold;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final now = ref.watch(clockProvider).nowUtc().toLocal();
+    return Padding(
+      key: const ValueKey('queue-hold'),
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Row(
+        children: [
+          Icon(
+            hold.kind == QueueHoldKind.paused ? AppIcons.pause : AppIcons.clock,
+            size: Touch.iconSmall,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
+          Expanded(
+            child: Text(
+              queueHoldWords(hold, now),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -240,4 +280,28 @@ class _EditQueuedBodyState extends State<_EditQueuedBody> {
       ],
     ),
   );
+}
+
+/// What holds [messages]' queue, as the server marks its queued ones; null
+/// when nothing does, or the server is too old to say.
+QueueHold? queueHoldOf(List<QueuedMessage> messages) {
+  for (final message in messages) {
+    if (message.state == QueuedMessageState.queued) return message.hold;
+  }
+  return null;
+}
+
+/// [hold] in words, its time on this machine's clock.
+String queueHoldWords(QueueHold hold, DateTime now) {
+  final until = hold.until;
+  final at = until == null ? null : formatResetClock(until, now);
+  return switch (hold.kind) {
+    QueueHoldKind.limit when at != null => 'Held until the limit resets · $at',
+    QueueHoldKind.limit => 'Held — the agent stopped on its usage limit',
+    QueueHoldKind.scheduled when at != null =>
+      'Held until the scheduled resume · $at',
+    QueueHoldKind.scheduled => 'Held until the scheduled resume',
+    QueueHoldKind.paused => 'Paused — nothing more goes until you say',
+    QueueHoldKind.stopped => "Waiting — this session isn't running",
+  };
 }

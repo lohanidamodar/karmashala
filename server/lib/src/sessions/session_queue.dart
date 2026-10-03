@@ -6,6 +6,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionQueueDao;
 
+import '../automations/server_resume_runner.dart' show ResumeQueue;
 import '../domain/uuid.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/turn_settlement.dart';
@@ -41,7 +42,11 @@ final class AdmitQueued extends QueueAdmission {
 /// behind others, so nothing waits for a session nobody runs: with the head
 /// as its opening prompt where the agent takes one, else bare and given the
 /// head once idle.
-class SessionQueue {
+///
+/// A queue can be held past the turn's end ([QueueHold]): on a usage limit
+/// ([limitHold]), whose resume then delivers the head in its message's place
+/// ([sendForResume]). Clients are told the hold on each queued message.
+class SessionQueue implements ResumeQueue {
   SessionQueue({
     required this.dao,
     required this.status,
@@ -49,6 +54,7 @@ class SessionQueue {
     this.resumesOnSend,
     this.resumeStopped,
     this.takesOpeningMessage,
+    this.limitHold,
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
@@ -87,6 +93,10 @@ class SessionQueue {
   /// (`launch.acceptsPromptArgument`).
   final bool Function(String sessionId)? takesOpeningMessage;
 
+  /// What holds row [String]'s queue on its usage limit or a scheduled
+  /// resume, or null.
+  final QueueHold? Function(String sessionId)? limitHold;
+
   /// Told the session's open messages each time they move.
   final void Function(String sessionId, List<QueuedMessage> open)? announce;
   final void Function(String message)? log;
@@ -119,6 +129,9 @@ class SessionQueue {
   /// Sessions resumed bare for their head, which waits for the turn to end.
   final _resumedForHead = <String>{};
   final _waiters = <String, List<Completer<QueuedMessage>>>{};
+
+  /// The hold each session's clients were last told.
+  final _toldHold = <String, QueueHold?>{};
   final _subscriptions = <StreamSubscription<Object?>>[];
   var _closed = false;
 
@@ -208,7 +221,11 @@ class SessionQueue {
         return AdmitQueued(existing, dao.positionOf(sessionId, existing.seq));
       }
     }
-    if (!busy(sessionId) && !dao.hasWaiting(sessionId)) return null;
+    if (!busy(sessionId) &&
+        !dao.hasWaiting(sessionId) &&
+        !_holdsNewMessages(sessionId)) {
+      return null;
+    }
     final message = dao.enqueue(
       id: _newId(),
       sessionId: sessionId,
@@ -234,7 +251,7 @@ class SessionQueue {
   }
 
   /// The messages [sessionId] holds, queued, delivering or failed, in order.
-  List<QueuedMessage> list(String sessionId) => dao.open(sessionId);
+  List<QueuedMessage> list(String sessionId) => _open(sessionId);
 
   /// Replaces queued message [id]'s text; refused once it is on its way.
   QueuedMessage edit(String sessionId, String id, String text) {
@@ -373,14 +390,28 @@ class SessionQueue {
   }
 
   Future<void> _drain(String sessionId, {bool resume = false}) async {
-    final deliver = this.deliver;
-    if (_closed || deliver == null) return;
-    if (resume && _stopped(sessionId)) return _resumeFor(sessionId);
-    if (!_ready(sessionId)) return;
-    final head = dao.head(sessionId);
-    if (head == null) {
+    if (_closed || deliver == null || _inFlight.contains(sessionId)) return;
+    if (dao.head(sessionId) == null) {
       _withQueued.remove(sessionId);
       return;
+    }
+    final hold = _holdOf(sessionId);
+    if (_toldHold[sessionId] != hold) _announce(sessionId);
+    if (hold != null) return;
+    if (resume && _stopped(sessionId)) return _resumeFor(sessionId);
+    if (!_ready(sessionId)) return;
+    await _deliverHead(sessionId);
+  }
+
+  /// Delivers [sessionId]'s head now. Null when it went or none waits; else
+  /// why not, in words — the head then queued again or failed.
+  Future<String?> _deliverHead(String sessionId) async {
+    final deliver = this.deliver;
+    final head = dao.head(sessionId);
+    if (deliver == null) return 'this server delivers no messages';
+    if (head == null) {
+      _withQueued.remove(sessionId);
+      return null;
     }
     if (!dao.transition(
       head.id,
@@ -388,19 +419,21 @@ class SessionQueue {
       to: QueuedMessageState.delivering,
       now: _now(),
     )) {
-      return;
+      return 'the next message is already on its way';
     }
     _inFlight.add(sessionId);
     _sawWorking.remove(sessionId);
     _resumedForHead.remove(sessionId);
     _announce(sessionId);
     var delivered = false;
+    String? why;
     try {
       await deliver(sessionId, head.text);
       delivered = true;
       _finish(head, QueuedMessageState.delivered);
       log?.call('queue $sessionId: ${head.id} delivered');
     } on DataRefused catch (refusal) {
+      why = refusal.message;
       if (refusal.code == DataRefusalCode.notFound ||
           refusal.code == DataRefusalCode.conflict) {
         // Nothing was typed: it waits for the next turn's end.
@@ -415,7 +448,8 @@ class SessionQueue {
         _finish(head, QueuedMessageState.failed, error: refusal.message);
       }
     } on Object catch (error) {
-      _finish(head, QueuedMessageState.failed, error: '$error');
+      why = '$error';
+      _finish(head, QueuedMessageState.failed, error: why);
     } finally {
       _inFlight.remove(sessionId);
       if (delivered) _awaitTurnStart(sessionId);
@@ -423,6 +457,7 @@ class SessionQueue {
       _announce(sessionId);
     }
     if (delivered) _kick(sessionId);
+    return why;
   }
 
   /// Starts [sessionId], which nothing runs, for its head: as the opening
@@ -511,5 +546,116 @@ class SessionQueue {
   }
 
   void _announce(String sessionId) =>
-      announce?.call(sessionId, dao.open(sessionId));
+      announce?.call(sessionId, _open(sessionId));
+
+  /// [sessionId]'s open messages, each queued one marked with the hold.
+  List<QueuedMessage> _open(String sessionId) {
+    final open = dao.open(sessionId);
+    final waiting = open.any((m) => m.state == QueuedMessageState.queued);
+    final hold = _toldHold[sessionId] = waiting ? _holdOf(sessionId) : null;
+    if (hold == null) return open;
+    return [
+      for (final message in open)
+        message.state == QueuedMessageState.queued
+            ? message.copyWith(hold: hold)
+            : message,
+    ];
+  }
+
+  // ---- Holds: what keeps a queue waiting past its turn's end.
+
+  /// Looks again at every queue that waits: a resume armed, moved or ended
+  /// changes what holds them.
+  void refreshAll() {
+    for (final sessionId in _withQueued.toList()) {
+      _kick(sessionId);
+    }
+  }
+
+  QueueHold? _holdOf(String sessionId) => limitHold?.call(sessionId);
+
+  /// A resume armed for the reset takes even a new message's place.
+  bool _holdsNewMessages(String sessionId) =>
+      limitHold?.call(sessionId)?.until != null;
+
+  // ---- A scheduled resume's message goes through here ([ResumeQueue]).
+
+  @override
+  Future<String> sendForResume(String sessionId, String message) async {
+    if (dao.head(sessionId) case final head?) {
+      final why = await _deliverHead(sessionId);
+      if (why != null) throw StateError(why);
+      log?.call('queue $sessionId: ${head.id} went in the resume\'s place');
+      return head.text;
+    }
+    final deliver = this.deliver;
+    if (busy(sessionId) || deliver == null) {
+      // Delivered by the turn's end, past the hold the resume itself is.
+      _enqueueAutomation(sessionId, message);
+      return message;
+    }
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    var delivered = false;
+    try {
+      await deliver(sessionId, message);
+      delivered = true;
+      return message;
+    } on DataRefused catch (refusal) {
+      throw StateError(refusal.message);
+    } finally {
+      afterImmediate(sessionId, delivered: delivered);
+    }
+  }
+
+  /// Queues a resume's [message] behind the running turn.
+  void _enqueueAutomation(String sessionId, String message) {
+    dao.enqueue(
+      id: _newId(),
+      sessionId: sessionId,
+      text: message,
+      origin: QueuedMessageOrigin.automation,
+      now: _now(),
+    );
+    _withQueued.add(sessionId);
+    _announce(sessionId);
+  }
+
+  @override
+  QueuedMessage? claimHeadForResume(String sessionId) {
+    if (_inFlight.contains(sessionId)) return null;
+    final head = dao.head(sessionId);
+    if (head == null ||
+        !dao.transition(
+          head.id,
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.delivering,
+          now: _now(),
+        )) {
+      return null;
+    }
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    _announce(sessionId);
+    return head;
+  }
+
+  @override
+  void releaseClaimed(QueuedMessage claimed, {required bool sent}) {
+    final sessionId = claimed.sessionId;
+    _inFlight.remove(sessionId);
+    if (sent) {
+      _finish(claimed, QueuedMessageState.delivered);
+      _awaitTurnStart(sessionId);
+    } else {
+      dao.transition(
+        claimed.id,
+        from: QueuedMessageState.delivering,
+        to: QueuedMessageState.queued,
+        now: _now(),
+      );
+    }
+    _announce(sessionId);
+    _kick(sessionId);
+  }
 }

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
+    show formatResetClock;
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -133,6 +135,30 @@ void main() {
 
       await send(tester, 'and lint');
       expect(find.text('Queued · 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, a queue held on the usage limit says until '
+        'when', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'then run the tests');
+
+      final until = testTime.add(const Duration(hours: 2));
+      server.sessionWork.holdQueue(
+        'acp-1',
+        QueueHold(QueueHoldKind.limit, until: until),
+      );
+      await tester.pumpAndSettle();
+
+      final clock = formatResetClock(until, testTime.toLocal());
+      expect(find.text('Held until the limit resets · $clock'), findsOneWidget);
+      expect(find.text('Queued · next'), findsOneWidget);
+
+      server.sessionWork.holdQueue('acp-1', null);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('queue-hold')), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

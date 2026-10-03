@@ -59,6 +59,7 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
+import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
 import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
@@ -1082,12 +1083,26 @@ Future<int> runServe(
           (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
               false);
     },
+    // A limit holds the queue until its resume, which sends the head.
+    limitHold: (sessionId) {
+      final session = sessionRows.getById(sessionId);
+      return usageLimitQueueHold(
+        live: automations?.liveResumeFor(sessionId),
+        report: prompts.status.statusOf(sessionId)?.report,
+        agentId: session == null
+            ? null
+            : checkoutRows.installation(session.agentInstallationId)?.agentId,
+      );
+    },
     announce: (sessionId, open) => data.announce([
       SessionQueueChanged(sessionId: sessionId, messages: open),
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   switchQueue = sessionQueue;
+  automations
+    ?..resumeQueue = sessionQueue
+    ..resumesMoved = sessionQueue.refreshAll;
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
