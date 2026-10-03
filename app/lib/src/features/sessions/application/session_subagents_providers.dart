@@ -17,13 +17,18 @@ class SessionSubagentsUnavailable implements Exception {
   String toString() => message;
 }
 
-/// How often an open panel asks again: a subagent's record moves without a
-/// notice whenever its parent's chat is not on screen.
+/// How often an open panel asks again while a delegate is live: its record
+/// moves without a notice whenever its parent's chat is not on screen.
 const Duration kSubagentsRefresh = Duration(seconds: 3);
+
+/// When to ask again unprompted after [list], or null: only while an entry
+/// is running or blocked, since each ask re-reads records and tokens.
+Duration? subagentsRefreshAfter(SessionSubagentList list) =>
+    list.entries.any((entry) => entry.state.isLive) ? kSubagentsRefresh : null;
 
 /// Session [sessionId]'s subagents and child sessions, as the server reads
 /// them (`sessions.subagents`): asked again on a notice of its transcript or
-/// of the session rows, and every [kSubagentsRefresh] while anyone watches.
+/// of the session rows, and every [kSubagentsRefresh] while one is live.
 final sessionSubagentsProvider = StreamProvider.autoDispose
     .family<SessionSubagentList, String>((ref, sessionId) {
       if (!ref.read(capabilitiesProvider).serverOffers('sessions.subagents')) {
@@ -48,10 +53,12 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
         }
         asking = true;
         next?.cancel();
+        Duration? after;
         try {
           final list = (await client.send(
             SessionSubagentsRead(sessionId),
           )).value;
+          after = subagentsRefreshAfter(list);
           if (!disposed) out.add(list);
         } on DataRefused catch (refusal) {
           if (!disposed) {
@@ -63,8 +70,8 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
             if (askAgain) {
               askAgain = false;
               unawaited(ask());
-            } else {
-              next = Timer(kSubagentsRefresh, () => unawaited(ask()));
+            } else if (after != null) {
+              next = Timer(after, () => unawaited(ask()));
             }
           }
         }
