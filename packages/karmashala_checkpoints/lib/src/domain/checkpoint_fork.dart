@@ -16,6 +16,7 @@ String? checkpointForkFileRefusal({
   required bool intoNewWorktree,
   required String? unsupportedEnvironmentReason,
   required List<String> otherSessionsInCheckout,
+  String? turnRunningIn,
 }) {
   const left = 'The files were left as they are: ';
   if (unsupportedEnvironmentReason != null) {
@@ -25,6 +26,11 @@ String? checkpointForkFileRefusal({
     return '${left}a new worktree was asked for, and a checkpoint restores '
         'into the checkout it was taken in. The worktree is a fresh checkout '
         'of the branch, not this checkpoint.';
+  }
+  if (turnRunningIn != null) {
+    return '${left}a turn of "$turnRunningIn" is running, and rolling its '
+        'checkout back would change files under its agent mid-turn. Restore '
+        'deliberately with checkpoint_restore once the turn has ended.';
   }
   if (otherSessionsInCheckout.isNotEmpty) {
     final who = otherSessionsInCheckout.length == 1

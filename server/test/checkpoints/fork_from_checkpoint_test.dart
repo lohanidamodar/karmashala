@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
@@ -121,6 +122,32 @@ void main() {
           intoNewWorktree: false,
         ),
         contains('"Nightly sweep" is working in this checkout'),
+      );
+    });
+
+    test('a turn running in the source gives the files up, naming it, unless '
+        'the source asked itself', () async {
+      w.checkpoints.recorder.observe('s1', AgentActivityStatus.working);
+      await w.settle();
+      expect(
+        w.checkpoints.forkFileRefusal(
+          row('c1'),
+          sessionId: 's1',
+          intoNewWorktree: false,
+        ),
+        allOf(
+          startsWith('The files were left as they are: '),
+          contains('a turn of "session s1" is running'),
+        ),
+      );
+      expect(
+        w.checkpoints.forkFileRefusal(
+          row('c2'),
+          sessionId: 's1',
+          intoNewWorktree: false,
+          requestedBy: 's1',
+        ),
+        isNull,
       );
     });
 

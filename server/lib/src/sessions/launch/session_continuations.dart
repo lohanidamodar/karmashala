@@ -698,6 +698,7 @@ class SessionContinuations {
     bool newWorktree = false,
     bool confirm = false,
     bool preview = false,
+    String? requestedBy,
   }) async {
     final work =
         forks ??
@@ -712,6 +713,7 @@ class SessionContinuations {
       checkpoint,
       sessionId: sessionId,
       intoNewWorktree: newWorktree,
+      requestedBy: requestedBy,
     );
     if (preview) {
       return {
@@ -738,7 +740,11 @@ class SessionContinuations {
         work.forSession(sessionId),
         repository: checkpoint.repository,
       );
-      restored = await work.restoreForFork(checkpoint, confirm: confirm);
+      restored = await work.restoreForFork(
+        checkpoint,
+        confirm: confirm,
+        requestedBy: requestedBy,
+      );
       undo = restored.safetyCheckpoint ?? before;
     }
     final SessionStarted started;
