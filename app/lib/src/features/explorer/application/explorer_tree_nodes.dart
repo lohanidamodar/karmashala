@@ -210,6 +210,40 @@ final class ProjectNode extends ExplorerNode {
   );
 }
 
+/// The No project row's id, and its key among the expanded projects: no
+/// project id is spelled like it.
+const String kNoProjectNodeId = 'no-project';
+
+/// **Sessions without a project**, every machine's together: one row over
+/// each machine's Scratch project, whose folders are each a session's own.
+/// Scratch is one project per machine underneath, because a project's
+/// folder is on one machine; the row is where that stops showing.
+final class NoProjectNode extends ExplorerNode {
+  NoProjectNode({required this.projects, required this.expanded})
+    : super(id: kNoProjectNodeId, depth: 0);
+
+  /// The Scratch projects it stands for, one per machine in scope.
+  final List<Project> projects;
+  final bool expanded;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NoProjectNode &&
+      other.expanded == expanded &&
+      _sameProjects(other.projects, projects);
+
+  @override
+  int get hashCode => Object.hash(expanded, Object.hashAll(projects));
+
+  static bool _sameProjects(List<Project> a, List<Project> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
 /// A tree is rebuilt whole on every fold, and a path cuts to the same strings
 /// every time. Bounded: a workspace that outgrows it starts over.
 final _abbreviations = <String, List<String>>{};
@@ -407,7 +441,17 @@ List<ExplorerNode> buildExplorerTree({
 
   final filed = <String, List<Project>>{};
   final loose = <Project>[];
+  final scratch = <Project>[];
   for (final project in projects) {
+    if (project.isScratch) {
+      // Filed under no context, so a context in scope holds none.
+      final inScope =
+          (environmentScope == null ||
+              project.root.environmentId == environmentScope) &&
+          (contextScope.isAll || contextScope.unassignedOnly);
+      if (inScope || project.id == keepProjectId) scratch.add(project);
+      continue;
+    }
     final context = contextOf(project);
     final inScope =
         (environmentScope == null ||
@@ -437,6 +481,30 @@ List<ExplorerNode> buildExplorerTree({
         childrenOf: childrenOf,
       ),
   ];
+
+  if (scratch.isNotEmpty) {
+    final group = NoProjectNode(
+      projects: scratch,
+      expanded: expandedProjects.contains(kNoProjectNodeId),
+    );
+    nodes.add(group);
+    if (group.expanded && childrenOf != null) {
+      for (final project in scratch) {
+        // Said only when there is more than one machine to tell apart.
+        if (scratch.length > 1) {
+          final machine = project.root.environmentId;
+          nodes.add(
+            HintNode(
+              id: '$kNoProjectNodeId/machine:$machine',
+              depth: 1,
+              message: environmentsById[machine]?.label ?? machine,
+            ),
+          );
+        }
+        nodes.addAll(childrenOf(ProjectNode(project: project, expanded: true)));
+      }
+    }
+  }
 
   final ordered = filed.keys.toList()
     ..sort(

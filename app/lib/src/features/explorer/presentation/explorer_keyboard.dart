@@ -107,6 +107,7 @@ String explorerNodeTitle(ExplorerNode node) => switch (node) {
   final TerminalsHeaderNode node => node.label,
   final SectionHeaderNode node => node.section.name,
   final ProjectNode node => node.project.name,
+  NoProjectNode() => 'No project',
   final SessionRowNode node => node.session.title,
   final ImportedRowNode node => node.session.displayTitle,
   final TerminalRowNode node => node.terminal.label,
@@ -125,6 +126,7 @@ bool isExplorerKeyboardStop(ExplorerNode node) => switch (node) {
 bool? explorerNodeExpanded(ExplorerNode node) => switch (node) {
   final ExplorerHeaderNode node => node.expanded,
   final ProjectNode node => node.expanded,
+  final NoProjectNode node => node.expanded,
   _ => null,
 };
 
@@ -428,6 +430,10 @@ class ExplorerTreeKeyboard {
         ref
             .read(explorerExpandedProjectsProvider.notifier)
             .toggle(node.project.id);
+      case NoProjectNode():
+        ref
+            .read(explorerExpandedProjectsProvider.notifier)
+            .toggle(kNoProjectNodeId);
       default:
     }
   }

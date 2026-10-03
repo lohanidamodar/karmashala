@@ -170,6 +170,7 @@ void main() {
     final TerminalsHeaderNode node => node.label.toUpperCase(),
     final SectionHeaderNode node => node.section.name,
     final ProjectNode node => node.project.name,
+    NoProjectNode() => 'No project',
     final SessionRowNode node => node.session.title,
     final ImportedRowNode node => node.session.displayTitle,
     final TerminalRowNode node => node.terminal.label,

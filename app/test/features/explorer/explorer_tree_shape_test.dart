@@ -23,6 +23,7 @@ List<String> sketch(List<ExplorerNode> nodes) => [
       SectionHeaderNode(:final section, :final expanded) => '${expanded ? '=' : '≠'} ${section.name}',
       ProjectNode(:final project, :final expanded, :final environmentLabel) => '${expanded ? '-' : '+'} ${project.name}'
           '${environmentLabel == null ? '' : ' @$environmentLabel'}',
+      NoProjectNode(:final expanded, :final projects) => '${expanded ? '-' : '+'} No project [${projects.length}]',
       SessionRowNode(:final session) => '. ${session.title}',
       ImportedRowNode(:final session) => '~ ${session.id}',
       TerminalRowNode(:final terminal) => '> ${terminal.label}',
@@ -324,4 +325,112 @@ void main() {
       expect(WorkspaceScope.parse('nonsense'), WorkspaceScope.all);
     },
   );
+  group('sessions without a project', () {
+    final scratchHere = project(
+      id: 's1',
+      name: 'Scratch',
+      path: r'C:\Users\me\karmashala\scratch',
+      kind: Project.scratchKind,
+    );
+    final scratchThere = project(
+      id: 's2',
+      name: 'Scratch',
+      environmentId: 'wsl:Ubuntu',
+      path: '/home/me/karmashala/scratch',
+      kind: Project.scratchKind,
+    );
+    final withScratch = [...projects, scratchHere, scratchThere];
+
+    List<ExplorerNode> scratchTree({
+      List<Project>? of,
+      Set<String> expandedProjects = const {},
+      String? environmentScope,
+      WorkspaceScope contextScope = WorkspaceScope.all,
+    }) => buildExplorerTree(
+      projects: of ?? withScratch,
+      environments: environmentChoices(of ?? withScratch, environments),
+      contexts: contexts,
+      collapsed: const {},
+      expandedProjects: expandedProjects,
+      environmentScope: environmentScope,
+      contextScope: contextScope,
+      childrenOf: (node) => [
+        HintNode(
+          id: 'rows-of-${node.project.id}',
+          depth: node.depth + 1,
+          message: 'sessions of ${node.project.id}',
+        ),
+      ],
+    );
+
+    test('every machine\'s Scratch is one No project row, first, and never a '
+        'project row of its own', () {
+      expect(scratchTree().take(3).toList().let(sketch), [
+        '+ No project [2]',
+        '= Client work [3]',
+        '+ proc-nepal @Windows',
+      ]);
+      expect(
+        sketch(scratchTree()).where((r) => r.contains('Scratch')),
+        isEmpty,
+      );
+    });
+
+    test(
+      'open, it holds each machine\'s sessions under that machine\'s name',
+      () {
+        expect(
+          scratchTree(
+            expandedProjects: {kNoProjectNodeId},
+          ).take(5).toList().let(sketch),
+          [
+            '- No project [2]',
+            '  # Windows',
+            '  # sessions of s1',
+            '  # Ubuntu',
+            '  # sessions of s2',
+          ],
+        );
+      },
+    );
+
+    test('with one machine\'s Scratch, its sessions need no machine name', () {
+      expect(
+        scratchTree(
+          of: [...projects, scratchThere],
+          expandedProjects: {kNoProjectNodeId},
+        ).take(3).toList().let(sketch),
+        ['- No project [1]', '  # sessions of s2', '= Client work [3]'],
+      );
+    });
+
+    test('a machine in scope keeps its own; a context in scope holds none', () {
+      expect(
+        scratchTree(
+          environmentScope: 'wsl:Ubuntu',
+          expandedProjects: {kNoProjectNodeId},
+        ).take(2).toList().let(sketch),
+        ['- No project [1]', '  # sessions of s2'],
+      );
+      expect(
+        sketch(
+          scratchTree(contextScope: const WorkspaceScope.of('c1')),
+        ).where((r) => r.contains('No project')),
+        isEmpty,
+      );
+    });
+
+    test('with no Scratch anywhere there is no No project row', () {
+      expect(
+        sketch(
+          scratchTree(of: projects),
+        ).where((r) => r.contains('No project')),
+        isEmpty,
+      );
+    });
+  });
+}
+
+extension<T> on T {
+  R let<R>(R Function(T) body) => body(this);
 }

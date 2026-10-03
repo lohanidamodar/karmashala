@@ -267,7 +267,9 @@ class ExplorerSearchField extends StatelessWidget {
         },
         child: TextField(
           focusNode: links?.searchFocus,
-          style: theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.field),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: TypeSizes.field,
+          ),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -434,8 +436,15 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
     // somewhere — is brought into view once, after this frame.
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     if (selectedProjectId != _revealed) {
+      // A Scratch project has no row of its own: No project is its row.
       final index = nodes.indexWhere(
-        (node) => node is ProjectNode && node.project.id == selectedProjectId,
+        (node) => switch (node) {
+          ProjectNode(:final project) => project.id == selectedProjectId,
+          NoProjectNode(:final projects) => projects.any(
+            (p) => p.id == selectedProjectId,
+          ),
+          _ => false,
+        },
       );
       _revealed = selectedProjectId;
       if (index >= 0) {

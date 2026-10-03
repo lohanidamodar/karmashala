@@ -22,6 +22,7 @@ import '../application/explorer_tree_provider.dart';
 import 'environment_rows.dart';
 import 'explorer_context_actions.dart';
 import 'explorer_keyboard.dart';
+import 'explorer_no_project_row.dart';
 import 'explorer_project_row.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
@@ -72,6 +73,7 @@ class ExplorerTreeRow extends StatelessWidget {
           : environmentGlyph(node.environmentKind),
       anchorKey: anchorKey,
     ),
+    final NoProjectNode node => ExplorerNoProjectRow(node: node),
     final SessionRowNode node => ExplorerNativeSessionRow(node: node),
     final ImportedRowNode node => ImportedSessionRow(
       session: node.session,
