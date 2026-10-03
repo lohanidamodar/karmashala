@@ -7,16 +7,30 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/session.dart' show Session;
 
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../automations/daemon_agents.dart';
 import '../../sessions/launch/server_session_launcher.dart';
+import '../../sessions/session_subagents.dart' show boundedText;
+import '../../status/child_turn_wait.dart';
 import 'agent_names.dart';
 import 'checkout_reach.dart';
 import 'project_folders.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
+
+/// How long `subagent_run` waits unless told, and the most it may be told.
+const Duration kSubagentRunDefaultBound = Duration(minutes: 10);
+const Duration kSubagentRunMaxBound = Duration(minutes: 30);
+
+/// The bound a caller's `timeoutSeconds` asks for, within the limits.
+Duration subagentRunBoundFor(num? seconds) {
+  if (seconds == null || seconds <= 0) return kSubagentRunDefaultBound;
+  final asked = Duration(milliseconds: (seconds * 1000).round());
+  return asked > kSubagentRunMaxBound ? kSubagentRunMaxBound : asked;
+}
 
 /// What an agent is told when a tool would show something and no Karmashala
 /// window is connected to show it in.
@@ -41,6 +55,8 @@ class LaunchToolSet extends ServerToolSet {
     this.agents = const DaemonAgents(),
     CheckoutReach? reach,
     ProjectFolders? folders,
+    this.turns,
+    this.tokensOf,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -68,6 +84,13 @@ class LaunchToolSet extends ServerToolSet {
   final CheckoutReach? _reach;
   final ProjectFolders? _folders;
 
+  /// The wait `subagent_run` blocks on; null where this server keeps no
+  /// status (a fixture), and the tool is refused in words.
+  final ChildTurnWait? turns;
+
+  /// The tokens a session's record counts, every bucket added up.
+  final Future<int?> Function(String sessionId)? tokensOf;
+
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
 
@@ -77,19 +100,140 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    if (tool != 'open_new_session') return null;
+    if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
       tool: tool,
       arguments: arguments,
       callerSessionId: callerSessionId,
-      start: () => runTool(() => _open(arguments, callerSessionId)),
+      start: () => runTool(
+        () async => tool == 'subagent_run'
+            ? await _run(arguments, callerSessionId)
+            : (await _open(arguments, callerSessionId)).answer,
+      ),
     );
   }
 
-  Future<Object?> _open(
+  /// `subagent_run`: [_open]'s launch — its depth cap and permission carry —
+  /// then a wait for the child's first turn, answered with what it said.
+  Future<Object?> _run(
     Map<String, dynamic> args,
     String? callerSessionId,
   ) async {
+    final prompt = (args['prompt'] as String?)?.trim() ?? '';
+    if (prompt.isEmpty) {
+      throw ArgumentError('prompt is required and cannot be blank.');
+    }
+    final turns = this.turns;
+    if (turns == null) {
+      throw StateError(
+        'This server keeps no session status, so it cannot wait for a '
+        'subagent. Use open_new_session and session_wait.',
+      );
+    }
+    final bound = subagentRunBoundFor(args['timeoutSeconds'] as num?);
+    final model = (args['model'] as String?)?.trim();
+    final title = (args['title'] as String?)?.trim();
+    final started = _context.now();
+    final opened = await _open(
+      {
+        ...args,
+        'prompt': prompt,
+        'title': title == null || title.isEmpty
+            ? 'Subagent: ${_firstLine(prompt)}'
+            : title,
+      },
+      callerSessionId,
+      modelId: model == null || model.isEmpty ? null : model,
+    );
+    final session = opened.session;
+    final outcome = await turns.firstTurn(
+      session.id,
+      bound: bound,
+      since: started,
+    );
+    final answer = switch (outcome.state) {
+      ChildTurnState.running || ChildTurnState.blocked => null,
+      _ => await _answerOf(turns, session.id, since: started),
+    };
+    final (text, cut) = answer == null
+        ? (null, false)
+        : boundedText(answer.text, kFinalAnswerMaxChars);
+    final tokens = await tokensOf?.call(session.id);
+    final block = outcome.block;
+    return <String, Object?>{
+      'state': outcome.state.name,
+      'childSessionId': session.id,
+      'title': session.title,
+      'agent': agents.nameOf(opened.agentId),
+      'model': session.modelId ?? "the agent's default (not recorded)",
+      'finalAnswer': text,
+      if (cut) 'finalAnswerTruncated': true,
+      'finalAnswerSource': text == null
+          ? 'not recorded — no agent message in its record since it started'
+          : "the child's last agent message, from its record",
+      'durationMs': _context.now().difference(started).inMilliseconds,
+      'tokens': tokens ?? 'not recorded',
+      if (block != null)
+        'blockedOn': <String, Object?>{'kind': block.kind, 'text': block.text},
+      if (outcome.state == ChildTurnState.ended) ...{
+        'exitCode': outcome.exitCode,
+        'exitCodeKnown': outcome.exitCodeKnown,
+      },
+      'depth': opened.answer['depth'],
+      'permissionMode': opened.answer['permissionMode'],
+      'permissionCapped': ?opened.answer['permissionCapped'],
+      'note': _runNote(outcome.state, session.id, bound),
+    };
+  }
+
+  /// The answer once the turn settled; a record written a moment after the
+  /// status moved is read again, briefly.
+  static Future<({String text, DateTime? at})?> _answerOf(
+    ChildTurnWait turns,
+    String sessionId, {
+    required DateTime since,
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      final answer = await turns.answerOf(sessionId, since: since);
+      if (answer != null || attempt >= 2) return answer;
+      await Future<void>.delayed(turns.recheck);
+    }
+  }
+
+  static String _firstLine(String prompt) {
+    final line = prompt.split('\n').first.trim();
+    return line.length <= 48 ? line : '${line.substring(0, 47)}…';
+  }
+
+  static String _runNote(ChildTurnState state, String id, Duration bound) =>
+      switch (state) {
+        ChildTurnState.done =>
+          'The child finished its turn; finalAnswer is what it said last. It '
+              'is still open as session $id for a follow-up with session_send.',
+        ChildTurnState.failed =>
+          'The child stopped on a failure. Read session_transcript '
+              '(sessionId: $id) for why.',
+        ChildTurnState.blocked =>
+          'BLOCKED ON A PERSON: the child stopped for an approval or a '
+              'question (blockedOn). Waiting longer will not clear it; ask the '
+              'user, or answer an approval with session_answer, then '
+              'session_wait on $id.',
+        ChildTurnState.ended =>
+          'The child process ended. exitCode is UNKNOWN — not 0 — when '
+              'exitCodeKnown is false.',
+        ChildTurnState.running =>
+          'STILL RUNNING after ${bound.inSeconds}s, which is this call\'s '
+              'bound, not a verdict. Continue with session_wait (sessionId: '
+              '$id) and read its answer with session_transcript. Calling '
+              'subagent_run again starts another agent.',
+      };
+
+  Future<({Map<String, Object?> answer, Session session, String agentId})>
+  _open(
+    Map<String, dynamic> args,
+    String? callerSessionId, {
+    String? modelId,
+  }) async {
     final projectId = args['projectId'] as String?;
     final repositoryId = args['repositoryId'] as String?;
     final title = args['title'] as String?;
@@ -156,6 +300,7 @@ class LaunchToolSet extends ServerToolSet {
         prompt: args['prompt'] as String?,
         worktree: args['useWorktree'] == true,
         permissionMode: permission.selection?.canonical,
+        modelId: modelId,
         parentSessionId: callerSessionId,
       ),
     );
@@ -167,7 +312,7 @@ class LaunchToolSet extends ServerToolSet {
         launch: started.launch,
       ),
     );
-    return <String, Object?>{
+    final answer = <String, Object?>{
       'sessionId': session.id,
       'opened': 'new ${install.agentId} session',
       'title': session.title,
@@ -183,6 +328,7 @@ class LaunchToolSet extends ServerToolSet {
           : 'running in the Karmashala server; $kNoWindowOpen — a window '
                 'shows it when it is opened',
     };
+    return (answer: answer, session: session, agentId: install.agentId);
   }
 
   /// A folder of its own for a session without a project, in
@@ -408,6 +554,85 @@ const List<Map<String, Object?>> launchToolSchemas = [
         },
       },
       'required': <String>[],
+    },
+  },
+  {
+    'name': 'subagent_run',
+    'description':
+        'Run a subagent: start a NEW session on any installed agent and '
+        'model with prompt as its task, wait for its first turn to finish, '
+        'and get its final answer back. It is started exactly as '
+        'open_new_session starts one — recorded as your child, under the same '
+        'nesting cap and permission ceiling — and stays open as a session '
+        'you can follow up with session_send. state is done, failed, blocked '
+        '(it stopped for an approval or a question: blockedOn says which), '
+        'ended, or running when timeoutSeconds ran out first — then continue '
+        'with session_wait on childSessionId; calling this again starts '
+        'another agent. If your own tool calls time out sooner than the '
+        'default 600 seconds, pass a smaller timeoutSeconds.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'prompt': {
+          'type': 'string',
+          'description':
+              'The task, sent as the subagent\'s first message under a line '
+              'naming this session. Say what to return: its last message is '
+              'the answer.',
+        },
+        'cli': {
+          'type': 'string',
+          'description':
+              'Agent to run, by name ("claude", "codex", …); list_agents has '
+              'them. Omit both this and agentInstallationId for the default.',
+        },
+        'agentInstallationId': {
+          'type': 'string',
+          'description': 'Specific installation id from list_agents.',
+        },
+        'model': {
+          'type': 'string',
+          'description':
+              'The agent\'s own model id. Omit for the model configured for '
+              'that agent.',
+        },
+        'projectId': {
+          'type': 'string',
+          'description':
+              'Project id from list_projects. Omit to run in a scratch folder '
+              'of its own, as open_new_session does.',
+        },
+        'repositoryId': {'type': 'string'},
+        'scratch': {'type': 'boolean'},
+        'environmentId': {
+          'type': 'string',
+          'description':
+              'For a run without a project: where its folder is made.',
+        },
+        'useWorktree': {
+          'type': 'boolean',
+          'description':
+              'Run in a Git worktree of its own — for a subagent that edits '
+              'files while you keep working in the same repository.',
+        },
+        'title': {
+          'type': 'string',
+          'description': 'Name for the child session; defaults to the prompt.',
+        },
+        'permissionMode': {
+          'type': 'string',
+          'enum': permissionRiskNames,
+          'description':
+              'As open_new_session: never above the least of your own mode '
+              'and "autoRun".',
+        },
+        'timeoutSeconds': {
+          'type': 'number',
+          'description':
+              'How long to wait for its answer: default 600, at most 1800.',
+        },
+      },
+      'required': <String>['prompt'],
     },
   },
 ];

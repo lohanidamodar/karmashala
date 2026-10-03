@@ -119,8 +119,9 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'is gone, with the exit code when one was learned and never a zero '
         'when none was. "timeout" is YOUR bound and not a verdict: the session '
         'is still running, and inputSent says whether anything was delivered, '
-        'so call again rather than sending the same work twice. Nothing here '
-        'polls — the wait completes on the events the app already sees.',
+        'so call again rather than sending the same work twice. On "idle" and '
+        '"done", finalAnswer is its last message from its record. Nothing '
+        'here polls — the wait completes on the events the app already sees.',
     'inputSchema': {
       'type': 'object',
       'properties': {

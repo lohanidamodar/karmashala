@@ -11,6 +11,8 @@ import 'package:karmashala_session_engine/store.dart'
     show SessionDao, SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import '../../domain/session_registry.dart';
+import '../../sessions/session_subagents.dart' show boundedText;
+import '../../status/child_turn_wait.dart';
 import '../../status/daemon_prompt_answers.dart';
 import '../../status/hosted_session_wait.dart';
 import 'server_tool_context.dart';
@@ -33,6 +35,7 @@ class SessionToolSet extends ServerToolSet {
     this.resumeWith,
     HostedSessionWait? waits,
     SessionMessageTypist? typist,
+    this.answerOf,
   }) : _sessions = SessionDao(_context.database),
        waits = waits ?? HostedSessionWait(status: prompts.status) {
     this.typist = typist ?? typistOver(prompts);
@@ -46,6 +49,10 @@ class SessionToolSet extends ServerToolSet {
   /// message, and shows it in the person's window; null refuses instead.
   final Future<void> Function(String sessionId, String prompt)? resumeWith;
   final HostedSessionWait waits;
+
+  /// What a session said last, which a wait that settles ready answers with;
+  /// null where this server reads no transcripts.
+  final AnswerOf? answerOf;
   late final SessionMessageTypist typist;
   final SessionDao _sessions;
 
@@ -333,10 +340,21 @@ class SessionToolSet extends ServerToolSet {
       sessionId,
       bound: sessionWaitBoundFor(timeoutSeconds),
     );
+    final ready =
+        outcome.state == SessionWaitState.idle ||
+        outcome.state == SessionWaitState.done;
+    final answer = ready ? await answerOf?.call(sessionId) : null;
+    final (text, cut) = answer == null
+        ? (null, false)
+        : boundedText(answer.text, kFinalAnswerMaxChars);
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
       ...renderWaitOutcome(outcome),
+      if (ready && answerOf != null) ...{
+        'finalAnswer': text ?? 'not recorded',
+        if (cut) 'finalAnswerTruncated': true,
+      },
     };
   }
 

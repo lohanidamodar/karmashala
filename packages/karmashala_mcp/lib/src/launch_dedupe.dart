@@ -9,7 +9,7 @@ const Duration launchDedupeWindow = Duration(minutes: 2);
 /// Whether repeating [tool] would start something in the world.
 bool startsAnAgent(String tool, Map<String, dynamic> arguments) =>
     switch (tool) {
-      'open_new_session' => true,
+      'open_new_session' || 'subagent_run' => true,
       'session_handoff' ||
       'session_fork' ||
       'session_fork_from_checkpoint' => arguments['preview'] != true,
