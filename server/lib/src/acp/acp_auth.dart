@@ -185,7 +185,7 @@ class ServerAcpAuth {
     }
     final installation = target.installation;
     final command = method.terminalCommand;
-    open(
+    final opened = open(
       AcpLoginTerminal(
         agentId: installation.agentId,
         environment: target.environment,
@@ -208,6 +208,12 @@ class ServerAcpAuth {
         title: '${target.name}: ${method.name}',
       ),
     );
+    if (!opened) {
+      throw DataRefused.unavailable(
+        'No terminal could be opened on ${target.environment.name} for '
+        '${method.name}, so nothing was remembered.',
+      );
+    }
     final choice = AcpAuthChoice(
       installationId: installationId,
       methodId: methodId,

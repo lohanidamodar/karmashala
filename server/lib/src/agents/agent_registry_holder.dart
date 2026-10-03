@@ -23,8 +23,6 @@ class AgentRegistryHolder {
   static AgentRegistry compose(Iterable<AcpAgentRow> rows) =>
       AgentRegistry.withExtra([for (final row in rows) acpAgentAdapter(row)]);
 
-  void replace(AgentRegistry registry) => _current = registry;
-
   /// Recomposes from [data]'s rows after every write that touched them.
   void follow(DataService data) {
     data.addChangeListener((changes) {

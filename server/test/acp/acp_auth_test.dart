@@ -244,6 +244,32 @@ void main() {
     );
   });
 
+  test('a terminal login whose terminal does not open is refused, and '
+      'remembers nothing', () async {
+    final server = ServerAcpAuth(
+      installations: () => [antigravity],
+      environments: () => [wsl],
+      registry: () => AgentRegistry.builtIn,
+      choices: AcpAuthChoiceDao(database),
+      spawn: (_, _) async => FakeAcpProcess(nextAgent()).spawn(),
+      vault: () => vault,
+      openTerminal: (_) => false,
+      now: () => t0,
+      readTimeout: const Duration(seconds: 5),
+    );
+    await expectLater(
+      server.terminalLogin('ag1', 'login'),
+      throwsA(
+        isA<DataRefused>().having(
+          (r) => r.code,
+          'code',
+          DataRefusalCode.unavailable,
+        ),
+      ),
+    );
+    expect(server.state('ag1'), isNull);
+  });
+
   test('a terminal login opens a terminal on the machine running what the '
       'method names, remembered unconfirmed', () async {
     final server = auth();
