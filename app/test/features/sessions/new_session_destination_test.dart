@@ -3,6 +3,7 @@ import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 
@@ -314,6 +315,106 @@ void main() {
       expect(container.read(selectedRepositoryIdProvider), 'r2');
       expect(container.read(selectedProjectIdProvider), 'p2');
       expect(container.read(selectedSessionIdProvider), started.single.id);
+    });
+
+    testWidgets('the agent picked stays picked when the project changes', (
+      tester,
+    ) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'c1',
+          agentId: AgentIds.codex,
+          path: r'C:\Users\me\.bin\codex.exe',
+        ),
+      );
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await tester.tap(find.byKey(const ValueKey('agent-card:c1')));
+      await tester.pumpAndSettle();
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('Beta'),
+      );
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(
+        db.server.sessionRows.getByRepository('r2').single.agentInstallationId,
+        'c1',
+      );
+    });
+
+    testWidgets('on a project on another machine, the same agent is picked '
+        'where it is installed there', (tester) async {
+      server.environmentRows.upsert(wslEnv());
+      server.projectRows.insert(
+        project(
+          id: 'p3',
+          name: 'Gamma',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/gamma',
+        ),
+      );
+      server.repositoryRows.insert(
+        repository(
+          id: 'r3',
+          projectId: 'p3',
+          name: 'gamma',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/gamma',
+        ),
+      );
+      server.installationRows
+        ..insert(
+          agentInstallation(
+            id: 'c1',
+            agentId: AgentIds.codex,
+            path: r'C:\Users\me\.bin\codex.exe',
+          ),
+        )
+        ..insert(
+          agentInstallation(
+            id: 'u-claude',
+            environmentId: 'wsl:Ubuntu',
+            path: '/usr/bin/claude',
+          ),
+        )
+        ..insert(
+          agentInstallation(
+            id: 'u-codex',
+            agentId: AgentIds.codex,
+            environmentId: 'wsl:Ubuntu',
+            path: '/usr/bin/codex',
+          ),
+        );
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      await tester.tap(find.byKey(const ValueKey('agent-card:c1')));
+      await tester.pumpAndSettle();
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('Gamma'),
+      );
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(
+        db.server.sessionRows.getByRepository('r3').single.agentInstallationId,
+        'u-codex',
+      );
+    });
+
+    testWidgets('Project is asked before Agent: which agents there are '
+        'depends on the machine it picks', (tester) async {
+      final container = containerFor(selected: 'r1');
+      await open(tester, container);
+      expect(
+        tester.getTopLeft(find.text('PROJECT & MACHINE')).dy,
+        lessThan(tester.getTopLeft(find.text('AGENT')).dy),
+      );
+      await closeAll(tester);
     });
 
     testWidgets('a title typed here is the person\'s; the one it opens with '

@@ -130,6 +130,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   final _promptController = TextEditingController();
   AgentInstallation? _installation;
 
+  /// The agent the person picked, whichever machine it was on: a change
+  /// of project keeps it wherever it is installed there too.
+  String? _pickedAgentId;
+
   /// Null only while the workspace has no projects at all.
   SessionDestination? _destination;
 
@@ -418,6 +422,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     if (checkout == null || installations.isEmpty) return null;
     final picked = _installation;
     if (picked != null && installations.contains(picked)) return picked;
+    if (_samePickedAgent(installations) case final same?) return same;
     // The one definition of "which agent, here" — shared with the `+` button
     // in the Explorer, which runs it without asking.
     return ref
@@ -432,7 +437,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   AgentInstallation? _agentForScratch(List<AgentInstallation> installations) {
     final picked = _installation;
     if (picked != null && installations.contains(picked)) return picked;
-    return installations.firstOrNull;
+    return _samePickedAgent(installations) ?? installations.firstOrNull;
+  }
+
+  /// The agent the person picked, as installed among [installations].
+  AgentInstallation? _samePickedAgent(List<AgentInstallation> installations) {
+    final agentId = _pickedAgentId;
+    if (agentId == null) return null;
+    return installations.where((i) => i.agentId == agentId).firstOrNull;
   }
 
   /// The terminal an external session opens in: the one picked, while it is
@@ -922,26 +934,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             NewProjectDialog.show(host);
           },
         ),
-        // Four labelled parts in the order the choice is made (spec
-        // §5): who runs, on what, where the work lands, what it is told.
+        // Four labelled parts in the order the choice is made: where it
+        // runs (which decides the agents offered), who runs it, where the
+        // work lands, what it is told.
         Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             NewDialogSection(
-              label: 'Agent',
-              first: true,
-              child: installations.isEmpty
-                  ? _noAgents(checkout)
-                  : NewSessionAgentCards(
-                      installations: installations,
-                      selected: installation,
-                      enabled: !_busy,
-                      onSelected: (v) => setState(() => _installation = v),
-                    ),
-            ),
-            NewDialogSection(
               label: 'Project & machine',
+              first: true,
               child: SessionDestinationPicker(
                 destination: destination,
                 enabled: !_busy,
@@ -949,14 +951,28 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   setState(() {
                     _error = null;
                     _destination = picked;
-                    // The agent belongs to the environment we are
-                    // leaving. Cleared so `_agentFor` re-resolves
-                    // the default.
+                    // The installation belongs to the machine being
+                    // left. Cleared so `_agentFor` finds the picked
+                    // agent on the new one, else the default.
                     _installation = null;
                   });
                   _afterDestinationChanged();
                 },
               ),
+            ),
+            NewDialogSection(
+              label: 'Agent',
+              child: installations.isEmpty
+                  ? _noAgents(checkout)
+                  : NewSessionAgentCards(
+                      installations: installations,
+                      selected: installation,
+                      enabled: !_busy,
+                      onSelected: (v) => setState(() {
+                        _installation = v;
+                        _pickedAgentId = v.agentId;
+                      }),
+                    ),
             ),
             if (externalOffered || worktreeOffered)
               NewDialogSection(
