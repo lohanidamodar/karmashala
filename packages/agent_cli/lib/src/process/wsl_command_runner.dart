@@ -14,12 +14,17 @@ class WslInvocation {
     this.arguments, {
     this.stdinText,
     this.timeout,
+    this.environment = const {},
   });
   final String executable;
   final List<String> arguments;
 
-  /// Set only by an `exec` invocation; see [WslCommandRunner.exec].
+  /// The request's own; killing `wsl.exe` ends the command it relays.
   final Duration? timeout;
+
+  /// Set on the `wsl.exe` process itself: the request's variables, and the
+  /// `WSLENV` that carries them across into the distribution.
+  final Map<String, String> environment;
 
   /// Written to `wsl.exe`'s stdin, which forwards it to the command, then
   /// closed so the command sees end-of-file. Null closes stdin at once.
@@ -36,7 +41,28 @@ class WslInvocation {
     arguments: arguments,
     stdinText: stdinText,
     timeout: timeout,
+    environment: environment,
   );
+}
+
+/// A POSIX variable name: the only kind `WSLENV` and `env -u` can carry.
+final _variableName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
+
+/// [inherited] (this process's own `WSLENV`) with [names] forwarded as `/u`
+/// — Win32 to WSL only, the value untranslated — replacing any entry of the
+/// same name.
+String _wslEnvFor(Iterable<String> names, String? inherited) {
+  final ours = names.toSet();
+  bool isOurs(String entry) {
+    final name = entry.split('/').first.toUpperCase();
+    return ours.any((n) => n.toUpperCase() == name);
+  }
+
+  return [
+    for (final entry in (inherited ?? '').split(':'))
+      if (entry.isNotEmpty && !isOurs(entry)) entry,
+    for (final name in ours) '$name/u',
+  ].join(':');
 }
 
 /// Builds the `wsl.exe` command line to run [request] inside [distribution].
@@ -53,11 +79,29 @@ class WslInvocation {
 ///
 /// [exec] uses `--exec` instead of `--`: the command is started directly, not
 /// handed to the user's shell as one line to re-parse.
+///
+/// The request's variables are set on `wsl.exe` and named in `WSLENV`
+/// ([inheritedWslEnv] is this process's own, kept), never written as
+/// `NAME=value` words: under `--` the user's shell would re-parse a value
+/// holding `$`, `;`, a quote or a space, and a key on the command line is in
+/// every process listing. A removal is `env -u NAME` inside. A name that is
+/// not a POSIX variable name throws [CommandException].
 WslInvocation buildWslInvocation(
   String distribution,
   CommandRequest request, {
   bool exec = false,
+  String? inheritedWslEnv,
 }) {
+  for (final name in [
+    ...request.environment.keys,
+    ...request.removedEnvironment,
+  ]) {
+    if (!_variableName.hasMatch(name)) {
+      throw CommandException(
+        '"$name" is not a variable name a WSL command can be given',
+      );
+    }
+  }
   final args = <String>['-d', distribution];
   final cwd = request.workingDirectory;
   if (cwd != null) {
@@ -65,18 +109,30 @@ WslInvocation buildWslInvocation(
       ..add('--cd')
       ..add(cwd.path);
   }
-  // The distribution inherits nothing of this app's environment, so what the
-  // request sets or removes is said inside it, as words of the command.
+  // A variable the request also sets is set, so it is not removed after.
+  final removed = [
+    for (final name in request.removedEnvironment)
+      if (!request.environment.containsKey(name)) name,
+  ];
   args
     ..add(exec ? '--exec' : '--')
-    ..addAll(posixEnvironmentPrefix(request))
+    ..addAll([
+      if (removed.isNotEmpty) 'env',
+      for (final name in removed) ...['-u', name],
+    ])
     ..add(request.executable)
     ..addAll(request.arguments);
   return WslInvocation(
     'wsl.exe',
     args,
     stdinText: request.stdinText,
-    timeout: exec ? request.timeout : null,
+    timeout: request.timeout,
+    environment: request.environment.isEmpty
+        ? const {}
+        : {
+            ...request.environment,
+            'WSLENV': _wslEnvFor(request.environment.keys, inheritedWslEnv),
+          },
   );
 }
 
@@ -115,13 +171,20 @@ class WslCommandRunner implements CommandRunner {
 
   /// Start commands with `wsl.exe --exec`, so an argument reaches the command
   /// byte for byte. The default `--` passes the line through the user's shell,
-  /// which expands `$…` and breaks on quotes, and it never carried a timeout;
-  /// this mode is new, so it honours the request's.
+  /// which expands `$…` and breaks on quotes. Variables reach it unchanged in
+  /// both modes; see [buildWslInvocation].
   final bool exec;
+
+  WslInvocation _invocationFor(CommandRequest request) => buildWslInvocation(
+    distribution,
+    request,
+    exec: exec,
+    inheritedWslEnv: Platform.environment['WSLENV'],
+  );
 
   @override
   Future<CommandResult> run(CommandRequest request) async {
-    final invocation = buildWslInvocation(distribution, request, exec: exec);
+    final invocation = _invocationFor(request);
     try {
       return await (spawner ?? sharedProcessSpawner).run(
         invocation.hostRequest,
@@ -136,7 +199,7 @@ class WslCommandRunner implements CommandRunner {
 
   @override
   Future<ProcessHandle> start(CommandRequest request) async {
-    final invocation = buildWslInvocation(distribution, request, exec: exec);
+    final invocation = _invocationFor(request);
     try {
       return IoProcessHandle(await spawnStreaming(invocation.hostRequest));
     } on ProcessException catch (e) {
