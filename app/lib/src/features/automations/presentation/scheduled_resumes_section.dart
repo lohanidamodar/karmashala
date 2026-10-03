@@ -42,9 +42,9 @@ class ScheduledResumesSection extends ConsumerWidget {
             help: switch (settings.usageLimitBehavior) {
               UsageLimitBehavior.schedule =>
                 'A resume is armed at the reset, with a countdown and Cancel '
-                    'in the session\'s bar, where the session\'s mode does '
-                    'not stop to ask. Choose Ask first or Do nothing to turn '
-                    'automatic resume off.',
+                    'in the session\'s bar, unless the session\'s permission '
+                    'mode asks before acting. Choose Ask first or Do nothing '
+                    'to turn automatic resume off.',
               UsageLimitBehavior.ask =>
                 'Automatic resume is off: the session\'s bar says so and '
                     'offers to resume at the reset.',
@@ -77,10 +77,13 @@ class ScheduledResumesSection extends ConsumerWidget {
             ),
           ),
           SettingsSwitchRow(
-            label: 'Continue turns a restart cut off',
+            label: 'Continue turns cut off when the session host stops',
+            // The server's kInterruptedTurnFreshness and kMaxAutomaticContinues.
             help:
-                'When Karmashala stops or crashes mid-turn, the session is '
-                'resumed and told to carry on.',
+                'If the session host stops or crashes while a turn is '
+                'running, the session is resumed when the host starts again '
+                'and told to carry on. Turns older than 12 hours are not '
+                'continued, nor a session cut off 3 times in a row.',
             value: settings.continueInterruptedTurns,
             onChanged: controller.setContinueInterruptedTurns,
           ),

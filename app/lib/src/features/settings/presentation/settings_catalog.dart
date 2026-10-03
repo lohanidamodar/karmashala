@@ -989,6 +989,21 @@ const settingsEntries = <SettingsEntry>[
     ],
   ),
   SettingsEntry(
+    'Continue turns cut off when the session host stops',
+    anchor: SettingsAnchor.scheduledResumes,
+    description:
+        'A turn running when the session host stopped or crashed is resumed '
+        'when it starts again.',
+    keywords: [
+      'restart',
+      'crash',
+      'continue',
+      'cut off',
+      'interrupted',
+      'session host',
+    ],
+  ),
+  SettingsEntry(
     'Default resume message',
     anchor: SettingsAnchor.scheduledResumes,
     description: 'What a resumed session is told, unless you say otherwise.',

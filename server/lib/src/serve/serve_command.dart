@@ -1120,11 +1120,22 @@ Future<int> runServe(
               (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
                   false);
         },
-        resume: (sessionId, prompt) =>
-            launches.resume(sessionId, prompt: prompt),
+        // A window connected by the time the agent is back shows it, as
+        // `session_send`'s resume does; the inbox item covers one that is not.
+        resume: (sessionId, prompt) async {
+          final started = await launches.resume(sessionId, prompt: prompt);
+          data.tellIntent(
+            OpenSessionTab(
+              sessionId: started.sessionId,
+              title: started.session.title,
+              launch: started.launch,
+            ),
+          );
+        },
         now: () => DateTime.now().toUtc(),
         enabled: () =>
             continuesInterruptedTurns(database.readMetadata('settings.v1')),
+        report: attention.turnCutOff,
         log: (message) => errSink.writeln('karmashala_host: $message'),
       ).run(),
     );
@@ -1257,7 +1268,11 @@ Future<int> runServe(
     }
   }
 
-  final childTurns = ChildTurnWait(waits: sessionWaits, answerOf: answerOf);
+  final childTurns = ChildTurnWait(
+    waits: sessionWaits,
+    answerOf: answerOf,
+    settled: turnSettlement.settled,
+  );
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1304,6 +1319,11 @@ Future<int> runServe(
         turns: childTurns,
         tokensOf: (sessionId) async =>
             (await sessionRecordReadings.tokensOf(sessionId)).total,
+        endChild: (sessionId) async {
+          final id = hostSessionIdOf(sessionId);
+          if (registry.findProcess(id) != null) await registry.close(id);
+        },
+        callHolds: openTurns.heldByCall,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).

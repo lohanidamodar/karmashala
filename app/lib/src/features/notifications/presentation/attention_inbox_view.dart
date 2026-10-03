@@ -268,6 +268,10 @@ class _ContinueAction extends StatelessWidget {
     color: semantic.attention,
   ),
   InboxItemKind.usageLimit => (icon: AppIcons.clock, color: semantic.attention),
+  InboxItemKind.turnCutOff => (
+    icon: AppIcons.arrowClockwise,
+    color: semantic.attention,
+  ),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this

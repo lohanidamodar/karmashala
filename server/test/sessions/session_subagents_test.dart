@@ -215,6 +215,33 @@ void main() {
     ]);
   });
 
+  test('a child ended on request is done only when its record ends on its '
+      'answer', () async {
+    final list = await reader(
+      children: [
+        child('answered', status: SessionStatus.cancelled),
+        child('midway', status: SessionStatus.cancelled),
+      ],
+      messages: {
+        'answered': const [
+          TranscriptMessage(role: 'user', text: 'go'),
+          TranscriptMessage(role: 'agent', text: 'Done: it is in cart.dart'),
+        ],
+        'midway': const [
+          TranscriptMessage(role: 'user', text: 'first'),
+          TranscriptMessage(role: 'agent', text: 'First answer'),
+          TranscriptMessage(role: 'user', text: 'now the second'),
+        ],
+      },
+    ).read(const SessionSubagentsRead('s1'));
+    expect(list.entries.map((e) => e.state), [
+      SubagentState.done,
+      SubagentState.stopped,
+    ]);
+    // Its earlier answer is still shown; only the state stops claiming Done.
+    expect(list.entries.last.finalResult, 'First answer');
+  });
+
   test('an ACP parent lists its children and says why its tool calls are '
       'not', () async {
     final list = await reader(

@@ -2,6 +2,7 @@ import 'package:agent_cli/read.dart' show SubagentRef;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_session/lineage.dart' show SessionLink;
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -37,6 +38,70 @@ class SessionSubagentsButton extends StatelessWidget {
   );
 }
 
+/// **The status line's count of a session's child sessions**, and how many
+/// are working; nothing, and no width, while it has none. Opens the panel.
+class SessionSubagentsBadge extends ConsumerWidget {
+  const SessionSubagentsBadge({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (:count, :running) = ref.watch(sessionChildCountProvider(sessionId));
+    if (count == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final working = SemanticColors.of(context).working;
+    final children = count == 1 ? '1 child session' : '$count child sessions';
+    final tooltip =
+        '$children${running == 0 ? '' : ', $running working'}. '
+        'Opens Subagents.';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: Tooltip(
+          message: tooltip,
+          child: InkWell(
+            key: const ValueKey('session-subagents-badge'),
+            onTap: () => showSessionSubagents(context, sessionId),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.sm),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    AppIcons.treeStructure,
+                    size: Chrome.iconSmall,
+                    color: running == 0 ? scheme.onSurfaceVariant : working,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    running == 0 ? '$count' : '$count · $running working',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// **Every subagent and child session of one session**: what each was asked,
 /// the agent and model it ran on, how far it got, how long it took, its tokens
 /// and its last answer. A row opens the delegate's turns or the child session.
@@ -52,7 +117,9 @@ class SessionSubagentsPanel extends ConsumerWidget {
       AsyncValue(:final value?) => _Body(sessionId: sessionId, list: value),
       AsyncValue(hasError: true, :final error) => _Message(
         icon: AppIcons.warningCircle,
-        text: '$error',
+        text: error is SessionSubagentsUnavailable
+            ? error.message
+            : kSubagentsUnreadable,
       ),
       _ => const Center(child: CircularProgressIndicator()),
     };
@@ -148,8 +215,16 @@ String formatSubagentDuration(Duration span) {
       ),
       SubagentState.done => (icon: AppIcons.checkCircle, label: 'Done'),
       SubagentState.failed => (icon: AppIcons.xCircle, label: 'Failed'),
+      SubagentState.stopped => (icon: AppIcons.stopCircle, label: 'Stopped'),
       SubagentState.unknown => (icon: AppIcons.question, label: 'Unknown'),
     };
+
+/// How a child session came from its parent, in the panel's words.
+String subagentLinkLabel(String? link) => switch (SessionLink.parse(link)) {
+  SessionLink.spawn || null => 'child session',
+  SessionLink.handoff => 'handed off',
+  SessionLink.fork => 'forked',
+};
 
 class _EntryRow extends ConsumerWidget {
   const _EntryRow({required this.parentSessionId, required this.entry});
@@ -167,7 +242,7 @@ class _EntryRow extends ConsumerWidget {
     final facts = [
       entry.agent ??
           (entry.kind == SubagentKind.childSession ? 'session' : 'subagent'),
-      entry.model ?? 'default model',
+      entry.model ?? 'model not recorded',
       look.label,
       if (duration != null) formatSubagentDuration(duration),
       if (tokens != null)
@@ -225,9 +300,7 @@ class _EntryRow extends ConsumerWidget {
                           Padding(
                             padding: const EdgeInsets.only(left: Insets.xs),
                             child: Text(
-                              entry.link == 'spawn' || entry.link == null
-                                  ? 'child session'
-                                  : entry.link!,
+                              subagentLinkLabel(entry.link),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),

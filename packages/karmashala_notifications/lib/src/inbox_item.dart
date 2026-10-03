@@ -46,7 +46,11 @@ enum InboxItemKind {
   followUp,
 
   /// An agent's turn ended on its account's usage limit.
-  usageLimit;
+  usageLimit,
+
+  /// A turn the session host's stop cut off: continued at its next start, or
+  /// left for a person with the reason.
+  turnCutOff;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -59,7 +63,8 @@ enum InboxItemKind {
     InboxItemKind.checksFailed ||
     InboxItemKind.changesRequested ||
     InboxItemKind.readyToMerge ||
-    InboxItemKind.usageLimit => InboxRetirement.viewing,
+    InboxItemKind.usageLimit ||
+    InboxItemKind.turnCutOff => InboxRetirement.viewing,
     // Neither: the watcher would sweep this away on its next poll, and glancing
     // at a crashed session does not deal with what it left.
     InboxItemKind.followUp => InboxRetirement.source,
@@ -78,6 +83,15 @@ enum InboxItemKind {
     InboxItemKind.readyToMerge => 'Ready to merge',
     InboxItemKind.followUp => 'Needs a follow-up',
     InboxItemKind.usageLimit => 'Usage limit reached',
+    InboxItemKind.turnCutOff => 'Turn cut off',
+  };
+
+  /// The kind written on the wire. A kind added after 1.31 travels as
+  /// [followUp] with its own name beside it: a released client throws on a
+  /// kind it does not know, and that loses the whole batch it came in.
+  String get wireName => switch (this) {
+    InboxItemKind.turnCutOff => InboxItemKind.followUp.name,
+    _ => name,
   };
 
   static InboxItemKind of(NotificationReason reason) => switch (reason) {
@@ -165,7 +179,8 @@ class InboxItem {
   Map<String, Object?> toJson() => {
     'id': id,
     'session': session.toJson(),
-    'kind': kind.name,
+    'kind': kind.wireName,
+    if (kind.wireName != kind.name) 'kindName': kind.name,
     'at': at.toUtc().toIso8601String(),
     if (seen) 'seen': true,
     'detail': ?detail,
@@ -173,10 +188,14 @@ class InboxItem {
 
   static InboxItem fromJson(Object? json) {
     final map = attentionObject(json, 'inbox item');
+    final named = map['kindName'];
     return InboxItem(
       id: attentionString(map, 'id'),
       session: WatchedSession.fromJson(map['session']),
-      kind: attentionEnum(InboxItemKind.values, map, 'kind'),
+      kind: InboxItemKind.values.firstWhere(
+        (kind) => kind.name == named,
+        orElse: () => attentionEnum(InboxItemKind.values, map, 'kind'),
+      ),
       at: attentionTime(map, 'at'),
       seen: map['seen'] == true,
       detail: map['detail'] as String?,

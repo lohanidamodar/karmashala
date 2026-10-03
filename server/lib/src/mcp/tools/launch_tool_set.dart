@@ -2,6 +2,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' hide Clock;
 import 'package:agent_cli/process.dart'
     show EnvironmentPath, localHostEnvironmentId;
+import 'package:karmashala_automations/resumes.dart' show ScheduledResume;
+import 'package:karmashala_automations/store.dart' show ScheduledResumeDao;
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -58,6 +60,8 @@ class LaunchToolSet extends ServerToolSet {
     ProjectFolders? folders,
     this.turns,
     this.tokensOf,
+    this.endChild,
+    this.callHolds,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -91,6 +95,14 @@ class LaunchToolSet extends ServerToolSet {
 
   /// The tokens a session's record counts, every bucket added up.
   final Future<int?> Function(String sessionId)? tokensOf;
+
+  /// Ends a child that answered; null where this server ends nothing (a
+  /// fixture), and the child is left open.
+  final Future<void> Function(String sessionId)? endChild;
+
+  /// Row [String] is (true) or no longer is (false) waited on by a
+  /// `subagent_run` call: its parent owns its turn, not a boot's continue.
+  final void Function(String sessionId, bool held)? callHolds;
 
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
@@ -148,11 +160,17 @@ class LaunchToolSet extends ServerToolSet {
       inCallerTree: true,
     );
     final session = opened.session;
-    final outcome = await turns.firstTurn(
-      session.id,
-      bound: bound,
-      since: started,
-    );
+    final ChildTurnOutcome outcome;
+    callHolds?.call(session.id, true);
+    try {
+      outcome = await turns.firstTurn(
+        session.id,
+        bound: bound,
+        since: started,
+      );
+    } finally {
+      callHolds?.call(session.id, false);
+    }
     final answer = switch (outcome.state) {
       ChildTurnState.running || ChildTurnState.blocked => null,
       _ => await _answerOf(turns, session.id, since: started),
@@ -162,6 +180,13 @@ class LaunchToolSet extends ServerToolSet {
         : boundedText(answer.text, kFinalAnswerMaxChars);
     final tokens = await tokensOf?.call(session.id);
     final block = outcome.block;
+    final keepOpen = args['keepOpen'] == true;
+    final ended = outcome.state == ChildTurnState.done && !keepOpen
+        ? await _end(session.id)
+        : null;
+    final resume = outcome.state == ChildTurnState.failed
+        ? await _armedResumeOf(session.id, turns.recheck)
+        : null;
     return <String, Object?>{
       'state': outcome.state.name,
       'childSessionId': session.id,
@@ -184,8 +209,54 @@ class LaunchToolSet extends ServerToolSet {
       'depth': opened.answer['depth'],
       'permissionMode': opened.answer['permissionMode'],
       'permissionCapped': ?opened.answer['permissionCapped'],
-      'note': _runNote(outcome.state, session.id, bound),
+      'childOpen': switch (outcome.state) {
+        ChildTurnState.ended => false,
+        ChildTurnState.done => ended != true,
+        _ => true,
+      },
+      if (resume != null)
+        'resume': <String, Object?>{
+          'at': resume.fireAt.toUtc().toIso8601String(),
+          'message': resume.message,
+          'window': resume.windowLabel ?? 'a time chosen',
+        },
+      'note': _runNote(
+        outcome.state,
+        session.id,
+        bound,
+        keptOpen: keepOpen,
+        ended: ended,
+        resume: resume,
+      ),
     };
+  }
+
+  /// Ends [sessionId] once it has answered: true when it ended, false when
+  /// ending it failed, null where this server ends nothing.
+  Future<bool?> _end(String sessionId) async {
+    final end = endChild;
+    if (end == null) return null;
+    try {
+      await end(sessionId);
+      return true;
+    } on Object catch (error) {
+      _context.log('subagent_run could not end child $sessionId: $error');
+      return false;
+    }
+  }
+
+  /// The resume a limit armed for [sessionId]: the setting arms it after a
+  /// fresh usage reading, so a failure is looked at again briefly.
+  Future<ScheduledResume?> _armedResumeOf(
+    String sessionId,
+    Duration recheck,
+  ) async {
+    final resumes = ScheduledResumeDao(_context.database);
+    for (var attempt = 0; ; attempt++) {
+      final live = resumes.liveFor(sessionId);
+      if (live != null || attempt >= 3) return live;
+      await Future<void>.delayed(recheck);
+    }
   }
 
   /// The answer once the turn settled; a record written a moment after the
@@ -207,14 +278,41 @@ class LaunchToolSet extends ServerToolSet {
     return line.length <= 48 ? line : '${line.substring(0, 47)}…';
   }
 
-  static String _runNote(ChildTurnState state, String id, Duration bound) =>
-      switch (state) {
-        ChildTurnState.done =>
-          'The child finished its turn; finalAnswer is what it said last. It '
-              'is still open as session $id for a follow-up with session_send.',
-        ChildTurnState.failed =>
-          'The child stopped on a failure. Read session_transcript '
-              '(sessionId: $id) for why.',
+  static String _runNote(
+    ChildTurnState state,
+    String id,
+    Duration bound, {
+    required bool keptOpen,
+    required bool? ended,
+    required ScheduledResume? resume,
+  }) => switch (state) {
+    ChildTurnState.done => switch (ended) {
+      true =>
+        'The child finished its turn; finalAnswer is what it said last. It '
+            'was ended once it answered; pass keepOpen: true to keep a child '
+            'open for a follow-up.',
+      false =>
+        'The child finished its turn; finalAnswer is what it said last. '
+            'Ending it failed, so it is still open as session $id: end it '
+            'with session_end when you are done with it.',
+      null =>
+        'The child finished its turn; finalAnswer is what it said last. It '
+            'is still open as session $id for a follow-up with session_send'
+            '${keptOpen ? '' : '; end it with session_end when you are done'}.',
+    },
+    ChildTurnState.failed => switch (resume) {
+      final resume? =>
+        'The child stopped on its usage limit, and Karmashala resumes it at '
+            '${resume.fireAt.toUtc().toIso8601String()} '
+            '${resume.sendsMessage ? 'with "${resume.message}"' : 'saying nothing'} '
+            '(resume). It is still open as session $id: session_wait on it '
+            'after then for its answer. Ending it does not cancel that '
+            'resume; only the user can, from the session\'s bar.',
+      null =>
+        'The child stopped on a failure. Read session_transcript '
+            '(sessionId: $id) for why. It is still open; end it with '
+            'session_end when you are done with it.',
+    },
         ChildTurnState.blocked =>
           'BLOCKED ON A PERSON: the child stopped for an approval or a '
               'question (blockedOn). Waiting longer will not clear it; ask the '
@@ -597,7 +695,8 @@ const List<Map<String, Object?>> launchToolSchemas = [
         'if you are in one — so it sees the files you see; useWorktree gives '
         'it a worktree of its own instead. It is launched as open_new_session '
         'launches one — recorded as your child, under the same nesting cap '
-        'and permission ceiling — and stays open as a session '
+        'and permission ceiling. A child that answers (done) is ended then, '
+        'unless keepOpen is true; any other child stays open as a session '
         'you can follow up with session_send. state is done, failed, blocked '
         '(it stopped for an approval or a question: blockedOn says which), '
         'ended, or running when timeoutSeconds ran out first — then continue '
@@ -669,6 +768,13 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'number',
           'description':
               'How long to wait for its answer: default 600, at most 1800.',
+        },
+        'keepOpen': {
+          'type': 'boolean',
+          'description':
+              'Keep the child open after it answers, for a follow-up with '
+              'session_send; end it with session_end when done. Default '
+              'false: an answered child is ended.',
         },
       },
       'required': <String>['prompt'],

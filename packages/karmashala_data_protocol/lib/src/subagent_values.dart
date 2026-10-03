@@ -22,6 +22,10 @@ enum SubagentState {
   blocked,
   done,
   failed,
+
+  /// Ended on request before its turn's answer; an older client reads it as
+  /// [unknown].
+  stopped,
   unknown;
 
   static SubagentState parse(Object? raw) {

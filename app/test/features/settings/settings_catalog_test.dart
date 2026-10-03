@@ -71,6 +71,13 @@ void main() {
       );
     });
 
+    test('finds the continue of cut-off turns by how a person says it', () {
+      const label = 'Continue turns cut off when the session host stops';
+      for (final query in ['restart', 'crash', 'continue', 'cut off']) {
+        expect(labels(query), contains(label), reason: query);
+      }
+    });
+
     test('finds an option by a word that is on neither', () {
       expect(labels('dotfiles'), ['Show hidden files']);
       expect(labels('quota'), ['Usage & limits']);

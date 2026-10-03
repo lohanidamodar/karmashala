@@ -223,7 +223,9 @@ your `timeoutSeconds` ran out, not that the child failed: the child keeps
 working, so wait on `childSessionId` with `session_wait` — which also returns
 `finalAnswer` once the child is ready — and do not call `subagent_run` again,
 which starts a second agent. `blocked` means the child stopped for a person;
-waiting longer will not clear it.
+waiting longer will not clear it. A child that answers is ended then unless
+you pass `keepOpen: true`; `childOpen` says which. A child stopped by its
+usage limit stays open, and `resume` names the resume armed for it.
 ''',
   ),
   McpGuide(

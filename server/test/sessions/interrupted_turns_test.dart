@@ -181,6 +181,29 @@ void main() {
       expect(decided.skipped, isEmpty);
     });
 
+    test("a subagent_run child is its parent's to continue, not boot's", () {
+      final open = turns()
+        ..heldByCall('child', true)
+        ..statusMoved('child', AgentActivityStatus.working, t0)
+        ..statusMoved('free', AgentActivityStatus.working, t0)
+        ..heldByCall('free', true)
+        ..heldByCall('free', false);
+      final recorded = turns().open;
+      expect(recorded['child']!.byCall, isTrue);
+      expect(recorded['free']!.byCall, isFalse);
+      final decided = planInterruptedTurns(
+        recorded,
+        sessionOf: (id) => row(id),
+        childrenOf: (_) => const [],
+        runsHere: (_) => false,
+        now: t0,
+      );
+      expect(decided.resume.map((r) => r.sessionId), ['free']);
+      expect(decided.skipped.single.sessionId, 'child');
+      expect(decided.skipped.single.forAPerson, isFalse);
+      expect(open.open, hasLength(2));
+    });
+
     test('ended on purpose, archived, handed off or gone is left alone', () {
       final decided = plan(
         {
@@ -214,6 +237,7 @@ void main() {
         'handed': 'its work was handed off',
         'gone': 'it is no longer in the workspace',
       });
+      expect(decided.skipped.where((s) => s.forAPerson), isEmpty);
     });
 
     test('running already, no conversation, too old or looping is skipped', () {
@@ -239,6 +263,10 @@ void main() {
         'old',
         'loop',
       ]);
+      expect(
+        decided.skipped.where((s) => s.forAPerson).map((s) => s.sessionId),
+        ['nameless', 'old', 'loop'],
+      );
     });
   });
 
@@ -246,6 +274,7 @@ void main() {
     late Map<String, Session> rows;
     late List<(String, String?)> resumed;
     late List<String> logged;
+    late Map<String, String> reported;
 
     InterruptedTurnContinuer continuer(
       OpenTurns open, {
@@ -265,11 +294,13 @@ void main() {
           },
       now: () => t0.add(const Duration(minutes: 1)),
       enabled: () => enabled,
+      report: (id, detail) => reported[id] = detail,
       log: logged.add,
     );
 
     setUp(() {
       rows = {'s1': row('s1'), 's2': row('s2')};
+      reported = {};
       resumed = [];
       logged = [];
     });
@@ -373,6 +404,46 @@ void main() {
       expect(resumed, isEmpty);
       expect(turns().open, isEmpty);
       expect(logged.single, contains('switched off'));
+      expect(reported['s1'], contains('switched off in Settings'));
+    });
+
+    test('each continued session is filed for the inbox, told or not', () async {
+      final open = turns()
+        ..statusMoved('s1', AgentActivityStatus.working, t0)
+        ..statusMoved('s2', AgentActivityStatus.working, t0);
+      await continuer(open, takes: (session) => session.id == 's1').run();
+      expect(reported.keys, {'s1', 's2'});
+      expect(reported['s1'], startsWith(kTurnCutOffLead));
+      expect(reported['s1'], contains('continued it'));
+      expect(reported['s2'], contains('not asked to continue'));
+    });
+
+    test('a turn left for a person is filed with the reason; one the person '
+        'ended themselves is not', () async {
+      rows['old'] = row('old');
+      rows['stopped'] = row('stopped', status: SessionStatus.cancelled);
+      final stale = OpenTurn(since: t0.subtract(const Duration(hours: 13)));
+      stored = jsonEncode({
+        'old': stale.toJson(),
+        'stopped': OpenTurn(since: t0).toJson(),
+      });
+      await continuer(turns()).run();
+      expect(resumed, isEmpty);
+      expect(reported.keys, ['old']);
+      expect(
+        reported['old'],
+        '$kTurnCutOffLead It was not continued: its turn began more than '
+        '12 hours ago.',
+      );
+    });
+
+    test('a resume that fails is filed as not continued', () async {
+      final open = turns()..statusMoved('s1', AgentActivityStatus.working, t0);
+      await continuer(
+        open,
+        resume: (_, _) async => throw StateError('no agent'),
+      ).run();
+      expect(reported['s1'], contains('reopening the session failed'));
     });
   });
 

@@ -113,6 +113,7 @@ class _CompactSessionBar extends StatelessWidget {
                         ),
                         child: ScheduledResumeChip(sessionId: sessionId),
                       ),
+                      SessionSubagentsBadge(sessionId: sessionId),
                       const SizedBox(width: Insets.xs),
                       _SessionSheetButton(sessionId: sessionId),
                     ],

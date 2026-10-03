@@ -55,6 +55,8 @@ import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
 import '../widgets/adaptive_modal.dart';
 import 'zen_bar.dart' show kZenBarRoom;
+import '../../features/sessions/presentation/session_subagents_panel.dart'
+    show SessionSubagentsBadge;
 
 // Re-exported so `workbench.dart` stays the one import for the tab strip.
 export 'tab_strip_metrics.dart';

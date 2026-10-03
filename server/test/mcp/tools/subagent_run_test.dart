@@ -5,7 +5,9 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
 import 'package:agent_cli/process.dart' show EnvironmentPath;
-import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_automations/store.dart'
+    show CheckoutRows, ScheduledResumeDao;
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
@@ -49,6 +51,9 @@ void main() {
   late Map<String, String> answers;
   late HostedSessionWait waits;
   late LaunchToolSet tools;
+  late StreamController<String> settledTurns;
+  late List<String> endedChildren;
+  late List<(String, bool)> holds;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -61,6 +66,9 @@ void main() {
 
   setUp(() {
     ids = 0;
+    settledTurns = StreamController<String>.broadcast(sync: true);
+    endedChildren = [];
+    holds = [];
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -126,10 +134,13 @@ void main() {
       turns: ChildTurnWait(
         waits: waits,
         answerOf: answerOf,
+        settled: settledTurns.stream,
         deadline: (_) => deadline.future,
         recheck: const Duration(milliseconds: 5),
       ),
       tokensOf: (_) async => 4200,
+      endChild: (sessionId) async => endedChildren.add(sessionId),
+      callHolds: (sessionId, held) => holds.add((sessionId, held)),
     );
   });
 
@@ -222,6 +233,57 @@ void main() {
     expect(row.parentLink, SessionLink.spawn);
     expect(row.modelId, 'claude-haiku');
     expect(row.title, startsWith('Subagent: Find the cart bug'));
+    // Answered: ended, and the call held its turn only while it waited.
+    expect(endedChildren, ['new-1']);
+    expect(result['childOpen'], isFalse);
+    expect(result['note'], contains('was ended once it answered'));
+    expect(holds, [('new-1', true), ('new-1', false)]);
+  });
+
+  test('keepOpen leaves an answered child open', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Look', 'keepOpen': true});
+    status.hook(hook('UserPromptSubmit'));
+    await pumpEventQueue();
+    answers['new-1'] = 'Seen.';
+    status.hook(hook('Stop'));
+    final result = await answer.timeout(const Duration(seconds: 5));
+    expect(result['state'], 'done');
+    expect(endedChildren, isEmpty);
+    expect(result['childOpen'], isTrue);
+    expect(result['note'], contains('session_send'));
+  });
+
+  test('a child stopped on its limit stays open, with its resume named', () async {
+    insertCaller('caller');
+    final fireAt = t0.add(const Duration(hours: 3));
+    ScheduledResumeDao(database).replaceFor(
+      ScheduledResume(
+        id: 'r1',
+        sessionId: 'new-1',
+        fireAt: fireAt,
+        state: ScheduledResumeState.pending,
+        scheduledAt: t0,
+        windowLabel: '5-hour',
+        message: 'continue',
+      ),
+      now: t0,
+    );
+    final answer = await run({'prompt': 'Big job'});
+    status.hook(hook('UserPromptSubmit'));
+    await pumpEventQueue();
+    status.hook(hook('StopFailure'));
+    final result = await answer.timeout(const Duration(seconds: 5));
+    expect(result['state'], 'failed');
+    expect(endedChildren, isEmpty);
+    expect(result['childOpen'], isTrue);
+    expect(result['resume'], {
+      'at': fireAt.toIso8601String(),
+      'message': 'continue',
+      'window': '5-hour',
+    });
+    expect(result['note'], contains('resumes it at ${fireAt.toIso8601String()}'));
+    expect(result['note'], contains('only the user can'));
   });
 
   test('a child ready before it ever worked is not done until it has an '
@@ -238,6 +300,36 @@ void main() {
     final result = await answer.timeout(const Duration(seconds: 5));
     expect(result['state'], 'done');
     expect(result['finalAnswer'], '42 files.');
+  });
+
+  test('a turn the server settles over a screen it cannot read is done, '
+      'not waited out', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Quiet job'}, screen: 'codex-tui');
+    expect(
+      status.statusOf('new-1')?.report.status,
+      anyOf(isNull, AgentActivityStatus.unknown),
+    );
+    answers['new-1'] = 'Done quietly.';
+    settledTurns.add('new-1');
+    final result = await answer.timeout(const Duration(seconds: 5));
+    expect(result['state'], 'done');
+    expect(result['finalAnswer'], 'Done quietly.');
+  });
+
+  test('a settled turn over a status that says ready is read as it says', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Not started'});
+    status.hook(hook('Stop'));
+    await pumpEventQueue();
+    var finished = false;
+    unawaited(answer.then((_) => finished = true));
+    settledTurns.add('new-1');
+    await pumpEventQueue();
+    // Ready and never seen working, with no answer: not yet its turn's end.
+    expect(finished, isFalse);
+    deadline.complete();
+    expect((await answer)['state'], 'running');
   });
 
   test('at its bound it answers running, and says how to continue', () async {

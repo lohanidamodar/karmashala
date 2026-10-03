@@ -28,7 +28,17 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
   static const _width = 300.0;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      // ⋯ holds the way in; the count beside it says there is something
+      // there, at every width the status line has.
+      SessionSubagentsBadge(sessionId: widget.sessionId),
+      _menu(context),
+    ],
+  );
+
+  Widget _menu(BuildContext context) {
     final tones = SurfaceTones.of(context);
     return MenuAnchor(
       controller: _controller,

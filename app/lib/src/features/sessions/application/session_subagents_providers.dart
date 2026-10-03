@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
+import 'session_providers.dart';
 import 'session_signals.dart';
+import 'session_status_providers.dart';
 
 /// Why a session's subagents cannot be listed, in words for the panel.
 class SessionSubagentsUnavailable implements Exception {
@@ -16,6 +19,12 @@ class SessionSubagentsUnavailable implements Exception {
   @override
   String toString() => message;
 }
+
+/// What the panel says when asking failed for a reason the server gave no
+/// words for (the connection dropped, the answer was out of shape).
+const String kSubagentsUnreadable =
+    "Couldn't read this session's subagents. Close the panel and open it "
+    'again to retry.';
 
 /// How often an open panel asks again while a delegate is live: its record
 /// moves without a notice whenever its parent's chat is not on screen.
@@ -64,6 +73,11 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
           if (!disposed) {
             out.addError(SessionSubagentsUnavailable(refusal.message));
           }
+        } on Object {
+          // Any other failure ends the spinner too; a later notice asks again.
+          if (!disposed) {
+            out.addError(const SessionSubagentsUnavailable(kSubagentsUnreadable));
+          }
         } finally {
           asking = false;
           if (!disposed) {
@@ -89,4 +103,33 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
       });
       unawaited(ask());
       return out.stream;
+    });
+
+/// How many child sessions session [String] has (not archived), and how many
+/// of those are working now. Read from the rows and their statuses this app
+/// already holds, so a status line can show it without asking the server;
+/// an agent's own in-turn subagents are in the panel, not counted here.
+final sessionChildCountProvider = Provider.autoDispose
+    .family<({int count, int running}), String>((ref, sessionId) {
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.status,
+      });
+      var count = 0;
+      var running = 0;
+      for (final row in ref.read(sessionsDataProvider).getAll()) {
+        if (row.parentSessionId != sessionId || row.isArchived) continue;
+        count++;
+        if (!row.status.claimsLive) continue;
+        final status = ref.watch(
+          agentSessionStatusProvider(
+            row.id,
+          ).select((report) => report.asData?.value.status),
+        );
+        if (status == AgentActivityStatus.working ||
+            status == AgentActivityStatus.awaitingApproval) {
+          running++;
+        }
+      }
+      return (count: count, running: running);
     });
