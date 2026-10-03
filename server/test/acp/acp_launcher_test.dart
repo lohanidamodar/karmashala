@@ -115,6 +115,7 @@ void main() {
   HostedAgentLauncher launcher({
     bool withRuntimes = true,
     AcpStartAuth Function(AgentInstallation, AcpLaunchSpec)? acpAuth,
+    void Function(String sessionId)? onRowWritten,
   }) {
     final rows = CheckoutRows(database);
     return HostedAgentLauncher(
@@ -127,6 +128,7 @@ void main() {
       environmentOf: rows.environment,
       acpRuntimes: withRuntimes ? factory : null,
       acpAuth: acpAuth,
+      onRowWritten: onRowWritten,
       windows: false,
     );
   }
@@ -328,6 +330,51 @@ void main() {
     final ended = registry.findProcess('karmashala_s1')!.lifecycle;
     expect(ended.hasEnded, isTrue);
     expect(ended.exitCode, isNull, reason: 'it never ran a turn to exit');
+  });
+
+  test('a resume the agent refuses leaves the row failed through both '
+      'writers, not back at the status it had', () async {
+    process = FakeAcpProcess(
+      FakeAcpAgent(
+        requireAuthentication: true,
+        supportsLoadSession: false,
+        authMethods: const [
+          AuthMethod(id: 'a', name: 'A'),
+          AuthMethod(id: 'b', name: 'B'),
+        ],
+      ),
+    );
+    SessionDao(database).insert(
+      Session(
+        id: 'old',
+        repositoryId: 'r1',
+        agentInstallationId: 'acp1',
+        title: 'Old',
+        useWorktree: false,
+        status: SessionStatus.completed,
+        createdAt: t0,
+        externalSessionId: 'agent-session-9',
+      ),
+    );
+    final rows = CheckoutRows(database);
+    final written = <String>[];
+    recording.changes.listen((c) => written.add(c.to.name));
+    final byLauncher = <SessionStatus>[];
+    await expectLater(
+      launcher(onRowWritten: (id) => byLauncher.add(row(id).status)).start(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation('acp1')!,
+          title: 'Old',
+          resuming: SessionDao(database).getById('old'),
+        ),
+      ),
+      throwsA(isA<AcpLoginRequired>()),
+    );
+    await pump();
+    expect(row('old').status, SessionStatus.failed);
+    expect(written, everyElement('failed'));
+    expect(byLauncher.last, SessionStatus.failed);
   });
   test('the login remembered for the installation is the method a start '
       'authenticates with, and its key reaches the agent', () async {

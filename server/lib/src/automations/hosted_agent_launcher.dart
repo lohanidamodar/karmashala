@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -22,6 +23,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
 import '../acp/acp_auth.dart' show AcpStartAuth;
 import '../acp/acp_runtimes.dart';
+import '../acp/acp_session_runtime.dart';
 import '../domain/session_registry.dart';
 import '../pty/environment_spawn.dart';
 import '../sessions/launch/handoff_packet_files.dart';
@@ -687,6 +689,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required String? credentialNotice,
     required void Function(Object? error)? settleWorktree,
   }) async {
+    AcpSessionRuntime? opened;
     try {
       final arguments = acpArgumentsFor(
         installation,
@@ -728,7 +731,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           risk: risk,
         ),
       );
-      registry.openAcp(hostSessionIdOf(id), runtime);
+      opened = registry.openAcp(hostSessionIdOf(id), runtime);
       final outcome = await runtime.start();
       if (outcome.agentSessionId != session.externalSessionId) {
         sessions.updateExternalSessionId(id, outcome.agentSessionId);
@@ -751,7 +754,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       );
     } on Object catch (error) {
       settleWorktree?.call(error);
-      sessions.updateStatus(id, resuming?.status ?? SessionStatus.failed);
+      // Once the registry holds the runtime, its lifecycle records the end
+      // as failed too; a resume says the same rather than its old status.
+      final ran = opened;
+      if (ran != null) unawaited(ran.stop());
+      sessions.updateStatus(
+        id,
+        ran != null
+            ? SessionStatus.failed
+            : resuming?.status ?? SessionStatus.failed,
+      );
       onRowWritten?.call(id);
       rethrow;
     }
