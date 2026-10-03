@@ -12,6 +12,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_session/session.dart';
 
+import '../acp/acp_usage_limit.dart'
+    show kProtocolUsageLimitReason, usageLimitResetIn;
 import 'server_resume_runner.dart' show ResumeUsage, formatResumeClock;
 
 /// How old an agent's rate-limit record may be and still explain *this*
@@ -227,30 +229,28 @@ class ServerUsageLimits {
         ?.usage
         ?.limitEvidence;
     final at = now();
+    // A protocol turn the agent refused on a limit, in its own words: a
+    // spent window in a reading names the reset when one can be read, else
+    // the words themselves when they carry it.
+    if (entry.report.source == AgentStatusSource.protocol &&
+        entry.report.failureReason == kProtocolUsageLimitReason) {
+      final window =
+          await _spentWindow(installation, at) ??
+          switch (usageLimitResetIn(entry.report.evidence, at)) {
+            final resets? => UsageWindow(label: 'usage', resetsAt: resets),
+            null => null,
+          };
+      if (window == null) return null;
+      return (sessionId: session.id, agentName: name, window: window);
+    }
     switch (evidence) {
       case HookFailureReasonEvidence(:final reason):
         if (entry.report.failureReason != reason) return null;
         // The same word can be a passing rate limit: only a spent window
         // makes it a usage limit, and only a reading names the reset.
-        final reader = usage;
-        if (reader == null || reader.unreadableBecause(installation) != null) {
-          return null;
-        }
-        final AgentUsage reading;
-        try {
-          reading = await reader.fetch(installation);
-        } on UsageException {
-          return null;
-        }
-        final blocking = blockingWindow(reading.windows, now: at);
-        if (blocking == null || blocking.reason != BlockingWindowReason.spent) {
-          return null;
-        }
-        return (
-          sessionId: session.id,
-          agentName: name,
-          window: blocking.window,
-        );
+        final window = await _spentWindow(installation, at);
+        if (window == null) return null;
+        return (sessionId: session.id, agentName: name, window: window);
       case StateFileRateLimitEvidence(:final read):
         final path = entry.session.stateFilePath;
         if (path == null || path.isEmpty) return null;
@@ -268,6 +268,29 @@ class ServerUsageLimits {
       case NoUsageLimitEvidence() || null:
         return null;
     }
+  }
+
+  /// The spent window a fresh reading of [installation]'s account names, or
+  /// null when there is none or no reading.
+  Future<UsageWindow?> _spentWindow(
+    AgentInstallation installation,
+    DateTime at,
+  ) async {
+    final reader = usage;
+    if (reader == null || reader.unreadableBecause(installation) != null) {
+      return null;
+    }
+    final AgentUsage reading;
+    try {
+      reading = await reader.fetch(installation);
+    } on UsageException {
+      return null;
+    }
+    final blocking = blockingWindow(reading.windows, now: at);
+    if (blocking == null || blocking.reason != BlockingWindowReason.spent) {
+      return null;
+    }
+    return blocking.window;
   }
 
   void _arm(

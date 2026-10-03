@@ -10,12 +10,28 @@ import '../types/tool_call.dart';
 
 /// One `session/prompt` as the fake agent answers it: [steps] in order, then
 /// [stopReason]. A `session/cancel` arriving mid-way ends it with `cancelled`.
+/// With [error], the prompt is answered with that JSON-RPC error instead.
 @immutable
 final class FakeTurn {
-  const FakeTurn(this.steps, {this.stopReason = StopReason.endTurn});
+  const FakeTurn(
+    this.steps, {
+    this.stopReason = StopReason.endTurn,
+    this.error,
+  });
 
   final List<FakeStep> steps;
   final StopReason stopReason;
+  final FakeTurnError? error;
+}
+
+/// The error a [FakeTurn] ends its prompt with.
+@immutable
+final class FakeTurnError {
+  const FakeTurnError(this.code, this.message, {this.data});
+
+  final int code;
+  final String message;
+  final Object? data;
 }
 
 /// Something the fake agent does during a turn.

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart'
     show
         CommandRunnerFactory,
@@ -865,6 +867,24 @@ Future<int> runServe(
     ),
     openAgent: openAgent,
   );
+  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
+  // a PTY: its conversation is `session_messages`, its status its own word.
+  final sessionMessages = SessionMessageDao(database);
+  final acpHost = ServerAcpHost(
+    agentStatus: status,
+    checkpoints: checkpoints,
+    data: data,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final sessionUsage = SessionUsageDao(database);
+  final acpRuntimes = AcpRuntimes(
+    messages: sessionMessages,
+    usage: sessionUsage,
+    host: acpHost,
+    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
+      environment ?? localHostEnvironment(DateTime.now().toUtc()),
+    ),
+  );
   final automations = await _startAutomations(
     database: database,
     data: data,
@@ -888,6 +908,9 @@ Future<int> runServe(
     openAgent: openAgent,
     // Automations and resumes fire on an SSH box it reaches (slice 5d).
     reachesBox: ssh.remote.reaches,
+    // A resume of an ACP session that ended starts it again over ACP.
+    acpRuntimes: acpRuntimes.start,
+    acpAuth: acpAuth.startAuth,
   );
   // Event rules and usage limits follow every status the server keeps,
   // app or no app.
@@ -900,24 +923,6 @@ Future<int> runServe(
   final sessionRows = SessionDao(database);
   LaunchSettings launchSettings() =>
       LaunchSettings.parse(database.readMetadata(kLaunchSettingsKey));
-  // An agent whose adapter speaks ACP runs in a runtime of the server's, not
-  // a PTY: its conversation is `session_messages`, its status its own word.
-  final sessionMessages = SessionMessageDao(database);
-  final acpHost = ServerAcpHost(
-    agentStatus: status,
-    checkpoints: checkpoints,
-    data: data,
-    log: (message) => errSink.writeln('karmashala_host: $message'),
-  );
-  final sessionUsage = SessionUsageDao(database);
-  final acpRuntimes = AcpRuntimes(
-    messages: sessionMessages,
-    usage: sessionUsage,
-    host: acpHost,
-    runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
-      environment ?? localHostEnvironment(DateTime.now().toUtc()),
-    ),
-  );
   // A client that subscribes after an ACP agent started is greeted with the
   // modes and options the runtime announced before it arrived.
   final acpModes = AcpSessionModes(

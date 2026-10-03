@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
+import 'package:agent_cli/descriptors.dart'
+    show AcpLaunchSpec, AgentActivityStatus;
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
@@ -32,6 +34,9 @@ import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:path/path.dart' as p;
 
+import '../acp/acp_auth.dart' show AcpStartAuth;
+import '../acp/acp_runtimes.dart' show AcpRuntimeFactory;
+import '../acp/acp_session_runtime.dart' show AcpSessionRuntime;
 import '../domain/session_registry.dart';
 import '../data/attention_work.dart';
 import '../data/told_automations.dart';
@@ -82,6 +87,9 @@ class DaemonAutomations implements ChecksWork {
     void Function(UsageLimitNotice notice)? noticeUsageLimit,
     AgentTerminalOpener? openAgent,
     bool Function(ExecutionEnvironment environment)? reachesBox,
+    AcpRuntimeFactory? acpRuntimes,
+    AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
+    acpAuth,
   }) : _db = database,
        _tell = tell,
        _log = log ?? _ignore {
@@ -167,11 +175,19 @@ class DaemonAutomations implements ChecksWork {
           agentId: agentId,
           directory: directory,
         ),
+        acpRuntimes: acpRuntimes,
+        acpAuth: acpAuth,
       ),
       now: now,
       newId: ids,
       onChanged: _changed,
     );
+    // A row the server runs over ACP, while its runtime lives.
+    AcpSessionRuntime? liveAcp(String sessionId) {
+      final runtime = registry.findAcp(hostSessionIdOf(sessionId));
+      return runtime == null || runtime.lifecycle.hasEnded ? null : runtime;
+    }
+
     final resumeFiring = ServerResumeRunner(
       resumes: resumes,
       sessionOf: sessions.getById,
@@ -184,9 +200,13 @@ class DaemonAutomations implements ChecksWork {
       },
       close: (sessionId) async {
         final id = hostSessionIdOf(sessionId);
-        if (registry.find(id) != null) await registry.close(id);
+        if (registry.findProcess(id) != null) await registry.close(id);
       },
       statusOf: agentStatusOf,
+      promptOf: (sessionId) => switch (liveAcp(sessionId)) {
+        final runtime? => runtime.send,
+        null => null,
+      },
       usage: usage,
       onDecision: onDecision,
       now: now,
@@ -238,7 +258,7 @@ class DaemonAutomations implements ChecksWork {
           () => usageLimitSettingsFrom(database.readMetadata('settings.v1')),
       raise: raise ?? (_) {},
       notice: noticeUsageLimit ?? (_) {},
-      isLive: (id) => running(id) != null,
+      isLive: (id) => running(id) != null || liveAcp(id) != null,
       onArmed: _changed,
       now: now,
       newId: ids,
