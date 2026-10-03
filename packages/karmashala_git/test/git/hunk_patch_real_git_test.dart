@@ -30,8 +30,8 @@ void main() {
   }
 
   /// The working tree's diff against HEAD, as the checkpoint code asks for it.
-  String diff() => run(['diff', '--no-color', '--binary', 'HEAD']).stdout
-      as String;
+  String diff() =>
+      run(['diff', '--no-color', '--binary', 'HEAD']).stdout as String;
 
   /// Whether `git apply -R --check` takes [patch] — the restore's own call.
   String? applyRefusal(String patch) {
