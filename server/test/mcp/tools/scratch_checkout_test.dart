@@ -130,8 +130,7 @@ void main() {
   group('createScratchCheckout in a POSIX environment', () {
     test('spells the folder into the shell script unquoted, inside the '
         'quoted path', () async {
-      // `TARGET="$ROOT/'name'"` once put the quotes into the path, which the
-      // shell read as an empty one: mkdir: cannot create directory ''.
+      // Quotes inside the quoted path would become part of the folder name.
       final requests = <CommandRequest>[];
       final wsl = ExecutionEnvironment(
         id: 'wsl:arch',
@@ -222,9 +221,7 @@ void main() {
     });
 
     test('Scratch is removed like any project, its sessions with it', () async {
-      // It once refused while a session was in it, which left a Scratch
-      // nobody could remove from the explorer: the confirmation there
-      // already says the sessions go with the project.
+      // The explorer's confirmation already says the sessions go with it.
       final scratch = await fixture.folders.createScratchCheckout(
         target: host(),
       );
