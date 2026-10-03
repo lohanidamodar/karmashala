@@ -80,6 +80,14 @@ void main() {
       expect(read.args, isEmpty);
       expect(read.env, isEmpty);
     });
+
+    test('a source this build does not know reads as custom, and the table '
+        'still lists', () {
+      dao.upsert(row());
+      db.execute("UPDATE acp_agents SET source = 'marketplace';");
+      expect(dao.getById('r1')!.source, AcpAgentSource.custom);
+      expect(dao.getAll(), hasLength(1));
+    });
   });
 
   group('installation leading arguments', () {

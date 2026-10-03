@@ -56,7 +56,10 @@ class AcpAgentDao {
     command: row['command']! as String,
     args: stringListFromJson(row['args']),
     env: stringMapFromJson(row['env']),
-    source: AcpAgentSource.values.byName(row['source']! as String),
+    // A source this build has no name for reads as typed in, like bad JSON.
+    source:
+        AcpAgentSource.values.asNameMap()[row['source']] ??
+        AcpAgentSource.custom,
     registryId: row['registry_id'] as String?,
     iconUrl: row['icon_url'] as String?,
     createdAt: dateFromIso(row['created_at']),
