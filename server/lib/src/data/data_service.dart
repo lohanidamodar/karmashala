@@ -359,11 +359,11 @@ class DataService {
   WorktreeSetup worktreeSetupOf(String repositoryId) =>
       _worktrees.setupOf(repositoryId);
 
-  /// The installations recorded in [environmentId], oldest first.
   /// The ACP agents a person added, oldest first — what the server's agent
   /// registry is composed from (`AgentRegistryHolder`).
   List<AcpAgentRow> get acpAgents => _acpAgents.list();
 
+  /// The installations recorded in [environmentId], oldest first.
   List<AgentInstallation> installationsIn(String environmentId) =>
       _hosts.installationsIn(environmentId);
 

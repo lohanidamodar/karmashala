@@ -110,6 +110,7 @@ void main() {
       required String agentId,
       SessionMessageDao? messages,
       SessionUsageDao? usage,
+      bool Function(String sessionId)? speaksAcp,
     }) => SessionRecordReadings(
       lookUp: (_) async => (path: null, agentId: agentId, absence: null),
       registry: AgentRegistry.builtIn,
@@ -118,7 +119,21 @@ void main() {
       runners: const CommandRunnerFactory(),
       messages: messages,
       usage: usage,
+      speaksAcp: speaksAcp,
     );
+
+    test('an ACP agent a person added, which the shipped registry does not '
+        'know, answers from the rows too', () async {
+      final messages = SessionMessageDao(db);
+      messages.append(row('m1', SessionMessageRole.user));
+      final reading = (await readings(
+        agentId: 'my-own-acp-agent',
+        messages: messages,
+        speaksAcp: (sessionId) => sessionId == 's1',
+      ).stats(const SessionStatsRead(['s1']))).sessions['s1']!;
+      expect(reading.gap, SessionStatsGap.none);
+      expect(reading.stats!.turns, 1);
+    });
 
     test('an ACP session answers from the rows and usage kept here', () async {
       final messages = SessionMessageDao(db);

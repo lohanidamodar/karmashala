@@ -48,8 +48,13 @@ class SessionRecordReadings {
     this.lifetimeFresh = const Duration(seconds: 30),
     this.messages,
     this.usage,
+    this.speaksAcp,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
+
+  /// Whether session [String]'s agent is spoken to over ACP, by the registry
+  /// as it is now; null asks [registry], which knows the shipped agents alone.
+  final bool Function(String sessionId)? speaksAcp;
 
   final Future<SessionRecordLookup> Function(String sessionId) lookUp;
   final AgentRegistry registry;
@@ -135,7 +140,8 @@ class SessionRecordReadings {
     );
     // An agent spoken to over ACP keeps no store of its own here: its rows
     // and its reported usage are this server's.
-    if (adapter?.acp != null && row != null) {
+    final acp = speaksAcp?.call(sessionId) ?? adapter?.acp != null;
+    if (acp && row != null) {
       final rows = messages;
       if (rows == null) return gap(SessionStatsGap.agentKeepsNoCounts);
       return SessionStatsReading(

@@ -1056,15 +1056,7 @@ Future<int> runServe(
     ),
     // An ACP session's transcript is the rows its runtime wrote (C3).
     messages: SessionMessageTranscriptSource(sessionMessages),
-    servesFromMessages: (sessionId) {
-      final row = sessionRows.getById(sessionId);
-      final installation = row == null
-          ? null
-          : checkoutRows.installation(row.agentInstallationId);
-      if (installation == null) return false;
-      return agentRegistry.current.adapterFor(installation.agentId)?.acp !=
-          null;
-    },
+    servesFromMessages: speaksAcp,
   );
   acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
   data.sessionTranscripts = sessionTranscripts;
@@ -1082,6 +1074,7 @@ Future<int> runServe(
     // An ACP session's counts come from the rows and usage this server kept.
     messages: sessionMessages,
     usage: sessionUsage,
+    speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
   // Sessions' pictures (Stage 0 step 10), extracted from the same records.
