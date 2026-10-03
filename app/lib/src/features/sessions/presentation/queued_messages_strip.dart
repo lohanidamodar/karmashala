@@ -15,9 +15,17 @@ import '../application/session_queue_providers.dart';
 /// a bubble on the sender's side, marked queued, with Edit and Cancel while
 /// it waits. A delivered one leaves here and shows in the transcript.
 class QueuedMessagesStrip extends ConsumerWidget {
-  const QueuedMessagesStrip({super.key, required this.sessionId});
+  const QueuedMessagesStrip({
+    super.key,
+    required this.sessionId,
+    this.onBackToComposer,
+  });
 
   final String sessionId;
+
+  /// Puts a failed message's text back in the composer; null offers only
+  /// Dismiss.
+  final ValueChanged<String>? onBackToComposer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,6 +51,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
               place: message.state == QueuedMessageState.failed
                   ? null
                   : ++place,
+              onBackToComposer: onBackToComposer,
             ),
         ],
       ),
@@ -163,12 +172,18 @@ class _HoldLine extends ConsumerWidget {
 }
 
 class _QueuedBubble extends ConsumerWidget {
-  const _QueuedBubble({super.key, required this.message, required this.place});
+  const _QueuedBubble({
+    super.key,
+    required this.message,
+    required this.place,
+    this.onBackToComposer,
+  });
 
   final QueuedMessage message;
 
   /// Its turn among the waiting messages, from 1; null for a failed one.
   final int? place;
+  final ValueChanged<String>? onBackToComposer;
 
   static const _corners = BorderRadius.only(
     topLeft: Radius.circular(Radii.lg),
@@ -260,6 +275,12 @@ class _QueuedBubble extends ConsumerWidget {
                               onPressed: () => _edit(context, ref),
                               child: const Text('Edit'),
                             ),
+                          if (failed && onBackToComposer != null)
+                            TextButton(
+                              key: ValueKey('queued-back-${message.id}'),
+                              onPressed: () => _backToComposer(context, ref),
+                              child: const Text('Back to composer'),
+                            ),
                           if (message.editable || failed)
                             TextButton(
                               key: ValueKey('queued-cancel-${message.id}'),
@@ -292,6 +313,12 @@ class _QueuedBubble extends ConsumerWidget {
     }
   }
 
+  /// The text goes back to the box, then the failed row is dismissed.
+  Future<void> _backToComposer(BuildContext context, WidgetRef ref) async {
+    onBackToComposer?.call(message.text);
+    await _cancel(context, ref);
+  }
+
   Future<void> _edit(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final actions = ref.read(sessionQueueActionsProvider);
@@ -300,7 +327,7 @@ class _QueuedBubble extends ConsumerWidget {
       title: 'Edit queued message',
       builder: (context) => _EditQueuedBody(initial: message.text),
     );
-    if (text == null || text.trim().isEmpty || text == message.text) return;
+    if (text == null || text == message.text) return;
     try {
       await actions.edit(message.sessionId, message.id, text);
     } on DataRefused catch (refusal) {
@@ -405,14 +432,21 @@ class _EditQueuedBodyState extends State<_EditQueuedBody> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             TextButton(
+              key: const ValueKey('queued-edit-cancel'),
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Keep it'),
+              child: const Text('Cancel'),
             ),
             const SizedBox(width: Insets.sm),
-            FilledButton(
-              key: const ValueKey('queued-edit-save'),
-              onPressed: () => Navigator.of(context).pop(_text.text),
-              child: const Text('Save'),
+            // An empty message cannot be queued: Cancel the message instead.
+            ValueListenableBuilder(
+              valueListenable: _text,
+              builder: (context, value, _) => FilledButton(
+                key: const ValueKey('queued-edit-save'),
+                onPressed: value.text.trim().isEmpty
+                    ? null
+                    : () => Navigator.of(context).pop(_text.text),
+                child: const Text('Save'),
+              ),
             ),
           ],
         ),

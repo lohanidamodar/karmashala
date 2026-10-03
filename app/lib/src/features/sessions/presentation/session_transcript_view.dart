@@ -203,6 +203,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
+  /// A queued message that failed, back in the box to send again — appended
+  /// after any draft, never sent.
+  void _backToComposer(String text) {
+    if (_leaving) return;
+    final existing = _composer.text.trimRight();
+    _composer.text = existing.isEmpty ? text : '$existing\n\n$text';
+    _composer.selection = TextSelection.collapsed(
+      offset: _composer.text.length,
+    );
+  }
+
   /// Takes whatever files were queued for this session, by the path its agent
   /// reads — called only by the composer, and only when it attaches them in
   /// the same call ([MessageComposer.takeServerFiles], [_filesQueued]). A
@@ -824,7 +835,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           Flexible(
             child: SingleChildScrollView(
               primary: false,
-              child: QueuedMessagesStrip(sessionId: widget.sessionId),
+              child: QueuedMessagesStrip(
+                sessionId: widget.sessionId,
+                onBackToComposer: _backToComposer,
+              ),
             ),
           ),
           // Directly above the box and outside the scroll, so a long queue

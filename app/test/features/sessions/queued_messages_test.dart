@@ -267,6 +267,59 @@ void main() {
     });
   }
 
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, Edit offers Cancel and Save, and Save is off '
+        'while the text is empty', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'run the tests');
+
+      await tester.tap(find.byKey(const ValueKey('queued-edit-q1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Keep it'), findsNothing);
+      await tester.enterText(
+        find.byKey(const ValueKey('queued-edit-field')),
+        '   ',
+      );
+      await tester.pump();
+      final save = tester.widget<FilledButton>(
+        find.byKey(const ValueKey('queued-edit-save')),
+      );
+      expect(save.onPressed, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('queued-edit-cancel')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.queues['acp-1']!.single.text, 'run the tests');
+      expect(
+        server.sessionWork.queueAsked.whereType<SessionQueueEdit>(),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('on a $name, a failed message goes back to the composer and '
+        'is dismissed', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'run the tests');
+      final queue = server.sessionWork.queues['acp-1']!;
+      queue[0] = queue[0].copyWith(
+        state: QueuedMessageState.failed,
+        error: 'the agent did not take the Return',
+      );
+      server.sessionWork.holdQueue('acp-1', null);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not sent'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('queued-back-q1')));
+      await tester.pumpAndSettle();
+
+      final composer = tester.widget<TextField>(find.byType(TextField).last);
+      expect(composer.controller?.text, 'run the tests');
+      expect(server.sessionWork.queues['acp-1'], isEmpty);
+      expect(find.text('Not sent'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('Edit replaces the queued text at the server', (tester) async {
     await pump(tester, size: phone);
     await send(tester, 'run the tests');
