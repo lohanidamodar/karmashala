@@ -96,7 +96,7 @@ void main() {
   test('a fork puts the files back and starts a child of the source', () async {
     final target = (await w.checkpoints.recorder.captureNow('s1'))!;
     readme().writeAsStringSync('hub\nlater work\n');
-    await w.checkpoints.recorder.captureNow('s1');
+    final later = (await w.checkpoints.recorder.captureNow('s1'))!;
 
     final answer = await continuations.forkFromCheckpoint(
       sessionId: 's1',
@@ -104,6 +104,15 @@ void main() {
     );
 
     expect(readme().readAsStringSync(), 'hub\n');
+    // The tree was already recorded, so no safety checkpoint was taken: the
+    // way back is the checkpoint it matched.
+    final files = answer['files']! as Map<String, Object?>;
+    expect(files['safetyCheckpointId'], isNull);
+    expect(files['undoCheckpointId'], later.id);
+    expect(
+      answer['delivered'],
+      contains(contains('checkpoint_restore ${later.id} puts back')),
+    );
     final child = SessionDao(w.db).getById(answer['sessionId']! as String)!;
     expect(child.parentSessionId, 's1');
     expect(child.parentLink, SessionLink.fork);

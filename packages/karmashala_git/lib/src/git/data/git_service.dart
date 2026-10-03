@@ -987,6 +987,33 @@ class GitService {
     return result.stdout;
   }
 
+  /// The files of [tree] at or under [paths], as git names them.
+  Future<List<String>> filesInTree(
+    EnvironmentPath repo,
+    String tree, {
+    required List<String> paths,
+  }) async {
+    // Quoted, not `-z`: the octal escapes are ASCII, so a non-ASCII name
+    // survives however the runner decodes git's output.
+    final result = await _git(repo, [
+      '-c',
+      'core.quotePath=true',
+      'ls-tree',
+      '-r',
+      '--name-only',
+      tree,
+      '--',
+      ...paths,
+    ]);
+    if (!result.ok) {
+      throw GitException('git ls-tree failed: ${result.stderr.trim()}');
+    }
+    return [
+      for (final line in result.stdout.split(RegExp(r'\r?\n')))
+        if (line.isNotEmpty) unquoteGitPath(line),
+    ];
+  }
+
   /// `git diff --name-status` between two objects, as [FileChange]s.
   Future<List<FileChange>> diffNameStatus(
     EnvironmentPath repo, {

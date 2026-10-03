@@ -282,13 +282,23 @@ class DaemonCheckpoints {
 
   /// Puts [checkpoint] back — every file, or only [paths] — in its session's
   /// queue, so it never races a turn's capture over the private index. A tree
-  /// that moved is answered with the conflict unless [confirm].
+  /// that moved is answered with the conflict unless [confirm]. Refused while
+  /// the session's turn runs, unless that session itself ([requestedBy]) asks.
   Future<CheckpointRestoreAnswer> restore(
     Checkpoint checkpoint, {
     bool confirm = false,
     List<String> paths = const [],
+    String? requestedBy,
   }) {
     _reachable(checkpoint.repository);
+    final running = turnRunningIn(checkpoint.sessionId, requestedBy);
+    if (running != null) {
+      throw DataRefused.invalid(
+        'A turn of "$running" is running: restoring now would change files '
+        'under its agent mid-turn. Nothing was changed. Restore once the turn '
+        'has ended, or stop it first.',
+      );
+    }
     return recorder.queued(checkpoint.sessionId, () async {
       try {
         return CheckpointRestoreAnswer.restored(
@@ -300,8 +310,17 @@ class DaemonCheckpoints {
         );
       } on CheckpointConflict catch (conflict) {
         return CheckpointRestoreAnswer.refused(conflict);
+      } on CheckpointPathsNotFound catch (missing) {
+        throw DataRefused.notFound(missing.message);
       }
     });
+  }
+
+  /// The title of [sessionId] while its turn runs and someone other than that
+  /// session asks to change its files; null when they may.
+  String? turnRunningIn(String sessionId, String? requestedBy) {
+    if (requestedBy == sessionId || !recorder.inTurn(sessionId)) return null;
+    return _sessions.getById(sessionId)?.title ?? sessionId;
   }
 
   Checkpoint _existing(String id) =>
@@ -370,8 +389,10 @@ class DaemonCheckpoints {
     Checkpoint checkpoint, {
     required String sessionId,
     required bool intoNewWorktree,
+    String? requestedBy,
   }) => checkpointForkFileRefusal(
     intoNewWorktree: intoNewWorktree,
+    turnRunningIn: turnRunningIn(checkpoint.sessionId, requestedBy),
     unsupportedEnvironmentReason: service.unsupportedReason(
       checkpoint.repository,
     ),
@@ -405,8 +426,13 @@ class DaemonCheckpoints {
   Future<RestoreOutcome> restoreForFork(
     Checkpoint checkpoint, {
     bool confirm = false,
+    String? requestedBy,
   }) async {
-    final answer = await restore(checkpoint, confirm: confirm);
+    final answer = await restore(
+      checkpoint,
+      confirm: confirm,
+      requestedBy: requestedBy,
+    );
     final conflict = answer.conflict;
     if (conflict != null) {
       throw StateError(

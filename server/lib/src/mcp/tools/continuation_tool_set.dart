@@ -88,6 +88,7 @@ class ContinuationToolSet extends ServerToolSet {
         newWorktree: args['newWorktree'] == true,
         confirm: args['confirm'] == true,
         preview: args['preview'] == true,
+        requestedBy: callerSessionId,
       );
       final started = answer['sessionId'];
       if (started is String) {

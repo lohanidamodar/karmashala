@@ -698,6 +698,7 @@ class SessionContinuations {
     bool newWorktree = false,
     bool confirm = false,
     bool preview = false,
+    String? requestedBy,
   }) async {
     final work =
         forks ??
@@ -712,6 +713,7 @@ class SessionContinuations {
       checkpoint,
       sessionId: sessionId,
       intoNewWorktree: newWorktree,
+      requestedBy: requestedBy,
     );
     if (preview) {
       return {
@@ -738,7 +740,11 @@ class SessionContinuations {
         work.forSession(sessionId),
         repository: checkpoint.repository,
       );
-      restored = await work.restoreForFork(checkpoint, confirm: confirm);
+      restored = await work.restoreForFork(
+        checkpoint,
+        confirm: confirm,
+        requestedBy: requestedBy,
+      );
       undo = restored.safetyCheckpoint ?? before;
     }
     final SessionStarted started;
@@ -759,12 +765,14 @@ class SessionContinuations {
                   'back as they were.'}',
       );
     }
+    final wrote = restored != null && !restored.alreadyThere;
     final halves = checkpointForkHalves(
       route: plan.kind.name,
       checkpoint: checkpoint,
       fileRefusal: fileRefusal,
       alreadyThere: restored?.alreadyThere,
       restoredFiles: restored?.files.length ?? 0,
+      undoCheckpointId: wrote ? undo?.id : null,
     );
     return {
       'sessionId': started.sessionId,
@@ -784,6 +792,7 @@ class SessionContinuations {
         if (restored != null) ...{
           'alreadyThere': restored.alreadyThere,
           'safetyCheckpointId': restored.safetyCheckpoint?.id,
+          if (wrote) 'undoCheckpointId': undo?.id,
           'paths': [
             for (final file in restored.files)
               {'path': file.path, 'status': file.type.name},

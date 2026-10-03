@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
@@ -177,6 +178,60 @@ void main() {
       expect(done.files.single.path, 'README.md');
       expect(readme(), 'hub\n');
       expect(restoreOutcomeMessage(done), startsWith('Restored 1 file.'));
+    }, skip: hasGit ? false : 'git is not on PATH');
+
+    test('a client\'s restore while the session\'s turn runs is refused, and '
+        'allowed once the turn ends', () async {
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      writeReadme('hub\nnewer\n');
+      w.checkpoints.recorder.observe('s1', AgentActivityStatus.working);
+      await w.settle();
+
+      await expectLater(
+        w.ask(CheckpointRestore(target.id, confirm: true)),
+        refused(DataRefusalCode.invalid, 'A turn of "session s1"'),
+      );
+      expect(readme(), 'hub\nnewer\n');
+
+      w.checkpoints.recorder.observe('s1', AgentActivityStatus.idle);
+      await w.settle();
+      final done = (await w.ask(
+        CheckpointRestore(target.id, confirm: true),
+      )).outcomeOrThrow;
+      expect(done.alreadyThere, isFalse);
+      expect(readme(), 'hub\n');
+    }, skip: hasGit ? false : 'git is not on PATH');
+
+    test('a per-path restore of a path in neither tree says so; an unchanged '
+        'one already matches', () async {
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      File(p.join(w.hub, 'other.txt')).writeAsStringSync('o\n');
+      await w.ask(const CheckpointCapture('s1'));
+
+      await expectLater(
+        w.ask(
+          CheckpointRestore(target.id, paths: const ['other.txt', 'nope.txt']),
+        ),
+        throwsA(
+          isA<DataRefused>()
+              .having((r) => r.code, 'code', DataRefusalCode.notFound)
+              .having(
+                (r) => r.message,
+                'message',
+                allOf(contains('nope.txt'), contains('not found')),
+              ),
+        ),
+      );
+      expect(
+        File(p.join(w.hub, 'other.txt')).existsSync(),
+        isTrue,
+        reason: 'nothing was restored',
+      );
+
+      final unchanged = (await w.ask(
+        CheckpointRestore(target.id, paths: const ['README.md']),
+      )).outcomeOrThrow;
+      expect(unchanged.alreadyThere, isTrue);
     }, skip: hasGit ? false : 'git is not on PATH');
 
     test('a per-path restore touches only the file it was asked for', () async {
