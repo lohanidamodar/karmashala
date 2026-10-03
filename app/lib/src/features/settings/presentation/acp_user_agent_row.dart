@@ -13,10 +13,9 @@ import '../../agents/presentation/agent_version_label.dart';
 import 'acp_agent_dialog.dart';
 import 'acp_builtin_agent_row.dart' show acpAgentsNote;
 import 'acp_login_lines.dart';
+import 'agent_collapsed_row.dart';
 import 'agent_health.dart';
 import 'environment_chips.dart';
-import 'settings_row.dart';
-import 'settings_theme.dart';
 
 /// **An ACP agent a person added, one row**: its name, where it came from
 /// (Registry or Custom), the machines it was found on, the command that
@@ -46,74 +45,57 @@ class AcpUserAgentRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final health = readAgentHealth(ref, installs: installs);
-    return SettingsRuled(
-      child: Tooltip(
-        message: acpAgentsNote,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2, right: Insets.sm),
-              child: AgentHealthGlyph(reading: health),
+    return AgentCollapsedRow(
+      name: row.name,
+      logo: AgentLogo(agentId: row.agentId, size: Chrome.iconAction),
+      tags: [
+        SettingsChip(
+          label: switch (row.source) {
+            AcpAgentSource.registry => 'Registry',
+            AcpAgentSource.custom => 'Custom',
+          },
+        ),
+      ],
+      health: readAgentHealth(ref, installs: installs),
+      environmentIds: installs.map((i) => i.environmentId),
+      tooltip: acpAgentsNote,
+      detail: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            [row.command, ...row.args].join(' '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: MonoStyles.small.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: Insets.sm,
-                    runSpacing: Insets.xs,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      AgentLogo(agentId: row.agentId, size: Chrome.iconAction),
-                      Text(row.name, style: SettingsStyles.rowLabel(context)),
-                      SettingsChip(
-                        label: switch (row.source) {
-                          AcpAgentSource.registry => 'Registry',
-                          AcpAgentSource.custom => 'Custom',
-                        },
-                      ),
-                      EnvironmentChips(
-                        environmentIds: installs.map((i) => i.environmentId),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: Insets.xs),
-                  Text(
-                    [row.command, ...row.args].join(' '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: MonoStyles.small.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (installs.isNotEmpty) ...[
-                    const SizedBox(height: Insets.xs),
-                    Text(
-                      describeAgentVersions(
-                        installs,
-                        now: ref.watch(clockProvider).nowUtc(),
-                      ),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    AcpLoginLines(installs: installs, agentName: row.name),
-                  ],
-                ],
+          ),
+          if (installs.isNotEmpty) ...[
+            const SizedBox(height: Insets.xs),
+            Text(
+              describeAgentVersions(
+                installs,
+                now: ref.watch(clockProvider).nowUtc(),
               ),
             ),
-            IconButton(
-              tooltip: 'Edit ${row.name}',
-              icon: const Icon(AppIcons.pencil, size: Chrome.iconAction),
-              onPressed: () => AcpAgentDialog.show(context, existing: row),
-            ),
-            IconButton(
-              tooltip: 'Remove ${row.name}',
-              icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
-              onPressed: () => _remove(context, ref),
-            ),
+            AcpLoginLines(installs: installs, agentName: row.name),
           ],
-        ),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Edit ${row.name}',
+            icon: const Icon(AppIcons.pencil, size: Chrome.iconAction),
+            onPressed: () => AcpAgentDialog.show(context, existing: row),
+          ),
+          IconButton(
+            tooltip: 'Remove ${row.name}',
+            icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
+            onPressed: () => _remove(context, ref),
+          ),
+        ],
       ),
     );
   }

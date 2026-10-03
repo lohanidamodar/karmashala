@@ -192,13 +192,10 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     );
     // An agent spoken to over ACP has no account to read: said instead of a
     // button that would check forever.
-    final speaksAcp =
-        ref
-            .watch(agentRegistryProvider)
-            .adapterFor(widget.installation.agentId)
-            ?.acp !=
-        null;
-    if (speaksAcp) {
+    if (agentSpeaksAcp(
+      ref.watch(agentRegistryProvider),
+      widget.installation.agentId,
+    )) {
       return SettingsCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

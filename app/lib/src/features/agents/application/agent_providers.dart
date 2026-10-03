@@ -18,6 +18,11 @@ final agentRegistryProvider = Provider<AgentRegistry>(
   ]),
 );
 
+/// **Whether [agentId]'s agent is spoken to over ACP**: its adapter declares
+/// `acp`. The one rule every surface asks, never the agent's id.
+bool agentSpeaksAcp(AgentRegistry registry, String agentId) =>
+    registry.adapterFor(agentId)?.acp != null;
+
 /// The host process's environment variables, behind a provider so a test cannot
 /// silently inherit the developer's real `%LOCALAPPDATA%`.
 final hostEnvironmentProvider = Provider<Map<String, String>>(

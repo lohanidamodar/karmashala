@@ -173,13 +173,10 @@ class _AgentUsageLine extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // An agent spoken to over ACP has no account to read: the protocol
     // carries no limits, only what a running session reports of itself.
-    final speaksAcp =
-        ref
-            .watch(agentRegistryProvider)
-            .adapterFor(installation.agentId)
-            ?.acp !=
-        null;
-    if (speaksAcp) return Text(kAcpUsageLimitsNote, style: muted);
+    final registry = ref.watch(agentRegistryProvider);
+    if (agentSpeaksAcp(registry, installation.agentId)) {
+      return Text(kAcpUsageLimitsNote, style: muted);
+    }
     final usage = ref.watch(agentUsageProvider(installation));
     final value = usage.value;
     if (value == null) {

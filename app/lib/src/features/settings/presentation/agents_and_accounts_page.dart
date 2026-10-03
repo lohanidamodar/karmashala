@@ -74,7 +74,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
     final terminal = <AgentDescriptor>[];
     final builtInAcp = <AgentDescriptor>[];
     for (final descriptor in registry.descriptors) {
-      if (registry.adapterFor(descriptor.id)?.acp == null) {
+      if (!agentSpeaksAcp(registry, descriptor.id)) {
         terminal.add(descriptor);
       } else if (!userAcp.contains(descriptor.id)) {
         builtInAcp.add(descriptor);

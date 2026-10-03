@@ -4,9 +4,8 @@ import '../../agents/application/agent_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
-/// **Whether [sessionId]'s agent is spoken to over ACP** (ACP design, C5):
-/// its installation's adapter declares `acp`. Asked of the adapter, never of
-/// the agent's id. Such a session has no terminal of ours — the server owns
+/// **Whether [sessionId]'s agent is spoken to over ACP**: its installation's
+/// agent passes [agentSpeaksAcp]. Such a session has no terminal of ours — the server owns
 /// the process — and its conversation is the server's own rows.
 final isAcpSessionProvider = Provider.autoDispose.family<bool, String>((
   ref,
@@ -33,5 +32,5 @@ bool installationSpeaksAcp(Ref ref, String installationId) {
       .getById(installationId)
       ?.agentId;
   if (agentId == null) return false;
-  return ref.read(agentRegistryProvider).adapterFor(agentId)?.acp != null;
+  return agentSpeaksAcp(ref.read(agentRegistryProvider), agentId);
 }
