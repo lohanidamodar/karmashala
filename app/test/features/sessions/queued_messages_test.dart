@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -60,11 +61,25 @@ void main() {
     );
   });
 
+  // A running call ticks every second, so such a screen never settles.
+  var ticking = false;
+  Future<void> settle(WidgetTester tester) async {
+    if (!ticking) {
+      await tester.pumpAndSettle();
+      return;
+    }
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
   Future<void> pump(
     WidgetTester tester, {
     required Size size,
     bool queues = true,
+    SessionActivity? activity,
   }) async {
+    ticking = activity != null;
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -97,6 +112,8 @@ void main() {
         sessionDeliveryProvider.overrideWith(
           (ref, _) async => SessionDelivery.unknown,
         ),
+        if (activity != null)
+          sessionOutstandingCallsProvider.overrideWith((ref, _) => activity),
       ],
     );
     addTearDown(container.dispose);
@@ -108,14 +125,14 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await settle(tester);
   }
 
   Future<void> send(WidgetTester tester, String text) async {
     await tester.enterText(find.byType(TextField).last, text);
     await tester.pump();
     await tester.tap(find.byTooltip(RegExp('^Send')));
-    await tester.pumpAndSettle();
+    await settle(tester);
   }
 
   for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
@@ -207,6 +224,45 @@ void main() {
       await tester.pumpAndSettle();
       expect(server.sessionWork.sent.map((s) => s.text), ['first']);
       expect(find.byKey(const ValueKey('queue-hold')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, long queued messages are clamped to three lines '
+        'and the running turn\'s Stop stays above the composer', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        size: size,
+        activity: SessionActivity([
+          OutstandingCall(
+            summary: 'Bash(flutter test)',
+            toolName: 'Bash',
+            startedAt: testTime,
+          ),
+        ]),
+      );
+      final long = [
+        for (var i = 0; i < 30; i++) 'step $i of a long instruction',
+      ].join('\n');
+      await send(tester, long);
+      await send(tester, long);
+      await send(tester, long);
+
+      expect(find.byKey(const ValueKey('queued-expand-q1')), findsOneWidget);
+      final stop = find.byTooltip(RegExp('^Stop the running turn'));
+      expect(stop, findsOneWidget);
+      final composerTop = tester.getRect(find.byType(TextField).last).top;
+      final stopRect = tester.getRect(stop);
+      expect(stopRect.top, greaterThanOrEqualTo(0));
+      expect(stopRect.bottom, lessThanOrEqualTo(composerTop));
+
+      await tester.tap(find.byKey(const ValueKey('queued-expand-q1')));
+      await settle(tester);
+      expect(find.text('Show less'), findsOneWidget);
+      expect(tester.getRect(stop).bottom, lessThanOrEqualTo(composerTop));
       expect(tester.takeException(), isNull);
     });
   }

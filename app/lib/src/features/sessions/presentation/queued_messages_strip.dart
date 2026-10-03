@@ -233,7 +233,12 @@ class _QueuedBubble extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: Insets.xs),
-                    Text(message.text, style: theme.textTheme.bodyMedium),
+                    _ClampedText(
+                      key: ValueKey('queued-text-${message.id}'),
+                      id: message.id,
+                      text: message.text,
+                      style: theme.textTheme.bodyMedium,
+                    ),
                     if (failed && message.error != null)
                       Padding(
                         padding: const EdgeInsets.only(top: Insets.xs),
@@ -304,6 +309,62 @@ class _QueuedBubble extends ConsumerWidget {
       );
     }
   }
+}
+
+/// A queued message's text, three lines at most until expanded: a long one
+/// must not crowd the composer.
+class _ClampedText extends StatefulWidget {
+  const _ClampedText({
+    super.key,
+    required this.id,
+    required this.text,
+    required this.style,
+  });
+
+  static const maxLines = 3;
+
+  final String id;
+  final String text;
+  final TextStyle? style;
+
+  @override
+  State<_ClampedText> createState() => _ClampedTextState();
+}
+
+class _ClampedTextState extends State<_ClampedText> {
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final painter = TextPainter(
+        text: TextSpan(text: widget.text, style: widget.style),
+        maxLines: _ClampedText.maxLines,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: box.maxWidth);
+      final overflows = painter.didExceedMaxLines;
+      painter.dispose();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.text,
+            style: widget.style,
+            maxLines: _expanded ? null : _ClampedText.maxLines,
+            overflow: _expanded ? null : TextOverflow.ellipsis,
+          ),
+          if (overflows)
+            TextButton(
+              key: ValueKey('queued-expand-${widget.id}'),
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: Text(_expanded ? 'Show less' : 'Show more'),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 class _EditQueuedBody extends StatefulWidget {

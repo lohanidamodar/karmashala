@@ -818,31 +818,18 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The strips scroll among themselves in whatever the
-          // composer leaves; none of them may push the box away.
+          // What was sent while the turn ran, waiting at the server below
+          // the transcript it will join: it scrolls in whatever the
+          // composer leaves, and may not push the box away.
           Flexible(
             child: SingleChildScrollView(
               primary: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // What was sent while the turn ran, waiting at the server
-                  // below the transcript it will join.
-                  QueuedMessagesStrip(sessionId: widget.sessionId),
-                  // The ask, the delivery facts, Ship and the notices
-                  // are the pane's status bar's, in both views; the
-                  // chat keeps only what is its own. Directly above
-                  // the box: "what is it doing right now" was only
-                  // answerable by scrolling to the end.
-                  ActivityStrip(
-                    sessionId: widget.sessionId,
-                    onStop: _interruptTurn,
-                  ),
-                ],
-              ),
+              child: QueuedMessagesStrip(sessionId: widget.sessionId),
             ),
           ),
+          // Directly above the box and outside the scroll, so a long queue
+          // never hides the running turn or its Stop.
+          ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
             constraints: BoxConstraints(
