@@ -202,6 +202,38 @@ void main() {
       expect(readme(), 'hub\n');
     }, skip: hasGit ? false : 'git is not on PATH');
 
+    test('a per-path restore of a path in neither tree says so; an unchanged '
+        'one already matches', () async {
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      File(p.join(w.hub, 'other.txt')).writeAsStringSync('o\n');
+      await w.ask(const CheckpointCapture('s1'));
+
+      await expectLater(
+        w.ask(
+          CheckpointRestore(target.id, paths: const ['other.txt', 'nope.txt']),
+        ),
+        throwsA(
+          isA<DataRefused>()
+              .having((r) => r.code, 'code', DataRefusalCode.notFound)
+              .having(
+                (r) => r.message,
+                'message',
+                allOf(contains('nope.txt'), contains('not found')),
+              ),
+        ),
+      );
+      expect(
+        File(p.join(w.hub, 'other.txt')).existsSync(),
+        isTrue,
+        reason: 'nothing was restored',
+      );
+
+      final unchanged = (await w.ask(
+        CheckpointRestore(target.id, paths: const ['README.md']),
+      )).outcomeOrThrow;
+      expect(unchanged.alreadyThere, isTrue);
+    }, skip: hasGit ? false : 'git is not on PATH');
+
     test('a per-path restore touches only the file it was asked for', () async {
       File(p.join(w.hub, 'other.txt')).writeAsStringSync('o1\n');
       final target = (await w.ask(const CheckpointCapture('s1')))!;

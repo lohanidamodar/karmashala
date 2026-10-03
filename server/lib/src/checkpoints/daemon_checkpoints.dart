@@ -310,6 +310,8 @@ class DaemonCheckpoints {
         );
       } on CheckpointConflict catch (conflict) {
         return CheckpointRestoreAnswer.refused(conflict);
+      } on CheckpointPathsNotFound catch (missing) {
+        throw DataRefused.notFound(missing.message);
       }
     });
   }

@@ -60,6 +60,23 @@ class CheckpointConflict implements Exception {
   String toString() => 'CheckpointConflict: $message';
 }
 
+/// Raised by a per-path restore naming paths that are in neither the
+/// checkpoint nor the working tree. Nothing was written.
+class CheckpointPathsNotFound implements Exception {
+  CheckpointPathsNotFound(this.checkpoint, this.paths);
+  final Checkpoint checkpoint;
+  final List<String> paths;
+
+  String get message =>
+      '${paths.map((path) => '"$path"').join(', ')} not found in checkpoint '
+      '${checkpoint.sequence} or the working tree of '
+      '${checkpoint.repository.path}. Nothing was restored. Name paths '
+      'relative to the repository, as checkpoint_list lists them.';
+
+  @override
+  String toString() => 'CheckpointPathsNotFound: $message';
+}
+
 /// What a restore did.
 class RestoreOutcome {
   const RestoreOutcome({
@@ -368,6 +385,22 @@ class CheckpointService {
       await git.ensureCheckpointDirs(repo, dirs);
       return git.writeWorkingTree(repo, dirs);
     });
+    if (selection.isNotEmpty) {
+      final asked = [for (final choice in selection) choice.path];
+      final known = {
+        for (final tree in {checkpoint.treeSha, current})
+          ...await git.filesInTree(repo, tree, paths: asked),
+      };
+      final missing = [
+        for (final path in asked)
+          if (!known.any((name) => name == path || name.startsWith('$path/')))
+            path,
+      ];
+      if (missing.isNotEmpty) {
+        throw CheckpointPathsNotFound(checkpoint, missing);
+      }
+    }
+
     final latest = latestCheckpointIn(
       await records.forSession(checkpoint.sessionId),
       repository: checkpoint.repository,
