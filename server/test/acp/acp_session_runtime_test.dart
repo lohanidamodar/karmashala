@@ -32,6 +32,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal;
 import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
+import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
+import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -1012,6 +1014,95 @@ void main() {
     expect(process.killed, isTrue);
     expect(end, isA<SessionExited>().having((e) => e.exitCode, 'code', 137));
     expect(runtime.closeRequested, isTrue);
+  });
+
+  test('a stop mid-turn is no failure of the turn, even when the agent is '
+      'killed before it answers the cancel', () async {
+    final agent = FakeAcpAgent(
+      turns: const [
+        FakeTurn([FakeStep.waitForCancel()]),
+      ],
+    );
+    // An agent deaf to `session/cancel`: the stop has to kill it.
+    final toAgent = StreamController<List<int>>();
+    toAgent.stream
+        .where((bytes) => !utf8.decode(bytes).contains('session/cancel'))
+        .listen(agent.fromClient.add, onDone: agent.fromClient.close);
+    final exit = Completer<int>();
+    final runtime = AcpSessionRuntime(
+      id: 'karmashala_s1',
+      sessionId: 's1',
+      agentId: 'claude-acp',
+      agentName: 'Fake agent',
+      spec: const AcpLaunchSpec(),
+      workingDirectory: temp.path,
+      spawn: () async => AcpTransport.streams(
+        output: agent.toClient,
+        input: toAgent.sink,
+        exitCode: exit.future,
+        kill: () async {
+          if (!exit.isCompleted) exit.complete(137);
+          await agent.close();
+        },
+      ),
+      messages: SessionMessageDao(database),
+      host: host,
+      stopPatience: const Duration(milliseconds: 200),
+    );
+    await runtime.start();
+    await runtime.send('Go');
+    await pump();
+    runtime.markCloseRequested();
+    await runtime.stop();
+    await runtime.awaitTurn();
+    await pump();
+    expect(statuses(), isNot(contains(AgentActivityStatus.failed)));
+  });
+
+  test('a stop while the agent is still being spawned kills it once it '
+      'arrives, and the start is refused in words', () async {
+    final process = FakeAcpProcess(FakeAcpAgent());
+    final spawned = Completer<void>();
+    final runtime = AcpSessionRuntime(
+      id: 'karmashala_s1',
+      sessionId: 's1',
+      agentId: 'claude-acp',
+      agentName: 'Fake agent',
+      spec: const AcpLaunchSpec(),
+      workingDirectory: temp.path,
+      spawn: () async {
+        await spawned.future;
+        return process.spawn();
+      },
+      messages: SessionMessageDao(database),
+      host: host,
+      stopPatience: const Duration(milliseconds: 200),
+    );
+    final starting = runtime.start();
+    await pump();
+    final stopped = runtime.stop();
+    spawned.complete();
+    await expectLater(
+      starting,
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('stopped while it was starting'),
+        ),
+      ),
+    );
+    await stopped;
+    expect(process.killed, isTrue);
+    expect(
+      runtime.lifecycle,
+      isA<SessionEndedWithoutCode>().having(
+        (e) => e.reason,
+        'reason',
+        contains('before its process had started'),
+      ),
+    );
+    expect(process.agent.newSessionParams, isEmpty);
   });
 
   test('an edit whose kind and file arrive on a later tool_call_update still '

@@ -171,6 +171,7 @@ class AcpSessionRuntime implements ScreenSession {
   var _loading = false;
   var _closeRequested = false;
   var _stoppingWithHost = false;
+  var _stopping = false;
   var _torn = false;
 
   /// Most stderr kept for a failure's words.
@@ -224,6 +225,11 @@ class AcpSessionRuntime implements ScreenSession {
     final notices = <String>[];
     try {
       final transport = await _spawn();
+      if (_torn) {
+        // Stopped while spawning: the teardown had no process to end.
+        await transport.kill();
+        throw StateError('$agentName was stopped while it was starting');
+      }
       _transport = transport;
       transport.errorLines.listen(_stderrLine, onError: (Object _) {});
       unawaited(
@@ -496,14 +502,17 @@ class AcpSessionRuntime implements ScreenSession {
   /// Ends the agent: the open turn is cancelled, the peer closed, and the
   /// process killed when it has not exited within [stopPatience].
   Future<SessionLifecycle> stop() async {
+    _stopping = true;
     if (!_lifecycle.hasEnded) cancel();
     await _tearDown();
     if (!_lifecycle.hasEnded) {
       _finish(
         SessionEndedWithoutCode(
           _now(),
-          'asked to stop, killed after ${stopPatience.inSeconds} s, and not '
-          'reaped within another ${stopPatience.inSeconds} s',
+          _transport == null
+              ? 'asked to stop before its process had started'
+              : 'asked to stop, killed after ${stopPatience.inSeconds} s, '
+                    'and not reaped within another ${stopPatience.inSeconds} s',
         ),
       );
     }
@@ -533,7 +542,11 @@ class AcpSessionRuntime implements ScreenSession {
     _usageTurnEnded();
     if (identical(_turn, turn)) _turn = null;
     _resolvePending(const PermissionOutcome.cancelled());
-    if (failure != null) {
+    if (failure != null && _stopping) {
+      // The peer closed under the turn because this server stopped it.
+      reason = StopReason.cancelled;
+      _publish(AgentActivityStatus.idle, detail: reason.raw);
+    } else if (failure != null) {
       _publish(
         AgentActivityStatus.failed,
         failureReason: failure is AcpRpcError
