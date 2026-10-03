@@ -45,17 +45,26 @@ bool continuesInterruptedTurns(String? raw) {
   return true;
 }
 
-/// A turn recorded as running: when it began, and how many automatic
-/// continues in a row led to it.
+/// A turn recorded as running: when it began, how many automatic continues
+/// in a row led to it, and whether a `subagent_run` call was waiting on it.
 class OpenTurn {
-  const OpenTurn({required this.since, this.continues = 0});
+  const OpenTurn({
+    required this.since,
+    this.continues = 0,
+    this.byCall = false,
+  });
 
   final DateTime since;
   final int continues;
+  final bool byCall;
+
+  OpenTurn withByCall(bool byCall) =>
+      OpenTurn(since: since, continues: continues, byCall: byCall);
 
   Map<String, Object?> toJson() => {
     'since': since.toUtc().toIso8601String(),
     if (continues > 0) 'continues': continues,
+    if (byCall) 'byCall': true,
   };
 
   static OpenTurn? fromJson(Object? json) {
@@ -66,6 +75,7 @@ class OpenTurn {
     return OpenTurn(
       since: since.toUtc(),
       continues: continues is int && continues > 0 ? continues : 0,
+      byCall: json['byCall'] == true,
     );
   }
 }
@@ -84,6 +94,7 @@ class OpenTurns {
   final void Function(String value) _write;
   final Map<String, OpenTurn> _open;
   final Map<String, int> _continuing = {};
+  final Set<String> _byCall = {};
 
   Map<String, OpenTurn> get open => Map.unmodifiable(_open);
 
@@ -95,6 +106,7 @@ class OpenTurns {
         _open[sessionId] = OpenTurn(
           since: at.toUtc(),
           continues: _continuing.remove(sessionId) ?? 0,
+          byCall: _byCall.contains(sessionId),
         );
         _save();
       case AgentActivityStatus.idle || AgentActivityStatus.failed:
@@ -120,6 +132,20 @@ class OpenTurns {
     }
     final sessionId = sessionIdForHostId(hostSessionId, _open.keys);
     if (sessionId != null && _open.remove(sessionId) != null) _save();
+  }
+
+  /// Row [sessionId] is ([held]) or no longer is waited on by a
+  /// `subagent_run` call, whose parent owns what becomes of its turn.
+  void heldByCall(String sessionId, bool held) {
+    if (held) {
+      _byCall.add(sessionId);
+    } else {
+      _byCall.remove(sessionId);
+    }
+    final turn = _open[sessionId];
+    if (turn == null || turn.byCall == held) return;
+    _open[sessionId] = turn.withByCall(held);
+    _save();
   }
 
   /// The next turn row [sessionId] opens is the [continues]th automatic
@@ -242,6 +268,9 @@ InterruptedTurnPlan planInterruptedTurns(
       (text: text, forAPerson: false);
   if (session == null) return own('it is no longer in the workspace');
   if (session.isArchived) return own('it was archived');
+  if (turn.byCall) {
+    return own("its parent's subagent_run call was waiting on it");
+  }
   // A row the server's stop left is `unknown`, or `completed` for an agent
   // that runs inside the server; these two only ever come from elsewhere.
   if (session.status == SessionStatus.cancelled) return own('it was stopped');

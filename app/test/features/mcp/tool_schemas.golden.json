@@ -2737,7 +2737,7 @@
     },
     {
       "name": "subagent_run",
-      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. Unless you name a projectId (or scratch) it works in YOUR checkout and directory — your worktree, if you are in one — so it sees the files you see; useWorktree gives it a worktree of its own instead. It is launched as open_new_session launches one — recorded as your child, under the same nesting cap and permission ceiling — and stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, or running when timeoutSeconds ran out first — then continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
+      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. Unless you name a projectId (or scratch) it works in YOUR checkout and directory — your worktree, if you are in one — so it sees the files you see; useWorktree gives it a worktree of its own instead. It is launched as open_new_session launches one — recorded as your child, under the same nesting cap and permission ceiling. A child that answers (done) is ended then, unless keepOpen is true; any other child stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, or running when timeoutSeconds ran out first — then continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2794,6 +2794,10 @@
           "timeoutSeconds": {
             "type": "number",
             "description": "How long to wait for its answer: default 600, at most 1800."
+          },
+          "keepOpen": {
+            "type": "boolean",
+            "description": "Keep the child open after it answers, for a follow-up with session_send; end it with session_end when done. Default false: an answered child is ended."
           }
         },
         "required": [
@@ -5580,7 +5584,7 @@
     },
     "subagent_run": {
       "category": "sessions",
-      "summary": "Run a subagent on any agent and model; wait for its final answer."
+      "summary": "Run a subagent on any agent and model; get its answer, then it ends."
     },
     "get_usage": {
       "category": "sessions",

@@ -615,7 +615,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'subagent_run': McpToolListing(
     McpToolCategory.sessions,
-    'Run a subagent on any agent and model; wait for its final answer.',
+    'Run a subagent on any agent and model; get its answer, then it ends.',
   ),
   'open_session': McpToolListing(
     McpToolCategory.sessions,

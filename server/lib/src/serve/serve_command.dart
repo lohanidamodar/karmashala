@@ -1319,6 +1319,11 @@ Future<int> runServe(
         turns: childTurns,
         tokensOf: (sessionId) async =>
             (await sessionRecordReadings.tokensOf(sessionId)).total,
+        endChild: (sessionId) async {
+          final id = hostSessionIdOf(sessionId);
+          if (registry.findProcess(id) != null) await registry.close(id);
+        },
+        callHolds: openTurns.heldByCall,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).

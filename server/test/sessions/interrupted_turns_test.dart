@@ -181,6 +181,29 @@ void main() {
       expect(decided.skipped, isEmpty);
     });
 
+    test("a subagent_run child is its parent's to continue, not boot's", () {
+      final open = turns()
+        ..heldByCall('child', true)
+        ..statusMoved('child', AgentActivityStatus.working, t0)
+        ..statusMoved('free', AgentActivityStatus.working, t0)
+        ..heldByCall('free', true)
+        ..heldByCall('free', false);
+      final recorded = turns().open;
+      expect(recorded['child']!.byCall, isTrue);
+      expect(recorded['free']!.byCall, isFalse);
+      final decided = planInterruptedTurns(
+        recorded,
+        sessionOf: (id) => row(id),
+        childrenOf: (_) => const [],
+        runsHere: (_) => false,
+        now: t0,
+      );
+      expect(decided.resume.map((r) => r.sessionId), ['free']);
+      expect(decided.skipped.single.sessionId, 'child');
+      expect(decided.skipped.single.forAPerson, isFalse);
+      expect(open.open, hasLength(2));
+    });
+
     test('ended on purpose, archived, handed off or gone is left alone', () {
       final decided = plan(
         {
