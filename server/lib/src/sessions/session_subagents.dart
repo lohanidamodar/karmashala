@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport;
-import 'package:agent_cli/read.dart' show TranscriptMessage;
+import 'package:agent_cli/read.dart'
+    show TranscriptMessage, readSubagentTranscript;
 import 'package:agent_cli/stream.dart' show isSubagentToolName;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/lineage.dart' show SessionLink;
@@ -48,6 +50,45 @@ SubagentState liveSubagentState(AgentStatusReport? report) {
 
 typedef SubagentTokens = ({int? total, SubagentTokensGap? gap});
 
+/// **A delegate's own last answer**, read from its record off this isolate
+/// and kept while the record is unchanged: a finished delegate's record does
+/// not move, so it is read once.
+class SubagentAnswers {
+  SubagentAnswers({
+    Future<List<TranscriptMessage>> Function(String path)? read,
+    this.maxHeld = 512,
+  }) : _read =
+           read ?? ((path) => Isolate.run(() => readSubagentTranscript(path)));
+
+  final Future<List<TranscriptMessage>> Function(String path) _read;
+  final int maxHeld;
+  final _held = <String, (int, DateTime, String?)>{};
+
+  /// Null when the record is missing, unreadable or says nothing.
+  Future<String?> of(String path) async {
+    final FileStat stat;
+    try {
+      stat = await File(path).stat();
+    } on Object {
+      return null;
+    }
+    if (stat.type == FileSystemEntityType.notFound) return null;
+    final held = _held[path];
+    if (held != null && held.$1 == stat.size && held.$2 == stat.modified) {
+      return held.$3;
+    }
+    String? answer;
+    try {
+      answer = lastAgentAnswer(await _read(path))?.text;
+    } on Object {
+      answer = null;
+    }
+    if (_held.length >= maxHeld) _held.remove(_held.keys.first);
+    _held[path] = (stat.size, stat.modified, answer);
+    return answer;
+  }
+}
+
 /// **A session's delegates, gathered here** (`sessions.subagents`): the
 /// subagents its agent's own record names, joined to the call that spawned
 /// each, and the sessions recorded as its children. Every figure is read from
@@ -65,7 +106,13 @@ class SessionSubagents {
     this.subagentTokens,
     this.speaksAcp,
     Future<DateTime?> Function(String path)? modifiedAt,
-  }) : _modifiedAt = modifiedAt ?? _fileModified;
+    Future<String?> Function(String path)? subagentAnswerOf,
+  }) : _modifiedAt = modifiedAt ?? _fileModified,
+       _subagentAnswerOf = subagentAnswerOf ?? SubagentAnswers().of;
+
+  /// A finished delegate's last answer from its own record. The spawning
+  /// call's output is only a launch acknowledgement for a background one.
+  final Future<String?> Function(String path) _subagentAnswerOf;
 
   /// Every row of a session's transcript, as its record holds it now.
   final Future<List<TranscriptMessage>> Function(String sessionId) messagesOf;
@@ -151,7 +198,10 @@ class SessionSubagents {
                   total: null,
                   gap: SubagentTokensGap.notRecorded,
                 )));
-      final output = open ? null : tool?.output?.trim();
+      final own = state.isLive || path == null
+          ? null
+          : await _subagentAnswerOf(path);
+      final output = open ? null : (own ?? tool?.output?.trim());
       final (result, cut) = output == null || output.isEmpty
           ? (null, false)
           : boundedText(output, kSubagentResultMaxChars);

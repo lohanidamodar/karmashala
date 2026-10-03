@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
@@ -59,7 +60,9 @@ void main() {
     List<Session> children = const [],
     Map<String, SubagentState> live = const {},
     bool acp = false,
+    Map<String, String> subagentAnswers = const {},
   }) => SessionSubagents(
+    subagentAnswerOf: (path) async => subagentAnswers[path],
     messagesOf: (id) async => messages[id] ?? const [],
     childrenOf: (_) => children,
     liveStateOf: (id) => live[id],
@@ -105,6 +108,49 @@ void main() {
     // Still running: no end, no result.
     expect(list.entries[2].endedAt, isNull);
     expect(list.entries[2].finalResult, isNull);
+  });
+
+  test('a finished subagent\'s result is its own last answer; the call\'s '
+      'output only when its record has none', () async {
+    final list = await reader(
+      messages: {
+        's1': [
+          task('t1', output: '{"isAsync":true,"status":"async_launched"}'),
+          task('t2', output: 'The call said this.'),
+        ],
+      },
+      subagentAnswers: {
+        '/store/s1/subagents/agent-t1.jsonl': 'The delegate found it.',
+      },
+    ).read(const SessionSubagentsRead('s1'));
+    expect(list.entries[0].finalResult, 'The delegate found it.');
+    expect(list.entries[1].finalResult, 'The call said this.');
+  });
+
+  test('the default reader takes the last agent text of the delegate\'s '
+      'record, and reads an unchanged record once', () async {
+    final root = Directory.systemTemp.createTempSync('subagent_answer');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final file = File('${root.path}/agent-1.jsonl')
+      ..writeAsStringSync(
+        [
+          '{"type":"assistant","message":{"content":[{"type":"text",'
+              '"text":"Looking"}]}}',
+          '{"type":"assistant","message":{"content":[{"type":"text",'
+              '"text":"Final: it is in cart.dart"}]}}',
+        ].join('\n'),
+      );
+    var reads = 0;
+    final answers = SubagentAnswers(
+      read: (path) {
+        reads++;
+        return readSubagentTranscript(path);
+      },
+    );
+    expect(await answers.of(file.path), 'Final: it is in cart.dart');
+    expect(await answers.of(file.path), 'Final: it is in cart.dart');
+    expect(reads, 1);
+    expect(await answers.of('${root.path}/missing.jsonl'), isNull);
   });
 
   test('a call left open by a session nothing runs is unknown, never '
