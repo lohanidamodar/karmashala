@@ -98,10 +98,11 @@ class DaemonAutomations implements ChecksWork {
     final now = clock ?? _utcNow;
     final ids = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
-    final resumes = _resumeRows = ToldResumes(
-      ScheduledResumeDao(database),
-      _told,
-    );
+    final resumes = ToldResumes(ScheduledResumeDao(database), (change) {
+      _told(change);
+      _resumeMoved();
+    });
+    _resumeRows = resumes;
     final projectChecks = ProjectCheckDao(database);
     final sessions = SessionDao(database);
     final rows = CheckoutRows(database);
@@ -319,7 +320,31 @@ class DaemonAutomations implements ChecksWork {
   }
 
   /// A client wrote automation rows: re-arm, and start what can start.
-  void written() => unawaited(_reconcile());
+  void written() {
+    unawaited(_reconcile());
+    _resumeMoved();
+  }
+
+  /// Told after any resume row moved — a client's write included — so the
+  /// queues it holds look again.
+  void Function()? resumesMoved;
+  var _resumeMoving = false;
+
+  void _resumeMoved() {
+    if (_resumeMoving || _stopped) return;
+    _resumeMoving = true;
+    scheduleMicrotask(() {
+      _resumeMoving = false;
+      if (!_stopped) resumesMoved?.call();
+    });
+  }
+
+  /// The resume waiting or firing for [sessionId], or null.
+  ScheduledResume? liveResumeFor(String sessionId) =>
+      _resumeRows.liveFor(sessionId);
+
+  /// The server's session queue, which resumes then send through.
+  set resumeQueue(ResumeQueue? queue) => _resumes.queue = queue;
 
   /// Event rules answered here (slice 5c): a turn finished or failed.
   late final ServerEventRules eventRules;

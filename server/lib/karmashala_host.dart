@@ -36,7 +36,7 @@ export 'src/mcp/mcp_tool_relay.dart';
 export 'src/serve/session_store.dart';
 export 'src/automations/daemon_automations.dart';
 export 'src/automations/server_resume_runner.dart'
-    show ResumeUsage, ResumeDecision, formatResumeClock;
+    show ResumeQueue, ResumeUsage, ResumeDecision, formatResumeClock;
 export 'src/automations/hosted_agent_launcher.dart'
     show kSessionIdEnvironmentVariable;
 export 'src/automations/hosted_check_runner.dart' show kCheckSessionPrefix;

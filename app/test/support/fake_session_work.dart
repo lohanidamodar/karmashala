@@ -69,11 +69,31 @@ class FakeSessionWork {
     _tellQueue(sessionId);
   }
 
+  /// What holds each session's queue, marked on its queued messages.
+  final holds = <String, QueueHold>{};
+
+  /// The server holds [sessionId]'s queue for [hold], or lets it go.
+  void holdQueue(String sessionId, QueueHold? hold) {
+    if (hold == null) {
+      holds.remove(sessionId);
+    } else {
+      holds[sessionId] = hold;
+    }
+    _tellQueue(sessionId);
+  }
+
+  List<QueuedMessage> _told(String sessionId) {
+    final hold = holds[sessionId];
+    return [
+      for (final message in queues[sessionId] ?? const <QueuedMessage>[])
+        hold != null && message.state == QueuedMessageState.queued
+            ? message.copyWith(hold: hold)
+            : message,
+    ];
+  }
+
   void _tellQueue(String sessionId) => _server._tell(null, [
-    SessionQueueChanged(
-      sessionId: sessionId,
-      messages: List.of(queues[sessionId] ?? const []),
-    ),
+    SessionQueueChanged(sessionId: sessionId, messages: _told(sessionId)),
   ]);
 
   Object? _queueRequest(SessionInputRequest<Object?> request) {
@@ -81,7 +101,7 @@ class FakeSessionWork {
     final queue = queues[request.sessionId] ??= [];
     switch (request) {
       case SessionQueueList():
-        return List.of(queue);
+        return _told(request.sessionId);
       case SessionQueueEdit(:final id, :final text):
         final at = queue.indexWhere((m) => m.id == id);
         if (at < 0) throw const DataRefused.notFound('no such message');
@@ -96,6 +116,15 @@ class FakeSessionWork {
             .copyWith(state: QueuedMessageState.cancelled);
         _tellQueue(request.sessionId);
         return cancelled;
+      case SessionQueueSendNext(:final sessionId):
+        if (queue.isEmpty) {
+          throw const DataRefused.notFound('nothing waits in this queue');
+        }
+        final head = queue.removeAt(0);
+        running.add(sessionId);
+        sent.add(SessionSend(sessionId: sessionId, text: head.text));
+        _tellQueue(sessionId);
+        return head.copyWith(state: QueuedMessageState.delivered);
       case SessionSend() || SessionInterrupt():
         return null;
     }
@@ -103,7 +132,10 @@ class FakeSessionWork {
 
   Object? _input(SessionInputRequest<Object?> request) {
     if (request
-        case SessionQueueList() || SessionQueueEdit() || SessionQueueCancel()) {
+        case SessionQueueList() ||
+            SessionQueueEdit() ||
+            SessionQueueCancel() ||
+            SessionQueueSendNext()) {
       return _queueRequest(request);
     }
     if (request case SessionSend(

@@ -59,6 +59,7 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
+import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
 import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
@@ -147,7 +148,8 @@ import '../mcp/tools/review_thread_tool_set.dart';
 import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
-import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart'
+    show AgentHookEvent, LifecycleEventKind;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
@@ -1050,10 +1052,11 @@ Future<int> runServe(
     },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
-  data.sessionWork = ServerSessionWork(
+  final sessionWork = ServerSessionWork(
     launches: launches,
     continuations: continuations,
   );
+  data.sessionWork = sessionWork;
   // A client's chat sends and Stop (`sessions.send`, `.interrupt`), typed by
   // the same typist as MCP `session_send`.
   // An agent spoken to over ACP that nothing runs is resumed here to take a
@@ -1086,12 +1089,31 @@ Future<int> runServe(
           (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
               false);
     },
+    // A message is not typed over what a person is typing in the pane.
+    personTypedAt: (sessionId) =>
+        prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
+    // A limit holds the queue until its resume, which sends the head.
+    limitHold: (sessionId) {
+      final session = sessionRows.getById(sessionId);
+      return usageLimitQueueHold(
+        live: automations?.liveResumeFor(sessionId),
+        report: prompts.status.statusOf(sessionId)?.report,
+        agentId: session == null
+            ? null
+            : checkoutRows.installation(session.agentInstallationId)?.agentId,
+      );
+    },
     announce: (sessionId, open) => data.announce([
       SessionQueueChanged(sessionId: sessionId, messages: open),
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   switchQueue = sessionQueue;
+  automations
+    ?..resumeQueue = sessionQueue
+    ..resumesMoved = sessionQueue.refreshAll;
+  // A person's End pauses what waits, so nothing resumes what they ended.
+  sessionWork.ending = sessionQueue.pause;
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
@@ -1153,6 +1175,12 @@ Future<int> runServe(
     settled: turnSettlement.settled,
   );
   sessionQueue.start();
+  // A process ending tells what waits for it that nothing runs it now.
+  final queueEnds = server.lifecycle.events.listen((event) {
+    if (event.kind != LifecycleEventKind.started) {
+      sessionQueue.hostSessionEnded(event.sessionId);
+    }
+  });
   data.sessionInput = sessionInput;
   // A phone on the older companion API sends to such a session the same way;
   // to a PTY session it types its own keys, so only the queue's decision is
@@ -1538,6 +1566,7 @@ Future<int> runServe(
   await ssh.close();
   storeDesk.close();
   await attention.close();
+  await queueEnds.cancel();
   await sessionQueue.close();
   await turnSettlement.close();
   await status.close();

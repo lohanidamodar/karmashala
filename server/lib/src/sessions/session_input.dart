@@ -127,6 +127,7 @@ class SessionInput {
         ),
         SessionQueueEdit(:final sessionId, :final id, :final text) =>
           Future<QueuedMessage>.sync(() => _queue().edit(sessionId, id, text)),
+        SessionQueueSendNext(:final sessionId) => _queue().sendNext(sessionId),
         SessionQueueCancel(:final sessionId, :final id) =>
           Future<QueuedMessage>.sync(() => _queue().cancel(sessionId, id)),
       };
@@ -315,15 +316,19 @@ class SessionInput {
     );
   }
 
+  /// Stop also pauses the queue: the turn's end it causes must not send the
+  /// next message the person just stopped short of.
   Future<DataAck> _interrupt(String sessionId) async {
     final runtime = prompts.status.acpRuntimeOf(sessionId);
     if (runtime != null) {
+      queue?.pause(sessionId);
       runtime.cancel();
       return const DataAck();
     }
     if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }
+    queue?.pause(sessionId);
     return const DataAck();
   }
 }

@@ -308,10 +308,27 @@ class ScheduledResumeController {
   }
 
   /// Ends the live resume for [sessionId], if it has one that has not started.
-  bool cancelFor(String sessionId, {String reason = 'Cancelled by you.'}) {
+  bool cancelFor(String sessionId, {String reason = 'Cancelled by you.'}) =>
+      cancelUndoably(sessionId, reason: reason) != null;
+
+  /// [cancelFor], answering the resume as it stood — what [restore] puts
+  /// back — or null when nothing was cancelled.
+  ScheduledResume? cancelUndoably(
+    String sessionId, {
+    String reason = 'Cancelled by you.',
+  }) {
     final live = _dao.liveFor(sessionId);
-    if (live == null || live.state == ScheduledResumeState.firing) return false;
+    if (live == null || live.state == ScheduledResumeState.firing) return null;
     end(live, ScheduledResumeState.cancelled, reason);
+    return live;
+  }
+
+  /// Arms [cancelled] again as it stood; false when its session has another
+  /// resume waiting by now, which is left alone.
+  bool restore(ScheduledResume cancelled) {
+    if (_dao.liveFor(cancelled.sessionId) != null) return false;
+    _dao.update(cancelled);
+    _changed(cancelled.sessionId);
     return true;
   }
 

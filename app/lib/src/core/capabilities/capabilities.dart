@@ -288,6 +288,10 @@ final class Capabilities {
   /// edit and cancel; without it, nothing is listed.
   bool get sessionQueue => sendViaServer && serverOffers('sessions.queue');
 
+  /// The queue says what holds it, pauses on Stop, and takes Send next.
+  bool get sessionQueueControl =>
+      sessionQueue && serverOffers('sessions.queue.control');
+
   /// A session's agent can be switched in place, the same row and chat, and
   /// its transcript names the agent of each turn.
   bool get switchAgent => serverOffers('sessions.switchAgent');

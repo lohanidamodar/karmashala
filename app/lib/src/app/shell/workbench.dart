@@ -11,6 +11,8 @@ import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/descriptors.dart';
 import '../../features/automations/presentation/scheduled_resume_chip.dart';
+import '../../features/sessions/presentation/queued_messages_strip.dart'
+    show QueuedCountChip;
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/editor/application/editor_tab_actions.dart';
 import '../../features/editor/application/open_documents.dart';

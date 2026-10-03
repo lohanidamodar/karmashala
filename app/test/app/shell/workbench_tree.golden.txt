@@ -2831,6 +2831,8 @@ WorkbenchView
                                                                                                       RichText
                                                                                         ScheduledResumeChip
                                                                                           SizedBox
+                                                                                        QueuedCountChip
+                                                                                          SizedBox
                                                 ConstrainedBox
                                                   SingleChildScrollView
                                                     Scrollable
@@ -3756,11 +3758,10 @@ WorkbenchView
                                                                                                                       Semantics
                                                                                                                         IgnorePointer key=[GlobalKey#…]
                                                                                                                           _SingleChildViewport
-                                                                                                                            Column
-                                                                                                                              QueuedMessagesStrip
-                                                                                                                                SizedBox
-                                                                                                                              ActivityStrip
-                                                                                                                                SizedBox
+                                                                                                                            QueuedMessagesStrip
+                                                                                                                              SizedBox
+                                                                                      ActivityStrip
+                                                                                        SizedBox
                                                                                       ConstrainedBox
                                                                                         Consumer
                                                                                           MessageComposer
@@ -4114,6 +4115,8 @@ WorkbenchView
                                                                                                     Text text="work"
                                                                                                       RichText
                                                                                         ScheduledResumeChip
+                                                                                          SizedBox
+                                                                                        QueuedCountChip
                                                                                           SizedBox
                                                 ConstrainedBox
                                                   SingleChildScrollView
@@ -4985,6 +4988,8 @@ WorkbenchView
                                                                                                     Text text="work"
                                                                                                       RichText
                                                                                         ScheduledResumeChip
+                                                                                          SizedBox
+                                                                                        QueuedCountChip
                                                                                           SizedBox
                                                 ConstrainedBox
                                                   SingleChildScrollView
@@ -5887,6 +5892,8 @@ WorkbenchView
                                               Flexible
                                                 ScheduledResumeChip
                                                   SizedBox
+                                              QueuedCountChip
+                                                SizedBox
                                         LayoutBuilder
                                           _SessionActionRow
                                             Row

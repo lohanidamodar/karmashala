@@ -61,6 +61,9 @@ const Set<String> kServerFeatures = <String>{
   // turn; `sessions.queue.*` lists, edits and cancels, told by
   // `sessionQueueChanged`.
   'sessions.queue',
+  // `sessions.queue.sendNext`, a pause after Stop or End, and the hold told
+  // on each queued message.
+  'sessions.queue.control',
   // `sessions.setMode` and `.setConfigOption`: an ACP session's mode and
   // options, as its agent announces them.
   'sessions.setMode',

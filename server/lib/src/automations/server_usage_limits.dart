@@ -86,6 +86,45 @@ String usageLimitSentence(UsageLimitHit hit, DateTime now) {
       '${resets == null ? '' : ' Resets ${formatResumeClock(resets, now)}.'}';
 }
 
+/// Whether [report] is a turn that failed on [agentId]'s usage limit by the
+/// agent's own word — read at once, before any usage reading confirms it.
+bool endedOnUsageLimit(
+  AgentStatusReport report, {
+  String? agentId,
+  AgentRegistry agents = AgentRegistry.builtIn,
+}) {
+  if (report.status != AgentActivityStatus.failed) return false;
+  if (report.source == AgentStatusSource.protocol) {
+    return report.failureReason == kProtocolUsageLimitReason;
+  }
+  if (agentId == null) return false;
+  return switch (agents.adapterFor(agentId)?.usage?.limitEvidence) {
+    HookFailureReasonEvidence(:final reason) => report.failureReason == reason,
+    _ => false,
+  };
+}
+
+/// What holds a session's queue for its limit: the resume [live] for it, or
+/// a turn that just failed on the limit while none is armed yet.
+QueueHold? usageLimitQueueHold({
+  ScheduledResume? live,
+  AgentStatusReport? report,
+  String? agentId,
+  AgentRegistry agents = AgentRegistry.builtIn,
+}) {
+  if (live != null) {
+    return QueueHold(
+      live.windowLabel == null ? QueueHoldKind.scheduled : QueueHoldKind.limit,
+      until: live.fireAt,
+    );
+  }
+  if (report != null &&
+      endedOnUsageLimit(report, agentId: agentId, agents: agents)) {
+    return const QueueHold(QueueHoldKind.limit);
+  }
+  return null;
+}
+
 /// **A turn that ended on a usage limit, noticed by the server** (slice 5c)
 /// — the app's `UsageLimitWatcher`, moved, so a limit is noticed and a resume
 /// armed with every app closed. Only from evidence the agent itself wrote, as

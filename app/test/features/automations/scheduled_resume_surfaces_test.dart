@@ -104,6 +104,38 @@ void main() {
       expect(find.textContaining('Resumes'), findsNothing);
     });
 
+    for (final (name, size) in [
+      ('phone', const Size(390, 844)),
+      ('desktop', const Size(1440, 900)),
+    ]) {
+      testWidgets('on a $name, a cancel says so, and Undo arms it again as '
+          'it stood', (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        final armed = arm();
+        await tester.pumpWidget(
+          host(
+            const Row(children: [ScheduledResumeChip(sessionId: 's1')]),
+            width: size.width,
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('scheduled-resume-cancel')));
+        await tester.pumpAndSettle();
+        expect(h.live('s1'), isNull);
+        expect(find.text('Resume cancelled'), findsOneWidget);
+
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
+        final back = h.live('s1');
+        expect(back?.id, armed.id);
+        expect(back?.fireAt, armed.fireAt);
+        expect(back?.state, ScheduledResumeState.pending);
+        expect(find.text('Resumes in 2h 5m'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets('its menu cancels too, and the chip goes', (tester) async {
       arm();
       await tester.pumpWidget(

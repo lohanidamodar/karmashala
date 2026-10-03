@@ -34,6 +34,21 @@ abstract interface class ResumeUsage {
   String? unreadableBecause(AgentInstallation installation);
 }
 
+/// The session's queue as a resume sends through it (`SessionQueue`): the
+/// one sender to a session, so a resume never races a queued message.
+abstract interface class ResumeQueue {
+  /// Sends a resume's [message] to the live session [sessionId] — its
+  /// queue's head in its place when one waits. Answers the text that went;
+  /// throws [StateError] in words when nothing did.
+  Future<String> sendForResume(String sessionId, String message);
+
+  /// Claims [sessionId]'s queued head to open a resumed start, or null.
+  QueuedMessage? claimHeadForResume(String sessionId);
+
+  /// How the [claimed] head went: [sent], or back at the queue's front.
+  void releaseClaimed(QueuedMessage claimed, {required bool sent});
+}
+
 /// What a resume's end is filed as, for its session's record.
 typedef ResumeDecision = ({
   String sessionId,
@@ -105,6 +120,10 @@ class ServerResumeRunner implements ScheduledResumeFiring {
   /// Set once the scheduler exists: every end goes through it, so every
   /// client is told how the resume ended.
   late AutomationScheduler scheduler;
+
+  /// Set once the server's queue exists; before then a message is typed or
+  /// prompted directly.
+  ResumeQueue? queue;
 
   /// Fails every row a server that stopped mid-resume left `firing`: a second
   /// try could send the message twice. Run before the scheduler starts.
@@ -336,6 +355,32 @@ class ServerResumeRunner implements ScheduledResumeFiring {
       return;
     }
     final message = resume.message.trim();
+    if (queue case final queue?) {
+      final String sent;
+      try {
+        sent = await queue.sendForResume(session.id, message);
+      } on StateError catch (refused) {
+        _finish(
+          resume,
+          ScheduledResumeState.failed,
+          'The session refused the message: ${refused.message}',
+        );
+        return;
+      }
+      _finish(
+        resume,
+        ScheduledResumeState.done,
+        _join([
+          sent == message
+              ? 'The session was already open, and sent "$message".'
+              : 'The session was already open, and sent the queued message '
+                    '"$sent" in place of "$message".',
+          ...notes,
+        ]),
+        sent: sent,
+      );
+      return;
+    }
     final running = runningOf(session.id);
     if (running == null) {
       if (promptOf?.call(session.id) case final prompt?) {
@@ -433,12 +478,14 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     // The message rides the command line where the agent takes one there:
     // the CLI submits it when it is ready, nothing typed at a starting TUI.
     // Over ACP the launcher sends it as the first prompt instead.
-    final message = resume.message.trim();
     final descriptor = agents.descriptorOf(installation.agentId);
-    final asArgument =
-        message.isNotEmpty &&
+    final takesOpening =
         descriptor != null &&
         (descriptor.acp != null || descriptor.launch.acceptsPromptArgument);
+    // A message queued while the limit held opens it in the resume's place.
+    final claimed = takesOpening ? queue?.claimHeadForResume(session.id) : null;
+    final message = claimed?.text ?? resume.message.trim();
+    final asArgument = message.isNotEmpty && takesOpening;
     try {
       if (live) {
         // Open under another mode than the one armed. Every refusal came
@@ -460,10 +507,26 @@ class ServerResumeRunner implements ScheduledResumeFiring {
         ),
       );
     } on Object catch (error) {
+      if (claimed != null) queue?.releaseClaimed(claimed, sent: false);
       _finish(
         resume,
         ScheduledResumeState.failed,
         'The session could not be resumed: $error',
+      );
+      return;
+    }
+    if (claimed != null) {
+      queue?.releaseClaimed(claimed, sent: true);
+      final instead = resume.message.trim();
+      _finish(
+        resume,
+        ScheduledResumeState.done,
+        _join([
+          'Resumed, and sent the queued message "$message"'
+              '${instead.isEmpty ? '' : ' in place of "$instead"'}.',
+          ...notes,
+        ]),
+        sent: message,
       );
       return;
     }

@@ -100,4 +100,29 @@ void main() {
     expect(read.sessionId, 's1');
     expect(read.messages, [failed, queued]);
   });
+
+  test('sessions.queue.sendNext names the session and reads the message', () {
+    const request = SessionQueueSendNext('s1');
+    final read =
+        DataRequest.fromJson(request.kind, wire(request.argumentsToJson()))
+            as SessionQueueSendNext;
+    expect((read.sessionId, read.kind), ('s1', 'sessions.queue.sendNext'));
+    expect(
+      request.resultFromJson(roundTrip(request.resultToJson(queued))),
+      queued,
+    );
+  });
+
+  test('a hold rides on a queued message; one this build does not know, or '
+      'none, reads as none', () {
+    final held = queued.copyWith(
+      hold: QueueHold(QueueHoldKind.limit, until: t0),
+    );
+    expect(QueuedMessage.fromJson(wire(held.toJson())), held);
+    expect(queued.toJson().containsKey('hold'), isFalse);
+    final newer = wire(held.toJson())..['hold'] = {'kind': 'somethingNew'};
+    expect(QueuedMessage.fromJson(newer).hold, isNull);
+    final automation = QueuedMessageOrigin.fromName('automation');
+    expect(automation, QueuedMessageOrigin.automation);
+  });
 }

@@ -282,6 +282,7 @@ class _SessionStatusLine extends StatelessWidget {
                 children: [
                   DeliveryStateLine(sessionId: sessionId),
                   ScheduledResumeChip(sessionId: sessionId),
+                  QueuedCountChip(sessionId: sessionId),
                 ],
               ),
             ),
@@ -361,6 +362,7 @@ class _SessionFactsRow extends StatelessWidget {
       ),
       // Nothing, and no width, until one is armed.
       Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
+      QueuedCountChip(sessionId: sessionId),
     ],
   );
 }
