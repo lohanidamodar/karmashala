@@ -210,6 +210,7 @@ void main() {
       await tester.pumpWidget(host(const ScheduledResumesSection()));
       expect(find.text('No resume is waiting.'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Resume now'));
       await tester.tap(find.text('Resume now'));
       await tester.pump();
       final again = h.live('s1')!;
