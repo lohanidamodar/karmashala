@@ -177,6 +177,35 @@ void main() {
       expect(readme(), 'hub\nchanged\n');
     }, skip: hasGit ? false : 'git is not on PATH');
 
+    test('a per-path restore puts back a binary file', () async {
+      final logo = File(p.join(w.hub, 'logo.bin'))
+        ..writeAsBytesSync([0, 1, 2, 3, 0, 255]);
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      logo.writeAsBytesSync([0, 9, 9, 9, 0, 255, 7]);
+      await w.ask(const CheckpointCapture('s1'));
+
+      final done = (await w.ask(
+        CheckpointRestore(target.id, paths: const ['logo.bin']),
+      )).outcomeOrThrow;
+      expect(done.files.map((f) => f.path), ['logo.bin']);
+      expect(logo.readAsBytesSync(), [0, 1, 2, 3, 0, 255]);
+    }, skip: hasGit ? false : 'git is not on PATH');
+
+    test('a per-path restore of a name git quotes is done, not "already '
+        'there"', () async {
+      final cafe = File(p.join(w.hub, 'café.txt'))..writeAsStringSync('one\n');
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      cafe.writeAsStringSync('two\n');
+      await w.ask(const CheckpointCapture('s1'));
+
+      final done = (await w.ask(
+        CheckpointRestore(target.id, paths: const ['café.txt']),
+      )).outcomeOrThrow;
+      expect(done.alreadyThere, isFalse);
+      expect(done.files.map((f) => f.path), ['café.txt']);
+      expect(cafe.readAsStringSync(), 'one\n');
+    }, skip: hasGit ? false : 'git is not on PATH');
+
     test('an unknown id is not found, in the tool\'s words', () async {
       await expectLater(
         w.ask(const CheckpointDiff('nope')),

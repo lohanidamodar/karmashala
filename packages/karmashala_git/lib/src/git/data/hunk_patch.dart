@@ -6,6 +6,8 @@
 /// apply` often accepts anyway (it searches for context) and `--cached` does not.
 library;
 
+import 'git_diff_parsing.dart' show unquoteGitPath;
+
 /// One `@@` block of a unified diff.
 class DiffHunk {
   const DiffHunk({
@@ -160,6 +162,11 @@ List<FilePatch> splitUnifiedDiff(String diff) {
     while (header.isNotEmpty && header.last.isEmpty) {
       header.removeLast();
     }
+    // A binary payload ends with a blank line, and `git apply` calls the patch
+    // corrupt without it.
+    if (header.any((line) => line.startsWith('GIT binary patch'))) {
+      header.add('');
+    }
 
     files.add(
       FilePatch(
@@ -264,7 +271,32 @@ _parseHunkHeader(String line) {
 /// does not itself contain that sequence.
 (String, String) _pathsFrom(String header) {
   final rest = header.substring('diff --git '.length);
+  // git quotes a name with non-ASCII or control characters: `"a/caf\303\251"`.
+  if (rest.startsWith('"')) {
+    final close = _closingQuote(rest);
+    if (close > 0 && close + 2 <= rest.length) {
+      String bare(String path, String prefix) =>
+          path.startsWith(prefix) ? path.substring(prefix.length) : path;
+      return (
+        bare(unquoteGitPath(rest.substring(0, close + 1)), 'a/'),
+        bare(unquoteGitPath(rest.substring(close + 2)), 'b/'),
+      );
+    }
+  }
   final split = rest.lastIndexOf(' b/');
   if (split < 0 || !rest.startsWith('a/')) return (rest, rest);
   return (rest.substring(2, split), rest.substring(split + 3));
+}
+
+/// The index of the quote closing the quoted name [text] opens with, or -1.
+int _closingQuote(String text) {
+  for (var i = 1; i < text.length; i++) {
+    final char = text[i];
+    if (char == r'\') {
+      i++;
+    } else if (char == '"') {
+      return i;
+    }
+  }
+  return -1;
 }
