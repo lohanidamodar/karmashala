@@ -41,7 +41,12 @@ class AcpBinaryInstaller {
         'Karmashala installs agents on this machine and in WSL, not over SSH.',
       );
     }
-    final plan = _InstallPlan.of(environment.kind, request, hostEnvironment);
+    final plan = _InstallPlan.of(
+      environment.kind,
+      request,
+      hostEnvironment,
+      timeout,
+    );
     final CommandRunner runner;
     try {
       runner = runnerFor(environment);
@@ -117,22 +122,32 @@ class _InstallPlan {
     EnvironmentKind kind,
     AcpAgentInstall request,
     Map<String, String> hostEnvironment,
+    Duration timeout,
   ) {
     final posix = isPosixShell(kind);
     final registryId = _plain(request.registryId, 'registry id');
     final version = _plain(request.version, 'version');
     final command = _commandPath(request.command);
     final url = Uri.tryParse(request.archive);
+    // Printable ASCII only: PowerShell also ends a quoted string at the
+    // typographic quotes.
     if (url == null ||
         !(url.scheme == 'https' || url.scheme == 'http') ||
         url.host.isEmpty ||
-        RegExp(r'''[\s'"`$\\]''').hasMatch(request.archive)) {
+        RegExp(r'''[^\x21-\x7E]|['"`$\\]''').hasMatch(request.archive)) {
       throw DataRefused.invalid(
         'The registry\'s archive address is not one Karmashala will fetch: '
         '${request.archive}',
       );
     }
+    // Decoded from the path, so `%24(...)` would arrive here as `$(...)`.
     final archiveName = url.pathSegments.lastOrNull ?? '';
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]*$').hasMatch(archiveName)) {
+      throw DataRefused.invalid(
+        'The registry\'s archive address does not end in a plain file name '
+        'Karmashala will fetch: ${request.archive}',
+      );
+    }
     if (!_isArchive(archiveName)) {
       throw DataRefused.invalid(
         'Karmashala unpacks .zip, .tar.gz, .tgz and .tar.xz archives, not '
@@ -145,6 +160,12 @@ class _InstallPlan {
         'The registry\'s sha256 for this archive is not a checksum.',
       );
     }
+    if (url.scheme == 'http' && sha == null) {
+      throw const DataRefused.invalid(
+        'The registry\'s archive address is plain http and it gives no '
+        'checksum, so Karmashala will not fetch and run it.',
+      );
+    }
     String? windowsHome;
     if (!posix) {
       windowsHome = hostEnvironment['USERPROFILE']?.trim();
@@ -153,7 +174,7 @@ class _InstallPlan {
           'USERPROFILE is not set, so there is no folder to install into.',
         );
       }
-      if (windowsHome.contains("'")) {
+      if (RegExp("['‘-‛]").hasMatch(windowsHome)) {
         throw const DataRefused.invalid(
           'The profile folder\'s path holds a quote Karmashala cannot pass.',
         );
@@ -168,7 +189,7 @@ class _InstallPlan {
       command: command,
       sha256: sha,
       windowsHome: windowsHome,
-      timeout: const Duration(minutes: 20),
+      timeout: timeout,
     );
   }
 
@@ -269,10 +290,10 @@ printf '%s\\n' "\$dir/$command"
 \$dir = Join-Path '$windowsHome' '${_windowsFolder()}'
 \$archive = Join-Path \$dir '$archiveName'
 ${sha256 == null ? '' : '''
-if ((Get-FileHash -Algorithm SHA256 -Path \$archive).Hash.ToLowerInvariant() -ne '$sha256') {
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath \$archive).Hash.ToLowerInvariant() -ne '$sha256') {
   throw 'The download does not match the checksum the registry gives.'
 }
-'''}${archiveName.endsWith('.zip') ? 'Expand-Archive -Force -Path \$archive -DestinationPath \$dir' : 'tar -xf \$archive -C \$dir'}
+'''}${archiveName.endsWith('.zip') ? 'Expand-Archive -Force -LiteralPath \$archive -DestinationPath \$dir' : 'tar -xf \$archive -C \$dir'}
 Remove-Item -Force \$archive
 Write-Output (Join-Path \$dir '${command.replaceAll('/', r'\')}')
 ''');

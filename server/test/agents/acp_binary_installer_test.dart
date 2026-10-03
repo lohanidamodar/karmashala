@@ -100,6 +100,21 @@ void main() {
     expect(unpack, isNot(contains('sha256sum')));
   });
 
+  test('each step is bounded by the installer\'s own timeout', () async {
+    final runner = FakeCommandRunner(
+      environmentId: wsl.id,
+      responder: (_) => ok('/home/me/x/agent\n'),
+    );
+    await AcpBinaryInstaller(
+      runnerFor: (_) => runner,
+      timeout: const Duration(minutes: 3),
+    ).install(wsl, linux);
+    expect(
+      runner.requests.map((r) => r.timeout),
+      everyElement(const Duration(minutes: 3)),
+    );
+  });
+
   test('a checksum the registry gives is checked before unpacking', () async {
     final runner = FakeCommandRunner(
       environmentId: wsl.id,
@@ -182,7 +197,7 @@ void main() {
     );
     final unpack = runner.requests[1].stdinText!;
     expect(unpack, contains('Get-FileHash -Algorithm SHA256'));
-    expect(unpack, contains('Expand-Archive -Force -Path \$archive'));
+    expect(unpack, contains('Expand-Archive -Force -LiteralPath \$archive'));
     expect(
       unpack,
       contains("Write-Output (Join-Path \$dir 'agy_acp_server.exe')"),
@@ -261,6 +276,11 @@ void main() {
         "https://x.test/a'.zip",
         'https://x.test/a b.zip',
         'file:///tmp/a.zip',
+        // Decoded into the file name: `$(touch /tmp/x).zip`, `../../a.zip`.
+        'https://x.test/%24(touch%20%2Ftmp%2Fx).zip',
+        'https://x.test/%2E%2E%2F%2E%2E%2Fa.zip',
+        'https://x.test/a’+(calc)+’.zip',
+        'http://x.test/a.zip',
       ]) {
         await expectLater(
           install(
