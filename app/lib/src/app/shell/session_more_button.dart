@@ -60,7 +60,9 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
       ],
       child: IconButton(
         key: const ValueKey('session-more'),
-        tooltip: 'More: recap, open in a system terminal, stop, repositories',
+        tooltip:
+            'More: recap, subagents, open in a system terminal, stop, '
+            'repositories',
         visualDensity: UiDensity.of(context).controlDensity,
         iconSize: Chrome.iconSmall,
         icon: const Icon(AppIcons.dotsThree),
