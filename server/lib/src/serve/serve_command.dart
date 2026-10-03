@@ -70,6 +70,7 @@ import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
+import '../sessions/session_subagents.dart';
 import '../sessions/session_transcripts.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
@@ -1124,6 +1125,25 @@ Future<int> runServe(
     registry: transcripts.registry,
     root: p.join(dataDirectory, 'media'),
   );
+  // A session's subagents and child sessions, from the same records and the
+  // status this server keeps.
+  final sessionSubagents = SessionSubagents(
+    messagesOf: sessionTranscripts.messagesOf,
+    childrenOf: sessionRows.childrenOf,
+    liveStateOf: (sessionId) => status.holds(sessionId)
+        ? liveSubagentState(status.statusOf(sessionId)?.report)
+        : null,
+    agentNameOf: (session) {
+      final agentId = checkoutRows
+          .installation(session.agentInstallationId)
+          ?.agentId;
+      return agentId == null ? null : liveAgents.nameOf(agentId);
+    },
+    sessionTokens: sessionRecordReadings.tokensOf,
+    subagentTokens: sessionRecordReadings.subagentTokensOf,
+    speaksAcp: speaksAcp,
+  );
+  data.sessionSubagents = sessionSubagents;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(

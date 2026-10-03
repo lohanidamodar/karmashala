@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/sessions/presentation/session_repositories_bar.dart';
+import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 
 /// **⋯ on the pane status line**: the session's rarer verbs, which lived in
@@ -92,6 +93,7 @@ class SessionMoreBody extends StatelessWidget {
         Row(
           children: [
             SessionRecapButton(sessionId: sessionId),
+            SessionSubagentsButton(sessionId: sessionId),
             OpenSessionInSystemTerminalButton(sessionId: sessionId),
             StopSessionButton(sessionId: sessionId),
           ],

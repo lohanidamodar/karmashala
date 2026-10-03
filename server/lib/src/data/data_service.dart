@@ -17,6 +17,7 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
+import '../sessions/session_subagents.dart';
 import '../sessions/session_modes.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_transcripts.dart';
@@ -162,6 +163,10 @@ class DataService {
   /// Sessions' pictures, extracted here (Stage 0 step 10); refused
   /// `unavailable` without it.
   SessionMedia? sessionMedia;
+
+  /// A session's subagents and child sessions; refused `unavailable` without
+  /// it.
+  SessionSubagents? sessionSubagents;
 
   /// A client's chat sends and Stop, typed as host keys (Stage 2 step 2);
   /// refused `unavailable` without it.
@@ -889,6 +894,12 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
                     'this server extracts no session media',
                   )))
               .list(read),
+        final SessionSubagentsRead read =>
+          await (_service.sessionSubagents ??
+                  (throw const DataRefused.unavailable(
+                    'this server lists no subagents',
+                  )))
+              .read(read),
       };
       return DataReply(result as R, _service._revision);
     }

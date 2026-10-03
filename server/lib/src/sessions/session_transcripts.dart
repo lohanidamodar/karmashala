@@ -129,6 +129,14 @@ class SessionTranscripts {
     );
   }
 
+  /// Every row of [sessionId]'s transcript as it stands now; empty while there
+  /// is none to read.
+  Future<List<TranscriptMessage>> messagesOf(String sessionId) async {
+    final held = _hold(sessionId);
+    await _refresh(held);
+    return held.messages;
+  }
+
   /// One page of [SessionTranscriptTurns.sessionId]'s turns, text only: what
   /// an export or a recap quotes (Stage 0 step 8).
   Future<TranscriptPage> turns(SessionTranscriptTurns request) async {
