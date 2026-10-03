@@ -288,6 +288,10 @@ final class Capabilities {
   /// edit and cancel; without it, nothing is listed.
   bool get sessionQueue => sendViaServer && serverOffers('sessions.queue');
 
+  /// A session's agent can be switched in place, the same row and chat, and
+  /// its transcript names the agent of each turn.
+  bool get switchAgent => serverOffers('sessions.switchAgent');
+
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.
   bool get serverTerminalsArea => !client.hostsServer && !server.sameMachine;

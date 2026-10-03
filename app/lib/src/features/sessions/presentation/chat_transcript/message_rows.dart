@@ -110,6 +110,7 @@ class _ChatMessageTile extends StatelessWidget {
             onLinkTap: onLinkTap,
             detail: detail,
           ),
+          kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
           'error' => _ErrorMessageCard(message: message),
           _ => _ToolMessageCard(
             message: message,
@@ -223,6 +224,10 @@ class _AgentMessageBlock extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (message.agentName case final name?) ...[
+            _AgentByline(name: name, agentId: message.agentId),
+            const SizedBox(height: Insets.xs),
+          ],
           if (thinking != null && thinking.isNotEmpty) ...[
             ThinkingAccordion(thinking: thinking),
             const SizedBox(height: Insets.xs),

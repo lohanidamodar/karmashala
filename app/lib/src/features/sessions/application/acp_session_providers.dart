@@ -11,9 +11,12 @@ final isAcpSessionProvider = Provider.autoDispose.family<bool, String>((
   ref,
   sessionId,
 ) {
-  // The row appearing or going is `membership`; which installation it runs
-  // under never changes after that.
-  ref.watchSessionKinds(const {SessionChangeKind.membership});
+  // The row appearing or going is `membership`; a switch in place moves its
+  // installation, told as `placement`.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.placement,
+  });
   final row = ref.read(sessionsDataProvider).getById(sessionId);
   if (row == null) return false;
   final installations = ref.watch(agentInstallationsDataProvider);

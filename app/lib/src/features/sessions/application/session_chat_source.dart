@@ -194,7 +194,11 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         return;
       }
       final externalId = session.externalSessionId;
-      if (externalId == null || externalId.isEmpty) {
+      // A switched-in agent may not have named its conversation yet; the
+      // server reads the session span by span, so it is asked anyway.
+      final switches = ref.read(capabilitiesProvider).switchAgent;
+      if ((externalId == null || externalId.isEmpty) &&
+          !(viaServer && switches)) {
         yield const [];
         return;
       }
@@ -204,6 +208,10 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
           sessionId,
           visible: chatTranscriptPollingProvider,
         );
+        return;
+      }
+      if (externalId == null || externalId.isEmpty) {
+        yield const [];
         return;
       }
       final agentId = ref

@@ -63,6 +63,7 @@ import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
 import 'chat_transcript.dart';
 import 'end_session_action.dart';
+import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
 import 'queued_messages_strip.dart';
@@ -782,9 +783,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             : null;
         return MessageComposer(
           controller: _composer,
-          // Attachments and the message, nothing else: mode, model
-          // and stats are on the pane's status bar (owner, 2026-09-28).
-          chips: const [],
+          // Mode, model and stats are on the pane's status bar (owner,
+          // 2026-09-28); switching agent is the composer's (2026-10-03).
+          chips: [
+            if (caps.switchAgent)
+              SwitchAgentControl(sessionId: widget.sessionId),
+          ],
           // Read when the menu opens, never watched: the footer is
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
@@ -900,6 +904,18 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
+  TranscriptAgent? _agentOf(String installationId) {
+    final agentId = ref
+        .read(agentInstallationsDataProvider)
+        .getById(installationId)
+        ?.agentId;
+    if (agentId == null) return null;
+    return (
+      name: ref.read(agentRegistryProvider).displayNameFor(agentId),
+      agentId: agentId,
+    );
+  }
+
   /// The agent's own transcript as chat messages. The subagent a row spawned
   /// travels beside them, not inside [ChatMessage], which has no room for it.
   List<ChatMessage> _fromTranscript(
@@ -911,6 +927,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       messages,
       subagents: subagents,
       earlier: earlier,
+      agentOf: _agentOf,
     );
     if (!mapEquals(subagents, _subagents)) {
       _subagents = subagents;
@@ -1141,6 +1158,9 @@ class _OpenLinkBody extends StatelessWidget {
 String? sessionTerminalPane(WidgetRef ref, String sessionId) =>
     ref.read(paneSessionsProvider).paneOf(sessionId);
 
+/// The agent a switched session's row names, as its turns are labelled.
+typedef TranscriptAgent = ({String name, String agentId});
+
 /// A CLI transcript as chat messages, with a compacted session's history shown
 /// **once** — the summary restates everything before the last boundary.
 @visibleForTesting
@@ -1148,6 +1168,7 @@ List<ChatMessage> chatMessagesFromTranscript(
   List<TranscriptMessage> messages, {
   Map<int, SubagentRef>? subagents,
   int earlier = 0,
+  TranscriptAgent? Function(String installationId)? agentOf,
 }) {
   // The **last** boundary: a session compacted twice has restated its history
   // twice, and only the newest summary covers all of it. [earlier] rows come
@@ -1185,18 +1206,30 @@ List<ChatMessage> chatMessagesFromTranscript(
     );
   }
 
+  // In a switched session the first agent row of each turn names its agent.
+  var nameNext = true;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
     final reference = message.subagent;
     if (reference != null) subagents?[out.length] = reference;
+    final installation = message.agentInstallationId;
+    final switching = message.role == kAgentSwitchRole;
+    final named =
+        installation != null &&
+        (switching || (message.role == 'agent' && nameNext));
+    final agent = named ? agentOf?.call(installation) : null;
+    if (message.role == 'user' || switching) nameNext = true;
+    if (message.role == 'agent') nameNext = false;
     out.add(
       ChatMessage(
-        role: message.role,
+        role: switching ? kAgentSwitchNoticeRole : message.role,
         text: message.text,
         tool: message.tool,
         thinking: message.thinking,
         at: message.at,
         pending: message.pendingToolUseId != null,
+        agentName: named ? agent?.name ?? 'another agent' : null,
+        agentId: agent?.agentId,
       ),
     );
   }

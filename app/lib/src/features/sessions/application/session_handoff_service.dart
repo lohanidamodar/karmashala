@@ -5,13 +5,19 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionFork, SessionHandoff, SessionHandoffPreview;
+    show
+        SessionFork,
+        SessionHandoff,
+        SessionHandoffPreview,
+        SessionStarted,
+        SessionSwitchAgent;
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 import '../data/sessions_client.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 
 /// One agent this session could be continued in — including the one already
 /// running it: a fresh session is a real answer to a full context window.
@@ -24,6 +30,7 @@ class HandoffTarget {
     required this.isSameAgent,
     this.followsDefault = false,
     this.refusal,
+    this.resumesConversation = false,
   });
 
   final AgentInstallation installation;
@@ -42,6 +49,10 @@ class HandoffTarget {
 
   /// Why this target cannot receive a handoff, or null when it can.
   final String? refusal;
+
+  /// For a switch in place: this agent ran the session before, so its own
+  /// conversation is resumed.
+  final bool resumesConversation;
 
   bool get canReceive => refusal == null;
 }
@@ -101,6 +112,97 @@ class SessionHandoffService {
           ? '$name takes no opening prompt, so the handoff packet could not '
                 'be delivered — the new session would start knowing nothing.'
           : null,
+    );
+  }
+
+  /// The agents [sessionId] could be switched to in place: the one running it
+  /// is refused, and an agent spoken to over ACP needs no prompt argument —
+  /// its packet is the first prompt. [used] are the installations that ran
+  /// this session before, whose own conversations a switch resumes.
+  List<HandoffTarget> switchTargetsFor(
+    String sessionId, {
+    Set<String> used = const {},
+  }) {
+    final current = _ref
+        .read(sessionsDataProvider)
+        .getById(sessionId)
+        ?.agentInstallationId;
+    final registry = _ref.read(agentRegistryProvider);
+    return [
+      for (final target in targetsFor(sessionId))
+        HandoffTarget(
+          installation: target.installation,
+          descriptor: target.descriptor,
+          agentName: target.agentName,
+          permission: target.permission,
+          isSameAgent: target.isSameAgent,
+          followsDefault: target.followsDefault,
+          refusal: target.isSameAgent
+              ? '${target.agentName} already runs this session.'
+              : agentSpeaksAcp(registry, target.installation.agentId) &&
+                    target.descriptor != null
+              ? null
+              : target.refusal,
+          resumesConversation:
+              target.installation.id != current &&
+              used.contains(target.installation.id),
+        ),
+    ];
+  }
+
+  /// Switches [sessionId] to [targetInstallationId] in place — the same row
+  /// and chat — then puts it on screen: the chat stays the primary view, and
+  /// a terminal agent's pane is opened, or reused, behind it.
+  Future<SessionStarted> switchAgent({
+    required String sessionId,
+    required String targetInstallationId,
+    String instruction = '',
+  }) async {
+    final launcher = _ref.read(sessionLauncherProvider);
+    final oldPane = launcher.livePaneFor(sessionId);
+    final started = await _server.switchAgent(
+      SessionSwitchAgent(
+        sessionId: sessionId,
+        targetInstallationId: targetInstallationId,
+        instruction: instruction,
+      ),
+    );
+    _place(sessionId, started, oldPane);
+    return started;
+  }
+
+  void _place(String sessionId, SessionStarted started, String? oldPane) {
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    final launch = started.launch;
+    if (launch == null) {
+      // Over ACP the conversation is the tab; the old terminal has nothing
+      // left to show.
+      if (oldPane != null) terminals.closePane(oldPane, detach: true);
+      terminals.openChatTab(sessionId);
+    } else {
+      final reused = oldPane == null
+          ? null
+          : terminals.startAgentInPane(oldPane, launch);
+      final String paneId;
+      if (reused != null) {
+        paneId = oldPane!;
+        terminals.revealConversationForPane(paneId);
+      } else {
+        if (oldPane != null) terminals.closePane(oldPane, detach: true);
+        paneId = terminals.openAgentTab(launch).paneId;
+        // The terminal is secondary: the chat tab comes back to the front.
+        terminals.openChatTab(sessionId);
+      }
+      _ref.read(sessionsDataProvider).updatePaneId(sessionId, paneId);
+    }
+    _ref.publishSessionChange(
+      SessionChange(
+        sessionId: sessionId,
+        kinds: const {
+          SessionChangeKind.membership,
+          SessionChangeKind.placement,
+        },
+      ),
     );
   }
 
