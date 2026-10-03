@@ -35,13 +35,18 @@ final class AdmitQueued extends QueueAdmission {
 /// message is kept in `session_queued_messages`; each time a turn ends, the
 /// head is delivered, one per turn.
 ///
-/// A stopped ACP session is resumed to take its head ([resumesOnSend]); a
-/// stopped PTY session holds its queue until it runs and goes idle again.
+/// A stopped ACP session is resumed to take its head ([resumesOnSend]). A
+/// stopped PTY session is resumed ([resumeStopped]) when a message is queued
+/// behind others, so nothing waits for a session nobody runs: with the head
+/// as its opening prompt where the agent takes one, else bare and given the
+/// head once idle.
 class SessionQueue {
   SessionQueue({
     required this.dao,
     required this.status,
     this.resumesOnSend,
+    this.resumeStopped,
+    this.takesOpeningMessage,
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
@@ -56,6 +61,15 @@ class SessionQueue {
   /// Whether row [String] speaks ACP, so a send resumes it when nothing runs
   /// it.
   final bool Function(String sessionId)? resumesOnSend;
+
+  /// Resumes row [String] that nothing runs, [prompt] its opening message
+  /// when given — `ServerSessionLauncher.resume`.
+  final Future<Object?> Function(String sessionId, String? prompt)?
+  resumeStopped;
+
+  /// Whether row [String]'s agent takes an opening message when it starts
+  /// (`launch.acceptsPromptArgument`).
+  final bool Function(String sessionId)? takesOpeningMessage;
 
   /// Told the session's open messages each time they move.
   final void Function(String sessionId, List<QueuedMessage> open)? announce;
@@ -85,6 +99,9 @@ class SessionQueue {
   /// Sessions known to have a row still queued, so a status tick costs no
   /// query for the rest.
   final _withQueued = <String>{};
+
+  /// Sessions resumed bare for their head, which waits for the idle composer.
+  final _resumedForHead = <String>{};
   final _waiters = <String, List<Completer<QueuedMessage>>>{};
   StreamSubscription<HostedAgentStatus>? _statuses;
   var _closed = false;
@@ -176,8 +193,8 @@ class SessionQueue {
     _withQueued.add(sessionId);
     log?.call('queue $sessionId: ${message.id} queued behind the running turn');
     _announce(sessionId);
-    // Nothing may be running to end a turn: a stopped ACP session is resumed.
-    _kick(sessionId);
+    // Nothing may be running to end a turn: a stopped session is resumed.
+    _kick(sessionId, resume: true);
     return AdmitQueued(message, dao.positionOf(sessionId, message.seq));
   }
 
@@ -292,26 +309,44 @@ class SessionQueue {
     if (_inFlight.contains(sessionId)) return false;
     final runtime = status.acpRuntimeOf(sessionId);
     if (runtime != null) return !runtime.inTurn;
+    if (_awaitingTurn.containsKey(sessionId)) return false;
     if (resumesOnSend?.call(sessionId) ?? false) return true;
     if (!status.holds(sessionId)) return false;
-    if (_awaitingTurn.containsKey(sessionId)) return false;
     final report = status.statusOf(sessionId)?.report;
+    // A session resumed bare is typed into only at its idle composer.
+    if (_resumedForHead.contains(sessionId)) {
+      return report?.status == AgentActivityStatus.idle &&
+          !report!.hasOpenPrompt &&
+          !report.hasOpenQuestion;
+    }
     if (report == null) return true;
     return !_working(report.status) &&
         !report.hasOpenPrompt &&
         !report.hasOpenQuestion;
   }
 
+  /// Whether nothing runs [sessionId] and [resumeStopped] would start it.
+  bool _stopped(String sessionId) =>
+      resumeStopped != null &&
+      !_inFlight.contains(sessionId) &&
+      !_resumedForHead.contains(sessionId) &&
+      status.acpRuntimeOf(sessionId) == null &&
+      !(resumesOnSend?.call(sessionId) ?? false) &&
+      !status.holds(sessionId);
+
   // Deferred: a turn's end is published from inside the runtime that ended
-  // it, which must finish settling before the next turn opens.
-  void _kick(String sessionId) {
+  // it, which must finish settling before the next turn opens. Only a new
+  // message [resume]s a stopped session: one a person ended stays ended.
+  void _kick(String sessionId, {bool resume = false}) {
     if (_closed) return;
-    scheduleMicrotask(() => unawaited(_drain(sessionId)));
+    scheduleMicrotask(() => unawaited(_drain(sessionId, resume: resume)));
   }
 
-  Future<void> _drain(String sessionId) async {
+  Future<void> _drain(String sessionId, {bool resume = false}) async {
     final deliver = this.deliver;
-    if (_closed || deliver == null || !_ready(sessionId)) return;
+    if (_closed || deliver == null) return;
+    if (resume && _stopped(sessionId)) return _resumeFor(sessionId);
+    if (!_ready(sessionId)) return;
     final head = dao.head(sessionId);
     if (head == null) {
       _withQueued.remove(sessionId);
@@ -327,6 +362,7 @@ class SessionQueue {
     }
     _inFlight.add(sessionId);
     _sawWorking.remove(sessionId);
+    _resumedForHead.remove(sessionId);
     _announce(sessionId);
     var delivered = false;
     try {
@@ -357,6 +393,70 @@ class SessionQueue {
       _announce(sessionId);
     }
     if (delivered) _kick(sessionId);
+  }
+
+  /// Starts [sessionId], which nothing runs, for its head: as the opening
+  /// prompt where its agent takes one, else bare, the head then delivered at
+  /// the idle composer. A refused resume fails the head in its words.
+  Future<void> _resumeFor(String sessionId) async {
+    final resume = resumeStopped!;
+    final head = dao.head(sessionId);
+    if (head == null) return;
+    final withPrompt = takesOpeningMessage?.call(sessionId) ?? false;
+    if (withPrompt &&
+        !dao.transition(
+          head.id,
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.delivering,
+          now: _now(),
+        )) {
+      return;
+    }
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    log?.call(
+      'queue $sessionId: nothing runs it; resuming it for ${head.id}'
+      '${withPrompt ? ' as its opening prompt' : ''}',
+    );
+    _announce(sessionId);
+    var delivered = false;
+    try {
+      await resume(sessionId, withPrompt ? head.text : null);
+      if (withPrompt) {
+        delivered = true;
+        _finish(head, QueuedMessageState.delivered);
+      } else {
+        _resumedForHead.add(sessionId);
+      }
+    } on Object catch (error) {
+      final words = switch (error) {
+        DataRefused(:final message) => message,
+        StateError(:final message) => message,
+        ArgumentError(:final message) => '$message',
+        _ => '$error',
+      };
+      if (!withPrompt) {
+        dao.transition(
+          head.id,
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.delivering,
+          now: _now(),
+        );
+      }
+      _finish(
+        head,
+        QueuedMessageState.failed,
+        error:
+            'This session is not running and could not be resumed to take '
+            'the message, so it was not sent: $words',
+      );
+    } finally {
+      _inFlight.remove(sessionId);
+      if (delivered) _awaitTurnStart(sessionId);
+      _announce(sessionId);
+    }
+    // A bare resume's idle screen may already be read.
+    if (!delivered) _kick(sessionId);
   }
 
   void _finish(QueuedMessage head, QueuedMessageState to, {String? error}) {

@@ -356,6 +356,30 @@ void main() {
     });
   });
 
+  test('a send to a stopped ACP session with messages waiting hands the '
+      'head to the delivery that resumes it', () async {
+    final delivered = <String>[];
+    final queue = queueOver(resumesOnSend: (id) => id == 's2')
+      ..deliver = ((_, text) async => delivered.add(text))
+      ..start();
+    dao.enqueue(
+      id: 'old',
+      sessionId: 's2',
+      text: 'earlier',
+      origin: QueuedMessageOrigin.app,
+      now: t0,
+    );
+
+    expect(
+      queue.admit('s2', 'later', origin: QueuedMessageOrigin.app),
+      isA<AdmitQueued>(),
+    );
+    await pumpEventQueue();
+
+    expect(delivered, ['earlier']);
+    expect(dao.getById('old')!.state, QueuedMessageState.delivered);
+  });
+
   group('an ACP session, through SessionInput', () {
     late DaemonPromptAnswers prompts;
     late Directory temp;

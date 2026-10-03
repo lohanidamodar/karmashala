@@ -1038,6 +1038,19 @@ Future<int> runServe(
     dao: SessionQueueDao(database),
     status: prompts.status,
     resumesOnSend: speaksAcp,
+    // A PTY session nothing runs is resumed for its queue, never left
+    // holding it.
+    resumeStopped: (sessionId, prompt) =>
+        launches.resume(sessionId, prompt: prompt),
+    takesOpeningMessage: (sessionId) {
+      final session = sessionRows.getById(sessionId);
+      final agentId = session == null
+          ? null
+          : checkoutRows.installation(session.agentInstallationId)?.agentId;
+      return agentId != null &&
+          (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
+              false);
+    },
     announce: (sessionId, open) => data.announce([
       SessionQueueChanged(sessionId: sessionId, messages: open),
     ]),
