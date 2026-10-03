@@ -276,7 +276,11 @@ class SessionHandoffService {
       externalSessionId: session.externalSessionId,
       // Read off the chat when it is open: a switched thread tags its turns.
       switched:
-          (_ref.read(sessionChatTranscriptProvider(sessionId)).value ??
+          ((_ref.exists(sessionChatTranscriptProvider(sessionId))
+                      ? _ref
+                            .read(sessionChatTranscriptProvider(sessionId))
+                            .value
+                      : null) ??
                   const [])
               .any((message) => message.agentInstallationId != null),
     );
