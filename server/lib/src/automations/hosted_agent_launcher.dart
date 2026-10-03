@@ -495,6 +495,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             kind,
             isPacket: typedPacket,
           );
+    // A prompt that went to a file is read from the data directory, which an
+    // agent that can be granted it gets, so it does not ask to leave its
+    // workspace for Karmashala's own file.
+    final handedFile =
+        acp == null &&
+        prompt != (typedPacket ? launch.systemPrompt : launch.prompt);
+    final files = handoffFiles;
+    final readableDirectory = handedFile && files != null
+        ? agentConfigPathFor(files.directory.path, kind)
+        : null;
     final newConversation = resumeId == null || resumeId.isEmpty;
     final permission = launch.followSettings
         ? agents.permissionOf(
@@ -537,6 +547,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             forkSessionId: launch.forkConversationId,
             prompt: prompt,
             systemPromptFilePath: systemPromptPath,
+            extraDirectoryPath: readableDirectory,
             suppressSelfUpdate: suppressUpdate,
           );
     final agentLaunch = AgentPaneLaunch(

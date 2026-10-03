@@ -97,6 +97,7 @@ class AgentLaunchSpec {
     this.continueLatest = const AgentContinueSupport.unsupported(),
     this.prompt = const AgentPromptSupport.unsupported(),
     this.systemPromptFile = const AgentSystemPromptFileSupport.unchecked(),
+    this.extraDirectory = const AgentExtraDirectorySupport.unsupported(),
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
@@ -235,6 +236,10 @@ class AgentLaunchSpec {
   /// Whether this agent takes an extra system prompt as a file, and how. See
   /// [AgentSystemPromptFileSupport]. Defaults to "nobody checked".
   final AgentSystemPromptFileSupport systemPromptFile;
+
+  /// Whether a directory beyond the workspace can be granted at launch. See
+  /// [AgentExtraDirectorySupport]. Defaults to unsupported.
+  final AgentExtraDirectorySupport extraDirectory;
 
   /// Whether an opening prompt can be delivered at all — [prompt]'s *whether*,
   /// for the refusal gates that only ever asked that. They read the same answer

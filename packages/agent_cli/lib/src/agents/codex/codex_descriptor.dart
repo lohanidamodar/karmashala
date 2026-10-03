@@ -235,6 +235,16 @@ const codexDescriptor = AgentDescriptor(
           '--dangerously-bypass-hook-trust/-C/--add-dir/-a/--search/'
           '--no-alt-screen — no system-prompt or instructions file among them',
     ),
+    // So a packet it is told to read from Karmashala's data directory is in
+    // its own sandbox: under on-request approvals it asked before reading a
+    // file outside the workspace (probe, 2026-10-03). A top-level option,
+    // so it stands left of `resume` like the permission flags.
+    extraDirectory: AgentExtraDirectorySupport.flag(
+      '--add-dir',
+      evidence:
+          'codex 0.153.4 --help lists --add-dir among its top-level options '
+          '(the list above), one directory per flag',
+    ),
     // Left at the default (false): Codex enforces **one writer per thread**.
     // The lock is real and inspectable — a live Codex holds an flock on
     // `~/.codex/thread-writer-locks/<thread-id>.lock` — and a second resume of

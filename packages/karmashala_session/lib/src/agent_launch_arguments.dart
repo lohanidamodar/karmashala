@@ -15,6 +15,7 @@ List<String> agentPaneArguments(
   String? forkSessionId,
   String? prompt,
   String? systemPromptFilePath,
+  String? extraDirectoryPath,
   String? mcpUrl,
   String? mcpConfigPath,
   bool suppressSelfUpdate = false,
@@ -28,6 +29,7 @@ List<String> agentPaneArguments(
     if (suppressSelfUpdate) ...?launch?.selfUpdate.disableArguments,
     ...?launch?.permission.argumentsFor(permissionMode),
     ...?launch?.model.argumentsFor(modelId),
+    ...?launch?.extraDirectory.argumentsFor(extraDirectoryPath),
     ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
