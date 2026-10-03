@@ -209,6 +209,19 @@ void main() {
     expect(kServerFeatures, contains('sessions.send.resumes'));
   });
 
+  test('the server announces each ACP request family it serves', () {
+    expect(
+      kServerFeatures,
+      containsAll([
+        'sessions.setMode',
+        'sessions.setConfigOption',
+        'acpAgents',
+        'acpAgents.install',
+        'acpAuth',
+      ]),
+    );
+  });
+
   group('sessions.send — a phone, another desktop', () {
     test(
       'to an ended ACP session resumes it with session/load and sends the '

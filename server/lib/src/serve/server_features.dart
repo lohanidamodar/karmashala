@@ -57,4 +57,14 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.send` to an ACP session nothing runs resumes it here and sends
   // the message as its first turn, answering `resumed` and any notice.
   'sessions.send.resumes',
+  // `sessions.setMode` and `.setConfigOption`: an ACP session's mode and
+  // options, as its agent announces them.
+  'sessions.setMode',
+  'sessions.setConfigOption',
+  // `acpAgents.list`, `.put`, `.delete`: the ACP agents a person adds;
+  // `acpAgents.install`: one the registry ships as an archive, installed here.
+  'acpAgents',
+  'acpAgents.install',
+  // `acpAuth.*`: an ACP agent's login methods, chosen and remembered here.
+  'acpAuth',
 };
