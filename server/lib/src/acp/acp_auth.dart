@@ -299,7 +299,8 @@ class ServerAcpAuth {
     } on Object catch (error) {
       throw DataRefused(
         DataRefusalCode.failed,
-        '${target.name} did not answer: $error',
+        '${target.name} did not answer: '
+        '${withoutSecrets('$error', variables.values)}',
       );
     }
   }

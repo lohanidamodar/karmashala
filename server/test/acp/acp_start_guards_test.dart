@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_host/src/acp/acp_runtimes.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
+import '../support/fake_command_runner.dart';
 import 'acp_fixture.dart';
 
 /// Two ways an ACP start used to hang without a word, seen live: an
@@ -186,6 +188,52 @@ void main() {
       // throws first and tears down behind it.
       await Future<void>.delayed(const Duration(milliseconds: 300));
       expect(killed, isTrue, reason: 'the hung process is not left behind');
+    });
+
+    test('a spawn that fails keeps the agent\'s variables out of the words '
+        'the start fails with', () async {
+      final runtimes = AcpRuntimes(
+        messages: SessionMessageDao(database),
+        host: RecordingHost(),
+        runnerFor: (_) => FakeCommandRunner(
+          throwError: const ProcessException('wsl.exe', [
+            '--',
+            'env',
+            'GEMINI_API_KEY=k-123',
+            'KARMASHALA_SESSION_ID=s1',
+          ], 'The system cannot find the file specified.'),
+        ),
+      );
+      final runtime = runtimes.start(
+        AcpSessionStart(
+          sessionId: 's1',
+          hostSessionId: 'karmashala_s1',
+          agentId: 'antigravity-acp',
+          agentName: 'Antigravity',
+          spec: const AcpLaunchSpec(),
+          executable: '/home/me/agy',
+          arguments: const [],
+          directory: EnvironmentPath(environmentId: 'local', path: temp.path),
+          variables: const {
+            'GEMINI_API_KEY': 'k-123',
+            'KARMASHALA_SESSION_ID': 's1',
+          },
+        ),
+      );
+      await expectLater(
+        runtime.start(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('cannot find the file'),
+              contains('KARMASHALA_SESSION_ID=s1'),
+              isNot(contains('k-123')),
+            ),
+          ),
+        ),
+      );
     });
   });
 }

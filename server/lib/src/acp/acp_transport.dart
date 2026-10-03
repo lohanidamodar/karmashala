@@ -79,6 +79,16 @@ final class _ProcessTransport implements AcpTransport {
   Future<void> kill() => _handle.kill();
 }
 
+/// [words] with each of [secrets] blanked: a spawn that fails names its
+/// command line, and in WSL the agent's variables are words on it.
+String withoutSecrets(String words, Iterable<String> secrets) {
+  var said = words;
+  for (final secret in secrets) {
+    if (secret.isNotEmpty) said = said.replaceAll(secret, '<redacted>');
+  }
+  return said;
+}
+
 /// A [ProcessHandle] writes lines, and the peer writes one message per chunk
 /// ending in a newline; this hands each chunk over as that line.
 final class _LineSink implements StreamSink<List<int>> {

@@ -1,3 +1,5 @@
+import 'dart:io' show ProcessException;
+
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -202,6 +204,25 @@ void main() {
     await server.authenticate('ag1', 'gemini-api-key');
     expect(spawned.single.environment, {'GEMINI_API_KEY': 'k-123'});
     expect(agents.single.authenticatedWith, 'gemini-api-key');
+  });
+
+  test('a connection that cannot start keeps the key out of its words, '
+      'though the failure names the command line it is on', () async {
+    vault = {'GEMINI_API_KEY': 'k-123'};
+    nextAgent = () => throw const ProcessException('wsl.exe', [
+      '--',
+      'env',
+      'GEMINI_API_KEY=k-123',
+      '/home/me/agy_acp_server.par',
+    ], 'The system cannot find the file specified.');
+    await expectLater(
+      auth().authenticate('ag1', 'gemini-api-key'),
+      throwsA(
+        isA<DataRefused>()
+            .having((r) => r.message, 'message', contains('did not answer'))
+            .having((r) => r.message, 'message', isNot(contains('k-123'))),
+      ),
+    );
   });
 
   test('a terminal method is refused authenticate, and an unknown one names '

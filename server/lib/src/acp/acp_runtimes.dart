@@ -4,6 +4,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
+import 'package:karmashala_launch/karmashala_launch.dart'
+    show kSessionIdEnvironmentVariable;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessageDao, SessionUsageDao;
 
@@ -83,19 +85,31 @@ class AcpRuntimes {
     agentName: start.agentName,
     spec: start.spec,
     workingDirectory: start.directory.path,
-    spawn: () async => AcpTransport.process(
-      await runnerFor(start.environment).start(
-        CommandRequest(
-          executable: start.executable,
-          arguments: start.arguments,
-          workingDirectory: start.directory,
-          // A custom agent's own variables first, so the session id and
-          // anything the launcher withholds still win.
-          environment: {...start.spec.environment, ...start.variables},
-          removedEnvironment: start.removed,
-        ),
-      ),
-    ),
+    spawn: () async {
+      // A custom agent's own variables first, so the session id and anything
+      // the launcher withholds still win.
+      final variables = {...start.spec.environment, ...start.variables};
+      try {
+        return AcpTransport.process(
+          await runnerFor(start.environment).start(
+            CommandRequest(
+              executable: start.executable,
+              arguments: start.arguments,
+              workingDirectory: start.directory,
+              environment: variables,
+              removedEnvironment: start.removed,
+            ),
+          ),
+        );
+      } on Object catch (error) {
+        throw StateError(
+          withoutSecrets('$error', [
+            for (final MapEntry(:key, :value) in variables.entries)
+              if (key != kSessionIdEnvironmentVariable) value,
+          ]),
+        );
+      }
+    },
     messages: messages,
     usage: usage,
     files: AcpPathScope.forEnvironment(start.environment, start.directory.path),
