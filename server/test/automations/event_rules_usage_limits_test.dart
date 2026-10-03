@@ -347,17 +347,38 @@ void main() {
 
   test('the settings are read from settings.v1, defaults when absent', () {
     final none = usageLimitSettingsFrom(null);
-    expect(none.behavior, UsageLimitBehavior.ask);
+    expect(none.behavior, UsageLimitBehavior.schedule);
     expect(none.resumeMessageFor('claudeCode'), 'continue');
     final set = usageLimitSettingsFrom(
       jsonEncode({
-        'usageLimitBehavior': 'schedule',
+        'onUsageLimit': 'ask',
         'resumeMessage': 'go on',
         'resumeMessages': {'codex': 'next'},
       }),
     );
-    expect(set.behavior, UsageLimitBehavior.schedule);
+    expect(set.behavior, UsageLimitBehavior.ask);
     expect(set.resumeMessageFor('claudeCode'), 'go on');
     expect(set.resumeMessageFor('codex'), 'next');
+    expect(
+      usageLimitSettingsFrom(jsonEncode({'onUsageLimit': 'later'})).behavior,
+      UsageLimitBehavior.schedule,
+    );
+  });
+
+  test('the legacy key: its "ask" was the old default, written on every save, '
+      'so it reads as automatic; its "nothing" stays', () {
+    UsageLimitBehavior legacy(String value) =>
+        usageLimitSettingsFrom(jsonEncode({'usageLimitBehavior': value}))
+            .behavior;
+    expect(legacy('ask'), UsageLimitBehavior.schedule);
+    expect(legacy('schedule'), UsageLimitBehavior.schedule);
+    expect(legacy('nothing'), UsageLimitBehavior.nothing);
+    // A choice made under the new key wins over whatever the old one held.
+    expect(
+      usageLimitSettingsFrom(
+        jsonEncode({'usageLimitBehavior': 'nothing', 'onUsageLimit': 'ask'}),
+      ).behavior,
+      UsageLimitBehavior.ask,
+    );
   });
 }

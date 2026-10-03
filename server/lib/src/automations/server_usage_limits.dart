@@ -23,7 +23,7 @@ const Duration kLimitRecordFreshness = Duration(minutes: 10);
 /// `resumeMessages` per agent).
 const String kDefaultResumeMessage = 'continue';
 
-/// What the Settings choice `usageLimitBehavior` says to do.
+/// What the Settings choice `onUsageLimit` says to do.
 enum UsageLimitBehavior { ask, schedule, nothing }
 
 /// The usage-limit part of a client's settings (`settings.v1`), read afresh
@@ -34,7 +34,9 @@ typedef UsageLimitSettings = ({
 });
 
 /// Reads [UsageLimitSettings] out of `settings.v1`'s JSON; a missing or odd
-/// value is the default (ask; "continue").
+/// value is the default (schedule; "continue"). The legacy key
+/// `usageLimitBehavior` was saved on every write while `ask` was the default,
+/// so only its `nothing` is taken as chosen — as the app reads it.
 UsageLimitSettings usageLimitSettingsFrom(String? raw) {
   Map<String, Object?> json = const {};
   try {
@@ -43,10 +45,14 @@ UsageLimitSettings usageLimitSettingsFrom(String? raw) {
   } on FormatException {
     // Defaults.
   }
-  final behavior = UsageLimitBehavior.values.firstWhere(
-    (b) => b.name == json['usageLimitBehavior'],
-    orElse: () => UsageLimitBehavior.ask,
-  );
+  final behavior = json.containsKey('onUsageLimit')
+      ? UsageLimitBehavior.values.firstWhere(
+          (b) => b.name == json['onUsageLimit'],
+          orElse: () => UsageLimitBehavior.schedule,
+        )
+      : json['usageLimitBehavior'] == UsageLimitBehavior.nothing.name
+      ? UsageLimitBehavior.nothing
+      : UsageLimitBehavior.schedule;
   final message = json['resumeMessage'] is String
       ? json['resumeMessage']! as String
       : kDefaultResumeMessage;

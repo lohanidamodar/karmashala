@@ -185,14 +185,16 @@ void main() {
       await tester.pumpWidget(host(const ScheduledResumesSection()));
       expect(find.text('No resume is waiting.'), findsOneWidget);
 
-      await tester.tap(find.text('Ask'));
+      expect(find.textContaining('to turn automatic resume off'), findsOne);
+      await tester.tap(find.text('Resume automatically at the reset'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Always schedule a resume').last);
+      await tester.tap(find.text('Do nothing').last);
       await tester.pumpAndSettle();
       expect(
         h.container.read(settingsControllerProvider).usageLimitBehavior,
-        UsageLimitBehavior.schedule,
+        UsageLimitBehavior.nothing,
       );
+      expect(find.textContaining('Automatic resume is off'), findsOne);
 
       await tester.enterText(find.byType(TextField), 'carry on');
       expect(
