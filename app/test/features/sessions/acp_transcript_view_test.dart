@@ -22,8 +22,8 @@ import '../../support/test_machine.dart';
 import '../../support/tool_runs.dart';
 import '../terminal/fake_instance.dart';
 
-/// **An ACP session's conversation is the server's own rows** (ACP design,
-/// C3 and C5): the view reads them down the server transcript path — the one
+/// **An ACP session's conversation is the server's own rows**: the view reads
+/// them down the server transcript path — the one
 /// a PTY session's record comes down — with no file of its own to look for
 /// and no CLI id to wait for. Tool rows, thinking and the plan all render.
 void main() {

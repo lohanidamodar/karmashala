@@ -12,7 +12,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
-/// **An ACP session's status bar** (ACP design, C5): the PTY permission and
+/// **An ACP session's status bar**: the PTY permission and
 /// model chips stand down — the agent's mode is its permission axis and its
 /// model is a config option — and the agent's own pickers take their place.
 /// Decided by the adapter's capability, never by the agent's id.

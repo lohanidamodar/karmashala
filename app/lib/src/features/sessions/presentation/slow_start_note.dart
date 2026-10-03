@@ -22,7 +22,11 @@ class SlowStartNote extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(AppIcons.info, color: theme.colorScheme.onSurfaceVariant),
+        Icon(
+          AppIcons.info,
+          size: Chrome.iconAction,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: Insets.sm),
         Expanded(
           child: Text(

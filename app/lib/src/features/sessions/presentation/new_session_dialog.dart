@@ -167,6 +167,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// start, which the error then offers to log in.
   AgentInstallation? _loginFor;
 
+  /// What the last login said, shown until the next start.
+  String? _loginNotice;
+
   /// Set once a start has been busy for a while: an agent run through npx
   /// is downloaded on its first start, and a silent spinner looked hung.
   bool _slowStart = false;
@@ -619,9 +622,6 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       });
     }
   }
-
-  /// What the last login said, shown until the next start.
-  String? _loginNotice;
 
   Widget _terminalPicker() {
     final terminals = ref.watch(availableSystemTerminalsProvider);

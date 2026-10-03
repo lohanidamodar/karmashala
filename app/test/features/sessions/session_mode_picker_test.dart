@@ -11,7 +11,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
-/// **The agent's own modes, in the session bar** (ACP design, C5): drawn only
+/// **The agent's own modes, in the session bar**: drawn only
 /// once the agent has announced some, set through `sessions.setMode`, and a
 /// refusal is said rather than swallowed.
 void main() {

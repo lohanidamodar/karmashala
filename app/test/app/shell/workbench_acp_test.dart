@@ -30,7 +30,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
-/// **An ACP session is a chat session** (ACP design, C5): the workbench opens
+/// **An ACP session is a chat session**: the workbench opens
 /// its conversation as a tab of its own — a chat pane, with no process behind
 /// it, since the server owns the agent — and offers no terminal to toggle to.
 /// A PTY session beside it keeps both faces.

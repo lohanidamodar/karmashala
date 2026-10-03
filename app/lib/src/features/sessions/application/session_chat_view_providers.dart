@@ -31,7 +31,7 @@ SessionChatView screenSessionChatView(Ref ref, String sessionId) {
   // id yet will get one, and an agent whose store we cannot open will not.
   final adapter = ref.read(agentRegistryProvider).adapterFor(agentId);
   // An ACP agent's conversation is the server's own rows: no store, no file,
-  // no CLI id to wait for (ACP design, C3).
+  // no CLI id to wait for.
   if (adapter != null && adapter.acp != null) {
     return SessionChatView.unread(prior: agentSupportsChatView(adapter));
   }

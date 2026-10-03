@@ -7,7 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/session_modes_providers.dart';
 
-/// **The agent's own modes** (ACP design, C5): what the session's agent offers
+/// **The agent's own modes**: what the session's agent offers
 /// at runtime, by name, with the one it is in selected. Nothing at all — no
 /// width either — for a session whose agent has announced none. For an ACP
 /// session this *is* the permission axis: Karmashala's rung only picked the

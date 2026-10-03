@@ -213,7 +213,7 @@ class DataClient {
   /// credentials** — a token bundle never leaves the server.
   final installations = KeyedReplica<AgentInstallation>();
 
-  /// The ACP agents a person added (ACP design, C2), by row id.
+  /// The ACP agents a person added, by row id.
   final acpAgents = KeyedReplica<AcpAgentRow>();
   final claudeAccounts = KeyedReplica<ClaudeAccount>(_sameClaude);
   final codexAccounts = KeyedReplica<CodexAccount>(_sameCodex);
@@ -285,7 +285,7 @@ class DataClient {
   /// ended, or was forgotten.
   Stream<TerminalChange> get terminalChanges => _terminalChanges.stream;
 
-  /// The modes each session's agent offers (ACP design, C5), by session id,
+  /// The modes each session's agent offers, by session id,
   /// as last told. In memory only: the agent announces them again on resume.
   final sessionModes = <String, SessionModesChanged>{};
 

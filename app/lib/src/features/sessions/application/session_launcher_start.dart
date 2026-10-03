@@ -138,7 +138,7 @@ extension SessionStartVerbs on SessionLauncher {
     final launch = started.launch;
     if (launch == null) {
       // No terminal to attach: an agent spoken to over ACP runs inside the
-      // server, and its conversation is the tab (ACP design, C5).
+      // server, and its conversation is the tab.
       final tabId = installationSpeaksAcp(_ref, session.agentInstallationId)
           ? _showChatTab(session.id)
           : null;

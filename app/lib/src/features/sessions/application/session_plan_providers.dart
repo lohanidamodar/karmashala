@@ -128,7 +128,7 @@ final sessionAgentPlanProvider = Provider.autoDispose
       }
 
       // An ACP agent's plan arrives as a protocol update the server files on
-      // a row's tool (ACP design, C3): no tool name to know, no file to own.
+      // a row's tool: no tool name to know, no file to own.
       final acp = ref.watch(isAcpSessionProvider(sessionId));
 
       // The capability answer comes first and costs nothing: an agent that

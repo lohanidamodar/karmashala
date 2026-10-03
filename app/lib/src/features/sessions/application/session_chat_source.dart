@@ -180,16 +180,13 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         yield const [];
         return;
       }
-      // An ACP session's conversation is the server's own rows (ACP design,
-      // C3): no file on any disk, and no CLI id to wait for. A server that
-      // cannot serve them has nothing to show.
+      // An ACP session's conversation is the server's own rows: no file on
+      // any disk, and no CLI id to wait for. A server that cannot serve them
+      // has nothing to show.
       if (ref.watch(isAcpSessionProvider(sessionId))) {
         if (viaServer) {
-          // Watched for as long as it is on screen, not only while a
-          // terminal's chat face is up: this session has no terminal, so no
-          // face ever flips, and that gate left it loading forever. The
-          // server pushes the rows as they are written, so the watch costs
-          // nothing between turns.
+          // Watched for as long as it is on screen: with no terminal there
+          // is no chat face to gate it on.
           yield* serverTranscriptMessages(ref, sessionId);
         } else {
           yield const [];

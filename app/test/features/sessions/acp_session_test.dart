@@ -12,7 +12,7 @@ import '../../support/test_machine.dart';
 
 /// **An ACP session is one whose installation's adapter declares `acp`** —
 /// read off the adapter, never off the agent's id, so a custom agent added
-/// from the registry is one too (ACP design, C2 and C5).
+/// from the registry is one too.
 void main() {
   late TestMachine db;
   late FakeDataServer server;

@@ -265,7 +265,7 @@ final class Capabilities {
   bool get mediaViaServer => serverOffers('sessions.media');
 
   /// The server runs ACP agents as sessions of its own and serves their
-  /// conversation from its rows (ACP design, C3); without it the New Session
+  /// conversation from its rows; without it the New Session
   /// dialog offers none.
   bool get acpSessions => serverOffers('acpSessions');
 

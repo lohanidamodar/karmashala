@@ -11,7 +11,7 @@ import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 
-/// **The agent's own config options, in the session bar** (ACP design, C5):
+/// **The agent's own config options, in the session bar**:
 /// a picker per `select` option once the agent has announced them, the
 /// `model` one first, set through `sessions.setConfigOption`; a refusal is
 /// said rather than swallowed.

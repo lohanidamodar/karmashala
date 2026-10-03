@@ -191,13 +191,12 @@ class SessionStatsPopover extends ConsumerWidget {
   ) {
     final reason = view.unavailable;
     final stats = view.stats;
+    final notABill = stats?.reportedCost == null
+        ? 'Counts only — not a bill.'
+        : 'Counts, and the cost as the agent reported it — not a bill.';
     final footer = [
       const SizedBox(height: Insets.md),
-      Text(
-        '${sessionStatsProvenance(view)}. '
-        '${stats?.reportedCost == null ? 'Counts only — not a bill.' : 'Counts, and the cost as the agent reported it — not a bill.'}',
-        style: meta,
-      ),
+      Text('${sessionStatsProvenance(view)}. $notABill', style: meta),
     ];
     if (reason != null || stats == null) {
       return [
@@ -260,26 +259,25 @@ class SessionStatsPopover extends ConsumerWidget {
           )
         else
           ContextPerTurn(perTurn: contextPerTurn),
-      ] else
+      ] else ...[
         const _GroupLabel('Output per turn'),
-      if (perTurn == null && contextPerTurn != null)
-        const SizedBox.shrink()
-      else if (perTurn == null)
-        Text('Output per turn is $kStatNotRecorded.', style: meta)
-      else if (perTurn.length < 2)
-        Text(
-          perTurn.isEmpty
-              ? 'No turn has finished yet.'
-              : 'One turn so far: ${formatCompactCount(perTurn.single)} '
-                    'output tokens.',
-          style: meta,
-        )
-      else
-        _OutputPerTurn(
-          perTurn: perTurn,
-          reasoningPerTurn: stats.reasoningTokensPerTurn,
-          meta: meta,
-        ),
+        if (perTurn == null)
+          Text('Output per turn is $kStatNotRecorded.', style: meta)
+        else if (perTurn.length < 2)
+          Text(
+            perTurn.isEmpty
+                ? 'No turn has finished yet.'
+                : 'One turn so far: ${formatCompactCount(perTurn.single)} '
+                      'output tokens.',
+            style: meta,
+          )
+        else
+          _OutputPerTurn(
+            perTurn: perTurn,
+            reasoningPerTurn: stats.reasoningTokensPerTurn,
+            meta: meta,
+          ),
+      ],
       const _GroupLabel('This project’s week'),
       _ProjectWeekSection(sessionId: sessionId, width: inner, meta: meta),
       ...footer,

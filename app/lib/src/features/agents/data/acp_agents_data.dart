@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
 
-/// The ACP agents a person added, as the server keeps them (ACP design, C2):
+/// The ACP agents a person added, as the server keeps them:
 /// read from this app's copy, oldest first, and written through the server,
 /// which composes its agent registry from the same rows.
 class AcpAgentsData {

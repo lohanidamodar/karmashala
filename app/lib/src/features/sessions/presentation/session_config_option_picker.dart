@@ -8,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/session_config_options_providers.dart';
 
-/// **One `select` config option of the session's agent** (ACP design, C5): its
+/// **One `select` config option of the session's agent**: its
 /// choices by name, the one the agent holds selected, set through
 /// `sessions.setConfigOption`. The agent's `model` option wears the robot the
 /// PTY model chip wears, since it stands in that chip's place.

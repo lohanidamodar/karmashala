@@ -490,8 +490,8 @@ class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
 }
 
 /// [SessionStatsButton] from values: the context fill when [stats] records
-/// both the newest prompt and the window \u2014 or, newer, what the agent itself
-/// last reported as [liveContext] \u2014 "Stats" otherwise.
+/// both the newest prompt and the window \u2014 or, ahead of it, what the agent
+/// itself last reported as [liveContext] \u2014 "Stats" otherwise.
 class SessionStatsChip extends StatelessWidget {
   const SessionStatsChip({
     required this.stats,
