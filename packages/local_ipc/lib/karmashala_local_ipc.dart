@@ -21,8 +21,69 @@ typedef LocalRpcHandler = FutureOr<String> Function(String request);
 /// Hard cap on a single request or response, in bytes.
 const int kLocalRpcMaxBytes = 1024 * 1024;
 
-/// How long a client waits for the server to answer before giving up.
+/// How long a client waits for the server to answer before giving up, for a
+/// call that names no longer wait ([localRpcAnswerTimeout]).
 const Duration kLocalRpcTimeout = Duration(seconds: 60);
+
+/// How long a client waits to connect: short, so a server that is gone is
+/// known at once whatever the call's own bound.
+const Duration kLocalRpcConnectTimeout = Duration(seconds: 10);
+
+/// What a call waits beyond the tool's own wait, for the work around it.
+const Duration kLocalRpcAnswerMargin = Duration(seconds: 60);
+
+/// The longest any call waits for its answer: `subagent_run`'s 30 minutes,
+/// plus the margin.
+const Duration kLocalRpcMaxAnswerTimeout = Duration(minutes: 31);
+
+/// The wait, in seconds, a tool takes when its `timeoutSeconds` is omitted,
+/// for the tools whose default is long enough to matter.
+const Map<String, int> kToolDefaultWaitSeconds = {
+  'subagent_run': 600,
+  'terminal_run': 60,
+  'flutter_pick_widget': 120,
+};
+
+/// How long one call of [tool] with [arguments] may wait for its answer: its
+/// own `timeoutSeconds` (or its default) plus [kLocalRpcAnswerMargin], never
+/// less than [kLocalRpcTimeout] nor more than [kLocalRpcMaxAnswerTimeout].
+Duration localRpcAnswerTimeout(String tool, Map<String, dynamic> arguments) {
+  final asked = arguments['timeoutSeconds'];
+  final seconds = asked is num && asked > 0
+      ? asked
+      : kToolDefaultWaitSeconds[tool];
+  if (seconds == null) return kLocalRpcTimeout;
+  final bound =
+      Duration(milliseconds: (seconds * 1000).round()) + kLocalRpcAnswerMargin;
+  if (bound < kLocalRpcTimeout) return kLocalRpcTimeout;
+  return bound > kLocalRpcMaxAnswerTimeout ? kLocalRpcMaxAnswerTimeout : bound;
+}
+
+/// Nothing accepted the connection: the request was never sent, so trying
+/// again cannot run it twice.
+class LocalRpcUnreachable implements Exception {
+  const LocalRpcUnreachable(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => 'Karmashala is not answering on its socket: $cause';
+}
+
+/// The first line on [stream], waiting at most [timeout] between chunks.
+/// Throws [StateError] at once when the stream ends without one — a server
+/// that hung up — and [TimeoutException] past the bound.
+Future<String> readLocalRpcAnswer(
+  Stream<List<int>> stream,
+  Duration timeout,
+) async {
+  final reader = _LineReader(kLocalRpcMaxBytes);
+  await for (final chunk in stream.timeout(timeout)) {
+    final lines = reader.add(chunk);
+    if (lines.isNotEmpty) return lines.first;
+  }
+  throw StateError('The server closed the connection without answering.');
+}
 
 /// Whether this platform can host a unix domain socket at all. Advisory: an
 /// older Windows build passes this and still fails at bind.
@@ -159,10 +220,13 @@ class LocalRpcClient {
 
   /// Connects to [socketPath], sends the one-line [request], and returns the
   /// single response line. Refuses a request with a newline or over the cap.
+  /// [timeout] bounds the wait for the answer, [connectTimeout] the connect;
+  /// a failed connect throws [LocalRpcUnreachable].
   static Future<String> call(
     String socketPath,
     String request, {
     Duration timeout = kLocalRpcTimeout,
+    Duration connectTimeout = kLocalRpcConnectTimeout,
   }) async {
     final encoded = utf8.encode(request);
     if (encoded.length > kLocalRpcMaxBytes) {
@@ -171,19 +235,22 @@ class LocalRpcClient {
     if (request.contains('\n')) {
       throw ArgumentError('Request must not contain a newline.');
     }
-    final socket = OrderlySocket(
-      await Socket.connect(localSocketAddress(socketPath), 0, timeout: timeout),
-    );
+    final Socket connected;
+    try {
+      connected = await Socket.connect(
+        localSocketAddress(socketPath),
+        0,
+        timeout: connectTimeout,
+      );
+    } on Object catch (error) {
+      throw LocalRpcUnreachable(error);
+    }
+    final socket = OrderlySocket(connected);
     try {
       socket.add(encoded);
       socket.add(const [0x0a]);
       await socket.flush();
-      final reader = _LineReader(kLocalRpcMaxBytes);
-      await for (final chunk in socket.stream.timeout(timeout)) {
-        final lines = reader.add(chunk);
-        if (lines.isNotEmpty) return lines.first;
-      }
-      throw StateError('The server closed the connection without answering.');
+      return await readLocalRpcAnswer(socket.stream, timeout);
     } finally {
       // Awaited: a bridge killed after this returns has nothing pending.
       await socket.release();
