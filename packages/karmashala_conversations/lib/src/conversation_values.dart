@@ -52,6 +52,7 @@ class ConversationHit {
     this.at,
     this.matches = 1,
     this.tier,
+    this.rowId,
   });
 
   /// The agent's own conversation id.
@@ -77,6 +78,11 @@ class ConversationHit {
   /// runs one expression.
   final ConversationMatchTier? tier;
 
+  /// The session that holds this conversation as an earlier agent's part of
+  /// a switched thread, which no row names by this id any more; null when a
+  /// row names it.
+  final String? rowId;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'cli': cli,
@@ -87,6 +93,7 @@ class ConversationHit {
     'at': _iso(at),
     'matches': matches,
     'tier': tier?.name,
+    'rowId': ?rowId,
   };
 
   static ConversationHit fromJson(Map<String, Object?> json) => ConversationHit(
@@ -98,6 +105,7 @@ class ConversationHit {
     indexedAt: _date(json['indexedAt']),
     at: _date(json['at']),
     matches: json['matches'] as int? ?? 1,
+    rowId: json['rowId'] as String?,
     tier: switch (json['tier']) {
       final String name => ConversationMatchTier.values.firstWhere(
         (tier) => tier.name == name,
