@@ -28,6 +28,9 @@ final acpAgentIconRetryDelayProvider = Provider<Duration>(
 /// at once the next time it is drawn after nothing drew it.
 final acpAgentIconProvider = FutureProvider.autoDispose.family<String?, String>(
   (ref, url) async {
+    // Read before any await: a provider let go of mid-fetch has a dead ref.
+    final newClient = ref.read(acpRegistryHttpClientProvider);
+    final retryAfter = ref.read(acpAgentIconRetryDelayProvider);
     final directory = await ref.watch(
       acpAgentIconCacheDirectoryProvider.future,
     );
@@ -42,12 +45,12 @@ final acpAgentIconProvider = FutureProvider.autoDispose.family<String?, String>(
     } on IOException {
       // Unreadable cache: fetch again below.
     }
-    final svg = await _fetch(ref, url);
+    final svg = await _fetch(newClient, url);
     if (svg == null) {
-      final retry = Timer(ref.read(acpAgentIconRetryDelayProvider), () {
-        ref.invalidateSelf();
-      });
-      ref.onDispose(retry.cancel);
+      if (ref.mounted) {
+        final retry = Timer(retryAfter, ref.invalidateSelf);
+        ref.onDispose(retry.cancel);
+      }
       try {
         if (await file.exists()) await file.delete();
       } on IOException {
@@ -55,11 +58,19 @@ final acpAgentIconProvider = FutureProvider.autoDispose.family<String?, String>(
       }
       return null;
     }
+    // Written beside and renamed over, so a reader never sees half an icon.
+    final partial = File('${file.path}.partial');
     try {
       await directory.create(recursive: true);
-      await file.writeAsString(svg);
+      await partial.writeAsString(svg, flush: true);
+      await partial.rename(file.path);
     } on IOException {
       // Nothing cached; drawn this once from memory.
+      try {
+        if (await partial.exists()) await partial.delete();
+      } on IOException {
+        // Left for the next write to replace.
+      }
     }
     return svg;
   },
@@ -112,10 +123,10 @@ String? asSvgDocument(String text) {
   return RegExp(r'^<svg[\s/>]').hasMatch(rest) ? text : null;
 }
 
-Future<String?> _fetch(Ref ref, String url) async {
+Future<String?> _fetch(HttpClient Function() newClient, String url) async {
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasScheme) return null;
-  final client = ref.read(acpRegistryHttpClientProvider)();
+  final client = newClient();
   try {
     final request = await client.getUrl(uri);
     final response = await request.close().timeout(const Duration(seconds: 15));

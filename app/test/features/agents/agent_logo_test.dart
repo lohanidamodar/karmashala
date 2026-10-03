@@ -70,6 +70,8 @@ void main() {
         File('${cache.path}/${iconCacheFileName(iconUrl)}').readAsStringSync(),
         svg,
       );
+      // Written aside and renamed over: nothing half-written is left behind.
+      expect(cache.listSync(), hasLength(1));
 
       // A second look reads the file and asks the registry nothing.
       http = FakeHttpClient(body: 'unused');
@@ -142,12 +144,25 @@ void main() {
         expect(http.requests, 1);
 
         http = FakeHttpClient(body: svg);
-        await Future<void>.delayed(const Duration(milliseconds: 120));
+        // Waits for the retry itself rather than guessing how long it takes.
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (http.requests == 0 && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
         expect(await scope.read(acpAgentIconProvider(iconUrl).future), svg);
         expect(http.requests, 1);
         expect(cache.listSync(), hasLength(1));
       },
     );
+
+    test('a fetch let go of before it lands fails nothing', () async {
+      final scope = container();
+      http = FakeHttpClient(statusCode: 503, body: 'down');
+      // Read once with no listener: the provider is disposed mid-fetch, and
+      // the failed fetch must not schedule a retry on its dead ref.
+      expect(await scope.read(acpAgentIconProvider(iconUrl).future), isNull);
+      expect(http.requests, 1);
+    });
 
     test('a file an older build kept that is not an SVG is replaced', () async {
       await cache.create(recursive: true);

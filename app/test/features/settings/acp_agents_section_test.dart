@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show SocketException;
 
 import 'package:agent_cli/descriptors.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/acp_agent_providers.dart';
+import 'package:karmashala/src/features/agents/application/acp_install_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_agent_dialog.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_agents_section.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
@@ -403,6 +405,48 @@ void main() {
     expect(detections, 0);
   });
 
+  testWidgets(
+    'an install that lands after the dialog closed still keeps the agent',
+    (tester) async {
+      final landed = Completer<String>();
+      http = FakeHttpClient(body: registryJsonWithArchive);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...await overrides(),
+            acpInstallControllerProvider.overrideWith(
+              () => _SlowInstall(landed.future),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(child: AcpAgentsSection()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openDialog(tester);
+      await tester.tap(find.text('Shipped Agent'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Install and add'));
+      await tester.pump();
+
+      // Closed under the install, as Esc or a click outside closes it.
+      Navigator.of(tester.element(find.byType(AcpAgentDialog))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(AcpAgentDialog), findsNothing);
+
+      landed.complete(r'C:\acp\shipped\shipped.exe');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final kept = db.server.acpAgentRows.getAll().single;
+      expect(kept.name, 'Shipped Agent');
+      expect(kept.command, r'C:\acp\shipped\shipped.exe');
+    },
+  );
+
   testWidgets('Remove asks first, and Cancel keeps the row', (tester) async {
     db.server.acpAgentRows.insert(row());
     await pump(tester);
@@ -463,4 +507,14 @@ void main() {
       },
     );
   });
+}
+
+/// An install that lands only when the test says so.
+class _SlowInstall extends AcpInstallController {
+  _SlowInstall(this._landed);
+
+  final Future<String> _landed;
+
+  @override
+  Future<String> installHere(String registryId) => _landed;
 }

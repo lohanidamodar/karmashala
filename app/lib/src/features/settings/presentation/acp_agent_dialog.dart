@@ -12,6 +12,8 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/acp_agent_form.dart';
 import '../../agents/application/acp_agent_providers.dart';
 import '../../agents/application/acp_install_controller.dart';
+import 'acp_custom_agent_form.dart';
+import 'acp_registry_picker.dart';
 
 /// Where the agent to add comes from.
 enum AcpAgentOrigin { registry, custom }
@@ -89,6 +91,10 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
 
   Future<void> _save() async {
     final existing = widget.existing;
+    // Read before any await: an install outlives a dialog closed under it,
+    // and the agent it installed is still kept.
+    final installer = ref.read(acpInstallControllerProvider.notifier);
+    final setup = ref.read(acpAgentsSetupProvider.notifier);
     final String name;
     final String command;
     final List<String> args;
@@ -120,9 +126,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
             _refusal = null;
           });
           try {
-            command = await ref
-                .read(acpInstallControllerProvider.notifier)
-                .installHere(entry.id!);
+            command = await installer.installHere(entry.id!);
           } on Object catch (e) {
             if (mounted) {
               setState(() {
@@ -155,23 +159,23 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         registryId = existing?.registryId;
         iconUrl = existing?.iconUrl;
     }
-    setState(() {
-      _saving = true;
-      _refusal = null;
-    });
+    if (mounted) {
+      setState(() {
+        _saving = true;
+        _refusal = null;
+      });
+    }
     try {
-      await ref
-          .read(acpAgentsSetupProvider.notifier)
-          .save(
-            id: existing?.id,
-            name: name,
-            command: command,
-            args: args,
-            env: env,
-            source: source,
-            registryId: registryId,
-            iconUrl: iconUrl,
-          );
+      await setup.save(
+        id: existing?.id,
+        name: name,
+        command: command,
+        args: args,
+        env: env,
+        source: source,
+        registryId: registryId,
+        iconUrl: iconUrl,
+      );
       if (mounted) Navigator.of(context).pop();
     } on DataRefused catch (e) {
       if (mounted) {
@@ -240,11 +244,11 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
                 child: DesktopErrorBanner(refusal),
               ),
             switch (_origin) {
-              AcpAgentOrigin.registry => _RegistryPicker(
+              AcpAgentOrigin.registry => AcpRegistryPicker(
                 picked: _picked,
                 onPick: (entry) => setState(() => _picked = entry),
               ),
-              AcpAgentOrigin.custom => _CustomForm(
+              AcpAgentOrigin.custom => AcpCustomAgentForm(
                 name: _name,
                 command: _command,
                 args: _args,
@@ -288,246 +292,6 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
                 : _picked != null && _installsFirst(_picked!)
                 ? 'Install and add'
                 : 'Add',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The registry's agents, filterable, each with the launch this machine would
-/// use; one with no build for it is listed but cannot be picked.
-class _RegistryPicker extends ConsumerStatefulWidget {
-  const _RegistryPicker({required this.picked, required this.onPick});
-
-  final AcpRegistryEntry? picked;
-  final ValueChanged<AcpRegistryEntry> onPick;
-
-  @override
-  ConsumerState<_RegistryPicker> createState() => _RegistryPickerState();
-}
-
-class _RegistryPickerState extends ConsumerState<_RegistryPicker> {
-  final _filter = TextEditingController();
-
-  /// Rows shown before the list scrolls, in row heights.
-  static const double _listHeight = 5 * Chrome.menuRowTall;
-
-  @override
-  void dispose() {
-    _filter.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final catalog = ref.watch(acpRegistryCatalogProvider);
-    final platform = ref.watch(acpRegistryPlatformProvider);
-    // By field, not by state: a value or an error is shown whatever else the
-    // provider is doing.
-    if (catalog.value case final value?) return _list(theme, value, platform);
-    if (catalog.error case final error?) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DesktopErrorBanner(
-            'The registry could not be fetched: $error. '
-            'A custom agent can still be added.',
-          ),
-          const SizedBox(height: Insets.xs),
-          // The fetch is one per dialog; this asks again without closing it.
-          TextButton.icon(
-            onPressed: () => ref.invalidate(acpRegistryCatalogProvider),
-            icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-            label: const Text('Fetch again'),
-          ),
-        ],
-      );
-    }
-    return Row(
-      children: [
-        const InlineSpinner(),
-        const SizedBox(width: Insets.sm),
-        Expanded(
-          child: Text(
-            'Fetching the registry…',
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _list(ThemeData theme, AcpRegistryCatalog catalog, String platform) {
-    if (catalog.agents.isEmpty) {
-      return Text(
-        'The registry lists no agents.',
-        style: theme.textTheme.bodySmall,
-      );
-    }
-    final query = _filter.text.trim().toLowerCase();
-    final shown = [
-      for (final entry in catalog.agents)
-        if (query.isEmpty ||
-            entry.label.toLowerCase().contains(query) ||
-            (entry.description?.toLowerCase().contains(query) ?? false))
-          entry,
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _filter,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-                  hintText: 'Filter agents',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Fetch the registry again',
-              icon: const Icon(
-                AppIcons.arrowsClockwise,
-                size: Chrome.iconAction,
-              ),
-              onPressed: () => ref.invalidate(acpRegistryCatalogProvider),
-            ),
-          ],
-        ),
-        const SizedBox(height: Insets.sm),
-        SizedBox(
-          height: _listHeight,
-          child: shown.isEmpty
-              ? Center(
-                  child: Text(
-                    'No agent matches.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                )
-              : ListView.builder(
-                  primary: false,
-                  itemCount: shown.length,
-                  itemBuilder: (context, index) {
-                    final entry = shown[index];
-                    final launch = entry.launch;
-                    final binary = acpInstallableBinary(entry, platform);
-                    final detail = [
-                      ?entry.version,
-                      if (launch != null)
-                        [launch.command, ...launch.args].join(' ')
-                      else if (binary != null)
-                        'installs ${acpArchiveName(binary)} on this machine'
-                      else
-                        'no build for this machine',
-                    ].join(' · ');
-                    final usable = launch != null || binary != null;
-                    return ListTile(
-                      key: ValueKey('acp-registry-${entry.id ?? index}'),
-                      dense: true,
-                      enabled: usable,
-                      selected: identical(entry, widget.picked),
-                      selectedTileColor: theme.colorScheme.primaryContainer
-                          .withValues(alpha: 0.4),
-                      title: Text(
-                        entry.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        detail,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: MonoStyles.small.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      onTap: usable ? () => widget.onPick(entry) : null,
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Name, command, arguments and environment, typed.
-class _CustomForm extends StatelessWidget {
-  const _CustomForm({
-    required this.name,
-    required this.command,
-    required this.args,
-    required this.env,
-    required this.onSubmit,
-  });
-
-  final TextEditingController name;
-  final TextEditingController command;
-  final TextEditingController args;
-  final TextEditingController env;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final mono = TextStyle(
-      fontFamily: kMonoFamily,
-      fontFamilyFallback: kMonoFallback,
-      fontSize: theme.textTheme.bodyMedium?.fontSize,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: name,
-          autofocus: true,
-          decoration: const InputDecoration(
-            isDense: true,
-            labelText: 'Name',
-            hintText: 'My agent',
-          ),
-          onSubmitted: (_) => onSubmit(),
-        ),
-        const SizedBox(height: Insets.md),
-        TextField(
-          controller: command,
-          style: mono,
-          decoration: const InputDecoration(
-            isDense: true,
-            labelText: 'Command',
-            hintText: 'An executable on PATH, or its full path',
-          ),
-          onSubmitted: (_) => onSubmit(),
-        ),
-        const SizedBox(height: Insets.md),
-        TextField(
-          controller: args,
-          style: mono,
-          decoration: const InputDecoration(
-            isDense: true,
-            labelText: 'Arguments',
-            hintText: '--acp  (quotes keep words together)',
-          ),
-          onSubmitted: (_) => onSubmit(),
-        ),
-        const SizedBox(height: Insets.md),
-        TextField(
-          controller: env,
-          style: mono,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            isDense: true,
-            labelText: 'Environment',
-            hintText: 'KEY=value, one per line',
-            alignLabelWithHint: true,
           ),
         ),
       ],
