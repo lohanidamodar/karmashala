@@ -370,7 +370,11 @@ class SessionContinuations {
                 text: message.text.trim(),
               ),
       ], budget);
-      return (turns: trimmed.turns, omitted: trimmed.omitted, unreadable: false);
+      return (
+        turns: trimmed.turns,
+        omitted: trimmed.omitted,
+        unreadable: false,
+      );
     } on Object {
       return (turns: const <HandoffTurn>[], omitted: 0, unreadable: true);
     }
@@ -726,14 +730,35 @@ class SessionContinuations {
     if (plan.isRefused) throw StateError(plan.explanation);
     // The files first: a refusal here must not leave a session behind.
     RestoreOutcome? restored;
+    Checkpoint? undo;
     if (fileRefusal == null) {
+      // No safety checkpoint is taken of a tree already recorded; then the
+      // latest checkpoint is the way back.
+      final before = latestCheckpointIn(
+        work.forSession(sessionId),
+        repository: checkpoint.repository,
+      );
       restored = await work.restoreForFork(checkpoint, confirm: confirm);
+      undo = restored.safetyCheckpoint ?? before;
     }
-    final started = await fork(
-      sessionId: sessionId,
-      instruction: instruction,
-      intoNewWorktree: newWorktree,
-    );
+    final SessionStarted started;
+    try {
+      started = await fork(
+        sessionId: sessionId,
+        instruction: instruction,
+        intoNewWorktree: newWorktree,
+      );
+    } on Object catch (error) {
+      if (restored == null || restored.alreadyThere) rethrow;
+      final count = restored.files.length;
+      throw StateError(
+        'No session was started: $error. The files were already restored '
+        'to checkpoint ${checkpoint.sequence} ($count file'
+        '${count == 1 ? '' : 's'}) in ${checkpoint.repository.path}'
+        '${undo == null ? '.' : '; checkpoint_restore ${undo.id} puts them '
+                  'back as they were.'}',
+      );
+    }
     final halves = checkpointForkHalves(
       route: plan.kind.name,
       checkpoint: checkpoint,
@@ -901,7 +926,9 @@ class SessionContinuations {
         );
       }
       if (source.isNotEmpty) {
-        log?.call('Carried ${source.length} decision(s) from $from into $into.');
+        log?.call(
+          'Carried ${source.length} decision(s) from $from into $into.',
+        );
       }
     } on Object catch (error) {
       log?.call('Could not carry decisions from $from: $error');

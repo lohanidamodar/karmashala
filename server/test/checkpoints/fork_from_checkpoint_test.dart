@@ -124,6 +124,19 @@ void main() {
       );
     });
 
+    test('a session with no directory recorded works in its repository\'s '
+        'checkout, and is named too', () {
+      w.addSession('s2', title: 'Old session');
+      expect(
+        w.checkpoints.forkFileRefusal(
+          row('c1'),
+          sessionId: 's1',
+          intoNewWorktree: false,
+        ),
+        contains('"Old session" is working in this checkout'),
+      );
+    });
+
     test('a new worktree, or an SSH host, gives it up in words', () {
       expect(
         w.checkpoints.forkFileRefusal(

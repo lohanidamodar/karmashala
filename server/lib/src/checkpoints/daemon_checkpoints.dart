@@ -53,6 +53,7 @@ class DaemonCheckpoints {
     void Function(String message)? log,
   }) : _heldHere = heldHere,
        _sessions = SessionDao(database),
+       _repositories = RepositoryDao(database),
        _dao = CheckpointDao(database),
        _log = log ?? _silent {
     final now = clock ?? _utcNow;
@@ -74,7 +75,7 @@ class DaemonCheckpoints {
       service: service,
       targets: ServerCheckpointTargets(
         sessions: _sessions,
-        repositories: RepositoryDao(database),
+        repositories: _repositories,
         environments: environments,
         checkpoints: _dao,
         service: service,
@@ -100,6 +101,7 @@ class DaemonCheckpoints {
   final Duration hold;
   final bool Function(String sessionId) _heldHere;
   final SessionDao _sessions;
+  final RepositoryDao _repositories;
   final CheckpointDao _dao;
   final void Function(String message) _log;
   final hints = CheckpointTurnHints();
@@ -377,7 +379,18 @@ class DaemonCheckpoints {
       for (final session in sessionsWorkingIn(
         checkpoint.repository,
         excluding: sessionId,
-        among: _sessions.getAll(),
+        among: [
+          // A row with no directory recorded runs in its repository's checkout.
+          for (final session in _sessions.getAll())
+            if (session.workingDirectory == null && session.worktree == null)
+              session.copyWith(
+                workingDirectory: _repositories
+                    .getById(session.repositoryId)
+                    ?.path,
+              )
+            else
+              session,
+        ],
         pathsMatch: samePath,
       ))
         session.title,
