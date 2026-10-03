@@ -26,6 +26,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         DecisionRecorded,
         OpenSessionTab,
         OpenTerminalTab,
+        SessionAgentChanged,
         SessionQueueChanged,
         SessionSend,
         TerminalOpen,
@@ -42,6 +43,7 @@ import 'package:karmashala_session_engine/store.dart'
         DecisionRecordDao,
         ImportedSessionDao,
         SessionDao,
+        SessionAgentSpanDao,
         SessionMessageDao,
         SessionQueueDao,
         SessionRepositoryDao,
@@ -76,6 +78,7 @@ import '../sessions/session_message_transcripts.dart';
 import '../sessions/session_record_readings.dart';
 import '../sessions/session_records.dart';
 import '../sessions/session_subagents.dart';
+import '../sessions/session_agent_stitching.dart';
 import '../sessions/session_transcripts.dart';
 import '../status/child_turn_wait.dart';
 import '../status/hosted_session_wait.dart';
@@ -1007,6 +1010,10 @@ Future<int> runServe(
   );
   final sessionWaits = HostedSessionWait(status: prompts.status);
   final typist = SessionToolSet.typistOver(prompts);
+  // A switch in place asks the queue and the transcripts, made below.
+  SessionQueue? switchQueue;
+  SessionTranscripts? switchTranscripts;
+  final agentSpans = SessionAgentSpanDao(database);
   final continuations = SessionContinuations(
     launches: launches,
     sessions: sessionRows,
@@ -1019,6 +1026,23 @@ Future<int> runServe(
     forks: checkpoints,
     waits: sessionWaits,
     send: typist.send,
+    spans: agentSpans,
+    conversationOf: (sessionId) async =>
+        await switchTranscripts?.messagesOf(sessionId) ?? const [],
+    turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
+    nextMessageOrdinal: sessionMessages.countForSession,
+    onSwitched: (sessionId, spans) {
+      data.announceSessions([sessionId]);
+      final row = sessionRows.getById(sessionId);
+      if (row == null) return;
+      data.announce([
+        SessionAgentChanged(
+          sessionId: sessionId,
+          agentInstallationId: row.agentInstallationId,
+          spans: spans,
+        ),
+      ]);
+    },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   data.sessionWork = ServerSessionWork(
@@ -1058,6 +1082,7 @@ Future<int> runServe(
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  switchQueue = sessionQueue;
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,
@@ -1145,7 +1170,27 @@ Future<int> runServe(
     // An ACP session's transcript is the rows its runtime wrote (C3).
     messages: SessionMessageTranscriptSource(sessionMessages),
     servesFromMessages: speaksAcp,
+    // A session that switched agent is read span by span.
+    spans: AgentSpanReaders(
+      spansOf: (sessionId) {
+        final all = agentSpans.forSession(sessionId);
+        final row = all.isEmpty ? null : sessionRows.getById(sessionId);
+        if (row == null) return all;
+        return [
+          ...all.take(all.length - 1),
+          all.last.copyWith(externalSessionId: row.externalSessionId),
+        ];
+      },
+      agentIdOf: (installationId) =>
+          checkoutRows.installation(installationId)?.agentId,
+      speaksAcp: (installationId) {
+        final agentId = checkoutRows.installation(installationId)?.agentId;
+        return agentId != null && liveAgents.adapterOf(agentId)?.acp != null;
+      },
+      locate: transcripts.recordFor,
+    ),
   );
+  switchTranscripts = sessionTranscripts;
   acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
   data.sessionTranscripts = sessionTranscripts;
   // Rewind points, changed files and the open question (Stage 0 step 7):

@@ -47,6 +47,12 @@ class ServerSessionWork implements SessionWork {
           permissionMode: r.permissionMode,
           sourceBrief: r.sourceBrief,
         ),
+        final SessionSwitchAgent r => await continuations.switchAgent(
+          sessionId: r.sessionId,
+          targetInstallationId: r.targetInstallationId,
+          instruction: r.instruction,
+          permissionMode: r.permissionMode,
+        ),
         final SessionFork r => await continuations.fork(
           sessionId: r.sessionId,
           instruction: r.instruction,

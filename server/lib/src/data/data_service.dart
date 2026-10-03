@@ -1031,7 +1031,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// `send_prompt` — [SessionSend], [SessionInterrupt], [SessionQueueEdit],
 /// [SessionQueueCancel]; `start_session` —
 /// [SessionStart], [SessionResume], [SessionFork], [SessionForkFromCheckpoint],
-/// [SessionHandoff]; `send_attachment` — [FilesUploadBegin]; `add_project` —
+/// [SessionHandoff], [SessionSwitchAgent]; `send_attachment` — [FilesUploadBegin]; `add_project` —
 /// [ProjectCreate], [ProjectFoldersCreate], [ImportsAdd]; `view_usage` —
 /// [UsageCurrent], [UsageRefresh], [UsageHistory]. `approve` is the host
 /// protocol's prompt answer, and `read_transcript` is `LinkTrust.transcripts`.
@@ -1068,7 +1068,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionResume() ||
     SessionFork() ||
     SessionForkFromCheckpoint() ||
-    SessionHandoff() => Capability.startSession,
+    SessionHandoff() ||
+    SessionSwitchAgent() => Capability.startSession,
     FilesUploadBegin() => Capability.sendAttachment,
     ProjectCreate() ||
     ProjectFoldersCreate() ||

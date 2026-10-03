@@ -218,10 +218,22 @@ class FakeSessionWork {
             parentLink: SessionLink.fork,
           ),
         );
+      case final SessionSwitchAgent r:
+        switches.add(r);
+        final before = _server.sessionRows.getById(r.sessionId)!;
+        _server.sessionRows.put(
+          before.copyWith(agentInstallationId: r.targetInstallationId),
+        );
+        return SessionStarted(
+          session: _server.sessionRows.getById(r.sessionId)!,
+        );
       case SessionForkFromCheckpoint():
         throw const DataRefused.invalid('not scripted');
     }
   }
+
+  /// Every switch asked of the server, in order.
+  final switches = <SessionSwitchAgent>[];
 
   SessionStarted _start(SessionStartSpec spec) {
     // A conversation the server already runs is answered as it is.

@@ -71,7 +71,7 @@ void main() {
     test('an end of the server\'s own keeps the turn; any other end '
         'settles it', () {
       final open = turns();
-      for (final id in ['s1', 's2', 's3', 's4']) {
+      for (final id in ['s1', 's2', 's3', 's4', 's5']) {
         open.statusMoved(id, AgentActivityStatus.working, t0);
       }
       open.ended(
@@ -84,6 +84,8 @@ void main() {
       );
       open.ended('karmashala_s3', reason: 'closed on request');
       open.ended('karmashala_s4');
+      // A switch hands the session on: nothing is left to continue.
+      open.ended('karmashala_s5', reason: SessionEndedWithoutCode.switched);
       expect(turns().open.keys, {'s1', 's2'});
     });
 

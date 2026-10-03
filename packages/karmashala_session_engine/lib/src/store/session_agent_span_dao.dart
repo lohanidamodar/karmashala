@@ -74,6 +74,21 @@ class SessionAgentSpanDao {
     return next;
   });
 
+  /// Takes back a switch whose new agent never started: the spans from
+  /// [fromSeq] on go, and the row names [previous]'s agent again.
+  void undoSwitch(Session previous, {required int fromSeq}) =>
+      _db.transaction(() {
+        _db.execute(
+          'DELETE FROM session_agent_spans WHERE session_id = ? AND seq >= ?;',
+          [previous.id, fromSeq],
+        );
+        SessionDao(_db).switchAgent(
+          previous.id,
+          installationId: previous.agentInstallationId,
+          externalSessionId: previous.externalSessionId,
+        );
+      });
+
   void _insert(SessionAgentSpan span) => _db.execute(
     'INSERT INTO session_agent_spans (session_id, seq, agent_installation_id, '
     'external_session_id, started_at, first_message_ordinal, carried_packet) '

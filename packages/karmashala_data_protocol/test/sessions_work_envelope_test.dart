@@ -101,6 +101,13 @@ void main() {
         confirm: true,
         preview: true,
       ),
+      const SessionSwitchAgent(
+        sessionId: 's1',
+        targetInstallationId: 'i2',
+        instruction: 'go',
+        permissionMode: 'mode=plan',
+      ),
+      const SessionSwitchAgent(sessionId: 's1', targetInstallationId: 'i2'),
       const ClientActive(focusedPaneId: 'p1'),
       const ClientActive(),
     ];

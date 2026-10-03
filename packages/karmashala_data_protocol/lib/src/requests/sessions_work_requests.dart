@@ -49,6 +49,12 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
         ? null
         : args.value('sourceBrief', sourceBriefFromJson),
   ),
+  SessionSwitchAgent.name => SessionSwitchAgent(
+    sessionId: args.string('sessionId'),
+    targetInstallationId: args.string('targetInstallationId'),
+    instruction: args.optionalString('instruction') ?? '',
+    permissionMode: args.optionalString('permissionMode'),
+  ),
   SessionFork.name => SessionFork(
     sessionId: args.string('sessionId'),
     instruction: args.optionalString('instruction') ?? '',
@@ -684,5 +690,39 @@ final class SessionSent {
     'notice': ?notice,
     'queuedId': ?queuedId,
     'position': ?position,
+  };
+}
+
+/// Switches session [sessionId] to installation [targetInstallationId] in
+/// place — the same row and chat: its agent is stopped, and the new one starts
+/// with the turns it missed (its own conversation resumed when it ran this
+/// session before). [instruction] may be empty. Refused `invalid` mid-turn,
+/// for an archived session, and for an agent that cannot be told anything.
+final class SessionSwitchAgent extends _StartedRequest {
+  const SessionSwitchAgent({
+    required this.sessionId,
+    required this.targetInstallationId,
+    this.instruction = '',
+    this.permissionMode,
+  });
+
+  static const String name = 'sessions.switchAgent';
+
+  final String sessionId;
+  final String targetInstallationId;
+  final String instruction;
+
+  /// The mode a person picked; null carries the session's, capped.
+  final String? permissionMode;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'targetInstallationId': targetInstallationId,
+    'instruction': instruction,
+    'permissionMode': ?permissionMode,
   };
 }

@@ -56,6 +56,11 @@ class CompactionBoundary {
   String toString() => 'CompactionBoundary(${trigger ?? 'unrecorded'})';
 }
 
+/// The role of the row a switched session's transcript holds where another
+/// agent took over: its text is what that agent was handed, and its
+/// [TranscriptMessage.agentInstallationId] the agent taking over.
+const String kAgentSwitchRole = 'agentSwitch';
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -69,6 +74,7 @@ class TranscriptMessage {
     this.pendingBackgroundAgentId,
     this.thinking,
     this.compaction,
+    this.agentInstallationId,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -132,6 +138,24 @@ class TranscriptMessage {
   /// [CompactionBoundary].
   final CompactionBoundary? compaction;
 
+  /// The installation that spoke this row, set only in a session that switched
+  /// agent; null everywhere else, including every row a file reader returns.
+  final String? agentInstallationId;
+
+  /// This row with [agentInstallationId] set.
+  TranscriptMessage withAgent(String? installationId) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: installationId,
+  );
+
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
   /// lossless for every field above: lowerCamel names, a null field left out,
   /// [at] as ISO-8601 UTC. A field added to this class is added here too.
@@ -145,6 +169,7 @@ class TranscriptMessage {
     'pendingToolUseId': ?pendingToolUseId,
     'pendingBackgroundAgentId': ?pendingBackgroundAgentId,
     'compaction': ?compaction?.toJson(),
+    'agentInstallationId': ?agentInstallationId,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -181,6 +206,7 @@ class TranscriptMessage {
       compaction: compaction is Map
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
+      agentInstallationId: string('agentInstallationId'),
     );
   }
 }

@@ -92,6 +92,20 @@ void main() {
     expect(sessions.getById('s1')!.externalSessionId, 'conv-a');
   });
 
+  test('a switch that never started is taken back whole', () {
+    final before = sessions.getById('s1')!;
+    spans.recordSwitch(
+      session: before,
+      toInstallationId: 'a2',
+      toExternalSessionId: null,
+      at: t1,
+    );
+    spans.undoSwitch(before, fromSeq: 0);
+    expect(spans.forSession('s1'), isEmpty);
+    expect(sessions.getById('s1')!.agentInstallationId, 'a1');
+    expect(sessions.getById('s1')!.externalSessionId, 'conv-a');
+  });
+
   test('a span round-trips through json', () {
     final span = SessionAgentSpan(
       sessionId: 's1',
