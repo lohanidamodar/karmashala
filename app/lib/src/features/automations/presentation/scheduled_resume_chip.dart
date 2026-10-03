@@ -89,9 +89,7 @@ class ScheduledResumeChip extends ConsumerWidget {
                   excludeSemantics: true,
                   child: InkWell(
                     key: const ValueKey('scheduled-resume-cancel'),
-                    onTap: () => ref
-                        .read(scheduledResumeControllerProvider)
-                        .cancelFor(sessionId),
+                    onTap: () => cancelResumeWithUndo(context, ref, sessionId),
                     borderRadius: BorderRadius.circular(Radii.sm),
                     child: TouchTarget(
                       child: Padding(
@@ -125,12 +123,45 @@ class ScheduledResumeChip extends ConsumerWidget {
         icon: AppIcons.x,
       ),
     ]);
+    if (!context.mounted) return;
     if (picked == 'cancel') {
-      ref.read(scheduledResumeControllerProvider).cancelFor(sessionId);
-    } else if (picked == 'change' && context.mounted) {
+      cancelResumeWithUndo(context, ref, sessionId);
+    } else if (picked == 'change') {
       await ResumeOnResetDialog.show(context, [sessionId]);
     }
   }
+}
+
+/// Cancels [sessionId]'s waiting resume in one click, said in a snackbar
+/// whose Undo arms it again as it stood.
+void cancelResumeWithUndo(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+) {
+  final resumes = ref.read(scheduledResumeControllerProvider);
+  final cancelled = resumes.cancelUndoably(sessionId);
+  if (cancelled == null) return;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  messenger?.showSnackBar(
+    SnackBar(
+      content: const Text('Resume cancelled'),
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () {
+          if (resumes.restore(cancelled)) return;
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Not restored: another resume is already waiting for this '
+                'session.',
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
 }
 
 /// The transcript header's way in: one clock, whose tooltip says whether it
