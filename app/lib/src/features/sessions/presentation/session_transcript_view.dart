@@ -65,6 +65,7 @@ import 'chat_transcript.dart';
 import 'end_session_action.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
+import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
 
@@ -822,6 +823,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // What was sent while the turn ran, waiting at the server
+                  // below the transcript it will join.
+                  QueuedMessagesStrip(sessionId: widget.sessionId),
                   // The ask, the delivery facts, Ship and the notices
                   // are the pane's status bar's, in both views; the
                   // chat keeps only what is its own. Directly above

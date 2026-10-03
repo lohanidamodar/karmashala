@@ -3754,6 +3754,8 @@ WorkbenchView
                                                                                                                         IgnorePointer key=[GlobalKey#…]
                                                                                                                           _SingleChildViewport
                                                                                                                             Column
+                                                                                                                              QueuedMessagesStrip
+                                                                                                                                SizedBox
                                                                                                                               ActivityStrip
                                                                                                                                 SizedBox
                                                                                       ConstrainedBox

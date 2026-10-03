@@ -25,6 +25,7 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
         ],
       ),
       'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
+      'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
       _ => null,
     };
 
@@ -318,5 +319,31 @@ final class SessionUsageChanged extends DataChange {
     'contextSize': contextSize,
     'costAmount': ?costAmount,
     'costCurrency': ?costCurrency,
+  };
+}
+
+/// Session [sessionId]'s queued messages now stand at [messages] — queued,
+/// delivering and failed, in the order they go. A delivered or cancelled one
+/// has left the list; a client replaces its copy whole.
+final class SessionQueueChanged extends DataChange {
+  const SessionQueueChanged({required this.sessionId, required this.messages});
+
+  factory SessionQueueChanged.fromJson(Map<String, Object?> json) =>
+      SessionQueueChanged(
+        sessionId: json['sessionId']! as String,
+        messages: [
+          for (final row in (json['messages'] as List?) ?? const [])
+            QueuedMessage.fromJson((row as Map).cast<String, Object?>()),
+        ],
+      );
+
+  final String sessionId;
+  final List<QueuedMessage> messages;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionQueueChanged',
+    'sessionId': sessionId,
+    'messages': [for (final message in messages) message.toJson()],
   };
 }
