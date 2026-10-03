@@ -156,6 +156,14 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     if (sessionId == null) return;
     final paneId = sessionTerminalPane(ref, sessionId);
     if (paneId == _shownPane) return;
+    // A thread on its chat tab keeps it: a terminal arriving behind it — a
+    // resume, a switch to a terminal agent — is secondary (owner, 2026-10-03).
+    final chat = chatPaneId(sessionId);
+    if (_shownPane == chat &&
+        paneId != null &&
+        ref.read(paneSessionsProvider).sessionOf(chat) == sessionId) {
+      return;
+    }
     // A session that *had* a pane and no longer has one has been ended, which
     // is a different act from selecting one that never had a pane.
     final ended = _shownPane != null && paneId == null;

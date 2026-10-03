@@ -154,6 +154,19 @@ class TerminalActions {
   Future<void> startOrResumePane(BuildContext context, String paneId) async {
     final instance = _sessions.instanceFor(paneId);
     if (instance == null) return;
+    // Never the agent a session switched away from.
+    final reopened = await ref
+        .read(explorerActionsProvider)
+        .reopenSwitchedPane(paneId);
+    if (reopened != null) {
+      final message = reopened.message;
+      if (message != null && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+      return;
+    }
     if (!shouldResumeRatherThanRestart(
       liveness: instance.liveness.value,
       isAgentPane: instance.agentLaunch != null,

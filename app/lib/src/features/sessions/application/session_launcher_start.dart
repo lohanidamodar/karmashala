@@ -151,7 +151,16 @@ extension SessionStartVerbs on SessionLauncher {
     final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
     // A pane restored but never started already holds this session's
     // scrollback, so attaching *in* it avoids two terminals for one session.
-    final dormant = dormantPaneFor(session.id);
+    var dormant = dormantPaneFor(session.id);
+    // Restored from an agent the session has since switched away from: that
+    // history is the old agent's, and its pane goes rather than hosting this.
+    final restoredAs = dormant == null
+        ? null
+        : terminals.instanceFor(dormant)?.agentLaunch?.agentId;
+    if (restoredAs != null && restoredAs != launch.agentId) {
+      terminals.closePane(dormant!, detach: true);
+      dormant = null;
+    }
     final resumedTab = dormant == null
         ? null
         : terminals.startAgentInPane(dormant, launch);

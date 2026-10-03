@@ -235,6 +235,25 @@ class ExplorerActions {
     return openNative(sessionId);
   }
 
+  /// A Restart pressed on a pane whose session has since switched to another
+  /// agent: the pane goes, and the session opens where its current agent
+  /// runs. Null when the pane still belongs to the row's agent.
+  Future<ExplorerResult?> reopenSwitchedPane(String paneId) async {
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    final launch = terminals.instanceFor(paneId)?.agentLaunch;
+    final sessionId = launch?.sessionId;
+    if (launch == null || sessionId == null) return null;
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (session == null) return null;
+    final current = _ref
+        .read(agentInstallationsDataProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+    if (current == null || current == launch.agentId) return null;
+    terminals.closePane(paneId, detach: true);
+    return openNative(sessionId);
+  }
+
   /// Resumes every pane holding restored agent history, one pane per frame:
   /// back-to-back resumes freeze the window for the sum of them. One layout
   /// write for all of them, and refusals are counted rather than thrown.

@@ -9,6 +9,9 @@ import 'package:karmashala/src/features/sessions/application/acp_session_provide
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/switch_agent_control.dart';
+import 'package:karmashala/src/features/agents/application/installation_labels.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -117,6 +120,7 @@ void main() {
       WidgetTester tester, {
       required Size size,
       bool switches = true,
+      AgentActivityStatus activity = AgentActivityStatus.idle,
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -139,6 +143,7 @@ void main() {
             ),
           ),
           sessionRunningOnHostProvider.overrideWithValue((_) => true),
+          sessionActivityLookupProvider.overrideWithValue((_) => activity),
           sessionChatTranscriptProvider.overrideWith(
             (ref, id) => Stream.value(switched),
           ),
@@ -202,6 +207,89 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    for (final (name, size) in [
+      ('phone', const Size(390, 844)),
+      ('desktop', const Size(1440, 900)),
+    ]) {
+      testWidgets('on a $name the face names the running agent, its row is '
+          'checked "running now", and each other row says what happens', (
+        tester,
+      ) async {
+        await pump(tester, size: size);
+        expect(find.text(acp), findsWidgets);
+
+        await tester.tap(find.byKey(const ValueKey('switch-agent')));
+        await tester.pumpAndSettle();
+        expect(find.text('running now'), findsOneWidget);
+        expect(find.text('Runs this session now.'), findsOneWidget);
+        expect(
+          find.textContaining('Stops $acp; continues $claude'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('on a $name every agent is refused, with the reason, while '
+          'a turn runs', (tester) async {
+        await pump(
+          tester,
+          size: size,
+          activity: AgentActivityStatus.working,
+        );
+        await tester.tap(find.byKey(const ValueKey('switch-agent')));
+        await tester.pumpAndSettle();
+        expect(find.text(kSwitchWhileBusy), findsNWidgets(2));
+        await tester.tap(find.text(registry.displayNameFor(AgentIds.codex)).last);
+        await tester.pumpAndSettle();
+        expect(server.sessionWork.switches, isEmpty);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('on a $name two installations of one agent are told apart '
+          'and the other one can be picked', (tester) async {
+        server.installationRows.insert(
+          agentInstallation(id: 'cc2', path: r'D:\tools\claude\claude.exe'),
+        );
+        await pump(tester, size: size);
+        await tester.tap(find.byKey(const ValueKey('switch-agent')));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining(RegExp('^${RegExp.escape(claude)} · ')),
+          findsNWidgets(2),
+        );
+        await tester.tap(find.byKey(const ValueKey('switch-to-cc2')));
+        await tester.pumpAndSettle();
+        expect(server.sessionWork.switches.single.targetInstallationId, 'cc2');
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    test('installations of one agent in two environments are named by where '
+        'they live; a lone one by its name alone', () {
+      final labels = installationLabels(
+        [
+          agentInstallation(id: 'w'),
+          agentInstallation(
+            id: 'l',
+            environmentId: 'wsl',
+            path: '/home/me/.local/bin/claude',
+          ),
+          agentInstallation(
+            id: 'x',
+            agentId: AgentIds.codex,
+            path: r'C:\bin\codex.exe',
+          ),
+        ],
+        registry: registry,
+        environmentName: (id) => id == 'wsl' ? 'WSL' : 'Windows',
+      );
+      expect(labels, {
+        'w': '$claude · Windows',
+        'l': '$claude · WSL',
+        'x': registry.displayNameFor(AgentIds.codex),
+      });
+    });
 
     testWidgets('a server that cannot switch draws no control', (
       tester,
