@@ -54,6 +54,7 @@ String? checkpointForkFileRefusal({
   String? fileRefusal,
   bool? alreadyThere,
   int restoredFiles = 0,
+  String? undoCheckpointId,
 }) => (
   delivered: <String>[
     'A fork of the session, by the $route route.',
@@ -62,7 +63,9 @@ String? checkpointForkFileRefusal({
           ? 'The working tree already matched checkpoint '
                 '${checkpoint.sequence}; nothing was written.'
           : 'The working tree of ${checkpoint.repository.path}, at checkpoint '
-                '${checkpoint.sequence} ($restoredFiles files).',
+                '${checkpoint.sequence} ($restoredFiles files).'
+                '${undoCheckpointId == null ? '' : ' checkpoint_restore '
+                          '$undoCheckpointId puts back the tree as it was.'}',
   ],
   notDelivered: <String>[kForkCarriesTheWholeConversation, ?fileRefusal],
 );

@@ -765,12 +765,14 @@ class SessionContinuations {
                   'back as they were.'}',
       );
     }
+    final wrote = restored != null && !restored.alreadyThere;
     final halves = checkpointForkHalves(
       route: plan.kind.name,
       checkpoint: checkpoint,
       fileRefusal: fileRefusal,
       alreadyThere: restored?.alreadyThere,
       restoredFiles: restored?.files.length ?? 0,
+      undoCheckpointId: wrote ? undo?.id : null,
     );
     return {
       'sessionId': started.sessionId,
@@ -790,6 +792,7 @@ class SessionContinuations {
         if (restored != null) ...{
           'alreadyThere': restored.alreadyThere,
           'safetyCheckpointId': restored.safetyCheckpoint?.id,
+          if (wrote) 'undoCheckpointId': undo?.id,
           'paths': [
             for (final file in restored.files)
               {'path': file.path, 'status': file.type.name},
