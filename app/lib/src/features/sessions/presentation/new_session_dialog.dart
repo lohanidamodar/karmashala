@@ -951,10 +951,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   setState(() {
                     _error = null;
                     _destination = picked;
-                    // The installation belongs to the machine being
-                    // left. Cleared so `_agentFor` finds the picked
-                    // agent on the new one, else the default.
-                    _installation = null;
+                    // The installation picked is kept: still offered
+                    // there, it stays; else `_agentFor` finds the same
+                    // agent on the new machine, else the default.
                   });
                   _afterDestinationChanged();
                 },

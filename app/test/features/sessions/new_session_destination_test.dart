@@ -725,6 +725,58 @@ void main() {
       expect(container.read(selectedProjectIdProvider), 'ps');
     });
 
+    testWidgets('the agent picked keeps its machine when the project becomes '
+        'No project, which offers every machine\'s agents', (tester) async {
+      server.environmentRows.upsert(wslEnv());
+      server.projectRows.insert(
+        project(
+          id: 'p3',
+          name: 'Gamma',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/gamma',
+        ),
+      );
+      server.repositoryRows.insert(
+        repository(
+          id: 'r3',
+          projectId: 'p3',
+          name: 'gamma',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/gamma',
+        ),
+      );
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'u-claude',
+          environmentId: 'wsl:Ubuntu',
+          path: '/usr/bin/claude',
+        ),
+      );
+      server.gitWork.answer = (request) => request is ScratchCheckoutCreate
+          ? throw const DataRefused.unavailable('not made in this test')
+          : FakeGitWork.unhandled;
+      final container = containerFor(selected: 'r3');
+      await open(tester, container);
+      await tester.tap(find.byKey(const ValueKey('agent-card:u-claude')));
+      await tester.pumpAndSettle();
+      await choose(
+        tester,
+        current: find.text('Gamma'),
+        option: find.text('No project'),
+      );
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(
+        server.gitWork.asked
+            .whereType<ScratchCheckoutCreate>()
+            .single
+            .environmentId,
+        'wsl:Ubuntu',
+      );
+      await closeAll(tester);
+    });
+
     testWidgets('a folder the server cannot make is said, and nothing starts', (
       tester,
     ) async {
