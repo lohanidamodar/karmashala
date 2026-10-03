@@ -354,6 +354,15 @@ class CheckpointService {
   }) async {
     final repo = checkpoint.repository;
     final git = _gitFor(repo);
+    // git names every path with forward slashes; a Windows spelling would
+    // match nothing and be answered "already there".
+    final env = environmentOf(repo.environmentId);
+    if (env != null && usesWindowsPaths(env.kind)) {
+      selection = [
+        for (final choice in selection)
+          HunkSelection(choice.path.replaceAll(r'\', '/'), hunks: choice.hunks),
+      ];
+    }
     final dirs = await git.checkpointDirs(repo);
     final current = await _exclusive(repo, () async {
       await git.ensureCheckpointDirs(repo, dirs);

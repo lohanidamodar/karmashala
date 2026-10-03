@@ -194,6 +194,23 @@ void main() {
       expect(readme(), 'hub\nchanged\n');
     }, skip: hasGit ? false : 'git is not on PATH');
 
+    test('a per-path restore on Windows takes the path spelled with '
+        'backslashes', () async {
+      final file = File(p.join(w.hub, 'lib', 'a.txt'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('one\n');
+      final target = (await w.ask(const CheckpointCapture('s1')))!;
+      file.writeAsStringSync('two\n');
+      await w.ask(const CheckpointCapture('s1'));
+
+      final done = (await w.ask(
+        CheckpointRestore(target.id, paths: const [r'lib\a.txt']),
+      )).outcomeOrThrow;
+      expect(done.alreadyThere, isFalse);
+      expect(done.files.map((f) => f.path), ['lib/a.txt']);
+      expect(file.readAsStringSync(), 'one\n');
+    }, skip: !hasGit || !Platform.isWindows ? 'needs git, on Windows' : false);
+
     test('a per-path restore puts back a binary file', () async {
       final logo = File(p.join(w.hub, 'logo.bin'))
         ..writeAsBytesSync([0, 1, 2, 3, 0, 255]);
