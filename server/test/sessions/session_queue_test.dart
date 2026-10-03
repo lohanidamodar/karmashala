@@ -90,6 +90,7 @@ void main() {
   SessionQueue queueOver({
     Duration grace = const Duration(seconds: 30),
     bool Function(String)? resumesOnSend,
+    Duration quiet = const Duration(seconds: 30),
   }) {
     var n = 0;
     final queue = SessionQueue(
@@ -98,6 +99,8 @@ void main() {
       resumesOnSend: resumesOnSend,
       announce: (_, open) => announced.add(open),
       turnStartGrace: grace,
+      quietPeriod: quiet,
+      quietPoll: const Duration(milliseconds: 10),
       newId: () => 'q${++n}',
       now: () => t0,
     );
@@ -212,6 +215,75 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 80));
         await pumpEventQueue();
         expect(delivered, ['a', 'b']);
+      });
+    });
+
+    group('a reader that drops to unknown mid-turn', () {
+      const quiet = Duration(milliseconds: 300);
+
+      void unknown() => status.report(
+        's1',
+        AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'conv-1',
+          status: AgentActivityStatus.unknown,
+          observedAt: DateTime.now().toUtc(),
+          source: AgentStatusSource.terminalGrid,
+        ),
+      );
+
+      /// The agent keeps streaming: [count] screen updates [every] apart.
+      Future<void> streams(int count, Duration every) async {
+        for (var i = 0; i < count; i++) {
+          launcher.handles.last.emit(utf8.encode('word $i of the essay\r\n'));
+          await Future<void>.delayed(every);
+        }
+      }
+
+      setUp(() async {
+        await queue.close();
+        queue = queueOver(quiet: quiet)
+          ..deliver = ((_, text) async => delivered.add(text))
+          ..start();
+      });
+
+      test('keeps the message queued while the screen still moves', () async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        expect(send('a'), isA<AdmitQueued>());
+        unknown();
+        expect(
+          status.statusOf('s1')!.report.status,
+          AgentActivityStatus.unknown,
+        );
+        expect(queue.busy('s1'), isTrue, reason: 'still mid-turn');
+        expect(send('b'), isA<AdmitQueued>());
+
+        await streams(12, const Duration(milliseconds: 30));
+        expect(delivered, isEmpty);
+      });
+
+      test('delivers once the screen has been quiet for the period', () async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        send('a');
+        unknown();
+        await streams(4, const Duration(milliseconds: 30));
+        expect(delivered, isEmpty);
+
+        await Future<void>.delayed(quiet * 3);
+        await pumpEventQueue();
+        expect(delivered, ['a']);
+      });
+
+      test('idle after working delivers at once', () async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        send('a');
+        unknown();
+        hook('Stop');
+        await pumpEventQueue();
+        expect(delivered, ['a']);
       });
     });
 

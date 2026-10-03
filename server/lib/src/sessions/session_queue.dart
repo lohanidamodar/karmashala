@@ -9,6 +9,11 @@ import 'package:karmashala_session_engine/store.dart' show SessionQueueDao;
 import '../domain/uuid.dart';
 import '../status/daemon_agent_status.dart';
 
+/// How long the screen of a session whose reader cannot tell its status must
+/// stay unchanged before its turn is taken as over: a reader that only ever
+/// says working or unknown would otherwise hold its queue forever.
+const Duration kQueueQuietPeriod = Duration(seconds: 8);
+
 /// What [SessionQueue.admit] decided for one message.
 sealed class QueueAdmission {
   const QueueAdmission();
@@ -50,10 +55,19 @@ class SessionQueue {
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
+    this.quietPeriod = kQueueQuietPeriod,
+    this.quietPoll = const Duration(seconds: 1),
     DateTime Function()? now,
     String Function()? newId,
   }) : _now = now ?? (() => DateTime.now().toUtc()),
        _newId = newId ?? newUuid;
+
+  /// How long a PTY screen must show nothing new before a session whose
+  /// reader says `unknown` counts as done with its turn.
+  final Duration quietPeriod;
+
+  /// How often that screen is read while waiting for it to go quiet.
+  final Duration quietPoll;
 
   final SessionQueueDao dao;
   final DaemonAgentStatus status;
@@ -100,8 +114,15 @@ class SessionQueue {
   /// query for the rest.
   final _withQueued = <String>{};
 
-  /// Sessions resumed bare for their head, which waits for the idle composer.
+  /// Sessions resumed bare for their head, which waits for the turn to end.
   final _resumedForHead = <String>{};
+
+  /// PTY sessions seen working and not since seen idle or failed: an
+  /// `unknown` reading there is a reader that lost the turn, not its end.
+  final _midTurn = <String>{};
+
+  /// Screens watched for going quiet, by session.
+  final _quietWatches = <String, _QuietWatch>{};
   final _waiters = <String, List<Completer<QueuedMessage>>>{};
   StreamSubscription<HostedAgentStatus>? _statuses;
   var _closed = false;
@@ -131,6 +152,10 @@ class SessionQueue {
       timer.cancel();
     }
     _awaitingTurn.clear();
+    for (final watch in _quietWatches.values) {
+      watch.timer.cancel();
+    }
+    _quietWatches.clear();
   }
 
   /// Whether [sessionId]'s agent is mid-turn, or a message is on its way.
@@ -139,8 +164,50 @@ class SessionQueue {
     final runtime = status.acpRuntimeOf(sessionId);
     if (runtime != null) return runtime.inTurn;
     if (_awaitingTurn.containsKey(sessionId)) return true;
-    return _working(status.statusOf(sessionId)?.report.status);
+    final kind = status.statusOf(sessionId)?.report.status;
+    if (_working(kind)) return true;
+    if (_unread(kind) && _midTurn.contains(sessionId)) {
+      return !_quiet(sessionId);
+    }
+    return false;
   }
+
+  static bool _unread(AgentActivityStatus? status) =>
+      status == null || status == AgentActivityStatus.unknown;
+
+  /// Whether [sessionId]'s screen has shown nothing new for [quietPeriod].
+  /// Starts watching it the first time it is asked; a session with no
+  /// screen is never quiet.
+  bool _quiet(String sessionId) {
+    final watch = _quietWatches[sessionId] ??= _watchQuiet(sessionId);
+    watch.sample();
+    return watch.quietFor >= quietPeriod;
+  }
+
+  _QuietWatch _watchQuiet(String sessionId) {
+    late final _QuietWatch watch;
+    watch = _QuietWatch(
+      () => status.liveScreenOf(sessionId)?.tailText(40).join('\n'),
+      Timer.periodic(quietPoll, (_) {
+        final waiting = _withQueued.contains(sessionId);
+        if (_closed ||
+            (!waiting && !_midTurn.contains(sessionId)) ||
+            !status.holds(sessionId)) {
+          _stopQuiet(sessionId);
+          return;
+        }
+        watch.sample();
+        if (watch.quietFor < quietPeriod) return;
+        // Quiet that long, the turn is over whatever the reader says.
+        _midTurn.remove(sessionId);
+        if (waiting) _kick(sessionId);
+      }),
+    );
+    return watch;
+  }
+
+  void _stopQuiet(String sessionId) =>
+      _quietWatches.remove(sessionId)?.timer.cancel();
 
   /// Queues [text] when [sessionId] is busy or has messages waiting;
   /// otherwise claims the session for an immediate delivery. A [requestId]
@@ -286,10 +353,17 @@ class SessionQueue {
 
   void _onStatus(HostedAgentStatus change) {
     final sessionId = change.sessionId;
-    if (_working(change.report.status)) {
+    final kind = change.report.status;
+    if (_working(kind)) {
       if (_inFlight.contains(sessionId)) _sawWorking.add(sessionId);
       _awaitingTurn.remove(sessionId)?.cancel();
+      _midTurn.add(sessionId);
+      _stopQuiet(sessionId);
       return;
+    }
+    if (!_unread(kind)) {
+      _midTurn.remove(sessionId);
+      _stopQuiet(sessionId);
     }
     if (_withQueued.contains(sessionId)) _kick(sessionId);
   }
@@ -313,16 +387,17 @@ class SessionQueue {
     if (resumesOnSend?.call(sessionId) ?? false) return true;
     if (!status.holds(sessionId)) return false;
     final report = status.statusOf(sessionId)?.report;
-    // A session resumed bare is typed into only at its idle composer.
-    if (_resumedForHead.contains(sessionId)) {
-      return report?.status == AgentActivityStatus.idle &&
-          !report!.hasOpenPrompt &&
-          !report.hasOpenQuestion;
+    if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
+      return false;
     }
-    if (report == null) return true;
-    return !_working(report.status) &&
-        !report.hasOpenPrompt &&
-        !report.hasOpenQuestion;
+    // Only a real end of turn: idle or failed, or a reader that cannot tell
+    // over a screen that has stopped moving.
+    return switch (report?.status) {
+      AgentActivityStatus.idle || AgentActivityStatus.failed => true,
+      AgentActivityStatus.working ||
+      AgentActivityStatus.awaitingApproval => false,
+      AgentActivityStatus.unknown || null => _quiet(sessionId),
+    };
   }
 
   /// Whether nothing runs [sessionId] and [resumeStopped] would start it.
@@ -482,4 +557,28 @@ class SessionQueue {
 
   void _announce(String sessionId) =>
       announce?.call(sessionId, dao.open(sessionId));
+}
+
+/// A screen read on a timer, and how long it has shown nothing new.
+final class _QuietWatch {
+  _QuietWatch(this._read, this.timer);
+
+  final String? Function() _read;
+  final Timer timer;
+  final _since = Stopwatch()..start();
+  String? _last;
+  var _seen = false;
+
+  /// Zero until the screen has been read once, and for a screen gone.
+  Duration get quietFor =>
+      _seen && _last != null ? _since.elapsed : Duration.zero;
+
+  void sample() {
+    final now = _read();
+    if (!_seen || now != _last) {
+      _seen = true;
+      _last = now;
+      _since.reset();
+    }
+  }
 }
