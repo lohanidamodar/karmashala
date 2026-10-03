@@ -4,6 +4,7 @@ import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -161,6 +162,44 @@ void main() {
           intoNewWorktree: false,
         ),
         contains('"Old session" is working in this checkout'),
+      );
+    });
+
+    test('an ended session in the checkout does not guard it', () {
+      for (final (i, status) in [
+        SessionStatus.completed,
+        SessionStatus.failed,
+        SessionStatus.cancelled,
+        SessionStatus.unknown,
+      ].indexed) {
+        w.addSession('e$i', workingDirectory: w.hub, status: status);
+        w.addSession('n$i', status: status);
+      }
+      expect(
+        w.checkpoints.forkFileRefusal(
+          row('c1'),
+          sessionId: 's1',
+          intoNewWorktree: false,
+        ),
+        isNull,
+      );
+    });
+
+    test('a session this server runs guards it, whatever its row says', () {
+      w.addSession(
+        's2',
+        workingDirectory: w.hub,
+        title: 'Held here',
+        status: SessionStatus.completed,
+      );
+      w.held.add('s2');
+      expect(
+        w.checkpoints.forkFileRefusal(
+          row('c1'),
+          sessionId: 's1',
+          intoNewWorktree: false,
+        ),
+        contains('"Held here" is working in this checkout'),
       );
     });
 

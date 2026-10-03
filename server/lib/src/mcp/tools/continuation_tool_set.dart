@@ -422,8 +422,9 @@ const List<Map<String, Object?>> sessionHandoffToolSchemas = [
         'checkpoint, exactly as checkpoint_restore does, taking a safety '
         'checkpoint first and refusing a tree that has moved unless "confirm" '
         'is true. It refuses the file half outright — and says so rather than '
-        'failing — when another session is working in that checkout, when the '
-        'repository cannot be checkpointed from here, or when newWorktree is '
+        'failing — when another live session is working in that checkout (an '
+        'ended one never blocks it), when the repository cannot be '
+        'checkpointed from here, or when newWorktree is '
         'true, because a checkpoint restores only into the checkout it was '
         'taken in. Use preview:true to read both decisions before committing.',
     'inputSchema': {

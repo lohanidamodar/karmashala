@@ -207,6 +207,7 @@ class CheckpointWorld {
     String? workingDirectory,
     String environmentId = 'local',
     String? title,
+    SessionStatus status = SessionStatus.running,
   }) => SessionDao(db).insert(
     Session(
       id: id,
@@ -214,7 +215,7 @@ class CheckpointWorld {
       agentInstallationId: 'a1',
       title: title ?? 'session $id',
       useWorktree: false,
-      status: SessionStatus.running,
+      status: status,
       createdAt: at,
       externalSessionId: conversation,
       workingDirectory: workingDirectory == null

@@ -192,8 +192,9 @@ read both, and never read a missing key as a half that happened.
 The file half is the destructive one, on `checkpoint_restore`'s terms: a safety
 checkpoint first, and a tree that has moved refused unless `confirm`. It is
 **refused outright**, and named in `notDelivered` rather than failing the call,
-when another session is recorded working in that checkout — rolling it back
-would take work that is not yours — when the repository cannot be checkpointed
+when another session whose agent is still running is recorded working in that
+checkout — rolling it back would take work that is not yours; an ended session
+never blocks it — when the repository cannot be checkpointed
 from here, and when `newWorktree` is true, because a checkpoint restores only
 into the checkout it was taken in. `preview: true` reports both decisions
 without touching a file.

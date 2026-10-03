@@ -401,22 +401,32 @@ class DaemonCheckpoints {
         checkpoint.repository,
         excluding: sessionId,
         among: [
-          // A row with no directory recorded runs in its repository's checkout.
+          // Only a live agent guards; one with no directory recorded runs in
+          // its repository's checkout.
           for (final session in _sessions.getAll())
-            if (session.workingDirectory == null && session.worktree == null)
-              session.copyWith(
-                workingDirectory: _repositories
-                    .getById(session.repositoryId)
-                    ?.path,
-              )
-            else
-              session,
+            if (_live(session))
+              if (session.workingDirectory == null && session.worktree == null)
+                session.copyWith(
+                  workingDirectory: _repositories
+                      .getById(session.repositoryId)
+                      ?.path,
+                )
+              else
+                session,
         ],
         pathsMatch: samePath,
       ))
         session.title,
     ],
   );
+
+  /// Whether [session]'s agent may be working right now: one this server runs
+  /// or sees mid-turn, or a row whose status claims a live agent. An ended
+  /// row, or one nothing can see (`unknown`), never guards a checkout.
+  bool _live(Session session) =>
+      _heldHere(session.id) ||
+      recorder.inTurn(session.id) ||
+      (!session.isOver && session.status.claimsLive);
 
   /// Restores [checkpoint]'s tree into its checkout for a fork — call only
   /// when [forkFileRefusal] said null, and before starting the fork. A tree
