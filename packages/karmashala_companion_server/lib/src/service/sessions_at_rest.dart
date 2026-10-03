@@ -53,7 +53,7 @@ class SessionsAtRest {
   /// support, and whether a path here is one it can open. Null: none may.
   final RemoteAttachmentSupport Function(Session row)? attachmentSupportOf;
 
-  /// Sends a phone's message to session [String] by the protocol its agent
+  /// Sends a phone's message to a session by the protocol its agent
   /// speaks — resuming it first when nothing runs it — and answers true;
   /// false for a session with no such agent, which is typed into its screen.
   /// Throws [RemoteApiRefusal] in words when it is refused.

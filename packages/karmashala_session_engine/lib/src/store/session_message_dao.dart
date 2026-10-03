@@ -6,7 +6,7 @@ import 'package:karmashala_store/database.dart';
 enum SessionMessageRole { user, agent, tool }
 
 /// One row of `session_messages`: a turn of an ACP session's conversation as
-/// the server stored it (ACP design, C3). [ordinal] and [revision] are the
+/// the server stored it. [ordinal] and [revision] are the
 /// DAO's to assign; a message handed to [SessionMessageDao.append] carries
 /// whatever, and comes back with the real ones.
 class SessionMessage {

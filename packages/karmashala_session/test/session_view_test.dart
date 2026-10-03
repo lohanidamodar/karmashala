@@ -59,7 +59,7 @@ void main() {
     );
 
     test('an agent spoken to over ACP has one, with no transcript file', () {
-      // The server keeps its conversation as rows (ACP design, C3), so the
+      // The server keeps its conversation as rows, so the
       // chat view is built without a store — asked of the adapter, never of
       // the id.
       const acp = DataOnlyAgentAdapter(

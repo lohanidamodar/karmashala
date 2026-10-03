@@ -1,6 +1,6 @@
 part of '../data_request.dart';
 
-// The ACP agents a person added (ACP design, C2): rows the server composes
+// The ACP agents a person added: rows the server composes
 // its agent registry from.
 
 DataRequest<Object?>? _acpAgentsRequestFromJson(String kind, _Arguments args) =>

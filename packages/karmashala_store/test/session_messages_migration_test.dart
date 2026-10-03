@@ -2,8 +2,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
 import 'package:test/test.dart';
 
-/// v65: `session_messages`, the rows an ACP session's conversation is kept in
-/// (ACP design, C3).
+/// v65: `session_messages`, the rows an ACP session's conversation is kept in.
 void main() {
   late AppDatabase db;
 

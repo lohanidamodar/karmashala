@@ -1,6 +1,6 @@
 part of '../data_change.dart';
 
-// The ACP agents a person added (ACP design, C2).
+// The ACP agents a person added.
 
 DataChange? _acpAgentsChangeFromJson(String name, Map<String, Object?> json) =>
     switch (name) {

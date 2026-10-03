@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:test/test.dart';
 
-/// An agent's modes (ACP design, C5) cross the wire whole: the request that
+/// An agent's modes cross the wire whole: the request that
 /// sets one and the change that tells what is offered.
 void main() {
   Map<String, Object?> wire(Object? json) =>

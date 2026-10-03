@@ -2,7 +2,7 @@ part of '../data_change.dart';
 
 // What a session's agent offers at runtime and is not on its row: the modes
 // an ACP agent lets a client switch between, and the settings (a model, a
-// flag) it exposes as config options (ACP design, C5). Told to every client
+// flag) it exposes as config options. Told to every client
 // as the agent announces or changes them; nothing of it is stored.
 
 DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>

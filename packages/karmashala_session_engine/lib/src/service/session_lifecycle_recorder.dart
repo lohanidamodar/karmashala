@@ -52,8 +52,7 @@ typedef UnknownResolver =
 /// no code is an end, clean or failed by its reason. The resolver answers
 /// `unknown` to leave the rule as it is.
 class SessionLifecycleRecorder {
-  SessionLifecycleRecorder(this._sessions, {UnknownResolver? resolveUnknown})
-    : _resolveUnknown = resolveUnknown;
+  SessionLifecycleRecorder(this._sessions, {this._resolveUnknown});
 
   final SessionStatusStore _sessions;
   final UnknownResolver? _resolveUnknown;

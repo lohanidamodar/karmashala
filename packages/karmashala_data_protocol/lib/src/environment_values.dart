@@ -53,7 +53,7 @@ final class AgentsSnapshot {
   /// Every account's usage as the server last read it (`usage.current`).
   final List<AccountUsageState> usage;
 
-  /// The ACP agents a person added, oldest first (ACP design, C2).
+  /// The ACP agents a person added, oldest first.
   final List<AcpAgentRow> acpAgents;
 
   Map<String, Object?> toJson() => {

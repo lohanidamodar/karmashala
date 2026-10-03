@@ -647,7 +647,7 @@ void _migrateToV64(Database db) {
 }
 
 /// An ACP session's conversation, written by the server from the agent's
-/// `session/update` stream (ACP design, C3). `revision` is per session, so a
+/// `session/update` stream. `revision` is per session, so a
 /// client naming the one it holds is sent only the rows that moved.
 void _migrateToV65(Database db) {
   db.execute('''
@@ -688,7 +688,7 @@ void _migrateToV66(Database db) {
 
 /// The ACP agents a person added — typed in (`custom`) or picked from the
 /// public registry (`registry`) — each a command, its argv and environment
-/// (ACP design, C2). The server composes its agent registry from these.
+///. The server composes its agent registry from these.
 void _migrateToV67(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS acp_agents (

@@ -4,8 +4,8 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
 /// v66: `agent_installations.leading_arguments`, what an `npx` installation
-/// is run with; v67: `acp_agents`, the ACP agents a person added (ACP design,
-/// C2); v68: `acp_agents.icon_url`, the registry's icon for the row.
+/// is run with; v67: `acp_agents`, the ACP agents a person added; v68:
+/// `acp_agents.icon_url`, the registry's icon for the row.
 void main() {
   late AppDatabase db;
 
