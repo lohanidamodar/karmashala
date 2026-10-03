@@ -114,7 +114,7 @@ Future<T?> showAdaptiveSidePanel<T>({
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black26,
+    barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.26),
     transitionDuration: motion.base,
     pageBuilder: (context, _, _) {
       final theme = Theme.of(context);
