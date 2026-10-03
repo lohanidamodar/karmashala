@@ -105,6 +105,12 @@ class OpenTurns {
     }
   }
 
+  /// Row [sessionId]'s turn settled by the server's own decision
+  /// (`TurnSettlement`): a reader that never says idle over a quiet screen.
+  void settled(String sessionId) {
+    if (_open.remove(sessionId) != null) _save();
+  }
+
   /// The host session [hostSessionId] ended for [reason]. The server's own
   /// stop keeps the turn open: that is the cut-off this record is for.
   void ended(String hostSessionId, {String? reason}) {
@@ -155,13 +161,16 @@ class OpenTurns {
 
 /// Keeps [turns] in step with the statuses of the agents this server runs
 /// itself ([runsHere]: a box's session runs on without it) and with every
-/// session end. Cancel these before the server's stop ends its sessions.
+/// session end, and closes a turn the server decides has [settled] (a quiet
+/// screen its reader cannot read). Cancel these before the server's stop ends
+/// its sessions.
 List<StreamSubscription<Object?>> followOpenTurns(
   OpenTurns turns, {
   required Stream<HostedAgentStatus> statuses,
   required Stream<LifecycleEvent> lifecycle,
   required bool Function(String sessionId) runsHere,
   required DateTime Function() clock,
+  Stream<String>? settled,
 }) => [
   statuses.listen((status) {
     if (!runsHere(status.sessionId)) return;
@@ -170,6 +179,9 @@ List<StreamSubscription<Object?>> followOpenTurns(
   lifecycle.listen((event) {
     if (event.kind == LifecycleEventKind.started) return;
     turns.ended(event.sessionId, reason: event.reason);
+  }),
+  ?settled?.listen((sessionId) {
+    if (runsHere(sessionId)) turns.settled(sessionId);
   }),
 ];
 

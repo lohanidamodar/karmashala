@@ -22,6 +22,9 @@ import 'package:karmashala_host/src/mcp/tools/checkout_reach.dart';
 import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/sessions/launch/session_continuations.dart';
+import 'package:karmashala_host/src/sessions/session_queue.dart';
+import 'package:karmashala_host/src/status/daemon_agent_status.dart';
+import 'package:karmashala_host/src/status/turn_settlement.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -58,7 +61,11 @@ class _Transcripts extends TranscriptStores {
 }
 
 TranscriptMessage _said(String role, String text, String installation) =>
-    TranscriptMessage(role: role, text: text, agentInstallationId: installation);
+    TranscriptMessage(
+      role: role,
+      text: text,
+      agentInstallationId: installation,
+    );
 
 /// One thread, many agents: a switch keeps the row, stops the running agent
 /// as `switched`, writes the spans, and starts the new agent with what it
@@ -81,6 +88,7 @@ void main() {
   late Timer reaper;
   List<TranscriptMessage>? conversation;
   var running = false;
+  bool Function(String sessionId)? turnRunning;
   var ids = 0;
 
   SessionDao rows() => SessionDao(database);
@@ -88,6 +96,7 @@ void main() {
   setUp(() async {
     ids = 0;
     running = false;
+    turnRunning = null;
     conversation = null;
     switched = [];
     closeReasons = [];
@@ -191,10 +200,8 @@ void main() {
       }),
       carryDecision: (_) {},
       spans: spans,
-      conversationOf: conversation == null
-          ? null
-          : (_) async => conversation!,
-      turnRunning: (_) => running,
+      conversationOf: conversation == null ? null : (_) async => conversation!,
+      turnRunning: (id) => turnRunning?.call(id) ?? running,
       nextMessageOrdinal: SessionMessageDao(database).countForSession,
       onSwitched: (id, _) => switched.add(id),
       now: () => t0.add(Duration(minutes: switched.length + 1)),
@@ -237,7 +244,7 @@ void main() {
       carryDecision: (_) {},
       spans: spans,
       conversationOf: (_) async => conversation!,
-      turnRunning: (_) => running,
+      turnRunning: (id) => turnRunning?.call(id) ?? running,
       nextMessageOrdinal: SessionMessageDao(database).countForSession,
       onSwitched: (id, _) => switched.add(id),
       now: () => t0.add(Duration(minutes: switched.length + 1)),
@@ -277,7 +284,10 @@ void main() {
   test('switching back resumes the earlier conversation and recaps only '
       'the turns it missed', () async {
     await launches.resume('s1');
-    await continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+    await continuations.switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'c1',
+    );
     rows().updateExternalSessionId('s1', 'conv-c');
 
     await reading([
@@ -353,6 +363,61 @@ void main() {
     expect(rows().getById('s1')!.agentInstallationId, 'a1');
     expect(closeReasons, isEmpty);
     expect(pty.started, hasLength(1));
+  });
+
+  test('a terminal agent whose reader lost a finished turn is switched once '
+      'its screen has been quiet, and refused while it still moves', () async {
+    const quiet = Duration(milliseconds: 300);
+    final status = DaemonAgentStatus(
+      registry: registry,
+      database: database,
+      publish: (_, _) {},
+      interval: const Duration(hours: 1),
+    );
+    final turns = TurnSettlement(
+      status: status,
+      quietPeriod: quiet,
+      poll: const Duration(milliseconds: 10),
+    )..start();
+    final queue = SessionQueue(
+      dao: SessionQueueDao(database),
+      status: status,
+      turns: turns,
+    )..start();
+    addTearDown(() async {
+      await queue.close();
+      await turns.close();
+      await status.close();
+    });
+    turnRunning = queue.busy;
+    void says(AgentActivityStatus kind) => status.report(
+      's1',
+      AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 's1',
+        status: kind,
+        observedAt: DateTime.now().toUtc(),
+        source: AgentStatusSource.terminalGrid,
+      ),
+    );
+
+    await launches.resume('s1');
+    final agent = pty.handles.last..emit(utf8.encode('> \r\n'));
+    await pumpEventQueue();
+    says(AgentActivityStatus.working);
+    says(AgentActivityStatus.unknown);
+    agent.emit(utf8.encode('still writing\r\n'));
+    await expectLater(
+      continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1'),
+      throwsA(isA<StateError>()),
+    );
+
+    await Future<void>.delayed(quiet * 2);
+    final started = await continuations.switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'c1',
+    );
+    expect(started.session.agentInstallationId, 'c1');
   });
 
   test('a switch to the agent already running it is refused', () async {

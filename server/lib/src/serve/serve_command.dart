@@ -72,6 +72,7 @@ import '../sessions/launch/session_continuations.dart';
 import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_queue.dart';
+import '../status/turn_settlement.dart';
 import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
 import '../sessions/session_message_transcripts.dart';
@@ -1060,9 +1061,13 @@ Future<int> runServe(
   );
   // Every send — a client's, an agent's `session_send`, the older companion
   // API's — waits here while the session's turn runs.
+  // The one decision whether a turn still runs: the queue, a switch and the
+  // open-turn record all read it.
+  final turnSettlement = TurnSettlement(status: prompts.status)..start();
   final sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
+    turns: turnSettlement,
     resumesOnSend: speaksAcp,
     // A PTY session nothing runs is resumed for its queue, never left
     // holding it.
@@ -1130,6 +1135,7 @@ Future<int> runServe(
     lifecycle: server.lifecycle.events,
     runsHere: status.runsHere,
     clock: () => DateTime.now().toUtc(),
+    settled: turnSettlement.settled,
   );
   sessionQueue.start();
   data.sessionInput = sessionInput;
@@ -1508,6 +1514,7 @@ Future<int> runServe(
   storeDesk.close();
   await attention.close();
   await sessionQueue.close();
+  await turnSettlement.close();
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await statusFollow?.cancel();
