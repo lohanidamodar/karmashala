@@ -16,13 +16,15 @@ const Duration kAcpVersionProbeTimeout = Duration(seconds: 45);
 /// A short-lived conversation with an ACP agent: the transport [spawn] opens,
 /// `initialize`, then [body] with the peer and the agent's answer, and the
 /// process ended — however it went. Throws what failed, or a
-/// [TimeoutException] once [timeout] has passed.
+/// [TimeoutException] once [timeout] has passed. [onErrorLine] hears each
+/// line the agent writes to stderr.
 Future<T> talkToAcpAgent<T>(
   Future<AcpTransport> Function() spawn,
   Future<T> Function(AcpPeer peer, InitializeResult init) body, {
   Duration timeout = kAcpVersionProbeTimeout,
   String clientName = 'Karmashala',
   String clientVersion = kHostVersion,
+  void Function(String line)? onErrorLine,
 }) async {
   Future<AcpTransport>? spawning;
   AcpTransport? transport;
@@ -34,7 +36,10 @@ Future<T> talkToAcpAgent<T>(
       final opened = await spawning!;
       transport = opened;
       // Drained, or a chatty agent fills the pipe and blocks before it answers.
-      stderr = opened.errorLines.listen((_) {}, onError: (Object _) {});
+      stderr = opened.errorLines.listen(
+        (line) => onErrorLine?.call(line),
+        onError: (Object _) {},
+      );
       final talking = AcpPeer(opened.output, opened.input);
       peer = talking;
       final answer = await talking.call(AcpMethods.initialize, {

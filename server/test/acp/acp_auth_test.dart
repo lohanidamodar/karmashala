@@ -36,6 +36,21 @@ void main() {
     ),
     createdAt: t0,
   );
+  final windows = ExecutionEnvironment(
+    id: 'windows',
+    kind: EnvironmentKind.windowsNative,
+    name: 'Windows',
+    createdAt: t0,
+  );
+  final antigravityOnWindows = AgentInstallation(
+    id: 'ag-win',
+    agentId: 'antigravity-acp',
+    executable: const EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\agy\agy_acp_server.exe',
+    ),
+    createdAt: t0,
+  );
   final terminalAgent = AgentInstallation(
     id: 'cc1',
     agentId: AgentIds.claudeCode,
@@ -67,24 +82,30 @@ void main() {
   late List<AcpLoginTerminal> terminals;
   late Map<String, String> vault;
   late FakeAcpAgent Function() nextAgent;
+  late List<String> agentStderr;
+  late List<Uri> openedLinks;
 
   ServerAcpAuth auth() => ServerAcpAuth(
-    installations: () => [antigravity, terminalAgent],
-    environments: () => [wsl],
+    installations: () => [antigravity, terminalAgent, antigravityOnWindows],
+    environments: () => [wsl, windows],
     registry: () => AgentRegistry.builtIn,
     choices: AcpAuthChoiceDao(database),
     spawn: (environment, request) async {
-      expect(environment.id, wsl.id);
+      expect(environment.id, isIn([wsl.id, windows.id]));
       spawned.add(request);
       final agent = nextAgent();
       agents.add(agent);
-      return FakeAcpProcess(agent).spawn();
+      return FakeAcpProcess(
+        agent,
+        errorLines: Stream.fromIterable(agentStderr),
+      ).spawn();
     },
     vault: () => vault,
     openTerminal: (login) {
       terminals.add(login);
       return true;
     },
+    openLink: openedLinks.add,
     now: () => t0,
     readTimeout: const Duration(seconds: 5),
     authenticateTimeout: const Duration(seconds: 5),
@@ -92,14 +113,19 @@ void main() {
 
   setUp(() {
     database = AppDatabase.memory();
-    ExecutionEnvironmentDao(database).upsert(wsl);
+    ExecutionEnvironmentDao(database)
+      ..upsert(wsl)
+      ..upsert(windows);
     AgentInstallationDao(database)
       ..insert(antigravity)
-      ..insert(terminalAgent);
+      ..insert(terminalAgent)
+      ..insert(antigravityOnWindows);
     spawned = [];
     agents = [];
     terminals = [];
     vault = {};
+    agentStderr = [];
+    openedLinks = [];
     nextAgent = () => FakeAcpAgent(authMethods: methods, supportsLogout: true);
   });
   tearDown(() => database.close());
@@ -161,6 +187,35 @@ void main() {
     expect(server.state('ag1')!.methodId, 'oauth-personal');
     expect(server.state('ag1')!.authenticatedAt, t0);
   });
+
+  test('a WSL agent\'s login link is opened once on this machine: its own '
+      'opener reaches no desktop there, and its callback is local', () async {
+    const link =
+        'https://accounts.google.com/o/oauth2/v2/auth?response_type=code'
+        '&redirect_uri=http%3A%2F%2F127.0.0.1%3A41597%2F&state=s1';
+    agentStderr = [
+      'Open the following link to authenticate the ACP server: $link',
+      'gio: $link: Operation not supported',
+    ];
+    final state = await auth().authenticate('ag1', 'oauth-personal');
+    expect(state.confirmed, isTrue);
+    expect(openedLinks, [Uri.parse(link)]);
+  });
+
+  test(
+    'only an https link is opened, and a Windows agent opens its own',
+    () async {
+      agentStderr = [
+        'see file:///etc/passwd or http://127.0.0.1:9/ for details',
+      ];
+      await auth().authenticate('ag1', 'oauth-personal');
+      expect(openedLinks, isEmpty);
+
+      agentStderr = ['Open the following link: https://accounts.google.com/x'];
+      await auth().authenticate('ag-win', 'oauth-personal');
+      expect(openedLinks, isEmpty);
+    },
+  );
 
   test('a refused authenticate is told in the agent\'s words and changes '
       'nothing remembered', () async {

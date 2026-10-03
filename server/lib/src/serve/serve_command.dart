@@ -481,6 +481,7 @@ Future<int> runServe(
         OpenTerminalTab(paneId: paneId, title: opened.title),
       );
     },
+    openLink: openInThisMachinesBrowser,
   );
   final agentWork = ServerAgentWork(
     data: data,

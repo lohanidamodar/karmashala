@@ -65,9 +65,12 @@ class RecordingHost extends AcpRuntimeHost {
 /// A runtime wired to [agent] over its in-memory streams: no process runs.
 /// [exit] is the process exit a test completes; [agent] is closed on kill.
 class FakeAcpProcess {
-  FakeAcpProcess(this.agent);
+  FakeAcpProcess(this.agent, {this.errorLines});
 
   final FakeAcpAgent agent;
+
+  /// What the agent writes to stderr; none when null.
+  final Stream<String>? errorLines;
   final exit = Completer<int>();
   var killed = false;
 
@@ -75,6 +78,7 @@ class FakeAcpProcess {
     output: agent.toClient,
     input: agent.fromClient,
     exitCode: exit.future,
+    errorLines: errorLines,
     kill: () async {
       killed = true;
       if (!exit.isCompleted) exit.complete(137);

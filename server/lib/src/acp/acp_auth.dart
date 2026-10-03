@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Process, ProcessException, ProcessStartMode;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -60,6 +60,7 @@ class ServerAcpAuth {
     required AcpAuthSpawn spawn,
     Map<String, String> Function()? vault,
     bool Function(AcpLoginTerminal terminal)? openTerminal,
+    void Function(Uri link)? openLink,
     DateTime Function()? now,
     this.readTimeout = kAcpVersionProbeTimeout,
     this.authenticateTimeout = const Duration(minutes: 3),
@@ -70,6 +71,7 @@ class ServerAcpAuth {
        _spawn = spawn,
        _vault = vault ?? (() => const {}),
        _openTerminal = openTerminal,
+       _openLink = openLink,
        _now = now ?? (() => DateTime.now().toUtc());
 
   final AcpAuthChoiceDao choices;
@@ -84,6 +86,9 @@ class ServerAcpAuth {
   final AcpAuthSpawn _spawn;
   final Map<String, String> Function() _vault;
   final bool Function(AcpLoginTerminal terminal)? _openTerminal;
+
+  /// Opens a link in this machine's browser.
+  final void Function(Uri link)? _openLink;
   final DateTime Function() _now;
 
   /// The methods [installationId] advertises, read over a fresh connection.
@@ -131,6 +136,7 @@ class ServerAcpAuth {
       target,
       authenticateTimeout,
       variables: _variablesFor(target.spec, methodId),
+      onErrorLine: _loginLinkOpener(target.environment),
       (peer, init) async {
         final method = _advertised(target, init, methodId);
         if (method.isTerminal) {
@@ -256,6 +262,26 @@ class ServerAcpAuth {
     );
   }
 
+  /// An agent's browser login prints its link and tries to open it. In WSL
+  /// that opener reaches no desktop, and the login waits on a callback that
+  /// never comes, so the first https link it prints is opened here. Its
+  /// callback is a loopback port, which WSL forwards from this machine.
+  /// Elsewhere the agent opens its own.
+  void Function(String line)? _loginLinkOpener(
+    ExecutionEnvironment environment,
+  ) {
+    final open = _openLink;
+    if (open == null || environment.kind != EnvironmentKind.wsl) return null;
+    var opened = false;
+    return (line) {
+      if (opened) return;
+      final link = loginLinkIn(line);
+      if (link == null) return;
+      opened = true;
+      open(link);
+    };
+  }
+
   Map<String, String> _variablesFor(AcpLaunchSpec spec, String methodId) {
     final name = spec.apiKeyVariables[methodId];
     if (name == null) return const {};
@@ -282,6 +308,7 @@ class ServerAcpAuth {
     Duration timeout,
     Future<T> Function(acp.AcpPeer peer, acp.InitializeResult init) body, {
     Map<String, String> variables = const {},
+    void Function(String line)? onErrorLine,
   }) async {
     try {
       return await talkToAcpAgent(
@@ -299,6 +326,7 @@ class ServerAcpAuth {
         timeout: timeout,
         clientName: target.spec.clientName,
         clientVersion: clientVersion,
+        onErrorLine: onErrorLine,
       );
     } on DataRefused {
       rethrow;
@@ -349,6 +377,16 @@ class ServerAcpAuth {
   );
 }
 
+/// The first https link in [line], without the punctuation that ends a
+/// sentence around it; null when there is none.
+Uri? loginLinkIn(String line) {
+  final match = RegExp(r'https://[^\s"<>]+').firstMatch(line);
+  if (match == null) return null;
+  final text = match[0]!.replaceFirst(RegExp(r'''[.,;:)\]'"]+$'''), '');
+  final link = Uri.tryParse(text);
+  return link == null || link.host.isEmpty ? null : link;
+}
+
 class _Target {
   const _Target(
     this.installation,
@@ -363,4 +401,20 @@ class _Target {
   final ExecutionEnvironment environment;
   final String directory;
   final String name;
+}
+
+/// Opens [link] in the default browser of the machine this server runs on;
+/// a browser that does not start is not the login's failure — it waits, and
+/// ends at its timeout.
+Future<void> openInThisMachinesBrowser(Uri link) async {
+  final (executable, arguments) = Platform.isWindows
+      ? ('rundll32', ['url.dll,FileProtocolHandler', '$link'])
+      : Platform.isMacOS
+      ? ('open', ['$link'])
+      : ('xdg-open', ['$link']);
+  try {
+    await Process.start(executable, arguments, mode: ProcessStartMode.detached);
+  } on ProcessException {
+    // Nothing here opens a browser.
+  }
 }
