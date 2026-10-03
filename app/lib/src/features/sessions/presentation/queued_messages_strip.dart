@@ -67,9 +67,8 @@ class _HoldLine extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = ref.watch(clockProvider).nowUtc().toLocal();
-    final controls = ref.watch(
-      capabilitiesProvider.select((c) => c.sessionQueueControl),
-    );
+    final caps = ref.watch(capabilitiesProvider);
+    final controls = caps.sessionQueueControl;
     final actions = !controls
         ? const <Widget>[]
         : switch (hold.kind) {
@@ -83,6 +82,13 @@ class _HoldLine extends ConsumerWidget {
                 key: const ValueKey('queue-cancel-all'),
                 onPressed: () => _cancelAll(context, ref),
                 child: const Text('Cancel all'),
+              ),
+            ],
+            QueueHoldKind.stopped when caps.mayStart => [
+              TextButton(
+                key: const ValueKey('queue-resume-now'),
+                onPressed: () => _sendNext(context, ref, resuming: true),
+                child: const Text('Resume now'),
               ),
             ],
             _ => const <Widget>[],
@@ -124,13 +130,18 @@ class _HoldLine extends ConsumerWidget {
     );
   }
 
-  Future<void> _sendNext(BuildContext context, WidgetRef ref) async {
+  Future<void> _sendNext(
+    BuildContext context,
+    WidgetRef ref, {
+    bool resuming = false,
+  }) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       await ref.read(sessionQueueActionsProvider).sendNext(sessionId);
     } on DataRefused catch (refusal) {
+      final what = resuming ? 'resume it' : 'send it';
       messenger?.showSnackBar(
-        SnackBar(content: Text('Could not send it: ${refusal.message}')),
+        SnackBar(content: Text('Could not $what: ${refusal.message}')),
       );
     }
   }

@@ -191,6 +191,26 @@ void main() {
     });
   }
 
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, messages for a session nothing runs say so and '
+        'offer Resume now', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'first');
+      server.sessionWork.holdQueue(
+        'acp-1',
+        const QueueHold(QueueHoldKind.stopped),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("Waiting — this session isn't running"), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('queue-resume-now')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.map((s) => s.text), ['first']);
+      expect(find.byKey(const ValueKey('queue-hold')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('Edit replaces the queued text at the server', (tester) async {
     await pump(tester, size: phone);
     await send(tester, 'run the tests');

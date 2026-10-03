@@ -393,6 +393,66 @@ void main() {
     });
   });
 
+  group('a session nothing runs', () {
+    late List<(String, String?)> resumed;
+
+    Future<void> restart() async {
+      await queue.close();
+      resumed = [];
+      queue = SessionQueue(
+        dao: dao,
+        status: status,
+        resumeStopped: (sessionId, prompt) async {
+          resumed.add((sessionId, prompt));
+          return null;
+        },
+        takesOpeningMessage: (_) => true,
+        announce: (_, open) => announced.add(open),
+        now: () => t0,
+      )..deliver = (_, text) async => delivered.add(text);
+      queue.start();
+      await pumpEventQueue();
+    }
+
+    test('its waiting messages say so at start, and nothing resumes it '
+        'until asked', () async {
+      dao.enqueue(
+        id: 'w',
+        sessionId: 's1',
+        text: 'waiting',
+        origin: QueuedMessageOrigin.app,
+        now: t0,
+      );
+      await restart();
+      expect(
+        announced.last.single.hold,
+        const QueueHold(QueueHoldKind.stopped),
+      );
+      queue.refreshAll();
+      await pumpEventQueue();
+      expect(resumed, isEmpty);
+
+      final sent = await queue.sendNext('s1');
+      expect(resumed, [('s1', 'waiting')]);
+      expect(sent.state, QueuedMessageState.delivered);
+    });
+
+    test('a process that ends with messages waiting tells them', () async {
+      await restart();
+      await runAgent();
+      hook('UserPromptSubmit');
+      send('a');
+      expect(announced.last.single.hold, isNull);
+
+      launcher.handles.last.finish(0);
+      await pumpEventQueue();
+      queue.hostSessionEnded('karmashala_s1');
+      await pumpEventQueue();
+      expect(announced.last.single.hold?.kind, QueueHoldKind.stopped);
+      expect(resumed, isEmpty);
+    });
+  });
+
   group('endedOnUsageLimit', () {
     AgentStatusReport report(
       AgentActivityStatus kind, {

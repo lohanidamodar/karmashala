@@ -4,6 +4,8 @@ import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart'
+    show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart' show SessionQueueDao;
 
 import '../automations/server_resume_runner.dart' show ResumeQueue;
@@ -153,6 +155,8 @@ class SessionQueue implements ResumeQueue {
       _announce(sessionId);
     }
     _withQueued.addAll(dao.sessionsWithQueued());
+    // Each is told what holds it — a session nothing runs says so.
+    refreshAll();
     if (_subscriptions.isNotEmpty) return;
     if (_ownsTurns) turns.start();
     _subscriptions
@@ -402,7 +406,10 @@ class SessionQueue implements ResumeQueue {
     }
     final hold = _holdOf(sessionId);
     if (_toldHold[sessionId] != hold) _announce(sessionId);
-    if (hold != null) return;
+    // A new message resumes a session nothing runs; nothing else does.
+    if (hold != null && !(resume && hold.kind == QueueHoldKind.stopped)) {
+      return;
+    }
     if (resume && _stopped(sessionId)) return _resumeFor(sessionId);
     if (!_ready(sessionId)) return;
     await _deliverHead(sessionId);
@@ -616,12 +623,29 @@ class SessionQueue implements ResumeQueue {
     return dao.getById(head.id)!;
   }
 
+  /// Looks again at [hostSessionId]'s queue once its process ended: nothing
+  /// runs it now, which its clients are told.
+  void hostSessionEnded(String hostSessionId) {
+    for (final sessionId in _withQueued) {
+      if (hostSessionIdOf(sessionId) == hostSessionId) _kick(sessionId);
+    }
+  }
+
   QueueHold? _holdOf(String sessionId) {
     if (_paused.contains(sessionId)) {
       return const QueueHold(QueueHoldKind.paused);
     }
-    return limitHold?.call(sessionId);
+    final limit = limitHold?.call(sessionId);
+    if (limit != null) return limit;
+    if (_nothingRuns(sessionId)) return const QueueHold(QueueHoldKind.stopped);
+    return null;
   }
+
+  bool _nothingRuns(String sessionId) =>
+      !_inFlight.contains(sessionId) &&
+      !_resumedForHead.contains(sessionId) &&
+      status.acpRuntimeOf(sessionId) == null &&
+      !status.holds(sessionId);
 
   /// A resume armed for the reset takes even a new message's place.
   bool _holdsNewMessages(String sessionId) =>

@@ -148,7 +148,8 @@ import '../mcp/tools/review_thread_tool_set.dart';
 import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
-import 'package:karmashala_host_protocol/protocol.dart' show AgentHookEvent;
+import 'package:karmashala_host_protocol/protocol.dart'
+    show AgentHookEvent, LifecycleEventKind;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
@@ -1156,6 +1157,12 @@ Future<int> runServe(
     settled: turnSettlement.settled,
   );
   sessionQueue.start();
+  // A process ending tells what waits for it that nothing runs it now.
+  final queueEnds = server.lifecycle.events.listen((event) {
+    if (event.kind != LifecycleEventKind.started) {
+      sessionQueue.hostSessionEnded(event.sessionId);
+    }
+  });
   data.sessionInput = sessionInput;
   // A phone on the older companion API sends to such a session the same way;
   // to a PTY session it types its own keys, so only the queue's decision is
@@ -1531,6 +1538,7 @@ Future<int> runServe(
   await ssh.close();
   storeDesk.close();
   await attention.close();
+  await queueEnds.cancel();
   await sessionQueue.close();
   await turnSettlement.close();
   await status.close();
