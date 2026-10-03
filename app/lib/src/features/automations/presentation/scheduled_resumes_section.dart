@@ -72,6 +72,14 @@ class ScheduledResumesSection extends ConsumerWidget {
               onChanged: controller.setResumeMessage,
             ),
           ),
+          SettingsSwitchRow(
+            label: 'Continue turns a restart cut off',
+            help:
+                'When Karmashala stops or crashes mid-turn, the session is '
+                'resumed and told to carry on.',
+            value: settings.continueInterruptedTurns,
+            onChanged: controller.setContinueInterruptedTurns,
+          ),
           if (live.isEmpty)
             const SettingsNote('No resume is waiting.')
           else

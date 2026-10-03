@@ -328,12 +328,46 @@ class ServerSessionLauncher {
   /// Continues session [sessionId] on its own conversation (a fresh one in
   /// its own row when it never named one), in its own directory and mode.
   /// One already running here is answered as it is. [restart] ends it first.
+  /// A resume of a row another resume is still starting waits for that one,
+  /// so two callers never start two processes (a boot's automatic continue
+  /// and a client reopening the same row).
   Future<SessionStarted> resume(
     String sessionId, {
     bool restart = false,
     String? prompt,
     int columns = 120,
     int rows = 40,
+  }) {
+    Future<SessionStarted> now() => _resume(
+      sessionId,
+      restart: restart,
+      prompt: prompt,
+      columns: columns,
+      rows: rows,
+    );
+    final inFlight = _resuming[sessionId];
+    final started = inFlight == null
+        ? now()
+        : inFlight.then((_) => now(), onError: (Object _) => now());
+    _resuming[sessionId] = started;
+    unawaited(
+      started.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+        if (identical(_resuming[sessionId], started)) {
+          _resuming.remove(sessionId);
+        }
+      }),
+    );
+    return started;
+  }
+
+  final Map<String, Future<SessionStarted>> _resuming = {};
+
+  Future<SessionStarted> _resume(
+    String sessionId, {
+    required bool restart,
+    required String? prompt,
+    required int columns,
+    required int rows,
   }) async {
     final row =
         sessions.getById(sessionId) ??

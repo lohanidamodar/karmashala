@@ -99,6 +99,7 @@ class Settings {
     this.usageLimitBehavior = UsageLimitBehavior.ask,
     this.resumeMessage = kDefaultResumeMessage,
     this.resumeMessages = const {},
+    this.continueInterruptedTurns = true,
     this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
@@ -224,6 +225,10 @@ class Settings {
 
   /// The message last used per agent id, so the dialog opens on it.
   final Map<String, String> resumeMessages;
+
+  /// Whether the server resumes a session whose turn its stop or crash cut
+  /// off, and tells it so. The server reads this key itself.
+  final bool continueInterruptedTurns;
 
   /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
   /// one of its sections, or a context inside it. Absent means expanded, so a
@@ -390,6 +395,7 @@ class Settings {
     UsageLimitBehavior? usageLimitBehavior,
     String? resumeMessage,
     Map<String, String>? resumeMessages,
+    bool? continueInterruptedTurns,
     List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
@@ -462,6 +468,8 @@ class Settings {
     usageLimitBehavior: usageLimitBehavior ?? this.usageLimitBehavior,
     resumeMessage: resumeMessage ?? this.resumeMessage,
     resumeMessages: resumeMessages ?? this.resumeMessages,
+    continueInterruptedTurns:
+        continueInterruptedTurns ?? this.continueInterruptedTurns,
     collapsedExplorerNodes:
         collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
@@ -573,6 +581,7 @@ class Settings {
     'usageLimitBehavior': usageLimitBehavior.name,
     'resumeMessage': resumeMessage,
     if (resumeMessages.isNotEmpty) 'resumeMessages': resumeMessages,
+    'continueInterruptedTurns': continueInterruptedTurns,
     'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
@@ -723,6 +732,7 @@ class Settings {
             if (entry.key is String && entry.value is String)
               entry.key as String: entry.value as String,
       },
+      continueInterruptedTurns: json['continueInterruptedTurns'] != false,
       editorAutoSaveDelayMs: json['editorAutoSaveDelayMs'] is int
           ? (json['editorAutoSaveDelayMs'] as int).clamp(
               kMinEditorAutoSaveDelayMs,
@@ -857,6 +867,7 @@ class Settings {
       other.usageLimitBehavior == usageLimitBehavior &&
       other.resumeMessage == resumeMessage &&
       _stringMapEquals(other.resumeMessages, resumeMessages) &&
+      other.continueInterruptedTurns == continueInterruptedTurns &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
@@ -947,6 +958,7 @@ class Settings {
           quitKeepsHostSessions,
           usageLimitBehavior,
           resumeMessage,
+          continueInterruptedTurns,
           Object.hashAllUnordered(
             resumeMessages.entries.map((e) => Object.hash(e.key, e.value)),
           ),

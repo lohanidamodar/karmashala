@@ -267,6 +267,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setContinueInterruptedTurns(bool value) {
+    state = state.copyWith(continueInterruptedTurns: value);
+    _save();
+  }
+
   void setResumeMessage(String value) {
     state = state.copyWith(resumeMessage: value.trim());
     _save();

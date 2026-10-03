@@ -284,6 +284,17 @@ void main() {
     },
   );
 
+  test('two resumes of one row at once start one process; the second is '
+      'answered adopted', () async {
+    insert('s1', conversation: 'conv-1');
+    final first = launches.resume('s1', prompt: 'carry on');
+    final second = launches.resume('s1');
+    final answers = await Future.wait([first, second]);
+    expect(pty.started, hasLength(1));
+    expect(answers.first.adopted, isFalse);
+    expect(answers.last.adopted, isTrue);
+  });
+
   test('a row with no conversation gets a fresh one in the same row, '
       'under its own id', () async {
     insert('s1');

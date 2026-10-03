@@ -63,6 +63,7 @@ import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
+import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_ends_with_server.dart';
 import '../sessions/session_media.dart';
@@ -1029,6 +1030,46 @@ Future<int> runServe(
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // Turns the last stop or crash cut off are continued now, each resume
+  // claimed before any client can connect and reopen the same row; then
+  // every turn this server runs is recorded open until it settles.
+  final openTurns = OpenTurns(
+    read: () => database.readMetadata(kOpenTurnsKey),
+    write: (value) => database.writeMetadata(kOpenTurnsKey, value),
+  );
+  if (hostEnvironment[kAgentWorkVariable] != 'off') {
+    unawaited(
+      InterruptedTurnContinuer(
+        turns: openTurns,
+        sessionOf: sessionRows.getById,
+        childrenOf: sessionRows.childrenOf,
+        runsHere: launches.runsHere,
+        takesOpeningMessage: (session) {
+          final agentId = checkoutRows
+              .installation(session.agentInstallationId)
+              ?.agentId;
+          if (agentId == null) return false;
+          // Over ACP the message is the first `session/prompt`.
+          return liveAgents.adapterOf(agentId)?.acp != null ||
+              (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
+                  false);
+        },
+        resume: (sessionId, prompt) =>
+            launches.resume(sessionId, prompt: prompt),
+        now: () => DateTime.now().toUtc(),
+        enabled: () =>
+            continuesInterruptedTurns(database.readMetadata('settings.v1')),
+        log: (message) => errSink.writeln('karmashala_host: $message'),
+      ).run(),
+    );
+  }
+  final turnFollow = followOpenTurns(
+    openTurns,
+    statuses: status.changes,
+    lifecycle: server.lifecycle.events,
+    runsHere: status.runsHere,
+    clock: () => DateTime.now().toUtc(),
+  );
   data.sessionInput = sessionInput;
   // A phone on the older companion API sends to such a session the same way.
   companion.sendOverProtocol = (sessionId, text) async {
@@ -1308,6 +1349,10 @@ Future<int> runServe(
   await sink.flush();
 
   final code = await stopping.future;
+  // First: a turn this stop cuts off must stay recorded open.
+  for (final subscription in turnFollow) {
+    await subscription.cancel();
+  }
   for (final subscription in subscriptions) {
     await subscription.cancel();
   }

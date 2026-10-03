@@ -42,5 +42,14 @@ void main() {
     );
     expect(base.copyWith(resumeMessage: 'go'), isNot(base));
     expect(base.withResumeMessage('codex', 'go'), isNot(base));
+    expect(base.copyWith(continueInterruptedTurns: false), isNot(base));
+  });
+
+  test('continuing interrupted turns is on unless switched off', () {
+    expect(const Settings().continueInterruptedTurns, isTrue);
+    expect(Settings.fromJson(const {}).continueInterruptedTurns, isTrue);
+    final off = const Settings().copyWith(continueInterruptedTurns: false);
+    expect(off.toJson()['continueInterruptedTurns'], false);
+    expect(Settings.fromJson(off.toJson()).continueInterruptedTurns, isFalse);
   });
 }
