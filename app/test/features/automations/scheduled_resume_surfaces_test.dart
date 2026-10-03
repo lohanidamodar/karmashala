@@ -225,6 +225,18 @@ void main() {
       expect(find.text('No resume is waiting.'), findsOneWidget);
 
       expect(find.textContaining('to turn automatic resume off'), findsOne);
+      expect(
+        find.textContaining("unless the session's permission mode asks"),
+        findsOne,
+      );
+      expect(
+        find.text('Continue turns cut off when the session host stops'),
+        findsOne,
+      );
+      expect(
+        find.textContaining('Turns older than 12 hours are not continued'),
+        findsOne,
+      );
       await tester.tap(find.text('Resume automatically at the reset'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Do nothing').last);
