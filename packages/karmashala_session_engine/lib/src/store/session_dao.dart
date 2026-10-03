@@ -93,6 +93,7 @@ class SessionDao implements SessionStatusStore {
         session.id,
       ],
     );
+    _followActiveSpan(session.id, session.externalSessionId);
   }
 
   /// Updates the mutable fields of a session (title, worktree, status).
@@ -221,6 +222,19 @@ class SessionDao implements SessionStatusStore {
       externalSessionId,
       id,
     ]);
+    _followActiveSpan(id, externalSessionId);
+  }
+
+  /// A switched session's active span names the conversation its row names:
+  /// an agent that announces its id after starting is learnt here.
+  void _followActiveSpan(String id, String? externalSessionId) {
+    if (externalSessionId == null || externalSessionId.isEmpty) return;
+    _db.execute(
+      'UPDATE session_agent_spans SET external_session_id = ? '
+      'WHERE session_id = ? AND seq = (SELECT MAX(seq) FROM '
+      'session_agent_spans WHERE session_id = ?);',
+      [externalSessionId, id, id],
+    );
   }
 
   @override

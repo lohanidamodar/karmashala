@@ -28,7 +28,10 @@ import '../../data/conversations_handler.dart' show TranscriptStores;
 import '../../mcp/tools/checkout_delivery.dart';
 import '../../mcp/tools/checkout_reach.dart';
 import '../../status/hosted_session_wait.dart';
+import '../session_agent_stitching.dart' show kSwitchInstruction;
 import 'server_session_launcher.dart';
+
+export '../session_agent_stitching.dart' show kSwitchInstruction;
 
 /// How many of the source's snapshots a packet offers.
 const int kHandoffCheckpointCount = 8;
@@ -791,8 +794,9 @@ class SessionContinuations {
     final support =
         context.descriptor?.launch.systemPromptFile ??
         const AgentSystemPromptFileSupport.unchecked();
-    // A resumed conversation is told only what it missed, as its next turn.
-    final asFile = !resumable && !targetAcp && support.isSupported;
+    // The packet as a system-prompt file where the agent takes one, resumed
+    // or not: a prompt file outside the workspace makes it ask to read it.
+    final asFile = !targetAcp && support.isSupported;
     log?.call(
       'Switch of $sessionId from ${sourceAgentId ?? 'unknown'} to '
       '${context.installation.agentId}: '
@@ -1186,12 +1190,6 @@ class SessionContinuations {
     }
   }
 }
-
-/// What an agent switched in is asked to do when the person said nothing.
-const String kSwitchInstruction =
-    'You are taking over this session in place. Pick the work up where the '
-    'conversation stands: if the last request is finished, say so in a line '
-    'and wait for the next message.';
 
 /// The turns of [conversation] after [installationId] last spoke in it —
 /// all of them when it never did, or when [installationId] is null.

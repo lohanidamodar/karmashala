@@ -56,6 +56,12 @@ List<TranscriptMessage> stitchAgentSpans(List<SpanSource> sources) {
   return out;
 }
 
+/// What an agent switched in is asked to do when the person said nothing.
+const String kSwitchInstruction =
+    'You are taking over this session in place. Pick the work up where the '
+    'conversation stands: if the last request is finished, say so in a line '
+    'and wait for the next message.';
+
 /// Whether [text], a span's first user turn, is the packet it was handed —
 /// typed whole, or as the one line pointing at the file it was written to.
 bool isCarriedPacket(String text, String? packet) {
@@ -63,8 +69,12 @@ bool isCarriedPacket(String text, String? packet) {
   if (packet != null && packet.trim().isNotEmpty && said == packet.trim()) {
     return true;
   }
+  if (said == kSwitchInstruction) return true;
   return said.startsWith('# Handed off from ') ||
-      said.startsWith('Your handoff brief for this session is the file ');
+      said.startsWith('Your handoff brief for this session is the file ') ||
+      // The packet typed through a prompt file, as a non-file agent gets it.
+      (said.startsWith('My opening message to you is in the file ') &&
+          said.contains('handoff'));
 }
 
 /// [rows] from [from] (inclusive) to [before] (exclusive); a row with no time

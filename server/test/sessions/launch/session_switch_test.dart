@@ -295,10 +295,16 @@ void main() {
     final argv = pty.started.last.argv;
     expect(argv.first, '/bin/claude');
     expect(argv.join(' '), contains('--resume conv-1'));
-    expect(argv, isNot(contains('--append-system-prompt-file')));
-    expect(argv.last, contains('Tests added for the cache.'));
-    expect(argv.last, isNot(contains('I cached the totals.')));
-    expect(argv.last, contains('review them'));
+    // The recap travels as a system-prompt file, the instruction as the turn:
+    // no prompt file outside the workspace for the agent to ask about.
+    expect(argv, contains('--append-system-prompt-file'));
+    expect(argv.last, 'review them');
+    final packet = File(
+      argv[argv.indexOf('--append-system-prompt-file') + 1],
+    ).readAsStringSync();
+    expect(packet, contains('Tests added for the cache.'));
+    expect(packet, isNot(contains('I cached the totals.')));
+    expect(packet, contains('review them'));
     expect(
       spans
           .forSession('s1')
@@ -306,6 +312,32 @@ void main() {
       [(0, 'a1', 'conv-1'), (1, 'c1', 'conv-c'), (2, 'a1', 'conv-1')],
     );
     expect(rows().getById('s1')!.externalSessionId, 'conv-1');
+  });
+
+  test('an agent that names its conversation after it starts keeps it '
+      'in its span, and a switch back to it resumes it', () async {
+    await launches.resume('s1');
+    await continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+    // Codex announces its own id only once it runs.
+    rows().updateExternalSessionId('s1', 'codex-conv');
+    expect(spans.forSession('s1').last.externalSessionId, 'codex-conv');
+
+    await reading(const []).switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'a1',
+    );
+    expect(
+      spans.forSession('s1').map((s) => s.externalSessionId),
+      ['conv-1', 'codex-conv', 'conv-1'],
+    );
+
+    await reading(const []).switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'c1',
+    );
+    expect(pty.started.last.argv.first, '/bin/codex');
+    expect(pty.started.last.argv, contains('codex-conv'));
+    expect(rows().getById('s1')!.externalSessionId, 'codex-conv');
   });
 
   test('a switch is refused while a turn runs, and nothing moves', () async {

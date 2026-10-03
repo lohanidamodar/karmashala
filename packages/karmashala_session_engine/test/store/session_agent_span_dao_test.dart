@@ -106,6 +106,45 @@ void main() {
     expect(sessions.getById('s1')!.externalSessionId, 'conv-a');
   });
 
+  test('an id the active agent names later reaches its span, and a '
+      'switch away keeps it even from a stale read', () {
+    spans.recordSwitch(
+      session: sessions.getById('s1')!,
+      toInstallationId: 'a2',
+      toExternalSessionId: null,
+      at: t1,
+    );
+    final stale = sessions.getById('s1')!;
+    sessions.updateExternalSessionId('s1', 'conv-b');
+    expect(spans.forSession('s1').last.externalSessionId, 'conv-b');
+    // Span 0 keeps its own conversation.
+    expect(spans.forSession('s1').first.externalSessionId, 'conv-a');
+
+    spans.recordSwitch(
+      session: stale,
+      toInstallationId: 'a1',
+      toExternalSessionId: 'conv-a',
+      at: t2,
+    );
+    expect(
+      spans.forSession('s1').map((s) => s.externalSessionId),
+      ['conv-a', 'conv-b', 'conv-a'],
+    );
+  });
+
+  test('a full row write names the conversation of the active span too', () {
+    spans.recordSwitch(
+      session: sessions.getById('s1')!,
+      toInstallationId: 'a2',
+      toExternalSessionId: null,
+      at: t1,
+    );
+    sessions.write(
+      sessions.getById('s1')!.copyWith(externalSessionId: 'conv-w'),
+    );
+    expect(spans.forSession('s1').last.externalSessionId, 'conv-w');
+  });
+
   test('a span round-trips through json', () {
     final span = SessionAgentSpan(
       sessionId: 's1',

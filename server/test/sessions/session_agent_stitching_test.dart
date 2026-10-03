@@ -134,6 +134,42 @@ void main() {
     });
   });
 
+  test('the delivery of a switch is not a user turn; words the person '
+      'typed are', () {
+    List<String> texts(List<TranscriptMessage> rows) => [
+      for (final m in stitchAgentSpans([
+        (
+          span: SessionAgentSpan(
+            sessionId: 's',
+            seq: 1,
+            agentInstallationId: 'b',
+            startedAt: t0,
+            carriedPacket: 'the packet',
+          ),
+          fromMessages: false,
+          rows: rows,
+        ),
+      ]))
+        m.text,
+    ];
+    expect(
+      texts([
+        row('user', 'My opening message to you is in the file '
+            '/data/handoff/prompt-s.md. Read all of it.', 1),
+        row('agent', 'ok', 2),
+      ]),
+      ['the packet', 'ok'],
+    );
+    expect(
+      texts([row('user', kSwitchInstruction, 1), row('agent', 'ok', 2)]),
+      ['the packet', 'ok'],
+    );
+    expect(
+      texts([row('user', 'review the tests', 1), row('agent', 'ok', 2)]),
+      ['the packet', 'review the tests', 'ok'],
+    );
+  });
+
   group('SessionTranscripts', () {
     late AppDatabase db;
     late Directory temp;

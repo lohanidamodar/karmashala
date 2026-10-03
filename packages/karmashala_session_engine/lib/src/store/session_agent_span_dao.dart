@@ -38,22 +38,27 @@ class SessionAgentSpanDao {
     String? carriedPacket,
   }) => _db.transaction(() {
     final spans = forSession(session.id);
+    // The row as it stands now: the leaving agent may have named its
+    // conversation after [session] was read.
+    final leaving =
+        SessionDao(_db).getById(session.id)?.externalSessionId ??
+        session.externalSessionId;
     if (spans.isEmpty) {
       _insert(
         SessionAgentSpan(
           sessionId: session.id,
           seq: 0,
           agentInstallationId: session.agentInstallationId,
-          externalSessionId: session.externalSessionId,
+          externalSessionId: leaving,
           startedAt: session.createdAt,
           firstMessageOrdinal: leavingFirstMessageOrdinal,
         ),
       );
-    } else if (session.externalSessionId != null) {
+    } else if (leaving != null && leaving.isNotEmpty) {
       _db.execute(
         'UPDATE session_agent_spans SET external_session_id = ? '
         'WHERE session_id = ? AND seq = ?;',
-        [session.externalSessionId, session.id, spans.last.seq],
+        [leaving, session.id, spans.last.seq],
       );
     }
     final next = SessionAgentSpan(
