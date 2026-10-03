@@ -44,6 +44,8 @@ class ResumeBadge {
     required this.label,
     required this.tooltip,
     required this.queued,
+    this.fireAt,
+    this.firing = false,
   });
 
   final String resumeId;
@@ -53,16 +55,26 @@ class ResumeBadge {
   final String tooltip;
   final bool queued;
 
+  /// When a pending resume fires, for a surface that counts down to it; null
+  /// once it is queued or firing.
+  final DateTime? fireAt;
+
+  /// Started: too late to cancel.
+  final bool firing;
+
   @override
   bool operator ==(Object other) =>
       other is ResumeBadge &&
       other.resumeId == resumeId &&
       other.label == label &&
       other.tooltip == tooltip &&
-      other.queued == queued;
+      other.queued == queued &&
+      other.fireAt == fireAt &&
+      other.firing == firing;
 
   @override
-  int get hashCode => Object.hash(resumeId, label, tooltip, queued);
+  int get hashCode =>
+      Object.hash(resumeId, label, tooltip, queued, fireAt, firing);
 }
 
 /// Every waiting resume's badge by session id: one query per write, however
@@ -80,6 +92,10 @@ final resumeBadgesProvider = Provider<Map<String, ResumeBadge>>((ref) {
         },
         tooltip: describeScheduledResume(resume, now: now),
         queued: resume.state == ScheduledResumeState.queued,
+        fireAt: resume.state == ScheduledResumeState.pending
+            ? resume.fireAt
+            : null,
+        firing: resume.state == ScheduledResumeState.firing,
       ),
   };
 });

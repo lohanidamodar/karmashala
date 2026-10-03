@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart'
+    show resumesDataProvider;
+import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
@@ -293,5 +296,47 @@ void main() {
     expect(find.byTooltip('Chat view'), findsOneWidget);
     expect(find.byTooltip('Terminal view'), findsOneWidget);
     expect(find.byType(SessionTranscriptView), findsNothing);
+  });
+
+  group('a resume armed at the reset, seen from the chat', () {
+    void armResume() => container
+        .read(resumesDataProvider)
+        .replaceFor(
+          ScheduledResume(
+            id: 'r1',
+            sessionId: 'acp-1',
+            // Half a minute over, so a real clock reads it the same all test.
+            fireAt: DateTime.now().toUtc().add(
+              const Duration(hours: 2, minutes: 5, seconds: 30),
+            ),
+            state: ScheduledResumeState.pending,
+            scheduledAt: DateTime.now().toUtc(),
+          ),
+          now: DateTime.now().toUtc(),
+        );
+
+    for (final (name, size, compact) in [
+      ('desktop', const Size(1440, 900), false),
+      ('phone', const Size(390, 844), true),
+    ]) {
+      testWidgets('$name: the bar under the chat counts down, and one click '
+          'cancels', (tester) async {
+        seedAcpSession();
+        armResume();
+        container.read(selectedSessionIdProvider.notifier).select('acp-1');
+        await pump(tester, size: size, compact: compact);
+
+        expect(find.byType(SessionTranscriptView), findsOneWidget);
+        expect(find.text('Resumes in 2h 6m'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(
+          find.byKey(const ValueKey('scheduled-resume-cancel')),
+        );
+        await tester.pumpAndSettle();
+        expect(container.read(resumesDataProvider).liveFor('acp-1'), isNull);
+        expect(find.textContaining('Resumes in'), findsNothing);
+      });
+    }
   });
 }
