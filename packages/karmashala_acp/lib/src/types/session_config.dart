@@ -54,6 +54,7 @@ final class ConfigSelectOption {
     required this.name,
     this.description,
     this.group,
+    this.groupId,
   });
 
   final String value;
@@ -62,6 +63,11 @@ final class ConfigSelectOption {
 
   /// The group heading this choice sat under, when the agent grouped them.
   final String? group;
+
+  /// That group's id (`group` on the wire).
+  final String? groupId;
+
+  bool get _isGrouped => group != null || groupId != null;
 
   JsonMap toJson() =>
       withoutNulls({'value': value, 'name': name, 'description': description});
@@ -111,19 +117,20 @@ final class ConfigOption {
     'description': description,
     'category': category,
     'currentValue': currentValue,
-    if (isSelect) 'options': [for (final o in options) o.toJson()],
+    if (isSelect) 'options': _selectOptionsToJson(options),
   });
 
   /// Grouped and ungrouped lists both flatten to choices; a group's items
-  /// remember their heading.
+  /// remember their heading and id.
   static List<ConfigSelectOption> _selectOptions(List<JsonMap>? items) {
     final result = <ConfigSelectOption>[];
     for (final item in items ?? const <JsonMap>[]) {
       final grouped = item.objects('options');
       if (grouped != null) {
         final heading = item.string('name');
+        final groupId = item.string('group');
         for (final choice in grouped) {
-          result.add(_choice(choice, group: heading));
+          result.add(_choice(choice, group: heading, groupId: groupId));
         }
       } else {
         result.add(_choice(item));
@@ -132,13 +139,45 @@ final class ConfigOption {
     return result;
   }
 
-  static ConfigSelectOption _choice(JsonMap json, {String? group}) =>
-      ConfigSelectOption(
-        value: json.string('value') ?? '',
-        name: json.string('name') ?? '',
-        description: json.string('description'),
-        group: group,
+  /// [_selectOptions] undone: consecutive choices of one group go back under
+  /// it, so a grouped list goes out grouped.
+  static List<JsonMap> _selectOptionsToJson(List<ConfigSelectOption> options) {
+    final result = <JsonMap>[];
+    for (var i = 0; i < options.length; i++) {
+      final first = options[i];
+      if (!first._isGrouped) {
+        result.add(first.toJson());
+        continue;
+      }
+      final members = [first.toJson()];
+      while (i + 1 < options.length &&
+          options[i + 1]._isGrouped &&
+          options[i + 1].group == first.group &&
+          options[i + 1].groupId == first.groupId) {
+        members.add(options[++i].toJson());
+      }
+      result.add(
+        withoutNulls({
+          'group': first.groupId,
+          'name': first.group,
+          'options': members,
+        }),
       );
+    }
+    return result;
+  }
+
+  static ConfigSelectOption _choice(
+    JsonMap json, {
+    String? group,
+    String? groupId,
+  }) => ConfigSelectOption(
+    value: json.string('value') ?? '',
+    name: json.string('name') ?? '',
+    description: json.string('description'),
+    group: group,
+    groupId: groupId,
+  );
 }
 
 List<ConfigOption>? configOptionsFromJson(List<JsonMap>? items) =>

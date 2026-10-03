@@ -27,7 +27,6 @@ class FakeAcpAgent {
     this.sessionIdPrefix = 'fake-session',
     this.supportsLoadSession = true,
     this.holdsNoConversations = false,
-
     this.supportsLogout = false,
     this.authenticateRefusal,
     this.loadReplay = const [],

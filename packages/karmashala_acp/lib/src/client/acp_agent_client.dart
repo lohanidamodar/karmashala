@@ -26,7 +26,10 @@ class AcpAgentClient {
     this.protocolVersion = AcpVocabulary.protocolVersion,
   }) {
     _requestSubscription = peer.requests.listen(_onRequest);
-    _notificationSubscription = peer.notifications.listen(_onNotification);
+    _notificationSubscription = peer.notifications.listen(
+      _onNotification,
+      onDone: () => unawaited(_updates.close()),
+    );
   }
 
   final AcpPeer peer;
@@ -37,7 +40,8 @@ class AcpAgentClient {
   late final StreamSubscription<AcpIncomingRequest> _requestSubscription;
   late final StreamSubscription<AcpNotification> _notificationSubscription;
 
-  /// Broadcast: subscribe before the prompt whose updates you want.
+  /// Broadcast: subscribe before the prompt whose updates you want. Done once
+  /// the peer has closed, whichever side ended it.
   Stream<SessionUpdateEvent> get updates => _updates.stream;
 
   /// Throws [AcpVersionMismatch] unless the agent answers [protocolVersion].

@@ -22,10 +22,12 @@ sealed class ContentBlock {
         data: json.string('data') ?? '',
         mimeType: json.string('mimeType') ?? '',
         uri: json.string('uri'),
+        annotations: json.object('annotations'),
       ),
       'audio' => AudioContent(
         data: json.string('data') ?? '',
         mimeType: json.string('mimeType') ?? '',
+        annotations: json.object('annotations'),
       ),
       'resource_link' => ResourceLinkContent(
         uri: json.string('uri') ?? '',
@@ -34,9 +36,11 @@ sealed class ContentBlock {
         description: json.string('description'),
         mimeType: json.string('mimeType'),
         size: json.integer('size'),
+        annotations: json.object('annotations'),
       ),
       'resource' => EmbeddedResourceContent(
         EmbeddedResource.fromJson(json.object('resource') ?? const {}),
+        annotations: json.object('annotations'),
       ),
       _ => UnknownContent(type ?? '', json),
     };
@@ -62,12 +66,18 @@ final class TextContent extends ContentBlock {
 }
 
 final class ImageContent extends ContentBlock {
-  const ImageContent({required this.data, required this.mimeType, this.uri});
+  const ImageContent({
+    required this.data,
+    required this.mimeType,
+    this.uri,
+    this.annotations,
+  });
 
   /// Base64.
   final String data;
   final String mimeType;
   final String? uri;
+  final JsonMap? annotations;
 
   @override
   String get type => 'image';
@@ -78,21 +88,32 @@ final class ImageContent extends ContentBlock {
     'data': data,
     'mimeType': mimeType,
     'uri': uri,
+    'annotations': annotations,
   });
 }
 
 final class AudioContent extends ContentBlock {
-  const AudioContent({required this.data, required this.mimeType});
+  const AudioContent({
+    required this.data,
+    required this.mimeType,
+    this.annotations,
+  });
 
   /// Base64.
   final String data;
   final String mimeType;
+  final JsonMap? annotations;
 
   @override
   String get type => 'audio';
 
   @override
-  JsonMap toJson() => {'type': type, 'data': data, 'mimeType': mimeType};
+  JsonMap toJson() => withoutNulls({
+    'type': type,
+    'data': data,
+    'mimeType': mimeType,
+    'annotations': annotations,
+  });
 }
 
 final class ResourceLinkContent extends ContentBlock {
@@ -103,6 +124,7 @@ final class ResourceLinkContent extends ContentBlock {
     this.description,
     this.mimeType,
     this.size,
+    this.annotations,
   });
 
   final String uri;
@@ -111,6 +133,7 @@ final class ResourceLinkContent extends ContentBlock {
   final String? description;
   final String? mimeType;
   final int? size;
+  final JsonMap? annotations;
 
   @override
   String get type => 'resource_link';
@@ -124,19 +147,25 @@ final class ResourceLinkContent extends ContentBlock {
     'description': description,
     'mimeType': mimeType,
     'size': size,
+    'annotations': annotations,
   });
 }
 
 final class EmbeddedResourceContent extends ContentBlock {
-  const EmbeddedResourceContent(this.resource);
+  const EmbeddedResourceContent(this.resource, {this.annotations});
 
   final EmbeddedResource resource;
+  final JsonMap? annotations;
 
   @override
   String get type => 'resource';
 
   @override
-  JsonMap toJson() => {'type': type, 'resource': resource.toJson()};
+  JsonMap toJson() => withoutNulls({
+    'type': type,
+    'resource': resource.toJson(),
+    'annotations': annotations,
+  });
 }
 
 /// The body of an embedded resource: text, or a base64 blob.

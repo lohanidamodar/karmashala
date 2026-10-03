@@ -91,9 +91,27 @@ void main() {
     test('content blocks: every type round-trips; an unknown one is kept', () {
       final blocks = [
         {'type': 'text', 'text': 'hi'},
-        {'type': 'image', 'data': 'AAAA', 'mimeType': 'image/png'},
-        {'type': 'audio', 'data': 'BBBB', 'mimeType': 'audio/wav'},
-        {'type': 'resource_link', 'uri': 'file:///a', 'name': 'a', 'size': 3},
+        {
+          'type': 'image',
+          'data': 'AAAA',
+          'mimeType': 'image/png',
+          'annotations': {'priority': 0.5},
+        },
+        {
+          'type': 'audio',
+          'data': 'BBBB',
+          'mimeType': 'audio/wav',
+          'annotations': {
+            'audience': ['user'],
+          },
+        },
+        {
+          'type': 'resource_link',
+          'uri': 'file:///a',
+          'name': 'a',
+          'size': 3,
+          'annotations': {'priority': 1},
+        },
         {
           'type': 'resource',
           'resource': {
@@ -101,6 +119,7 @@ void main() {
             'mimeType': 'text/plain',
             'text': 'b',
           },
+          'annotations': {'priority': 0},
         },
         {'type': 'video', 'uri': 'file:///c'},
       ];
@@ -172,6 +191,50 @@ void main() {
         expect(options[1].currentValue, true);
       },
     );
+
+    test('config options: a grouped select goes back out grouped', () {
+      final json = {
+        'id': 'model',
+        'name': 'Model',
+        'type': 'select',
+        'currentValue': 'big',
+        'options': [
+          {
+            'group': 'hosted',
+            'name': 'Hosted',
+            'options': [
+              {'value': 'big', 'name': 'Big'},
+              {'value': 'small', 'name': 'Small'},
+            ],
+          },
+          {
+            'group': 'local',
+            'name': 'Local',
+            'options': [
+              {'value': 'tiny', 'name': 'Tiny'},
+            ],
+          },
+        ],
+      };
+      final option = ConfigOption.fromJson(json);
+      expect(option.options.map((o) => o.groupId), [
+        'hosted',
+        'hosted',
+        'local',
+      ]);
+      expect(option.toJson(), json);
+      final flat = {
+        'id': 'mode',
+        'name': 'Mode',
+        'type': 'select',
+        'currentValue': 'a',
+        'options': [
+          {'value': 'a', 'name': 'A'},
+          {'value': 'b', 'name': 'B'},
+        ],
+      };
+      expect(ConfigOption.fromJson(flat).toJson(), flat);
+    });
 
     test('McpServerEntry writes env and headers as name/value pairs', () {
       expect(

@@ -100,6 +100,13 @@ void main() {
     expect(result.agentInfo!.version, '0.0.1');
   });
 
+  test('updates end when the agent goes away', () async {
+    await connect();
+    final ended = client.updates.toList();
+    await agent.close();
+    await expectLater(ended, completion(isEmpty));
+  });
+
   test(
     'a protocol version other than ours throws AcpVersionMismatch',
     () async {
