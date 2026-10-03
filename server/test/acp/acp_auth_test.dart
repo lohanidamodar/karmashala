@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show ProcessException;
 
 import 'package:agent_cli/descriptors.dart';
@@ -8,6 +9,7 @@ import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/store.dart';
 import 'package:karmashala_host/src/acp/acp_auth.dart';
+import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -216,6 +218,53 @@ void main() {
       expect(openedLinks, isEmpty);
     },
   );
+
+  test('a browser login gets ten minutes; one not finished by then is ended '
+      'and told in words, remembering nothing', () async {
+    final silent = StreamController<List<int>>();
+    addTearDown(silent.close);
+    final waiting = ServerAcpAuth(
+      installations: () => [antigravity],
+      environments: () => [wsl],
+      registry: () => AgentRegistry.builtIn,
+      choices: AcpAuthChoiceDao(database),
+      spawn: (_, _) async => AcpTransport.streams(
+        output: silent.stream,
+        input: StreamController<List<int>>(),
+        exitCode: Completer<int>().future,
+      ),
+      authenticateTimeout: const Duration(milliseconds: 50),
+    );
+    await expectLater(
+      waiting.authenticate('ag1', 'oauth-personal'),
+      throwsA(
+        isA<DataRefused>().having(
+          (r) => r.message,
+          'message',
+          'Antigravity (ACP) was not logged in within 50 milliseconds, so the '
+              'login was ended. Log in again and finish signing in in the '
+              'browser it opens.',
+        ),
+      ),
+    );
+    expect(waiting.state('ag1'), isNull);
+    expect(
+      auth().authenticateTimeout,
+      const Duration(seconds: 5),
+      reason: 'the fixture sets its own',
+    );
+    expect(
+      ServerAcpAuth(
+        installations: () => const [],
+        environments: () => const [],
+        registry: () => AgentRegistry.builtIn,
+        choices: AcpAuthChoiceDao(database),
+        spawn: (_, _) => throw StateError('unused'),
+      ).authenticateTimeout,
+      kAcpAgentLoginPatience,
+    );
+    expect(kAcpAgentLoginPatience, const Duration(minutes: 10));
+  });
 
   test('a refused authenticate is told in the agent\'s words and changes '
       'nothing remembered', () async {

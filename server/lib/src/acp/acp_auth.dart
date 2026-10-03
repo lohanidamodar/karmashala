@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:io' show Platform, Process, ProcessException, ProcessStartMode;
 
 import 'package:agent_cli/descriptors.dart';
@@ -63,7 +64,7 @@ class ServerAcpAuth {
     void Function(Uri link)? openLink,
     DateTime Function()? now,
     this.readTimeout = kAcpVersionProbeTimeout,
-    this.authenticateTimeout = const Duration(minutes: 3),
+    this.authenticateTimeout = kAcpAgentLoginPatience,
     this.clientVersion = kHostVersion,
   }) : _installations = installations,
        _environments = environments,
@@ -137,6 +138,10 @@ class ServerAcpAuth {
       authenticateTimeout,
       variables: _variablesFor(target.spec, methodId),
       onErrorLine: _loginLinkOpener(target.environment),
+      timedOut:
+          '${target.name} was not logged in within '
+          '${_spoken(authenticateTimeout)}, so the login was ended. Log in '
+          'again and finish signing in in the browser it opens.',
       (peer, init) async {
         final method = _advertised(target, init, methodId);
         if (method.isTerminal) {
@@ -309,6 +314,7 @@ class ServerAcpAuth {
     Future<T> Function(acp.AcpPeer peer, acp.InitializeResult init) body, {
     Map<String, String> variables = const {},
     void Function(String line)? onErrorLine,
+    String? timedOut,
   }) async {
     try {
       return await talkToAcpAgent(
@@ -330,6 +336,11 @@ class ServerAcpAuth {
       );
     } on DataRefused {
       rethrow;
+    } on TimeoutException catch (error) {
+      throw DataRefused(
+        DataRefusalCode.failed,
+        timedOut ?? '${target.name} did not answer: $error',
+      );
     } on Object catch (error) {
       throw DataRefused(
         DataRefusalCode.failed,
@@ -375,6 +386,19 @@ class ServerAcpAuth {
     chosenAt: choice.chosenAt,
     authenticatedAt: choice.authenticatedAt,
   );
+}
+
+/// [span] as a person reads it: whole minutes, else seconds, else
+/// milliseconds.
+String _spoken(Duration span) {
+  String count(int n, String unit) => n == 1 ? '1 $unit' : '$n ${unit}s';
+  if (span.inMinutes > 0 && span == Duration(minutes: span.inMinutes)) {
+    return count(span.inMinutes, 'minute');
+  }
+  if (span.inSeconds > 0 && span == Duration(seconds: span.inSeconds)) {
+    return count(span.inSeconds, 'second');
+  }
+  return count(span.inMilliseconds, 'millisecond');
 }
 
 /// The first https link in [line], without the punctuation that ends a

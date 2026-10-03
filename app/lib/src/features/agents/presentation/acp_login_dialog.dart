@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show AcpAuthMethod, DataRefused;
+    show AcpAuthMethod, DataRefused, kAcpAgentLoginPatience;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -28,6 +28,12 @@ class AcpLoginDialog extends ConsumerStatefulWidget {
   static const String methodsNote =
       'The agent tells Karmashala which way it was logged in, not as whom.';
 
+  /// Said while the agent completes [method] itself: a browser login waits
+  /// on the person, as long as the server lets it.
+  static String waitingNote(String method) =>
+      'Waiting for $method. If a browser opened, finish signing in there. '
+      'The login ends after ${kAcpAgentLoginPatience.inMinutes} minutes.';
+
   static Future<String?> show(
     BuildContext context, {
     required String installationId,
@@ -47,6 +53,9 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
 
   /// The API-key method waiting for its key.
   AcpAuthMethod? _keyFor;
+
+  /// The method the agent is completing itself, while it does.
+  AcpAuthMethod? _agentDoing;
   bool _busy = false;
   String? _error;
 
@@ -71,6 +80,9 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _agentDoing = method.terminal || method.apiKeyVariable != null
+          ? null
+          : method;
     });
     try {
       final said = await ref
@@ -82,7 +94,12 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _agentDoing = null;
+        });
+      }
     }
   }
 
@@ -114,6 +131,10 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
               _KeyField(method: keyFor, controller: _key, onSubmit: _submit)
             else
               _methods(current),
+            if (_agentDoing case final doing?) ...[
+              const SizedBox(height: Insets.md),
+              Text(AcpLoginDialog.waitingNote(doing.name)),
+            ],
             const SizedBox(height: Insets.md),
             Text(
               AcpLoginDialog.methodsNote,

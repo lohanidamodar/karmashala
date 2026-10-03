@@ -5,6 +5,10 @@
 /// `authenticate` confirmed it.
 library;
 
+/// How long a login the agent completes itself is given: a browser
+/// login waits on a person choosing an account and consenting.
+const Duration kAcpAgentLoginPatience = Duration(minutes: 10);
+
 /// One way an agent can be logged in, as it advertised it.
 final class AcpAuthMethod {
   const AcpAuthMethod({

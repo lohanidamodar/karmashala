@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/agents/application/acp_login_controller.dart';
 import 'package:karmashala/src/features/agents/presentation/acp_login_line.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
@@ -39,10 +43,13 @@ void main() {
     db.server.agentWork.acpAuthMethods['ag1'] = methods;
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    List<Override> overrides = const [],
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [await db.server.override()],
+        overrides: [await db.server.override(), ...overrides],
         child: const MaterialApp(
           home: Scaffold(
             body: AcpLoginLine(installationId: 'ag1', agentName: 'Antigravity'),
@@ -84,6 +91,35 @@ void main() {
     expect(find.text('Switch method…'), findsOneWidget);
     expect(find.text('Forget'), findsOneWidget);
     expect(find.textContaining('signed in as'), findsNothing);
+  });
+
+  testWidgets('while the agent logs itself in, the dialog says to finish '
+      'in the browser and how long the login waits', (tester) async {
+    final hold = Completer<String>();
+    await pump(
+      tester,
+      overrides: [
+        acpLoginActionsProvider.overrideWith(
+          (ref) => _HeldLogin(ref, hold.future),
+        ),
+      ],
+    );
+    await openLogin(tester);
+    expect(find.textContaining('finish signing in there'), findsNothing);
+
+    await tester.tap(find.text('Log in with Google'));
+    await tester.pump();
+    expect(
+      find.text(
+        'Waiting for Log in with Google. If a browser opened, finish signing '
+        'in there. The login ends after 10 minutes.',
+      ),
+      findsOneWidget,
+    );
+
+    hold.complete('Logged in via Log in with Google.');
+    await tester.pumpAndSettle();
+    expect(find.text('Log in to Antigravity'), findsNothing);
   });
 
   testWidgets('an API-key method asks for the key, keeps it in the vault '
@@ -155,4 +191,18 @@ void main() {
     expect(db.server.agentWork.acpClears, [('ag1', true)]);
     expect(find.text('Not logged in through Karmashala'), findsOneWidget);
   });
+}
+
+/// A login that answers only once a test lets it.
+class _HeldLogin extends AcpLoginActions {
+  _HeldLogin(super.ref, this._answer);
+
+  final Future<String> _answer;
+
+  @override
+  Future<String> logIn(
+    String installationId,
+    AcpAuthMethod method, {
+    String? apiKey,
+  }) => _answer;
 }
