@@ -115,6 +115,9 @@ Future<DaemonAutomations?> _startAutomations({
   void Function(UsageLimitNotice notice)? noticeUsageLimit,
   AgentTerminalOpener? openAgent,
   bool Function(ExecutionEnvironment environment)? reachesBox,
+  AcpRuntimeFactory? acpRuntimes,
+  AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
+  acpAuth,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -137,6 +140,8 @@ Future<DaemonAutomations?> _startAutomations({
     noticeUsageLimit: noticeUsageLimit,
     openAgent: openAgent,
     reachesBox: reachesBox,
+    acpRuntimes: acpRuntimes,
+    acpAuth: acpAuth,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

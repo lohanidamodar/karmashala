@@ -60,6 +60,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     required this.close,
     required this.now,
     this.statusOf,
+    this.promptOf,
     this.usage,
     this.onDecision,
     this.agents = const DaemonAgents(),
@@ -76,6 +77,11 @@ class ServerResumeRunner implements ScheduledResumeFiring {
 
   /// The running session this server holds for a row, or null.
   final HostSession? Function(String sessionId) runningOf;
+
+  /// How to send a turn to a row the server runs over a protocol (no
+  /// terminal to type into), or null when it runs none there.
+  final Future<void> Function(String message)? Function(String sessionId)?
+  promptOf;
 
   /// Ends the session the server runs for a row (a resume armed under
   /// another mode restarts it).
@@ -152,7 +158,8 @@ class ServerResumeRunner implements ScheduledResumeFiring {
       );
       return;
     }
-    final live = runningOf(session.id) != null;
+    final live =
+        runningOf(session.id) != null || promptOf?.call(session.id) != null;
     if (live && !resume.liveWhenScheduled) {
       _finish(
         resume,
@@ -191,7 +198,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
 
     if (live && !_needsRestart(session, resume)) {
-      _sendToLive(resume, session, [note, usageNote]);
+      await _sendToLive(resume, session, [note, usageNote]);
     } else {
       await _resumeAndSend(resume, session, live, [note, usageNote]);
     }
@@ -293,11 +300,11 @@ class ServerResumeRunner implements ScheduledResumeFiring {
         agents.permissionOf(agentId, session.permissionMode).canonical;
   }
 
-  void _sendToLive(
+  Future<void> _sendToLive(
     ScheduledResume resume,
     Session session,
     List<String> notes,
-  ) {
+  ) async {
     final report = statusOf?.call(session.id)?.report;
     if (report != null && report.status == AgentActivityStatus.working) {
       _finish(
@@ -330,6 +337,30 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
     final message = resume.message.trim();
     final running = runningOf(session.id);
+    if (running == null) {
+      if (promptOf?.call(session.id) case final prompt?) {
+        try {
+          await prompt(message);
+        } on StateError catch (refused) {
+          _finish(
+            resume,
+            ScheduledResumeState.failed,
+            'The session refused the message: ${refused.message}',
+          );
+          return;
+        }
+        _finish(
+          resume,
+          ScheduledResumeState.done,
+          _join([
+            'The session was already open, and sent "$message".',
+            ...notes,
+          ]),
+          sent: message,
+        );
+        return;
+      }
+    }
     if (running == null || !running.typeAsHost(utf8.encode(message))) {
       _finish(
         resume,
@@ -401,14 +432,13 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
     // The message rides the command line where the agent takes one there:
     // the CLI submits it when it is ready, nothing typed at a starting TUI.
+    // Over ACP the launcher sends it as the first prompt instead.
     final message = resume.message.trim();
+    final descriptor = agents.descriptorOf(installation.agentId);
     final asArgument =
         message.isNotEmpty &&
-        (agents
-                .descriptorOf(installation.agentId)
-                ?.launch
-                .acceptsPromptArgument ??
-            false);
+        descriptor != null &&
+        (descriptor.acp != null || descriptor.launch.acceptsPromptArgument);
     try {
       if (live) {
         // Open under another mode than the one armed. Every refusal came

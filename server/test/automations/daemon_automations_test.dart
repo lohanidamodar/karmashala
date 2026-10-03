@@ -12,6 +12,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_acp/testing.dart' show FakeAcpAgent, FakeTurn;
 import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session/session.dart'
     show SessionEnding, SessionStatus;
@@ -22,6 +23,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:test/test.dart';
+
+import '../acp/acp_fixture.dart';
 
 Future<void> pump() async {
   for (var i = 0; i < 20; i++) {
@@ -582,6 +585,35 @@ void main() {
       ]);
       expect(typed, 'continue\r');
       expect(launcher.started, hasLength(1), reason: 'nothing new started');
+    });
+
+    test('a session the server runs over ACP gets the message as its next '
+        'prompt', () async {
+      final process = FakeAcpProcess(
+        FakeAcpAgent(turns: [const FakeTurn([])]),
+      );
+      final runtime = registry.openAcp(
+        hostSessionIdOf('s1'),
+        runtimeOver(
+          process,
+          database: db,
+          workingDirectory: data.path,
+          sessionId: 's1',
+        ),
+      );
+      await runtime.start();
+      armResume(status: 'running', liveWhenScheduled: true);
+      await startDaemon();
+      await runtime.awaitTurn();
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(ended.reason, contains('already open, and sent "continue"'));
+      expect(
+        process.agent.prompts.single.single.toJson()['text'],
+        'continue',
+      );
+      expect(launcher.started, isEmpty, reason: 'nothing new started');
+      await runtime.stop();
     });
 
     test('a session somebody resumed by hand before its time is let '

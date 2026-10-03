@@ -26,6 +26,7 @@ import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_transport.dart';
+import 'acp_usage_limit.dart';
 
 /// What [AcpSessionRuntime.start] established.
 class AcpStartOutcome {
@@ -546,6 +547,15 @@ class AcpSessionRuntime implements ScreenSession {
       // The peer closed under the turn because this server stopped it.
       reason = StopReason.cancelled;
       _publish(AgentActivityStatus.idle, detail: reason.raw);
+    } else if (failure is AcpRpcError && isUsageLimitError(failure)) {
+      // Only the agent's words, so the reset read from them cannot come from
+      // a timestamp in its stderr.
+      _publish(
+        AgentActivityStatus.failed,
+        failureReason: kProtocolUsageLimitReason,
+        detail: 'usage limit',
+        evidence: usageLimitWords(failure),
+      );
     } else if (failure != null) {
       _publish(
         AgentActivityStatus.failed,
