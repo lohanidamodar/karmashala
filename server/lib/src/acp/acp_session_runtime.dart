@@ -29,6 +29,7 @@ import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
 import 'acp_prompt_images.dart';
 import 'acp_runtime_host.dart';
+import 'acp_terminals.dart';
 import 'acp_transport.dart';
 import 'acp_usage_limit.dart';
 
@@ -93,10 +94,14 @@ class AcpSessionRuntime implements ScreenSession {
     Duration coalesce = const Duration(milliseconds: 100),
     this.stopPatience = const Duration(seconds: 5),
     this.startPatience = const Duration(minutes: 3),
+    AcpTerminals? terminals,
+    this.terminalRefresh = const Duration(milliseconds: 250),
   }) : _spawn = spawn,
        _files = files ?? AcpPathScope(root: workingDirectory),
+       _terminals = terminals,
        _now = now ?? (() => DateTime.now().toUtc()) {
     startedAt = _now();
+    terminals?.onOutput = _terminalMoved;
     _writer = AcpConversationWriter(
       sessionId: sessionId,
       messages: messages,
@@ -149,6 +154,16 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// Where the agent's `fs/*` paths land on this machine.
   final AcpPathScope _files;
+
+  /// The agent's `terminal/*`; null advertises none.
+  final AcpTerminals? _terminals;
+
+  /// How often a running command's output is folded into its tool row.
+  final Duration terminalRefresh;
+
+  /// The tool calls that embed each terminal, and a refresh waiting per one.
+  final _terminalCalls = <String, Set<String>>{};
+  final _terminalTimers = <String, Timer>{};
   final DateTime Function() _now;
   late final AcpConversationWriter _writer;
 
@@ -256,6 +271,7 @@ class AcpSessionRuntime implements ScreenSession {
         AcpMethods.initialize,
         client.initialize(
           clientInfo: ClientInfo(name: spec.clientName, version: clientVersion),
+          clientCapabilities: ClientCapabilities(terminal: _terminals != null),
         ),
       );
       _capabilities = init.agentCapabilities;
@@ -688,11 +704,91 @@ class AcpSessionRuntime implements ScreenSession {
     }
     if (update is ToolCallUpdate) {
       final before = _writer.toolCall(update.toolCallId);
-      _writer.update(update);
+      _writer.update(_withTerminalOutput(update));
       _noteEditPaths(before, _writer.toolCall(update.toolCallId) ?? update);
       return;
     }
     _writer.update(update);
+  }
+
+  // Terminals.
+
+  /// [update] with each terminal it embeds carrying that terminal's output
+  /// as it stands, and the embedding remembered for later refreshes.
+  ToolCallUpdate _withTerminalOutput(ToolCallUpdate update) {
+    final terminals = _terminals;
+    final content = update.content;
+    if (terminals == null || content == null) return update;
+    var embeds = false;
+    final folded = [
+      for (final item in content)
+        if (item is ToolCallTerminal)
+          () {
+            embeds = true;
+            _terminalCalls
+                .putIfAbsent(item.terminalId, () => {})
+                .add(update.toolCallId);
+            final shown = terminals.snapshot(item.terminalId);
+            return shown == null
+                ? item
+                : ToolCallTerminal(
+                    item.terminalId,
+                    output: shown.output,
+                    truncated: shown.truncated,
+                    exitCode: shown.exitCode,
+                  );
+          }()
+        else
+          item,
+    ];
+    if (!embeds) return update;
+    return ToolCallUpdate(
+      toolCallId: update.toolCallId,
+      isNew: update.isNew,
+      title: update.title,
+      name: update.name,
+      kind: update.kind,
+      status: update.status,
+      content: folded,
+      locations: update.locations,
+      rawInput: update.rawInput,
+      rawOutput: update.rawOutput,
+    );
+  }
+
+  /// A terminal printed or ended: its output reaches the tool rows that
+  /// embed it, at most once per [terminalRefresh].
+  void _terminalMoved(String terminalId) {
+    if (_torn) return;
+    // An ended command's last word lands at once, before the agent reads it.
+    if (_terminals?.snapshot(terminalId)?.exitCode != null) {
+      _terminalTimers.remove(terminalId)?.cancel();
+      _foldTerminal(terminalId);
+      return;
+    }
+    if (_terminalTimers.containsKey(terminalId)) return;
+    _terminalTimers[terminalId] = Timer(terminalRefresh, () {
+      _terminalTimers.remove(terminalId);
+      if (!_torn) _foldTerminal(terminalId);
+    });
+  }
+
+  void _foldTerminal(String terminalId) {
+    for (final callId in _terminalCalls[terminalId] ?? const <String>{}) {
+      final call = _writer.toolCall(callId);
+      if (call == null) continue;
+      _writer.update(
+        _withTerminalOutput(
+          ToolCallUpdate(toolCallId: callId, content: call.content),
+        ),
+      );
+    }
+  }
+
+  Future<Object?> _terminal(String method, Object? params) {
+    final terminals = _terminals;
+    if (terminals == null) throw AcpMethodNotSupported(method);
+    return terminals.handle(method, asJsonMap(params) ?? const {});
   }
 
   /// An edit's paths reach the checkpoint once they are known — Claude's
@@ -1157,6 +1253,16 @@ class AcpSessionRuntime implements ScreenSession {
     if (_torn) return;
     _torn = true;
     await _updates?.cancel();
+    // Every command the agent left running ends with the session; the rows
+    // keep what each printed.
+    for (final timer in _terminalTimers.values) {
+      timer.cancel();
+    }
+    _terminalTimers.clear();
+    await _terminals?.releaseAll();
+    for (final terminalId in _terminalCalls.keys) {
+      _foldTerminal(terminalId);
+    }
     _writer.close();
     _resolvePending(const PermissionOutcome.cancelled());
     _announceGone();
@@ -1214,4 +1320,8 @@ final class _Handler extends AcpClientHandler {
   @override
   Future<void> writeTextFile(String sessionId, String path, String content) =>
       _runtime._write(path, content);
+
+  @override
+  Future<Object?> terminal(String method, Object? params) =>
+      _runtime._terminal(method, params);
 }

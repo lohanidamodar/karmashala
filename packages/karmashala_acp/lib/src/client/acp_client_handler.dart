@@ -24,7 +24,8 @@ abstract class AcpClientHandler {
 
   Future<void> writeTextFile(String sessionId, String path, String content);
 
-  /// Terminals are not advertised in this cut, so the default refuses.
+  /// `terminal/*` ([method] and its params), answered only by a client that
+  /// advertises `terminal`; the default refuses.
   Future<Object?> terminal(String method, Object? params) async =>
       throw AcpMethodNotSupported(method);
 }

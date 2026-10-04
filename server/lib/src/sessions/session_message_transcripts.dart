@@ -92,10 +92,9 @@ class SessionMessageTranscriptSource {
     final failed = status == 'failed' || status == 'error';
     String? output;
     var truncated = false;
-    if (!open) {
-      final text = _outputOf(json);
-      if (text != null) (output, truncated) = boundedToolOutput(text);
-    }
+    // A running command's output so far is shown too; it stays pending.
+    final text = open ? _terminalOutputOf(json) : _outputOf(json);
+    if (text != null) (output, truncated) = boundedToolOutput(text);
     return (
       activity: ToolActivity(
         name:
@@ -132,6 +131,19 @@ class SessionMessageTranscriptSource {
     return null;
   }
 
+  /// What the call's embedded terminals have printed so far, or null.
+  static String? _terminalOutputOf(Map<String, Object?> json) {
+    final content = json['content'];
+    if (content is! List) return null;
+    final printed = [
+      for (final block in content)
+        if (block is Map && block['type'] == 'terminal')
+          if (block['output'] case final String text when text.isNotEmpty)
+            text,
+    ];
+    return printed.isEmpty ? null : printed.join('\n');
+  }
+
   /// What the call answered: its content blocks' text, else its raw output.
   static String? _outputOf(Map<String, Object?> json) {
     final content = json['content'];
@@ -148,8 +160,13 @@ class SessionMessageTranscriptSource {
             final path = _string(block['path']);
             if (path != null) parts.add('edited $path');
           case 'terminal':
+            final printed = block['output'];
             final id = _string(block['terminalId']);
-            if (id != null) parts.add('terminal $id');
+            if (printed is String && printed.isNotEmpty) {
+              parts.add(printed);
+            } else if (id != null) {
+              parts.add('terminal $id');
+            }
         }
       }
     }

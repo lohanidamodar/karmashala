@@ -8,6 +8,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_runtime_host.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
+import 'package:karmashala_host/src/acp/acp_terminals.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessageDao, SessionUsageDao;
@@ -108,6 +109,7 @@ AcpSessionRuntime runtimeOver(
   DateTime Function()? now,
   Duration coalesce = const Duration(milliseconds: 20),
   Duration stopPatience = const Duration(milliseconds: 200),
+  AcpTerminals? terminals,
 }) {
   var ids = 0;
   return AcpSessionRuntime(
@@ -129,6 +131,8 @@ AcpSessionRuntime runtimeOver(
     now: now,
     coalesce: coalesce,
     stopPatience: stopPatience,
+    terminals: terminals,
+    terminalRefresh: const Duration(milliseconds: 20),
   );
 }
 

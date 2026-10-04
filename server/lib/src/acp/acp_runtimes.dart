@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
@@ -19,6 +20,7 @@ import '../status/daemon_agent_status.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
+import 'acp_terminals.dart';
 import 'acp_titles.dart';
 import 'acp_transport.dart';
 
@@ -83,7 +85,33 @@ class AcpRuntimes {
   final CommandRunner Function(ExecutionEnvironment? environment) runnerFor;
   final DateTime Function()? _now;
 
-  AcpSessionRuntime start(AcpSessionStart start) => AcpSessionRuntime(
+  AcpSessionRuntime start(AcpSessionStart start) {
+    final files = AcpPathScope.forEnvironment(
+      start.environment,
+      start.directory.path,
+    );
+    return _runtime(
+      start,
+      files,
+      // On the session's machine, through the runner its agent runs through.
+      AcpTerminals(
+        start: (request) => runnerFor(start.environment).start(request),
+        scope: files,
+        environmentId: start.directory.environmentId,
+        posix: switch (start.environment?.kind) {
+          null => !Platform.isWindows,
+          EnvironmentKind.windowsNative => false,
+          _ => true,
+        },
+      ),
+    );
+  }
+
+  AcpSessionRuntime _runtime(
+    AcpSessionStart start,
+    AcpPathScope files,
+    AcpTerminals terminals,
+  ) => AcpSessionRuntime(
     id: start.hostSessionId,
     sessionId: start.sessionId,
     agentId: start.agentId,
@@ -117,7 +145,8 @@ class AcpRuntimes {
     },
     messages: messages,
     usage: usage,
-    files: AcpPathScope.forEnvironment(start.environment, start.directory.path),
+    files: files,
+    terminals: terminals,
     host: host,
     mcpUrl: start.mcpUrl,
     risk: start.risk,
