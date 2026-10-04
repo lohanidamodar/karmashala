@@ -20,4 +20,7 @@ tags:
   # is set and WSL has npx, so the ordinary gate is unaffected. Run it
   # deliberately:
   #   dart test --tags=live-acp test/live/acp_live_test.dart
+  # Claude chat's own binary over stream-json, on this machine and (with
+  # KARMASHALA_LIVE_CLAUDE_WSL=<distribution>) in WSL, is the same tag:
+  #   dart test --tags=live-acp test/live/claude_stream_json_live_test.dart
   live-acp:

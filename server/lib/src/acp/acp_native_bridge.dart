@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec, AcpNativeBridge;
 
 import 'acp_transport.dart';
+import 'claude/claude_stream_json_bridge.dart';
 
 /// Speaks an agent's own protocol to [raw], the agent's process, and ACP to
 /// Karmashala: what an ACP adapter does, in-process, over the agent's own
@@ -9,7 +10,9 @@ typedef AcpBridge = AcpTransport Function(AcpTransport raw);
 
 /// The bridges this build carries, one per [AcpNativeBridge] it can speak.
 /// Each is added here beside its implementation.
-const Map<AcpNativeBridge, AcpBridge> kAcpNativeBridges = {};
+const Map<AcpNativeBridge, AcpBridge> kAcpNativeBridges = {
+  AcpNativeBridge.claudeStreamJson: claudeStreamJsonBridge,
+};
 
 /// The transport ACP is spoken over for an agent launched under [spec]:
 /// [raw] itself for an agent that speaks ACP, else [raw] wrapped by the

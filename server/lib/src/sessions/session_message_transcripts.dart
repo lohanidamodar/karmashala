@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart' show AgentPlan, AgentPlanItem;
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
-import 'package:agent_cli/read.dart' show TranscriptMessage;
+import 'package:agent_cli/read.dart' show CompactionBoundary, TranscriptMessage;
 import 'package:agent_cli/stream.dart'
     show
         FileEditKind,
@@ -14,6 +14,7 @@ import 'package:agent_cli/stream.dart'
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
 
+import '../acp/acp_extensions.dart';
 import '../acp/acp_tool_json.dart' show kEditsTruncatedKey;
 
 /// One row of `session_messages` as a transcript row: its [ordinal] is its
@@ -77,7 +78,19 @@ class SessionMessageTranscriptSource {
       tool: tool?.activity,
       at: row.createdAt,
       pendingToolUseId: tool?.pendingId,
+      compaction: _compactionOf(row.messageId),
     );
+  }
+
+  /// The boundary a compaction row marks, as a terminal transcript's
+  /// summary row carries it.
+  static CompactionBoundary? _compactionOf(String? messageId) {
+    const marker = AcpExtensions.compactionMessageId;
+    if (messageId == null || !messageId.startsWith(marker)) return null;
+    final trigger = messageId.length > marker.length + 1
+        ? messageId.substring(marker.length + 1)
+        : null;
+    return CompactionBoundary(trigger: trigger);
   }
 
   static ({ToolActivity activity, String? pendingId})? _toolOf(

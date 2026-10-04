@@ -25,40 +25,11 @@ import '../acp/acp_fixture.dart' show RecordingHost;
 /// agent's own login, so it skips unless KARMASHALA_LIVE_ACP=1 and WSL
 /// answers `command -v npx`. What no fake can measure: that the adapter's
 /// file tools, permission requests and exit meet this runtime as designed.
+/// Claude no longer runs through an adapter: claude_stream_json_live_test.dart
+/// drives its own binary.
 void main() {
   final wsl = _Wsl.detect();
   final skip = wsl.skipReason;
-
-  test(
-    'claude-agent-acp under acceptEdits: start, a plain reply, a file '
-    'written without asking, stop',
-    () => _exercise(
-      wsl,
-      agentId: AgentIds.claudeAcp,
-      agentName: 'Claude (ACP)',
-      spec: claudeAcpDescriptor.acp!,
-      package: '@agentclientprotocol/claude-agent-acp',
-      risk: PermissionRisk.acceptEdits,
-    ),
-    skip: skip,
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
-
-  test(
-    'claude-agent-acp under ask: the write asks permission, which the '
-    'runtime holds for the checkpoint and answers',
-    () => _exercise(
-      wsl,
-      agentId: AgentIds.claudeAcp,
-      agentName: 'Claude (ACP)',
-      spec: claudeAcpDescriptor.acp!,
-      package: '@agentclientprotocol/claude-agent-acp',
-      risk: PermissionRisk.ask,
-      expectPermission: true,
-    ),
-    skip: skip,
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
 
   test(
     'codex-acp under acceptEdits: start, a plain reply, a file written, stop',

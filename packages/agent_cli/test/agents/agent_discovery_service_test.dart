@@ -98,9 +98,11 @@ void main() {
           hostEnvironment: const {},
         ).discover();
 
+        // Claude's chat agent is the same `claude`, so it is found with it.
         expect(found.map((i) => i.agentId), [
           AgentIds.claudeCode,
           AgentIds.antigravity,
+          AgentIds.claudeAcp,
         ]);
         final claude = found.first;
         expect(claude.executable.path, r'C:\bin\claude.exe');

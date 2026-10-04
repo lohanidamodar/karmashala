@@ -1,7 +1,34 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:agent_cli/process.dart' show ProcessHandle;
+import 'package:agent_cli/process.dart' show CommandRequest, ProcessHandle;
+
+/// Starts the agent's command again with [extraArguments] after its own: for
+/// a bridge whose protocol picks the conversation on argv (`--resume <id>`).
+typedef AcpRelaunch =
+    Future<AcpTransport> Function(List<String> extraArguments);
+
+/// [request] started through [start]; it and every relaunch of it add their
+/// arguments to [request]'s own, never to another relaunch's.
+Future<AcpTransport> startAcpProcess(
+  Future<ProcessHandle> Function(CommandRequest request) start,
+  CommandRequest request, {
+  List<String> extraArguments = const [],
+}) async => AcpTransport.process(
+  await start(
+    extraArguments.isEmpty
+        ? request
+        : CommandRequest(
+            executable: request.executable,
+            arguments: [...request.arguments, ...extraArguments],
+            workingDirectory: request.workingDirectory,
+            runInShell: request.runInShell,
+            environment: request.environment,
+            removedEnvironment: request.removedEnvironment,
+          ),
+  ),
+  relaunch: (extra) => startAcpProcess(start, request, extraArguments: extra),
+);
 
 /// The agent process as the runtime sees it: its stdio as byte streams, its
 /// stderr as lines, and its exit. Over a [ProcessHandle] in the server; over
@@ -21,6 +48,9 @@ abstract interface class AcpTransport {
   /// Ends the process for good.
   Future<void> kill();
 
+  /// How to start this command again, or null where its opener cannot.
+  AcpRelaunch? get relaunch;
+
   /// Over the streams an in-memory agent exposes.
   factory AcpTransport.streams({
     required Stream<List<int>> output,
@@ -28,10 +58,12 @@ abstract interface class AcpTransport {
     required Future<int> exitCode,
     Stream<String>? errorLines,
     Future<void> Function()? kill,
+    AcpRelaunch? relaunch,
   }) = _StreamTransport;
 
   /// Over a process the environment's runner started.
-  factory AcpTransport.process(ProcessHandle handle) = _ProcessTransport;
+  factory AcpTransport.process(ProcessHandle handle, {AcpRelaunch? relaunch}) =
+      _ProcessTransport;
 }
 
 final class _StreamTransport implements AcpTransport {
@@ -41,8 +73,12 @@ final class _StreamTransport implements AcpTransport {
     required this.exitCode,
     Stream<String>? errorLines,
     Future<void> Function()? kill,
+    this.relaunch,
   }) : errorLines = errorLines ?? const Stream.empty(),
        _kill = kill;
+
+  @override
+  final AcpRelaunch? relaunch;
 
   @override
   final Stream<List<int>> output;
@@ -59,9 +95,12 @@ final class _StreamTransport implements AcpTransport {
 }
 
 final class _ProcessTransport implements AcpTransport {
-  _ProcessTransport(this._handle) : input = _LineSink(_handle);
+  _ProcessTransport(this._handle, {this.relaunch}) : input = _LineSink(_handle);
 
   final ProcessHandle _handle;
+
+  @override
+  final AcpRelaunch? relaunch;
 
   @override
   final StreamSink<List<int>> input;

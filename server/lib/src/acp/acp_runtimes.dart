@@ -127,15 +127,14 @@ class AcpRuntimes {
       try {
         return bridgedAcpTransport(
           start.spec,
-          AcpTransport.process(
-            await runnerFor(start.environment).start(
-              CommandRequest(
-                executable: start.executable,
-                arguments: start.arguments,
-                workingDirectory: start.directory,
-                environment: variables,
-                removedEnvironment: start.removed,
-              ),
+          await startAcpProcess(
+            runnerFor(start.environment).start,
+            CommandRequest(
+              executable: start.executable,
+              arguments: start.arguments,
+              workingDirectory: start.directory,
+              environment: variables,
+              removedEnvironment: start.removed,
             ),
           ),
         );

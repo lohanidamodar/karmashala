@@ -6,6 +6,7 @@ import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import 'acp_tool_json.dart';
+import 'acp_extensions.dart';
 
 /// **An ACP session's `session/update`s as `session_messages` rows** (design
 /// C3/C4): the prompt as a `user` row, chunks coalesced into one `agent` row
@@ -53,6 +54,21 @@ class AcpConversationWriter {
     _closeAgentRow();
     _append(SessionMessageRole.user, text: text);
     _render('You: $text');
+  }
+
+  /// The agent compacted its context: [summary], what it kept, on a row
+  /// marked as the boundary, as a terminal transcript's summary row is.
+  void compaction({String? trigger, String summary = ''}) {
+    if (_closed) return;
+    _closeAgentRow();
+    _append(
+      SessionMessageRole.user,
+      text: summary,
+      messageId: trigger == null
+          ? AcpExtensions.compactionMessageId
+          : '${AcpExtensions.compactionMessageId}:$trigger',
+    );
+    _render('[compacted${trigger == null ? '' : ' ($trigger)'}]');
   }
 
   /// One update from the agent. Kinds this writer does not store are ignored.
