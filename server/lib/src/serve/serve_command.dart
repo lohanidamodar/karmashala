@@ -41,6 +41,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_session_engine/store.dart'
     show
         DecisionRecordDao,
+        SessionDelegationDao,
         ImportedSessionDao,
         SessionDao,
         SessionAgentSpanDao,
@@ -1369,9 +1370,11 @@ Future<int> runServe(
         childTurns.firstTurn(childId, bound: kDelegationBound, since: since),
     answerOf: answerOf,
     queue: sessionQueue,
+    store: SessionDelegationDao(database),
+    isLive: prompts.status.holds,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
-  );
+  )..start();
   sessionInput.interrupted = delegations.stopped;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
@@ -1395,6 +1398,8 @@ Future<int> runServe(
         queue: sessionQueue,
         typist: typist,
         answerOf: answerOf,
+        sentBy: delegations.sent,
+        endedBy: delegations.endedBy,
         resumeWith: (sessionId, prompt) async {
           final started = await launches.resume(sessionId, prompt: prompt);
           data.tellIntent(

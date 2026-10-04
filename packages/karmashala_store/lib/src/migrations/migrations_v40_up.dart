@@ -795,3 +795,28 @@ void _migrateToV72(Database db) {
     );
   ''');
 }
+
+/// Async children whose turn results are pushed to their parent: which turn
+/// is awaited, from when, so a restart can re-arm the push. A null
+/// `turn_started_at` awaits nothing until the parent sends a follow-up.
+void _migrateToV73(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_delegations (
+      child_session_id  TEXT PRIMARY KEY
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      parent_session_id TEXT NOT NULL
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      title             TEXT NOT NULL,
+      agent             TEXT NOT NULL,
+      model             TEXT,
+      end_on_answer     INTEGER NOT NULL DEFAULT 0,
+      delegated_at      TEXT NOT NULL,
+      turn              INTEGER NOT NULL,
+      turn_started_at   TEXT
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_delegations_parent '
+    'ON session_delegations (parent_session_id);',
+  );
+}

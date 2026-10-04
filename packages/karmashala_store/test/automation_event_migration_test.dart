@@ -23,7 +23,7 @@ void main() {
   test('v57 adds the trigger, the run chain and the session origins', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 72);
+    expect(db.schemaVersion, 73);
     final raw = upTo(57);
     addTearDown(raw.close);
     expect(
