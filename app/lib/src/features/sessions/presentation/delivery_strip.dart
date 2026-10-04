@@ -28,6 +28,7 @@ import '../application/delivery_update_service.dart';
 import '../application/session_archive_service.dart';
 import '../application/session_handoff_service.dart';
 import '../application/session_providers.dart';
+import '../application/session_signals.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
@@ -564,6 +565,49 @@ class DeliveryStateLine extends ConsumerWidget {
   }
 }
 
+/// The stage's icon and word. `working` is the git stage "nothing recorded
+/// yet", which over a session nothing runs read as the agent working.
+class _StageMark extends ConsumerWidget {
+  const _StageMark({
+    required this.sessionId,
+    required this.delivery,
+    required this.colour,
+    required this.style,
+  });
+
+  final String sessionId;
+  final SessionDelivery delivery;
+  final Color colour;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watchSession(sessionId);
+    final stage = delivery.stage;
+    final row = ref.read(sessionsDataProvider).getById(sessionId);
+    final stopped =
+        stage == DeliveryStage.working && row != null && !row.status.claimsLive;
+    final word = !stopped
+        ? stage.label
+        : delivery.isDirty
+        ? 'Not running · uncommitted'
+        : 'Not running';
+    return Row(
+      key: const ValueKey('delivery-stage'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          stopped ? AppIcons.stopCircle : _stageIcon(stage),
+          size: Chrome.iconSmall,
+          color: colour,
+        ),
+        const SizedBox(width: Insets.xs),
+        Text(word, style: style?.copyWith(color: colour)),
+      ],
+    );
+  }
+}
+
 /// What the state line is made of, as separate pieces — a list, because both
 /// hosts wrap them in a [Wrap] of their own. [withModel] is about the *host*.
 List<Widget> _deliveryFacts(
@@ -589,13 +633,11 @@ List<Widget> _deliveryFacts(
   return [
     // A dot as well as a colour: state must never be carried by colour
     // alone, and the stage's own name is beside it regardless.
-    Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(_stageIcon(stage), size: Chrome.iconSmall, color: colour),
-        const SizedBox(width: Insets.xs),
-        Text(stage.label, style: label?.copyWith(color: colour)),
-      ],
+    _StageMark(
+      sessionId: sessionId,
+      delivery: delivery,
+      colour: colour,
+      style: label,
     ),
     // Beside the stage: how far the work got, and whether anything checked it.
     // Drawn in every state — a fact that vanishes reads as a clean bill.

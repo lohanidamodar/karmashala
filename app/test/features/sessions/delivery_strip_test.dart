@@ -180,9 +180,10 @@ void main() {
   /// The state line on its own — what the session bar hosts above the actions.
   Future<void> pumpStateLine(
     WidgetTester tester,
-    SessionDelivery? delivery,
-  ) async {
-    tester.view.physicalSize = const Size(900, 600);
+    SessionDelivery? delivery, {
+    Size size = const Size(900, 600),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -294,6 +295,51 @@ void main() {
       expect(find.text('work'), findsOneWidget);
       expect(find.text('3 ahead of origin/main'), findsOneWidget);
       expect(find.text('Commit'), findsNothing, reason: 'facts only');
+    });
+
+    for (final (name, size) in [
+      ('phone', const Size(390, 844)),
+      ('desktop', const Size(1440, 900)),
+    ]) {
+      testWidgets('on a $name, a session nothing runs is not called '
+          'Working', (tester) async {
+        final row = server.sessionRows.getById('s1')!;
+        server.sessionRows.put(row.copyWith(status: SessionStatus.cancelled));
+        await pumpStateLine(tester, state, size: size);
+
+        expect(find.text('Working'), findsNothing);
+        expect(find.text('Not running · uncommitted'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('on a $name, an ended session with nothing uncommitted '
+          'says only that it is not running', (tester) async {
+        final row = server.sessionRows.getById('s1')!;
+        server.sessionRows.put(row.copyWith(status: SessionStatus.completed));
+        await pumpStateLine(
+          tester,
+          const SessionDelivery(branch: 'work', hasWorktree: true),
+          size: size,
+        );
+
+        expect(find.text('Not running'), findsOneWidget);
+        expect(find.text('Working'), findsNothing);
+      });
+    }
+
+    testWidgets('a session that has committed says so, running or '
+        'not', (tester) async {
+      final row = server.sessionRows.getById('s1')!;
+      server.sessionRows.put(row.copyWith(status: SessionStatus.cancelled));
+      await pumpStateLine(
+        tester,
+        const SessionDelivery(
+          branch: 'work',
+          aheadOfBase: 2,
+          hasWorktree: true,
+        ),
+      );
+      expect(find.text('Committed'), findsOneWidget);
     });
 
     testWidgets('and draws nothing at all until something is known', (
