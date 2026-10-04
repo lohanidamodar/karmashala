@@ -28,9 +28,9 @@ void main() {
       for (final id in acpIds) id: AgentRegistry.builtIn.displayNameFor(id),
     };
     expect(names, {
-      'claude-acp': 'Claude (ACP)',
-      'codex-acp': 'Codex (ACP)',
-      'antigravity-acp': 'Antigravity (ACP)',
+      'claude-acp': 'Claude Code · Chat',
+      'codex-acp': 'Codex CLI · Chat',
+      'antigravity-acp': 'Antigravity · Chat',
       'grok': 'Grok',
     });
   });

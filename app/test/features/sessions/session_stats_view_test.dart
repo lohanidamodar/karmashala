@@ -77,11 +77,11 @@ void main() {
     test('an answer the agent reported says so', () {
       final view = SessionStatsView.computed(
         const SessionStats(source: SessionStatsSource.agentReported),
-        'Claude (ACP)',
+        'Claude Code · Chat',
       );
       expect(
         sessionStatsProvenance(view),
-        startsWith('Reported by Claude (ACP)'),
+        startsWith('Reported by Claude Code · Chat'),
       );
       expect(sessionStatsProvenance(view), contains('the server kept'));
     });

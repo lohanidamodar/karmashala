@@ -56,6 +56,17 @@ void main() {
     );
   });
 
+  test('a chat form is named as its agent, marked chat, wherever its own '
+      'name is read', () {
+    for (final forms in registry.folded.where((f) => f.hasBoth)) {
+      expect(
+        registry.displayNameFor(forms.chatId!),
+        '${forms.displayName} · Chat',
+        reason: forms.chatId,
+      );
+    }
+  });
+
   test('a session names its agent and, for a paired one, its form', () {
     expect(registry.formLabelOf(AgentIds.claudeAcp), 'Claude Code · Chat');
     expect(registry.formLabelOf(AgentIds.claudeCode), 'Claude Code');
