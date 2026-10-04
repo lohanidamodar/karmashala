@@ -84,7 +84,7 @@ class ToolActivity {
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
     final s = subject;
-    return s == null || s.isEmpty ? name : '$name($s)';
+    return s == null || s.isEmpty || s == name ? name : '$name($s)';
   }
 
   /// The wire form a server's transcript page carries. Absent fields are

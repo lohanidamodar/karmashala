@@ -508,6 +508,21 @@ void main() {
       expect(shown('lib/one.dart'), findsNothing);
     });
 
+    testWidgets('a live line whose call is named by its subject says it once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        view([
+          tool('Read', subject: 'lib/one.dart'),
+          tool('Read', subject: 'lib/two.dart'),
+          tool('echo hi', subject: 'echo hi', output: null, pending: true),
+        ], turn: TranscriptTurn.working),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('echo hi'), findsOneWidget);
+      expect(find.text('echo hi  echo hi'), findsNothing);
+    });
+
     testWidgets('the turn ending settles the line even with no new message', (
       tester,
     ) async {

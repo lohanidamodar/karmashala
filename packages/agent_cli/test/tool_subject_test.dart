@@ -19,6 +19,17 @@ void main() {
     );
   });
 
+  test('the one-line form names a subject once', () {
+    expect(
+      const ToolActivity(name: 'Bash', subject: 'ls').summary,
+      'Bash(ls)',
+    );
+    expect(
+      const ToolActivity(name: 'echo hi', subject: 'echo hi').summary,
+      'echo hi',
+    );
+  });
+
   test('an input naming none of them has no subject', () {
     expect(toolSubjectEntryFor({'plan': 'x' * 400}), isNull);
     expect(toolSubjectEntryFor({'n': 3}), isNull);

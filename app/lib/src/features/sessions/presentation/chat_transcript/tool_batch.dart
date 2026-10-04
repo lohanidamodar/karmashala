@@ -45,11 +45,16 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
     if (row.live) {
       final newest = run.last.tool!;
       final subject = newest.subject?.split('\n').first;
+      final name = toolDisplayName(newest.name);
       label = 'Working';
       labelSpan = TextSpan(text: label, style: strong);
-      detail = subject == null || subject.isEmpty
-          ? toolDisplayName(newest.name)
-          : '${toolDisplayName(newest.name)}  $subject';
+      detail =
+          subject == null ||
+              subject.isEmpty ||
+              subject == name ||
+              subject == newest.name
+          ? name
+          : '$name  $subject';
       glyph = _toolIcon(newest.name);
     } else {
       (label, labelSpan) = _settledLabel(run, strong: strong, muted: muted);
