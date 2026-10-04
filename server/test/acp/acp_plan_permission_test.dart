@@ -3,7 +3,13 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart'
     show AcpLaunchSpec, PermissionRisk, claudeAcpDescriptor;
 import 'package:karmashala_acp/karmashala_acp.dart'
-    show PermissionOption, PermissionOptionKind, PermissionSelected, ToolKind;
+    show
+        PermissionOption,
+        PermissionOptionKind,
+        PermissionSelected,
+        SessionMode,
+        SessionModeState,
+        ToolKind;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_store/database.dart';
@@ -88,11 +94,15 @@ void main() {
     List<PermissionOption> options, {
     required PermissionRisk risk,
     AcpLaunchSpec? launch,
+    String? pickedMode,
   }) async {
     final process = FakeAcpProcess(
       FakeAcpAgent(
+        modes: claudeModes,
         turns: [
           FakeTurn([
+            // The agent enters plan mode itself before it asks.
+            if (pickedMode != null) const FakeStep.mode('plan'),
             FakeStep.toolCall(
               toolCallId: 'plan-1',
               title: 'Ready to code?',
@@ -113,6 +123,8 @@ void main() {
       risk: risk,
     );
     await runtime.start();
+    // The mode picker, after launch.
+    if (pickedMode != null) await runtime.setMode(pickedMode);
     await runtime.send('Plan it');
     await pump();
     return (runtime, process);
@@ -176,4 +188,33 @@ void main() {
       await runtime.stop();
     });
   }
+
+  for (final (launched, picked, chosen) in [
+    (PermissionRisk.ask, 'acceptEdits', 'acceptEdits'),
+    (PermissionRisk.acceptEdits, 'default', 'default'),
+  ]) {
+    test('the mode picked after launch is the ceiling: launched at '
+        '${launched.name}, picked $picked, approves $chosen', () async {
+      final (runtime, process) = await asking(
+        bridge,
+        risk: launched,
+        pickedMode: picked,
+      );
+      await runtime.answerPermission(approve: true, toolCallId: 'plan-1');
+      await runtime.awaitTurn();
+      expect(process.agent.permissionOutcomes, [PermissionSelected(chosen)]);
+      await runtime.stop();
+    });
+  }
 }
+
+/// The modes claude-agent-acp and the stream-json bridge offer.
+const claudeModes = SessionModeState(
+  currentModeId: 'default',
+  availableModes: [
+    SessionMode(id: 'plan', name: 'Plan'),
+    SessionMode(id: 'default', name: 'Ask'),
+    SessionMode(id: 'acceptEdits', name: 'Accept edits'),
+    SessionMode(id: 'bypassPermissions', name: 'Bypass'),
+  ],
+);

@@ -156,6 +156,20 @@ class AcpSessionRuntime implements ScreenSession {
   StreamSubscription<SessionUpdateEvent>? _updates;
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
+
+  /// The rung of the last working mode the person put the session in — at
+  /// launch, or with the mode picker since — which an approval that switches
+  /// mode stays within. The agent's own mode changes never move it.
+  PermissionRisk? _workingRung;
+
+  /// Notes [modeId] as chosen for the session. Plan mode is not where it
+  /// works: approving a plan returns to the mode it was in before.
+  void _modeChosen(String modeId) {
+    final rung = spec.rungOfMode(modeId);
+    if (rung != null && !rung.isAtMost(PermissionRisk.readOnly)) {
+      _workingRung = rung;
+    }
+  }
   List<ConfigOption>? _configOptions;
   UsageUpdate? _latestUsage;
   UsageUpdate? _turnUsage;
@@ -394,6 +408,7 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     await client.setMode(agent, modeId);
+    _modeChosen(modeId);
     _modes = SessionModeState(
       currentModeId: modeId,
       availableModes: modes.availableModes,
@@ -943,7 +958,7 @@ class AcpSessionRuntime implements ScreenSession {
     if (!allows.any((allow) => allow.rung != null)) return null;
     // Approving a plan leaves read-only, so asking before every edit is the
     // floor: it grants nothing without asking.
-    var ceiling = risk ?? PermissionRisk.ask;
+    var ceiling = _workingRung ?? risk ?? PermissionRisk.ask;
     if (ceiling.isAtMost(PermissionRisk.readOnly)) ceiling = PermissionRisk.ask;
     PermissionOption? chosen;
     PermissionRisk? at;
