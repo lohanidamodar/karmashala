@@ -62,6 +62,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
+import 'chat_cards/chat_tool_ask.dart';
 import 'chat_cards/pinned_plan_strip.dart';
 import 'chat_transcript.dart';
 import 'end_session_action.dart';
@@ -292,14 +293,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
+  /// What hangs under a row: the subagent it spawned, and the ask about it
+  /// while one is open.
   MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
       (message, ordinal) {
         final reference = subagents[ordinal];
-        if (reference == null) return null;
-        return SubagentTurnsTile(
-          reference: reference,
-          resolveHostPath: _hostPathResolver(),
-          sessionId: widget.sessionId,
+        final callId = message.pending ? message.pendingToolUseId : null;
+        final subagent = reference == null
+            ? null
+            : SubagentTurnsTile(
+                reference: reference,
+                resolveHostPath: _hostPathResolver(),
+                sessionId: widget.sessionId,
+              );
+        final ask = callId == null
+            ? null
+            : ChatToolAsk(sessionId: widget.sessionId, toolUseId: callId);
+        if (subagent == null || ask == null) return subagent ?? ask;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [subagent, ask],
         );
       };
 
@@ -555,7 +569,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           // the session: a killed agent's last status can stay
                           // "working", which kept its final turn live — and
                           // unfolded — forever. Nothing running, the turn is over.
-                          turn: sessionHasLiveProcess(ref, widget.sessionId)
+                          // An ACP status is the server's runtime speaking,
+                          // never a dead process's last word.
+                          turn: acp || sessionHasLiveProcess(ref, widget.sessionId)
                               ? ref.watch(
                                   agentSessionStatusProvider(
                                     widget.sessionId,
@@ -1244,6 +1260,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         thinking: message.thinking,
         at: message.at,
         pending: message.pendingToolUseId != null,
+        pendingToolUseId: message.pendingToolUseId,
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,
       ),

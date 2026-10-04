@@ -11,7 +11,9 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -174,6 +176,47 @@ class ChatCardHarness {
     await _status.close();
   }
 }
+
+/// Records every prompt answer and hands it to [onAnswer], which plays the
+/// agent: closing the prompt is what clears every card showing it.
+class RecordingPromptAnswers implements PromptAnswering {
+  RecordingPromptAnswers({this.onAnswer, this.menu});
+
+  final void Function(PromptAnswerRequest request)? onAnswer;
+  final List<PromptAnswerRequest> answers = [];
+
+  /// The menu the agent's screen shows, when the test draws one.
+  AgentScreenMenu? menu;
+
+  @override
+  Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) async {
+    answers.add(request);
+    onAnswer?.call(request);
+    return const SessionApprovalAnswer(answered: 'ok', effect: 'recorded');
+  }
+
+  @override
+  Future<PromptEvidence> evidence(String sessionId) async =>
+      throw UnimplementedError();
+
+  @override
+  AgentScreenMenu? menuOnScreen(String sessionId) => menu;
+}
+
+/// The chat with the ask dock under it, as the workbench mounts them.
+Widget chatWithDock(ProviderContainer container) => UncontrolledProviderScope(
+  container: container,
+  child: const MaterialApp(
+    home: Scaffold(
+      body: Column(
+        children: [
+          Expanded(child: SessionTranscriptView(sessionId: 's1')),
+          ApprovalRequestCard(sessionId: 's1', docked: true),
+        ],
+      ),
+    ),
+  ),
+);
 
 /// A plan tool call as each face records it: Claude Code's `TodoWrite` row
 /// in its transcript, or the server's `plan` row for an ACP plan update.

@@ -17,6 +17,22 @@ class AcpLaunchSpec {
     this.apiKeyVariables = const {},
   });
 
+  /// How any ACP agent's permission request is answered: the server picks the
+  /// request's own allow or reject option, so no key is typed. The same two
+  /// answers the server's prompt evidence names.
+  static const AgentApprovalRules permissionAnswers = AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: 'allow',
+      label: 'Allow',
+      effect: 'Lets the agent make this call.',
+    ),
+    deny: AgentApprovalKey(
+      keys: 'reject',
+      label: 'Reject',
+      effect: 'Refuses this call; the agent carries on without it.',
+    ),
+  );
+
   /// Argv that puts the binary into ACP stdio mode — `['--acp']`,
   /// `['agent', 'stdio']`, or empty for a dedicated adapter binary.
   final List<String> arguments;

@@ -41,6 +41,7 @@ class ChatMessage {
     this.thinking,
     this.at,
     this.pending = false,
+    this.pendingToolUseId,
     this.agentName,
     this.agentId,
   });
@@ -62,6 +63,10 @@ class ChatMessage {
   /// call answered with nothing has no output either.
   final bool pending;
 
+  /// The unanswered call's id, when the source named it: what an ask about
+  /// this call is matched by.
+  final String? pendingToolUseId;
+
   /// The agent that spoke, named on the first agent row of a turn and on a
   /// switch divider in a session that switched agent; null everywhere else.
   final String? agentName;
@@ -76,6 +81,7 @@ class ChatMessage {
           other.role == role &&
           other.at == at &&
           other.pending == pending &&
+          other.pendingToolUseId == pendingToolUseId &&
           other.agentName == agentName &&
           other.agentId == agentId &&
           other.thinking == thinking &&

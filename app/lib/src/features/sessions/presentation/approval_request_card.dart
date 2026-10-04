@@ -27,6 +27,7 @@ import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
+import 'chat_cards/chat_tool_ask.dart' show ChatToolAsk, chatInlineAsksProvider;
 
 part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
@@ -44,6 +45,7 @@ class ApprovalRequestCard extends ConsumerWidget {
     required this.sessionId,
     this.docked = false,
     this.touch = false,
+    this.inline = false,
     super.key,
   });
 
@@ -57,8 +59,17 @@ class ApprovalRequestCard extends ConsumerWidget {
   /// [Touch.target], no key caps, and a reason typed in a sheet.
   final bool touch;
 
+  /// Drawn in the chat under the call it is about ([ChatToolAsk]). The dock
+  /// steps aside while one is, so the answers are on screen once.
+  final bool inline;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (docked &&
+        !inline &&
+        ref.watch(chatInlineAsksProvider.select((s) => s.contains(sessionId)))) {
+      return const SizedBox.shrink();
+    }
     final report = ref
         .watch(agentSessionStatusProvider(sessionId))
         .asData
@@ -88,7 +99,10 @@ class ApprovalRequestCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
-    final rules = descriptor?.approval ?? const AgentApprovalRules();
+    // An ACP agent types no keys: its request is answered by option.
+    final rules = descriptor?.acp != null
+        ? AcpLaunchSpec.permissionAnswers
+        : descriptor?.approval ?? const AgentApprovalRules();
     final agentName = descriptor?.displayName ?? report.agentId;
     // A pane we can type into, or a process this machine's host runs and
     // answers in. Without either — an external terminal, a session whose
