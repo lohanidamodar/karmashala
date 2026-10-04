@@ -57,6 +57,7 @@ class AcpSessionModes implements SessionModeChanger {
         ?runtime.configOptions,
         ?runtime.reportedUsage,
         ?runtime.commands,
+        ?runtime.promptKinds,
       ],
   ];
 

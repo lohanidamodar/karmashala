@@ -10,6 +10,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         SessionCommand,
         SessionCommandsChanged,
+        SessionPromptKindsChanged,
         SessionConfigChoice,
         SessionConfigOption,
         SessionConfigOptionsChanged,
@@ -212,6 +213,15 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// The slash commands the agent accepts, as last announced; null until it
   /// has announced any.
+  /// What the agent takes in a prompt beyond text, once it has started and
+  /// until it is gone; null otherwise.
+  SessionPromptKindsChanged? get promptKinds => _agentSessionId == null || _torn
+      ? null
+      : SessionPromptKindsChanged(
+          sessionId: sessionId,
+          images: _capabilities.promptCapabilities.image,
+        );
+
   SessionCommandsChanged? get commands => switch (_commands) {
     final commands? => _commandsChange(commands),
     null => null,
@@ -345,6 +355,7 @@ class AcpSessionRuntime implements ScreenSession {
       await _applyInitialMode(modes, notices);
       _configOptions = options;
       _announceConfigOptions();
+      host.promptKindsChanged(promptKinds!);
       _publish(
         AgentActivityStatus.idle,
         detail: resumed ? AcpMethods.sessionLoad : AcpMethods.sessionNew,
@@ -1018,6 +1029,9 @@ class AcpSessionRuntime implements ScreenSession {
     _announceModes();
     _announceConfigOptions();
     host.commandsChanged(_commandsChange(const []));
+    host.promptKindsChanged(
+      SessionPromptKindsChanged(sessionId: sessionId, images: false),
+    );
   }
 
   SessionCommandsChanged _commandsChange(List<AvailableCommand> commands) =>

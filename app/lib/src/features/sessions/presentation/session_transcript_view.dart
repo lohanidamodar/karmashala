@@ -42,6 +42,7 @@ import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_commands_providers.dart';
+import '../application/session_prompt_kinds_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -817,6 +818,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
           commands: _commands,
+          // Read when the chips draw, like the commands: never watched.
+          imagesGoAsImages: () =>
+              ref.read(sessionTakesImagesProvider(widget.sessionId)),
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           droppedFiles: _dropped.stream,
