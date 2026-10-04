@@ -424,6 +424,9 @@ class LaunchToolSet extends ServerToolSet {
         title: (title == null || title.trim().isEmpty)
             ? 'Agent session'
             : title.trim(),
+        // A title the caller named is chosen, as one typed in the dialog is:
+        // the agent's own name for the conversation never replaces it.
+        titleTyped: title != null && title.trim().isNotEmpty,
         prompt: args['prompt'] as String?,
         worktree: newWorktree,
         existingWorktree: existingWorktree,

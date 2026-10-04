@@ -214,6 +214,21 @@ void main() {
     ]);
   });
 
+  test('a title the caller names is kept as chosen, so the agent\'s own '
+      'name never replaces it; none leaves the naming to the agent', () async {
+    insertCaller('caller');
+    await tools.call('open_new_session', {
+      'projectId': 'p1',
+      'title': 'Chat: inline diffs',
+    }, 'caller');
+    final named = SessionDao(database).getById('new-1')!;
+    expect(named.title, 'Chat: inline diffs');
+    expect(named.titleByUser, isTrue);
+
+    await tools.call('open_new_session', {'projectId': 'p1'}, 'caller');
+    expect(SessionDao(database).getById('new-2')!.titleByUser, isFalse);
+  });
+
   test('refuses past the spawn depth, nothing started', () async {
     insertCaller('root');
     insertCaller('child', parent: 'root');
