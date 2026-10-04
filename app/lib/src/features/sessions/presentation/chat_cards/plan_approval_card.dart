@@ -7,8 +7,10 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 
 import '../../../agents/application/agent_providers.dart';
+import '../../application/session_input.dart';
 import '../../application/session_launcher.dart';
 import '../../application/session_prompt_answers.dart';
+import '../../application/session_status_providers.dart';
 import '../../application/session_turn_interrupt.dart';
 
 /// **An agent asking to leave plan mode, as a card in the chat**: the plan in
@@ -127,7 +129,11 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
   }
 
   Future<String?> _keepPlanning() async {
+    // Read before the first await: the answer closes this card.
     final answers = ref.read(sessionPromptAnswersProvider);
+    final input = ref.read(sessionInputProvider);
+    final statusOf = ref.read(sessionStatusLookupProvider);
+    final change = _change.text.trim();
     if (widget.support.keepPlanningOption == null) {
       await answers.answer(
         ApprovalAnswerRequest(
@@ -136,25 +142,58 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
           ask: PromptAsk.drawnFrom(widget.report),
         ),
       );
-      return null;
+    } else {
+      // Picked by its words off the screen: another "No" can come first.
+      final menu = answers.menuOnScreen(widget.sessionId);
+      final option = menu == null
+          ? null
+          : widget.support.keepPlanningIn(menu.options);
+      if (menu == null || option == null) {
+        return 'Keep planning is not on ${widget.agentName}\'s screen to '
+            'choose, so nothing was sent. Answer it in the terminal.';
+      }
+      // On Claude Code the row is a text box; Enter on it empty rejects the
+      // plan and stays in plan mode (2.1.287, measured in the probe).
+      await answers.answer(
+        MenuAnswerRequest(
+          sessionId: widget.sessionId,
+          menuId: menu.id,
+          option: option,
+        ),
+      );
     }
-    // Picked by its words off the screen: another "No" can come first.
-    final menu = answers.menuOnScreen(widget.sessionId);
-    final option = menu == null
-        ? null
-        : widget.support.keepPlanningIn(menu.options);
-    if (menu == null || option == null) {
-      return 'Keep planning is not on ${widget.agentName}\'s screen to choose, '
-          'so nothing was sent. Answer it in the terminal.';
+    if (change.isEmpty) return null;
+    // Sent as the next message once the prompt is gone: typed while it
+    // shows, the words would land in it.
+    bool promptShows() =>
+        answers.menuOnScreen(widget.sessionId) != null ||
+        (statusOf(widget.sessionId)?.hasOpenPrompt ?? false);
+    final deadline = DateTime.now().add(_promptClosePatience);
+    while (promptShows() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    await answers.answer(
-      MenuAnswerRequest(
-        sessionId: widget.sessionId,
-        menuId: menu.id,
-        option: option,
-      ),
-    );
+    if (promptShows()) {
+      return 'Kept planning. What to change was not sent: a prompt is still '
+          'open. Send it from the chat once it is gone.';
+    }
+    if (!await input.send(
+      widget.sessionId,
+      change,
+      requestId: newSessionInputId(),
+    )) {
+      return 'Kept planning, but the session has no live terminal to send '
+          'what to change.';
+    }
     return null;
+  }
+
+  static const _promptClosePatience = Duration(seconds: 3);
+  final _change = TextEditingController();
+
+  @override
+  void dispose() {
+    _change.dispose();
+    super.dispose();
   }
 
   Future<String?> _stop() =>
@@ -215,7 +254,21 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
               'terminal.',
               style: UiDensity.of(context).muted(theme),
             )
-          else
+          else ...[
+            TextField(
+              key: const ValueKey('plan-feedback'),
+              controller: _change,
+              enabled: idle,
+              minLines: 1,
+              maxLines: 4,
+              style: theme.textTheme.bodyMedium,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText:
+                    'What should change? Optional — sent with Keep planning',
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
             Wrap(
               spacing: Insets.sm,
               runSpacing: Insets.xs,
@@ -237,6 +290,7 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
                 ),
               ],
             ),
+          ],
         ],
       ),
     );

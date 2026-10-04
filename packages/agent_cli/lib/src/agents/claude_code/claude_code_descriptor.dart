@@ -888,7 +888,9 @@ const claudeCodeDescriptor = AgentDescriptor(
   // Ultraplan row can come before it.
   planApproval: AgentPlanApprovalSupport(
     toolName: 'ExitPlanMode',
-    keepPlanningOption: r'^No, keep planning',
+    // Its label, or the placeholder 2.1.287 draws in its place; Enter on it
+    // empty rejects the plan and stays in plan mode (probe, 2026-10-04).
+    keepPlanningOption: r'^(No, keep planning|Tell Claude what to change)\b',
     // The yeses by what they switch to (the axis below). Bypass is checked
     // before auto, and either before "accept edits", whose words the first
     // two can contain.

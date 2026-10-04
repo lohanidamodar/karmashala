@@ -81,6 +81,7 @@ void main() {
       'lib/src/features/projects/presentation/new_project_dialog.dart',
       'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
       'lib/src/features/sessions/presentation/approval_request_card/tool_ask_answers.dart',
+      'lib/src/features/sessions/presentation/chat_cards/plan_approval_card.dart',
       'lib/src/features/editor/presentation/media/media_player_view.dart',
       '../packages/karmashala_ui/lib/src/file_browser.dart',
       '../packages/karmashala_ui/lib/src/app_theme.dart',

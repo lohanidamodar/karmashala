@@ -4,6 +4,7 @@ import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/application/session_turn_interrupt.dart';
+import 'package:karmashala/src/features/sessions/application/session_input.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
@@ -70,16 +71,23 @@ void main() {
         WidgetTester tester, {
         String? permissionMode,
         bool menuReadable = true,
+        AgentScreenMenu drawn = screenMenu,
+        List<String>? sent,
       }) async {
         late final ChatCardHarness h;
         final interrupts = <String>[];
-        final answers = RecordingPromptAnswers(
+        late final RecordingPromptAnswers answers;
+        answers = RecordingPromptAnswers(
           menu: kind == ChatCardSession.terminalCli && menuReadable
-              ? screenMenu
+              ? drawn
               : null,
-          onAnswer: (_) => h.status(
-            ChatCardHarness.statusOf(kind, AgentActivityStatus.working),
-          ),
+          onAnswer: (_) {
+            // The prompt closes with the answer.
+            answers.menu = null;
+            h.status(
+              ChatCardHarness.statusOf(kind, AgentActivityStatus.working),
+            );
+          },
         );
         h = await ChatCardHarness.open(
           kind,
@@ -89,6 +97,8 @@ void main() {
           overrides: [
             sessionPromptAnswersProvider.overrideWithValue(answers),
             sessionAnswerableProvider.overrideWithValue((_) => true),
+            if (sent != null)
+              sessionInputProvider.overrideWith((ref) => _SentInput(sent)),
             sessionTurnInterruptProvider.overrideWithValue((id) async {
               interrupts.add(id);
               h.status(ChatCardHarness.idle(kind));
@@ -204,6 +214,56 @@ void main() {
         expect(card, findsNothing);
       });
 
+      if (kind == ChatCardSession.terminalCli) {
+        /// The prompt exactly as 2.1.287 drew it in the probe (2026-10-04):
+        /// keep planning is an input row showing its placeholder.
+        const asDrawn = AgentScreenMenu(
+          prompt: [
+            'Claude has written up a plan and is ready to execute. Would you '
+                'like to proceed?',
+          ],
+          options: [
+            'Yes, and use auto mode',
+            'Yes, manually approve edits',
+            'Tell Claude what to change',
+          ],
+          highlighted: 0,
+        );
+
+        testWidgets('Keep planning finds the row 2.1.287 draws as "Tell '
+            'Claude what to change"', (tester) async {
+          final (_, answers, _) = await open(tester, drawn: asDrawn);
+
+          await tester.tap(find.text('Keep planning'));
+          await tester.pumpAndSettle();
+
+          final answer = answers.answers.single as MenuAnswerRequest;
+          expect(answer.option, 2);
+          expect(card, findsNothing);
+        });
+
+        testWidgets('what to change is sent once the prompt has closed', (
+          tester,
+        ) async {
+          final sent = <String>[];
+          final (_, answers, _) = await open(
+            tester,
+            drawn: asDrawn,
+            sent: sent,
+          );
+
+          await tester.enterText(
+            find.byKey(const ValueKey('plan-feedback')),
+            'Use a README section instead',
+          );
+          await tester.tap(find.text('Keep planning'));
+          await tester.pumpAndSettle();
+
+          expect((answers.answers.single as MenuAnswerRequest).option, 2);
+          expect(sent, ['Use a README section instead']);
+        });
+      }
+
       testWidgets('Stop stops the turn the way the Stop button does', (
         tester,
       ) async {
@@ -303,4 +363,20 @@ void main() {
     expect(find.byKey(const ValueKey('plan-approval:mode-1')), findsNothing);
     expect(find.byKey(const ValueKey('chat-ask:mode-1')), findsOneWidget);
   });
+}
+
+/// Records what the card types into the session as a message.
+class _SentInput implements SessionInput {
+  _SentInput(this.sent);
+
+  final List<String> sent;
+
+  @override
+  Future<bool> send(String sessionId, String text, {String? requestId}) async {
+    sent.add(text);
+    return true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
