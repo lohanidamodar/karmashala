@@ -133,23 +133,30 @@ class ToolActivity {
 
   static String? _stringOrNull(Object? value) => value is String ? value : null;
 
-  /// This call with the answer it eventually got.
+  /// This call with the answer it eventually got. [edits] replaces the call's
+  /// own when the result recorded better ones; null keeps them.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
     bool isError = false,
-  }) => ToolActivity(
-    name: name,
-    subject: subject,
-    imagePath: imagePath,
-    output: output,
-    outputTruncated: outputTruncated,
-    isError: isError,
-    plan: plan,
-    kind: kind,
-    edits: edits,
-    editsTruncated: editsTruncated,
-  );
+    List<FileEditRecord>? edits,
+  }) {
+    final (kept, cut) = edits == null
+        ? (this.edits, editsTruncated)
+        : boundedToolEdits(edits);
+    return ToolActivity(
+      name: name,
+      subject: subject,
+      imagePath: imagePath,
+      output: output,
+      outputTruncated: outputTruncated,
+      isError: isError,
+      plan: plan,
+      kind: kind,
+      edits: kept,
+      editsTruncated: cut,
+    );
+  }
 }
 
 /// The most of one tool result the transcript keeps.

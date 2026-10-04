@@ -9,6 +9,7 @@ import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
+import '../../agents/claude_code/claude_file_edits.dart';
 import '../../agents/codex/codex_patch_edits.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
@@ -804,12 +805,19 @@ void _parseClaudeLine(
           // launch and the row it belongs to are known only here.
           final id = part['tool_use_id'];
           final row = id is String ? pending[id] : null;
+          final isError = part['is_error'] == true;
+          // What the write actually did, with real line numbers; a failed
+          // call keeps the edit it asked for.
+          final written = isError
+              ? null
+              : claudeResultEdit(json['toolUseResult']);
           _attachResult(
             out,
             pending,
             id: id,
             output: _claudeResultText(part['content']),
-            isError: part['is_error'] == true,
+            isError: isError,
+            edits: written == null ? null : [written],
           );
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
@@ -1020,12 +1028,15 @@ void _attachResult(
   required Object? id,
   required String output,
   required bool isError,
+  List<FileEditRecord>? edits,
 }) {
   if (id is! String) return;
   final index = pending.remove(id);
   if (index == null || index >= out.length) return;
   final call = out[index].tool;
   if (call == null) return;
+  // Only a call that was itself a write takes the result's edits.
+  if (call.edits.isEmpty) edits = null;
   final trimmed = output.trimRight();
   final (bounded, truncated) = boundedToolOutput(trimmed);
   final row = out[index];
@@ -1036,6 +1047,7 @@ void _attachResult(
       output: bounded.isEmpty ? null : bounded,
       outputTruncated: truncated,
       isError: isError,
+      edits: edits,
     ),
     subagent: row.subagent,
     // Answered, so it is no longer outstanding — and this is the only place
