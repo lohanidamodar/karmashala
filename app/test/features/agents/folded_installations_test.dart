@@ -31,6 +31,11 @@ void main() {
     expect(groups.every((g) => !g.offersChoice), isTrue);
   });
 
+  test('an agent\'s machines sit together, in the order the agent came', () {
+    final groups = foldInstallations(registry, [terminal, codex, wslClaude]);
+    expect(groups.map((g) => g.key), ['t', 'w', 'x']);
+  });
+
   test('a chosen form moves a default to that form on the same machine', () {
     const none = Settings();
     final chatChosen = none.withAgentRunForm(

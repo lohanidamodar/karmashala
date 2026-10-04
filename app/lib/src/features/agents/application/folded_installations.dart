@@ -52,9 +52,15 @@ List<FoldedInstallations> foldInstallations(
     final key = (registry.foldedIdOf(install.agentId), install.environmentId);
     (groups[key] ??= []).add(install);
   }
+  // An agent's machines side by side, agents in the order they came.
+  final agents = [
+    for (final (agentId, _) in groups.keys) agentId,
+  ].toSet().toList();
+  final ordered = groups.entries.toList()
+    ..sort((a, b) => agents.indexOf(a.key.$1) - agents.indexOf(b.key.$1));
   return [
     for (final MapEntry(key: (agentId, environmentId), value: installs)
-        in groups.entries)
+        in ordered)
       FoldedInstallations(
         forms: registry.formsOf(agentId),
         environmentId: environmentId,
