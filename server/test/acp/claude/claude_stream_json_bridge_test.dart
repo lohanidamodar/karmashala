@@ -9,6 +9,8 @@ import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
+import 'package:karmashala_host/src/sessions/session_message_transcripts.dart'
+    show SessionMessageTranscriptSource;
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason, usageLimitResetIn;
 import 'package:karmashala_host_protocol/protocol.dart'
@@ -564,6 +566,53 @@ void main() {
         usageLimitResetIn(failed.evidence, DateTime.utc(2026, 10, 4)),
         DateTime.fromMillisecondsSinceEpoch(1791127800 * 1000, isUtc: true),
       );
+      await rt.stop();
+    });
+
+    test('a compaction is said in the chat as a terminal session says it: '
+        "Claude's summary on a row marked as the boundary", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.system('status', {'status': 'compacting'});
+            c.system('compact_boundary', {
+              'compact_metadata': {
+                'trigger': 'manual',
+                'pre_tokens': 31249,
+                'post_tokens': 2640,
+              },
+            });
+            c.emit({
+              'type': 'user',
+              'message': {
+                'role': 'user',
+                'content': 'This session is being continued. Summary: bananas.',
+              },
+            });
+            c.emit({
+              'type': 'user',
+              'message': {
+                'role': 'user',
+                'content':
+                    '<local-command-stdout>Compacted </local-command-stdout>',
+              },
+              'isReplay': true,
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('/compact');
+      await rt.awaitTurn();
+      final projected = [
+        for (final row in rows()) SessionMessageTranscriptSource.project(row),
+      ];
+      final boundary = projected.where((m) => m.compaction != null).single;
+      expect(boundary.compaction!.trigger, 'manual');
+      expect(boundary.text, contains('Summary: bananas.'));
+      expect(projected.any((m) => m.text.contains('local-command')), isFalse);
       await rt.stop();
     });
 

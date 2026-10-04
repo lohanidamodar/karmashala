@@ -13,6 +13,7 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         JsonRpcErrorCodes;
 
 import '../../domain/uuid.dart';
+import '../acp_extensions.dart';
 import '../acp_transport.dart';
 import 'claude_process.dart';
 import 'claude_tools.dart';
@@ -591,7 +592,36 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   // Claude's stream.
 
+  /// A compact_boundary's metadata, until the summary that follows it.
+  JsonMap? _compaction;
+
+  /// Says a compaction once the message after its boundary is in: Claude's
+  /// summary (a user message of plain text, consumed here) or, when that
+  /// is not it, none.
+  bool _compacted(JsonMap message) {
+    final metadata = _compaction;
+    if (metadata == null) return false;
+    _compaction = null;
+    final content = jsonObject(message['message'])?['content'];
+    final summary = message['type'] == 'user' && content is String
+        ? content
+        : null;
+    _update({
+      'sessionUpdate': AcpExtensions.compaction,
+      'trigger': ?metadata['trigger'],
+      'summary': ?summary,
+      '_meta': {
+        'claudeCode': {
+          'preTokens': ?metadata['pre_tokens'],
+          'postTokens': ?metadata['post_tokens'],
+        },
+      },
+    });
+    return summary != null;
+  }
+
   void _onClaude(JsonMap message) {
+    if (_compacted(message)) return;
     final parent = message['parent_tool_use_id'];
     switch (message['type']) {
       case 'stream_event':
@@ -800,6 +830,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
         }
+      case 'compact_boundary':
+        _compaction = jsonObject(message['compact_metadata']) ?? const {};
       case 'task_started' || 'task_progress' || 'task_notification':
         _onTask(message);
     }

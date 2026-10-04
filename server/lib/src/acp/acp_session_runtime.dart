@@ -22,6 +22,7 @@ import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
 import '../domain/uuid.dart';
 import 'acp_conversation_writer.dart';
+import 'acp_extensions.dart';
 import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
@@ -606,6 +607,15 @@ class AcpSessionRuntime implements ScreenSession {
     }
     if (update is UsageUpdate) {
       _usageReported(update);
+      return;
+    }
+    if (update is UnknownUpdate && update.kind == AcpExtensions.compaction) {
+      final trigger = update.raw['trigger'];
+      final summary = update.raw['summary'];
+      _writer.compaction(
+        trigger: trigger is String ? trigger : null,
+        summary: summary is String ? summary : '',
+      );
       return;
     }
     if (update is ToolCallUpdate) {
