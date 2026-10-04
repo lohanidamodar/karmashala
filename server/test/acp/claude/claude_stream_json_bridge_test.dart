@@ -620,7 +620,7 @@ void main() {
         final bridged = bridgedAcpTransport(_spec, await machine.spawn());
         final client = AcpAgentClient(
           AcpPeer(bridged.output, bridged.input),
-          handler: _Always(),
+          handler: _Choosing((o) => o.kind == PermissionOptionKind.allowAlways),
         );
         await client.initialize(
           clientInfo: const ClientInfo(name: 't', version: '0'),
@@ -679,30 +679,165 @@ void main() {
       await rt.stop();
     });
 
-    test('AskUserQuestion, which ACP cannot carry, is declined with a '
-        'reason Claude can act on', () async {
+    Json question({
+      String text = 'Which fruit?',
+      List<String> choices = const ['Apple', 'Pear'],
+      bool multiSelect = false,
+    }) => {
+      'question': text,
+      'header': 'Fruit',
+      'options': [
+        for (final choice in choices)
+          {'label': choice, 'description': 'A $choice'},
+      ],
+      'multiSelect': multiSelect,
+    };
+
+    /// A turn asking [questions], completing [answered] with Claude's reply.
+    FakeClaudeTurn asking(List<Json> questions, Completer<Json> answered) =>
+        (c, user) async {
+          final input = {'questions': questions};
+          c.toolUse('q', 'AskUserQuestion', input);
+          answered.complete(
+            await c.askPermission('q', 'AskUserQuestion', input),
+          );
+          c.result();
+        };
+
+    test("a single-choice question asks the person with Claude's choices, "
+        'and the choice goes back as the answer', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(
         turns: [
-          (c, user) async {
-            c.toolUse('q', 'AskUserQuestion', {'questions': <Object?>[]});
-            answered.complete(
-              await c.askPermission('q', 'AskUserQuestion', {
-                'questions': <Object?>[],
-              }),
-            );
-            c.result();
-          },
+          asking([question()], answered),
         ],
       );
       final rt = runtime(machine);
       await rt.start();
       await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      final asked = wire.firstWhere(
+        (m) => m['method'] == 'session/request_permission',
+      );
+      final params = asked['params'] as Json;
+      expect((params['toolCall'] as Json)['title'], 'Which fruit?');
+      expect(
+        [for (final o in params['options'] as List) (o as Json)['name']],
+        ['Apple', 'Pear', 'Answer in my reply'],
+      );
+      expect(
+        [for (final o in params['options'] as List) (o as Json)['kind']],
+        ['allow_once', 'allow_once', 'reject_once'],
+      );
+      // The runtime's approve takes the first choice.
+      await rt.answerPermission(approve: true);
       final response = await answered.future;
-      expect(response['behavior'], 'deny');
-      expect(response['message'], contains('ask'));
+      expect(response['behavior'], 'allow');
+      expect(response['updatedInput'], {
+        'questions': [question()],
+        'answers': {'Which fruit?': 'Apple'},
+      });
       await rt.awaitTurn();
       await rt.stop();
+    });
+
+    test('any choice can be the answer, and several questions are asked in '
+        'turn', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([
+            question(),
+            question(text: 'Which colour?', choices: ['Red', 'Green']),
+          ], answered),
+        ],
+      );
+      final bridged = bridgedAcpTransport(_spec, await machine.spawn());
+      final client = AcpAgentClient(
+        AcpPeer(bridged.output, bridged.input),
+        handler: _Choosing((o) => o.name == 'Pear' || o.name == 'Green'),
+      );
+      await client.initialize(
+        clientInfo: const ClientInfo(name: 't', version: '0'),
+      );
+      final session = await client.newSession(cwd: temp.path);
+      final turn = client.prompt(session.sessionId, [ContentBlock.text('Go')]);
+      final response = await answered.future;
+      expect((response['updatedInput'] as Json)['answers'], {
+        'Which fruit?': 'Pear',
+        'Which colour?': 'Green',
+      });
+      expect(await turn, StopReason.endTurn);
+      await client.close();
+    });
+
+    test('a multi-select question offers each choice and "Answer in my '
+        'reply"; answering in the reply declines it and puts the question '
+        'in the chat', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([question(multiSelect: true)], answered),
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      final params =
+          wire.firstWhere(
+                (m) => m['method'] == 'session/request_permission',
+              )['params']
+              as Json;
+      expect(
+        [for (final o in params['options'] as List) (o as Json)['name']],
+        ['Apple', 'Pear', 'Answer in my reply'],
+      );
+      await rt.answerPermission(approve: false);
+      final response = await answered.future;
+      expect(response['behavior'], 'deny');
+      expect(response['message'], contains('next message'));
+      await rt.awaitTurn();
+      final said = rows()
+          .where((r) => r.role == SessionMessageRole.agent)
+          .map((r) => r.text)
+          .join('\n');
+      expect(said, contains('Which fruit?'));
+      expect(said, contains('Apple'));
+      await rt.stop();
+    });
+
+    test('a question with no choices, or one asked where nobody is asked '
+        '(bypass), is declined and shown in the chat', () async {
+      for (final (choices, risk) in [
+        (const <String>[], PermissionRisk.ask),
+        (const ['Apple', 'Pear'], PermissionRisk.bypass),
+      ]) {
+        wire.clear();
+        final answered = Completer<Json>();
+        final machine = FakeClaudeMachine(
+          turns: [
+            asking([question(text: 'Your name?', choices: choices)], answered),
+          ],
+        );
+        final rt = runtime(machine, risk: risk);
+        await rt.start();
+        await rt.send('Ask me');
+        final response = await answered.future;
+        expect(response['behavior'], 'deny');
+        expect(
+          wire.where((m) => m['method'] == 'session/request_permission'),
+          isEmpty,
+        );
+        await rt.awaitTurn();
+        expect(
+          rows().where((r) => r.text.contains('Your name?')),
+          isNotEmpty,
+          reason: '$risk',
+        );
+        await rt.stop();
+        database.execute('DELETE FROM session_messages');
+      }
     });
   });
 
@@ -900,17 +1035,18 @@ AcpTransport _tapped(AcpTransport bridged, List<Json> wire) {
   );
 }
 
-final class _Always extends AcpClientHandler {
+/// A client choosing the first option [pick] accepts, as a person would.
+final class _Choosing extends AcpClientHandler {
+  _Choosing(this.pick);
+
+  final bool Function(PermissionOption option) pick;
+
   @override
   Future<PermissionOutcome> requestPermission(
     String sessionId,
     ToolCallUpdate toolCall,
     List<PermissionOption> options,
-  ) async => PermissionOutcome.selected(
-    options
-        .firstWhere((o) => o.kind == PermissionOptionKind.allowAlways)
-        .optionId,
-  );
+  ) async => PermissionOutcome.selected(options.firstWhere(pick).optionId);
 
   @override
   Future<String> readTextFile(

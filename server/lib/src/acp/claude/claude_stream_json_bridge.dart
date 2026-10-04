@@ -952,14 +952,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     final input = jsonObject(request['input']) ?? const {};
     final id = '${request['tool_use_id'] ?? ''}';
     final suggestions = jsonObjects(request['permission_suggestions']);
-    if (name == 'AskUserQuestion') {
-      return const {
-        'behavior': 'deny',
-        'message':
-            "Karmashala's chat cannot show your multiple-choice questions; "
-            'ask them in your reply instead.',
-      };
-    }
+    if (name == 'AskUserQuestion') return _ask(id, input);
     final tool = _tools[id] ?? _Tool(name, input, null);
     final exitPlan = name == 'ExitPlanMode';
     final options = exitPlan
@@ -1030,6 +1023,103 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       if (chosen == 'allow_always') 'updatedPermissions': suggestions,
     };
   }
+
+  /// Claude's questions, each asked as a permission whose options are its
+  /// choices; the chosen labels go back as `answers`, keyed by question, as
+  /// Claude reads them. ACP selects one option, so a multi-select question
+  /// is answered with one choice or in the person's reply. A question with
+  /// no choices, or one asked where nobody answers prompts (bypass, which
+  /// the runtime answers itself), is shown in the chat and declined.
+  Future<JsonMap> _ask(String id, JsonMap input) async {
+    final questions = jsonObjects(input['questions']);
+    final answers = <String, String>{};
+    final unasked = <JsonMap>[];
+    for (final question in questions) {
+      final text = '${question['question'] ?? ''}';
+      final choices = [
+        for (final option in jsonObjects(question['options']))
+          if (option['label'] case final String label) (label, option),
+      ];
+      if (choices.isEmpty || _mode == 'bypassPermissions') {
+        unasked.add(question);
+        continue;
+      }
+      Object? answer;
+      try {
+        answer = await _acp.call(AcpMethods.sessionRequestPermission, {
+          'sessionId': _sessionId,
+          'toolCall': {
+            'toolCallId': id,
+            'title': text,
+            'kind': 'other',
+            'status': 'pending',
+            'rawInput': input,
+            'content': [ClaudeTools.text(_questionWords(question))],
+            '_meta': {
+              'claudeCode': {
+                'toolName': 'AskUserQuestion',
+                'multiSelect': question['multiSelect'] == true,
+              },
+            },
+          },
+          'options': [
+            for (final (i, (label, _)) in choices.indexed)
+              _option('choice-$i', label, 'allow_once'),
+            _option('reply', 'Answer in my reply', 'reject_once'),
+          ],
+        });
+      } on Object {
+        answer = null;
+      }
+      final outcome = jsonObject(jsonObject(answer)?['outcome']) ?? const {};
+      final chosen = outcome['outcome'] == 'selected'
+          ? outcome['optionId']
+          : null;
+      if (chosen == null) {
+        return const {
+          'behavior': 'deny',
+          'message': 'The person cancelled the turn.',
+          'interrupt': true,
+        };
+      }
+      final index = chosen is String && chosen.startsWith('choice-')
+          ? int.tryParse(chosen.substring('choice-'.length))
+          : null;
+      if (index == null || index >= choices.length) {
+        unasked.add(question);
+      } else {
+        answers[text] = choices[index].$1;
+      }
+    }
+    if (unasked.isEmpty) {
+      return {
+        'behavior': 'allow',
+        'updatedInput': {...input, 'answers': answers},
+      };
+    }
+    final shown = [for (final q in unasked) _questionWords(q)].join('\n\n');
+    _chunk(
+      'agent_message_chunk',
+      '\n\nClaude asked:\n\n$shown\n\nAnswer in your next message.\n',
+      null,
+    );
+    return {
+      'behavior': 'deny',
+      'message':
+          'The person will answer in their next message instead. '
+          '${answers.isEmpty ? '' : 'Answered so far: ${jsonEncode(answers)}. '}'
+          'Unanswered: ${[for (final q in unasked) q['question']].join('; ')}',
+    };
+  }
+
+  static String _questionWords(JsonMap question) => [
+    '${question['question'] ?? ''}',
+    for (final option in jsonObjects(question['options']))
+      '- ${option['label']}'
+          '${option['description'] is String ? ': ${option['description']}' : ''}',
+    if (question['multiSelect'] == true)
+      '(Several may apply: pick one here, or answer in your reply.)',
+  ].join('\n');
 
   static JsonMap _option(String id, String name, String kind) => {
     'optionId': id,
