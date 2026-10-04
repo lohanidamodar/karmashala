@@ -178,10 +178,9 @@ class AcpVersionProbe {
     final version = await readAcpAgentVersion(
       () async => bridgedAcpTransport(
         spec,
-        AcpTransport.process(
-          await runner.start(
-            acpProbeRequest(installation, spec, environment, directory),
-          ),
+        await startAcpProcess(
+          runner.start,
+          acpProbeRequest(installation, spec, environment, directory),
         ),
       ),
       timeout: timeout,
