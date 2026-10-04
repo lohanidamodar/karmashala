@@ -45,6 +45,7 @@ void main() {
       at: testTime,
       toolUseId: 'c1',
       options: offered,
+      kind: 'execute',
     ),
   );
 
@@ -135,6 +136,16 @@ void main() {
       expect(sent.ask?.toolUseId, 'c1');
     });
   }
+
+  testWidgets('a session with no terminal is not sent to one, and the call '
+      'reads as what it does', (tester) async {
+    await pump(tester);
+    expect(find.text('Answer in the terminal'), findsNothing);
+    expect(find.text('Terminal view'), findsNothing);
+    expect(find.textContaining('wants to run a command'), findsOneWidget);
+    expect(find.text('dart test'), findsOneWidget);
+    expect(find.textContaining('{"command"'), findsNothing);
+  });
 
   testWidgets('a phone draws them without overflowing', (tester) async {
     await pump(tester, size: const Size(390, 844));

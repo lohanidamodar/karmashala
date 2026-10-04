@@ -1236,7 +1236,7 @@ class AcpSessionRuntime implements ScreenSession {
       question: question,
       evidence: [title],
       toolAsk: AgentToolAsk(
-        toolName: title,
+        toolName: _toolNameOf(call) ?? title,
         input: input is Map ? pruneToolInput(input) : const {},
         at: now,
         toolUseId: call.toolCallId,
@@ -1258,6 +1258,19 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// The tool [call] is, by the agent's own name for it: a `toolName` an
+  /// agent puts in its `_meta`, else the call's `name`.
+  static String? _toolNameOf(ToolCallUpdate call) {
+    for (final value in call.meta?.values ?? const <Object?>[]) {
+      if (asJsonMap(value)?['toolName'] case final String name
+          when name.isNotEmpty) {
+        return name;
+      }
+    }
+    final name = call.name;
+    return name == null || name.isEmpty ? null : name;
   }
 
   /// The questions a bridge carried whole under `_meta.karmashala.questions`

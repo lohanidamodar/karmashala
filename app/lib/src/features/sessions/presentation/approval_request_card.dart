@@ -68,7 +68,9 @@ class ApprovalRequestCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (docked &&
         !inline &&
-        ref.watch(chatInlineAsksProvider.select((s) => s.contains(sessionId)))) {
+        ref.watch(
+          chatInlineAsksProvider.select((s) => s.contains(sessionId)),
+        )) {
       return const SizedBox.shrink();
     }
     final report = ref
@@ -132,7 +134,8 @@ class ApprovalRequestCard extends ConsumerWidget {
             // chat keeps the rest of the page.
             : ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * _touchDockShare,
+                  maxHeight:
+                      MediaQuery.sizeOf(context).height * _touchDockShare,
                 ),
                 child: SingleChildScrollView(primary: false, child: dock),
               ),
@@ -301,7 +304,9 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
     } on SessionPromptRefusal catch (refusal) {
       // Worded for the card's own snack bar, which reads a gateway refusal.
       throw GatewayException(
-        said == null ? refusal.message : _approvalRefusalText(refusal, touch: true),
+        said == null
+            ? refusal.message
+            : _approvalRefusalText(refusal, touch: true),
       );
     }
     said?.say('Chosen.');
@@ -433,8 +438,10 @@ class _TerminalLink extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
+      !_hasTerminal(ref, sessionId)
+      ? const SizedBox.shrink()
       // Docked, the dock's own quiet "Answer in the terminal" (board N1).
-      _Docked.of(context)
+      : _Docked.of(context)
       ? Align(
           alignment: AlignmentDirectional.centerEnd,
           child: _AnswerInTerminal(sessionId: sessionId),

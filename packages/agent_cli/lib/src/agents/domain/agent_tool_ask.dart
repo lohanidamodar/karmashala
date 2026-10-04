@@ -11,8 +11,6 @@
 /// screen instead.
 library;
 
-import 'dart:convert';
-
 /// One tool call waiting on the user's permission.
 class AgentToolAsk {
   const AgentToolAsk({
@@ -159,6 +157,10 @@ Map<String, Object?> pruneToolInput(Map<Object?, Object?> input) {
         pruned[key] = text.length <= cap ? text : '${text.substring(0, cap)}…';
       case num() || bool():
         pruned[key] = value;
+      // A command given as argv is kept as its words.
+      case final List<Object?> words
+          when key == 'command' && words.every((w) => w is String):
+        pruned[key] = words;
     }
   }
   return pruned;
@@ -249,7 +251,41 @@ ToolAskSummary summarizeToolAsk(AgentToolAsk ask) {
     case 'Glob' || 'Grep':
       return ToolAskSummary(action: 'search files', subject: field('pattern'));
   }
-  final input = ask.input.isEmpty ? '' : jsonEncode(ask.input);
+  // An ACP call no tool name above matched: what its kind says it does.
+  String path() => [
+    field('file_path'),
+    field('path'),
+    field('notebook_path'),
+  ].firstWhere((p) => p.isNotEmpty, orElse: () => '');
+  switch (ask.kind) {
+    case 'execute':
+      final command = _commandLine(ask.input['command']);
+      final reading = readShellCommand(command, cwd: cwd);
+      return ToolAskSummary(
+        action: 'run a command',
+        subject: command,
+        isCommand: true,
+        touches: reading.touches,
+        danger: reading.danger,
+      );
+    case 'edit':
+      return ToolAskSummary(action: 'edit a file', subject: path());
+    case 'delete':
+      return ToolAskSummary(action: 'delete a file', subject: path());
+    case 'move':
+      return ToolAskSummary(action: 'move a file', subject: path());
+    case 'read':
+      return ToolAskSummary(action: 'read a file', subject: path());
+    case 'fetch':
+      return ToolAskSummary(
+        action: 'fetch from the web',
+        subject: field('url').isNotEmpty ? field('url') : field('query'),
+        touches: const ['uses the network'],
+      );
+    case 'search':
+      return ToolAskSummary(action: 'search files', subject: field('pattern'));
+  }
+  final input = _mainArgument(ask.input);
   // `mcp__<server>__<tool>`: the tool by its own name, and whose it is.
   final mcp = RegExp(r'^mcp__(.+?)__(.+)$').firstMatch(ask.toolName);
   if (mcp != null) {
@@ -259,6 +295,41 @@ ToolAskSummary summarizeToolAsk(AgentToolAsk ask) {
     );
   }
   return ToolAskSummary(action: 'use ${ask.toolName}', subject: input);
+}
+
+/// A command as one line: argv joined, a string as it is.
+String _commandLine(Object? command) => switch (command) {
+  final String line => line,
+  final List<Object?> argv => argv.whereType<String>().join(' '),
+  _ => '',
+};
+
+/// The one argument that names what a call acts on: the first of the usual
+/// keys, else its first text value — never the input as JSON.
+String _mainArgument(Map<String, Object?> input) {
+  const keys = [
+    'command',
+    'file_path',
+    'path',
+    'url',
+    'query',
+    'pattern',
+    'body',
+    'text',
+    'title',
+    'name',
+    'id',
+    'description',
+  ];
+  for (final key in keys) {
+    if (input[key] case final String value when value.trim().isNotEmpty) {
+      return value;
+    }
+  }
+  for (final value in input.values) {
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  return '';
 }
 
 /// Whether [path] lies outside [root]. Relative paths are read against the

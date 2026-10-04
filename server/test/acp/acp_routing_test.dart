@@ -178,6 +178,35 @@ void main() {
     expect(status.holds('s1'), isFalse);
   });
 
+  test('an ask is named by the tool the agent says it is, not its display '
+      'title', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: [
+          const FakeTurn([
+            FakeStep.toolCall(
+              toolCallId: 'c1',
+              title: 'echo hi',
+              kind: ToolKind.execute,
+              rawInput: {'command': 'echo hi'},
+              permissionOptions: fakePermissionOptions,
+              meta: {
+                'someAgent': {'toolName': 'Bash'},
+              },
+            ),
+          ]),
+        ],
+      ),
+    );
+    final runtime = await open(process);
+    await runtime.send('Go');
+    await pump();
+    expect(report().toolAsk?.toolName, 'Bash');
+    expect(report().toolAsk?.kind, 'execute');
+    await runtime.answerPermission(approve: true);
+    await runtime.awaitTurn();
+  });
+
   test('a question carried whole is an open question with every question '
       'in it, answered with the picks', () async {
     final process = FakeAcpProcess(

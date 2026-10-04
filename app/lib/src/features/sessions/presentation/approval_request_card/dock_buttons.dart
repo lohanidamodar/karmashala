@@ -157,6 +157,12 @@ class _DockButtonRow extends StatelessWidget {
   }
 }
 
+/// Whether [sessionId] has a terminal to answer in: an agent spoken to over
+/// its protocol has none.
+bool _hasTerminal(WidgetRef ref, String sessionId) =>
+    ref.watch(agentSessionStatusProvider(sessionId)).asData?.value.source !=
+    AgentStatusSource.protocol;
+
 /// The way to the terminal from the dock: in the terminal view it focuses the
 /// pane the dock is under; in the chat it brings that pane back.
 class _AnswerInTerminal extends ConsumerWidget {
@@ -165,26 +171,29 @@ class _AnswerInTerminal extends ConsumerWidget {
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => TextButton(
-    style: TextButton.styleFrom(
-      foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-      minimumSize: Size(
-        0,
-        _Docked.touchOf(context) ? Touch.target : _dockButtonHeight,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      // Compact takes eight pixels off the 48dp floor on a phone.
-      visualDensity: _Docked.touchOf(context)
-          ? VisualDensity.standard
-          : VisualDensity.compact,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_dockInnerRadius),
-      ),
-    ),
-    onPressed: () => _openTerminal(ref, sessionId),
-    child: const Text('Answer in the terminal'),
-  );
+  Widget build(BuildContext context, WidgetRef ref) =>
+      !_hasTerminal(ref, sessionId)
+      ? const SizedBox.shrink()
+      : TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            minimumSize: Size(
+              0,
+              _Docked.touchOf(context) ? Touch.target : _dockButtonHeight,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            // Compact takes eight pixels off the 48dp floor on a phone.
+            visualDensity: _Docked.touchOf(context)
+                ? VisualDensity.standard
+                : VisualDensity.compact,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(_dockInnerRadius),
+            ),
+          ),
+          onPressed: () => _openTerminal(ref, sessionId),
+          child: const Text('Answer in the terminal'),
+        );
 }
 
 /// One of the dock's answers: 28px, a 7px corner, amber for [primary] and
