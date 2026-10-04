@@ -273,10 +273,15 @@ class _Header extends StatelessWidget {
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final small = theme.textTheme.labelSmall;
-    final path = switch (edit.renamedTo) {
-      null => edit.path,
-      final to => '${edit.path} → $to',
-    };
+    final path = edit.renamedTo ?? edit.path;
+    // The name first and whole, the folder after it and cut: an absolute
+    // path ellipsised at its end loses the one part a reader looks for.
+    final cut = path.lastIndexOf(RegExp(r'[\\/]')) + 1;
+    final name = path.substring(cut);
+    final folder = [
+      if (edit.renamedTo != null) '${edit.path} →',
+      if (cut > 0) path.substring(0, cut),
+    ].join(' ');
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm,
@@ -292,11 +297,34 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: Insets.sm),
           Expanded(
-            child: Text(
-              path,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: MonoStyles.small.copyWith(color: scheme.onSurface),
+            child: LayoutBuilder(
+              builder: (context, box) => Row(
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: MonoStyles.small.copyWith(color: scheme.onSurface),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Tooltip(
+                      message: edit.path,
+                      child: Text(
+                        folder,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: MonoStyles.small.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (diff.added > 0 || diff.removed > 0) ...[
