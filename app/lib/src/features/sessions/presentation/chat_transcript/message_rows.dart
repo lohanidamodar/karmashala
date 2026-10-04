@@ -185,7 +185,9 @@ class _UserMessageCard extends StatelessWidget {
       scheme.primary,
       _tintAlpha,
     )!;
-    return LayoutBuilder(
+    // Karmashala's own note to the agent is not the person's words.
+    final (:preamble, :rest) = splitScratchPreamble(message.text);
+    final bubble = LayoutBuilder(
       builder: (context, constraints) => _TurnWithMeta(
         alignEnd: true,
         at: message.at,
@@ -205,7 +207,7 @@ class _UserMessageCard extends StatelessWidget {
                 vertical: Radii.md,
               ),
               child: MarkdownMessage(
-                message.text,
+                rest,
                 onPathTap: onPathTap,
                 onLinkTap: onLinkTap,
                 selectable: false,
@@ -214,6 +216,68 @@ class _UserMessageCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (preamble == null) return bubble;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _SessionNote(text: preamble),
+        if (rest.isNotEmpty) bubble,
+      ],
+    );
+  }
+}
+
+/// What Karmashala told the agent ahead of the person's first words, folded
+/// to one line.
+class _SessionNote extends StatefulWidget {
+  const _SessionNote({required this.text});
+
+  final String text;
+
+  @override
+  State<_SessionNote> createState() => _SessionNoteState();
+}
+
+class _SessionNoteState extends State<_SessionNote> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SelectionContainer.disabled(
+          child: InkWell(
+            onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _open ? AppIcons.caretDown : AppIcons.caretRight,
+                    size: Chrome.iconSmall,
+                    color: muted?.color,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Text('Session note', style: muted),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_open)
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.lg, bottom: Insets.sm),
+            child: Text(widget.text, style: muted),
+          ),
+      ],
     );
   }
 }

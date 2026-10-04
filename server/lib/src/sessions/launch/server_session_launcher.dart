@@ -23,7 +23,6 @@ import '../../automations/daemon_checkout_facts.dart';
 import '../../automations/hosted_agent_launcher.dart';
 import '../../domain/session_registry.dart';
 import 'launch_settings.dart';
-import 'scratch_preamble.dart';
 
 /// Asks an agent's own store whether it holds a conversation.
 typedef ConversationPresenceIn =

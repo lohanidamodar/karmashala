@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/sessions/presentation/chat_transcript.da
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
 import 'package:karmashala/src/features/sessions/presentation/tool_run.dart';
+import 'package:karmashala_session/session.dart' show withScratchPreamble;
 
 /// **A run of tool calls reads as one line.** Between two of the model's
 /// sentences, twenty file reads are one step. What must never disappear into
@@ -547,6 +548,23 @@ void main() {
         expect(find.text('Plan not approved: kept planning'), findsOneWidget);
       },
     );
+
+    testWidgets('a scratch session\'s opening note is folded away from the '
+        'person\'s words', (tester) async {
+      final opening = ChatMessage(
+        role: 'user',
+        text: withScratchPreamble('/home/u/scratch/x', 'Tidy the folder'),
+      );
+      await tester.pumpWidget(view([opening]));
+      await tester.pumpAndSettle();
+      expect(shown('Tidy the folder'), findsOneWidget);
+      expect(shown('session_checkout_attach'), findsNothing);
+      expect(find.text('Session note'), findsOneWidget);
+
+      await tester.tap(find.text('Session note'));
+      await tester.pumpAndSettle();
+      expect(shown('session_checkout_attach'), findsOneWidget);
+    });
 
     testWidgets('an answered question shows each question with its pick', (
       tester,
