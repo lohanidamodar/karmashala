@@ -19,6 +19,7 @@ class FakeClaudeMachine {
     Set<String> conversations = const {},
     this.version = '2.1.287',
     this.models = defaultModels,
+    this.ignoreInterrupt = false,
   }) : turns = List.of(turns),
        conversations = {...conversations};
 
@@ -27,6 +28,10 @@ class FakeClaudeMachine {
   final Set<String> conversations;
   final String version;
   final List<Json> models;
+
+  /// Whether an interrupt is answered but the turn goes on, as a stuck
+  /// `claude` would.
+  final bool ignoreInterrupt;
 
   /// Every process started, in order.
   final launched = <FakeClaude>[];
@@ -217,7 +222,7 @@ class FakeClaude {
         });
       case 'interrupt':
         _answer(id, {'still_queued': <Object?>[]});
-        if (turnOpen) {
+        if (turnOpen && !machine.ignoreInterrupt) {
           emit({
             'type': 'user',
             'message': {

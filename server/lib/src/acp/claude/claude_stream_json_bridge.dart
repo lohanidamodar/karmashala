@@ -39,7 +39,11 @@ AcpTransport claudeStreamJsonBridge(AcpTransport raw) =>
 /// name and the subagent call it ran under, a subagent's task id, type and
 /// progress, and a turn's duration, turn count and per-model usage.
 final class ClaudeStreamJsonBridge implements AcpTransport {
-  ClaudeStreamJsonBridge(AcpTransport raw) : _relaunch = raw.relaunch {
+  ClaudeStreamJsonBridge(
+    AcpTransport raw, {
+    Duration interruptPatience = const Duration(seconds: 5),
+  }) : _relaunch = raw.relaunch,
+       _interruptPatience = interruptPatience {
     _acp = AcpPeer(_fromClient.stream, _toClient.sink);
     _acp.requests.listen((request) => unawaited(_onRequest(request)));
     _acp.notifications.listen(_onNotification);
@@ -48,6 +52,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   }
 
   final AcpRelaunch? _relaunch;
+
+  /// How long Claude has to end a turn after the interrupt before its
+  /// process is ended, as Orca does.
+  final Duration _interruptPatience;
   final _toClient = StreamController<List<int>>();
   final _fromClient = StreamController<List<int>>();
   final _errors = StreamController<String>();
@@ -359,6 +367,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     final id = newUuid();
     await _open(['--session-id', id], params);
+    _openParams = params;
     _sessionId = id;
     _announceCommands();
     return {
@@ -377,6 +386,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       );
     }
     await _open(['--resume', id], params);
+    _openParams = params;
     _sessionId = id;
     _announceCommands();
     return {'modes': _modes(), 'configOptions': _configOptions()};
@@ -397,6 +407,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   }
 
   Future<JsonMap> _prompt(JsonMap params) async {
+    if (_claude == null && _abandoned && _turn == null) await _resume();
     final claude = _claude;
     if (claude == null || _sessionId.isEmpty) {
       throw const AcpRpcError(
@@ -459,9 +470,52 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   void _cancel() {
     final claude = _claude;
-    if (_turn == null || claude == null) return;
+    final turn = _turn;
+    if (turn == null || claude == null) return;
     _cancelling = true;
     unawaited(claude.control('interrupt').then((_) {}, onError: (Object _) {}));
+    Timer(_interruptPatience, () {
+      if (identical(_turn, turn) && identical(_claude, claude)) {
+        _abandon(claude, turn);
+      }
+    });
+  }
+
+  /// Claude did not end the turn after the interrupt: the process is ended
+  /// (its end is not the session's), the turn answers cancelled, and the
+  /// next prompt resumes the conversation in a new process.
+  void _abandon(ClaudeProcess claude, Completer<String> turn) {
+    _claude = null;
+    _turn = null;
+    _cancelling = false;
+    _abandoned = true;
+    if (_agentTurnOpen) {
+      _agentTurnOpen = false;
+      _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
+    }
+    if (!turn.isCompleted) turn.complete('cancelled');
+    unawaited(claude.kill().catchError((Object _) {}));
+  }
+
+  var _abandoned = false;
+
+  /// The `session/new` or `session/load` params the conversation was opened
+  /// with, for a resume after an abandoned turn.
+  JsonMap _openParams = const {};
+
+  Future<void> _resume() async {
+    final mode = _mode;
+    final model = _model;
+    final claude = await _open(['--resume', _sessionId], _openParams);
+    _abandoned = false;
+    if (_mode != mode) {
+      await claude.control('set_permission_mode', {'mode': mode});
+      _mode = mode;
+    }
+    if (_model != model) {
+      await claude.control('set_model', {'model': model});
+      _model = model;
+    }
   }
 
   Future<JsonMap> _setMode(JsonMap params) async {

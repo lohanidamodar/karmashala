@@ -9,6 +9,8 @@ import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
+import 'package:karmashala_host/src/acp/claude/claude_stream_json_bridge.dart'
+    show ClaudeStreamJsonBridge;
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart'
     show SessionMessageTranscriptSource;
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
@@ -76,6 +78,7 @@ void main() {
     PermissionRisk? risk,
     String? resumeSessionId,
     String? mcpUrl,
+    Duration? interruptPatience,
   }) {
     var ids = 0;
     return AcpSessionRuntime(
@@ -85,8 +88,20 @@ void main() {
       agentName: 'Claude',
       spec: _spec,
       workingDirectory: temp.path,
-      spawn: () async =>
-          _tapped(bridgedAcpTransport(_spec, await machine.spawn()), wire),
+      spawn: () async => _tapped(
+        bridgedAcpTransport(
+          _spec,
+          await machine.spawn(),
+          bridges: {
+            AcpNativeBridge.claudeStreamJson: (raw) => ClaudeStreamJsonBridge(
+              raw,
+              interruptPatience:
+                  interruptPatience ?? const Duration(seconds: 5),
+            ),
+          },
+        ),
+        wire,
+      ),
       messages: SessionMessageDao(database),
       usage: SessionUsageDao(database),
       host: host,
@@ -977,6 +992,48 @@ void main() {
   });
 
   group('control', () {
+    test('a Claude that does not end the turn after the interrupt is ended; '
+        'the turn ends cancelled, and the next prompt resumes the '
+        'conversation in a new process with its mode and model', () async {
+      final machine = FakeClaudeMachine(
+        ignoreInterrupt: true,
+        turns: [
+          (c, user) async => c.streamText('m1', ['stuck ']),
+          (c, user) async {
+            c.assistant('m2', [
+              {'type': 'text', 'text': 'Back.'},
+            ]);
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(
+        machine,
+        interruptPatience: const Duration(milliseconds: 100),
+      );
+      await rt.start();
+      await rt.setMode('plan');
+      await rt.setConfigOption('model', 'sonnet');
+      final first = machine.current;
+      await rt.send('Hang');
+      await until(() => rows().any((r) => r.text.contains('stuck')));
+      rt.cancel();
+      expect(await rt.awaitTurn(), StopReason.cancelled);
+      expect(first.killed, isTrue);
+      expect(rt.lifecycle.hasEnded, isFalse, reason: 'the session lives on');
+      expect(host.statuses.last.status, AgentActivityStatus.idle);
+
+      await rt.send('Again');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      final second = machine.current;
+      expect(second, isNot(same(first)));
+      expect(second.args, ['--resume', rt.agentSessionId]);
+      expect(second.controls('set_permission_mode').single['mode'], 'plan');
+      expect(second.controls('set_model').single['model'], 'sonnet');
+      expect(rows().any((r) => r.text == 'Back.'), isTrue);
+      await rt.stop();
+    });
+
     test('cancel interrupts the turn mid-stream; the turn ends cancelled and '
         'the next one runs in the same process', () async {
       final machine = FakeClaudeMachine(
