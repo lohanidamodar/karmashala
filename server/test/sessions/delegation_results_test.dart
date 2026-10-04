@@ -35,8 +35,11 @@ void main() {
   late SessionQueue queue;
   late Map<String, List<String>> delivered;
   late Map<String, String> answers;
+  // When each answer was said, for a follow-up that must not read the last.
+  late Map<String, DateTime> answeredAt;
   late List<String> ended;
   late DelegationResults delegations;
+  late ChildTurnWait turns;
   late Directory temp;
   var clock = t0;
 
@@ -58,9 +61,30 @@ void main() {
     String sessionId, {
     DateTime? since,
   }) async => switch (answers[sessionId]) {
-    final text? => (text: text, at: null),
+    String()
+        when since != null &&
+            (answeredAt[sessionId]?.isBefore(since) ?? false) =>
+      null,
+    final text? => (text: text, at: answeredAt[sessionId]),
     null => null,
   };
+
+  /// A tracker over this test's database, as a server builds one at start.
+  DelegationResults tracker() => DelegationResults(
+    turnOf: (childId, since) => turns.firstTurn(
+      childId,
+      bound: const Duration(minutes: 5),
+      since: since,
+    ),
+    answerOf: answerOf,
+    queue: queue,
+    store: SessionDelegationDao(database),
+    isLive: status.holds,
+    restoreGrace: const Duration(milliseconds: 60),
+    endChild: (childId) async => ended.add(childId),
+    batchWindow: const Duration(milliseconds: 40),
+    now: () => clock,
+  );
 
   setUp(() {
     clock = t0;
@@ -97,37 +121,29 @@ void main() {
     dao = SessionQueueDao(database);
     delivered = {};
     answers = {};
+    answeredAt = {};
     ended = [];
     var n = 0;
-    queue = SessionQueue(
-      dao: dao,
-      status: status,
-      turnStartGrace: const Duration(milliseconds: 30),
-      quietPeriod: const Duration(seconds: 30),
-      quietPoll: const Duration(milliseconds: 10),
-      newId: () => 'q${++n}',
-      now: () => t0,
-    )..deliver = ((sessionId, text) async =>
-        (delivered[sessionId] ??= []).add(text));
+    queue =
+        SessionQueue(
+            dao: dao,
+            status: status,
+            turnStartGrace: const Duration(milliseconds: 30),
+            quietPeriod: const Duration(seconds: 30),
+            quietPoll: const Duration(milliseconds: 10),
+            newId: () => 'q${++n}',
+            now: () => t0,
+          )
+          ..deliver = ((sessionId, text) async =>
+              (delivered[sessionId] ??= []).add(text));
     queue.start();
-    final turns = ChildTurnWait(
+    turns = ChildTurnWait(
       waits: HostedSessionWait(status: status),
       answerOf: answerOf,
       settled: queue.turns.settled,
       recheck: const Duration(milliseconds: 5),
     );
-    delegations = DelegationResults(
-      turnOf: (childId, since) => turns.firstTurn(
-        childId,
-        bound: const Duration(minutes: 5),
-        since: since,
-      ),
-      answerOf: answerOf,
-      queue: queue,
-      endChild: (childId) async => ended.add(childId),
-      batchWindow: const Duration(milliseconds: 40),
-      now: () => clock,
-    );
+    delegations = tracker();
   });
 
   tearDown(() async {
@@ -385,6 +401,134 @@ void main() {
     final message = delivered['parent']!.single;
     expect(message, contains('BLOCKED'));
     expect(message, contains('session_answer'));
+  });
+
+  group('across a restart', () {
+    test('a child still running is watched again by the next tracker, and '
+        'its result pushed', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      await delegations.close();
+      expect(SessionDelegationDao(database).awaiting(), hasLength(1));
+
+      delegations = tracker()..start();
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Back after the restart.';
+      hook('c1', 'Stop');
+      await settle();
+
+      expect(delivered['parent']!.single, contains('Back after the restart.'));
+      expect(SessionDelegationDao(database).awaiting(), isEmpty);
+    });
+
+    test('a child that finished while the server was down has its result '
+        'pushed once on start', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      await delegations.close();
+      // Down: the child answers and its process goes.
+      answers['c1'] = 'Finished while you were away.';
+      pty.handles.last.finish(0);
+      await pumpEventQueue();
+
+      delegations = tracker()..start();
+      await settle();
+      expect(
+        delivered['parent']!.single,
+        contains('Finished while you were away.'),
+      );
+      expect(delivered['parent']!.single, contains('— done'));
+
+      await delegations.close();
+      delegations = tracker()..start();
+      await settle();
+      expect(delivered['parent'], hasLength(1), reason: 'pushed once');
+    });
+  });
+
+  group('follow-up turns', () {
+    Future<void> firstTurnReported() async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'First answer.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+    }
+
+    test("the parent's follow-up to its async child has that turn's result "
+        'pushed too', () async {
+      await firstTurnReported();
+      clock = t0.add(const Duration(minutes: 10));
+      delegations.sent('parent', 'c1');
+      hook('parent', 'UserPromptSubmit');
+      hook('parent', 'Stop');
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Second answer.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+
+      expect(delivered['parent'], hasLength(2));
+      expect(delivered['parent']!.last, contains('Second answer.'));
+      expect(delivered['parent']!.last, contains('turn 2'));
+    });
+
+    test('a message from anyone but the parent arms nothing', () async {
+      await firstTurnReported();
+      delegations.sent('someone-else', 'c1');
+      delegations.sent(null, 'c1');
+      expect(SessionDelegationDao(database).awaiting(), isEmpty);
+    });
+
+    test('a follow-up sent mid-turn is reported after the turn it lands '
+        'behind', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      delegations.sent('parent', 'c1');
+      answers['c1'] = 'First answer.';
+      answeredAt['c1'] = clock;
+      // The next turn is awaited from when this one was reported.
+      clock = t0.add(const Duration(minutes: 1));
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(SessionDelegationDao(database).awaiting(), hasLength(1));
+
+      hook('parent', 'UserPromptSubmit');
+      hook('parent', 'Stop');
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Answer to the follow-up.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(2));
+      expect(delivered['parent']!.last, contains('Answer to the follow-up.'));
+    });
+
+    test('once the parent stops it, nothing more is pushed', () async {
+      await firstTurnReported();
+      delegations.stopped('c1');
+      expect(SessionDelegationDao(database).byChild('c1'), isNull);
+      delegations.sent('parent', 'c1');
+      expect(SessionDelegationDao(database).awaiting(), isEmpty);
+    });
   });
 }
 

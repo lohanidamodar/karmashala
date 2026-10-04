@@ -38,6 +38,8 @@ class SessionToolSet extends ServerToolSet {
     HostedSessionWait? waits,
     SessionMessageTypist? typist,
     this.answerOf,
+    this.sentBy,
+    this.endedBy,
   }) : _sessions = SessionDao(_context.database),
        waits = waits ?? HostedSessionWait(status: prompts.status) {
     this.typist = typist ?? typistOver(prompts);
@@ -59,6 +61,15 @@ class SessionToolSet extends ServerToolSet {
   /// What a session said last, which a wait that settles ready answers with;
   /// null where this server reads no transcripts.
   final AnswerOf? answerOf;
+
+  /// Told after a `session_send` from [String] (null: no session) to
+  /// [String], sent at [DateTime], went in or queued — a parent's follow-up
+  /// to its delegation.
+  final void Function(String? callerSessionId, String sessionId, DateTime at)?
+  sentBy;
+
+  /// Told as a `session_end` from [String] ends [String].
+  final void Function(String? callerSessionId, String sessionId)? endedBy;
   late final SessionMessageTypist typist;
   final SessionDao _sessions;
 
@@ -109,16 +120,21 @@ class SessionToolSet extends ServerToolSet {
           return _answer(sessionId, arguments['decision'], callerSessionId);
         });
       case 'session_send':
-        return runTool(
-          () => _send(
+        return runTool(() async {
+          final at = _context.now();
+          final wait = arguments['wait'] == true;
+          final answer = await _send(
             sessionId,
             (arguments['text'] as String?) ?? '',
             callerSessionId: callerSessionId,
-            wait: arguments['wait'] == true,
+            wait: wait,
             timeoutSeconds: arguments['timeoutSeconds'] as num?,
             held: held,
-          ),
-        );
+          );
+          // A send that waited answered the turn itself: nothing to push.
+          if (!wait) sentBy?.call(callerSessionId, sessionId, at);
+          return answer;
+        });
       case 'session_wait':
         return runTool(
           () => _wait(
@@ -144,6 +160,7 @@ class SessionToolSet extends ServerToolSet {
             _session(sessionId);
             throw StateError(_onBoxRefusal('end it'));
           }
+          endedBy?.call(callerSessionId, sessionId);
           return _end(sessionId, held: runsHere);
         });
     }

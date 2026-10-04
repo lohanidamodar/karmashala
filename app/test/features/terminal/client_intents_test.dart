@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/client_intents.dart';
@@ -8,6 +9,7 @@ import 'package:karmashala/src/features/terminal/application/local_host_provider
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 
@@ -160,6 +162,41 @@ void main() {
       server.sessionWork.asked.whereType<SessionStart>(),
       isEmpty,
       reason: 'a session the server runs is never started from here',
+    );
+  });
+
+  test('a session an agent started on an ACP agent opens as its chat tab, '
+      'as the New session dialog opens one — never a terminal pane', () async {
+    final (container, server) = await start();
+    server.installationRows.insert(
+      agentInstallation(id: 'acp1', agentId: AgentIds.claudeAcp),
+    );
+    server.sessionRows.insert(
+      session(id: 's10', title: 'ACP child', agentInstallationId: 'acp1'),
+    );
+    server.sessionWork.running.add('s10');
+
+    server.sessionWork.tellIntent(
+      const OpenSessionTab(sessionId: 's10', title: 'ACP child'),
+    );
+    await pumpEventQueue();
+    await pumpEventQueue();
+
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final panes = [
+      for (final tab in container.read(terminalSessionsControllerProvider).tabs)
+        ...tab.layout.panes,
+    ];
+    expect(panes, contains(chatPaneId('s10')));
+    expect(
+      [
+        for (final id in panes)
+          if (controller.instanceFor(id)?.agentLaunch?.sessionId == 's10') id,
+      ],
+      isEmpty,
+      reason: 'the server runs an ACP agent itself; a pane here would be dead',
     );
   });
 }

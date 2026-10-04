@@ -45,6 +45,28 @@ void main() {
       ]);
     });
 
+    test("an ACP parent's launches, titled as its adapter titles them and "
+        'with no subject, are a group too', () {
+      ChatMessage acp(String title, String child) => ChatMessage(
+        role: 'tool',
+        text: title,
+        tool: ToolActivity(
+          name: title,
+          output: '{"state":"started","childSessionId":"$child"}',
+        ),
+      );
+      final groups = delegationGroups([
+        const ChatMessage(role: 'user', text: 'Split it up'),
+        acp('mcp__karmashala__subagent_run', 'c1'),
+        acp('Tool: karmashala/open_new_session', 'c2'),
+        const ChatMessage(role: 'agent', text: 'Started two.'),
+      ]);
+      expect(groups[3]!.map((c) => (c.childId, c.title)), [
+        ('c1', null),
+        ('c2', null),
+      ]);
+    });
+
     test('a single launch is no group, and turns are not merged', () {
       final groups = delegationGroups([
         const ChatMessage(role: 'user', text: 'one'),
@@ -116,7 +138,8 @@ void main() {
                 parentSessionId: 'p',
                 calls: [
                   DelegationCall(childId: 'c1', title: 'Audit the cart'),
-                  DelegationCall(childId: 'c2', title: 'Write docs'),
+                  // As an ACP parent's call arrives: no subject of its own.
+                  DelegationCall(childId: 'c2'),
                   DelegationCall(title: 'Starting'),
                 ],
               ),
@@ -142,6 +165,8 @@ void main() {
         expect(find.text('Codex · gpt-5 · Done · 1m 05s'), findsOneWidget);
         expect(find.text('Cart is fine.'), findsOneWidget);
         expect(find.text('Claude Code · Running · 3m 00s'), findsOneWidget);
+        // Named by its own session when the call carried no subject.
+        expect(find.text('Write docs'), findsOneWidget);
         expect(find.text('Starting'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
