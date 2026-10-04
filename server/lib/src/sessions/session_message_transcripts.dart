@@ -118,16 +118,17 @@ class SessionMessageTranscriptSource {
     final text = open ? _terminalOutputOf(json) : _outputOf(json);
     if (text != null) (output, truncated) = boundedToolOutput(text);
     final (edits, editsCut) = boundedToolEdits(_editsOf(json['content']));
+    final kind = _string(json['kind']);
+    final named =
+        _toolNameIn(json['_meta']) ?? _string(json['name']) ?? _kindNames[kind];
     return (
       activity: ToolActivity(
-        name:
-            _string(json['title']) ??
-            _string(json['name']) ??
-            _string(json['kind']) ??
-            'tool',
+        name: named ?? _string(json['title']) ?? kind ?? 'tool',
         subject:
             _subjectOf(json['locations']) ??
-            toolSubjectEntryFor(json['rawInput'])?.value,
+            toolSubjectEntryFor(json['rawInput'])?.value ??
+            // Its title says what it acts on when its kind names it.
+            (named == null ? null : _string(json['title'])),
         output: output,
         outputTruncated: truncated,
         isError: failed,
@@ -139,6 +140,29 @@ class SessionMessageTranscriptSource {
       pendingId: open ? (_string(json['toolCallId']) ?? row.id) : null,
     );
   }
+
+  /// A call's tool by the agent's own name for it: a `toolName` it put in
+  /// its `_meta` (Claude's `Bash`, `mcp__server__tool`).
+  static String? _toolNameIn(Object? meta) {
+    if (meta is! Map) return null;
+    for (final value in meta.values) {
+      if (value is Map) {
+        if (_string(value['toolName']) case final name?) return name;
+      }
+    }
+    return null;
+  }
+
+  /// What an ACP kind is called on a card when the agent named no tool.
+  static const Map<String?, String> _kindNames = {
+    'execute': 'Shell',
+    'edit': 'Edit',
+    'read': 'Read',
+    'delete': 'Delete',
+    'move': 'Move',
+    'search': 'Search',
+    'fetch': 'Fetch',
+  };
 
   static const Set<String> _openStatuses = {
     'pending',

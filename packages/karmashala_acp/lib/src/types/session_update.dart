@@ -220,6 +220,7 @@ final class ToolCallUpdate extends SessionUpdate {
     locations: update.locations ?? locations,
     rawInput: update.rawInput ?? rawInput,
     rawOutput: update.rawOutput ?? rawOutput,
+    meta: update.meta == null ? meta : {...?meta, ...update.meta!},
   );
 }
 

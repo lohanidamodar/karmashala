@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
+import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart';
 import 'package:karmashala_host/src/sessions/session_records.dart';
@@ -115,7 +116,7 @@ void main() {
       expect(agent.thinking, 'greet back');
     });
 
-    test('a tool call still open is pending; title is its label', () {
+    test('a tool call still open is pending; its name is its label', () {
       final message = SessionMessageTranscriptSource.project(
         row(
           't',
@@ -136,7 +137,7 @@ void main() {
       expect(message.role, 'tool');
       expect(message.pendingToolUseId, 'call-1');
       final tool = message.tool!;
-      expect(tool.name, 'Read main.dart');
+      expect(tool.name, 'read');
       expect(tool.subject, r'C:\src\demo\lib\main.dart:12');
       expect(tool.output, isNull);
       expect(tool.isError, isFalse);
@@ -162,7 +163,7 @@ void main() {
         ),
       );
       expect(done.pendingToolUseId, isNull);
-      expect(done.tool!.name, 'execute');
+      expect(done.tool!.name, 'Shell');
       expect(done.tool!.output, 'ok\nedited a.dart');
       expect(done.tool!.isError, isFalse);
 
@@ -181,6 +182,47 @@ void main() {
       expect(failed.tool!.isError, isTrue);
       expect(failed.tool!.output, '{"exit":1}');
       expect(failed.pendingToolUseId, isNull);
+    });
+
+    test('a call is named by its tool, never by its title; the title is '
+        'the subject only when nothing else is', () {
+      ToolActivity tool(Map<String, Object?> json) =>
+          SessionMessageTranscriptSource.project(
+            row('x', role: SessionMessageRole.tool, tool: json),
+          ).tool!;
+      final bash = tool({
+        'toolCallId': 'c1',
+        'title': 'echo hello && ls -la',
+        'kind': 'execute',
+        'status': 'completed',
+        'rawInput': {'command': 'echo hello && ls -la'},
+        '_meta': {
+          'claudeCode': {'toolName': 'Bash'},
+        },
+      });
+      expect(bash.name, 'Bash');
+      expect(bash.subject, 'echo hello && ls -la');
+
+      final edit = tool({
+        'toolCallId': 'c2',
+        'title': 'Edit notes.txt',
+        'kind': 'edit',
+        'status': 'completed',
+        'locations': [
+          {'path': r'C:\w\notes.txt'},
+        ],
+      });
+      expect(edit.name, 'Edit');
+      expect(edit.subject, r'C:\w\notes.txt');
+
+      final other = tool({
+        'toolCallId': 'c3',
+        'title': 'Thinking it over',
+        'kind': 'other',
+        'status': 'completed',
+      });
+      expect(other.name, 'Thinking it over');
+      expect(other.subject, isNull);
     });
 
     test('a plan row carries the plan, in either JSON shape', () {
