@@ -13,6 +13,14 @@ import 'support/sweep_world.dart';
 /// reports; that every environment is asked at once; and which pairs the
 /// probe log says were searched. The environments and their replies are
 /// described, so nothing here spawns a real CLI.
+/// The built-in agents without their chat forms. A chat form now runs the
+/// same binary as its terminal agent, so one `claude` would be found twice;
+/// these tests are about the sweep's rules, not about that pairing.
+final _terminalAgents = AgentRegistry([
+  for (final adapter in AgentRegistry.builtIn.adapters)
+    if (adapter.acp == null) adapter,
+]);
+
 void main() {
   group('a sweep of every environment', () {
     // Every request a sweep made, as `executable + arguments`, for the count
@@ -57,7 +65,9 @@ void main() {
 
     test('discovers the same agent independently per environment', () async {
       final runner = claudeOnlyRunner();
-      final report = await world.sweep(runnerFor: (_) => runner).sweep();
+      final report = await world
+          .sweep(registry: _terminalAgents, runnerFor: (_) => runner)
+          .sweep();
 
       expect(report.foundCount, 2);
       final installations = world.installations.getAll();
@@ -83,7 +93,9 @@ void main() {
         // is reached while the first is still held, and the number of calls is
         // exactly what a sequential sweep made.
         final plain = claudeOnlyRunner();
-        await world.sweep(runnerFor: (_) => plain).sweep();
+        await world
+            .sweep(registry: _terminalAgents, runnerFor: (_) => plain)
+            .sweep();
         final sequential = [...calls];
         calls.clear();
 
@@ -94,7 +106,9 @@ void main() {
         );
         final second = SweepWorld([windowsEnv(), wslEnv()]);
 
-        final sweep = second.sweep(runnerFor: (_) => held).sweep();
+        final sweep = second
+            .sweep(registry: _terminalAgents, runnerFor: (_) => held)
+            .sweep();
         await pumpEventQueue();
         // Every Windows call is held, so anything from WSL here happened while
         // the Windows environment was still waiting. Sequentially this list
@@ -117,7 +131,10 @@ void main() {
 
     test('re-running discovery does not duplicate installations', () async {
       final runner = claudeOnlyRunner();
-      final sweep = world.sweep(runnerFor: (_) => runner);
+      final sweep = world.sweep(
+        registry: _terminalAgents,
+        runnerFor: (_) => runner,
+      );
       await sweep.sweep();
       await sweep.sweep();
       expect(world.installations.getAll(), hasLength(2));
@@ -129,6 +146,7 @@ void main() {
       final runner = claudeOnlyRunner();
       final report = await world
           .sweep(
+            registry: _terminalAgents,
             runnerFor: (environment) => environment.id == 'wsl:Ubuntu'
                 ? throw StateError('no distribution recorded')
                 : runner,
@@ -153,7 +171,9 @@ void main() {
       final runner = claudeOnlyRunner();
       world.installations.refuseReconcile = StateError('the server said no');
 
-      final report = await world.sweep(runnerFor: (_) => runner).sweep();
+      final report = await world
+          .sweep(registry: _terminalAgents, runnerFor: (_) => runner)
+          .sweep();
 
       expect(report.environments.every((e) => !e.reachable), isTrue);
       expect(
@@ -171,7 +191,7 @@ void main() {
     test('only narrows to the environments and agents it names', () async {
       final runner = claudeOnlyRunner();
       final report = await world
-          .sweep(runnerFor: (_) => runner)
+          .sweep(registry: _terminalAgents, runnerFor: (_) => runner)
           .sweep(
             only: {
               'windows': {AgentIds.claudeCode},
@@ -215,7 +235,7 @@ void main() {
               : CommandResult(exitCode: 0, stdout: hit, stderr: '');
         },
       );
-      return world.sweep(runnerFor: (_) => runner);
+      return world.sweep(registry: _terminalAgents, runnerFor: (_) => runner);
     }
 
     test(
@@ -572,7 +592,7 @@ void main() {
       final runner = onPath({'claude'});
 
       final report = await world
-          .sweep(runnerFor: (_) => runner)
+          .sweep(registry: _terminalAgents, runnerFor: (_) => runner)
           .scan(windowsEnv());
 
       expect(report.addedCount, 1);
@@ -591,7 +611,10 @@ void main() {
 
     test('an environment that does not answer is reported so', () async {
       final report = await world
-          .sweep(runnerFor: (_) => throw StateError('no runner'))
+          .sweep(
+            registry: _terminalAgents,
+            runnerFor: (_) => throw StateError('no runner'),
+          )
           .scan(windowsEnv());
 
       expect(report.environments.single.reachable, isFalse);

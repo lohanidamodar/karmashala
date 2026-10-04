@@ -7,6 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_host/src/acp/acp_runtimes.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
+import 'package:karmashala_host/src/acp/acp_version_probe.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -65,6 +66,111 @@ void main() {
           '--acp',
         ], reason: path);
       }
+    });
+
+    Matcher refusedForRescan = throwsA(
+      isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        contains('rescan agents'),
+      ),
+    );
+
+    test('a stale npx row of an agent that now runs its own binary is '
+        'refused in words, never run as npx app-server', () {
+      final codex = codexAcpDescriptor.acp!;
+      final stale = installation(
+        r'C:\nodejs\npx.cmd',
+        leading: ['-y', '@agentclientprotocol/codex-acp'],
+      );
+      expect(
+        () => acpArgumentsFor(stale, codex, linux: false),
+        refusedForRescan,
+      );
+      // Recorded before leading arguments were kept: still npx, still refused.
+      expect(
+        () => acpArgumentsFor(installation('/usr/bin/npx'), codex, linux: true),
+        refusedForRescan,
+      );
+      // The binary a rescan finds runs as the spec says.
+      expect(
+        acpArgumentsFor(
+          installation(r'C:\codex\codex.exe'),
+          codex,
+          linux: false,
+        ),
+        ['app-server'],
+      );
+    });
+
+    test('an npx row runs only the spec\'s own package', () {
+      expect(
+        () => acpArgumentsFor(
+          installation('/usr/bin/npx', leading: ['-y', '@other/agent']),
+          spec,
+          linux: true,
+        ),
+        refusedForRescan,
+      );
+      expect(
+        acpArgumentsFor(
+          installation('/usr/bin/npx', leading: ['-y', '@example/agent']),
+          spec,
+          linux: true,
+        ),
+        ['-y', '@example/agent', '--acp'],
+      );
+      // A spec that names no package never runs a package an npx row names.
+      expect(
+        () => acpArgumentsFor(
+          installation('/usr/bin/npx', leading: ['-y', '@example/agent']),
+          const AcpLaunchSpec(arguments: ['--acp']),
+          linux: true,
+        ),
+        refusedForRescan,
+      );
+    });
+
+    test(
+      'a person\'s own agent whose command is npx runs as they wrote it',
+      () {
+        const own = AcpLaunchSpec(arguments: ['-y', 'their-agent', '--acp']);
+        expect(
+          acpArgumentsFor(installation('/usr/bin/npx'), own, linux: true),
+          ['-y', 'their-agent', '--acp'],
+        );
+      },
+    );
+
+    test('the login and the version read build their argv the same way', () {
+      final environment = ExecutionEnvironment(
+        id: 'wsl:arch',
+        kind: EnvironmentKind.wsl,
+        name: 'arch',
+        wslDistribution: 'arch',
+        createdAt: t0,
+      );
+      expect(
+        () => acpProbeRequest(
+          installation(
+            '/usr/bin/npx',
+            leading: ['-y', '@agentclientprotocol/codex-acp'],
+          ),
+          codexAcpDescriptor.acp!,
+          environment,
+          '/tmp',
+        ),
+        refusedForRescan,
+      );
+      expect(
+        acpProbeRequest(
+          installation('/usr/bin/codex'),
+          codexAcpDescriptor.acp!,
+          environment,
+          '/tmp',
+        ).arguments,
+        ['app-server'],
+      );
     });
 
     test('Linux-only arguments follow the mode arguments on Linux alone', () {

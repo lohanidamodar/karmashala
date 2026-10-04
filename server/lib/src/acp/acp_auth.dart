@@ -10,6 +10,8 @@ import 'package:karmashala_environments/store.dart'
     show AcpAuthChoice, AcpAuthChoiceDao;
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
+import 'acp_arguments.dart';
+import 'acp_login_link.dart';
 import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 import 'acp_version_probe.dart';
@@ -138,7 +140,7 @@ class ServerAcpAuth {
       target,
       authenticateTimeout,
       variables: _variablesFor(target.spec, methodId),
-      onErrorLine: _loginLinkOpener(target.environment),
+      onErrorLine: _loginLinkOpener(target.environment, target.spec),
       timedOut:
           '${target.name} was not logged in within '
           '${_spoken(authenticateTimeout)}, so the login was ended. Log in '
@@ -207,8 +209,9 @@ class ServerAcpAuth {
         arguments: command != null
             ? method.terminalArguments
             : [
-                ...installation.leadingArguments,
-                ...target.spec.argumentsFor(
+                ...acpArgumentsFor(
+                  installation,
+                  target.spec,
                   linux: AcpLaunchSpec.runsOnLinux(
                     target.environment.kind,
                     hostIsLinux: Platform.isLinux,
@@ -272,12 +275,16 @@ class ServerAcpAuth {
   /// that opener reaches no desktop, and the login waits on a callback that
   /// never comes, so the first https link it prints is opened here. Its
   /// callback is a loopback port, which WSL forwards from this machine.
-  /// Elsewhere the agent opens its own.
+  /// Elsewhere the agent opens its own, unless a bridge speaks for it: the
+  /// bridge runs in this process and has no browser to open.
   void Function(String line)? _loginLinkOpener(
     ExecutionEnvironment environment,
+    AcpLaunchSpec spec,
   ) {
     final open = _openLink;
-    if (open == null || environment.kind != EnvironmentKind.wsl) return null;
+    if (open == null || !serverOpensLoginLinks(environment.kind, spec)) {
+      return null;
+    }
     var opened = false;
     return (line) {
       if (opened) return;

@@ -3,23 +3,31 @@ import '../domain/agent_descriptor.dart';
 import '../domain/agent_permission_support.dart';
 
 const _evidence =
-    '@agentclientprotocol/codex-acp: session/new availableModes read-only, '
-    'workspace-write, agent, agent-full-access — declared from the adapter '
-    'source 2026-10-02, not yet read off a live session';
+    'codexAppServer bridge: modes read-only, workspace-write, agent, '
+    'agent-full-access (the codex-acp adapter\'s ids) as approval policy and '
+    'sandbox on codex-cli 0.160.0 app-server, 2026-10-04';
 
-/// Codex behind the `codex-acp` adapter, spoken to over ACP. Terminal-shaped
-/// rules are deliberately absent; the mode is set over the protocol.
+/// Codex's chat: the person's own `codex app-server`, translated to ACP
+/// in-process, so it shares the terminal Codex's login and threads.
+/// Terminal-shaped rules are deliberately absent; the mode is set over the
+/// protocol.
 const codexAcpDescriptor = AgentDescriptor(
   id: 'codex-acp',
   displayName: 'Codex (ACP)',
-  binaries: AgentBinaries(windows: ['codex-acp'], posix: ['codex-acp']),
-  // The adapter embeds Codex, which keeps its threads in Codex's home.
+  binaries: AgentBinaries(
+    windows: ['codex'],
+    posix: ['codex'],
+    windowsInstallPaths: [
+      r'%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe',
+    ],
+  ),
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',
     homeVariable: 'CODEX_HOME',
   ),
   acp: AcpLaunchSpec(
-    npxPackage: '@agentclientprotocol/codex-acp',
+    arguments: ['app-server'],
+    nativeBridge: AcpNativeBridge.codexAppServer,
     modeNames: {
       PermissionRisk.readOnly: ['read-only'],
       PermissionRisk.ask: ['workspace-write'],

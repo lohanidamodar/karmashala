@@ -410,7 +410,11 @@ void main() {
 
       // The user answered "where is Codex here". A sweep does not answer it
       // again — not by moving the row, and not by adding a second one.
-      final rows = world.installations.getAll();
+      // (Codex's chat agent runs the same binary and has a row of its own.)
+      final rows = [
+        for (final row in world.installations.getAll())
+          if (row.agentId == AgentIds.codex) row,
+      ];
       expect(rows, hasLength(1));
       expect(rows.single.executable.path, r'C:\mine\codex.exe');
       expect(rows.single.executableByUser, isTrue);

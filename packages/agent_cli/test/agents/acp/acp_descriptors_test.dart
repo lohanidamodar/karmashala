@@ -205,11 +205,15 @@ void main() {
       'stdio',
       '--allow-dangerously-skip-permissions',
     ]);
-    expect(codexAcpDescriptor.acp!.arguments, isEmpty);
+    // Codex's chat is its own binary's app-server, translated in-process.
+    expect(codexAcpDescriptor.acp!.arguments, ['app-server']);
+    expect(codexAcpDescriptor.acp!.npxPackage, isNull);
     expect(
-      codexAcpDescriptor.acp!.npxPackage,
-      '@agentclientprotocol/codex-acp',
+      codexAcpDescriptor.acp!.nativeBridge,
+      AcpNativeBridge.codexAppServer,
     );
+    expect(codexAcpDescriptor.binaries.windows, ['codex']);
+    expect(codexAcpDescriptor.binaries.posix, ['codex']);
     expect(grokDescriptor.acp!.arguments, ['agent', 'stdio']);
     expect(grokDescriptor.acp!.npxPackage, '@xai-official/grok');
   });

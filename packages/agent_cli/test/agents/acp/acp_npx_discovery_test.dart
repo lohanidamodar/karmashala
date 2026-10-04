@@ -37,16 +37,15 @@ void main() {
       ).discover();
 
       // Every ACP agent with a package is found; Antigravity ships as an
-      // archive, Claude runs the person's own binary, and no terminal agent
-      // is found.
-      expect(found.map((i) => i.agentId), [AgentIds.codexAcp, AgentIds.grok]);
-      final codex = found.first;
-      expect(codex.executable.path, r'C:\Program Files\nodejs\npx.cmd');
-      expect(codex.leadingArguments, ['-y', '@agentclientprotocol/codex-acp']);
+      // archive, Claude's and Codex's chat are their own binaries, and no
+      // terminal agent is found.
+      expect(found.map((i) => i.agentId), [AgentIds.grok]);
+      final grok = found.single;
+      expect(grok.executable.path, r'C:\Program Files\nodejs\npx.cmd');
       // No binary was run, so there is no version and no reading time.
-      expect(codex.version, isNull);
-      expect(codex.versionReadAt, isNull);
-      expect(found[1].leadingArguments, ['-y', '@xai-official/grok']);
+      expect(grok.version, isNull);
+      expect(grok.versionReadAt, isNull);
+      expect(found.single.leadingArguments, ['-y', '@xai-official/grok']);
 
       // One `npx` lookup serves the whole sweep.
       expect(
@@ -76,7 +75,8 @@ void main() {
         clock: FixedClock(testTime),
         hostEnvironment: const {},
       ).discover();
-      expect(found, hasLength(2));
+      // Grok is the one shipped agent still run as an npm package.
+      expect(found, hasLength(1));
       expect(found.first.executable.path, '/usr/bin/npx');
       expect(found.first.executable.environmentId, 'wsl:Ubuntu');
     });
