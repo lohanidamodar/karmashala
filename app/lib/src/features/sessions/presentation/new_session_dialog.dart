@@ -13,6 +13,8 @@ import '../../../app/widgets/full_screen_form.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/folded_installations.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../agents/presentation/acp_login_dialog.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused, DataRefusalCode;
@@ -433,11 +435,20 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   }
 
   /// The agent for a session without a project: the one picked, else the
-  /// first installed anywhere — its machine is where the folder goes.
+  /// first installed anywhere, in the form chosen for it — its machine is
+  /// where the folder goes.
   AgentInstallation? _agentForScratch(List<AgentInstallation> installations) {
     final picked = _installation;
     if (picked != null && installations.contains(picked)) return picked;
-    return _samePickedAgent(installations) ?? installations.firstOrNull;
+    if (_samePickedAgent(installations) case final same?) return same;
+    final first = installations.firstOrNull;
+    if (first == null) return null;
+    return inChosenForm(
+      first,
+      installations,
+      ref.read(agentRegistryProvider),
+      ref.read(settingsControllerProvider),
+    );
   }
 
   /// The agent the person picked, as installed among [installations].

@@ -852,7 +852,10 @@ void main() {
   group('an agent installed as a terminal and as a chat', () {
     late _RecordingLauncher launcher;
 
-    Future<ProviderContainer> openWithChat(WidgetTester tester) async {
+    Future<ProviderContainer> openWithChat(
+      WidgetTester tester, {
+      String? selected = 'r1',
+    }) async {
       server.installationRows.insert(
         agentInstallation(
           id: 'ca1',
@@ -861,7 +864,7 @@ void main() {
         ),
       );
       final container = ProviderContainer(
-        parent: containerFor(selected: 'r1'),
+        parent: containerFor(selected: selected),
         overrides: [
           sessionLauncherProvider.overrideWith(
             (ref) => launcher = _RecordingLauncher(ref),
@@ -885,6 +888,45 @@ void main() {
       expect(find.byKey(const ValueKey('agent-card:ca1')), findsNothing);
       await start(tester);
       expect(launcher.requests.single.installation.id, 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('a dialog with no project opens on the form last chosen', (
+      tester,
+    ) async {
+      // Seen on a probe: with no project the dialog fell back to the first
+      // installation, the terminal form, whatever was chosen.
+      server.projectRows
+        ..delete('p1')
+        ..delete('p2');
+      final container = await openWithChat(tester, selected: null);
+      expect(find.text('No project'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The server's answer to a session with no project: its folder.
+      server.gitWork.answer = (request) {
+        if (request is! ScratchCheckoutCreate) return FakeGitWork.unhandled;
+        server.projectRows.insert(
+          project(
+            id: 'ps',
+            name: 'Scratch',
+            path: r'C:\Users\me\karmashala\scratch',
+            kind: Project.scratchKind,
+          ),
+        );
+        final folder = repository(
+          id: 'rs',
+          projectId: 'ps',
+          name: 'pong',
+          path: r'C:\Users\me\karmashala\scratch\pong',
+        );
+        server.repositoryRows.insert(folder);
+        return folder;
+      };
+      await open(tester, container);
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'ca1');
       await closeAll(tester);
     });
 

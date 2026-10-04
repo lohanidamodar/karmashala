@@ -195,6 +195,45 @@ void main() {
       expect(picked.map((i) => i.id), ['a1']);
     });
 
+    testWidgets('Terminal stays on one line at the dialog\'s width', (
+      tester,
+    ) async {
+      // The dialog is 420 wide and lays cards two across.
+      final picked = <AgentInstallation>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            await db.server.override(),
+            agentUsageProvider.overrideWith(
+              (ref, installation) => const AsyncLoading<AgentUsage>(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 420,
+                  child: NewSessionAgentCards(
+                    installations: [agentInstallation(), chat()],
+                    selected: null,
+                    onSelected: picked.add,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final terminal = find.byKey(const ValueKey('agent-form:a1:terminal'));
+      final chatLabel = find.byKey(const ValueKey('agent-form:a1:chat'));
+      expect(
+        tester.getSize(terminal).height,
+        tester.getSize(chatLabel).height,
+        reason: 'a wrapped label is two lines tall',
+      );
+    });
+
     testWidgets('the form picked is the one the card shows selected', (
       tester,
     ) async {

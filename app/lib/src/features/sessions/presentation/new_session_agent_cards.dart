@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
@@ -230,14 +229,17 @@ class _FormChoice extends StatelessWidget {
       showSelectedIcon: false,
       style: const ButtonStyle(visualDensity: VisualDensity.compact),
       segments: [
+        // Words alone: a card is half the dialog, and an icon beside
+        // "Terminal" wrapped it onto two lines (seen in a probe).
         for (final f in AgentRunForm.values)
           ButtonSegment(
             value: f,
-            icon: Icon(
-              f == AgentRunForm.chat ? AppIcons.chat : AppIcons.terminal,
-              size: Chrome.iconAction,
+            label: Text(
+              f.label,
+              key: ValueKey('$keyPrefix:${f.name}'),
+              maxLines: 1,
+              softWrap: false,
             ),
-            label: Text(f.label, key: ValueKey('$keyPrefix:${f.name}')),
           ),
       ],
       selected: {form},
