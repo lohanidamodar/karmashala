@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../agents/application/agent_providers.dart';
+import '../../../remote/application/remote_approval_bindings.dart'
+    show chatOpenQuestionProvider;
 import '../../application/session_status_providers.dart';
 import '../approval_request_card.dart';
 import 'plan_approval_card.dart';
@@ -42,9 +44,9 @@ bool asksAboutCall(AgentStatusReport? report, String toolUseId) =>
     report.waiting == AgentWaitKind.approval &&
     report.toolAsk?.toolUseId == toolUseId;
 
-/// **The pending approval, under the call it is about.** The dock's own card
-/// and answers, so either place answers the one prompt and both clear when
-/// the agent moves on. Nothing at all for any other call.
+/// **The pending approval or question, under the call it is about.** The
+/// dock's own card and answers, so either place answers the one prompt and
+/// both clear when the agent moves on. Nothing at all for any other call.
 class ChatToolAsk extends ConsumerStatefulWidget {
   const ChatToolAsk({
     required this.sessionId,
@@ -86,11 +88,24 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
 
   @override
   Widget build(BuildContext context) {
-    final asking = ref.watch(
-      agentSessionStatusProvider(
-        widget.sessionId,
-      ).select((s) => asksAboutCall(s.asData?.value, widget.toolUseId)),
+    final status = agentSessionStatusProvider(widget.sessionId);
+    final approval = ref.watch(
+      status.select((s) => asksAboutCall(s.asData?.value, widget.toolUseId)),
     );
+    // A question names its call in the question itself, read off the hook or
+    // the agent's record.
+    final questionOpen = ref.watch(
+      status.select((s) => s.asData?.value.hasOpenQuestion ?? false),
+    );
+    final asking =
+        approval ||
+        questionOpen &&
+            ref.watch(
+                  chatOpenQuestionProvider(
+                    widget.sessionId,
+                  ).select((q) => q.value?.toolUseId),
+                ) ==
+                widget.toolUseId;
     if (asking != _shown) _tell(asking);
     if (!asking) return const SizedBox.shrink();
     // A plan prompt, when the agent's descriptor says this ask is one.

@@ -372,7 +372,10 @@ class _QuestionOr extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final question = ref.watch(chatOpenQuestionProvider(sessionId)).value;
+    // The value only: a re-read while the question is unreadable is no change.
+    final question = ref.watch(
+      chatOpenQuestionProvider(sessionId).select((q) => q.value),
+    );
     if (question == null) return orElse;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
