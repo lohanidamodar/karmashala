@@ -168,6 +168,65 @@ void main() {
     expect(attention.inbox.items.single.kind, InboxItemKind.finished);
   });
 
+  group('a row keyed anew once its conversation id is known', () {
+    // A chat row is watched under its own id until the agent's conversation id
+    // is recorded and the rows are read again; seen on a probe as two
+    // "finished" items for one turn.
+    const early = WatchedSession(
+      key: AgentSessionKey(AgentIds.claudeCode, 'row-1'),
+      label: 'Fix login',
+      openId: 'row-1',
+      imported: false,
+    );
+
+    void said(String sessionId, AgentActivityStatus status) => reports.record(
+      AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: sessionId,
+        status: status,
+        source: AgentStatusSource.protocol,
+        observedAt: clock.nowUtc(),
+      ),
+    );
+
+    test('files one finished turn, told once', () async {
+      watched = [early];
+      said('row-1', AgentActivityStatus.working);
+      await attention.poll();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      said('row-1', AgentActivityStatus.idle);
+      await attention.poll();
+      expect(attention.inbox.items, hasLength(1));
+
+      clock.now = clock.now.add(const Duration(seconds: 30));
+      watched = [session];
+      said('cli-1', AgentActivityStatus.idle);
+      await attention.poll();
+      await attention.poll();
+      await flush();
+
+      expect(attention.inbox.items, hasLength(1));
+      expect(news(), hasLength(1));
+    });
+
+    test('an ask stays one ask, and clears when answered', () async {
+      watched = [early];
+      said('row-1', AgentActivityStatus.working);
+      await attention.poll();
+      said('row-1', AgentActivityStatus.awaitingApproval);
+      await attention.poll();
+
+      watched = [session];
+      said('cli-1', AgentActivityStatus.awaitingApproval);
+      await attention.poll();
+      expect(attention.inbox.items, hasLength(1));
+
+      said('cli-1', AgentActivityStatus.working);
+      await attention.poll();
+      expect(attention.inbox.isEmpty, isTrue);
+    });
+  });
+
   group('what a window looks at is seen', () {
     test('its items are marked seen, now and as they arrive', () async {
       final link = Object();

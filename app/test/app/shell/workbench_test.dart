@@ -762,6 +762,7 @@ void main() {
       hasWorktree: true,
     );
     continuation = possible;
+    agentStatus = AgentActivityStatus.working;
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
@@ -800,6 +801,7 @@ void main() {
         hasWorktree: true,
       );
       continuation = possible;
+      agentStatus = AgentActivityStatus.working;
       seedSessionInAPane();
       container.read(selectedSessionIdProvider.notifier).select('s1');
     }

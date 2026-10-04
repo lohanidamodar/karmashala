@@ -1234,6 +1234,35 @@ void main() {
       },
     );
 
+    test('a task not said to be backgrounded holds nothing once the turn '
+        'ends', () async {
+      // Claude Code sends is_backgrounded only for tasks that carry it; one
+      // without it, and no report after, left a finished chat "Working".
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('ag', 'Agent', {'description': 'Look', 'prompt': 'x'});
+            c.system('task_started', {
+              'task_id': 'task1',
+              'tool_use_id': 'ag',
+              'description': 'Look',
+            });
+            c.toolResult('ag', 'Found it.');
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(host.statuses.last.status, AgentActivityStatus.idle);
+      expect(host.statuses.last.inFlight, isEmpty);
+      await rt.stop();
+    });
+
     test('a turn that ends with a background subagent running stays working, '
         'naming it, until the subagent reports back', () async {
       final report = Completer<void>();

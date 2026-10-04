@@ -85,7 +85,11 @@ class ServerAttention implements AttentionWork {
   final void Function()? onStatusMoved;
 
   late final List<StreamSubscription<Object?>> _subscriptions;
-  final Map<AgentSessionKey, AgentActivityStatus> _lastStatus = {};
+
+  /// By row and by key: a row is keyed anew once its conversation id is
+  /// known, and a conversation can move to another row; neither is a first
+  /// sight of it.
+  final Map<String, AgentActivityStatus> _lastStatus = {};
   Map<AgentSessionKey, SessionAttention> _attention = {};
   AttentionInbox _inbox = AttentionInbox.empty;
   List<SessionAttention> _waiting = const [];
@@ -154,7 +158,14 @@ class ServerAttention implements AttentionWork {
       }
       // A session that comes back is a first observation again, which the
       // policy treats as no evidence.
-      _lastStatus.removeWhere((key, _) => !seen.contains(key));
+      final current = <String>{
+        for (final entry in entries)
+          if (_lastStatusKeys(entry.session) case (final row, final key)) ...[
+            row,
+            key,
+          ],
+      };
+      _lastStatus.removeWhere((id, _) => !current.contains(id));
       _attention = attention;
       _file(
         InboxUpdate(
@@ -200,8 +211,9 @@ class ServerAttention implements AttentionWork {
   ) {
     final session = entry.session;
     final report = entry.report;
-    final previous = _lastStatus[session.key];
-    _lastStatus[session.key] = report.status;
+    final (row, key) = _lastStatusKeys(session);
+    final previous = _lastStatus[row] ?? _lastStatus[key];
+    _lastStatus[row] = _lastStatus[key] = report.status;
     final transition = AgentStatusTransition(
       session: session.key,
       from: previous,
@@ -232,6 +244,9 @@ class ServerAttention implements AttentionWork {
     final kind = AttentionKind.forStatus(report.status);
     return kind == null ? null : SessionAttention(session: session, kind: kind);
   }
+
+  static (String, String) _lastStatusKeys(WatchedSession session) =>
+      ('row:${session.imported}:${session.openId}', 'key:${session.key}');
 
   void _file(InboxUpdate update) {
     final previousWaiting = {

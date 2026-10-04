@@ -329,13 +329,25 @@ class AttentionInbox {
     final added = <InboxItem>[];
     final rebound = <String, WatchedSession>{};
 
+    // A row is keyed anew once its conversation id is recorded, and that is
+    // the same item. Indexed only on a miss, so a steady poll stays linear.
+    Map<String, InboxItem>? byRow;
+    String rowOf(InboxItemKind kind, WatchedSession session) =>
+        '${kind.name}:${session.imported}:${session.openId}';
+
     void upsert(WatchedSession session, InboxItemKind kind) {
       final id = InboxItem.idFor(kind, session.key);
-      final listed = _byId[id];
+      final listed =
+          _byId[id] ??
+          (byRow ??= {
+            for (final item in items)
+              if (item.kind != InboxItemKind.followUp)
+                rowOf(item.kind, item.session): item,
+          })[rowOf(kind, session)];
       if (listed != null) {
         // Already listed: keeps its arrival time and seen flag. But where to go
         // for it is not identity, so a rebound session must replace the old one.
-        if (listed.session != session) rebound[id] = session;
+        if (listed.session != session) rebound[listed.id] = session;
         return;
       }
       // Already added by the news half of this same update.
