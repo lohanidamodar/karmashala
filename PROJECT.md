@@ -1393,7 +1393,7 @@ $env:KARMASHALA_HOST_DIR = "$env:KARMASHALA_DATA_DIR\host"
 | Draining the spool directories in agent stores | `AgentHookSpoolDrainer(enabled: false)` |
 | Skills in agent skill roots (install and removal) | `AgentSkillInstallationService._forEachStore`, `AppLifecycle.installAgentSkills` |
 | Launch at login (the shared `Karmashala` Run value) and the global launcher hotkey | `SystemIntegrationService.init` / `_reconcile` |
-| Remote access: writing the real server's config, pairing (the LAN listener, the beacon, the local relay on 8787 and its `netsh` rule are the server's, never the app's) | `RemoteAccessController._sync` / `beginPairing` |
+| Remote access on the LAN: binding every interface, the beacon, the local relay on 8787. A probe pairs phones with its own server (its own `server.json`, in the probe's data folder), over the internet relay | `RemoteAccessController.setRemoteAccess` |
 | OS toasts (the first rewrites the Start Menu shortcut toasts are delivered through) | `notificationPresenterProvider` |
 | The env-vault key in the per-user cache folder | `EnvVault.open` keeps a probe's key in `<data>/probe-key` |
 | The owner's local server (`~/.karmashala`: its socket, lock, log and sessions, and its data — the database the app opens too, `server.json`) — attaching to, listing, ending or starting it | `localHostSessionAccessProvider` gives a probe its own host in `<data>/host`, and the `serve` it starts from the same binary is handed `KARMASHALA_HOST_DIR` naming it, which `HostPaths.resolve` reads first, and `--data-dir=<data>`, so it keeps its data — the probe's database — in the probe's folder (the real app's `serve` gets no `--data-dir`: its data is the server's default folder) |
@@ -1427,7 +1427,8 @@ the relay — each works on the one per-user host there, the owner's included.
   The real app sees payloads for sessions it has no row for, as it does for any
   agent run outside it.
 - No OS toasts (the in-app inbox still fills), no launcher hotkey, no remote
-  access or pairing, no launch at login. The banner's tooltip lists them.
+  access on the LAN (pairing goes over the internet relay), no launch at
+  login. The banner's tooltip lists them.
 - **SSH panes run on tmux, not the session host.** A remote host is per user
   and holds the owner's sessions, and namespacing it would need every deployed
   binary to honour `KARMASHALA_HOST_DIR` — an older one ignoring it would

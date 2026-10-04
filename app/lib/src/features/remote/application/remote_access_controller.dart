@@ -53,8 +53,9 @@ class RemoteAccessController {
   /// Serialises the syncs so a fast toggle cannot overlap them.
   Future<void> _chain = Future<void>.value();
 
-  /// Whether this instance is a probe, where remote access never starts.
-  bool get isDisabledByProbe => _ref.read(probeModeProvider).enabled;
+  /// Whether this instance is a probe. Its server is its own, so a phone
+  /// pairs with it; the machine's LAN stays the real server's.
+  bool get _probe => _ref.read(probeModeProvider).enabled;
 
   /// The link to the host's companion, when the host serves the phones.
   HostCompanionLink? get _host => _ref.read(companionAtHostProvider)
@@ -84,16 +85,18 @@ class RemoteAccessController {
     final relay = relayUrl == null
         ? null
         : resolveRelayUri(relayUrl)?.toString();
+    final probe = _probe;
     final companion = <String, Object?>{
       'enabled': ?enabled,
       'relayEnabled': ?hostedEnabled,
-      'localRelay': ?localRelay,
+      // A probe takes no port: the local relay's is the real server's.
+      'localRelay': probe ? (localRelay == null ? null : false) : localRelay,
       'localRelayPort': ?localRelayPort,
       // A cleared field in a build with no default clears the relay.
       if (relayUrl != null) ...{'relay': relay, 'relayToken': null},
       if (enabled == true) ...{
-        'bind': '0.0.0.0',
-        'beacon': true,
+        // Every interface and the beacon are the real server's in a probe.
+        if (!probe) ...{'bind': '0.0.0.0', 'beacon': true},
         // The internet relay this build offers, until the person names
         // another.
         if (relayUrl == null &&
@@ -142,8 +145,7 @@ class RemoteAccessController {
     final remote = _ref.read(remoteAccessSettingsProvider.notifier);
     if (!_ref.read(remoteAccessSettingsProvider).loaded) await remote.load();
     final access = _ref.read(remoteAccessSettingsProvider);
-    // A probe writes nothing into the real server's config.
-    if (!access.enabled || isDisabledByProbe || host == null) return;
+    if (!access.enabled || host == null) return;
     final sshRelays = _ref.read(activeSshRelayUrlsProvider);
     final notes = _ref.read(notesEnabledProvider);
     if (access.notes != notes || !_sameUris(access.extraRelays, sshRelays)) {
@@ -159,9 +161,6 @@ class RemoteAccessController {
     Uri? relay,
     bool relayIsLocal = false,
   }) async {
-    if (isDisabledByProbe) {
-      throw StateError('Remote access is disabled in a probe instance.');
-    }
     final host = _host;
     if (host == null) {
       throw StateError(

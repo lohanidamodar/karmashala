@@ -50,7 +50,7 @@ class ProbeMode {
     'agent skill installation',
     'launch at login',
     'the global launcher hotkey',
-    'remote access, the local relay and phone pairing',
+    'the LAN side of remote access: every interface, the beacon, the local relay',
     'the fixed control port',
     'the Karmashala host on SSH machines (its server refuses them)',
   ];

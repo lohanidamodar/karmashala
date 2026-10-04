@@ -20,6 +20,8 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_notifications/toasts.dart';
+import 'package:karmashala_host/lifecycle_client.dart' show PairedMessage;
+import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:path/path.dart' as p;
 import '../../support/memory_server_config.dart';
@@ -267,38 +269,49 @@ void main() {
   group('remote access', () {
     late FakeHostLifecycle host;
 
-    Future<ProviderContainer> remoteContainer(bool probe) async {
+    // A probe's server is its own (`<data>/host`, its own config), so a
+    // phone pairs with it, never with the real one. What it must not take is
+    // the machine's LAN: every interface, the beacon and the local relay's
+    // port are the real server's.
+    test('a probe pairs a phone with its own server, over the internet relay '
+        'only', () async {
+      final config = MemoryServerConfigSource();
       host = FakeHostLifecycle();
       final link = HostCompanionLink(deviceById: (_) async => null);
       final container = containerWith(
-        probe: probe,
+        probe: true,
         extra: [
           companionAtHostProvider.overrideWithValue(true),
           hostCompanionLinkProvider.overrideWithValue(link),
           remoteAccessControllerProvider.overrideWith(
             RemoteAccessController.new,
           ),
+          serverConfigIn(config),
         ],
       );
       link.attached((await host.open())!);
-      return container;
-    }
-
-    // The LAN relay is the server's since protocol 29: no instance of the
-    // app binds a port for phones, probe or not. What is left to keep a
-    // probe from is pairing a phone to the real server.
-    test('a probe cannot pair', () async {
-      final container = await remoteContainer(true);
       final controller = container.read(remoteAccessControllerProvider);
-      setRemoteAccessNow(container, enabled: true);
-      await controller.sync();
 
-      expect(
-        () => controller.beginPairing(capabilities: CapabilitySet.all),
-        throwsStateError,
+      await controller.setRemoteAccess(enabled: true, localRelay: true);
+      final companion = config.patches.last['companion']! as Map;
+      expect(companion['enabled'], isTrue);
+      expect(companion.containsKey('bind'), isFalse);
+      expect(companion['beacon'], isNot(true));
+      expect(companion['localRelay'], isFalse);
+
+      final payload = await PairingPayload.generateWithCode(
+        relay: Uri.parse('wss://relay.example.com'),
+        hostId: DeviceId.parse('11111111222222223333333344444444'),
+        capabilities: CapabilitySet.all,
       );
-      expect(host.pairings, isEmpty);
-      expect(host.serverCalls, isEmpty, reason: 'nothing written to it');
+      host.answerPairing = (requestId) => PairedMessage(
+        requestId: requestId,
+        code: 'CODE',
+        expiresAt: DateTime.utc(2026, 9, 25, 13),
+        payload: payload.encode(),
+      );
+      await controller.beginPairing(capabilities: CapabilitySet.all);
+      expect(host.pairings, hasLength(1));
     });
   });
 
