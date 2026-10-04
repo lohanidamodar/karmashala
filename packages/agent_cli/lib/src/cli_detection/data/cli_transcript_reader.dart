@@ -916,7 +916,9 @@ void _parseCodexLine(
       // subject than the fallback below, which for `update_plan` was the whole
       // argument blob on one line.
       final plan = agentPlanForToolCall(name, payload['arguments']);
-      final patch = name == kCodexPatchTool ? codexPatchOf(payload) : null;
+      final patch = name == kCodexPatchTool
+          ? codexPatchOf(payload)
+          : codexShellPatchOf(payload);
       final (edits, cut) = boundedToolEdits(
         patch == null ? const [] : codexPatchEdits(patch),
       );

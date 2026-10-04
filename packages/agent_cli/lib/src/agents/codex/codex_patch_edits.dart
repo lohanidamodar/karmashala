@@ -95,6 +95,43 @@ String? codexPatchOf(Map<dynamic, dynamic> payload) {
   return null;
 }
 
+/// The patch an older Codex ran through its shell tool: `command` is either
+/// `["apply_patch", patch]` or a shell script that invokes `apply_patch` with
+/// the patch in a heredoc. Null for any other command.
+String? codexShellPatchOf(Map<dynamic, dynamic> payload) {
+  final arguments = payload['arguments'];
+  if (arguments is! String || !arguments.contains(kCodexPatchTool)) {
+    return null;
+  }
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(arguments);
+  } on FormatException {
+    return null;
+  }
+  final command = decoded is Map ? decoded['command'] : null;
+  if (command is! List || command.isEmpty) return null;
+  if (command.first == kCodexPatchTool) {
+    return command.length > 1 && command[1] is String
+        ? command[1] as String
+        : null;
+  }
+  final script = command.last;
+  if (script is! String || !_invokesPatch.hasMatch(script)) return null;
+  final start = script.indexOf(_beginPatch);
+  if (start < 0) return null;
+  final end = script.indexOf(_endPatch, start);
+  return end < 0
+      ? script.substring(start)
+      : script.substring(start, end + _endPatch.length);
+}
+
+const String _beginPatch = '*** Begin Patch';
+const String _endPatch = '*** End Patch';
+
+/// `apply_patch` as a command of its own in a script, not a word in a string.
+final RegExp _invokesPatch = RegExp(r'(^|&&|;|\n)\s*apply_patch\b');
+
 String? _header(String line, String prefix) {
   if (!line.startsWith(prefix)) return null;
   final rest = line.substring(prefix.length).trim();

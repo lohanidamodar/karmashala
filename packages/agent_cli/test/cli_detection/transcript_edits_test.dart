@@ -253,6 +253,52 @@ void main() {
       expect(tool.edits, hasLength(3));
     });
 
+    test('older Codex ran the patch through `shell`', () async {
+      final path = await write('codex-shell.jsonl', [
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_3',
+          'arguments': jsonEncode({
+            'command': ['apply_patch', patch],
+            'workdir': '/src',
+          }),
+        }),
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_4',
+          'arguments': jsonEncode({
+            'command': ['bash', '-lc', "apply_patch <<'EOF'\n$patch\nEOF\n"],
+          }),
+        }),
+      ]);
+      final rows = await readCliTranscript(path, AgentIds.codex);
+      for (final row in rows) {
+        expect(row.tool!.edits.map((e) => e.path), [
+          'docs/new.md',
+          'lib/main.dart',
+          'old.txt',
+        ]);
+        expect(row.tool!.subject, 'docs/new.md');
+      }
+    });
+
+    test('a shell command that is not a patch carries no edits', () async {
+      final path = await write('codex-ls.jsonl', [
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_5',
+          'arguments': jsonEncode({
+            'command': ['bash', '-lc', 'echo "*** Begin Patch"'],
+          }),
+        }),
+      ]);
+      final tool = (await readCliTranscript(path, AgentIds.codex)).single.tool!;
+      expect(tool.edits, isEmpty);
+    });
+
     test('a patch with no file header reads as no edits', () {
       expect(codexPatchEdits('*** Begin Patch\n*** End Patch'), isEmpty);
       expect(codexPatchEdits('not a patch'), isEmpty);
