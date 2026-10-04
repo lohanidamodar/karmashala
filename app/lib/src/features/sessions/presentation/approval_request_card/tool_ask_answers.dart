@@ -232,6 +232,16 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
 
   @override
   Widget build(BuildContext context) {
+    // An ACP agent names its own answers: those, not the board's.
+    final offered = widget.report.toolAsk?.options ?? const [];
+    if (offered.isNotEmpty) {
+      return _PermissionOptions(
+        sessionId: widget.sessionId,
+        report: widget.report,
+        options: offered,
+        command: widget.command,
+      );
+    }
     final theme = Theme.of(context);
     final approve = widget.rules.approve;
     final deny = widget.rules.deny;

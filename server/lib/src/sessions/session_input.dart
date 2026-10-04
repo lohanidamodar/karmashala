@@ -260,16 +260,18 @@ class SessionInput {
     bool resumed = false,
     String? notice,
   }) async {
+    final String? said;
     try {
-      await runtime.send(text);
+      said = await runtime.send(text);
     } on StateError catch (error) {
       throw DataRefused(DataRefusalCode.conflict, error.message);
     }
+    final words = [?notice, ?said].join(' ');
     return SessionSent(
       sent: true,
       via: viaProtocol,
       resumed: resumed,
-      notice: notice,
+      notice: words.isEmpty ? null : words,
     );
   }
 

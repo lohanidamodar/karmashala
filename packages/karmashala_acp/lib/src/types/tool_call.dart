@@ -19,7 +19,12 @@ sealed class ToolCallContent {
         oldText: json.string('oldText'),
         newText: json.string('newText') ?? '',
       ),
-      'terminal' => ToolCallTerminal(json.string('terminalId') ?? ''),
+      'terminal' => ToolCallTerminal(
+        json.string('terminalId') ?? '',
+        output: json.string('output'),
+        truncated: json.boolean('truncated') ?? false,
+        exitCode: json.integer('exitCode'),
+      ),
       _ => UnknownToolCallContent(type ?? '', json),
     };
   }
@@ -55,12 +60,29 @@ final class ToolCallDiff extends ToolCallContent {
 }
 
 final class ToolCallTerminal extends ToolCallContent {
-  const ToolCallTerminal(this.terminalId);
+  const ToolCallTerminal(
+    this.terminalId, {
+    this.output,
+    this.truncated = false,
+    this.exitCode,
+  });
 
   final String terminalId;
 
+  /// What the terminal has printed, as this client last read it — never on
+  /// the agent's wire: a client folds it in to show the command's output.
+  final String? output;
+  final bool truncated;
+  final int? exitCode;
+
   @override
-  JsonMap toJson() => {'type': 'terminal', 'terminalId': terminalId};
+  JsonMap toJson() => withoutNulls({
+    'type': 'terminal',
+    'terminalId': terminalId,
+    'output': output,
+    'truncated': truncated ? true : null,
+    'exitCode': exitCode,
+  });
 }
 
 final class UnknownToolCallContent extends ToolCallContent {

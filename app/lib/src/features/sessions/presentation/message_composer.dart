@@ -167,6 +167,22 @@ class ComposerSnippet {
   final String text;
 }
 
+/// A slash command the agent accepts, offered when the box starts with "/".
+class ComposerCommand {
+  const ComposerCommand({
+    required this.name,
+    required this.description,
+    this.hint,
+  });
+
+  /// Without the slash.
+  final String name;
+  final String description;
+
+  /// What the agent says to type after it, when it takes input.
+  final String? hint;
+}
+
 /// The session message box: text plus image attachments. On send the images are
 /// saved and their paths appended, so the agent can read them.
 ///
@@ -182,6 +198,7 @@ class MessageComposer extends StatefulWidget {
     this.chips = const [],
     this.controller,
     this.snippets,
+    this.commands,
     this.server,
     this.attaches = true,
     this.camera,
@@ -212,6 +229,10 @@ class MessageComposer extends StatefulWidget {
   /// The snippets the toolbar's menu offers, read each time it opens. Null
   /// hides the button: a host with no library has nothing to offer.
   final List<ComposerSnippet> Function()? snippets;
+
+  /// The agent's slash commands, read as the box's text changes: typing "/"
+  /// lists them and picking one puts it in the box. Null offers none.
+  final List<ComposerCommand> Function()? commands;
 
   /// The server the agent runs on, read when an image is pasted or attached.
   /// Null, or one on this machine, keeps today's client temp files. One
@@ -275,6 +296,8 @@ class _MessageComposerState extends State<MessageComposer> {
     // No listener on [_input] or [_focusNode] here: [_SendButton] and the
     // card's border listen for themselves, so neither rebuilds the text field.
     _input = widget.controller ?? TextEditingController();
+    // Rebuilds only when the palette's matches change, not per keystroke.
+    _input.addListener(_matchCommands);
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _drops = widget.droppedFiles?.listen(_attachDropped);
     widget.serverFilesWaiting?.addListener(_scheduleDrain);
@@ -325,10 +348,12 @@ class _MessageComposerState extends State<MessageComposer> {
   void didUpdateWidget(MessageComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
+      _input.removeListener(_matchCommands);
       if (oldWidget.controller == null) {
         _input.dispose();
       }
       _input = widget.controller ?? TextEditingController();
+      _input.addListener(_matchCommands);
     }
     if (oldWidget.droppedFiles != widget.droppedFiles) {
       unawaited(_drops?.cancel());
@@ -355,13 +380,99 @@ class _MessageComposerState extends State<MessageComposer> {
     }
     _lifecycle.dispose();
     _focusNode.dispose();
+    _input.removeListener(_matchCommands);
     if (widget.controller == null) _input.dispose();
     super.dispose();
+  }
+
+  /// The commands matching what follows a leading "/", while the command
+  /// itself is still being typed; empty when the palette is shut.
+  List<ComposerCommand> _commandMatches = const [];
+  int _commandHighlight = 0;
+
+  /// Esc shut the palette for this "/…": it opens again once the box no
+  /// longer starts a command.
+  bool _commandsDismissed = false;
+
+  bool get _paletteOpen => _commandMatches.isNotEmpty;
+
+  void _matchCommands() {
+    final text = _input.text;
+    final typing = text.startsWith('/') && !text.contains(RegExp(r'\s'));
+    if (!typing) _commandsDismissed = false;
+    var matches = const <ComposerCommand>[];
+    final offered = widget.commands;
+    if (typing && !_commandsDismissed && offered != null) {
+      final query = text.substring(1).toLowerCase();
+      final all = offered();
+      matches = [
+        for (final c in all)
+          if (c.name.toLowerCase().startsWith(query)) c,
+        for (final c in all)
+          if (!c.name.toLowerCase().startsWith(query) &&
+              c.name.toLowerCase().contains(query))
+            c,
+      ];
+    }
+    if (!mounted || _sameCommands(matches, _commandMatches)) return;
+    setState(() {
+      _commandMatches = matches;
+      _commandHighlight = 0;
+    });
+  }
+
+  static bool _sameCommands(List<ComposerCommand> a, List<ComposerCommand> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i]) && a[i].name != b[i].name) return false;
+    }
+    return true;
+  }
+
+  /// Puts "/name " in the box, ready for its input; nothing is sent.
+  void _pickCommand(ComposerCommand command) {
+    final text = '/${command.name} ';
+    _input.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _focusNode.requestFocus();
+  }
+
+  KeyEventResult _handlePaletteKey(KeyEvent event) {
+    final key = event.logicalKey;
+    final count = _commandMatches.length;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      setState(() => _commandHighlight = (_commandHighlight + 1) % count);
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      setState(
+        () => _commandHighlight = (_commandHighlight - 1 + count) % count,
+      );
+    } else if (key == LogicalKeyboardKey.tab ||
+        ((key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.numpadEnter) &&
+            !HardwareKeyboard.instance.isShiftPressed)) {
+      _pickCommand(_commandMatches[_commandHighlight]);
+    } else if (key == LogicalKeyboardKey.escape) {
+      setState(() {
+        _commandsDismissed = true;
+        _commandMatches = const [];
+      });
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   /// Enter sends, Shift+Enter inserts a newline, and Ctrl/Cmd+V also attaches a
   /// clipboard image when one is present (text paste still proceeds).
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (_paletteOpen && _handlePaletteKey(event) == KeyEventResult.handled) {
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keys = HardwareKeyboard.instance;
     if (event.logicalKey == LogicalKeyboardKey.keyV &&
@@ -1018,6 +1129,13 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                 ),
               ),
+            if (_paletteOpen && canType)
+              _CommandPalette(
+                commands: _commandMatches,
+                highlighted: _commandHighlight,
+                touch: touch,
+                onPicked: _pickCommand,
+              ),
             if (touch)
               _touchRow(field, canType: canType)
             else ...[
@@ -1185,18 +1303,22 @@ class _MessageComposerState extends State<MessageComposer> {
   /// Everything but the text lines, near enough to size the box by: guessing
   /// low costs a few pixels of scroll, never an overflow.
   double _chromeHeight(double width, TextScaler textScaler, bool touch) {
+    final palette = _paletteOpen
+        ? _CommandPalette.heightFor(_commandMatches.length, touch: touch)
+        : 0.0;
     // Bottom padding, the ring, the text's own padding, the toolbar.
     // The phone's one row: its padding, the ring and the row's lines of
     // text beside the buttons — which the lines are counted into, so only
     // the chips' own line is chrome.
     if (touch) {
-      var height = Insets.md + 2 + 2 * Insets.xs + 2 * Insets.sm;
+      var height = palette + Insets.md + 2 + 2 * Insets.xs + 2 * Insets.sm;
       if (widget.chips.isNotEmpty) height += 2 * Insets.xs + Chrome.control;
       final rows = _attachments.length + _uploads.length;
       if (rows > 0) height += Insets.sm + rows * _TouchAttachmentRow.height;
       return height;
     }
     var height =
+        palette +
         Insets.md +
         2 +
         2 * Insets.sm +
@@ -1882,6 +2004,108 @@ class _SendButton extends StatelessWidget {
           icon: busy ? const InlineSpinner() : const Icon(AppIcons.arrowUp),
         );
       },
+    );
+  }
+}
+
+/// The agent's slash commands matching what follows the "/", over the text:
+/// the name, its input hint, and the agent's description. Up and Down move,
+/// Enter or Tab picks, Esc shuts; a tap picks too.
+class _CommandPalette extends StatelessWidget {
+  const _CommandPalette({
+    required this.commands,
+    required this.highlighted,
+    required this.touch,
+    required this.onPicked,
+  });
+
+  final List<ComposerCommand> commands;
+  final int highlighted;
+  final bool touch;
+  final ValueChanged<ComposerCommand> onPicked;
+
+  /// Rows shown before the list scrolls.
+  static const _shown = 6;
+
+  static double _rowHeight({required bool touch}) =>
+      touch ? Touch.target : Chrome.menuRow;
+
+  /// What the palette adds to the composer, for its sizing.
+  static double heightFor(int count, {required bool touch}) =>
+      math.min(count, _shown) * _rowHeight(touch: touch) + Insets.sm;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final rowHeight = _rowHeight(touch: touch);
+    return Padding(
+      key: const ValueKey('composer-command-palette'),
+      padding: const EdgeInsets.fromLTRB(Insets.xs, Insets.sm, Insets.xs, 0),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: _shown * rowHeight),
+        child: ListView.builder(
+          shrinkWrap: true,
+          primary: false,
+          padding: EdgeInsets.zero,
+          itemCount: commands.length,
+          itemExtent: rowHeight,
+          itemBuilder: (context, i) {
+            final command = commands[i];
+            final hint = command.hint;
+            return Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                key: ValueKey('composer-command-${command.name}'),
+                borderRadius: BorderRadius.circular(Radii.sm),
+                onTap: () => onPicked(command),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: i == highlighted ? StateLayers.selected(scheme) : null,
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                  child: Row(
+                    children: [
+                      Text(
+                        '/${command.name}',
+                        style: MonoStyles.label.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      if (hint != null && hint.isNotEmpty) ...[
+                        const SizedBox(width: Insets.xs),
+                        Flexible(
+                          child: Text(
+                            hint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: MonoStyles.body.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: Insets.sm),
+                      Expanded(
+                        child: Text(
+                          command.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

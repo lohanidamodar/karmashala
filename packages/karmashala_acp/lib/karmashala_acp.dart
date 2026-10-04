@@ -7,7 +7,7 @@ library;
 export 'src/client/acp_agent_client.dart';
 export 'src/client/acp_client_handler.dart';
 export 'src/errors.dart';
-export 'src/json.dart' show JsonMap;
+export 'src/json.dart' show JsonMap, JsonMapReads, asJsonMap;
 export 'src/peer/acp_peer.dart';
 export 'src/peer/peer_messages.dart';
 export 'src/types/capabilities.dart';

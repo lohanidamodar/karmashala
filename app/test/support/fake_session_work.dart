@@ -36,6 +36,9 @@ class FakeSessionWork {
   /// Every `sessions.send` taken, in order.
   final sent = <SessionSend>[];
 
+  /// What a send taken over the protocol answers as its notice.
+  String? sendNotice;
+
   /// A send to a session it does not run resumes it first, as a server that
   /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
   bool resumesOnSend = false;
@@ -189,7 +192,12 @@ class FakeSessionWork {
     }
     if (request case final SessionSend send) {
       sent.add(send);
-      return SessionSent(sent: true, via: 'protocol', resumed: resumed);
+      return SessionSent(
+        sent: true,
+        via: 'protocol',
+        resumed: resumed,
+        notice: sendNotice,
+      );
     }
     return const DataAck();
   }

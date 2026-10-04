@@ -461,6 +461,9 @@ class FakeDataServer {
         case SessionAgentChanged():
           // Told, never kept: the row itself carries the agent.
           break;
+        case SessionCommandsChanged():
+          // Told, never kept: the agent's runtime greets them.
+          break;
         case SessionUsageChanged():
           // Told, never kept: a late client reads it from `sessions.stats`.
           break;

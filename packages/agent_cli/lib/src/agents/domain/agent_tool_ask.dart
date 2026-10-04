@@ -21,7 +21,12 @@ class AgentToolAsk {
     required this.at,
     this.toolUseId,
     this.cwd,
+    this.options = const [],
   });
+
+  /// The answers the agent itself offers, in its order — an ACP agent's
+  /// permission options; empty for an ask read off a hook.
+  final List<AgentToolAskOption> options;
 
   /// The agent's own name for the tool: `Bash`, `Write`, `mcp__server__tool`.
   final String toolName;
@@ -53,6 +58,7 @@ class AgentToolAsk {
     'at': at.toUtc().toIso8601String(),
     'toolUseId': ?toolUseId,
     'cwd': ?cwd,
+    if (options.isNotEmpty) 'options': [for (final o in options) o.toJson()],
   };
 
   /// Null for a shape this build cannot read — never a guessed call.
@@ -70,11 +76,60 @@ class AgentToolAsk {
       at: at,
       toolUseId: json['toolUseId'] as String?,
       cwd: json['cwd'] as String?,
+      options: [
+        for (final option in (json['options'] as List?) ?? const [])
+          ?AgentToolAskOption.fromJson(option),
+      ],
     );
   }
 
   @override
   String toString() => 'AgentToolAsk($toolName, ${toolUseId ?? '-'})';
+}
+
+/// One answer an agent offers to its own permission request: [kind] is the
+/// protocol's word — `allow_once`, `allow_always`, `reject_once`,
+/// `reject_always` — or whatever else it said.
+class AgentToolAskOption {
+  const AgentToolAskOption({
+    required this.id,
+    required this.name,
+    required this.kind,
+  });
+
+  final String id;
+
+  /// The agent's own words for it.
+  final String name;
+  final String kind;
+
+  bool get allows => kind.startsWith('allow');
+
+  /// Whether it answers this kind of call from now on, not only this one.
+  bool get always => kind.endsWith('_always');
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name, 'kind': kind};
+
+  static AgentToolAskOption? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'];
+    if (id is! String || id.isEmpty) return null;
+    return AgentToolAskOption(
+      id: id,
+      name: json['name'] as String? ?? id,
+      kind: json['kind'] as String? ?? '',
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is AgentToolAskOption &&
+      other.id == id &&
+      other.name == name &&
+      other.kind == kind;
+
+  @override
+  int get hashCode => Object.hash(id, name, kind);
 }
 
 /// The fields of a tool's input worth carrying on every status: its scalars,

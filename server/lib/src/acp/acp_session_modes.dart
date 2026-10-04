@@ -48,14 +48,15 @@ class AcpSessionModes implements SessionModeChanger {
     }
   }
 
-  /// The modes and config options of every ACP agent running here, as the
-  /// runtimes last announced them.
+  /// The modes, config options, usage and slash commands of every ACP agent
+  /// running here, as the runtimes last announced them.
   List<DataChange> greeting() => [
     for (final runtime in running?.call() ?? const <AcpSessionRuntime>[])
       if (!runtime.lifecycle.hasEnded) ...[
         ?runtime.modes,
         ?runtime.configOptions,
         ?runtime.reportedUsage,
+        ?runtime.commands,
       ],
   ];
 

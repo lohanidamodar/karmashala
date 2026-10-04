@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
+    show
+        SessionCommandsChanged,
+        SessionConfigOptionsChanged,
+        SessionModesChanged,
+        SessionUsageChanged;
 import 'package:karmashala_launch/karmashala_launch.dart'
     show kSessionIdEnvironmentVariable;
 import 'package:karmashala_session_engine/store.dart'
@@ -16,6 +21,8 @@ import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
 import 'acp_native_bridge.dart';
+import 'acp_terminals.dart';
+import 'acp_titles.dart';
 import 'acp_transport.dart';
 
 /// What the launcher asks an ACP runtime to run: decided by the one launch
@@ -79,7 +86,34 @@ class AcpRuntimes {
   final CommandRunner Function(ExecutionEnvironment? environment) runnerFor;
   final DateTime Function()? _now;
 
-  AcpSessionRuntime start(AcpSessionStart start) => AcpSessionRuntime(
+  AcpSessionRuntime start(AcpSessionStart start) {
+    final files = AcpPathScope.forEnvironment(
+      start.environment,
+      start.directory.path,
+    );
+    return _runtime(
+      start,
+      files,
+      // On the session's machine, through the runner its agent runs through.
+      AcpTerminals(
+        start: (request) => runnerFor(start.environment).start(request),
+        scope: files,
+        environmentId: start.directory.environmentId,
+        posix: switch (start.environment?.kind) {
+          null => !Platform.isWindows,
+          EnvironmentKind.windowsNative => false,
+          _ => true,
+        },
+        gitShell: () => findGitShell(runnerFor(start.environment)),
+      ),
+    );
+  }
+
+  AcpSessionRuntime _runtime(
+    AcpSessionStart start,
+    AcpPathScope files,
+    AcpTerminals terminals,
+  ) => AcpSessionRuntime(
     id: start.hostSessionId,
     sessionId: start.sessionId,
     agentId: start.agentId,
@@ -116,7 +150,8 @@ class AcpRuntimes {
     },
     messages: messages,
     usage: usage,
-    files: AcpPathScope.forEnvironment(start.environment, start.directory.path),
+    files: files,
+    terminals: terminals,
     host: host,
     mcpUrl: start.mcpUrl,
     risk: start.risk,
@@ -136,6 +171,7 @@ class ServerAcpHost extends AcpRuntimeHost {
     required this.agentStatus,
     required this.checkpoints,
     required this.data,
+    this.titles,
     this.hold = kAcpCheckpointHold,
     void Function(String message)? log,
   }) : _log = log;
@@ -143,6 +179,9 @@ class ServerAcpHost extends AcpRuntimeHost {
   final DaemonAgentStatus agentStatus;
   final DaemonCheckpoints checkpoints;
   final DataService data;
+
+  /// Where the agent's titles go; null keeps the rows' own.
+  final AcpTitles? titles;
   final Duration hold;
   final void Function(String message)? _log;
 
@@ -186,6 +225,14 @@ class ServerAcpHost extends AcpRuntimeHost {
 
   @override
   void usageChanged(SessionUsageChanged change) => data.announce([change]);
+
+  @override
+  void commandsChanged(SessionCommandsChanged change) =>
+      data.announce([change]);
+
+  @override
+  void titleChanged(String sessionId, String title) =>
+      titles?.follow(sessionId, title);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

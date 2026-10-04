@@ -10,6 +10,7 @@ import '../types/enums.dart';
 import '../types/permission.dart';
 import '../types/session_config.dart';
 import '../types/session_update.dart';
+import '../types/tool_call.dart';
 import '../vocabulary.dart';
 import 'fake_script.dart';
 
@@ -28,6 +29,7 @@ class FakeAcpAgent {
     this.supportsLoadSession = true,
     this.holdsNoConversations = false,
     this.supportsLogout = false,
+    this.supportsImages = false,
     this.authenticateRefusal,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
@@ -57,6 +59,9 @@ class FakeAcpAgent {
   /// Whether `initialize` advertises `auth.logout`, and `logout` answers.
   final bool supportsLogout;
 
+  /// Whether `initialize` advertises `promptCapabilities.image`.
+  final bool supportsImages;
+
   /// When set, `authenticate` fails -32603 with these words.
   final String? authenticateRefusal;
 
@@ -84,6 +89,13 @@ class FakeAcpAgent {
   /// Errors the client answered `fs/*` requests with.
   final fsErrors = <AcpException>[];
   final modeChanges = <String>[];
+
+  /// `terminal/*`: the ids created, each `wait_for_exit` and `output` answer,
+  /// and the errors the client answered with.
+  final terminalIds = <String>[];
+  final terminalExits = <JsonMap>[];
+  final terminalOutputs = <JsonMap>[];
+  final terminalErrors = <AcpException>[];
   final configChanges = <JsonMap>[];
   var cancels = 0;
 
@@ -120,6 +132,7 @@ class FakeAcpAgent {
               authMethods: authMethods,
               agentInfo: agentInfo,
               supportsLogout: supportsLogout,
+              supportsImages: supportsImages,
             ),
           );
         case AcpMethods.authenticate:
@@ -329,6 +342,75 @@ class FakeAcpAgent {
         if (result.error case final error?) fsErrors.add(error);
       case FakeToolCallStep():
         return _runToolCall(step, sessionId, turn);
+      case FakeTerminalStep():
+        return _runTerminal(step, sessionId, turn);
+    }
+    return true;
+  }
+
+  /// Each call of a terminal step, answered or failed, in order.
+  Future<bool> _runTerminal(
+    FakeTerminalStep step,
+    String sessionId,
+    _ActiveTurn turn,
+  ) async {
+    Future<JsonMap?> call(String method, JsonMap params) async {
+      final answer = await turn.race(_peer.call(method, params));
+      if (answer.cancelled) return null;
+      if (answer.error case final error?) {
+        terminalErrors.add(error);
+        return null;
+      }
+      return asJsonMap(answer.value) ?? const {};
+    }
+
+    final created = await call(
+      AcpMethods.terminalCreate,
+      withoutNulls({
+        'sessionId': sessionId,
+        'command': step.command,
+        'args': step.args,
+        'cwd': step.cwd,
+        'outputByteLimit': step.outputByteLimit,
+        'env': [
+          for (final MapEntry(:key, :value) in step.env.entries)
+            {'name': key, 'value': value},
+        ],
+      }),
+    );
+    final terminalId = created?.string('terminalId');
+    if (terminalId == null) return !turn.isCancelled;
+    terminalIds.add(terminalId);
+    _sendUpdate(
+      sessionId,
+      ToolCallUpdate(
+        toolCallId: step.toolCallId,
+        isNew: true,
+        title: step.command,
+        kind: ToolKind.execute,
+        status: ToolCallStatus.inProgress,
+        content: [ToolCallTerminal(terminalId)],
+      ).toJson(),
+    );
+    final ids = {'sessionId': sessionId, 'terminalId': terminalId};
+    if (step.kill && await call(AcpMethods.terminalKill, ids) == null) {
+      return false;
+    }
+    final exit = await call(AcpMethods.terminalWaitForExit, ids);
+    if (exit == null) return false;
+    terminalExits.add(exit);
+    final output = await call(AcpMethods.terminalOutput, ids);
+    if (output == null) return false;
+    terminalOutputs.add(output);
+    _sendUpdate(
+      sessionId,
+      ToolCallUpdate(
+        toolCallId: step.toolCallId,
+        status: ToolCallStatus.completed,
+      ).toJson(),
+    );
+    if (step.release && await call(AcpMethods.terminalRelease, ids) == null) {
+      return false;
     }
     return true;
   }
@@ -412,12 +494,13 @@ abstract final class InitializeResultJson {
     required List<AuthMethod> authMethods,
     required AgentInfo agentInfo,
     bool supportsLogout = false,
+    bool supportsImages = false,
   }) => {
     'protocolVersion': protocolVersion,
     'agentCapabilities': {
       'loadSession': loadSession,
       'promptCapabilities': {
-        'image': false,
+        'image': supportsImages,
         'audio': false,
         'embeddedContext': true,
       },

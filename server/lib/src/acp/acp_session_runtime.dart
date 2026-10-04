@@ -8,6 +8,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal, kPromptChangedRefusal;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        SessionCommand,
+        SessionCommandsChanged,
         SessionConfigChoice,
         SessionConfigOption,
         SessionConfigOptionsChanged,
@@ -17,6 +19,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessageDao, SessionUsageDao, SessionUsageTurn;
+import 'package:path/path.dart' as p;
 
 import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
@@ -24,7 +27,9 @@ import '../domain/uuid.dart';
 import 'acp_conversation_writer.dart';
 import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
+import 'acp_prompt_images.dart';
 import 'acp_runtime_host.dart';
+import 'acp_terminals.dart';
 import 'acp_transport.dart';
 import 'acp_usage_limit.dart';
 
@@ -89,10 +94,14 @@ class AcpSessionRuntime implements ScreenSession {
     Duration coalesce = const Duration(milliseconds: 100),
     this.stopPatience = const Duration(seconds: 5),
     this.startPatience = const Duration(minutes: 3),
+    AcpTerminals? terminals,
+    this.terminalRefresh = const Duration(milliseconds: 250),
   }) : _spawn = spawn,
        _files = files ?? AcpPathScope(root: workingDirectory),
+       _terminals = terminals,
        _now = now ?? (() => DateTime.now().toUtc()) {
     startedAt = _now();
+    terminals?.onOutput = _terminalMoved;
     _writer = AcpConversationWriter(
       sessionId: sessionId,
       messages: messages,
@@ -145,6 +154,16 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// Where the agent's `fs/*` paths land on this machine.
   final AcpPathScope _files;
+
+  /// The agent's `terminal/*`; null advertises none.
+  final AcpTerminals? _terminals;
+
+  /// How often a running command's output is folded into its tool row.
+  final Duration terminalRefresh;
+
+  /// The tool calls that embed each terminal, and a refresh waiting per one.
+  final _terminalCalls = <String, Set<String>>{};
+  final _terminalTimers = <String, Timer>{};
   final DateTime Function() _now;
   late final AcpConversationWriter _writer;
 
@@ -157,6 +176,7 @@ class AcpSessionRuntime implements ScreenSession {
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
   List<ConfigOption>? _configOptions;
+  List<AvailableCommand>? _commands;
   UsageUpdate? _latestUsage;
   UsageUpdate? _turnUsage;
   String? _agentSessionId;
@@ -189,6 +209,13 @@ class AcpSessionRuntime implements ScreenSession {
   /// before it has started.
   SessionConfigOptionsChanged? get configOptions =>
       _configOptionsChange(_configOptions);
+
+  /// The slash commands the agent accepts, as last announced; null until it
+  /// has announced any.
+  SessionCommandsChanged? get commands => switch (_commands) {
+    final commands? => _commandsChange(commands),
+    null => null,
+  };
 
   bool get inTurn => _turn != null;
 
@@ -244,6 +271,7 @@ class AcpSessionRuntime implements ScreenSession {
         AcpMethods.initialize,
         client.initialize(
           clientInfo: ClientInfo(name: spec.clientName, version: clientVersion),
+          clientCapabilities: ClientCapabilities(terminal: _terminals != null),
         ),
       );
       _capabilities = init.agentCapabilities;
@@ -337,7 +365,9 @@ class AcpSessionRuntime implements ScreenSession {
   }
 
   /// Sends [text] as the next turn. Refuses in words while a turn is open.
-  Future<void> send(String text) async {
+  /// Answers what the sender should be told, or null: why an attached image
+  /// went to the agent as its path rather than as an image.
+  Future<String?> send(String text) async {
     final client = _client;
     final agent = _agentSessionId;
     if (_lifecycle.hasEnded) {
@@ -357,12 +387,51 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     if (text.trim().isEmpty) throw StateError('there is no message to send');
+    final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
     _publish(AgentActivityStatus.working, detail: AcpMethods.sessionPrompt);
     final settled = _turnSettled = Completer<StopReason?>();
-    final turn = _turn = client.prompt(agent, [ContentBlock.text(text)]);
+    final turn = _turn = client.prompt(agent, prompt);
     unawaited(_settle(turn, settled));
+    if (notice != null) host.log('session $sessionId: $notice');
+    return notice;
+  }
+
+  /// [text] as prompt blocks: its attached images as image blocks when the
+  /// agent takes them, each one that cannot be left as its path; and what
+  /// the sender should be told of any left.
+  (List<ContentBlock>, String?) _promptOf(String text) {
+    final attached = splitAttachedImages(text);
+    final count = attached.paths.length;
+    if (count == 0) return ([ContentBlock.text(text)], null);
+    if (!_capabilities.promptCapabilities.image) {
+      return (
+        [ContentBlock.text(text)],
+        '$agentName does not take images in a prompt, so '
+            '${count == 1 ? 'the image was sent as its path' : 'the images were sent as their paths'}.',
+      );
+    }
+    final images = <ContentBlock>[];
+    final sent = <String>{};
+    final refused = <String>[];
+    for (final path in attached.paths) {
+      final (:image, :refusal) = promptImage(path);
+      if (image != null) {
+        images.add(image);
+        sent.add(path);
+      } else {
+        refused.add(
+          '${p.basename(path)} was sent as its path, not as an image: '
+          '$refusal.',
+        );
+      }
+    }
+    final rest = attached.textWithout(sent);
+    return (
+      [if (rest.trim().isNotEmpty) ContentBlock.text(rest), ...images],
+      refused.isEmpty ? null : refused.join(' '),
+    );
   }
 
   /// Completes when the open turn has ended and its status is published;
@@ -458,14 +527,16 @@ class AcpSessionRuntime implements ScreenSession {
     options: option.options,
   );
 
-  /// Answers the open permission request: allow with the first `allow_once`
-  /// (else `allow_always`) option, reject with `reject_once` (else
-  /// `reject_always`). Throws [SessionPromptRefusal] when none is open, when
-  /// [toolCallId] names another call, or when the agent offered no such
-  /// option. An edit waits for the before-turn checkpoint first.
+  /// Answers the open permission request: [optionId] chooses that option
+  /// exactly, its own kind deciding whether it allows; without one, allow
+  /// takes the first `allow_once` (else `allow_always`) option and reject
+  /// `reject_once` (else `reject_always`). Throws [SessionPromptRefusal] when
+  /// none is open, when [toolCallId] names another call, or when the agent
+  /// offered no such option. An edit waits for the before-turn checkpoint.
   Future<AcpPermissionAnswer> answerPermission({
     required bool approve,
     String? toolCallId,
+    String? optionId,
   }) async {
     final pending = _pending;
     if (pending == null) {
@@ -476,7 +547,19 @@ class AcpSessionRuntime implements ScreenSession {
     if (toolCallId != null && toolCallId != pending.call.toolCallId) {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
-    final option = _optionFor(pending.options, approve: approve);
+    final PermissionOption? option;
+    if (optionId != null) {
+      option = pending.options.where((o) => o.optionId == optionId).firstOrNull;
+      if (option == null) {
+        throw SessionPromptRefusal(
+          '$agentName offered no option "$optionId" for "${pending.title}"; '
+          'it offered ${pending.options.map((o) => o.name).join(', ')}',
+        );
+      }
+      approve = option.kind.allows;
+    } else {
+      option = _optionFor(pending.options, approve: approve);
+    }
     if (option == null) {
       throw SessionPromptRefusal(
         '$agentName offered no way to ${approve ? 'allow' : 'reject'} '
@@ -585,9 +668,20 @@ class AcpSessionRuntime implements ScreenSession {
         event.sessionId != agent) {
       return;
     }
+    final update = event.update;
+    // Not conversation: an agent may announce these while it loads.
+    if (update is AvailableCommandsUpdate) {
+      _commands = update.commands;
+      host.commandsChanged(_commandsChange(update.commands));
+      return;
+    }
+    if (update is SessionInfoUpdate) {
+      final title = update.title?.trim() ?? '';
+      if (title.isNotEmpty) host.titleChanged(sessionId, title);
+      return;
+    }
     // A load replays the conversation the rows already hold.
     if (_loading) return;
-    final update = event.update;
     if (update is CurrentModeUpdate) {
       final modes = _modes;
       if (modes != null && modes.currentModeId != update.currentModeId) {
@@ -610,11 +704,91 @@ class AcpSessionRuntime implements ScreenSession {
     }
     if (update is ToolCallUpdate) {
       final before = _writer.toolCall(update.toolCallId);
-      _writer.update(update);
+      _writer.update(_withTerminalOutput(update));
       _noteEditPaths(before, _writer.toolCall(update.toolCallId) ?? update);
       return;
     }
     _writer.update(update);
+  }
+
+  // Terminals.
+
+  /// [update] with each terminal it embeds carrying that terminal's output
+  /// as it stands, and the embedding remembered for later refreshes.
+  ToolCallUpdate _withTerminalOutput(ToolCallUpdate update) {
+    final terminals = _terminals;
+    final content = update.content;
+    if (terminals == null || content == null) return update;
+    var embeds = false;
+    final folded = [
+      for (final item in content)
+        if (item is ToolCallTerminal)
+          () {
+            embeds = true;
+            _terminalCalls
+                .putIfAbsent(item.terminalId, () => {})
+                .add(update.toolCallId);
+            final shown = terminals.snapshot(item.terminalId);
+            return shown == null
+                ? item
+                : ToolCallTerminal(
+                    item.terminalId,
+                    output: shown.output,
+                    truncated: shown.truncated,
+                    exitCode: shown.exitCode,
+                  );
+          }()
+        else
+          item,
+    ];
+    if (!embeds) return update;
+    return ToolCallUpdate(
+      toolCallId: update.toolCallId,
+      isNew: update.isNew,
+      title: update.title,
+      name: update.name,
+      kind: update.kind,
+      status: update.status,
+      content: folded,
+      locations: update.locations,
+      rawInput: update.rawInput,
+      rawOutput: update.rawOutput,
+    );
+  }
+
+  /// A terminal printed or ended: its output reaches the tool rows that
+  /// embed it, at most once per [terminalRefresh].
+  void _terminalMoved(String terminalId) {
+    if (_torn) return;
+    // An ended command's last word lands at once, before the agent reads it.
+    if (_terminals?.snapshot(terminalId)?.exitCode != null) {
+      _terminalTimers.remove(terminalId)?.cancel();
+      _foldTerminal(terminalId);
+      return;
+    }
+    if (_terminalTimers.containsKey(terminalId)) return;
+    _terminalTimers[terminalId] = Timer(terminalRefresh, () {
+      _terminalTimers.remove(terminalId);
+      if (!_torn) _foldTerminal(terminalId);
+    });
+  }
+
+  void _foldTerminal(String terminalId) {
+    for (final callId in _terminalCalls[terminalId] ?? const <String>{}) {
+      final call = _writer.toolCall(callId);
+      if (call == null) continue;
+      _writer.update(
+        _withTerminalOutput(
+          ToolCallUpdate(toolCallId: callId, content: call.content),
+        ),
+      );
+    }
+  }
+
+  Future<Object?> _terminal(String method, Object? params) {
+    final terminals = _terminals;
+    if (terminals == null) throw AcpMethodNotSupported(method);
+    return terminals.handle(method, asJsonMap(params) ?? const {});
   }
 
   /// An edit's paths reach the checkpoint once they are known — Claude's
@@ -837,9 +1011,25 @@ class AcpSessionRuntime implements ScreenSession {
     if (!_started) return;
     _modes = null;
     _configOptions = null;
+    _commands = null;
     _announceModes();
     _announceConfigOptions();
+    host.commandsChanged(_commandsChange(const []));
   }
+
+  SessionCommandsChanged _commandsChange(List<AvailableCommand> commands) =>
+      SessionCommandsChanged(
+        sessionId: sessionId,
+        commands: [
+          for (final command in commands)
+            if (command.name.isNotEmpty)
+              SessionCommand(
+                name: command.name,
+                description: command.description,
+                hint: command.inputHint,
+              ),
+        ],
+      );
 
   // Permissions.
 
@@ -872,6 +1062,14 @@ class AcpSessionRuntime implements ScreenSession {
         at: now,
         toolUseId: call.toolCallId,
         cwd: workingDirectory,
+        options: [
+          for (final option in options)
+            AgentToolAskOption(
+              id: option.optionId,
+              name: option.name,
+              kind: option.kind.raw,
+            ),
+        ],
       ),
       waitingSince: now,
     );
@@ -1055,6 +1253,16 @@ class AcpSessionRuntime implements ScreenSession {
     if (_torn) return;
     _torn = true;
     await _updates?.cancel();
+    // Every command the agent left running ends with the session; the rows
+    // keep what each printed.
+    for (final timer in _terminalTimers.values) {
+      timer.cancel();
+    }
+    _terminalTimers.clear();
+    await _terminals?.releaseAll();
+    for (final terminalId in _terminalCalls.keys) {
+      _foldTerminal(terminalId);
+    }
     _writer.close();
     _resolvePending(const PermissionOutcome.cancelled());
     _announceGone();
@@ -1112,4 +1320,8 @@ final class _Handler extends AcpClientHandler {
   @override
   Future<void> writeTextFile(String sessionId, String path, String content) =>
       _runtime._write(path, content);
+
+  @override
+  Future<Object?> terminal(String method, Object? params) =>
+      _runtime._terminal(method, params);
 }
