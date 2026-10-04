@@ -46,10 +46,12 @@ void main() {
         expect(adapter.capabilities, contains(AgentCapability.acp));
         expect(descriptor.acp!.clientName, 'Karmashala');
         // Each is reachable without an install of its own: an npm package,
-        // or a registry archive Karmashala installs.
+        // a registry archive Karmashala installs, or the agent's own binary
+        // spoken to in its protocol.
         expect(
           descriptor.acp!.npxPackage != null ||
-              descriptor.acp!.registryId != null,
+              descriptor.acp!.registryId != null ||
+              descriptor.acp!.nativeBridge != null,
           isTrue,
         );
       });
@@ -175,11 +177,15 @@ void main() {
       claudeAcpDescriptor.acp!.npxPackage,
       '@agentclientprotocol/claude-agent-acp',
     );
-    expect(codexAcpDescriptor.acp!.arguments, isEmpty);
+    // Codex's chat is its own binary's app-server, translated in-process.
+    expect(codexAcpDescriptor.acp!.arguments, ['app-server']);
+    expect(codexAcpDescriptor.acp!.npxPackage, isNull);
     expect(
-      codexAcpDescriptor.acp!.npxPackage,
-      '@agentclientprotocol/codex-acp',
+      codexAcpDescriptor.acp!.nativeBridge,
+      AcpNativeBridge.codexAppServer,
     );
+    expect(codexAcpDescriptor.binaries.windows, ['codex']);
+    expect(codexAcpDescriptor.binaries.posix, ['codex']);
     expect(grokDescriptor.acp!.arguments, ['agent', 'stdio']);
     expect(grokDescriptor.acp!.npxPackage, '@xai-official/grok');
   });
