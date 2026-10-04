@@ -90,7 +90,7 @@ class RemoteAccessController {
       'enabled': ?enabled,
       'relayEnabled': ?hostedEnabled,
       // A probe takes no port: the local relay's is the real server's.
-      'localRelay': probe ? (localRelay == null ? null : false) : localRelay,
+      'localRelay': ?(probe && localRelay != null ? false : localRelay),
       'localRelayPort': ?localRelayPort,
       // A cleared field in a build with no default clears the relay.
       if (relayUrl != null) ...{'relay': relay, 'relayToken': null},
