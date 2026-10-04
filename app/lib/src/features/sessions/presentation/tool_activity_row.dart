@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_ui/transcript.dart';
+import 'tool_edit_diff_card.dart';
 import 'transcript_image_preview.dart';
 
 /// The body of a transcript row that is a tool call: the command, the file, the
@@ -104,6 +105,8 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
             ),
           ),
         ],
+        if (widget.activity.edits.isNotEmpty)
+          ToolEditDiffCard(activity: widget.activity),
         if (widget.activity.output != null || widget.activity.isError) ...[
           const SizedBox(height: Insets.xs),
           _OutputPanel(

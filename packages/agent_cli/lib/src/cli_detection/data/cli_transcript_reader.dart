@@ -9,6 +9,7 @@ import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
+import '../../agents/codex/codex_patch_edits.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
@@ -907,10 +908,19 @@ void _parseCodexLine(
       // subject than the fallback below, which for `update_plan` was the whole
       // argument blob on one line.
       final plan = agentPlanForToolCall(name, payload['arguments']);
+      final patch = name == kCodexPatchTool ? codexPatchOf(payload) : null;
+      final (edits, cut) = boundedToolEdits(
+        patch == null ? const [] : codexPatchEdits(patch),
+      );
       final activity = ToolActivity(
         name: name,
-        subject: plan?.headline ?? _codexSubject(payload),
+        // A patch's first line is `*** Begin Patch`; the file it touches is
+        // what identifies it.
+        subject:
+            plan?.headline ?? edits.firstOrNull?.path ?? _codexSubject(payload),
         plan: plan,
+        edits: edits,
+        editsTruncated: cut,
       );
       final callId = payload['call_id'];
       if (callId is String) pending[callId] = out.length;

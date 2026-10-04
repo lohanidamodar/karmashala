@@ -168,6 +168,9 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
             )
           else
             for (final i in row.pinned) widget.rowAt(i),
+          if (!row.live)
+            if (turnChangedFiles(widget.messages, row) case final files?)
+              TurnChangedFilesLine(files: files),
         ],
       ),
     );
@@ -248,7 +251,7 @@ class _ToolCallLineState extends State<_ToolCallLine> {
     final semantic = SemanticColors.of(context);
     final message = widget.message;
     final tool = message.tool!;
-    final kind = toolKindOf(tool.name);
+    final kind = toolKindOf(tool.name, kind: tool.kind);
     final subject = tool.subject?.split('\n').first.trim();
     final named = switch (kind) {
       ToolKind.read ||
@@ -325,6 +328,12 @@ class _ToolCallLineState extends State<_ToolCallLine> {
           Padding(
             padding: const EdgeInsets.only(bottom: Insets.xs),
             child: widget.card(),
+          )
+        else if (tool.edits.isNotEmpty)
+          // The opened card draws the same diff, so it is drawn once.
+          Padding(
+            padding: const EdgeInsets.only(bottom: Insets.xs),
+            child: ToolEditDiffCard(activity: tool),
           ),
       ],
     );

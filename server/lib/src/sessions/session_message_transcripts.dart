@@ -3,9 +3,18 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart' show AgentPlan, AgentPlanItem;
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
 import 'package:agent_cli/read.dart' show TranscriptMessage;
-import 'package:agent_cli/stream.dart' show ToolActivity, boundedToolOutput;
+import 'package:agent_cli/stream.dart'
+    show
+        FileEditKind,
+        FileEditRecord,
+        ToolActivity,
+        boundedToolEdits,
+        boundedToolOutput,
+        toolSubjectEntryFor;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
+
+import '../acp/acp_tool_json.dart' show kEditsTruncatedKey;
 
 /// One row of `session_messages` as a transcript row: its [ordinal] is its
 /// index, [revision] is when it last changed.
@@ -96,6 +105,7 @@ class SessionMessageTranscriptSource {
       final text = _outputOf(json);
       if (text != null) (output, truncated) = boundedToolOutput(text);
     }
+    final (edits, editsCut) = boundedToolEdits(_editsOf(json['content']));
     return (
       activity: ToolActivity(
         name:
@@ -103,11 +113,16 @@ class SessionMessageTranscriptSource {
             _string(json['name']) ??
             _string(json['kind']) ??
             'tool',
-        subject: _subjectOf(json['locations']),
+        subject:
+            _subjectOf(json['locations']) ??
+            toolSubjectEntryFor(json['rawInput'])?.value,
         output: output,
         outputTruncated: truncated,
         isError: failed,
         plan: plan,
+        kind: _string(json['kind']),
+        edits: edits,
+        editsTruncated: editsCut || json[kEditsTruncatedKey] == true,
       ),
       pendingId: open ? (_string(json['toolCallId']) ?? row.id) : null,
     );
@@ -131,6 +146,26 @@ class SessionMessageTranscriptSource {
     }
     return null;
   }
+
+  /// The call's `diff` content as edits; an absent `oldText` is a new file.
+  static List<FileEditRecord> _editsOf(Object? content) {
+    if (content is! List) return const [];
+    return [
+      for (final block in content)
+        if (block is Map && block['type'] == 'diff')
+          if (_string(block['path']) case final path?)
+            FileEditRecord(
+              path: path,
+              kind: block['oldText'] is String
+                  ? FileEditKind.modified
+                  : FileEditKind.created,
+              oldText: _text(block['oldText']),
+              newText: _text(block['newText']),
+            ),
+    ];
+  }
+
+  static String? _text(Object? value) => value is String ? value : null;
 
   /// What the call answered: its content blocks' text, else its raw output.
   static String? _outputOf(Map<String, Object?> json) {
