@@ -10,6 +10,7 @@ import 'package:karmashala_environments/store.dart'
     show AcpAuthChoice, AcpAuthChoiceDao;
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
+import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 import 'acp_version_probe.dart';
 
@@ -318,14 +319,17 @@ class ServerAcpAuth {
   }) async {
     try {
       return await talkToAcpAgent(
-        () => _spawn(
-          target.environment,
-          acpProbeRequest(
-            target.installation,
-            target.spec,
+        () async => bridgedAcpTransport(
+          target.spec,
+          await _spawn(
             target.environment,
-            target.directory,
-            variables: variables,
+            acpProbeRequest(
+              target.installation,
+              target.spec,
+              target.environment,
+              target.directory,
+              variables: variables,
+            ),
           ),
         ),
         body,

@@ -7,6 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
+import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 
 /// How long one agent gets to answer `initialize`: an npx cold start
@@ -175,9 +176,12 @@ class AcpVersionProbe {
       return null;
     }
     final version = await readAcpAgentVersion(
-      () async => AcpTransport.process(
-        await runner.start(
-          acpProbeRequest(installation, spec, environment, directory),
+      () async => bridgedAcpTransport(
+        spec,
+        AcpTransport.process(
+          await runner.start(
+            acpProbeRequest(installation, spec, environment, directory),
+          ),
         ),
       ),
       timeout: timeout,

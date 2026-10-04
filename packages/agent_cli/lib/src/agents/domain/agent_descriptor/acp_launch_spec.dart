@@ -1,5 +1,18 @@
 part of '../agent_descriptor.dart';
 
+/// A protocol of the agent's own that Karmashala speaks in place of ACP,
+/// translated in-process so everything past the transport still sees ACP:
+/// the agent's own binary and login, with what its protocol carries that
+/// an ACP adapter would drop.
+enum AcpNativeBridge {
+  /// `codex app-server`: Codex's JSON-RPC over stdio.
+  codexAppServer,
+
+  /// Claude Code's stream-json mode: JSON lines in and out, with control
+  /// requests for permissions, interrupts and settings.
+  claudeStreamJson,
+}
+
 /// How an agent is driven over the Agent Client Protocol
 /// (https://agentclientprotocol.com): JSON-RPC over the process's own stdio,
 /// in place of a terminal. Declared on a descriptor; a consumer asks
@@ -15,7 +28,13 @@ class AcpLaunchSpec {
     this.linuxArguments = const [],
     this.registryId,
     this.apiKeyVariables = const {},
+    this.nativeBridge,
   });
+
+  /// Set when the agent is spoken to in its own protocol, through
+  /// [arguments], and translated to ACP in-process; null for an agent that
+  /// speaks ACP itself.
+  final AcpNativeBridge? nativeBridge;
 
   /// Argv that puts the binary into ACP stdio mode — `['--acp']`,
   /// `['agent', 'stdio']`, or empty for a dedicated adapter binary.
@@ -69,6 +88,7 @@ class AcpLaunchSpec {
     linuxArguments: linuxArguments,
     registryId: registryId,
     apiKeyVariables: apiKeyVariables,
+    nativeBridge: nativeBridge,
   );
 
   /// What `initialize` announces as `clientInfo.name`.

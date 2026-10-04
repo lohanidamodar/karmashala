@@ -15,6 +15,7 @@ import '../status/daemon_agent_status.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
+import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 
 /// What the launcher asks an ACP runtime to run: decided by the one launch
@@ -90,14 +91,17 @@ class AcpRuntimes {
       // the launcher withholds still win.
       final variables = {...start.spec.environment, ...start.variables};
       try {
-        return AcpTransport.process(
-          await runnerFor(start.environment).start(
-            CommandRequest(
-              executable: start.executable,
-              arguments: start.arguments,
-              workingDirectory: start.directory,
-              environment: variables,
-              removedEnvironment: start.removed,
+        return bridgedAcpTransport(
+          start.spec,
+          AcpTransport.process(
+            await runnerFor(start.environment).start(
+              CommandRequest(
+                executable: start.executable,
+                arguments: start.arguments,
+                workingDirectory: start.directory,
+                environment: variables,
+                removedEnvironment: start.removed,
+              ),
             ),
           ),
         );
