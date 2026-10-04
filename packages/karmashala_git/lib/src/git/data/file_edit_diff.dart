@@ -142,33 +142,63 @@ FileEditDiff _build(FileEditRecord record) {
 
 FileEditDiff _fromUnified(FileEditRecord record, String unified) {
   final all = unified.split('\n');
+  final lines = _hunkAwareLines(all);
   var added = 0;
   var removed = 0;
-  for (final line in all) {
-    // `+++`/`---` are file headers, not content; nothing here writes them, but
-    // a recorded patch from a future CLI version might.
-    if (line.startsWith('+') && !line.startsWith('+++')) {
-      added++;
-    } else if (line.startsWith('-') && !line.startsWith('---')) {
-      removed++;
-    }
+  for (final line in lines) {
+    if (line.kind == DiffLineKind.added) added++;
+    if (line.kind == DiffLineKind.removed) removed++;
   }
   if (added == 0 && removed == 0) {
     return _blank(record, FileEditDiffStatus.empty, unified: unified);
   }
 
-  final shown = all.length > kFileEditMaxLines
-      ? all.sublist(0, kFileEditMaxLines).join('\n')
-      : unified;
   return FileEditDiff(
     record: record,
     status: FileEditDiffStatus.ok,
-    lines: parseUnifiedDiff(shown),
+    lines: lines.length > kFileEditMaxLines
+        ? lines.sublist(0, kFileEditMaxLines)
+        : lines,
     unified: unified,
     added: added,
     removed: removed,
     totalLines: all.length,
   );
+}
+
+/// [all] classified the way a hunk reads them: inside a hunk the first
+/// character decides, so a removed `-- note` (`--- note`) or an added `++x`
+/// stays content rather than reading as a file header. Outside a hunk the
+/// Git panel's own parse applies.
+List<DiffLine> _hunkAwareLines(List<String> all) {
+  final out = <DiffLine>[];
+  var inHunk = false;
+  for (final line in all) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      out.add(DiffLine(DiffLineKind.hunk, line));
+    } else if (line.startsWith('diff ')) {
+      inHunk = false;
+      out.add(DiffLine(DiffLineKind.meta, line));
+    } else if (!inHunk) {
+      out.addAll(parseUnifiedDiff(line));
+    } else {
+      out.add(
+        DiffLine(switch (line.isEmpty ? '' : line[0]) {
+          '+' => DiffLineKind.added,
+          '-' => DiffLineKind.removed,
+          _ => DiffLineKind.context,
+        }, line),
+      );
+    }
+  }
+  // As parseUnifiedDiff does: a final newline is not an empty context line.
+  if (out.isNotEmpty &&
+      out.last.kind == DiffLineKind.context &&
+      out.last.text.isEmpty) {
+    out.removeLast();
+  }
+  return out;
 }
 
 FileEditDiff _blank(
