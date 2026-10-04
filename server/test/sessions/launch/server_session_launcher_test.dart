@@ -40,8 +40,15 @@ class _DyingLauncher implements PtyLauncher {
   final handles = <_DyingHandle>[];
   var _pid = 1000;
 
+  /// Whether the next spawn fails, as a missing binary does.
+  var refuseNext = false;
+
   @override
   PtyHandle start(PtySpawnRequest request) {
+    if (refuseNext) {
+      refuseNext = false;
+      throw const ProcessException('claude', [], 'not found');
+    }
     started.add(request);
     final handle = _DyingHandle(_pid++, request);
     handles.add(handle);
@@ -76,6 +83,7 @@ void main() {
   bool usableLogin = false;
   Set<String> vault = const {};
   AgentTerminalOpener? openAgent;
+  List<String> discarded = [];
 
   ServerSessionLauncher build() {
     final rows = CheckoutRows(database);
@@ -115,6 +123,10 @@ void main() {
           presence[conversation] ?? ConversationPresence.unknown,
       pathProbe: const _Everywhere(),
       directoryPresent: (_) => directoryThere,
+      discardFailedScratch: (checkout) async {
+        discarded.add(checkout.id);
+        return true;
+      },
     );
   }
 
@@ -159,6 +171,7 @@ void main() {
     pty = _DyingLauncher();
     registry = SessionRegistry(launcher: pty);
     openAgent = null;
+    discarded = [];
     launches = build();
   });
 
@@ -216,6 +229,54 @@ void main() {
     expect(registry.find('karmashala_new-1'), isNotNull);
     expect(argv(), contains('--session-id new-1'));
     expect(pty.started.last.argv.last, 'go');
+  });
+
+  test('a fresh launch that fails in a scratch folder asks for the folder '
+      'to go, and still fails', () async {
+    database.execute(
+      'INSERT INTO projects (id, name, root_environment_id, root_path, kind, '
+      'created_at) VALUES (?, ?, ?, ?, ?, ?);',
+      [
+        'ps',
+        'Scratch',
+        'local',
+        '/home/u/karmashala/scratch',
+        'scratch',
+        '$t0',
+      ],
+    );
+    database.execute(
+      'INSERT INTO repositories (id, project_id, name, environment_id, path, '
+      'created_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['rs', 'ps', 'fresh', 'local', '/home/u/karmashala/scratch/fresh', '$t0'],
+    );
+    pty.refuseNext = true;
+    await expectLater(
+      launches.start(
+        const SessionStartSpec(
+          repositoryId: 'rs',
+          installationId: 'a1',
+          title: 'Fails',
+          prompt: 'go',
+        ),
+      ),
+      throwsA(isA<ProcessException>()),
+    );
+    expect(discarded, ['rs']);
+
+    // An ordinary checkout is never offered up.
+    pty.refuseNext = true;
+    await expectLater(
+      launches.start(
+        const SessionStartSpec(
+          repositoryId: 'r1',
+          installationId: 'a1',
+          title: 'Fails too',
+        ),
+      ),
+      throwsA(isA<ProcessException>()),
+    );
+    expect(discarded, ['rs']);
   });
 
   test('Settings decide the mode and model nobody chose', () async {

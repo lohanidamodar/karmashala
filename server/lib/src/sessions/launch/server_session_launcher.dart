@@ -69,6 +69,7 @@ class ServerSessionLauncher {
     this.agents = const DaemonAgents(),
     this.registryOfAgents = AgentRegistry.builtIn,
     this.trustScratchFolder,
+    this.discardFailedScratch,
     this.log,
   });
 
@@ -105,6 +106,10 @@ class ServerSessionLauncher {
     EnvironmentPath folder,
   )?
   trustScratchFolder;
+
+  /// Removes a scratch checkout a fresh launch failed in, when nothing else
+  /// is there (`ProjectFolders.discardFailedScratch`); null keeps it.
+  final Future<bool> Function(Repository checkout)? discardFailedScratch;
   final void Function(String message)? log;
 
   LaunchSettings get _settings => settings?.call() ?? LaunchSettings.none;
@@ -316,39 +321,48 @@ class ServerSessionLauncher {
         : attributed;
     if (inScratch) await _trustScratch(installation, launchDirectory);
 
-    final started = await launcher.startDetailed(
-      HostedLaunch(
-        repository: repository,
-        installation: installation,
-        title: spec.title,
-        titleTyped: spec.titleTyped,
-        permissionMode: spec.permissionMode,
-        modelId: spec.modelId,
-        prompt: prompt,
-        worktree: spec.worktree,
-        worktreeBranch: spec.worktreeBranch,
-        worktreeBase: spec.worktreeBase,
-        worktreeExistingBranch: spec.worktreeExistingBranch,
-        existingWorktree: spec.existingWorktree,
+    final HostedStart started;
+    try {
+      started = await launcher.startDetailed(
+        HostedLaunch(
+          repository: repository,
+          installation: installation,
+          title: spec.title,
+          titleTyped: spec.titleTyped,
+          permissionMode: spec.permissionMode,
+          modelId: spec.modelId,
+          prompt: prompt,
+          worktree: spec.worktree,
+          worktreeBranch: spec.worktreeBranch,
+          worktreeBase: spec.worktreeBase,
+          worktreeExistingBranch: spec.worktreeExistingBranch,
+          existingWorktree: spec.existingWorktree,
 
-        workingDirectory: workingDirectory,
-        recordDirectory: recordDirectory,
-        resuming: reused,
-        fresh: restarting,
-        freshConversationId: restarting ? freshConversationId : null,
-        resumeConversationId: restarting ? null : resumeId,
-        forkConversationId: spec.forkConversationId,
-        parentSessionId: spec.parentSessionId,
-        parentLink: spec.parentLink,
-        additionalRepositoryIds: spec.additionalRepositoryIds,
-        systemPrompt: spec.systemPrompt,
-        view: spec.view,
-        surface: spec.surface,
-        columns: spec.columns,
-        rows: spec.rows,
-        followSettings: true,
-      ),
-    );
+          workingDirectory: workingDirectory,
+          recordDirectory: recordDirectory,
+          resuming: reused,
+          fresh: restarting,
+          freshConversationId: restarting ? freshConversationId : null,
+          resumeConversationId: restarting ? null : resumeId,
+          forkConversationId: spec.forkConversationId,
+          parentSessionId: spec.parentSessionId,
+          parentLink: spec.parentLink,
+          additionalRepositoryIds: spec.additionalRepositoryIds,
+          systemPrompt: spec.systemPrompt,
+          view: spec.view,
+          surface: spec.surface,
+          columns: spec.columns,
+          rows: spec.rows,
+          followSettings: true,
+        ),
+      );
+    } on Object {
+      // A folder made for this launch must not outlive it.
+      if (inScratch && freshConversation && reused == null) {
+        await discardFailedScratch?.call(repository);
+      }
+      rethrow;
+    }
     final words = [?notice, ?caveat, ?started.attachNotice].join(' ');
     log?.call(
       'Started ${started.session.id}: agent=$agentId '

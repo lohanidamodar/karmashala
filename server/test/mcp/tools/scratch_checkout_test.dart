@@ -117,6 +117,48 @@ void main() {
       );
     });
 
+    test('a launch that failed in a fresh folder takes the folder, the '
+        'checkout and its failed row with it', () async {
+      final checkout = await fixture.folders.createScratchCheckout(
+        target: host(),
+        hint: 'a start that fails',
+      );
+      session('s1', checkout.id);
+      SessionDao(fixture.database).updateStatus('s1', SessionStatus.failed);
+
+      expect(await fixture.folders.discardFailedScratch(checkout), isTrue);
+
+      expect(RepositoryDao(fixture.database).getById(checkout.id), isNull);
+      expect(SessionDao(fixture.database).getById('s1'), isNull);
+      expect(Directory(checkout.path.path).existsSync(), isFalse);
+    });
+
+    test('a folder with anything in it, or a session that ran there, is '
+        'kept', () async {
+      final touched = await fixture.folders.createScratchCheckout(
+        target: host(),
+      );
+      File(p.join(touched.path.path, 'notes.txt')).writeAsStringSync('mine');
+      expect(await fixture.folders.discardFailedScratch(touched), isFalse);
+      expect(RepositoryDao(fixture.database).getById(touched.id), isNotNull);
+      expect(Directory(touched.path.path).existsSync(), isTrue);
+
+      final used = await fixture.folders.createScratchCheckout(target: host());
+      session('s2', used.id);
+      expect(await fixture.folders.discardFailedScratch(used), isFalse);
+      expect(RepositoryDao(fixture.database).getById(used.id), isNotNull);
+      expect(Directory(used.path.path).existsSync(), isTrue);
+    });
+
+    test('a checkout outside Scratch is never discarded', () async {
+      final scratch = await fixture.folders.createScratchCheckout(
+        target: host(),
+      );
+      final ordinary = scratch.copyWith(projectId: 'not-scratch');
+      expect(await fixture.folders.discardFailedScratch(ordinary), isFalse);
+      expect(Directory(scratch.path.path).existsSync(), isTrue);
+    });
+
     test('the scratch project reads back as such over the wire', () async {
       final checkout = await fixture.folders.createScratchCheckout(
         target: host(),

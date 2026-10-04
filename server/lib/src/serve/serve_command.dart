@@ -1054,6 +1054,7 @@ Future<int> runServe(
     repairAgents: () async {
       await agentWork.detection.repair();
     },
+    discardFailedScratch: folders.discardFailedScratch,
     trustScratchFolder: (installation, folder) async {
       final where = data.environments
           .where((e) => e.id == folder.environmentId)

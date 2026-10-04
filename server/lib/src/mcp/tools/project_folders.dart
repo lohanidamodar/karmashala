@@ -9,6 +9,8 @@ import 'package:karmashala_git/git.dart'
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:path/path.dart' as p;
 
 import 'checkout_reach.dart';
@@ -214,6 +216,67 @@ class ProjectFolders {
         ));
     await _recorded(added);
     return checkout;
+  }
+
+  /// Undoes [createScratchCheckout] for a launch that failed in it: the
+  /// folder, the checkout and its failed session rows go — only when it is a
+  /// Scratch checkout, every session on it failed, and the folder holds
+  /// nothing but its fresh repository. Whether it went; never throws.
+  Future<bool> discardFailedScratch(Repository checkout) async {
+    try {
+      final project = ProjectDao(_context.database).getById(checkout.projectId);
+      if (project == null || !project.isScratch) return false;
+      final sessions = SessionDao(
+        _context.database,
+      ).getByRepository(checkout.id);
+      if (sessions.any((s) => s.status != SessionStatus.failed)) return false;
+      final target = _reach.environment(checkout.path.environmentId);
+      if (target == null || !await _deleteIfUntouched(target, checkout)) {
+        return false;
+      }
+      for (final session in sessions) {
+        _context.write(SessionDelete(session.id));
+      }
+      final kept = _context.write(CheckoutsRetire([checkout.id]));
+      return (kept[checkout.id] ?? 0) == 0;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Deletes [checkout]'s folder when it holds only a repository with no
+  /// commit — what [createScratchCheckout] left there.
+  Future<bool> _deleteIfUntouched(
+    ExecutionEnvironment target,
+    Repository checkout,
+  ) async {
+    final path = checkout.path.path;
+    if (_isPosix(target)) {
+      final quoted = "'${path.replaceAll("'", r"'\''")}'";
+      final script =
+          '''
+cd $quoted || exit 3
+[ "\$(ls -A)" = ".git" ] || exit 4
+git rev-parse -q --verify HEAD >/dev/null && exit 5
+cd / && rm -rf $quoted
+''';
+      final result = await _reach.runners
+          .forEnvironment(target)
+          .run(_shellScript(script));
+      return result.ok;
+    }
+    final folder = Directory(path);
+    final entries = folder.listSync();
+    if (entries.length != 1 || p.basename(entries.single.path) != '.git') {
+      return false;
+    }
+    final heads = Directory(p.join(path, '.git', 'refs', 'heads'));
+    if ((heads.existsSync() && heads.listSync().isNotEmpty) ||
+        File(p.join(path, '.git', 'packed-refs')).existsSync()) {
+      return false;
+    }
+    folder.deleteSync(recursive: true);
+    return true;
   }
 
   /// Makes `~/karmashala/scratch/<folder>` in [target] with a repository in
