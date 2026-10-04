@@ -14,7 +14,7 @@ const _evidence =
 const codexAcpDescriptor = AgentDescriptor(
   id: 'codex-acp',
   chatFormOf: 'codex',
-  displayName: 'Codex (ACP)',
+  displayName: 'Codex CLI · Chat',
   binaries: AgentBinaries(
     windows: ['codex'],
     posix: ['codex'],

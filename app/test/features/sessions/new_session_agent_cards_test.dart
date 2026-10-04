@@ -165,7 +165,7 @@ void main() {
       expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
       expect(find.byKey(const ValueKey('agent-card:chat')), findsNothing);
       expect(find.text('Claude Code'), findsOneWidget);
-      expect(find.text('Claude (ACP)'), findsNothing);
+      expect(find.text('Claude Code · Chat'), findsNothing);
       expect(find.byKey(const ValueKey('agent-form:a1:terminal')), findsOne);
       expect(find.byKey(const ValueKey('agent-form:a1:chat')), findsOne);
       // Its usage is the account's, read once.

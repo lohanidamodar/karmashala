@@ -12,7 +12,7 @@ import '../domain/agent_descriptor.dart';
 const antigravityAcpDescriptor = AgentDescriptor(
   id: 'antigravity-acp',
   chatFormOf: 'antigravity',
-  displayName: 'Antigravity (ACP)',
+  displayName: 'Antigravity · Chat',
   binaries: AgentBinaries(
     windows: ['agy_acp_server.exe'],
     posix: ['agy_acp_server.par', 'agy_acp_server'],

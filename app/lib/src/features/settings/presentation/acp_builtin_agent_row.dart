@@ -30,8 +30,8 @@ String describeAgentLaunch(AgentInstallation install) =>
     ? install.executable.path
     : 'npx ${install.leadingArguments.join(' ')}';
 
-/// **A shipped ACP agent, one row** (Claude (ACP), Codex (ACP), Antigravity
-/// (ACP), Grok): its health, where it is installed, how each machine
+/// **A shipped ACP agent, one row** (Grok, or a chat form whose agent this
+/// registry lacks): its health, where it is installed, how each machine
 /// launches it, the version the agent reported of itself over ACP, and each
 /// installation's login ([AcpLoginLine]). No account or permission block —
 /// none applies to an agent driven over ACP — one line saying so when it is

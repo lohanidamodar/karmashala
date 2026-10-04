@@ -124,7 +124,7 @@ void main() {
     expect(find.text('Enter to run'), findsOneWidget);
 
     // Tab from the preview takes the first usable agent — typed by its whole
-    // name, since Claude (ACP) shares its first word.
+    // name, since Claude Code · Chat shares it.
     await press(tester, LogicalKeyboardKey.tab);
     expect(boxText(tester), 'start Karmashala claude-code ');
 
@@ -166,7 +166,7 @@ void main() {
 
     await type(tester, 'start Karmashala anti');
     expect(find.text('antigravity'), findsOneWidget);
-    // Antigravity and Antigravity (ACP) both match, and neither is installed.
+    // Antigravity and Antigravity · Chat both match, and neither is installed.
     expect(find.textContaining('not installed in'), findsNWidgets(2));
 
     await press(tester, LogicalKeyboardKey.tab);

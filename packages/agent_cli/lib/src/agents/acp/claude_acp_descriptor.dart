@@ -18,7 +18,7 @@ const _evidence =
 const claudeAcpDescriptor = AgentDescriptor(
   id: 'claude-acp',
   chatFormOf: 'claudeCode',
-  displayName: 'Claude (ACP)',
+  displayName: 'Claude Code · Chat',
   binaries: AgentBinaries(
     windows: ['claude'],
     posix: ['claude'],

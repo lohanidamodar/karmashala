@@ -254,8 +254,10 @@ void main() {
         await pump(tester, size: size);
         await tester.tap(find.byKey(const ValueKey('switch-agent')));
         await tester.pumpAndSettle();
+        // Told apart by where each lives; the chat form's own name is
+        // "Claude Code · Chat", which is not one of them.
         expect(
-          find.textContaining(RegExp('^${RegExp.escape(claude)} · ')),
+          find.textContaining(RegExp('^${RegExp.escape(claude)} · (?!Chat)')),
           findsNWidgets(2),
         );
         await tester.tap(find.byKey(const ValueKey('switch-to-cc2')));

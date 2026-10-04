@@ -285,7 +285,7 @@ String _sessionToken(String title) {
 
 /// One entry per agent the registry knows, typed by the first word of its
 /// name — `codex`, `antigravity`, `grok`. Where two agents share that word,
-/// as Claude Code and Claude (ACP) do, each is typed by its whole name
+/// as Claude Code and Claude Code · Chat do, each is typed by its whole name
 /// instead — `claude-code`, `claude-acp` — and only a clash that survives
 /// even that falls back to the id.
 List<CommandAgent> _agents(AgentRegistry registry) {

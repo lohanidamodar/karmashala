@@ -217,7 +217,7 @@ const List<
 _acpGoldens = [
   (
     id: 'claude-acp',
-    displayName: 'Claude (ACP)',
+    displayName: 'Claude Code · Chat',
     // Claude's own binary in stream-json mode, bridged to ACP in-process.
     executable: 'claude',
     acpArguments: [
@@ -235,13 +235,13 @@ _acpGoldens = [
   ),
   (
     id: 'codex-acp',
-    displayName: 'Codex (ACP)',
+    displayName: 'Codex CLI · Chat',
     executable: 'codex',
     acpArguments: ['app-server'],
   ),
   (
     id: 'antigravity-acp',
-    displayName: 'Antigravity (ACP)',
+    displayName: 'Antigravity · Chat',
     executable: 'agy_acp_server.exe',
     acpArguments: [],
   ),

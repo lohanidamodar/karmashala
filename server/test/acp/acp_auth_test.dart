@@ -275,7 +275,7 @@ void main() {
         isA<DataRefused>().having(
           (r) => r.message,
           'message',
-          'Antigravity (ACP) was not logged in within 50 milliseconds, so the '
+          'Antigravity · Chat was not logged in within 50 milliseconds, so the '
               'login was ended. Log in again and finish signing in in the '
               'browser it opens.',
         ),
