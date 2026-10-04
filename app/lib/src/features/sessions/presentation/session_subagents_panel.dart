@@ -41,9 +41,16 @@ class SessionSubagentsButton extends StatelessWidget {
 /// **The status line's count of a session's child sessions**, and how many
 /// are working; nothing, and no width, while it has none. Opens the panel.
 class SessionSubagentsBadge extends ConsumerWidget {
-  const SessionSubagentsBadge({required this.sessionId, super.key});
+  const SessionSubagentsBadge({
+    required this.sessionId,
+    this.compact = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// `2 · 1` rather than `2 · 1 working`; the tooltip keeps the words.
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -87,7 +94,11 @@ class SessionSubagentsBadge extends ConsumerWidget {
                   ),
                   const SizedBox(width: Insets.xs),
                   Text(
-                    running == 0 ? '$count' : '$count · $running working',
+                    running == 0
+                        ? '$count'
+                        : compact
+                        ? '$count · $running'
+                        : '$count · $running working',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),

@@ -12,9 +12,16 @@ import '../../features/sessions/presentation/session_transcript_view.dart';
 /// carries title and state, the status line the rest). On the status line so
 /// terminal and chat view share them — one place per control.
 class SessionMoreButton extends StatefulWidget {
-  const SessionMoreButton({required this.sessionId, super.key});
+  const SessionMoreButton({
+    required this.sessionId,
+    this.compact = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Draws the subagent count as numbers only, for a bar short of width.
+  final bool compact;
 
   @override
   State<SessionMoreButton> createState() => _SessionMoreButtonState();
@@ -33,7 +40,10 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
     children: [
       // ⋯ holds the way in; the count beside it says there is something
       // there, at every width the status line has.
-      SessionSubagentsBadge(sessionId: widget.sessionId),
+      SessionSubagentsBadge(
+        sessionId: widget.sessionId,
+        compact: widget.compact,
+      ),
       _menu(context),
     ],
   );

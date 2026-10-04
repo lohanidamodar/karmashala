@@ -30,6 +30,7 @@ import '../application/session_handoff_service.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
 
@@ -586,12 +587,11 @@ class _StageMark extends ConsumerWidget {
     final stage = delivery.stage;
     final row = ref.read(sessionsDataProvider).getById(sessionId);
     final stopped =
-        stage == DeliveryStage.working && row != null && !row.status.claimsLive;
-    final word = !stopped
-        ? stage.label
-        : delivery.isDirty
-        ? 'Not running · uncommitted'
-        : 'Not running';
+        stage == DeliveryStage.working &&
+        row != null &&
+        (row.status.isEnded || row.status == SessionStatus.unknown);
+    // The uncommitted count is its own fact beside this one.
+    final word = stopped ? 'Not running' : stage.label;
     return Row(
       key: const ValueKey('delivery-stage'),
       mainAxisSize: MainAxisSize.min,
@@ -602,7 +602,16 @@ class _StageMark extends ConsumerWidget {
           color: colour,
         ),
         const SizedBox(width: Insets.xs),
-        Text(word, style: style?.copyWith(color: colour)),
+        // Ends rather than overflows a line the chips beside it have narrowed.
+        Flexible(
+          child: Text(
+            word,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style?.copyWith(color: colour),
+          ),
+        ),
       ],
     );
   }

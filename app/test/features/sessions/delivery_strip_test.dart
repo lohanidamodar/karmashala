@@ -308,7 +308,8 @@ void main() {
         await pumpStateLine(tester, state, size: size);
 
         expect(find.text('Working'), findsNothing);
-        expect(find.text('Not running · uncommitted'), findsOneWidget);
+        expect(find.text('Not running'), findsOneWidget);
+        expect(find.text('2 uncommitted'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
 

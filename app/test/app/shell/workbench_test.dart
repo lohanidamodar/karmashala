@@ -15,6 +15,17 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/toasts.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
+import 'package:karmashala/src/features/automations/presentation/scheduled_resume_chip.dart';
+import 'package:karmashala/src/features/sessions/application/session_queue_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_subagents_providers.dart';
+import 'package:karmashala_session/session.dart'
+    show
+        QueuedMessage,
+        QueuedMessageOrigin,
+        QueuedMessageState,
+        QueueHold,
+        QueueHoldKind;
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
@@ -75,6 +86,7 @@ void main() {
   late FakeDataServer server;
   late Override data;
   late ProviderContainer container;
+  late List<Override> overrides;
 
   /// A checkout nested inside the project's first repository.
   const nestedPath = EnvironmentPath(
@@ -125,7 +137,7 @@ void main() {
       plan: SessionForkPlan.decide(descriptor: null, agentName: 'Test CLI'),
     );
     container = ProviderContainer(
-      overrides: [
+      overrides: overrides = [
         data,
         ...fakeTerminalOverrides(machine: db),
         // Both of these poll on a real timer, which would outlive the widget
@@ -944,6 +956,77 @@ void main() {
         ),
       );
     });
+  });
+
+  testWidgets('with every chip it can hold, the bar overflows at no width '
+      'from phone to wide desktop', (tester) async {
+    delivery = const SessionDelivery(
+      branch: 'session/fix-the-login-form-validation',
+      baseBranch: 'origin/main',
+      hasRemote: true,
+      dirtyFiles: 2,
+      lines: DiffStat(added: 59, removed: 6, files: 7),
+      aheadOfBase: 3,
+      hasWorktree: true,
+    );
+    continuation = possible;
+    final queued = QueuedMessage(
+      id: 'q1',
+      sessionId: 's1',
+      seq: 1,
+      text: 'then run the tests',
+      state: QueuedMessageState.queued,
+      origin: QueuedMessageOrigin.app,
+      createdAt: testTime,
+      updatedAt: testTime,
+      hold: const QueueHold(QueueHoldKind.stopped),
+    );
+    container = ProviderContainer(
+      overrides: [
+        ...overrides,
+        sessionQueueProvider.overrideWith((ref, _) => [queued, queued]),
+        sessionChildCountProvider.overrideWith(
+          (ref, _) => (count: 2, running: 1),
+        ),
+        sessionResumeBadgeProvider.overrideWith(
+          (ref, _) => const ResumeBadge(
+            resumeId: 'r1',
+            label: 'resumes 14:05',
+            tooltip: 'Resumes at 14:05',
+            queued: true,
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+
+    for (final width in <double>[
+      390,
+      600,
+      720,
+      840,
+      1000,
+      1013,
+      1100,
+      1200,
+      1440,
+    ]) {
+      await pump(tester, size: Size(width, 800));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'the bar overflowed at ${width}px',
+      );
+      expect(find.byKey(const ValueKey('queued-count')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('session-subagents-badge')),
+        findsOneWidget,
+      );
+      expect(find.byType(ScheduledResumeChip), findsOneWidget);
+      expect(find.byKey(const ValueKey('session-more')), findsOneWidget);
+    }
   });
 
   testWidgets('the bar survives the minimum window and larger text', (

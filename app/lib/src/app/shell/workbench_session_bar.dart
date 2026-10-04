@@ -409,7 +409,7 @@ class _SessionActionRow extends StatelessWidget {
                           compact: true,
                           folded: true,
                         ),
-                        SessionMoreButton(sessionId: sessionId),
+                        SessionMoreButton(sessionId: sessionId, compact: true),
                       ],
                     ),
                   ),
@@ -424,35 +424,40 @@ class _SessionActionRow extends StatelessWidget {
         if (sessionId == null)
           const Spacer()
         else ...[
-          PermissionModeChip(sessionId: sessionId),
-          // Not flexible: a fourth flex child would take the strip's share.
-          SessionModePicker(sessionId: sessionId),
-          const SizedBox(width: Insets.xs),
-          // Its qualifier gives way before the row overflows.
-          Flexible(child: OperatorChip(sessionId: sessionId)),
-          const SizedBox(width: Insets.xs),
-          // A model name is the label whose width is least predictable.
-          Flexible(
-            child: SessionModelChip(
-              sessionId: sessionId,
-              maxLabelWidth: _sessionModelLabelWidth,
+          // The chips slide under the next step, ⋯ and the toggle rather than
+          // pushing them off the edge: ⋯ carries a subagent count, the facts
+          // above a queue and a resume, and together they overflowed a
+          // mid-width window (probe, 2026-10-04).
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PermissionModeChip(sessionId: sessionId),
+                  SessionModePicker(sessionId: sessionId),
+                  const SizedBox(width: Insets.xs),
+                  OperatorChip(sessionId: sessionId),
+                  const SizedBox(width: Insets.xs),
+                  SessionModelChip(
+                    sessionId: sessionId,
+                    maxLabelWidth: _sessionModelLabelWidth,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: Insets.sm),
           // The next step, and the rest behind Ship ▾: one run, one height,
-          // and it gives way (its labels end) before the row overflows.
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: DeliveryStrip(
-                sessionId: sessionId,
-                hostedOnTerminal: true,
-                folded: true,
-              ),
+          // and the step's label ends before the row overflows.
+          Flexible(
+            child: DeliveryStrip(
+              sessionId: sessionId,
+              hostedOnTerminal: true,
+              folded: true,
             ),
           ),
-          SessionMoreButton(sessionId: sessionId),
+          SessionMoreButton(sessionId: sessionId, compact: true),
         ],
         if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
       ],
