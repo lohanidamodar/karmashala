@@ -62,6 +62,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
+import 'chat_cards/pinned_plan_strip.dart';
 import 'chat_transcript.dart';
 import 'end_session_action.dart';
 import 'switch_agent_control.dart';
@@ -844,6 +845,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           ),
           // Directly above the box and outside the scroll, so a long queue
           // never hides the running turn or its Stop.
+          PinnedPlanStrip(sessionId: widget.sessionId),
           ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.

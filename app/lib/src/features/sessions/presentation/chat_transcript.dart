@@ -9,8 +9,10 @@ import 'package:karmashala_ui/icons.dart';
 import '../../agents/presentation/agent_logo.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
+import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_ui/transcript.dart';
+import 'chat_cards/plan_update_card.dart';
 import 'tool_activity_row.dart';
 import 'tool_run.dart';
 
@@ -325,12 +327,17 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
     };
 
+    // Each plan's predecessor among the held messages, so an update can say
+    // what it changed.
+    final planBefore = previousPlans(widget.messages);
+
     // Keyed at the top: the list finds a row by its item's own key.
     Widget rowAt(int offset) => _TappedTurn(
       key: ValueKey<int>(base + offset),
       notifier: _tappedTurn,
       child: _MessageRow(
         message: visible[offset],
+        previousPlan: planBefore[start + offset],
         ordinal: start + offset,
         onSaveNote: widget.onSaveNote,
         resolveHostPath: widget.resolveHostPath,
@@ -498,6 +505,20 @@ class _TappedTurn extends InheritedWidget {
   @override
   bool updateShouldNotify(_TappedTurn oldWidget) =>
       oldWidget.notifier != notifier;
+}
+
+/// The plan each plan row replaced, by index into [messages]; a first plan
+/// has no entry.
+Map<int, AgentPlan> previousPlans(List<ChatMessage> messages) {
+  final before = <int, AgentPlan>{};
+  AgentPlan? last;
+  for (var i = 0; i < messages.length; i++) {
+    final plan = messages[i].tool?.plan;
+    if (plan == null) continue;
+    if (last != null) before[i] = last;
+    last = plan;
+  }
+  return before;
 }
 
 /// The side gutter of the chat column at [width]: the board's 24px where the
