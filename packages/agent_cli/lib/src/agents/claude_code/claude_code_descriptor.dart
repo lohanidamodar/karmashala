@@ -268,7 +268,10 @@ const claudeCodeDescriptor = AgentDescriptor(
           '--system-prompt[-file], --append-system-prompt[-file], …"), and the '
           'flag validates its argument — `--append-system-prompt-file '
           'C:\\kw\\nope-does-not-exist.md -p hi` answers "Error: Append system '
-          'prompt file not found: C:\\kw\\nope-does-not-exist.md"',
+          'prompt file not found: C:\\kw\\nope-does-not-exist.md"; '
+          'claude 2.1.287 --help: "--append-system-prompt <prompt>  Append a '
+          'system prompt to the default system prompt"',
+      textToken: '--append-system-prompt',
     ),
     // Verified, not assumed: two panes were given `--resume` on the same
     // session id with the first still live (`integration_test/
@@ -862,11 +865,15 @@ const claudeCodeDescriptor = AgentDescriptor(
   ),
   terminal: AgentTerminalRules(
     clusterWidthFromBase: true,
+    typedTextArrivesWhole: true,
     evidence:
         'Claude Code lays its screen out with string-width, which gives a '
         'Devanagari cluster its first code point\'s width; panes measured the '
         'default way garbled its redraws (owner, 2026-09-30; xterm2 '
-        'divergence 15).',
+        'divergence 15). A 34-line message with quotes and %VAR% typed into '
+        'claude 2.1.287 on a Windows ConPTY, raw or as a bracketed paste, '
+        'showed as [Pasted text #1] and was recorded whole as the user turn '
+        '(server/test/live/claude_paste_live_test.dart, 2026-10-04).',
   ),
   // WSL keeps `ctrl+v`: Claude Code binds it there as well as `alt+v`, and it
   // is what already worked.

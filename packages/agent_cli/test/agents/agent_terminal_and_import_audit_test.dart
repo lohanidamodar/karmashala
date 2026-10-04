@@ -45,6 +45,43 @@ void main() {
       const rules = AgentTerminalRules();
       expect(rules.clusterWidthFromBase, isFalse);
       expect(rules.pasteBurstFoldsReturn, isFalse);
+      expect(rules.typedTextArrivesWhole, isFalse);
+    });
+
+    test('a long typed message reaches Claude Code whole; unmeasured '
+        'elsewhere', () {
+      expect(
+        adapter(AgentIds.claudeCode).descriptor.terminal.typedTextArrivesWhole,
+        isTrue,
+      );
+      expect(
+        adapter(AgentIds.antigravity).descriptor.terminal.typedTextArrivesWhole,
+        isFalse,
+      );
+    });
+  });
+
+  group('system prompt', () {
+    test('Claude Code takes the packet as text as well as a file', () {
+      final support = adapter(
+        AgentIds.claudeCode,
+      ).descriptor.launch.systemPromptFile;
+      expect(support.argumentsForText('brief\nline'), [
+        '--append-system-prompt',
+        'brief\nline',
+      ]);
+      expect(support.argumentsFor('/tmp/x.md'), [
+        '--append-system-prompt-file',
+        '/tmp/x.md',
+      ]);
+    });
+
+    test('an agent with no inline option takes no text', () {
+      final support = adapter(
+        AgentIds.codex,
+      ).descriptor.launch.systemPromptFile;
+      expect(support.takesText, isFalse);
+      expect(support.argumentsForText('brief'), isEmpty);
     });
   });
 

@@ -693,6 +693,7 @@ class AgentTerminalRules {
   const AgentTerminalRules({
     this.clusterWidthFromBase = false,
     this.pasteBurstFoldsReturn = false,
+    this.typedTextArrivesWhole = false,
     this.evidence,
   });
 
@@ -706,6 +707,12 @@ class AgentTerminalRules {
   /// Return after it into a newline, so typing a message must end the burst
   /// (`Ctrl+E`) before the Return that sends it.
   final bool pasteBurstFoldsReturn;
+
+  /// Whether a long or multi-line message typed into the composer reaches the
+  /// model **whole**, though the composer may show it as a placeholder
+  /// (`[Pasted text #N]`) — so an opening message can be typed in rather
+  /// than written to a file.
+  final bool typedTextArrivesWhole;
 
   /// Where the rules were read.
   final String? evidence;
