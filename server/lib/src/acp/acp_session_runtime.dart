@@ -175,6 +175,7 @@ class AcpSessionRuntime implements ScreenSession {
   var _stoppingWithHost = false;
   var _stopping = false;
   var _torn = false;
+  var _agentWorking = false;
 
   /// Most stderr kept for a failure's words.
   static const int stderrKept = 64 * 1024;
@@ -573,10 +574,28 @@ class AcpSessionRuntime implements ScreenSession {
         evidence: ['$agentName stopped the turn: ${reason.raw}'],
       );
     } else {
-      _publish(AgentActivityStatus.idle, detail: reason?.raw);
+      _publish(
+        _agentWorking ? AgentActivityStatus.working : AgentActivityStatus.idle,
+        detail: _agentWorking ? _agentTurnDetail : reason?.raw,
+      );
     }
     if (identical(_turnSettled, settled)) _turnSettled = null;
     if (!settled.isCompleted) settled.complete(reason);
+  }
+
+  static const _agentTurnDetail = 'agent turn';
+
+  /// The agent working on a turn no prompt asked for: working while it runs,
+  /// idle after. A prompt's own turn keeps its status meanwhile.
+  void _agentTurn({required bool started}) {
+    if (started == _agentWorking) return;
+    _agentWorking = started;
+    if (_turn != null) return;
+    if (!started) _writer.turnEnded();
+    _publish(
+      started ? AgentActivityStatus.working : AgentActivityStatus.idle,
+      detail: _agentTurnDetail,
+    );
   }
 
   void _onUpdate(SessionUpdateEvent event) {
@@ -607,6 +626,10 @@ class AcpSessionRuntime implements ScreenSession {
     }
     if (update is UsageUpdate) {
       _usageReported(update);
+      return;
+    }
+    if (update is UnknownUpdate && update.kind == AcpExtensions.agentTurn) {
+      _agentTurn(started: update.raw['state'] == 'started');
       return;
     }
     if (update is UnknownUpdate && update.kind == AcpExtensions.compaction) {

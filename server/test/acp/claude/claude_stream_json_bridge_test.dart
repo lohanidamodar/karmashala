@@ -1131,16 +1131,71 @@ void main() {
       expect(end, isNot(isA<SessionEndedWithoutCode>()));
     });
 
-    test('a turn Claude starts by itself (a background task finishing) is '
-        'still written', () async {
+    test(
+      'a turn Claude starts by itself (a background task finishing) is '
+      'written, and the session shows working while it runs, then idle',
+      () async {
+        final report = Completer<void>();
+        final machine = FakeClaudeMachine(
+          turns: [
+            (c, user) async {
+              c.result();
+              await report.future;
+              c.assistant('later', [
+                {'type': 'text', 'text': 'The task finished.'},
+              ]);
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+              c.result(origin: {'kind': 'task-notification'});
+            },
+          ],
+        );
+        final rt = runtime(machine);
+        await rt.start();
+        await rt.send('Go');
+        await rt.awaitTurn();
+        expect(host.statuses.last.status, AgentActivityStatus.idle);
+        report.complete();
+        await until(() => rows().any((r) => r.text == 'The task finished.'));
+        await until(
+          () => host.statuses.last.status == AgentActivityStatus.working,
+        );
+        await until(
+          () => host.statuses.last.status == AgentActivityStatus.idle,
+        );
+        expect(
+          [for (final s in host.statuses) s.status],
+          [
+            AgentActivityStatus.idle,
+            AgentActivityStatus.working,
+            AgentActivityStatus.idle,
+            AgentActivityStatus.working,
+            AgentActivityStatus.idle,
+          ],
+        );
+        expect(rt.inTurn, isFalse);
+        await rt.stop();
+      },
+    );
+
+    test('a prompt sent while Claude works on its own turn is answered by '
+        'its own result, not the background one', () async {
+      final report = Completer<void>();
       final machine = FakeClaudeMachine(
         turns: [
           (c, user) async {
             c.result();
+            await report.future;
             c.assistant('later', [
-              {'type': 'text', 'text': 'The task finished.'},
+              {'type': 'text', 'text': 'Background.'},
             ]);
-            c.result();
+          },
+          (c, user) async {
+            // Claude finishes its own turn first, then the queued prompt's.
+            c.result(origin: {'kind': 'task-notification'});
+            c.assistant('reply', [
+              {'type': 'text', 'text': 'Answer.'},
+            ]);
+            c.result(stopReason: 'max_tokens');
           },
         ],
       );
@@ -1148,7 +1203,10 @@ void main() {
       await rt.start();
       await rt.send('Go');
       await rt.awaitTurn();
-      await until(() => rows().any((r) => r.text == 'The task finished.'));
+      report.complete();
+      await until(() => rows().any((r) => r.text == 'Background.'));
+      await rt.send('Next');
+      expect(await rt.awaitTurn(), StopReason.maxTokens);
       await rt.stop();
     });
   });

@@ -389,6 +389,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _streamed.clear();
     _lastUsage = null;
     _reported = null;
+    _agentTurnOpen = false;
     _tools.clear();
     _planCalls.clear();
     _tasks.clear();
@@ -620,10 +621,21 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     return summary != null;
   }
 
+  /// Whether Claude is working on a turn no prompt asked for.
+  var _agentTurnOpen = false;
+
   void _onClaude(JsonMap message) {
     if (_compacted(message)) return;
     final parent = message['parent_tool_use_id'];
-    switch (message['type']) {
+    final type = message['type'];
+    if (_turn == null &&
+        !_agentTurnOpen &&
+        _sessionId.isNotEmpty &&
+        (type == 'assistant' || type == 'stream_event' || type == 'user')) {
+      _agentTurnOpen = true;
+      _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'started'});
+    }
+    switch (type) {
       case 'stream_event':
         if (parent == null) _onStreamEvent(jsonObject(message['event']));
       case 'assistant':
@@ -891,9 +903,15 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   void _onResult(JsonMap message) {
     _reportUsage(message);
     final turn = _turn;
-    // A turn Claude began itself (a background task finishing) answers no
-    // prompt; its updates have already been sent.
-    if (turn == null) return;
+    // A turn Claude began itself (a background task finishing) carries its
+    // origin and answers no prompt, even one queued behind it.
+    if (turn == null || message['origin'] != null) {
+      if (_agentTurnOpen) {
+        _agentTurnOpen = false;
+        _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
+      }
+      return;
+    }
     _turn = null;
     final subtype = message['subtype'];
     final isError = message['is_error'] == true;

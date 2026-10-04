@@ -351,6 +351,7 @@ class FakeClaude {
     String? stopReason = 'end_turn',
     double cost = 0.25,
     List<String>? errors,
+    Json? origin,
   }) {
     turnOpen = false;
     emit({
@@ -363,6 +364,7 @@ class FakeClaude {
       'duration_ms': 1200,
       'num_turns': 1,
       'errors': ?errors,
+      'origin': ?origin,
       'modelUsage': {
         'claude-opus-5-5': {'contextWindow': 200000, 'costUSD': cost},
       },
