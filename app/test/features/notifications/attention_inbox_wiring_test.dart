@@ -145,14 +145,17 @@ void main() {
     expect(container.read(attentionCountProvider), 0);
   });
 
-  test('going to the session\'s terminal tab clears its finished turn', () {
+  test('going to the session\'s terminal tab clears its finished turn', () async {
     // The selection above is only ever set by the Explorer, quick open and the
     // inbox. Clicking a tab sets nothing, so before this the most ordinary way
     // of arriving at a session retired nothing.
+    // Listened, as the tray keeps it in the app: an unlistened inbox is paused.
+    container.listen(attentionInboxProvider, (_, _) {});
     finished();
     expect(container.read(attentionCountProvider), 1);
 
     container.read(_foregroundProvider.notifier).show(['pane-1']);
+    await pumpEventQueue();
 
     expect(container.read(attentionInboxProvider).items, isEmpty);
     expect(container.read(attentionCountProvider), 0);

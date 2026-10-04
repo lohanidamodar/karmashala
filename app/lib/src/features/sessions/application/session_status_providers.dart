@@ -52,7 +52,7 @@ final sessionStatusStreamProvider =
 final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
   // Asked through `exists`, never built: building the controller starts the
   // scrollback autosave timer, which every reader would inherit as a pending.
-  if (!ref.exists(terminalSessionsControllerProvider)) return const [];
+  if (!ref.watch(terminalSessionsOpenedProvider)) return const [];
   // **Every group showing its terminal**, not just the focused one: a pane the
   // user can see is a pane the inbox must not badge.
   final faces = ref.watch(terminalFacesProvider);

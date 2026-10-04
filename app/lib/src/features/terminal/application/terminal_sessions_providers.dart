@@ -5,6 +5,13 @@ final terminalSessionsControllerProvider =
       TerminalSessionsController.new,
     );
 
+/// Whether the terminal has been opened this run, asked without opening it.
+/// `ref.exists` alone records no dependency, so a reader that asked before the
+/// terminal opened would keep its answer; the controller re-asks this one.
+final terminalSessionsOpenedProvider = Provider<bool>(
+  (ref) => ref.exists(terminalSessionsControllerProvider),
+);
+
 /// The terminal's tab topology. Watching this instead of the whole
 /// [TerminalSessionsState] is what stops a process dying in one pane rebuilding
 /// every terminal child — the tab list comes back by identity unless it moved.
