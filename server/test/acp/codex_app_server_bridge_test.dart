@@ -4,9 +4,12 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart'
     show AcpLaunchSpec, AcpNativeBridge, AgentActivityStatus, PermissionRisk;
+import 'package:agent_cli/process.dart' show EnvironmentKind;
 import 'package:karmashala_acp/karmashala_acp.dart';
+import 'package:karmashala_host/src/acp/acp_login_link.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
+import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
 import 'package:karmashala_host/src/acp/acp_version_probe.dart';
@@ -648,6 +651,80 @@ void main() {
       expect(runtime.lifecycle.hasEnded, isTrue);
     },
   );
+
+  test('a login needed at the start opens its link on this machine and says '
+      'so in the chat, then the session starts', () async {
+    final codex = FakeCodexAppServer(account: null);
+    final opened = <Uri>[];
+    var ids = 0;
+    final runtime = AcpSessionRuntime(
+      id: 'karmashala_s1',
+      sessionId: 's1',
+      agentId: 'codex-acp',
+      agentName: 'Codex',
+      spec: _spec,
+      workingDirectory: temp.path,
+      spawn: () async => openingLoginLinks(
+        bridgedAcpTransport(_spec, codex.transport),
+        open: opened.add,
+        agentName: 'Codex',
+      ),
+      messages: SessionMessageDao(database),
+      host: host,
+      newId: () => 'm${++ids}',
+      coalesce: const Duration(milliseconds: 20),
+      stopPatience: const Duration(milliseconds: 200),
+    );
+    final outcome = await runtime.start();
+    expect(outcome.agentSessionId, 'thr-new');
+    expect(opened, [Uri.parse('https://auth.example.com/oauth?state=1')]);
+    await settle(const Duration(milliseconds: 60));
+    final said = rows().map((r) => r.text).join('\n');
+    expect(said, contains('browser login was opened'));
+    expect(said, contains('https://auth.example.com/oauth?state=1'));
+    await runtime.stop();
+  });
+
+  test('the server opens a login link for an agent in WSL or behind a '
+      'bridge; elsewhere the agent opens its own', () {
+    const plain = AcpLaunchSpec();
+    expect(serverOpensLoginLinks(EnvironmentKind.wsl, plain), isTrue);
+    expect(serverOpensLoginLinks(EnvironmentKind.windowsNative, _spec), isTrue);
+    expect(
+      serverOpensLoginLinks(EnvironmentKind.windowsNative, plain),
+      isFalse,
+    );
+    expect(serverOpensLoginLinks(null, plain), isFalse);
+  });
+
+  test('a line said into the chat waits for the end of a line the agent is '
+      'still writing', () async {
+    final out = StreamController<List<int>>();
+    final errors = StreamController<String>();
+    final wrapped = openingLoginLinks(
+      AcpTransport.streams(
+        output: out.stream,
+        input: StreamController<List<int>>(),
+        exitCode: Completer<int>().future,
+        errorLines: errors.stream,
+      ),
+      open: (_) {},
+      agentName: 'Agent',
+    );
+    final text = StringBuffer();
+    wrapped.output.listen((bytes) => text.write(utf8.decode(bytes)));
+    wrapped.errorLines.listen((_) {});
+    out.add(utf8.encode('{"a":'));
+    await pump();
+    errors.add('Open https://login.example.com/x to log in');
+    await pump();
+    out.add(utf8.encode('1}\n'));
+    await pump();
+    final lines = const LineSplitter().convert(text.toString());
+    expect(lines.first, '{"a":1}');
+    expect(lines[1], contains('login.example.com'));
+    expect(jsonDecode(lines[1]), isA<Map<String, Object?>>());
+  });
 
   JsonMap question(String id, String text, [List<String>? choices]) => {
     'id': id,

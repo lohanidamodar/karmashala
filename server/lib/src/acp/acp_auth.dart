@@ -11,6 +11,7 @@ import 'package:karmashala_environments/store.dart'
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
 import 'acp_arguments.dart';
+import 'acp_login_link.dart';
 import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 import 'acp_version_probe.dart';
@@ -281,9 +282,9 @@ class ServerAcpAuth {
     AcpLaunchSpec spec,
   ) {
     final open = _openLink;
-    final opensItsOwn =
-        environment.kind != EnvironmentKind.wsl && spec.nativeBridge == null;
-    if (open == null || opensItsOwn) return null;
+    if (open == null || !serverOpensLoginLinks(environment.kind, spec)) {
+      return null;
+    }
     var opened = false;
     return (line) {
       if (opened) return;

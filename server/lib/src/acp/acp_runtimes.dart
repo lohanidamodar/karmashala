@@ -12,6 +12,7 @@ import 'package:karmashala_session_engine/store.dart'
 import '../checkpoints/daemon_checkpoints.dart';
 import '../data/data_service.dart';
 import '../status/daemon_agent_status.dart';
+import 'acp_login_link.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
@@ -68,6 +69,7 @@ class AcpRuntimes {
     required this.host,
     required this.runnerFor,
     this.usage,
+    this.openLink,
     DateTime Function()? now,
   }) : _now = now;
 
@@ -77,6 +79,10 @@ class AcpRuntimes {
   final SessionUsageDao? usage;
   final AcpRuntimeHost host;
   final CommandRunner Function(ExecutionEnvironment? environment) runnerFor;
+
+  /// Opens a login link on this machine for an agent that cannot
+  /// ([serverOpensLoginLinks]); null opens none.
+  final void Function(Uri link)? openLink;
   final DateTime Function()? _now;
 
   AcpSessionRuntime start(AcpSessionStart start) => AcpSessionRuntime(
@@ -91,7 +97,7 @@ class AcpRuntimes {
       // the launcher withholds still win.
       final variables = {...start.spec.environment, ...start.variables};
       try {
-        return bridgedAcpTransport(
+        final transport = bridgedAcpTransport(
           start.spec,
           AcpTransport.process(
             await runnerFor(start.environment).start(
@@ -105,6 +111,15 @@ class AcpRuntimes {
             ),
           ),
         );
+        final open = openLink;
+        return open != null &&
+                serverOpensLoginLinks(start.environment?.kind, start.spec)
+            ? openingLoginLinks(
+                transport,
+                open: open,
+                agentName: start.agentName,
+              )
+            : transport;
       } on Object catch (error) {
         throw StateError(
           withoutSecrets('$error', [

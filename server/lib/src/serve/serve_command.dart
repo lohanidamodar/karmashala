@@ -896,6 +896,7 @@ Future<int> runServe(
     messages: sessionMessages,
     usage: sessionUsage,
     host: acpHost,
+    openLink: openInThisMachinesBrowser,
     runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
