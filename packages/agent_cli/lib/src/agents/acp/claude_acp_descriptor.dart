@@ -14,6 +14,7 @@ const _evidence =
 /// over the protocol too, so no permission value puts anything on argv.
 const claudeAcpDescriptor = AgentDescriptor(
   id: 'claude-acp',
+  chatFormOf: 'claudeCode',
   displayName: 'Claude (ACP)',
   binaries: AgentBinaries(
     windows: ['claude-agent-acp'],

@@ -11,6 +11,7 @@ const _evidence =
 /// rules are deliberately absent; the mode is set over the protocol.
 const codexAcpDescriptor = AgentDescriptor(
   id: 'codex-acp',
+  chatFormOf: 'codex',
   displayName: 'Codex (ACP)',
   binaries: AgentBinaries(windows: ['codex-acp'], posix: ['codex-acp']),
   // The adapter embeds Codex, which keeps its threads in Codex's home.
