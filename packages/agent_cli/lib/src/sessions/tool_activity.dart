@@ -216,7 +216,7 @@ const List<String> kToolSubjectKeys = [
 /// keys name a *file* (see [toolActivityFor]).
 MapEntry<String, String>? toolSubjectEntryFor(Object? input) {
   if (input is! Map) return null;
-  for (final key in kToolSubjectKeys) {
+  for (final key in [...kToolSubjectKeys, ..._mainArgumentKeys]) {
     final value = input[key];
     if (value is String && value.trim().isNotEmpty) {
       return MapEntry(key, value.trim());
@@ -224,6 +224,17 @@ MapEntry<String, String>? toolSubjectEntryFor(Object? input) {
   }
   return null;
 }
+
+/// Keys an MCP tool's input commonly names its subject by.
+const List<String> _mainArgumentKeys = [
+  'body',
+  'text',
+  'title',
+  'name',
+  'message',
+  'id',
+  'sessionId',
+];
 
 /// The keys whose value is a path to one file, and therefore the only ones that
 /// may become an [ToolActivity.imagePath].
