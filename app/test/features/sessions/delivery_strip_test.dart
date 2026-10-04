@@ -9,6 +9,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
@@ -98,6 +99,9 @@ void main() {
   late FakeDataServer server;
   late DataClient data;
 
+  /// Whether the server runs s1: most cases are about a session at work.
+  var hostRuns = true;
+
   const worktree = EnvironmentPath(
     environmentId: 'windows',
     path: r'C:\src\.karmashala-worktrees\app-s1',
@@ -105,6 +109,7 @@ void main() {
 
   setUp(() async {
     recorder = _Recorder();
+    hostRuns = true;
     db = TestMachine();
     server = FakeDataServer()..runsOn(db);
     data = await server.connect();
@@ -149,6 +154,7 @@ void main() {
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
+          sessionRunningOnHostProvider.overrideWithValue((_) => hostRuns),
           sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
           sessionActionsProvider.overrideWith(
             (ref) => _RecordingActions(ref, recorder),
@@ -193,6 +199,7 @@ void main() {
           dataClientProvider.overrideWithValue(data),
           ...fakeTerminalOverrides(machine: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
+          sessionRunningOnHostProvider.overrideWithValue((_) => hostRuns),
           sessionDeliveryProvider.overrideWith(
             // No answer yet is the same as no answer at all here: the line
             // draws only what the probes established.
@@ -303,6 +310,7 @@ void main() {
     ]) {
       testWidgets('on a $name, a session nothing runs is not called '
           'Working', (tester) async {
+        hostRuns = false;
         final row = server.sessionRows.getById('s1')!;
         server.sessionRows.put(row.copyWith(status: SessionStatus.cancelled));
         await pumpStateLine(tester, state, size: size);
@@ -313,8 +321,32 @@ void main() {
         expect(tester.takeException(), isNull);
       });
 
+      testWidgets('on a $name, a row that still says running with nothing '
+          'running it is not called Working', (tester) async {
+        // After a restart: the row's word is stale, no pane and no server
+        // process stand behind it.
+        hostRuns = false;
+        final row = server.sessionRows.getById('s1')!;
+        server.sessionRows.put(row.copyWith(status: SessionStatus.running));
+        await pumpStateLine(tester, state, size: size);
+
+        expect(find.text('Working'), findsNothing);
+        expect(find.text('Not running'), findsOneWidget);
+      });
+
+      testWidgets('on a $name, a row whose status is unknown and that '
+          'nothing runs is not called Working', (tester) async {
+        hostRuns = false;
+        final row = server.sessionRows.getById('s1')!;
+        server.sessionRows.put(row.copyWith(status: SessionStatus.unknown));
+        await pumpStateLine(tester, state, size: size);
+
+        expect(find.text('Not running'), findsOneWidget);
+      });
+
       testWidgets('on a $name, an ended session with nothing uncommitted '
           'says only that it is not running', (tester) async {
+        hostRuns = false;
         final row = server.sessionRows.getById('s1')!;
         server.sessionRows.put(row.copyWith(status: SessionStatus.completed));
         await pumpStateLine(
@@ -769,6 +801,7 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
+        sessionRunningOnHostProvider.overrideWithValue((_) => hostRuns),
         sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
         sessionActionsProvider.overrideWith(
           (ref) => _RecordingActions(ref, recorder),
