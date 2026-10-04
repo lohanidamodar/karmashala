@@ -275,11 +275,18 @@ JsonMap _command(JsonMap item, String cwd) {
       ? 'read'
       : 'search';
   final output = item['aggregatedOutput'];
+  final command = codexInnerCommand('${item['command'] ?? ''}');
+  final exitCode = item['exitCode'];
+  final said = [
+    if (exitCode is int && exitCode != 0) 'Exit code $exitCode',
+    if (output is String && output.isNotEmpty) output,
+  ].join('\n');
   return {
-    'title': inner.isEmpty ? '${item['command']}' : inner.join(' && '),
+    'title': inner.isEmpty ? command : inner.join(' && '),
     'kind': kind,
     'rawInput': _dropNulls({
-      'command': item['command'],
+      'command': command,
+      'commandLine': command == item['command'] ? null : item['command'],
       'cwd': item['cwd'],
       'commandActions': actions.isEmpty ? null : actions,
     }),
@@ -287,10 +294,39 @@ JsonMap _command(JsonMap item, String cwd) {
       for (final a in actions)
         if (a['path'] case final String path) {'path': _absolute(path, cwd)},
     ],
-    if (output is String) 'content': [codexTextContent(output)],
-    if (item['exitCode'] != null) 'rawOutput': {'exitCode': item['exitCode']},
+    if (output is String || said.isNotEmpty)
+      'content': [codexTextContent(said)],
+    if (exitCode != null) 'rawOutput': {'exitCode': exitCode},
   };
 }
+
+/// The command a Codex command line runs inside the shell it was wrapped in
+/// (`powershell.exe -Command '…'`, `bash -lc '…'`, `cmd /c …`); the line
+/// itself when it is no such wrapper.
+String codexInnerCommand(String commandLine) {
+  final match = _shellWrapper.firstMatch(commandLine.trim());
+  if (match == null) return commandLine;
+  final arg = (match.group(1) ?? match.group(2) ?? match.group(3)!).trim();
+  if (arg.length >= 2 && arg.startsWith("'") && arg.endsWith("'")) {
+    final body = arg.substring(1, arg.length - 1);
+    // PowerShell doubles a quote inside one; a POSIX shell closes and reopens.
+    return body.replaceAll(r"'\''", "'").replaceAll("''", "'");
+  }
+  if (arg.length >= 2 && arg.startsWith('"') && arg.endsWith('"')) {
+    return arg.substring(1, arg.length - 1).replaceAll(r'\"', '"');
+  }
+  return arg;
+}
+
+/// A shell, by its file name with any directory before it (quoted or not),
+/// then the flag that hands it a command, which one group holds.
+final _shellWrapper = RegExp(
+  r'''^"?(?:[^"]*[\\/])?(?:powershell|pwsh)(?:\.exe)?"?\s+(?:-\w+\s+)*?-(?:Command|c)\s+(.+)$'''
+  r'''|^"?(?:[^"]*[\\/])?(?:ba|z)?sh(?:\.exe)?"?\s+-l?c\s+(.+)$'''
+  r'''|^"?(?:[^"]*[\\/])?cmd(?:\.exe)?"?\s+/[cC]\s+(.+)$''',
+  caseSensitive: false,
+  dotAll: true,
+);
 
 JsonMap _fileChange(JsonMap item, String cwd) {
   final changes = _objects(item['changes']);

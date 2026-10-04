@@ -382,7 +382,8 @@ void main() {
     expect(read['kind'], 'read');
     expect(read['title'], 'cat a.txt');
     expect(read['status'], 'completed');
-    expect((read['rawInput'] as Map)['command'], 'bash -lc "cat a.txt"');
+    expect((read['rawInput'] as Map)['command'], 'cat a.txt');
+    expect((read['rawInput'] as Map)['commandLine'], 'bash -lc "cat a.txt"');
     expect(read['content'], [
       {
         'type': 'content',
