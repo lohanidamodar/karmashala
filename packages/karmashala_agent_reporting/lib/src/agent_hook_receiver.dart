@@ -7,6 +7,7 @@ import 'package:agent_cli/descriptors.dart';
 /// a restart legitimately means "we no longer know".
 class AgentHookReports {
   final Map<String, AgentStatusReport> _byKey = {};
+  final Map<String, List<String>> _inFlight = {};
 
   AgentStatusReport? latest(String agentId, String sessionId) =>
       _byKey['$agentId/$sessionId'];
@@ -16,7 +17,23 @@ class AgentHookReports {
     _byKey['${report.agentId}/${report.sessionId}'] = report;
   }
 
-  void clear() => _byKey.clear();
+  /// The work the agent last said is still running after its turn, or empty.
+  List<String> inFlight(String agentId, String sessionId) =>
+      _inFlight['$agentId/$sessionId'] ?? const [];
+
+  void _holdInFlight(String agentId, String sessionId, List<String> work) {
+    if (sessionId.isEmpty) return;
+    if (work.isEmpty) {
+      _inFlight.remove('$agentId/$sessionId');
+    } else {
+      _inFlight['$agentId/$sessionId'] = work;
+    }
+  }
+
+  void clear() {
+    _byKey.clear();
+    _inFlight.clear();
+  }
 }
 
 /// Turns one hook callback into a status report, with no transport concerns, so
@@ -67,11 +84,6 @@ class AgentHookReceiver {
     final declaredStatus = kind.isEmpty
         ? declared?.status ?? tableStatus
         : declared?.status ?? AgentActivityStatus.unknown;
-    // **The turn ended; the session did not.** Claude Code fires a real `Stop`
-    // when a `Task` subagent launches, so the payload decides, not the name.
-    final status = _inFlight(spec, name, payload)
-        ? AgentActivityStatus.working
-        : declaredStatus;
     // The agent's own words, when its hooks carry any. Decoding them only for
     // the session id is why an approval could be announced but not explained.
     final message = spec == null ? '' : _messageIn(spec, payload, declared);
@@ -90,6 +102,22 @@ class AgentHookReceiver {
             )
         ? AgentSessionEnding.conversationOnly
         : declaredEnding;
+
+    // **The turn ended; the session did not.** Claude Code fires a real `Stop`
+    // when a `Task` subagent launches, so the payload decides, not the name.
+    // Only the event that lists the work, an ending or a failure retires it.
+    final listed = _inFlight(spec, name, payload);
+    if (listed != null) reports._holdInFlight(id, sessionId, listed);
+    if (ending != null || declaredStatus == AgentActivityStatus.failed) {
+      reports._holdInFlight(id, sessionId, const []);
+    }
+    final inFlight = reports.inFlight(id, sessionId);
+    // Its idle nudge looks only at the main thread, so while work is listed an
+    // idle word means the session handed off, not that it finished.
+    final status =
+        inFlight.isNotEmpty && declaredStatus == AgentActivityStatus.idle
+        ? AgentActivityStatus.working
+        : declaredStatus;
 
     // **A question opening.** The event that announces it is an ordinary tool
     // call to the table above, so it is recognised by the tool it names.
@@ -119,6 +147,7 @@ class AgentHookReceiver {
       evidence: message.isEmpty ? const [] : [message],
       ending: ending,
       failureReason: _failureReason(spec, status, payload),
+      inFlight: inFlight,
       // Only a session that stopped *for the user* is asked: otherwise an agent
       // writing "it needs your permission" would claim an open prompt.
       waiting: status != AgentActivityStatus.awaitingApproval
@@ -204,13 +233,27 @@ class AgentHookReceiver {
     return declared?.fallbackMessage ?? '';
   }
 
-  /// Whether [event]'s payload says awaited work is still running. Only a
-  /// **non-empty list** counts, so an agent that never sends the field is safe.
-  static bool _inFlight(AgentHookSpec? spec, String event, Object? payload) {
+  /// The work [event]'s payload says is still running, named; null when the
+  /// event declares no such list. Only a **non-empty list** names any, so an
+  /// agent that never sends the field is safe.
+  static List<String>? _inFlight(
+    AgentHookSpec? spec,
+    String event,
+    Object? payload,
+  ) {
     final path = spec?.inFlightPath[event];
-    if (path == null || path.isEmpty) return false;
+    if (path == null || path.isEmpty) return null;
     final value = _valueAt(path, payload);
-    return value is List && value.isNotEmpty;
+    if (value is! List) return const [];
+    return [for (final entry in value) _inFlightLabel(spec!, entry)];
+  }
+
+  static String _inFlightLabel(AgentHookSpec spec, Object? entry) {
+    for (final path in spec.inFlightLabelPaths) {
+      final label = _stringAt(path, entry);
+      if (label.isNotEmpty) return label;
+    }
+    return 'background work';
   }
 
   /// The hook body as JSON, or `null` when it is not JSON at all — which means

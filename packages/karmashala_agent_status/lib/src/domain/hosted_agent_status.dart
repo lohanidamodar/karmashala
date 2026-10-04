@@ -63,6 +63,7 @@ Map<String, Object?> reportToJson(AgentStatusReport report) => {
   if (report.toolAsk case final ask?) 'toolAsk': ask.toJson(),
   if (report.waitingSince case final since?)
     'waitingSince': since.toUtc().toIso8601String(),
+  if (report.inFlight.isNotEmpty) 'inFlight': report.inFlight,
 };
 
 AgentStatusReport? reportFromJson(Object? json) {
@@ -80,6 +81,7 @@ AgentStatusReport? reportFromJson(Object? json) {
     return null;
   }
   final evidence = json['evidence'];
+  final inFlight = json['inFlight'];
   return AgentStatusReport(
     agentId: agentId,
     sessionId: sessionId,
@@ -96,6 +98,7 @@ AgentStatusReport? reportFromJson(Object? json) {
     failureReason: json['failureReason'] as String?,
     toolAsk: AgentToolAsk.fromJson(json['toolAsk']),
     waitingSince: _time(json['waitingSince']),
+    inFlight: inFlight is List ? inFlight.whereType<String>().toList() : [],
   );
 }
 

@@ -190,6 +190,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   @override
   TerminalSessionsState build() {
+    // After the build: a widget may be building this, and a watched provider
+    // is not invalidated mid-build.
+    scheduleMicrotask(() {
+      if (ref.mounted) ref.invalidate(terminalSessionsOpenedProvider);
+    });
     ref.onDispose(() {
       _disposed = true;
       _autosave.stop();

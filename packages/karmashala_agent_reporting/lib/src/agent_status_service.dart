@@ -62,6 +62,12 @@ class AgentStatusService {
   AgentStatusReport? hookReport(AgentStatusQuery query, DateTime now) {
     final hook = hookReports.latest(query.agentId, query.sessionId);
     if (hook == null) return null;
+    // Work in flight fires nothing while it runs: a background shell is silent
+    // until it ends, and the hook that ends it is what retires this one.
+    if (hook.status == AgentActivityStatus.working &&
+        hook.inFlight.isNotEmpty) {
+      return hook;
+    }
     return now.difference(hook.observedAt) <= hookFreshness ? hook : null;
   }
 

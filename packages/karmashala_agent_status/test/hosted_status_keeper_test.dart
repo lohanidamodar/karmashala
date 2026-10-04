@@ -310,6 +310,37 @@ void main() {
       expect(stale.report.source, AgentStatusSource.terminalGrid);
     });
 
+    test('a session with a background subagent stays working until it ends', () {
+      keeper.track('row-1', agentId: claude.id);
+      final idleScreen = screenOf('claude-code-tui', 0.85, claude);
+      final running = [
+        {
+          'id': 'a1',
+          'type': 'subagent',
+          'status': 'running',
+          'description': 'Explore the repository',
+        },
+      ];
+      hook('Stop', {'background_tasks': running});
+      clock.now = clock.now.add(const Duration(minutes: 1));
+      hook('Notification', {
+        'notification_type': 'idle_prompt',
+        'message': 'Claude is waiting for your input',
+      });
+
+      // The main thread sits at its prompt and nothing fires for a long while.
+      clock.now = clock.now.add(const Duration(minutes: 20));
+      keeper.screen('row-1', idleScreen);
+      final held = keeper.statusOf('row-1')!.report;
+      expect(held.status, AgentActivityStatus.working);
+      expect(held.inFlight, ['Explore the repository']);
+
+      hook('Stop', {'background_tasks': <Object?>[]});
+      final done = keeper.statusOf('row-1')!.report;
+      expect(done.status, AgentActivityStatus.idle);
+      expect(done.inFlight, isEmpty);
+    });
+
     test('a stale hook is still the word when the screen says nothing', () {
       keeper.track('row-1', agentId: claude.id);
       final idle = hook('Stop');

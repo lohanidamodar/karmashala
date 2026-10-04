@@ -75,6 +75,35 @@ void main() {
     expect(report.source, AgentStatusSource.hook);
   });
 
+  test(
+    'a hook naming work in flight is believed however quiet it goes',
+    () async {
+      // A background shell fires no hooks while it runs, and the transcript's
+      // last word is the turn that launched it.
+      reports.record(
+        AgentStatusReport(
+          agentId: 'claudeCode',
+          sessionId: 's1',
+          status: AgentActivityStatus.working,
+          source: AgentStatusSource.hook,
+          observedAt: now.subtract(const Duration(minutes: 30)),
+          inFlight: const ['npm test'],
+        ),
+      );
+
+      final report = await service.statusFor(
+        AgentStatusQuery(
+          agentId: 'claudeCode',
+          sessionId: 's1',
+          stateFilePath: idleTranscript(),
+        ),
+      );
+
+      expect(report.status, AgentActivityStatus.working);
+      expect(report.inFlight, ['npm test']);
+    },
+  );
+
   test('a stale hook report is ignored and the state file decides', () async {
     recordHook(
       AgentActivityStatus.awaitingApproval,

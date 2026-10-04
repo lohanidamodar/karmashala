@@ -443,6 +443,7 @@ class ServerSessionStatus {
         failureReason: said?.failureReason,
         toolAsk: said?.toolAsk,
         waitingSince: said?.waitingSince,
+        inFlight: said?.inFlight ?? const [],
       ),
       now,
     );

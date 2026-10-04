@@ -81,7 +81,14 @@ class LensSessionRow extends ConsumerWidget {
     final quietSince = state == AgentState.quiet
         ? ref.read(sessionStatusLookupProvider)(id)?.evidenceAt
         : null;
+    // Read, not watched, like [quietSince]: the state wakes the row.
+    final stillRunning = state == AgentState.working
+        ? inFlightClause(
+            ref.read(sessionStatusLookupProvider)(id)?.inFlight ?? const [],
+          )
+        : null;
     final clauses = [
+      ?stillRunning,
       if (quietSince != null)
         'nothing new for ${compactAge(now.difference(quietSince))}',
       ...sessionContextClauses(

@@ -60,7 +60,14 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     });
     ref.listen(selectedSessionIdProvider, (_, _) => _syncViewed());
     // Going to the tab is looking at it: clicking a tab sets no selection.
-    ref.listen(foregroundTerminalPaneIdsProvider, (_, _) => _syncViewed());
+    // Deferred: the panes can move while a widget builds, when no provider
+    // may be written.
+    ref.listen(
+      foregroundTerminalPaneIdsProvider,
+      (_, _) => scheduleMicrotask(() {
+        if (ref.mounted) _syncViewed();
+      }),
+    );
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
     // A phone's session page coming up or going down; never moves on a desktop.

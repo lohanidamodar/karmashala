@@ -1234,6 +1234,71 @@ void main() {
       },
     );
 
+    test('a turn that ends with a background subagent running stays working, '
+        'naming it, until the subagent reports back', () async {
+      final report = Completer<void>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('ag', 'Agent', {
+              'description': 'Explore the repository',
+              'prompt': 'look around',
+              'run_in_background': true,
+            });
+            c.system('task_started', {
+              'task_id': 'task1',
+              'tool_use_id': 'ag',
+              'description': 'Explore the repository',
+              'is_backgrounded': true,
+            });
+            c.toolResult('ag', 'Async agent launched successfully.');
+            c.result();
+            await report.future;
+            // The subagent's own work, then its report waking Claude.
+            c.toolUse(
+              'sb',
+              'Bash',
+              {'command': 'ls'},
+              parentToolUseId: 'ag',
+              message: 'sub1',
+            );
+            c.toolResult('sb', 'a.txt', parentToolUseId: 'ag');
+            c.system('task_notification', {
+              'task_id': 'task1',
+              'tool_use_id': 'ag',
+              'status': 'completed',
+              'summary': 'One file.',
+            });
+            c.assistant('later', [
+              {'type': 'text', 'text': 'The subagent found one file.'},
+            ]);
+            c.result(origin: {'kind': 'task-notification'});
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      final sent = host.statuses.length;
+      await rt.send('Go');
+      await rt.awaitTurn();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final held = host.statuses.last;
+      expect(held.status, AgentActivityStatus.working);
+      expect(held.inFlight, ['Explore the repository']);
+
+      report.complete();
+      await until(
+        () => rows().any((r) => r.text == 'The subagent found one file.'),
+      );
+      await until(() => host.statuses.last.status == AgentActivityStatus.idle);
+      final after = [for (final s in host.statuses.skip(sent)) s.status];
+      // Never idle between the prompt and the subagent's end.
+      expect(after.indexOf(AgentActivityStatus.idle), after.length - 1);
+      expect(host.statuses.last.inFlight, isEmpty);
+      await rt.stop();
+    });
+
     test('a prompt sent while Claude works on its own turn is answered by '
         'its own result, not the background one', () async {
       final report = Completer<void>();

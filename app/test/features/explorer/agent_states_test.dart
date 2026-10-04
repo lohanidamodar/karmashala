@@ -283,6 +283,17 @@ void main() {
     });
   });
 
+  group('inFlightClause', () {
+    test('names the one thing still running, counts several', () {
+      expect(inFlightClause(const []), isNull);
+      expect(
+        inFlightClause(const ['Explore the repository']),
+        'still running: Explore the repository',
+      );
+      expect(inFlightClause(const ['a', 'b']), '2 still running');
+    });
+  });
+
   group('sessionContextClauses', () {
     test('project, then folder only when it differs, then branch', () {
       expect(
