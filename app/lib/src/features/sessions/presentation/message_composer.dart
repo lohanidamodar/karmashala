@@ -2064,9 +2064,7 @@ class _CommandPalette extends StatelessWidget {
                 onTap: () => onPicked(command),
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: i == highlighted
-                        ? scheme.primary.withValues(alpha: 0.12)
-                        : null,
+                    color: i == highlighted ? StateLayers.selected(scheme) : null,
                     borderRadius: BorderRadius.circular(Radii.sm),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
