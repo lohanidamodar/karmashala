@@ -20,24 +20,8 @@ import 'claude_tools.dart';
 /// The Claude Code release this translation was checked against, live.
 const String kClaudeStreamJsonVerifiedWith = '2.1.287';
 
-/// The arguments that put `claude` into the mode this bridge speaks: print
-/// mode over stream-json both ways, permission prompts sent to the client on
-/// the control channel, partial messages for streamed text, and
-/// bypassPermissions allowed as a mode a person may choose.
-const List<String> kClaudeStreamJsonArguments = [
-  '-p',
-  '--input-format',
-  'stream-json',
-  '--output-format',
-  'stream-json',
-  '--verbose',
-  '--include-partial-messages',
-  '--permission-prompt-tool',
-  'stdio',
-  '--allow-dangerously-skip-permissions',
-];
-
-/// The bridge for `AcpNativeBridge.claudeStreamJson`.
+/// The bridge for `AcpNativeBridge.claudeStreamJson`, over a `claude` started
+/// with the arguments the claude-acp descriptor declares.
 AcpTransport claudeStreamJsonBridge(AcpTransport raw) =>
     ClaudeStreamJsonBridge(raw);
 

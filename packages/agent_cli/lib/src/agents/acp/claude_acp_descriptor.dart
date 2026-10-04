@@ -7,7 +7,8 @@ const _evidence =
     'plan, default, acceptEdits, bypassPermissions — declared from the '
     'adapter source 2026-10-02, not yet read off a live session';
 
-/// Claude Code behind the `claude-agent-acp` adapter, spoken to over ACP.
+/// Claude Code as chat: the person's own `claude` in its stream-json mode
+/// (the protocol its Agent SDK speaks), translated to ACP in-process.
 ///
 /// Nothing terminal-shaped is declared — no hooks, screen rules or menus — the
 /// protocol carries status, approvals and the conversation. The mode is set
@@ -16,16 +17,33 @@ const claudeAcpDescriptor = AgentDescriptor(
   id: 'claude-acp',
   displayName: 'Claude (ACP)',
   binaries: AgentBinaries(
-    windows: ['claude-agent-acp'],
-    posix: ['claude-agent-acp'],
+    windows: ['claude'],
+    posix: ['claude'],
+    windowsInstallPaths: [r'%USERPROFILE%\.local\bin\claude.exe'],
   ),
-  // The adapter runs the Claude Code SDK, which writes to Claude Code's home.
+  // The same binary and home as Claude Code in a terminal, so a conversation
+  // started in either resumes in the other.
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
     homeVariable: 'CLAUDE_CONFIG_DIR',
   ),
   acp: AcpLaunchSpec(
-    npxPackage: '@agentclientprotocol/claude-agent-acp',
+    nativeBridge: AcpNativeBridge.claudeStreamJson,
+    // Print mode over stream-json both ways, permission prompts sent to the
+    // client on the control channel, streamed text, and bypassPermissions
+    // allowed as a mode a person may choose.
+    arguments: [
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages',
+      '--permission-prompt-tool',
+      'stdio',
+      '--allow-dangerously-skip-permissions',
+    ],
     modeNames: {
       PermissionRisk.readOnly: ['plan'],
       PermissionRisk.ask: ['default'],

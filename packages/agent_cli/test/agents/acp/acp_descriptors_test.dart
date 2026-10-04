@@ -45,11 +45,13 @@ void main() {
         expect(adapter.acp, same(descriptor.acp));
         expect(adapter.capabilities, contains(AgentCapability.acp));
         expect(descriptor.acp!.clientName, 'Karmashala');
-        // Each is reachable without an install of its own: an npm package,
-        // or a registry archive Karmashala installs.
+        // Each is reachable without an adapter of its own to install: an npm
+        // package, a registry archive Karmashala installs, or the agent's
+        // own binary spoken to through a native bridge.
         expect(
           descriptor.acp!.npxPackage != null ||
-              descriptor.acp!.registryId != null,
+              descriptor.acp!.registryId != null ||
+              descriptor.acp!.nativeBridge != null,
           isTrue,
         );
       });
@@ -170,11 +172,27 @@ void main() {
   });
 
   test('the declared argv and packages', () {
-    expect(claudeAcpDescriptor.acp!.arguments, isEmpty);
+    // Claude chat is the person's own `claude` over its stream-json mode,
+    // translated in-process: no adapter package.
+    expect(claudeAcpDescriptor.binaries.windows, ['claude']);
+    expect(claudeAcpDescriptor.binaries.posix, ['claude']);
+    expect(claudeAcpDescriptor.acp!.npxPackage, isNull);
     expect(
-      claudeAcpDescriptor.acp!.npxPackage,
-      '@agentclientprotocol/claude-agent-acp',
+      claudeAcpDescriptor.acp!.nativeBridge,
+      AcpNativeBridge.claudeStreamJson,
     );
+    expect(claudeAcpDescriptor.acp!.arguments, [
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages',
+      '--permission-prompt-tool',
+      'stdio',
+      '--allow-dangerously-skip-permissions',
+    ]);
     expect(codexAcpDescriptor.acp!.arguments, isEmpty);
     expect(
       codexAcpDescriptor.acp!.npxPackage,
