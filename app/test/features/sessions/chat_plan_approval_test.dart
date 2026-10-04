@@ -19,10 +19,10 @@ void main() {
   for (final kind in ChatCardSession.values) {
     group('${kind.name}:', () {
       // What each face calls the call that asks: Claude Code's own tool, and
-      // the claude-agent-acp adapter's title for it.
+      // the stream-json bridge's title for it — told apart by kind, not title.
       final toolName = switch (kind) {
         ChatCardSession.terminalCli => 'ExitPlanMode',
-        ChatCardSession.acp => 'Approve Plan',
+        ChatCardSession.acp => 'Ready to code?',
       };
 
       List<TranscriptMessage> turn() => [
@@ -46,6 +46,7 @@ void main() {
           input: const {'plan': _plan},
           at: testTime,
           toolUseId: 'plan-1',
+          kind: kind == ChatCardSession.acp ? 'switch_mode' : null,
         ),
       );
 
@@ -202,5 +203,53 @@ void main() {
     expect(find.byKey(const ValueKey('plan-approval:call-1')), findsNothing);
     expect(find.byKey(const ValueKey('chat-ask:call-1')), findsOneWidget);
   });
-}
 
+  /// An ACP session asking about one switch_mode call, titled [title].
+  Future<void> acpAsk(
+    WidgetTester tester, {
+    required String title,
+    required Map<String, Object?> input,
+  }) async {
+    final h = await ChatCardHarness.open(
+      ChatCardSession.acp,
+      messages: [
+        TranscriptMessage(
+          role: 'tool',
+          text: '',
+          tool: ToolActivity(name: title),
+          pendingToolUseId: 'mode-1',
+          at: testTime,
+        ),
+      ],
+      status: ChatCardHarness.statusOf(
+        ChatCardSession.acp,
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+        toolAsk: AgentToolAsk(
+          toolName: title,
+          input: input,
+          at: testTime,
+          toolUseId: 'mode-1',
+          kind: 'switch_mode',
+        ),
+      ),
+      overrides: [sessionAnswerableProvider.overrideWithValue((_) => true)],
+    );
+    addTearDown(h.dispose);
+    await tester.pumpWidget(chatWithDock(h.container));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the claude-agent-acp adapter\'s title is a plan prompt too: '
+      'the kind decides', (tester) async {
+    await acpAsk(tester, title: 'Approve Plan', input: const {'plan': _plan});
+    expect(find.byKey(const ValueKey('plan-approval:mode-1')), findsOneWidget);
+  });
+
+  testWidgets('a switch_mode ask with no plan (entering plan mode) is an '
+      'ordinary approval', (tester) async {
+    await acpAsk(tester, title: 'Enter plan mode', input: const {});
+    expect(find.byKey(const ValueKey('plan-approval:mode-1')), findsNothing);
+    expect(find.byKey(const ValueKey('chat-ask:mode-1')), findsOneWidget);
+  });
+}

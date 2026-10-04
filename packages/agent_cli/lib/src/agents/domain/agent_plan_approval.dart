@@ -10,15 +10,19 @@ import 'agent_tool_ask.dart';
 /// decline could land on another "No".
 class AgentPlanApprovalSupport {
   const AgentPlanApprovalSupport({
-    required this.toolName,
+    this.toolName,
+    this.toolKind,
     this.planKey = 'plan',
     this.keepPlanningOption,
     required this.evidence,
-  });
+  }) : assert(toolName != null || toolKind != null);
 
-  /// What the ask names the call that asks: a CLI's tool, or an ACP
-  /// adapter's title for it.
-  final String toolName;
+  /// The CLI's own tool the ask names, when a hook names one.
+  final String? toolName;
+
+  /// The call's kind as an ACP agent names it (`switch_mode`): what tells a
+  /// plan prompt whatever its title, from one translator or another.
+  final String? toolKind;
 
   /// The key in the call's input holding the plan's text.
   final String planKey;
@@ -32,7 +36,10 @@ class AgentPlanApprovalSupport {
 
   /// The plan [ask] asks to carry out, or null when it is not this prompt.
   String? planIn(AgentToolAsk? ask) {
-    if (ask == null || ask.toolName != toolName) return null;
+    if (ask == null) return null;
+    final named = toolName != null && ask.toolName == toolName;
+    final kinded = toolKind != null && ask.kind == toolKind;
+    if (!named && !kinded) return null;
     final plan = ask.input[planKey];
     return plan is String && plan.trim().isNotEmpty ? plan : null;
   }

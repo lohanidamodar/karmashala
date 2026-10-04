@@ -15,6 +15,7 @@ class AcpLaunchSpec {
     this.linuxArguments = const [],
     this.registryId,
     this.apiKeyVariables = const {},
+    this.optionModes = const {},
   });
 
   /// How any ACP agent's permission request is answered: the server picks the
@@ -85,6 +86,7 @@ class AcpLaunchSpec {
     linuxArguments: linuxArguments,
     registryId: registryId,
     apiKeyVariables: apiKeyVariables,
+    optionModes: optionModes,
   );
 
   /// What `initialize` announces as `clientInfo.name`.
@@ -108,4 +110,26 @@ class AcpLaunchSpec {
     }
     return null;
   }
+
+  /// Permission option ids → the mode each one switches the agent to, for an
+  /// agent whose option ids are not its mode ids. An id named nowhere here is
+  /// read as a mode id itself.
+  final Map<String, String> optionModes;
+
+  /// The rung [modeId] stands for: the lowest one [modeNames] lists it under,
+  /// or null for a mode this spec does not name.
+  PermissionRisk? rungOfMode(String modeId) {
+    final wanted = modeId.toLowerCase();
+    for (final rung in PermissionRisk.values) {
+      if (modeNames[rung]?.any((m) => m.toLowerCase() == wanted) ?? false) {
+        return rung;
+      }
+    }
+    return null;
+  }
+
+  /// The rung choosing permission option [optionId] would put the agent on,
+  /// or null when the option switches to no mode this spec names.
+  PermissionRisk? rungOfOption(String optionId) =>
+      rungOfMode(optionModes[optionId] ?? optionId);
 }

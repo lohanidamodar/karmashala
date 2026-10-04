@@ -21,6 +21,7 @@ class AgentToolAsk {
     required this.at,
     this.toolUseId,
     this.cwd,
+    this.kind,
   });
 
   /// The agent's own name for the tool: `Bash`, `Write`, `mcp__server__tool`.
@@ -40,6 +41,10 @@ class AgentToolAsk {
   /// "outside the project" is measured against.
   final String? cwd;
 
+  /// The call's kind as an ACP agent named it (`edit`, `switch_mode`), or
+  /// null where nothing named one, as for a CLI hook.
+  final String? kind;
+
   /// Whether [other] is the same call — a republished status need not move.
   bool sameCallAs(AgentToolAsk? other) =>
       other != null &&
@@ -53,6 +58,7 @@ class AgentToolAsk {
     'at': at.toUtc().toIso8601String(),
     'toolUseId': ?toolUseId,
     'cwd': ?cwd,
+    'kind': ?kind,
   };
 
   /// Null for a shape this build cannot read — never a guessed call.
@@ -70,6 +76,7 @@ class AgentToolAsk {
       at: at,
       toolUseId: json['toolUseId'] as String?,
       cwd: json['cwd'] as String?,
+      kind: json['kind'] as String?,
     );
   }
 

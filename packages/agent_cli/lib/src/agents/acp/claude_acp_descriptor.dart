@@ -25,17 +25,30 @@ const claudeAcpDescriptor = AgentDescriptor(
     homeDirectoryName: '.claude',
     homeVariable: 'CLAUDE_CONFIG_DIR',
   ),
-  // The adapter's reject on this request is "No, keep planning".
+  // By kind, not title: the adapter and the stream-json bridge title it
+  // differently. Either's reject on it is "No, keep planning"; which allow
+  // approves is the server's rung rule (AcpLaunchSpec.rungOfOption).
   planApproval: AgentPlanApprovalSupport(
-    toolName: 'Approve Plan',
+    toolKind: 'switch_mode',
     evidence:
-        '@agentclientprotocol/claude-agent-acp 0.85.1, read 2026-10-04: '
-        'ExitPlanModeReporter titles the call "Approve Plan" with rawInput '
-        '`plan`; buildExitPlanModePermissionOptions offers the allow options '
-        'then reject("No, keep planning")',
+        'read 2026-10-04: claude-agent-acp 0.85.1 ExitPlanModeReporter '
+        '{title "Approve Plan", kind switch_mode} and '
+        'buildExitPlanModePermissionOptions (allows, then reject "No, keep '
+        'planning"); feat/claude-native claude_stream_json_bridge.dart '
+        '_canUseTool for ExitPlanMode {title "Ready to code?", kind '
+        'switch_mode, rawInput.plan} offering acceptEdits/default/plan',
   ),
   acp: AcpLaunchSpec(
     npxPackage: '@agentclientprotocol/claude-agent-acp',
+    // The adapter's plan-exit ids (0.85.1, PERMISSION_OPTION_ID). The
+    // clear-context ones are left out: they also drop the conversation. The
+    // stream-json bridge's ids are its mode ids, so it needs none.
+    optionModes: {
+      'exit-plan-default': 'default',
+      'exit-plan-accept-edits': 'acceptEdits',
+      'exit-plan-auto': 'auto',
+      'exit-plan-bypass': 'bypassPermissions',
+    },
     modeNames: {
       PermissionRisk.readOnly: ['plan'],
       PermissionRisk.ask: ['default'],

@@ -477,6 +477,14 @@ class AcpSessionRuntime implements ScreenSession {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
     final option = _optionFor(pending.options, approve: approve);
+    if (option == null &&
+        approve &&
+        _modeSwitchingAllow(pending.options) != null) {
+      throw SessionPromptRefusal(
+        'every way $agentName offers to approve "${pending.title}" would '
+        "raise this session's permissions",
+      );
+    }
     if (option == null) {
       throw SessionPromptRefusal(
         '$agentName offered no way to ${approve ? 'allow' : 'reject'} '
@@ -850,12 +858,15 @@ class AcpSessionRuntime implements ScreenSession {
     final title = _titleOf(call);
     final rung = risk;
     if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
-      final once = options.where(
-        (o) => o.kind == PermissionOptionKind.allowOnce,
-      );
-      if (once.isNotEmpty) {
+      final switching = _modeSwitchingAllow(options);
+      final once = switching != null
+          ? switching.option
+          : options
+                .where((o) => o.kind == PermissionOptionKind.allowOnce)
+                .firstOrNull;
+      if (once != null) {
         await _holdForEdit(call);
-        return PermissionOutcome.selected(once.first.optionId);
+        return PermissionOutcome.selected(once.optionId);
       }
     }
     final pending = _PendingPermission(call, options, title);
@@ -872,6 +883,7 @@ class AcpSessionRuntime implements ScreenSession {
         at: now,
         toolUseId: call.toolCallId,
         cwd: workingDirectory,
+        kind: call.kind?.raw,
       ),
       waitingSince: now,
     );
@@ -889,10 +901,14 @@ class AcpSessionRuntime implements ScreenSession {
     if (!pending.completer.isCompleted) pending.completer.complete(outcome);
   }
 
-  static PermissionOption? _optionFor(
+  PermissionOption? _optionFor(
     List<PermissionOption> options, {
     required bool approve,
   }) {
+    if (approve) {
+      final switching = _modeSwitchingAllow(options);
+      if (switching != null) return switching.option;
+    }
     final wanted = approve
         ? const [
             PermissionOptionKind.allowOnce,
@@ -908,6 +924,38 @@ class AcpSessionRuntime implements ScreenSession {
       }
     }
     return null;
+  }
+
+  /// **An allow that switches the agent's mode never raises the session.**
+  /// When any allow option names a mode the spec knows (a plan prompt's
+  /// "accept edits", "ask before edits"), the one chosen is the highest at
+  /// or below the session's rung; an option whose mode is unknown is never
+  /// chosen. Null when no option names a mode: an ordinary call's request.
+  ({PermissionOption? option})? _modeSwitchingAllow(
+    List<PermissionOption> options,
+  ) {
+    final allows = [
+      for (final option in options)
+        if (option.kind == PermissionOptionKind.allowOnce ||
+            option.kind == PermissionOptionKind.allowAlways)
+          (option: option, rung: spec.rungOfOption(option.optionId)),
+    ];
+    if (!allows.any((allow) => allow.rung != null)) return null;
+    // Approving a plan leaves read-only, so asking before every edit is the
+    // floor: it grants nothing without asking.
+    var ceiling = risk ?? PermissionRisk.ask;
+    if (ceiling.isAtMost(PermissionRisk.readOnly)) ceiling = PermissionRisk.ask;
+    PermissionOption? chosen;
+    PermissionRisk? at;
+    for (final allow in allows) {
+      final rung = allow.rung;
+      if (rung == null || !rung.isAtMost(ceiling)) continue;
+      if (at == null || !rung.isAtMost(at)) {
+        chosen = allow.option;
+        at = rung;
+      }
+    }
+    return (option: chosen);
   }
 
   /// An edit lands after the turn's before-turn checkpoint, which is told
