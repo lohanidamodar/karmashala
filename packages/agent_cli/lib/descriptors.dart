@@ -25,6 +25,7 @@ export 'src/agents/adapter/agent_store.dart';
 export 'src/agents/adapter/agent_store_editor.dart';
 export 'src/agents/adapter/agent_store_server.dart';
 export 'src/agents/adapter/agent_transcripts.dart';
+export 'src/agents/adapter/injected_context.dart';
 export 'src/agents/adapter/agent_usage_endpoint.dart';
 export 'src/agents/adapter/agent_usage_support.dart';
 export 'src/agents/adapter/built_in_agent_adapters.dart';
