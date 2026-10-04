@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
@@ -181,6 +182,13 @@ class _AgentCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        // Not by colour alone: the chosen card says so.
+                        if (selected)
+                          Icon(
+                            AppIcons.checkCircle,
+                            size: Chrome.iconSmall,
+                            color: scheme.primary,
+                          ),
                       ],
                     ),
                     Text(
@@ -225,27 +233,39 @@ class _FormChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onChanged = this.onChanged;
-    return SegmentedButton<AgentRunForm>(
-      showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      segments: [
-        // Words alone: a card is half the dialog, and an icon beside
-        // "Terminal" wrapped it onto two lines (seen in a probe).
-        for (final f in AgentRunForm.values)
-          ButtonSegment(
-            value: f,
-            label: Text(
-              f.label,
-              key: ValueKey('$keyPrefix:${f.name}'),
-              maxLines: 1,
-              softWrap: false,
+    final scheme = Theme.of(context).colorScheme;
+    // Toggle buttons rather than a segmented button: every tap is reported,
+    // so tapping the form a card already shows still picks that card. Scaled
+    // down on a card too narrow for both words, as two across a phone are.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: ToggleButtons(
+        isSelected: [for (final f in AgentRunForm.values) f == form],
+        onPressed: onChanged == null
+            ? null
+            : (index) => onChanged(AgentRunForm.values[index]),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        constraints: const BoxConstraints(minHeight: 28, minWidth: 44),
+        fillColor: scheme.primary,
+        selectedColor: scheme.onPrimary,
+        selectedBorderColor: scheme.primary,
+        textStyle: Theme.of(context).textTheme.labelMedium,
+        children: [
+          // Words alone: a card is half the dialog, and an icon beside
+          // "Terminal" wrapped it onto two lines (seen in a probe).
+          for (final f in AgentRunForm.values)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+              child: Text(
+                f.label,
+                key: ValueKey('$keyPrefix:${f.name}'),
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
-          ),
-      ],
-      selected: {form},
-      onSelectionChanged: onChanged == null
-          ? null
-          : (picked) => onChanged(picked.first),
+        ],
+      ),
     );
   }
 }

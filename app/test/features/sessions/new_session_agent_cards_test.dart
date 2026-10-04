@@ -186,6 +186,32 @@ void main() {
       expect(picked.map((i) => i.id), ['chat', 'chat']);
     });
 
+    testWidgets('a tap on the form a card already shows still picks that '
+        'card', (tester) async {
+      // Two cards of one agent: the form is remembered per agent, so the
+      // other card already shows Chat when this one was set to it.
+      final wsl = agentInstallation(
+        id: 'w1',
+        environmentId: 'wsl:Ubuntu',
+        path: '/home/u/.local/bin/claude',
+      );
+      final wslChat = agentInstallation(
+        id: 'wchat',
+        agentId: AgentIds.claudeAcp,
+        environmentId: 'wsl:Ubuntu',
+        path: '/home/u/.local/bin/claude',
+      );
+      final installs = [agentInstallation(), chat(), wsl, wslChat];
+      final picked = await pumpPicking(tester, installs);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      expect(picked.map((i) => i.id), ['chat']);
+      // The WSL card shows Chat already; Chat on it is still a choice of it.
+      await tester.tap(find.byKey(const ValueKey('agent-form:w1:chat')));
+      await tester.pumpAndSettle();
+      expect(picked.map((i) => i.id), ['chat', 'wchat']);
+    });
+
     testWidgets('a tap on the card picks Terminal until Chat is chosen', (
       tester,
     ) async {
@@ -234,15 +260,49 @@ void main() {
       );
     });
 
+    testWidgets('both forms fit two cards across a phone', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            await db.server.override(),
+            agentUsageProvider.overrideWith(
+              (ref, installation) => const AsyncLoading<AgentUsage>(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: NewSessionAgentCards(
+                  installations: [
+                    agentInstallation(),
+                    chat(),
+                    agentInstallation(id: 'x', agentId: AgentIds.codex),
+                    agentInstallation(id: 'xc', agentId: AgentIds.codexAcp),
+                  ],
+                  selected: null,
+                  onSelected: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ToggleButtons), findsNWidgets(2));
+    });
+
     testWidgets('the form picked is the one the card shows selected', (
       tester,
     ) async {
       final installs = [agentInstallation(), chat()];
       await pumpPicking(tester, installs, selected: installs.last);
-      final choice = tester.widget<SegmentedButton<AgentRunForm>>(
-        find.byType(SegmentedButton<AgentRunForm>),
-      );
-      expect(choice.selected, {AgentRunForm.chat});
+      final choice = tester.widget<ToggleButtons>(find.byType(ToggleButtons));
+      expect(choice.isSelected, [false, true]);
     });
   });
 
@@ -253,7 +313,7 @@ void main() {
     ]);
     expect(find.byKey(const ValueKey('agent-card:x')), findsOneWidget);
     expect(find.byKey(const ValueKey('agent-card:g')), findsOneWidget);
-    expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
+    expect(find.byType(ToggleButtons), findsNothing);
   });
 
   testWidgets('installed only as chat, a paired agent is one card under the '
@@ -262,6 +322,6 @@ void main() {
       agentInstallation(id: 'cx', agentId: AgentIds.codexAcp),
     ]);
     expect(find.text('Codex CLI'), findsOneWidget);
-    expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
+    expect(find.byType(ToggleButtons), findsNothing);
   });
 }
