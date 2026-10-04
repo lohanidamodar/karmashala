@@ -99,19 +99,24 @@ void main() {
       ]);
     });
 
-    test('in a live run a failure stays in it but is pinned, not hidden', () {
+    test('in a live run a failure is drawn where it happened, splitting the '
+        'fold so the order is kept', () {
       final rows = transcriptRows([
+        tool('Read'),
         tool('Read'),
         tool('Read'),
         tool('Bash', isError: true),
         tool('Read'),
         tool('Read'),
+        tool('Read'),
       ], turn: TranscriptTurn.working);
 
-      expect(rows, hasLength(1));
-      expect(rows.single.length, 5);
-      expect(rows.single.pinned, [2]);
-      expect(rows.single.hidden, 4);
+      expect(rows.map((r) => (r.from, r.to, r.isBatch, r.live)), [
+        (0, 3, true, false),
+        (3, 4, false, false),
+        (4, 7, true, true),
+      ]);
+      expect(rows.last.pinned, isEmpty);
     });
 
     test('a settled run pins nothing: its failure is counted on the line', () {
@@ -137,25 +142,36 @@ void main() {
       ], turn: TranscriptTurn.working);
       expect(three.every((r) => !r.isBatch), isTrue);
 
-      final four = transcriptRows([
+      final after = transcriptRows([
         tool('Read'),
         tool('Bash', isError: true),
         tool('Read'),
         tool('Read'),
+        tool('Read'),
       ], turn: TranscriptTurn.working);
-      expect(four.single.isBatch, isTrue);
-      expect(four.single.hidden, 3);
+      expect(after.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 1, false),
+        (1, 2, false),
+        (2, 5, true),
+      ]);
+      expect(after.last.hidden, 3);
     });
 
-    test('in a live run a call the model reasoned its way to is pinned', () {
+    test('in a live run a call the model reasoned its way to is drawn in '
+        'place', () {
       final rows = transcriptRows([
+        tool('Read'),
         tool('Read'),
         tool('Read'),
         tool('Grep', thinking: 'where does this get called'),
         tool('Read'),
       ], turn: TranscriptTurn.working);
 
-      expect(rows.single.pinned, [2]);
+      expect(rows.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 3, true),
+        (3, 4, false),
+        (4, 5, false),
+      ]);
     });
 
     test('an unanswered call in a settled run is no longer waiting on anyone',
@@ -400,18 +416,19 @@ void main() {
     });
 
     testWidgets('a settled run counts its failure on the line; a live run '
-        'draws it under the line', (tester) async {
+        'draws it where it happened, above the calls after it', (tester) async {
       final calls = [
         tool('Read', subject: 'lib/one.dart'),
         tool('Bash', subject: 'flutter test', isError: true),
         tool('Read', subject: 'lib/two.dart'),
         tool('Read', subject: 'lib/three.dart'),
+        tool('Read', subject: 'lib/four.dart'),
       ];
       await tester.pumpWidget(view([...calls, said('done')]));
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Read 3 files, ran 1 command · 1 failed'),
+        find.text('Read 4 files, ran 1 command · 1 failed'),
         findsOneWidget,
       );
       expect(shown('flutter test'), findsNothing);
@@ -422,6 +439,10 @@ void main() {
       expect(shown('flutter test'), findsWidgets);
       expect(find.text('FAILED'), findsOneWidget);
       expect(shown('lib/two.dart'), findsNothing);
+      expect(
+        tester.getTopLeft(find.text('FAILED')).dy,
+        lessThan(tester.getTopLeft(find.text('Working')).dy),
+      );
     });
 
     testWidgets('what the agent said is never folded', (tester) async {

@@ -104,20 +104,53 @@ List<TranscriptRow> transcriptRows(
       i = end;
       continue;
     }
-    final pinned = <int>[
-      for (var k = i; k < end; k++)
-        if (_staysVisible(messages[k], turn: turn)) k,
-    ];
-    if (end - i - pinned.length >= kToolBatchMinimum) {
-      rows.add(TranscriptRow(i, end, pinned: pinned, live: live));
-    } else {
-      for (var single = i; single < end; single++) {
-        rows.add(TranscriptRow(single, single + 1));
-      }
+    // The rows that stay drawn at the tail sit under the live line, which is
+    // where they come anyway; one earlier in the run splits it there, so
+    // nothing is drawn out of order.
+    var tail = end;
+    while (tail > i && _staysVisible(messages[tail - 1], turn: turn)) {
+      tail--;
     }
+    var start = i;
+    for (var k = i; k < tail; k++) {
+      if (!_staysVisible(messages[k], turn: turn)) continue;
+      _addSegment(rows, start, k, live: false);
+      rows.add(TranscriptRow(k, k + 1));
+      start = k + 1;
+    }
+    _addSegment(
+      rows,
+      start,
+      end,
+      live: true,
+      pinned: [for (var k = tail; k < end; k++) k],
+    );
     i = end;
   }
   return rows;
+}
+
+/// Calls `[from, to)` of a live run as one line when that hides
+/// [kToolBatchMinimum] rows, else each its own row. [pinned] stay drawn under
+/// the line.
+void _addSegment(
+  List<TranscriptRow> rows,
+  int from,
+  int to, {
+  required bool live,
+  List<int> pinned = const [],
+}) {
+  if (to - from - pinned.length >= kToolBatchMinimum) {
+    rows.add(
+      live
+          ? TranscriptRow(from, to, pinned: pinned, live: true)
+          : TranscriptRow(from, to, folded: true),
+    );
+    return;
+  }
+  for (var single = from; single < to; single++) {
+    rows.add(TranscriptRow(single, single + 1));
+  }
 }
 
 /// The rows a reader is looking for in a live run. A pending call there is
