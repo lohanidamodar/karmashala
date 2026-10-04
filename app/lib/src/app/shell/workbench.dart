@@ -31,6 +31,7 @@ import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import '../../features/sessions/presentation/approval_request_card.dart';
+import '../../features/sessions/presentation/session_agent_mark.dart';
 import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';

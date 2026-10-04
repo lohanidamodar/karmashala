@@ -2774,6 +2774,21 @@ WorkbenchView
                                           _SessionStatusLine
                                             LayoutBuilder
                                               Row
+                                                SessionAgentMark key=[<'session-bar-agent'>]
+                                                  Padding
+                                                    Tooltip tooltip="Claude Code"
+                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                        OverlayPortal
+                                                          _OverlayPortal
+                                                            Semantics
+                                                              _ExclusiveMouseRegion
+                                                                Listener
+                                                                  Semantics
+                                                                    MouseRegion
+                                                                      Semantics
+                                                                        AgentLogo
+                                                                          Image
+                                                                            RawImage
                                                 Expanded
                                                   SingleChildScrollView
                                                     Scrollable
@@ -4066,6 +4081,21 @@ WorkbenchView
                                           _SessionStatusLine
                                             LayoutBuilder
                                               Row
+                                                SessionAgentMark key=[<'session-bar-agent'>]
+                                                  Padding
+                                                    Tooltip tooltip="Claude Code"
+                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                        OverlayPortal
+                                                          _OverlayPortal
+                                                            Semantics
+                                                              _ExclusiveMouseRegion
+                                                                Listener
+                                                                  Semantics
+                                                                    MouseRegion
+                                                                      Semantics
+                                                                        AgentLogo
+                                                                          Image
+                                                                            RawImage
                                                 Expanded
                                                   SingleChildScrollView
                                                     Scrollable
@@ -4942,6 +4972,21 @@ WorkbenchView
                                           _SessionStatusLine
                                             LayoutBuilder
                                               Row
+                                                SessionAgentMark key=[<'session-bar-agent'>]
+                                                  Padding
+                                                    Tooltip tooltip="Claude Code"
+                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                        OverlayPortal
+                                                          _OverlayPortal
+                                                            Semantics
+                                                              _ExclusiveMouseRegion
+                                                                Listener
+                                                                  Semantics
+                                                                    MouseRegion
+                                                                      Semantics
+                                                                        AgentLogo
+                                                                          Image
+                                                                            RawImage
                                                 Expanded
                                                   SingleChildScrollView
                                                     Scrollable
@@ -5869,6 +5914,21 @@ WorkbenchView
                                         LayoutBuilder
                                           _SessionFactsRow
                                             Row
+                                              SessionAgentMark key=[<'session-bar-agent'>]
+                                                Padding
+                                                  Tooltip tooltip="Claude Code"
+                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                      OverlayPortal
+                                                        _OverlayPortal
+                                                          Semantics
+                                                            _ExclusiveMouseRegion
+                                                              Listener
+                                                                Semantics
+                                                                  MouseRegion
+                                                                    Semantics
+                                                                      AgentLogo
+                                                                        Image
+                                                                          RawImage
                                               Expanded
                                                 LayoutBuilder
                                                   DeliveryStateLine
