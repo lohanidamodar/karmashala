@@ -9,6 +9,8 @@ import '../../../core/data/data_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../notes/application/composer_draft.dart';
+import '../../sessions/application/acp_session_providers.dart'
+    show installationSpeaksAcp;
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -76,11 +78,16 @@ class ClientIntents extends Notifier<void> {
     final launcher = ref.read(sessionLauncherProvider);
     if (launcher.reveal(sessionId)) return;
     final row = ref.read(sessionsDataProvider).getById(sessionId);
-    final installation = row == null
-        ? null
-        : ref
-              .read(agentInstallationsDataProvider)
-              .getById(row.agentInstallationId);
+    if (row == null) return;
+    // The server runs an ACP agent itself: no terminal to attach, so the
+    // launcher shows its chat tab, as it does for the New session dialog.
+    if (launch == null && installationSpeaksAcp(ref, row.agentInstallationId)) {
+      await launcher.showStarted(SessionStarted(session: row));
+      return;
+    }
+    final installation = ref
+        .read(agentInstallationsDataProvider)
+        .getById(row.agentInstallationId);
     final shown =
         launch ??
         (installation == null
@@ -88,11 +95,11 @@ class ClientIntents extends Notifier<void> {
             : AgentPaneLaunch(
                 agentId: installation.agentId,
                 executable: installation.executable.path,
-                workingDirectory: (row!.workingDirectory ?? row.worktree)?.path,
+                workingDirectory: (row.workingDirectory ?? row.worktree)?.path,
                 sessionId: sessionId,
                 title: title,
               ));
-    if (row == null || shown == null) return;
+    if (shown == null) return;
     await launcher.showStarted(SessionStarted(session: row, launch: shown));
   }
 
