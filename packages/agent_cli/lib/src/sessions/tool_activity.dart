@@ -30,6 +30,7 @@ class ToolActivity {
     this.kind,
     this.edits = const [],
     this.editsTruncated = false,
+    this.proposedPlan,
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -80,6 +81,10 @@ class ToolActivity {
   /// Whether [edits] lost content to the bound.
   final bool editsTruncated;
 
+  /// The plan this call asked the person to approve, in the agent's words
+  /// (Claude's `ExitPlanMode` input `plan`). Null for every other call.
+  final String? proposedPlan;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -100,6 +105,7 @@ class ToolActivity {
     'kind': ?kind,
     if (edits.isNotEmpty) 'edits': [for (final edit in edits) edit.toJson()],
     if (editsTruncated) 'editsTruncated': true,
+    'proposedPlan': ?proposedPlan,
   };
 
   /// Throws [FormatException] when `name` is not a string; any other field
@@ -128,6 +134,7 @@ class ToolActivity {
             ]
           : const [],
       editsTruncated: json['editsTruncated'] == true,
+      proposedPlan: _stringOrNull(json['proposedPlan']),
     );
   }
 
@@ -155,6 +162,7 @@ class ToolActivity {
       kind: kind,
       edits: kept,
       editsTruncated: cut,
+      proposedPlan: proposedPlan,
     );
   }
 }
@@ -265,8 +273,15 @@ ToolActivity toolActivityFor(String name, Object? input) {
     plan: plan,
     edits: edits,
     editsTruncated: cut,
+    proposedPlan: proposedPlanIn(input),
   );
 }
+
+/// The plan a call's [input] puts to the person for approval: its `plan`.
+String? proposedPlanIn(Object? input) => switch (input) {
+  {'plan': final String plan} when plan.trim().isNotEmpty => plan,
+  _ => null,
+};
 
 /// [text] cut to [kMaxToolOutputBytes], and whether cutting was needed.
 ///

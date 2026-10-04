@@ -10,6 +10,7 @@ import 'package:agent_cli/stream.dart'
         ToolActivity,
         boundedToolEdits,
         boundedToolOutput,
+        proposedPlanIn,
         toolSubjectEntryFor;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
@@ -136,6 +137,7 @@ class SessionMessageTranscriptSource {
         kind: _string(json['kind']),
         edits: edits,
         editsTruncated: editsCut || json[kEditsTruncatedKey] == true,
+        proposedPlan: proposedPlanIn(json['rawInput']),
       ),
       pendingId: open ? (_string(json['toolCallId']) ?? row.id) : null,
     );

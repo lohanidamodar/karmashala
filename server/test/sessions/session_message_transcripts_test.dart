@@ -225,6 +225,23 @@ void main() {
       expect(other.subject, isNull);
     });
 
+    test('a call proposing a plan carries the plan it proposed', () {
+      final call = SessionMessageTranscriptSource.project(
+        row(
+          'pp',
+          role: SessionMessageRole.tool,
+          tool: {
+            'toolCallId': 'c9',
+            'title': 'Ready to code?',
+            'kind': 'switch_mode',
+            'status': 'completed',
+            'rawInput': {'plan': '# Plan\n- one'},
+          },
+        ),
+      );
+      expect(call.tool!.proposedPlan, '# Plan\n- one');
+    });
+
     test('a plan row carries the plan, in either JSON shape', () {
       final acpShape = SessionMessageTranscriptSource.project(
         row(

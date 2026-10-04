@@ -104,6 +104,12 @@ class _ChatMessageTile extends StatelessWidget {
           // A plan, whoever filed it: drawn as the agent's checklist.
           _ when message.role != 'user' && message.tool?.plan != null =>
             PlanUpdateCard(plan: message.tool!.plan!, previous: previousPlan),
+          // A plan put to the person, once answered: kept, saying how.
+          _
+              when message.tool?.proposedPlan != null &&
+                  !message.pending &&
+                  message.tool!.output != null =>
+            _AnsweredPlanCard(tool: message.tool!),
           // Claude Code records an interruption as a user message; it is the
           // tool's note, not the person's words, so it is no bubble.
           'user' when _interruptionNote.hasMatch(message.text.trim()) =>
@@ -284,6 +290,54 @@ class _InterruptionNote extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A plan the agent asked to carry out, after the person answered: the plan
+/// in its words under whether it was approved. A refused plan is the tool's
+/// error (Claude's "keep planning").
+class _AnsweredPlanCard extends StatelessWidget {
+  const _AnsweredPlanCard({required this.tool});
+
+  final ToolActivity tool;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final approved = !tool.isError;
+    final tone = approved ? SemanticColors.of(context).idle : scheme.outline;
+    return TranscriptTurnFrame(
+      edge: scheme.outlineVariant,
+      padding: const EdgeInsets.all(Insets.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectionContainer.disabled(
+            child: Row(
+              children: [
+                Icon(
+                  approved ? AppIcons.checkCircle : AppIcons.listChecks,
+                  size: Chrome.iconSmall,
+                  color: tone,
+                ),
+                const SizedBox(width: Insets.xs),
+                Flexible(
+                  child: Text(
+                    approved
+                        ? 'Plan approved'
+                        : 'Plan not approved: kept planning',
+                    style: theme.textTheme.labelMedium?.copyWith(color: tone),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Insets.sm),
+          MarkdownMessage(tool.proposedPlan!),
+        ],
+      ),
     );
   }
 }

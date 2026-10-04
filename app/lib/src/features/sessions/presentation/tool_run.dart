@@ -20,11 +20,13 @@ const Set<String> kInteractiveToolNames = {
 
 /// Whether this message belongs in a run: a structured tool call. Prose, the
 /// user, errors, notices and a tool line with no call behind it all end one.
-/// So does a plan, which is drawn as a checklist where it was written.
+/// So does a plan, which is drawn as a checklist where it was written, and a
+/// plan put to the person, which stays readable once it is answered.
 bool isToolRunMember(ChatMessage message) =>
     message.role == 'tool' &&
     message.tool != null &&
-    message.tool!.plan == null;
+    message.tool!.plan == null &&
+    message.tool!.proposedPlan == null;
 
 /// One row of the transcript: a message at [from], or the run of tool calls
 /// `[from, to)` folded into one line.

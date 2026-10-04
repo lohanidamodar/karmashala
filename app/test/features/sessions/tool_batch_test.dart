@@ -46,12 +46,7 @@ void main() {
         tool('Read'),
       ]);
 
-      expect(rows.map((r) => (r.from, r.to)), [
-        (0, 1),
-        (1, 4),
-        (4, 5),
-        (5, 7),
-      ]);
+      expect(rows.map((r) => (r.from, r.to)), [(0, 1), (1, 4), (4, 5), (5, 7)]);
       expect(rows[1].isBatch, isTrue);
       expect(rows[1].live, isFalse);
       expect(rows[3].isBatch, isTrue, reason: 'two calls fold too');
@@ -174,20 +169,22 @@ void main() {
       ]);
     });
 
-    test('an unanswered call in a settled run is no longer waiting on anyone',
-        () {
-      final rows = transcriptRows([
-        tool('Read'),
-        tool('Read'),
-        tool('Read'),
-        tool('Bash', output: null, pending: true),
-        said('I stopped'),
-      ], turn: TranscriptTurn.working);
+    test(
+      'an unanswered call in a settled run is no longer waiting on anyone',
+      () {
+        final rows = transcriptRows([
+          tool('Read'),
+          tool('Read'),
+          tool('Read'),
+          tool('Bash', output: null, pending: true),
+          said('I stopped'),
+        ], turn: TranscriptTurn.working);
 
-      expect(rows.first.live, isFalse);
-      expect(rows.first.isBatch, isTrue);
-      expect(rows.first.pinned, isEmpty);
-    });
+        expect(rows.first.live, isFalse);
+        expect(rows.first.isBatch, isTrue);
+        expect(rows.first.pinned, isEmpty);
+      },
+    );
 
     test('an empty answer is not a pending call', () {
       final rows = transcriptRows([
@@ -507,6 +504,49 @@ void main() {
       );
       expect(shown('lib/one.dart'), findsNothing);
     });
+
+    testWidgets(
+      'an answered plan stays in the transcript, marked as answered',
+      (tester) async {
+        ChatMessage proposal({required bool approved}) => ChatMessage(
+          role: 'tool',
+          text: 'ExitPlanMode',
+          tool: ToolActivity(
+            name: 'ExitPlanMode',
+            proposedPlan: '# Ship it\n- add a line',
+            output: approved ? 'approved' : 'keep planning',
+            isError: !approved,
+          ),
+        );
+        final rows = transcriptRows([
+          tool('Read'),
+          proposal(approved: true),
+          tool('Edit'),
+        ], turn: TranscriptTurn.idle);
+        expect(rows.map((r) => (r.from, r.to, r.isBatch)), [
+          (0, 1, true),
+          (1, 2, false),
+          (2, 3, true),
+        ]);
+
+        await tester.pumpWidget(
+          view([
+            tool('Read'),
+            proposal(approved: true),
+            tool('Edit'),
+            tool('Edit'),
+            tool('Edit'),
+          ], turn: TranscriptTurn.working),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Plan approved'), findsOneWidget);
+        expect(shown('add a line'), findsWidgets);
+
+        await tester.pumpWidget(view([proposal(approved: false)]));
+        await tester.pumpAndSettle();
+        expect(find.text('Plan not approved: kept planning'), findsOneWidget);
+      },
+    );
 
     testWidgets('a live line whose call is named by its subject says it once', (
       tester,

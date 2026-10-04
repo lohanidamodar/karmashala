@@ -20,14 +20,19 @@ void main() {
   });
 
   test('the one-line form names a subject once', () {
-    expect(
-      const ToolActivity(name: 'Bash', subject: 'ls').summary,
-      'Bash(ls)',
-    );
+    expect(const ToolActivity(name: 'Bash', subject: 'ls').summary, 'Bash(ls)');
     expect(
       const ToolActivity(name: 'echo hi', subject: 'echo hi').summary,
       'echo hi',
     );
+  });
+
+  test('a call proposing a plan carries it, over the wire too', () {
+    final call = toolActivityFor('ExitPlanMode', {'plan': '# Plan\n- one'});
+    expect(call.proposedPlan, '# Plan\n- one');
+    expect(ToolActivity.fromJson(call.toJson()).proposedPlan, '# Plan\n- one');
+    expect(call.withResult(output: 'ok').proposedPlan, '# Plan\n- one');
+    expect(toolActivityFor('Bash', {'command': 'ls'}).proposedPlan, isNull);
   });
 
   test('an input naming none of them has no subject', () {
