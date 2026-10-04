@@ -20,6 +20,8 @@ void main() {
   late Map<String, bool> held, ready, working;
   late List<(String, String)> delivered;
   late List<String> holds, releases;
+  late Map<String, String> leadIns;
+  late List<String?> typedLeadIns;
   Object? refuse;
 
   setUp(() {
@@ -38,16 +40,20 @@ void main() {
     delivered = [];
     holds = [];
     releases = [];
+    leadIns = {};
+    typedLeadIns = [];
     refuse = null;
     delivery = HandoffDelivery(
       handoffs: handoffs,
       holds: (id) => held[id] ?? false,
       ready: (id) => ready[id] ?? false,
       working: (id) => working[id] ?? false,
-      deliver: (id, text) async {
+      leadInFor: (id) => leadIns[id],
+      deliver: (id, text, leadIn) async {
         final refusal = refuse;
         if (refusal != null) throw refusal;
         delivered.add((id, text));
+        typedLeadIns.add(leadIn);
       },
       hold: holds.add,
       release: releases.add,
@@ -100,6 +106,16 @@ void main() {
       expect(releases, ['s1']);
       await after(step);
       expect(delivered, hasLength(1));
+    });
+
+    test('is typed after the lead-in its agent declares', () async {
+      leadIns['s1'] = 'Please carry out this request: ';
+      held['s1'] = true;
+      ready['s1'] = true;
+      await after(step);
+      await after(step);
+      expect(delivered, [('s1', 'one\ntwo')]);
+      expect(typedLeadIns, ['Please carry out this request: ']);
     });
 
     test('lets the queue go when the turn is not seen to start', () async {

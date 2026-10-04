@@ -78,6 +78,19 @@ void main() {
       expect(composer.written.where((w) => w == '\r'), hasLength(1));
     });
 
+    test('types a lead-in as its own write before the message', () async {
+      // One burst is taken for a paste, and a message that is only pasted
+      // text is not read as the person's instructions.
+      final composer = FakeComposer();
+      final delivery = await typistFor(
+        composer,
+      ).deliver('s1', 'line one\nline two', leadIn: 'Do this: ');
+
+      expect(delivery, MessageDelivery.readBack);
+      expect(composer.written.take(2), ['Do this: ', 'line one\nline two']);
+      expect(composer.queued, ['Do this: line one\nline two']);
+    });
+
     test(
       'presses Return again when the composer folded it into a newline',
       () async {

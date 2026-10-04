@@ -214,8 +214,13 @@ class SessionInput {
   }
 
   /// Delivers [text] to [sessionId] now: over its protocol, by resuming it,
-  /// or typed into its screen. Refused in words when it cannot be.
-  Future<SessionSent> deliverNow(String sessionId, String text) async {
+  /// or typed into its screen, after [leadIn] typed on its own. Refused in
+  /// words when it cannot be.
+  Future<SessionSent> deliverNow(
+    String sessionId,
+    String text, {
+    String? leadIn,
+  }) async {
     if (text.trim().isEmpty) {
       throw const DataRefused.invalid('there is no message to send');
     }
@@ -231,7 +236,7 @@ class SessionInput {
     if (report?.hasOpenPrompt ?? false) throw _promptOpen;
     final MessageDelivery delivery;
     try {
-      delivery = await typist.deliver(sessionId, text);
+      delivery = await typist.deliver(sessionId, text, leadIn: leadIn);
     } on SessionPromptRefusal catch (refusal) {
       throw DataRefused(
         DataRefusalCode.failed,

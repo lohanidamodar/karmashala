@@ -878,6 +878,10 @@ const claudeCodeDescriptor = AgentDescriptor(
   terminal: AgentTerminalRules(
     clusterWidthFromBase: true,
     typedTextArrivesWhole: true,
+    // 2.1.287 answered a typed opening that was only a paste with "Your
+    // message is only pasted text … I'm not treating the steps in it as your
+    // instructions until you confirm" (probe, 2026-10-04).
+    typedOpeningLeadIn: 'Please carry out this request: ',
     evidence:
         'Claude Code lays its screen out with string-width, which gives a '
         'Devanagari cluster its first code point\'s width; panes measured the '

@@ -23,6 +23,7 @@ class HandoffDelivery {
     required this.ready,
     required this.working,
     required this.deliver,
+    this.leadInFor,
     this.hold,
     this.release,
     this.log,
@@ -36,7 +37,9 @@ class HandoffDelivery {
     required SessionHandoffs handoffs,
     required DaemonAgentStatus status,
     required TurnSettlement turns,
-    required Future<void> Function(String sessionId, String text) deliver,
+    required Future<void> Function(String sessionId, String text, String? leadIn)
+    deliver,
+    String? Function(String sessionId)? leadInFor,
     SessionQueue? queue,
     void Function(String message)? log,
   }) {
@@ -61,6 +64,7 @@ class HandoffDelivery {
           activity(id) == AgentActivityStatus.working ||
           activity(id) == AgentActivityStatus.awaitingApproval,
       deliver: deliver,
+      leadInFor: leadInFor,
       hold: queue?.hold,
       release: queue?.release,
       log: log,
@@ -78,8 +82,13 @@ class HandoffDelivery {
   /// Whether the session's agent is mid-turn.
   final bool Function(String sessionId) working;
 
-  /// Types [text] into the session and sends it; throws [DataRefused].
-  final Future<void> Function(String sessionId, String text) deliver;
+  /// Types [text] into the session, after a lead-in typed on its own when
+  /// given, and sends it; throws [DataRefused].
+  final Future<void> Function(String sessionId, String text, String? leadIn)
+  deliver;
+
+  /// What the session's agent wants typed before an opening, if anything.
+  final String? Function(String sessionId)? leadInFor;
 
   /// Holds and lets go of the session's queue.
   final void Function(String sessionId)? hold;
@@ -193,7 +202,7 @@ class HandoffDelivery {
     if (now.difference(since) < settle) return;
     watch.busy = true;
     try {
-      await deliver(id, row.text);
+      await deliver(id, row.text, leadInFor?.call(id));
       handoffs.consume(id, kind: row.kind);
       watch.typedAt = _now();
       watch.sawWorking = false;

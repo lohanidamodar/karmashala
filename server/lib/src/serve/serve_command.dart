@@ -1238,7 +1238,10 @@ Future<int> runServe(
     handoffs: handoffs,
     status: prompts.status,
     turns: turnSettlement,
-    deliver: (sessionId, text) => sessionInput.deliverNow(sessionId, text),
+    deliver: (sessionId, text, leadIn) =>
+        sessionInput.deliverNow(sessionId, text, leadIn: leadIn),
+    leadInFor: (sessionId) =>
+        prompts.agentOf(sessionId)?.terminal.typedOpeningLeadIn,
     queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );

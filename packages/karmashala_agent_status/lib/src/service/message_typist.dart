@@ -18,7 +18,12 @@ class SessionMessageTypist {
     this.typedPatience = const Duration(milliseconds: 1500),
     this.sendPatience = const Duration(seconds: 2),
     this.presses = 3,
+    this.leadInGap = const Duration(milliseconds: 200),
   });
+
+  /// How long after a lead-in the message is typed, so the two reach the
+  /// agent in separate reads.
+  final Duration leadInGap;
 
   /// The bottom rows of the session's pane, or null without one.
   final List<String>? Function(String sessionId) readScreen;
@@ -56,9 +61,19 @@ class SessionMessageTypist {
       await deliver(sessionId, text) != MessageDelivery.none;
 
   /// [send], saying whether the Return was read back off the screen.
-  Future<MessageDelivery> deliver(String sessionId, String text) async {
+  /// [leadIn] is typed first, as its own write, so it reads as typed rather
+  /// than as part of a paste.
+  Future<MessageDelivery> deliver(
+    String sessionId,
+    String text, {
+    String? leadIn,
+  }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return MessageDelivery.none;
+    if (leadIn != null && leadIn.isNotEmpty) {
+      if (!type(sessionId, leadIn)) return MessageDelivery.none;
+      await Future<void>.delayed(leadInGap);
+    }
     if (!type(sessionId, trimmed)) return MessageDelivery.none;
 
     final markers = markersFor(sessionId);

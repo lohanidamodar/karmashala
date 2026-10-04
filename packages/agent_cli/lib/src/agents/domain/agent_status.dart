@@ -706,8 +706,14 @@ class AgentTerminalRules {
     this.clusterWidthFromBase = false,
     this.pasteBurstFoldsReturn = false,
     this.typedTextArrivesWhole = false,
+    this.typedOpeningLeadIn,
     this.evidence,
   });
+
+  /// Words typed, on their own, before an opening message typed in: an agent
+  /// that takes the opening for a paste reads a message that is only pasted
+  /// text as content rather than as the person's request. Null types none.
+  final String? typedOpeningLeadIn;
 
   /// Whether the agent lays a grapheme cluster out at its **first code
   /// point's** width (`string-width`), so an Indic cluster (का, क्ष) takes one
