@@ -31,6 +31,7 @@ class _TabChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = ref.watch(terminalTabTitleProvider(tab.id));
+    final agentId = _agentId(ref);
     final chip = TerminalTabChip(
       title: title,
       liveness: _liveness(ref),
@@ -38,10 +39,15 @@ class _TabChip extends ConsumerWidget {
       // A document tab has nothing running in it, so it wears what it is rather
       // than a liveness dot reporting `exited`.
       icon: documentIconFor(tab),
-      mark: switch (_agentId(ref)) {
-        final agentId? => AgentLogo(agentId: agentId, size: Chrome.iconSmall),
-        null => null,
-      },
+      mark: agentId == null
+          ? null
+          : AgentLogo(agentId: agentId, size: Chrome.iconSmall),
+      tooltip: tabTitleTooltip(
+        title,
+        agentId == null
+            ? null
+            : ref.watch(agentRegistryProvider).displayNameFor(agentId),
+      ),
       unsaved: _hasUnsaved(ref),
       selected: selected,
       accented: accented,
@@ -62,7 +68,11 @@ class _TabChip extends ConsumerWidget {
       // the feedback's corner, which put every drop in the leading half.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _TabDragFeedback(title: title),
-      childWhenDragging: Opacity(opacity: 0.4, child: chip),
+      // The pointer stays over the tab it lifted; its title must not pop up.
+      childWhenDragging: TooltipVisibility(
+        visible: false,
+        child: Opacity(opacity: 0.4, child: chip),
+      ),
       child: _TabDropTarget(
         index: index,
         tab: tab,

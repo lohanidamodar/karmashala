@@ -54,6 +54,8 @@ class WorkbenchTabChip extends StatelessWidget {
   /// What a **middle click** does — the reversible close, never ending the
   /// session. `InkWell` has no tertiary callback, hence the wrapper; it fires up.
   final VoidCallback? onClose;
+
+  /// Shown over the title: its full text, which the chip cuts to fit.
   final String? tooltip;
 
   @override
@@ -72,7 +74,7 @@ class WorkbenchTabChip extends StatelessWidget {
               _ => Colors.transparent,
             },
     );
-    final chip = Material(
+    return Material(
       color: needsYou
           ? tones.attentionSurface
           : selected
@@ -105,25 +107,36 @@ class WorkbenchTabChip extends StatelessWidget {
               child: Row(
                 children: [
                   ?leading,
-                  if (mark case final mark?
-                      when constraints.maxWidth >= kMinTabWidth)
-                    Padding(
-                      padding: const EdgeInsets.only(right: Insets.xs),
-                      child: mark,
-                    ),
                   Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
-                          .copyWith(
-                            // Full ink only where the keyboard is: a strip nobody
-                            // types in must not compete with the one that is.
-                            color: needsYou || (selected && (accented ?? true))
-                                ? scheme.onSurface
-                                : scheme.onSurfaceVariant,
+                    child: _titleTooltip(
+                      Row(
+                        children: [
+                          if (mark case final mark?
+                              when constraints.maxWidth >= kMinTabWidth)
+                            Padding(
+                              padding: const EdgeInsets.only(right: Insets.xs),
+                              child: mark,
+                            ),
+                          Expanded(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
+                                  .copyWith(
+                                    // Full ink only where the keyboard is: a
+                                    // strip nobody types in must not compete
+                                    // with the one that is.
+                                    color:
+                                        needsYou ||
+                                            (selected && (accented ?? true))
+                                        ? scheme.onSurface
+                                        : scheme.onSurfaceVariant,
+                                  ),
+                            ),
                           ),
+                        ],
+                      ),
                     ),
                   ),
                   if (trailing != null) ...[
@@ -137,6 +150,14 @@ class WorkbenchTabChip extends StatelessWidget {
         ),
       ),
     );
-    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
+
+  // Over the title only: the status glyph and the close button have their own.
+  Widget _titleTooltip(Widget title) =>
+      tooltip == null ? title : Tooltip(message: tooltip!, child: title);
 }
+
+/// What hovering a tab's title says: the title in full, which the chip cuts to
+/// fit, and the agent when the tab holds a session.
+String tabTitleTooltip(String title, String? agentName) =>
+    agentName == null ? title : '$title · $agentName';

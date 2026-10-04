@@ -949,219 +949,223 @@ TerminalPaneStack
                                                             Draggable<TerminalDrag>
                                                               Listener
                                                                 WorkbenchTabChip
-                                                                  Tooltip tooltip="PowerShell"
-                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                      OverlayPortal
-                                                                        _OverlayPortal
-                                                                          Semantics
-                                                                            _ExclusiveMouseRegion
-                                                                              Listener
-                                                                                Semantics
-                                                                                  MouseRegion
-                                                                                    Material
-                                                                                      AnimatedPhysicalModel
-                                                                                        PhysicalModel
-                                                                                          NotificationListener<LayoutChangedNotification>
-                                                                                            _InkFeatures key=[GlobalKey#… ink renderer]
-                                                                                              AnimatedDefaultTextStyle
-                                                                                                DefaultTextStyle
-                                                                                                  GestureDetector
-                                                                                                    RawGestureDetector
-                                                                                                      _GestureSemantics
-                                                                                                        Listener
-                                                                                                          InkWell
-                                                                                                            _InkResponseStateWidget
-                                                                                                              _ParentInkResponseProvider
-                                                                                                                Actions
-                                                                                                                  _ActionsScope
-                                                                                                                    Focus
-                                                                                                                      _FocusInheritedScope
-                                                                                                                        Semantics
-                                                                                                                          MouseRegion
-                                                                                                                            Builder
-                                                                                                                              DefaultSelectionStyle
-                                                                                                                                Semantics
-                                                                                                                                  GestureDetector
-                                                                                                                                    RawGestureDetector
-                                                                                                                                      Listener
-                                                                                                                                        LayoutBuilder
-                                                                                                                                          Container
-                                                                                                                                            ConstrainedBox
-                                                                                                                                              DecoratedBox
-                                                                                                                                                Padding
-                                                                                                                                                  Row
-                                                                                                                                                    TabLivenessDot
-                                                                                                                                                      SizedBox
-                                                                                                                                                    Expanded
-                                                                                                                                                      Text text="PowerShell"
-                                                                                                                                                        RichText
-                                                                                                                                                    SizedBox
-                                                                                                                                                    DenseIconButton
-                                                                                                                                                      IconButton
-                                                                                                                                                        _SelectableIconButton
-                                                                                                                                                          _IconButtonM3
-                                                                                                                                                            Semantics
-                                                                                                                                                              _InputPadding
-                                                                                                                                                                ConstrainedBox
-                                                                                                                                                                  Material
-                                                                                                                                                                    _MaterialInterior
-                                                                                                                                                                      PhysicalShape
-                                                                                                                                                                        _ShapeBorderPaint
-                                                                                                                                                                          CustomPaint
-                                                                                                                                                                            NotificationListener<LayoutChangedNotification>
-                                                                                                                                                                              _InkFeatures key=[GlobalKey#… ink renderer]
-                                                                                                                                                                                AnimatedDefaultTextStyle
-                                                                                                                                                                                  DefaultTextStyle
-                                                                                                                                                                                    Tooltip tooltip="Close pane (the session keeps running)"
-                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                        OverlayPortal
-                                                                                                                                                                                          _OverlayPortal
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              _ExclusiveMouseRegion
-                                                                                                                                                                                                Listener
-                                                                                                                                                                                                  Semantics
-                                                                                                                                                                                                    MouseRegion
-                                                                                                                                                                                                      AnimatedTheme
-                                                                                                                                                                                                        Theme
-                                                                                                                                                                                                          _InheritedTheme
-                                                                                                                                                                                                            CupertinoTheme
-                                                                                                                                                                                                              InheritedCupertinoTheme
-                                                                                                                                                                                                                IconTheme
-                                                                                                                                                                                                                  IconTheme
-                                                                                                                                                                                                                    DefaultSelectionStyle
-                                                                                                                                                                                                                      InkWell
-                                                                                                                                                                                                                        _InkResponseStateWidget
-                                                                                                                                                                                                                          _ParentInkResponseProvider
-                                                                                                                                                                                                                            Actions
-                                                                                                                                                                                                                              _ActionsScope
-                                                                                                                                                                                                                                Focus
-                                                                                                                                                                                                                                  _FocusInheritedScope
-                                                                                                                                                                                                                                    Semantics
-                                                                                                                                                                                                                                      MouseRegion
-                                                                                                                                                                                                                                        Builder
-                                                                                                                                                                                                                                          DefaultSelectionStyle
-                                                                                                                                                                                                                                            Semantics
-                                                                                                                                                                                                                                              GestureDetector
-                                                                                                                                                                                                                                                RawGestureDetector
-                                                                                                                                                                                                                                                  Listener
-                                                                                                                                                                                                                                                    Padding
-                                                                                                                                                                                                                                                      Align
-                                                                                                                                                                                                                                                        Semantics
-                                                                                                                                                                                                                                                          Icon icon=IconData(U+0E4F6)
-                                                                                                                                                                                                                                                            Semantics
-                                                                                                                                                                                                                                                              ExcludeSemantics
-                                                                                                                                                                                                                                                                SizedBox
-                                                                                                                                                                                                                                                                  Center
-                                                                                                                                                                                                                                                                    RichText
+                                                                  Material
+                                                                    AnimatedPhysicalModel
+                                                                      PhysicalModel
+                                                                        NotificationListener<LayoutChangedNotification>
+                                                                          _InkFeatures key=[GlobalKey#… ink renderer]
+                                                                            AnimatedDefaultTextStyle
+                                                                              DefaultTextStyle
+                                                                                GestureDetector
+                                                                                  RawGestureDetector
+                                                                                    _GestureSemantics
+                                                                                      Listener
+                                                                                        InkWell
+                                                                                          _InkResponseStateWidget
+                                                                                            _ParentInkResponseProvider
+                                                                                              Actions
+                                                                                                _ActionsScope
+                                                                                                  Focus
+                                                                                                    _FocusInheritedScope
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Builder
+                                                                                                            DefaultSelectionStyle
+                                                                                                              Semantics
+                                                                                                                GestureDetector
+                                                                                                                  RawGestureDetector
+                                                                                                                    Listener
+                                                                                                                      LayoutBuilder
+                                                                                                                        Container
+                                                                                                                          ConstrainedBox
+                                                                                                                            DecoratedBox
+                                                                                                                              Padding
+                                                                                                                                Row
+                                                                                                                                  TabLivenessDot
+                                                                                                                                    SizedBox
+                                                                                                                                  Expanded
+                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                        OverlayPortal
+                                                                                                                                          _OverlayPortal
+                                                                                                                                            Semantics
+                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                Listener
+                                                                                                                                                  Semantics
+                                                                                                                                                    MouseRegion
+                                                                                                                                                      Row
+                                                                                                                                                        Expanded
+                                                                                                                                                          Text text="PowerShell"
+                                                                                                                                                            RichText
+                                                                                                                                  SizedBox
+                                                                                                                                  DenseIconButton
+                                                                                                                                    IconButton
+                                                                                                                                      _SelectableIconButton
+                                                                                                                                        _IconButtonM3
+                                                                                                                                          Semantics
+                                                                                                                                            _InputPadding
+                                                                                                                                              ConstrainedBox
+                                                                                                                                                Material
+                                                                                                                                                  _MaterialInterior
+                                                                                                                                                    PhysicalShape
+                                                                                                                                                      _ShapeBorderPaint
+                                                                                                                                                        CustomPaint
+                                                                                                                                                          NotificationListener<LayoutChangedNotification>
+                                                                                                                                                            _InkFeatures key=[GlobalKey#… ink renderer]
+                                                                                                                                                              AnimatedDefaultTextStyle
+                                                                                                                                                                DefaultTextStyle
+                                                                                                                                                                  Tooltip tooltip="Close pane (the session keeps running)"
+                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                          Semantics
+                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                              Listener
+                                                                                                                                                                                Semantics
+                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                    AnimatedTheme
+                                                                                                                                                                                      Theme
+                                                                                                                                                                                        _InheritedTheme
+                                                                                                                                                                                          CupertinoTheme
+                                                                                                                                                                                            InheritedCupertinoTheme
+                                                                                                                                                                                              IconTheme
+                                                                                                                                                                                                IconTheme
+                                                                                                                                                                                                  DefaultSelectionStyle
+                                                                                                                                                                                                    InkWell
+                                                                                                                                                                                                      _InkResponseStateWidget
+                                                                                                                                                                                                        _ParentInkResponseProvider
+                                                                                                                                                                                                          Actions
+                                                                                                                                                                                                            _ActionsScope
+                                                                                                                                                                                                              Focus
+                                                                                                                                                                                                                _FocusInheritedScope
+                                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                                      Builder
+                                                                                                                                                                                                                        DefaultSelectionStyle
+                                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                                            GestureDetector
+                                                                                                                                                                                                                              RawGestureDetector
+                                                                                                                                                                                                                                Listener
+                                                                                                                                                                                                                                  Padding
+                                                                                                                                                                                                                                    Align
+                                                                                                                                                                                                                                      Semantics
+                                                                                                                                                                                                                                        Icon icon=IconData(U+0E4F6)
+                                                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                                                            ExcludeSemantics
+                                                                                                                                                                                                                                              SizedBox
+                                                                                                                                                                                                                                                Center
+                                                                                                                                                                                                                                                  RichText
                                                         SizedBox
                                                           PaneTabChip key=[<'pane-tab/id-3'>]
                                                             Draggable<TerminalDrag>
                                                               Listener
                                                                 WorkbenchTabChip
-                                                                  Tooltip tooltip="Command Prompt"
-                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                      OverlayPortal
-                                                                        _OverlayPortal
-                                                                          Semantics
-                                                                            _ExclusiveMouseRegion
-                                                                              Listener
-                                                                                Semantics
-                                                                                  MouseRegion
-                                                                                    Material
-                                                                                      AnimatedPhysicalModel
-                                                                                        PhysicalModel
-                                                                                          NotificationListener<LayoutChangedNotification>
-                                                                                            _InkFeatures key=[GlobalKey#… ink renderer]
-                                                                                              AnimatedDefaultTextStyle
-                                                                                                DefaultTextStyle
-                                                                                                  GestureDetector
-                                                                                                    RawGestureDetector
-                                                                                                      _GestureSemantics
-                                                                                                        Listener
-                                                                                                          InkWell
-                                                                                                            _InkResponseStateWidget
-                                                                                                              _ParentInkResponseProvider
-                                                                                                                Actions
-                                                                                                                  _ActionsScope
-                                                                                                                    Focus
-                                                                                                                      _FocusInheritedScope
-                                                                                                                        Semantics
-                                                                                                                          MouseRegion
-                                                                                                                            Builder
-                                                                                                                              DefaultSelectionStyle
-                                                                                                                                Semantics
-                                                                                                                                  GestureDetector
-                                                                                                                                    RawGestureDetector
-                                                                                                                                      Listener
-                                                                                                                                        LayoutBuilder
-                                                                                                                                          Container
-                                                                                                                                            ConstrainedBox
-                                                                                                                                              DecoratedBox
-                                                                                                                                                Padding
-                                                                                                                                                  Row
-                                                                                                                                                    TabLivenessDot
-                                                                                                                                                      SizedBox
-                                                                                                                                                    Expanded
-                                                                                                                                                      Text text="Command Prompt"
-                                                                                                                                                        RichText
-                                                                                                                                                    SizedBox
-                                                                                                                                                    DenseIconButton
-                                                                                                                                                      IconButton
-                                                                                                                                                        _SelectableIconButton
-                                                                                                                                                          _IconButtonM3
-                                                                                                                                                            Semantics
-                                                                                                                                                              _InputPadding
-                                                                                                                                                                ConstrainedBox
-                                                                                                                                                                  Material
-                                                                                                                                                                    _MaterialInterior
-                                                                                                                                                                      PhysicalShape
-                                                                                                                                                                        _ShapeBorderPaint
-                                                                                                                                                                          CustomPaint
-                                                                                                                                                                            NotificationListener<LayoutChangedNotification>
-                                                                                                                                                                              _InkFeatures key=[GlobalKey#… ink renderer]
-                                                                                                                                                                                AnimatedDefaultTextStyle
-                                                                                                                                                                                  DefaultTextStyle
-                                                                                                                                                                                    Tooltip tooltip="Close pane (the session keeps running)"
-                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                        OverlayPortal
-                                                                                                                                                                                          _OverlayPortal
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              _ExclusiveMouseRegion
-                                                                                                                                                                                                Listener
-                                                                                                                                                                                                  Semantics
-                                                                                                                                                                                                    MouseRegion
-                                                                                                                                                                                                      AnimatedTheme
-                                                                                                                                                                                                        Theme
-                                                                                                                                                                                                          _InheritedTheme
-                                                                                                                                                                                                            CupertinoTheme
-                                                                                                                                                                                                              InheritedCupertinoTheme
-                                                                                                                                                                                                                IconTheme
-                                                                                                                                                                                                                  IconTheme
-                                                                                                                                                                                                                    DefaultSelectionStyle
-                                                                                                                                                                                                                      InkWell
-                                                                                                                                                                                                                        _InkResponseStateWidget
-                                                                                                                                                                                                                          _ParentInkResponseProvider
-                                                                                                                                                                                                                            Actions
-                                                                                                                                                                                                                              _ActionsScope
-                                                                                                                                                                                                                                Focus
-                                                                                                                                                                                                                                  _FocusInheritedScope
-                                                                                                                                                                                                                                    Semantics
-                                                                                                                                                                                                                                      MouseRegion
-                                                                                                                                                                                                                                        Builder
-                                                                                                                                                                                                                                          DefaultSelectionStyle
-                                                                                                                                                                                                                                            Semantics
-                                                                                                                                                                                                                                              GestureDetector
-                                                                                                                                                                                                                                                RawGestureDetector
-                                                                                                                                                                                                                                                  Listener
-                                                                                                                                                                                                                                                    Padding
-                                                                                                                                                                                                                                                      Align
-                                                                                                                                                                                                                                                        Semantics
-                                                                                                                                                                                                                                                          Icon icon=IconData(U+0E4F6)
-                                                                                                                                                                                                                                                            Semantics
-                                                                                                                                                                                                                                                              ExcludeSemantics
-                                                                                                                                                                                                                                                                SizedBox
-                                                                                                                                                                                                                                                                  Center
-                                                                                                                                                                                                                                                                    RichText
+                                                                  Material
+                                                                    AnimatedPhysicalModel
+                                                                      PhysicalModel
+                                                                        NotificationListener<LayoutChangedNotification>
+                                                                          _InkFeatures key=[GlobalKey#… ink renderer]
+                                                                            AnimatedDefaultTextStyle
+                                                                              DefaultTextStyle
+                                                                                GestureDetector
+                                                                                  RawGestureDetector
+                                                                                    _GestureSemantics
+                                                                                      Listener
+                                                                                        InkWell
+                                                                                          _InkResponseStateWidget
+                                                                                            _ParentInkResponseProvider
+                                                                                              Actions
+                                                                                                _ActionsScope
+                                                                                                  Focus
+                                                                                                    _FocusInheritedScope
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Builder
+                                                                                                            DefaultSelectionStyle
+                                                                                                              Semantics
+                                                                                                                GestureDetector
+                                                                                                                  RawGestureDetector
+                                                                                                                    Listener
+                                                                                                                      LayoutBuilder
+                                                                                                                        Container
+                                                                                                                          ConstrainedBox
+                                                                                                                            DecoratedBox
+                                                                                                                              Padding
+                                                                                                                                Row
+                                                                                                                                  TabLivenessDot
+                                                                                                                                    SizedBox
+                                                                                                                                  Expanded
+                                                                                                                                    Tooltip tooltip="Command Prompt"
+                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                        OverlayPortal
+                                                                                                                                          _OverlayPortal
+                                                                                                                                            Semantics
+                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                Listener
+                                                                                                                                                  Semantics
+                                                                                                                                                    MouseRegion
+                                                                                                                                                      Row
+                                                                                                                                                        Expanded
+                                                                                                                                                          Text text="Command Prompt"
+                                                                                                                                                            RichText
+                                                                                                                                  SizedBox
+                                                                                                                                  DenseIconButton
+                                                                                                                                    IconButton
+                                                                                                                                      _SelectableIconButton
+                                                                                                                                        _IconButtonM3
+                                                                                                                                          Semantics
+                                                                                                                                            _InputPadding
+                                                                                                                                              ConstrainedBox
+                                                                                                                                                Material
+                                                                                                                                                  _MaterialInterior
+                                                                                                                                                    PhysicalShape
+                                                                                                                                                      _ShapeBorderPaint
+                                                                                                                                                        CustomPaint
+                                                                                                                                                          NotificationListener<LayoutChangedNotification>
+                                                                                                                                                            _InkFeatures key=[GlobalKey#… ink renderer]
+                                                                                                                                                              AnimatedDefaultTextStyle
+                                                                                                                                                                DefaultTextStyle
+                                                                                                                                                                  Tooltip tooltip="Close pane (the session keeps running)"
+                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                          Semantics
+                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                              Listener
+                                                                                                                                                                                Semantics
+                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                    AnimatedTheme
+                                                                                                                                                                                      Theme
+                                                                                                                                                                                        _InheritedTheme
+                                                                                                                                                                                          CupertinoTheme
+                                                                                                                                                                                            InheritedCupertinoTheme
+                                                                                                                                                                                              IconTheme
+                                                                                                                                                                                                IconTheme
+                                                                                                                                                                                                  DefaultSelectionStyle
+                                                                                                                                                                                                    InkWell
+                                                                                                                                                                                                      _InkResponseStateWidget
+                                                                                                                                                                                                        _ParentInkResponseProvider
+                                                                                                                                                                                                          Actions
+                                                                                                                                                                                                            _ActionsScope
+                                                                                                                                                                                                              Focus
+                                                                                                                                                                                                                _FocusInheritedScope
+                                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                                      Builder
+                                                                                                                                                                                                                        DefaultSelectionStyle
+                                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                                            GestureDetector
+                                                                                                                                                                                                                              RawGestureDetector
+                                                                                                                                                                                                                                Listener
+                                                                                                                                                                                                                                  Padding
+                                                                                                                                                                                                                                    Align
+                                                                                                                                                                                                                                      Semantics
+                                                                                                                                                                                                                                        Icon icon=IconData(U+0E4F6)
+                                                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                                                            ExcludeSemantics
+                                                                                                                                                                                                                                              SizedBox
+                                                                                                                                                                                                                                                Center
+                                                                                                                                                                                                                                                  RichText
                                     Expanded
                                       _PaneDropTarget
                                         DragTarget<TerminalDrag>
@@ -2012,8 +2016,19 @@ TerminalTabChip
                                                                             Center
                                                                               RichText
                                                                     Expanded
-                                                                      Text text="Settings"
-                                                                        RichText
+                                                                      Tooltip tooltip="Settings"
+                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                          OverlayPortal
+                                                                            _OverlayPortal
+                                                                              Semantics
+                                                                                _ExclusiveMouseRegion
+                                                                                  Listener
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Row
+                                                                                          Expanded
+                                                                                            Text text="Settings"
+                                                                                              RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2133,8 +2148,19 @@ TerminalTabChip
                                                                                                             Center
                                                                                                               RichText
                                                                     Expanded
-                                                                      Text text="claude"
-                                                                        RichText
+                                                                      Tooltip tooltip="claude"
+                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                          OverlayPortal
+                                                                            _OverlayPortal
+                                                                              Semantics
+                                                                                _ExclusiveMouseRegion
+                                                                                  Listener
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Row
+                                                                                          Expanded
+                                                                                            Text text="claude"
+                                                                                              RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2249,8 +2275,19 @@ TerminalTabChip
                                                                                                   Center
                                                                                                     RichText
                                                                     Expanded
-                                                                      Text text="cmd"
-                                                                        RichText
+                                                                      Tooltip tooltip="cmd"
+                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                          OverlayPortal
+                                                                            _OverlayPortal
+                                                                              Semantics
+                                                                                _ExclusiveMouseRegion
+                                                                                  Listener
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Row
+                                                                                          Expanded
+                                                                                            Text text="cmd"
+                                                                                              RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2350,8 +2387,19 @@ TerminalTabChip
                                                                     TabLivenessDot
                                                                       SizedBox
                                                                     Expanded
-                                                                      Text text="PowerShell"
-                                                                        RichText
+                                                                      Tooltip tooltip="PowerShell"
+                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                          OverlayPortal
+                                                                            _OverlayPortal
+                                                                              Semantics
+                                                                                _ExclusiveMouseRegion
+                                                                                  Listener
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Row
+                                                                                          Expanded
+                                                                                            Text text="PowerShell"
+                                                                                              RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion

@@ -22,6 +22,7 @@ import '../../features/explorer/application/session_context.dart';
 import '../../features/explorer/application/where_you_are.dart';
 import '../../features/notes/application/note_drafts.dart';
 import '../../features/notes/application/note_tabs.dart';
+import '../../features/agents/application/agent_providers.dart';
 import '../../features/agents/presentation/agent_logo.dart';
 import '../../features/sessions/application/acp_session_providers.dart';
 import '../../features/sessions/application/session_agent_providers.dart';

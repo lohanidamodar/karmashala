@@ -67,6 +67,7 @@ class TerminalTabChip extends StatelessWidget {
     this.agentStatus,
     this.icon,
     this.mark,
+    this.tooltip,
     this.unsaved = false,
     this.accented = true,
     super.key,
@@ -92,6 +93,9 @@ class TerminalTabChip extends StatelessWidget {
 
   /// The mark of the agent whose session this tab holds, before its title.
   final Widget? mark;
+
+  /// What hovering the title says, when it is more than [title] itself.
+  final String? tooltip;
 
   /// Whether this tab holds edits that are not on disk. Drawn as a dot in place
   /// of the close glyph — a different mark, not a different colour.
@@ -147,6 +151,7 @@ class TerminalTabChip extends StatelessWidget {
           : TabAgentStatusDot(status: status),
       mark: mark,
       label: title,
+      tooltip: tooltip ?? title,
       trailing: _TabCloseButton(
         unsaved: unsaved,
         liveness: liveness,
