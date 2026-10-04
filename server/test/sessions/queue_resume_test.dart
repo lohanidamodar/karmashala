@@ -9,7 +9,7 @@ import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
-import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
+import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/sessions/session_queue.dart';
@@ -96,8 +96,10 @@ void main() {
             LaunchSettings.parse(database.readMetadata('settings.v1')),
         hasUsableLogin: (_) async => false,
         vaultNames: () => const {},
-        handoffFiles: HandoffPacketFiles(
-          Directory('${temp.path}${Platform.pathSeparator}handoff'),
+        handoffs: SessionHandoffs(
+          dao: SessionHandoffDao(database),
+          root: Directory('${temp.path}${Platform.pathSeparator}handoff'),
+          now: () => t0,
         ),
         links: SessionRepositoryDao(database),
         windows: false,
