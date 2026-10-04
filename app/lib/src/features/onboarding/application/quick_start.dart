@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart' show EnvironmentKind;
 
 import 'package:flutter/foundation.dart';
@@ -258,6 +260,36 @@ class Preflight {
       'WSL interop, Android tooling and disk space. Read-only.';
 }
 
+/// The agents installed in [environmentId], each once: its name, the version
+/// of its terminal form when read, and "chat" when that form is here too.
+List<String> preflightAgentsIn(
+  AgentRegistry registry,
+  List<AgentInstallation> installs,
+  String environmentId,
+) => [
+  for (final forms in registry.folded)
+    if (installs
+            .where(
+              (i) =>
+                  i.environmentId == environmentId &&
+                  forms.ids.contains(i.agentId),
+            )
+            .toList()
+        case final here when here.isNotEmpty)
+      () {
+        final terminal = here
+            .where((i) => i.agentId == forms.terminalId)
+            .firstOrNull;
+        final chat = here.any((i) => i.agentId == forms.chatId);
+        final version = (terminal ?? here.first).version;
+        return [
+          forms.displayName,
+          ?version,
+          if (chat && forms.hasBoth) terminal == null ? '(chat)' : '+ chat',
+        ].join(' ');
+      }(),
+];
+
 /// The review a first run shows: which agent CLIs each local environment has,
 /// whether git answers there, whether WSL is present — read from the agent
 /// discovery and the system health reading the app already keeps.
@@ -283,15 +315,7 @@ final preflightProvider = Provider<Preflight>((ref) {
   final rows = [
     for (final environment in environments)
       () {
-        final here = [
-          for (final descriptor in registry.descriptors)
-            for (final install in installs)
-              if (install.agentId == descriptor.id &&
-                  install.environmentId == environment.id)
-                install.version == null
-                    ? descriptor.displayName
-                    : '${descriptor.displayName} ${install.version}',
-        ];
+        final here = preflightAgentsIn(registry, installs, environment.id);
         final git = gitOf(environment.id);
         return PreflightEnvironment(
           name: environment.name,
@@ -327,8 +351,9 @@ final preflightProvider = Provider<Preflight>((ref) {
               : null,
         ),
     if (!findingAgents)
-      for (final descriptor in registry.descriptors)
-        if (!installs.any((i) => i.agentId == descriptor.id))
+      for (final forms in registry.folded)
+        if (!installs.any((i) => forms.ids.contains(i.agentId)))
+          if (registry.byId(forms.agentId) case final descriptor?)
           PreflightGap(
             title: descriptor.displayName,
             summary: installs.isEmpty
@@ -360,9 +385,9 @@ final preflightProvider = Provider<Preflight>((ref) {
     findingAgents: findingAgents,
     checked: report.hasRun,
     foundAgents: [
-      for (final descriptor in registry.descriptors)
-        if (installs.any((i) => i.agentId == descriptor.id))
-          descriptor.displayName,
+      for (final forms in registry.folded)
+        if (installs.any((i) => forms.ids.contains(i.agentId)))
+          forms.displayName,
     ],
     otherIssues: report.checks
         .where(

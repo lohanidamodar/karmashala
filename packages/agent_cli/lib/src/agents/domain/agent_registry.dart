@@ -85,6 +85,15 @@ class AgentRegistry {
   /// The display name of the agent [id] is a form of.
   String foldedNameOf(String id) => formsOf(id).displayName;
 
+  /// What a session on [id] is called: a paired agent's chat form is the
+  /// agent marked as chat ("Claude Code · Chat"); anything else, its own name,
+  /// so the terminal form reads as it always has.
+  String formLabelOf(String id) {
+    final forms = formsOf(id);
+    if (!forms.hasBoth || id != forms.chatId) return displayNameFor(id);
+    return '${forms.displayName} · ${AgentRunForm.chat.label}';
+  }
+
   /// Every agent once, its forms folded together, in registry order.
   List<AgentForms> get folded => [
     for (final adapter in adapters)

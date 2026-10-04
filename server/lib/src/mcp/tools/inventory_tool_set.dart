@@ -1,3 +1,4 @@
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
 import 'package:karmashala_automations/store.dart';
@@ -163,14 +164,21 @@ class InventoryToolSet extends ServerToolSet {
 
   List<Map<String, Object?>> _listAgents() => [
     for (final install in _installations.getAll()..sort(compareInstallations))
-      {
-        'agentInstallationId': install.id,
-        'cli': install.agentId,
-        'environmentId': install.environmentId,
-        if (install.version != null) 'version': install.version,
-        'path': install.executable.path,
-      },
+      agentRow(install),
   ];
+
+  /// One installation as `list_agents` gives it: one row per form, each
+  /// naming the agent it is a form of, so a caller can say "Claude Code,
+  /// chat" and still pass the installation to `open_new_session`.
+  Map<String, Object?> agentRow(AgentInstallation install) => {
+    'agentInstallationId': install.id,
+    'cli': install.agentId,
+    'agent': _context.agents.foldedNameOf(install.agentId),
+    'form': _context.agents.formOf(install.agentId).name,
+    'environmentId': install.environmentId,
+    if (install.version != null) 'version': install.version,
+    'path': install.executable.path,
+  };
 
   /// Full-text search over what was said in every conversation, asked of the
   /// server's index as quick open asks it. Catches the running sessions up
@@ -319,7 +327,9 @@ const List<Map<String, Object?>> inventoryToolSchemas = [
     'description':
         'List the installed agents available to start sessions with — each '
         'is an (agentInstallationId, cli, environmentId) the caller can pass '
-        'to open_new_session. Use this to map a user request like "a codex '
+        'to open_new_session, with the agent it is and its form: "terminal" '
+        '(the CLI in a terminal) or "chat". An agent installed in both forms '
+        'has a row for each. Use this to map a user request like "a codex '
         'session" to a concrete installation.',
     'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
   },

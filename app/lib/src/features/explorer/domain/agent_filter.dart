@@ -41,10 +41,11 @@ class AgentFilter {
       'AgentFilter(${agentIds.isEmpty ? 'all' : agentIds.join(', ')})';
 }
 
-/// The agents the filter can name, in registry order — built from the registry,
-/// not a sweep: an agent it does not list is one [AgentFilter.allows] never hides.
+/// The agents the filter can name, in registry order, each once with its chat
+/// form folded in (`AgentRegistry.folded`) — built from the registry, not a
+/// sweep: an agent it does not list is one [AgentFilter.allows] never hides.
 List<String> filterableAgentIds(AgentRegistry registry) => [
-  for (final descriptor in registry.descriptors) descriptor.id,
+  for (final forms in registry.folded) forms.agentId,
 ];
 
 /// What the funnel is doing, in one sentence, naming both halves so a filtered

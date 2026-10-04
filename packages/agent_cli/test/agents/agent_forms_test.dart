@@ -54,6 +54,13 @@ void main() {
     );
   });
 
+  test('a session names its agent and, for a paired one, its form', () {
+    expect(registry.formLabelOf(AgentIds.claudeAcp), 'Claude Code · Chat');
+    expect(registry.formLabelOf(AgentIds.claudeCode), 'Claude Code');
+    expect(registry.formLabelOf(AgentIds.grok), 'Grok');
+    expect(registry.formLabelOf('roverCli'), 'roverCli');
+  });
+
   test('an unknown id folds to itself and has no forms', () {
     final unknown = registry.formsOf('roverCli');
     expect(unknown.agentId, 'roverCli');

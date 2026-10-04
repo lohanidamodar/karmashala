@@ -1,3 +1,5 @@
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/read.dart' show ImportedSession;
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/store.dart';
@@ -70,10 +72,31 @@ void main() {
         {
           'agentInstallationId': 'a1',
           'cli': 'claudeCode',
+          'agent': 'Claude Code',
+          'form': 'terminal',
           'environmentId': h.here.id,
           'path': '/usr/local/bin/claude',
         },
       ]);
+    });
+
+    test('a chat form is its own row, named as the agent it is a form of', () {
+      final terminal = h.context.agents.formsOf('claudeCode');
+      expect(terminal.chatId, isNotNull);
+      final row = tools.agentRow(
+        AgentInstallation(
+          id: 'c1',
+          agentId: terminal.chatId!,
+          executable: EnvironmentPath(
+            environmentId: h.here.id,
+            path: '/usr/local/bin/claude-agent-acp',
+          ),
+          createdAt: DateTime.utc(2026),
+        ),
+      );
+      expect(row['cli'], terminal.chatId);
+      expect(row['agent'], 'Claude Code');
+      expect(row['form'], 'chat');
     });
   });
 

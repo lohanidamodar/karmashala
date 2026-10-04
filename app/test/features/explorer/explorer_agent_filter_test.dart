@@ -233,18 +233,48 @@ void main() {
       expect(agentFilterTooltip(AgentFilter.all, registry), 'Filter sessions');
       expect(
         agentFilterTooltip(const AgentFilter({AgentIds.codex}), registry),
-        'Showing Codex CLI only — Claude Code, Antigravity, Claude (ACP), '
-        'Codex (ACP), Antigravity (ACP) and Grok hidden',
+        'Showing Codex CLI only — Claude Code, Antigravity and Grok hidden',
       );
       expect(
         agentFilterTooltip(
           const AgentFilter({AgentIds.codex, AgentIds.claudeCode}),
           registry,
         ),
-        'Showing Claude Code and Codex CLI only — Antigravity, Claude (ACP), '
-        'Codex (ACP), Antigravity (ACP) and Grok hidden',
+        'Showing Claude Code and Codex CLI only — Antigravity and Grok hidden',
       );
     });
+
+    test('offers each agent once, its chat form folded in', () {
+      expect(filterableAgentIds(registry), [
+        for (final forms in registry.folded) forms.agentId,
+      ]);
+      expect(
+        filterableAgentIds(registry),
+        isNot(contains(AgentIds.claudeAcp)),
+      );
+    });
+  });
+
+  test('an agent ticked shows its chat sessions too', () async {
+    final db = seed(withAntigravity: false);
+    server.installationRows.insert(
+      agentInstallation(id: 'a-claude-chat', agentId: AgentIds.claudeAcp),
+    );
+    db.server.sessionRows.insert(
+      session(
+        id: 's-claude-chat',
+        title: 'Claude chat',
+        agentInstallationId: 'a-claude-chat',
+        status: SessionStatus.running,
+      ),
+    );
+    final container = await mount(db);
+    narrowTo(container, {AgentIds.claudeCode});
+    expect(shown(container), ['Claude chat', 'Claude work', 'Imported history']);
+
+    // A filter saved naming the chat form reads as its agent.
+    narrowTo(container, {AgentIds.claudeAcp});
+    expect(shown(container), ['Claude chat', 'Claude work', 'Imported history']);
   });
 
   group("a project's rows", () {
@@ -467,8 +497,7 @@ void main() {
       );
       expect(
         find.byTooltip(
-          'Showing Codex CLI only — Claude Code, Antigravity, Claude (ACP), '
-          'Codex (ACP), Antigravity (ACP) and Grok hidden',
+          'Showing Codex CLI only — Claude Code, Antigravity and Grok hidden',
         ),
         findsOneWidget,
       );

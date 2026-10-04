@@ -28,11 +28,11 @@ class SessionAgents {
   /// cannot say.
   String? forImported(ImportedSession session) => _nameable(session.cli);
 
-  /// An id the filter's menu could actually offer, or null. An id no descriptor
-  /// claims is *unknown*: the menu is built from the registry, so a filter that
-  /// hid rows it cannot offer to bring back would lose them.
+  /// The folded agent the filter's menu would offer for [id], or null. An id
+  /// no descriptor claims is *unknown*: the menu is built from the registry,
+  /// so a filter that hid rows it cannot offer to bring back would lose them.
   String? _nameable(String? id) =>
-      id != null && registry.byId(id) != null ? id : null;
+      id != null && registry.byId(id) != null ? registry.foldedIdOf(id) : null;
 }
 
 final sessionAgentsProvider = Provider<SessionAgents>(
@@ -54,7 +54,11 @@ final explorerAgentFilterProvider = Provider<AgentFilter>((ref) {
   final ids = ref.watch(
     settingsControllerProvider.select((s) => s.explorerAgentFilter),
   );
-  return ids.isEmpty ? AgentFilter.all : AgentFilter(ids.toSet());
+  // A filter saved before forms were folded may name a chat form.
+  final registry = ref.watch(agentRegistryProvider);
+  return ids.isEmpty
+      ? AgentFilter.all
+      : AgentFilter({for (final id in ids) registry.foldedIdOf(id)});
 });
 
 /// What one project's row shows, and how much of it the filter is holding back.
