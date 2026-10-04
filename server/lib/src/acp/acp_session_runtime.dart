@@ -177,6 +177,21 @@ class AcpSessionRuntime implements ScreenSession {
   StreamSubscription<SessionUpdateEvent>? _updates;
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
+
+  /// The rung of the last working mode the person put the session in — at
+  /// launch, or with the mode picker since — which an approval that switches
+  /// mode stays within. The agent's own mode changes never move it.
+  PermissionRisk? _workingRung;
+
+  /// Notes [modeId] as chosen for the session. Plan mode is not where it
+  /// works: approving a plan returns to the mode it was in before.
+  void _modeChosen(String modeId) {
+    final rung = spec.rungOfMode(modeId);
+    if (rung != null && !rung.isAtMost(PermissionRisk.readOnly)) {
+      _workingRung = rung;
+    }
+  }
+
   List<ConfigOption>? _configOptions;
   List<AvailableCommand>? _commands;
   UsageUpdate? _latestUsage;
@@ -479,6 +494,7 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     await client.setMode(agent, modeId);
+    _modeChosen(modeId);
     _modes = SessionModeState(
       currentModeId: modeId,
       availableModes: modes.availableModes,
@@ -575,6 +591,14 @@ class AcpSessionRuntime implements ScreenSession {
       approve = option.kind.allows;
     } else {
       option = _optionFor(pending.options, approve: approve);
+      if (option == null &&
+          approve &&
+          _modeSwitchingAllow(pending.options) != null) {
+        throw SessionPromptRefusal(
+          'every way $agentName offers to approve "${pending.title}" would '
+          "raise this session's permissions",
+        );
+      }
     }
     if (option == null) {
       throw SessionPromptRefusal(
@@ -1106,12 +1130,15 @@ class AcpSessionRuntime implements ScreenSession {
     final title = _titleOf(call);
     final rung = risk;
     if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
-      final once = options.where(
-        (o) => o.kind == PermissionOptionKind.allowOnce,
-      );
-      if (once.isNotEmpty) {
+      final switching = _modeSwitchingAllow(options);
+      final once = switching != null
+          ? switching.option
+          : options
+                .where((o) => o.kind == PermissionOptionKind.allowOnce)
+                .firstOrNull;
+      if (once != null) {
         await _holdForEdit(call);
-        return PermissionOutcome.selected(once.first.optionId);
+        return PermissionOutcome.selected(once.optionId);
       }
     }
     final pending = _PendingPermission(call, options, title);
@@ -1136,6 +1163,7 @@ class AcpSessionRuntime implements ScreenSession {
               kind: option.kind.raw,
             ),
         ],
+        kind: call.kind?.raw,
       ),
       waitingSince: now,
     );
@@ -1153,10 +1181,14 @@ class AcpSessionRuntime implements ScreenSession {
     if (!pending.completer.isCompleted) pending.completer.complete(outcome);
   }
 
-  static PermissionOption? _optionFor(
+  PermissionOption? _optionFor(
     List<PermissionOption> options, {
     required bool approve,
   }) {
+    if (approve) {
+      final switching = _modeSwitchingAllow(options);
+      if (switching != null) return switching.option;
+    }
     final wanted = approve
         ? const [
             PermissionOptionKind.allowOnce,
@@ -1172,6 +1204,38 @@ class AcpSessionRuntime implements ScreenSession {
       }
     }
     return null;
+  }
+
+  /// **An allow that switches the agent's mode never raises the session.**
+  /// When any allow option names a mode the spec knows (a plan prompt's
+  /// "accept edits", "ask before edits"), the one chosen is the highest at
+  /// or below the session's rung; an option whose mode is unknown is never
+  /// chosen. Null when no option names a mode: an ordinary call's request.
+  ({PermissionOption? option})? _modeSwitchingAllow(
+    List<PermissionOption> options,
+  ) {
+    final allows = [
+      for (final option in options)
+        if (option.kind == PermissionOptionKind.allowOnce ||
+            option.kind == PermissionOptionKind.allowAlways)
+          (option: option, rung: spec.rungOfOption(option.optionId)),
+    ];
+    if (!allows.any((allow) => allow.rung != null)) return null;
+    // Approving a plan leaves read-only, so asking before every edit is the
+    // floor: it grants nothing without asking.
+    var ceiling = _workingRung ?? risk ?? PermissionRisk.ask;
+    if (ceiling.isAtMost(PermissionRisk.readOnly)) ceiling = PermissionRisk.ask;
+    PermissionOption? chosen;
+    PermissionRisk? at;
+    for (final allow in allows) {
+      final rung = allow.rung;
+      if (rung == null || !rung.isAtMost(ceiling)) continue;
+      if (at == null || !rung.isAtMost(at)) {
+        chosen = allow.option;
+        at = rung;
+      }
+    }
+    return (option: chosen);
   }
 
   /// An edit lands after the turn's before-turn checkpoint, which is told

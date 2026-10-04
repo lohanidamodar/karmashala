@@ -3762,6 +3762,8 @@ WorkbenchView
                                                                                                                           _SingleChildViewport
                                                                                                                             QueuedMessagesStrip
                                                                                                                               SizedBox
+                                                                                      PinnedPlanStrip
+                                                                                        SizedBox
                                                                                       ActivityStrip
                                                                                         SizedBox
                                                                                       ConstrainedBox

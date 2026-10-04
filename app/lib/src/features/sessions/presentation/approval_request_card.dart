@@ -27,6 +27,7 @@ import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
+import 'chat_cards/chat_tool_ask.dart' show ChatToolAsk, chatInlineAsksProvider;
 
 part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
@@ -45,6 +46,7 @@ class ApprovalRequestCard extends ConsumerWidget {
     required this.sessionId,
     this.docked = false,
     this.touch = false,
+    this.inline = false,
     super.key,
   });
 
@@ -58,8 +60,17 @@ class ApprovalRequestCard extends ConsumerWidget {
   /// [Touch.target], no key caps, and a reason typed in a sheet.
   final bool touch;
 
+  /// Drawn in the chat under the call it is about ([ChatToolAsk]). The dock
+  /// steps aside while one is, so the answers are on screen once.
+  final bool inline;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (docked &&
+        !inline &&
+        ref.watch(chatInlineAsksProvider.select((s) => s.contains(sessionId)))) {
+      return const SizedBox.shrink();
+    }
     final report = ref
         .watch(agentSessionStatusProvider(sessionId))
         .asData
@@ -89,7 +100,10 @@ class ApprovalRequestCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
-    final rules = descriptor?.approval ?? const AgentApprovalRules();
+    // An ACP agent types no keys: its request is answered by option.
+    final rules = descriptor?.acp != null
+        ? AcpLaunchSpec.permissionAnswers
+        : descriptor?.approval ?? const AgentApprovalRules();
     final agentName = descriptor?.displayName ?? report.agentId;
     // A pane we can type into, or a process this machine's host runs and
     // answers in. Without either — an external terminal, a session whose
@@ -359,8 +373,19 @@ class _QuestionOr extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final question = ref.watch(chatOpenQuestionProvider(sessionId)).value;
+    // The value only: a re-read while the question is unreadable is no change.
+    final question = ref.watch(
+      chatOpenQuestionProvider(sessionId).select((q) => q.value),
+    );
     if (question == null) return orElse;
+    final agentId = ref
+        .read(agentSessionStatusProvider(sessionId))
+        .asData
+        ?.value
+        .agentId;
+    final chatRow = agentId == null
+        ? null
+        : ref.read(agentRegistryProvider).byId(agentId)?.questions?.chatRow;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -368,7 +393,10 @@ class _QuestionOr extends ConsumerWidget {
         QuestionPromptCard(
           agentName: agentName,
           question: question,
-          onAnswer: (answers, {decline = false}) async {
+          chatLabel: chatRow,
+          // Docked, the dock's header already says who is asking.
+          showHeader: !_Docked.of(context),
+          onAnswer: (answers, {decline = false, chat = false}) async {
             final said = _AnswerSaid.of(context);
             try {
               await ref.read(chatQuestionAnswerProvider)(
@@ -377,12 +405,19 @@ class _QuestionOr extends ConsumerWidget {
                   toolUseId: question.toolUseId,
                   answers: answers,
                   decline: decline,
+                  chat: chat,
                 ),
               );
             } on RemoteApiRefusal catch (refusal) {
               throw GatewayException(refusal.message);
             }
-            said?.say(decline ? 'Declined.' : 'Answered.');
+            said?.say(
+              decline
+                  ? 'Declined.'
+                  : chat
+                  ? 'Left to talk over.'
+                  : 'Answered.',
+            );
           },
         ),
         _TerminalLink(sessionId: sessionId),

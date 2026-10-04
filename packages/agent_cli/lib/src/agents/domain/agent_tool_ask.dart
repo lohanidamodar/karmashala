@@ -22,6 +22,7 @@ class AgentToolAsk {
     this.toolUseId,
     this.cwd,
     this.options = const [],
+    this.kind,
   });
 
   /// The answers the agent itself offers, in its order — an ACP agent's
@@ -45,6 +46,10 @@ class AgentToolAsk {
   /// "outside the project" is measured against.
   final String? cwd;
 
+  /// The call's kind as an ACP agent named it (`edit`, `switch_mode`), or
+  /// null where nothing named one, as for a CLI hook.
+  final String? kind;
+
   /// Whether [other] is the same call — a republished status need not move.
   bool sameCallAs(AgentToolAsk? other) =>
       other != null &&
@@ -59,6 +64,7 @@ class AgentToolAsk {
     'toolUseId': ?toolUseId,
     'cwd': ?cwd,
     if (options.isNotEmpty) 'options': [for (final o in options) o.toJson()],
+    'kind': ?kind,
   };
 
   /// Null for a shape this build cannot read — never a guessed call.
@@ -80,6 +86,7 @@ class AgentToolAsk {
         for (final option in (json['options'] as List?) ?? const [])
           ?AgentToolAskOption.fromJson(option),
       ],
+      kind: json['kind'] as String?,
     );
   }
 
@@ -139,14 +146,16 @@ class AgentToolAskOption {
 Map<String, Object?> pruneToolInput(Map<Object?, Object?> input) {
   const bodies = {'content', 'new_string', 'old_string', 'edits'};
   const longest = 2000;
-  // The command is the one field shown whole: it is what is being approved.
+  // A command and a plan are shown whole: each is what is being approved.
   const longestCommand = 8000;
   final pruned = <String, Object?>{};
   for (final MapEntry(:key, :value) in input.entries) {
     if (key is! String || bodies.contains(key)) continue;
     switch (value) {
       case final String text:
-        final cap = key == 'command' ? longestCommand : longest;
+        final cap = key == 'command' || key == 'plan'
+            ? longestCommand
+            : longest;
         pruned[key] = text.length <= cap ? text : '${text.substring(0, cap)}…';
       case num() || bool():
         pruned[key] = value;
@@ -281,7 +290,9 @@ String _normal(String path) {
   while (normal.length > 1 && normal.endsWith('/')) {
     normal = normal.substring(0, normal.length - 1);
   }
-  return RegExp(r'^[A-Za-z]:/').hasMatch(normal) ? normal.toLowerCase() : normal;
+  return RegExp(r'^[A-Za-z]:/').hasMatch(normal)
+      ? normal.toLowerCase()
+      : normal;
 }
 
 String _baseName(String path) {
@@ -450,12 +461,12 @@ bool _fetchesPackages(String name, List<_Word> args) {
       'update',
       'upgrade',
     }.contains(first),
-    'pip' || 'pip3' || 'uv' || 'cargo' || 'go' || 'brew' => const {
-      'install',
-      'add',
-      'get',
-      'sync',
-    }.contains(first),
+    'pip' ||
+    'pip3' ||
+    'uv' ||
+    'cargo' ||
+    'go' ||
+    'brew' => const {'install', 'add', 'get', 'sync'}.contains(first),
     'apt' || 'apt-get' || 'winget' || 'choco' || 'scoop' => first == 'install',
     'flutter' || 'dart' =>
       first == 'pub' && const {'get', 'add', 'upgrade'}.contains(second),

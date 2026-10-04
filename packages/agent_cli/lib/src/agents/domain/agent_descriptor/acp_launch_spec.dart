@@ -29,12 +29,29 @@ class AcpLaunchSpec {
     this.registryId,
     this.apiKeyVariables = const {},
     this.nativeBridge,
+    this.optionModes = const {},
   });
 
   /// Set when the agent is spoken to in its own protocol, through
   /// [arguments], and translated to ACP in-process; null for an agent that
   /// speaks ACP itself.
   final AcpNativeBridge? nativeBridge;
+
+  /// How any ACP agent's permission request is answered: the server picks the
+  /// request's own allow or reject option, so no key is typed. The same two
+  /// answers the server's prompt evidence names.
+  static const AgentApprovalRules permissionAnswers = AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: 'allow',
+      label: 'Allow',
+      effect: 'Lets the agent make this call.',
+    ),
+    deny: AgentApprovalKey(
+      keys: 'reject',
+      label: 'Reject',
+      effect: 'Refuses this call; the agent carries on without it.',
+    ),
+  );
 
   /// Argv that puts the binary into ACP stdio mode — `['--acp']`,
   /// `['agent', 'stdio']`, or empty for a dedicated adapter binary.
@@ -89,6 +106,7 @@ class AcpLaunchSpec {
     registryId: registryId,
     apiKeyVariables: apiKeyVariables,
     nativeBridge: nativeBridge,
+    optionModes: optionModes,
   );
 
   /// What `initialize` announces as `clientInfo.name`.
@@ -112,4 +130,26 @@ class AcpLaunchSpec {
     }
     return null;
   }
+
+  /// Permission option ids → the mode each one switches the agent to, for an
+  /// agent whose option ids are not its mode ids. An id named nowhere here is
+  /// read as a mode id itself.
+  final Map<String, String> optionModes;
+
+  /// The rung [modeId] stands for: the lowest one [modeNames] lists it under,
+  /// or null for a mode this spec does not name.
+  PermissionRisk? rungOfMode(String modeId) {
+    final wanted = modeId.toLowerCase();
+    for (final rung in PermissionRisk.values) {
+      if (modeNames[rung]?.any((m) => m.toLowerCase() == wanted) ?? false) {
+        return rung;
+      }
+    }
+    return null;
+  }
+
+  /// The rung choosing permission option [optionId] would put the agent on,
+  /// or null when the option switches to no mode this spec names.
+  PermissionRisk? rungOfOption(String optionId) =>
+      rungOfMode(optionModes[optionId] ?? optionId);
 }

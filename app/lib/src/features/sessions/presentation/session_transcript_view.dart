@@ -6,8 +6,6 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_agent_status/karmashala_agent_status.dart'
-    show SessionPromptRefusal;
 
 import '../../snippets/application/snippet_providers.dart';
 import '../application/session_activity_providers.dart';
@@ -43,7 +41,6 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_commands_providers.dart';
 import '../application/session_prompt_kinds_providers.dart';
-import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
@@ -51,6 +48,7 @@ import '../application/session_engine_provider.dart';
 import '../application/session_input.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
+import '../application/session_turn_interrupt.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport;
 import '../application/session_ui_providers.dart';
@@ -64,6 +62,8 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
+import 'chat_cards/chat_tool_ask.dart';
+import 'chat_cards/pinned_plan_strip.dart';
 import 'chat_transcript.dart';
 import 'end_session_action.dart';
 import 'switch_agent_control.dart';
@@ -298,22 +298,40 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
+  /// What hangs under a row: the subagent it spawned, and the ask about it
+  /// while one is open.
   MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
       (message, ordinal) {
         final reference = subagents[ordinal];
+        final callId = message.pending ? message.pendingToolUseId : null;
+        final ask = callId == null
+            ? null
+            : ChatToolAsk(
+                sessionId: widget.sessionId,
+                toolUseId: callId,
+                toolName: message.tool?.name,
+              );
+        final Widget? lead;
         if (reference == null) {
           final calls = _delegations[ordinal];
-          return calls == null
+          lead = calls == null
               ? null
               : DelegationGroupCard(
                   parentSessionId: widget.sessionId,
                   calls: calls,
                 );
+        } else {
+          lead = SubagentTurnsTile(
+            reference: reference,
+            resolveHostPath: _hostPathResolver(),
+            sessionId: widget.sessionId,
+          );
         }
-        return SubagentTurnsTile(
-          reference: reference,
-          resolveHostPath: _hostPathResolver(),
-          sessionId: widget.sessionId,
+        if (lead == null || ask == null) return lead ?? ask;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [lead, ask],
         );
       };
 
@@ -569,7 +587,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           // the session: a killed agent's last status can stay
                           // "working", which kept its final turn live — and
                           // unfolded — forever. Nothing running, the turn is over.
-                          turn: sessionHasLiveProcess(ref, widget.sessionId)
+                          // An ACP status is the server's runtime speaking,
+                          // never a dead process's last word.
+                          turn:
+                              acp ||
+                                  sessionHasLiveProcess(ref, widget.sessionId)
                               ? ref.watch(
                                   agentSessionStatusProvider(
                                     widget.sessionId,
@@ -750,44 +772,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// pressed by the server when it offers it, else typed into the agent's
   /// pane. Said, not silent, when nothing runs the session.
   void _interruptTurn() {
-    if (!ref.read(capabilitiesProvider).maySend) {
-      _say(kPromptNotGranted);
-      return;
-    }
-    // An Esc closes an open prompt too: not one answered elsewhere.
-    ref.read(ownPromptAnswersProvider).note(widget.sessionId);
     offerToStopChildren(context, ref, widget.sessionId);
-    if (ref.read(sessionInputProvider).viaServer) {
-      unawaited(_interruptViaServer());
-      return;
-    }
-    _interruptInPane();
-  }
-
-  void _interruptInPane() {
-    final paneId = sessionTerminalPane(ref, widget.sessionId);
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-    final live =
-        paneId != null &&
-        ref.read(terminalSessionsControllerProvider).livenessOf(paneId).isLive;
-    final instance = paneId == null ? null : terminals.instanceFor(paneId);
-    if (!live || instance == null) {
-      _say('No live terminal runs this session, so there is nothing to stop.');
-      return;
-    }
-    instance.terminal.textInput('\x1b');
-  }
-
-  Future<void> _interruptViaServer() async {
-    try {
-      // One the server does not run may still run in a pane here.
-      if (!await ref.read(sessionInputProvider).interrupt(widget.sessionId) &&
-          mounted) {
-        _interruptInPane();
-      }
-    } on SessionPromptRefusal catch (refusal) {
-      _say('Could not stop it: ${refusal.message}');
-    }
+    unawaited(
+      ref.read(sessionTurnInterruptProvider)(widget.sessionId).then((why) {
+        if (why != null) _say(why);
+      }),
+    );
   }
 
   /// The snippet library, as the composer's menu lists it.
@@ -875,6 +865,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           ),
           // Directly above the box and outside the scroll, so a long queue
           // never hides the running turn or its Stop.
+          PinnedPlanStrip(sessionId: widget.sessionId),
           ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
@@ -939,7 +930,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// Each agent of a switched thread by name — with where it lives when two
   /// installations of one agent took turns in it.
-  TranscriptAgent? Function(String) _agentsIn(List<TranscriptMessage> messages) {
+  TranscriptAgent? Function(String) _agentsIn(
+    List<TranscriptMessage> messages,
+  ) {
     final rows = ref.read(agentInstallationsDataProvider);
     final labels = installationLabelsOf(
       {for (final message in messages) ?message.agentInstallationId},
@@ -1260,8 +1253,7 @@ List<ChatMessage> chatMessagesFromTranscript(
     final switching = message.role == kAgentSwitchRole;
     final named =
         installation != null &&
-        (switching ||
-            (message.role == 'agent' && installation != lastNamed));
+        (switching || (message.role == 'agent' && installation != lastNamed));
     final agent = named ? agentOf?.call(installation) : null;
     if (switching) {
       lastNamed = null;
@@ -1276,6 +1268,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         thinking: message.thinking,
         at: message.at,
         pending: message.pendingToolUseId != null,
+        pendingToolUseId: message.pendingToolUseId,
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,
       ),

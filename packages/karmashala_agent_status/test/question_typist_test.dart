@@ -6,10 +6,18 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 /// probe), and the failure seen on the Oppo: the first key after a tab change
 /// is dropped.
 class FakeQuestionScreen {
-  FakeQuestionScreen(this.set, {this.dropAfterTab = true});
+  FakeQuestionScreen(
+    this.set, {
+    this.dropAfterTab = true,
+    this.continueWord = 'Next',
+  });
 
   final AgentQuestionSet set;
   final bool dropAfterTab;
+
+  /// The row after a multi-choice question's options: `Next` on 2.1.274,
+  /// `Submit` on 2.1.287 (read off the probe, 2026-10-04).
+  final String continueWord;
 
   int tab = 0;
   int row = 1; // 1-based; n+1 Type something, n+2 Next.
@@ -18,6 +26,7 @@ class FakeQuestionScreen {
   final Map<int, String> chosen = {};
   bool review = false;
   bool done = false;
+  bool chatting = false;
   bool _dropNext = false;
   final List<String> keys = [];
 
@@ -45,8 +54,8 @@ class FakeQuestionScreen {
         '     ${q.options[i].label}',
       ],
       '${mark(n + 1)}${n + 1}. ${typed[tab] ?? 'Type something.'}',
-      if (q.multiSelect) '${row == n + 2 ? '❯' : ' '}    Next',
-      '  ${n + 2 + (q.multiSelect ? 1 : 0)}. Chat about this',
+      if (q.multiSelect) '${row == n + 2 ? '❯' : ' '}    $continueWord',
+      '${mark(n + 2 + (q.multiSelect ? 1 : 0))}${n + 2 + (q.multiSelect ? 1 : 0)}. Chat about this',
       'Enter to select · Esc to cancel',
     ];
   }
@@ -63,12 +72,16 @@ class FakeQuestionScreen {
     }
     final q = _q;
     final n = q.options.length;
-    final last = q.multiSelect ? n + 2 : n + 1;
+    final last = q.multiSelect ? n + 3 : n + 2;
+    final chatRow = q.multiSelect ? n + 3 : n + 2;
     switch (k) {
       case '\x1b[B':
         if (row < last) row++;
       case '\x1b[A':
         if (row > 1) row--;
+      case '\r' when row == chatRow:
+        chatting = true;
+        done = true;
       case '\r':
         if (q.multiSelect && row <= n) {
           final set = ticked.putIfAbsent(tab, () => {});
@@ -200,4 +213,38 @@ void main() {
       ),
     );
   });
+
+  test('2.1.287 names the row after the options "Submit", not "Next"', () async {
+    const toppings = AgentQuestion(
+      question: 'Pick toppings',
+      multiSelect: true,
+      options: [
+        AgentQuestionOption(label: 'Nuts'),
+        AgentQuestionOption(label: 'Honey'),
+        AgentQuestionOption(label: 'Yogurt'),
+      ],
+    );
+    const set = AgentQuestionSet(toolUseId: 't', questions: [toppings]);
+    final screen = FakeQuestionScreen(set, continueWord: 'Submit');
+
+    await typistOn(screen).answer('s', set, const [
+      AgentQuestionAnswer.options([0, 2]),
+    ]);
+
+    expect(screen.chosen, {0: 'Nuts, Yogurt'});
+    expect(screen.done, isTrue);
+  });
+
+  for (final question in [fruit, colours]) {
+    test('"Chat about this" leaves ${question.multiSelect ? 'a multi' : 'a '
+        'single'}-choice question to talk it over', () async {
+      final set = AgentQuestionSet(toolUseId: 't', questions: [question]);
+      final screen = FakeQuestionScreen(set, continueWord: 'Submit');
+
+      await typistOn(screen).chatAbout('s', set, 'Chat about this');
+
+      expect(screen.chatting, isTrue);
+      expect(screen.chosen, isEmpty);
+    });
+  }
 }

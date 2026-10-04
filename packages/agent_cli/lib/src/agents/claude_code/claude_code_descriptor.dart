@@ -2,6 +2,7 @@ import '../../permissions/permission_risk.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_mcp_config.dart';
 import '../domain/agent_plan.dart';
+import '../domain/agent_plan_approval.dart';
 import '../domain/agent_question.dart';
 import '../domain/agent_screen_menu.dart';
 import '../domain/agent_permission_support.dart';
@@ -786,6 +787,9 @@ const claudeCodeDescriptor = AgentDescriptor(
       // simply write it in a message. What keeps it honest is the composer
       // check in `TerminalGridStatusSource`, not this list.
       GridMatcher('Esc to cancel'),
+      // The plan prompt, whose 2.1.287 footer names neither key ("ctrl+g to
+      // edit in Notepad · <plan file>"; probe, 2026-10-04).
+      GridMatcher('Would you like to proceed?'),
     ],
     working: [GridMatcher('esc to interrupt')],
     // Two footers, because the hint segment is mode-dependent: a session in
@@ -828,6 +832,8 @@ const claudeCodeDescriptor = AgentDescriptor(
     hookEvent: 'PreToolUse',
     keysFor: claudeQuestionKeys,
     declineKeys: '\x1b',
+    // Drawn below the answers on 2.1.274 and 2.1.287 (probe, 2026-10-04).
+    chatRow: 'Chat about this',
   ),
   // Measured on 2.1.274 (folder trust, permission, MCP server): `❯ ` marks the
   // highlighted row, ↓/↑ move it, Enter confirms it.
@@ -894,6 +900,32 @@ const claudeCodeDescriptor = AgentDescriptor(
   // reader looks the same value up by tool name, and two copies of a schema is
   // how one of them goes stale.
   plan: kClaudeCodeTodoWrite,
+  // Keep planning by its words: the decline picks the first `^No`, and the
+  // Ultraplan row can come before it.
+  planApproval: AgentPlanApprovalSupport(
+    toolName: 'ExitPlanMode',
+    // Its label, or the placeholder 2.1.287 draws in its place; Enter on it
+    // empty rejects the plan and stays in plan mode (probe, 2026-10-04).
+    keepPlanningOption: r'^(No, keep planning|Tell Claude what to change)\b',
+    // The yeses by what they switch to (the axis below). Bypass is checked
+    // before auto, and either before "accept edits", whose words the first
+    // two can contain.
+    approveOptions: {
+      r'^Yes\b.*bypass permissions': 'bypassPermissions',
+      r'^Yes\b.*auto mode': 'auto',
+      r'^Yes\b.*accept edits': 'acceptEdits',
+      r'^Yes\b.*manually approve edits': 'manual',
+    },
+    skippedOptions: [r'clear context'],
+    evidence:
+        'claude.exe 2.1.287 string table, read 2026-10-04: "Would you like to '
+        'proceed?" with yes-* options, an optional "No, refine with Ultraplan '
+        'in a cloud session", then "No, keep planning" (an input row, '
+        'placeholder "Tell Claude what to change"); ExitPlanMode input `plan`; '
+        'yes labels "Yes, and use auto mode", "Yes, auto-accept edits", "Yes, '
+        'manually approve edits", values yes-resume-auto-mode / '
+        'yes-accept-edits / yes-default-keep-context / yes-auto-clear-context',
+  ),
   skills: AgentSkillSupport.homeDirectory(
     ['.claude', 'skills'],
     projectDirectorySegments: ['.claude', 'skills'],

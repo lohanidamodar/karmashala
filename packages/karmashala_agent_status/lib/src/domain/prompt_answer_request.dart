@@ -67,6 +67,7 @@ sealed class PromptAnswerRequest {
           sessionId: sessionId,
           toolUseId: toolUseId,
           decline: json['decline'] == true,
+          chat: json['chat'] == true,
           answers: [
             for (final answer in answers)
               if (answer is Map && answer['text'] is String)
@@ -249,6 +250,7 @@ class QuestionAnswerRequest extends PromptAnswerRequest {
     required this.toolUseId,
     required this.answers,
     this.decline = false,
+    this.chat = false,
     super.decidedBy,
     super.decidedBySessionId,
   });
@@ -257,11 +259,15 @@ class QuestionAnswerRequest extends PromptAnswerRequest {
   final List<AgentQuestionAnswer> answers;
   final bool decline;
 
+  /// Leave the question to talk it over, by the agent's own row for that.
+  final bool chat;
+
   @override
   Map<String, Object?> toJson() => {
     ..._common('question'),
     'toolUseId': toolUseId,
     'decline': decline,
+    if (chat) 'chat': true,
     'answers': [
       for (final answer in answers)
         answer.text != null

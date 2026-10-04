@@ -4,11 +4,14 @@
 /// A session this machine's host runs is answered by the host.
 library;
 
+import 'dart:async';
+
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show CompanionPrompts, remoteQuestionOf;
 import 'package:karmashala_remote/remote.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../sessions/application/host_lifecycle/host_agent_statuses.dart';
 import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_status_providers.dart';
 
@@ -28,8 +31,22 @@ final chatOpenQuestionProvider = FutureProvider.autoDispose
           .asData
           ?.value;
       if (report == null || !report.hasOpenQuestion) return null;
+      // The status can say a question is open before the question can be
+      // read: the host's copy comes on its own feed, and the agent's record
+      // may not hold the call yet. Read again until it can be.
+      final host = ref
+          .read(hostAgentStatusesProvider)
+          .changes
+          .where((id) => id == sessionId)
+          .listen((_) => ref.invalidateSelf());
+      ref.onDispose(host.cancel);
       final open = await AppPromptTerminals(ref).openQuestion(sessionId);
-      return open == null ? null : remoteQuestionOf(open);
+      if (open == null) {
+        final again = Timer(kMenuRereadInterval, ref.invalidateSelf);
+        ref.onDispose(again.cancel);
+        return null;
+      }
+      return remoteQuestionOf(open);
     });
 
 /// Answers a question from the desktop chat view exactly as the phone's

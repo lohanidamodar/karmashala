@@ -193,6 +193,19 @@ class SessionPromptAnswers implements PromptAnswering {
         effect: 'Dismissed the question without answering it.',
       );
     }
+    if (request.chat) {
+      final row = support.chatRow;
+      if (row == null) {
+        throw const SessionPromptRefusal(
+          "this agent's questions offer no way to talk them over",
+        );
+      }
+      await typist.chatAbout(sessionId, open, row);
+      return SessionApprovalAnswer(
+        answered: row,
+        effect: 'Left the question to talk it over.',
+      );
+    }
     try {
       // The measured keys double as the check that the answer fits at all,
       // before a single key is pressed.

@@ -4,6 +4,7 @@ import '../../environments/environment_kind.dart';
 import '../../permissions/permission_risk.dart';
 import './agent_mcp_config.dart';
 import './agent_plan.dart';
+import './agent_plan_approval.dart';
 import './agent_question.dart';
 import './agent_screen_menu.dart';
 import './agent_permission_support.dart';
@@ -98,6 +99,7 @@ class AgentDescriptor {
     this.attachments = const AgentAttachmentSupport.none(),
     this.imagePaste = const AgentImagePasteKey(),
     this.plan = const AgentPlanSupport.none(),
+    this.planApproval,
     this.skills = const AgentSkillSupport.none(),
     this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
     this.acp,
@@ -164,6 +166,10 @@ class AgentDescriptor {
   /// somewhere this app can read"*, and on 2026-09-08 that had three different
   /// answers.
   final AgentPlanSupport plan;
+
+  /// How this agent asks to leave plan mode and carry its plan out, or null
+  /// for one whose plan prompt was never read — then it is an ordinary ask.
+  final AgentPlanApprovalSupport? planApproval;
 
   /// **Where this agent discovers user-level skills, and how that was
   /// learned.**

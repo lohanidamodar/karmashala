@@ -8,13 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// does — two clicks — rather than pretending the turn is still running.
 Future<void> openToolRuns(WidgetTester tester) async {
   // The fold lines, then the calls they opened onto. An owner's first InkWell
-  // is its own line; any under it belong to what it opened.
+  // is its own line; any under it belong to what it opened. Looked up again
+  // after every tap: opening one run can scroll the next out and rebuild it.
   for (final type in ['_ToolBatchTile', '_ToolCallLine']) {
-    final owners = find
-        .byWidgetPredicate((w) => w.runtimeType.toString() == type)
-        .evaluate()
-        .toList();
-    for (final owner in owners) {
+    final opened = <Object>{};
+    while (true) {
+      final owner = find
+          .byWidgetPredicate((w) => w.runtimeType.toString() == type)
+          .evaluate()
+          .where((e) => !opened.contains(e.widget.key ?? e))
+          .firstOrNull;
+      if (owner == null) break;
+      opened.add(owner.widget.key ?? owner);
       final line = find
           .descendant(
             of: find.byElementPredicate((e) => identical(e, owner)),

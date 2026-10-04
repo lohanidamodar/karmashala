@@ -55,6 +55,7 @@ class CompanionPrompts {
           sessionId: request.sessionId,
           toolUseId: request.toolUseId,
           decline: request.decline,
+          chat: request.chat,
           answers: [
             for (final answer in request.answers)
               answer.text != null

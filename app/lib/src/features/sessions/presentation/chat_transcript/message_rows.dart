@@ -7,6 +7,7 @@ part of '../chat_transcript.dart';
 class _MessageRow extends StatefulWidget {
   const _MessageRow({
     required this.message,
+    this.previousPlan,
     required this.ordinal,
     required this.onSaveNote,
     required this.resolveHostPath,
@@ -16,6 +17,9 @@ class _MessageRow extends StatefulWidget {
   });
 
   final ChatMessage message;
+
+  /// The plan a plan row replaced, so it can say what changed.
+  final AgentPlan? previousPlan;
   final int ordinal;
   final SaveNoteCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
@@ -34,6 +38,7 @@ class _MessageRowState extends State<_MessageRow> {
   void didUpdateWidget(_MessageRow old) {
     super.didUpdateWidget(old);
     if (old.message != widget.message ||
+        old.previousPlan != widget.previousPlan ||
         old.ordinal != widget.ordinal ||
         old.onSaveNote != widget.onSaveNote ||
         old.resolveHostPath != widget.resolveHostPath ||
@@ -51,6 +56,7 @@ class _MessageRowState extends State<_MessageRow> {
     final save = widget.onSaveNote;
     return _tile ??= _ChatMessageTile(
       message: message,
+      previousPlan: widget.previousPlan,
       resolveHostPath: widget.resolveHostPath,
       onPathTap: widget.onPathTap,
       onLinkTap: widget.onLinkTap,
@@ -63,6 +69,7 @@ class _MessageRowState extends State<_MessageRow> {
 class _ChatMessageTile extends StatelessWidget {
   const _ChatMessageTile({
     required this.message,
+    this.previousPlan,
     this.onSaveNote,
     this.resolveHostPath,
     this.onPathTap,
@@ -70,6 +77,7 @@ class _ChatMessageTile extends StatelessWidget {
     this.detail,
   });
   final ChatMessage message;
+  final AgentPlan? previousPlan;
   final VoidCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
   final PathLinkCallback? onPathTap;
@@ -93,6 +101,9 @@ class _ChatMessageTile extends StatelessWidget {
       child: TranscriptSelectionGroup(
         endsTurn: true,
         child: switch (message.role) {
+          // A plan, whoever filed it: drawn as the agent's checklist.
+          _ when message.role != 'user' && message.tool?.plan != null =>
+            PlanUpdateCard(plan: message.tool!.plan!, previous: previousPlan),
           // Claude Code records an interruption as a user message; it is the
           // tool's note, not the person's words, so it is no bubble.
           'user' when _interruptionNote.hasMatch(message.text.trim()) =>

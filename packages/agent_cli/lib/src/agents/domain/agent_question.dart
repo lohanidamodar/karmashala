@@ -122,6 +122,7 @@ class AgentQuestionSupport {
     this.hookToolNamePath = const ['tool_name'],
     this.hookToolInputPath = const ['tool_input'],
     this.hookToolUseIdPath = const ['tool_use_id'],
+    this.chatRow,
   });
 
   /// The tool whose call is a question.
@@ -146,6 +147,10 @@ class AgentQuestionSupport {
     List<AgentQuestionAnswer> answers,
   )
   keysFor;
+
+  /// The row that leaves the question to talk it over instead ("Chat about
+  /// this"), by its words, or null for an agent that draws none.
+  final String? chatRow;
 
   /// The keys that dismiss the question without answering it.
   final String declineKeys;
