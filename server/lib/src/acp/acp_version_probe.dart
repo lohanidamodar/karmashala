@@ -7,6 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
+import 'acp_arguments.dart';
 import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 
@@ -128,15 +129,14 @@ CommandRequest acpProbeRequest(
   Map<String, String> variables = const {},
 }) => CommandRequest(
   executable: installation.executable.path,
-  arguments: [
-    ...installation.leadingArguments,
-    ...spec.argumentsFor(
-      linux: AcpLaunchSpec.runsOnLinux(
-        environment.kind,
-        hostIsLinux: Platform.isLinux,
-      ),
+  arguments: acpArgumentsFor(
+    installation,
+    spec,
+    linux: AcpLaunchSpec.runsOnLinux(
+      environment.kind,
+      hostIsLinux: Platform.isLinux,
     ),
-  ],
+  ),
   workingDirectory: EnvironmentPath(
     environmentId: environment.id,
     path: directory,

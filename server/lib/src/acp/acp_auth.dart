@@ -10,6 +10,7 @@ import 'package:karmashala_environments/store.dart'
     show AcpAuthChoice, AcpAuthChoiceDao;
 import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
+import 'acp_arguments.dart';
 import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
 import 'acp_version_probe.dart';
@@ -207,8 +208,9 @@ class ServerAcpAuth {
         arguments: command != null
             ? method.terminalArguments
             : [
-                ...installation.leadingArguments,
-                ...target.spec.argumentsFor(
+                ...acpArgumentsFor(
+                  installation,
+                  target.spec,
                   linux: AcpLaunchSpec.runsOnLinux(
                     target.environment.kind,
                     hostIsLinux: Platform.isLinux,
