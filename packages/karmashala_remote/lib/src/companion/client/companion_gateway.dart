@@ -558,7 +558,12 @@ class CompanionApproval {
     this.denyEffect,
     this.question,
     this.menu,
+    this.options = const [],
   });
+
+  /// An ACP agent's own answers, in its order — answered by
+  /// [CompanionGateway.answerApproval] with the chosen one's id.
+  final List<RemoteApprovalOption> options;
 
   final String id;
   final String sessionId;
@@ -880,12 +885,14 @@ abstract interface class CompanionGateway {
     String? requestId,
   });
 
-  /// `approval.answer`.
+  /// `approval.answer`; [optionId] chooses one of [CompanionApproval.options],
+  /// and [decision] is what that option means.
   Future<void> answerApproval(
     String sessionId,
     String approvalId,
-    CompanionApprovalDecision decision,
-  );
+    CompanionApprovalDecision decision, {
+    String? optionId,
+  });
 
   /// Attention news (finished / needs you / failed) as it arrives — what local
   /// notifications are cut from.

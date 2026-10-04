@@ -223,6 +223,16 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 onAnswer: (decision) => approval == null
                     ? Future<void>.value()
                     : gateway.answerApproval(sessionId, approval.id, decision),
+                onChooseOption: (option) => approval == null
+                    ? Future<void>.value()
+                    : gateway.answerApproval(
+                        sessionId,
+                        approval.id,
+                        option.allows
+                            ? CompanionApprovalDecision.approve
+                            : CompanionApprovalDecision.deny,
+                        optionId: option.id,
+                      ),
                 onAnswerQuestion: (answers, {decline = false}) =>
                     approval == null
                     ? Future<void>.value()
@@ -431,6 +441,7 @@ class SessionFooter extends StatelessWidget {
     required this.onAnswer,
     this.onAnswerQuestion,
     this.onAnswerMenu,
+    this.onChooseOption,
     this.approval,
     this.canApprove = false,
     this.showActivity = true,
@@ -449,6 +460,9 @@ class SessionFooter extends StatelessWidget {
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
   final CompanionQuestionAnswerFn? onAnswerQuestion;
   final CompanionMenuAnswerFn? onAnswerMenu;
+
+  /// Answers with one of an ACP agent's own options.
+  final Future<void> Function(RemoteApprovalOption option)? onChooseOption;
 
   /// The activity strip, directly above the composer as the desktop puts it.
   final bool showActivity;
@@ -470,6 +484,7 @@ class SessionFooter extends StatelessWidget {
             onAnswer: onAnswer,
             onAnswerQuestion: onAnswerQuestion,
             onAnswerMenu: onAnswerMenu,
+            onChooseOption: onChooseOption,
           ),
         if (showActivity) CompanionActivityStrip(sessionId: sessionId),
         ?resume,

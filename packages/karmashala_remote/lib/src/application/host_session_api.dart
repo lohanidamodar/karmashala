@@ -389,7 +389,13 @@ class HostSessionApi {
               'this approval has already been answered',
             );
           }
-          final pressed = await bindings.answerApproval(sessionId, decision);
+          final optionId = envelope.payload['optionId'];
+          final byOption = bindings.answerApprovalOption;
+          final pressed = optionId is String && optionId.isNotEmpty
+              ? byOption != null
+                    ? await byOption(sessionId, decision, optionId)
+                    : await bindings.answerApproval(sessionId, decision)
+              : await bindings.answerApproval(sessionId, decision);
           // Told, not inferred — and told before the result, so the phone
           // that asked has the outcome even if it stops listening after it.
           await _sendApprovalResolved(

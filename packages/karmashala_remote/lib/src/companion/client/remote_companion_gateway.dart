@@ -878,8 +878,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> answerApproval(
     String sessionId,
     String approvalId,
-    CompanionApprovalDecision decision,
-  ) async {
+    CompanionApprovalDecision decision, {
+    String? optionId,
+  }) async {
     await _ready;
     final client = _requireClient();
     await _mapRefusals(
@@ -887,6 +888,7 @@ class RemoteCompanionGateway implements CompanionGateway {
         sessionId,
         approve: decision == CompanionApprovalDecision.approve,
         approvalId: approvalId,
+        optionId: optionId,
       ),
     );
     final pending = _approvalOf(sessionId);

@@ -331,6 +331,24 @@ class DataClient {
   Stream<SessionCommandsChanged> get sessionCommandChanges =>
       _sessionCommandChanges.stream;
 
+  final _sessionNotices = StreamController<SessionNoticed>.broadcast(
+    sync: true,
+  );
+
+  /// What the server has to say of a session, as it says it. Never kept.
+  Stream<SessionNoticed> get sessionNotices => _sessionNotices.stream;
+
+  /// What each session's agent takes in a prompt beyond text, by session id,
+  /// as last told. In memory only, like [sessionModes].
+  final sessionPromptKinds = <String, SessionPromptKindsChanged>{};
+
+  final _sessionPromptKindChanges =
+      StreamController<SessionPromptKindsChanged>.broadcast(sync: true);
+
+  /// A session's agent declared what it takes in a prompt, or went.
+  Stream<SessionPromptKindsChanged> get sessionPromptKindChanges =>
+      _sessionPromptKindChanges.stream;
+
   /// Each session's queued messages — queued, delivering and failed — as
   /// the server last told them, by session id. In memory only: forgotten
   /// when the link drops, and listed again by whoever shows them.
@@ -1051,6 +1069,13 @@ class DataClient {
           if (!_sessionCommandChanges.isClosed) {
             _sessionCommandChanges.add(change);
           }
+        case final SessionNoticed change:
+          if (!_sessionNotices.isClosed) _sessionNotices.add(change);
+        case final SessionPromptKindsChanged change:
+          sessionPromptKinds[change.sessionId] = change;
+          if (!_sessionPromptKindChanges.isClosed) {
+            _sessionPromptKindChanges.add(change);
+          }
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1271,6 +1296,8 @@ class DataClient {
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
     unawaited(_sessionCommandChanges.close());
+    unawaited(_sessionNotices.close());
+    unawaited(_sessionPromptKindChanges.close());
     unawaited(_sessionQueueChanges.close());
     unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());

@@ -28,6 +28,14 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
       'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
       'sessionAgentChanged' => SessionAgentChanged.fromJson(json),
       'sessionCommandsChanged' => SessionCommandsChanged.fromJson(json),
+      'sessionPromptKindsChanged' => SessionPromptKindsChanged(
+        sessionId: json['sessionId']! as String,
+        images: json['images'] == true,
+      ),
+      'sessionNoticed' => SessionNoticed(
+        sessionId: json['sessionId']! as String,
+        message: json['message'] as String? ?? '',
+      ),
       _ => null,
     };
 
@@ -447,5 +455,42 @@ final class SessionCommandsChanged extends DataChange {
     'change': 'sessionCommandsChanged',
     'sessionId': sessionId,
     'commands': [for (final command in commands) command.toJson()],
+  };
+}
+
+/// Something the server has to say of session [sessionId] to whoever watches
+/// it — what a message it delivered could not carry — in a sentence. Told
+/// once, never stored.
+final class SessionNoticed extends DataChange {
+  const SessionNoticed({required this.sessionId, required this.message});
+
+  final String sessionId;
+  final String message;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionNoticed',
+    'sessionId': sessionId,
+    'message': message,
+  };
+}
+
+/// What session [sessionId]'s agent takes in a prompt beyond text, as it
+/// declared at its start (ACP `promptCapabilities`): [images] when an
+/// attached image reaches it as an image rather than as its path. Not stored.
+final class SessionPromptKindsChanged extends DataChange {
+  const SessionPromptKindsChanged({
+    required this.sessionId,
+    required this.images,
+  });
+
+  final String sessionId;
+  final bool images;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionPromptKindsChanged',
+    'sessionId': sessionId,
+    'images': images,
   };
 }

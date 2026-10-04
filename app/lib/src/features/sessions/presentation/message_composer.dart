@@ -79,7 +79,22 @@ class _Attachment {
   /// A thumbnail for a touch chip; null draws the file's glyph.
   final ImageProvider? preview;
 
-  /// Where the file is, for the pointer chip's tooltip.
+  /// Where the file is, for the pointer chip's tooltip: an image goes to an
+  /// agent that takes them [asImage], anything else by its path.
+  String whereFor({required bool asImage}) =>
+      image && asImage ? _whereAsImage : where;
+
+  String get _whereAsImage => switch (from) {
+    _From.temp => 'Saved to a temp folder and sent to the agent as an image.',
+    _From.local => 'On this machine; the agent is sent it as an image.',
+    _From.uploaded => 'Sent to $serverName; the agent is sent it as an image.',
+    _From.server => 'On $serverName; the agent is sent it as an image.',
+    _From.files =>
+      serverName.isEmpty
+          ? 'From Files; the agent is sent it as an image.'
+          : 'From Files on $serverName; the agent is sent it as an image.',
+  };
+
   String get where => switch (from) {
     _From.temp =>
       'Saved to a temp folder and sent to the agent as a file path.',
@@ -199,6 +214,7 @@ class MessageComposer extends StatefulWidget {
     this.controller,
     this.snippets,
     this.commands,
+    this.imagesGoAsImages,
     this.server,
     this.attaches = true,
     this.camera,
@@ -233,6 +249,10 @@ class MessageComposer extends StatefulWidget {
   /// The agent's slash commands, read as the box's text changes: typing "/"
   /// lists them and picking one puts it in the box. Null offers none.
   final List<ComposerCommand> Function()? commands;
+
+  /// Whether an attached image reaches the agent as an image rather than as
+  /// its path, read when the chips are drawn. Null is "as its path".
+  final bool Function()? imagesGoAsImages;
 
   /// The server the agent runs on, read when an image is pasted or attached.
   /// Null, or one on this machine, keeps today's client temp files. One
@@ -1108,6 +1128,7 @@ class _MessageComposerState extends State<MessageComposer> {
               _AttachmentStrip(
                 attachments: _attachments,
                 uploading: _uploading,
+                asImages: widget.imagesGoAsImages?.call() ?? false,
                 onRemove: (i) => setState(() => _attachments.removeAt(i)),
               ),
             if (_sendError case final error?)
@@ -1346,10 +1367,14 @@ class _AttachmentStrip extends StatelessWidget {
   const _AttachmentStrip({
     required this.attachments,
     required this.uploading,
+    required this.asImages,
     required this.onRemove,
   });
 
   final List<_Attachment> attachments;
+
+  /// Whether the agent takes an image as an image, which the tooltip says.
+  final bool asImages;
 
   /// Pasted images still being sent, each drawn as a chip that says so.
   final int uploading;
@@ -1365,7 +1390,7 @@ class _AttachmentStrip extends StatelessWidget {
         for (var i = 0; i < attachments.length; i++)
           _AttachmentChip(
             name: attachments[i].name,
-            where: attachments[i].where,
+            where: attachments[i].whereFor(asImage: asImages),
             image: attachments[i].image,
             preview: attachments[i].preview,
             onRemove: () => onRemove(i),

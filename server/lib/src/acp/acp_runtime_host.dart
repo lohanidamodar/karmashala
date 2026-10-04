@@ -4,6 +4,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionCommandsChanged,
         SessionConfigOptionsChanged,
         SessionModesChanged,
+        SessionPromptKindsChanged,
         SessionUsageChanged;
 
 /// What an [AcpSessionRuntime] asks of the server around it: where its
@@ -44,6 +45,13 @@ abstract class AcpRuntimeHost {
   /// The agent named the conversation (`session_info_update`); [title] is
   /// trimmed and never empty.
   void titleChanged(String sessionId, String title) {}
+
+  /// A sentence for whoever watches [sessionId]: what a message it delivered
+  /// could not carry. Told however the message came.
+  void notice(String sessionId, String message) {}
+
+  /// What the agent takes in a prompt beyond text, as it declared.
+  void promptKindsChanged(SessionPromptKindsChanged change) {}
 
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);

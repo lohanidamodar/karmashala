@@ -23,6 +23,7 @@ import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
+import '../../features/sessions/application/server_session_notices.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/onboarding/application/quick_start.dart';
@@ -272,6 +273,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(serverResumeEndingsProvider);
     // And for a usage limit the server noticed, whose notice is shown here.
     ref.watch(usageLimitNoticesProvider);
+    // And for what the server has to say of a session it delivered to.
+    ref.watch(serverSessionNoticesProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
     // And for an agent switched from another client, whose old terminal

@@ -16,6 +16,7 @@ extension _GatewayApprovals on RemoteCompanionGateway {
       denyLabel: request.denyLabel,
       question: request.question,
       menu: request.menu,
+      options: request.options,
     );
     _approvalOf(request.sessionId).value = approval;
     final summary = _currentSummary(request.sessionId);

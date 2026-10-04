@@ -44,6 +44,7 @@ class HostedSessionWait {
       return SessionBlock(
         kind: 'approvalPrompt',
         text: evidenceLine(report.evidence),
+        options: report.toolAsk?.options ?? const [],
       );
     }
     return null;

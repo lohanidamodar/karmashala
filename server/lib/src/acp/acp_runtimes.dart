@@ -6,8 +6,10 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         SessionCommandsChanged,
+        SessionNoticed,
         SessionConfigOptionsChanged,
         SessionModesChanged,
+        SessionPromptKindsChanged,
         SessionUsageChanged;
 import 'package:karmashala_launch/karmashala_launch.dart'
     show kSessionIdEnvironmentVariable;
@@ -247,6 +249,15 @@ class ServerAcpHost extends AcpRuntimeHost {
   @override
   void titleChanged(String sessionId, String title) =>
       titles?.follow(sessionId, title);
+
+  @override
+  void promptKindsChanged(SessionPromptKindsChanged change) =>
+      data.announce([change]);
+
+  @override
+  void notice(String sessionId, String message) => data.announce([
+    SessionNoticed(sessionId: sessionId, message: message),
+  ]);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

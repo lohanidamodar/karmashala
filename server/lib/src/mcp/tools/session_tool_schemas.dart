@@ -78,7 +78,10 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'highlighted — and `answered` names it; otherwise it presses the key '
         'the agent itself names for approve or deny. Fails, rather than '
         'guessing, when no option or key for the decision you asked for can '
-        'be named. Use session_transcript first to see what is being asked.',
+        'be named. Use session_transcript first to see what is being asked. '
+        'An ACP agent names its own answers (allow always, reject always…): '
+        'session_wait lists them under blockedOn.options, and optionId '
+        'chooses one exactly.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -89,10 +92,16 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'decision': {
           'type': 'string',
           'enum': ['approve', 'deny'],
-          'description': 'What to answer.',
+          'description': 'What to answer. Give this or optionId.',
+        },
+        'optionId': {
+          'type': 'string',
+          'description':
+              "The id of one of the options the agent offered "
+              "(blockedOn.options); that option's own kind decides whether "
+              'it approves.',
         },
       },
-      'required': ['decision'],
     },
     'outputSchema': {
       'type': 'object',
@@ -195,6 +204,26 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
             'kind': {'type': 'string'},
             'text': {
               'type': ['string', 'null'],
+            },
+            'options': {
+              'type': 'array',
+              'description':
+                  "An ACP agent's own answers to its approval, in its order; "
+                  'session_answer chooses one by optionId. Absent for any '
+                  'other prompt.',
+              'items': {
+                'type': 'object',
+                'properties': {
+                  'id': {'type': 'string'},
+                  'name': {'type': 'string'},
+                  'kind': {
+                    'type': 'string',
+                    'description':
+                        'allow_once, allow_always, reject_once or '
+                        'reject_always.',
+                  },
+                },
+              },
             },
           },
         },

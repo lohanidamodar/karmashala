@@ -7,6 +7,12 @@ import 'package:karmashala_remote/host.dart';
 /// In-memory bindings: sessions, transcripts and recorded actions, with no
 /// providers, processes or terminals anywhere near them.
 class FakeRemoteBindings {
+  FakeRemoteBindings({this.answersOptions = true});
+
+  /// Whether these bindings can choose an agent's own option; off is a host
+  /// that predates them.
+  final bool answersOptions;
+
   final Map<String, RemoteSessionSnapshot> sessions = {};
   final Map<String, List<RemoteTranscriptMessage>> transcripts = {};
 
@@ -55,6 +61,10 @@ class FakeRemoteBindings {
   /// Every answer that actually reached the terminal. A refused one must not
   /// appear here — that is the whole point of refusing it.
   final List<({String sessionId, String decision})> approvalAnswers = [];
+
+  /// Answers that named one of the agent's options.
+  final List<({String sessionId, String decision, String optionId})>
+  approvalOptionAnswers = [];
   final List<RemoteQuestionAnswerRequest> questionAnswers = [];
   final List<RemoteMenuAnswerRequest> menuAnswers = [];
 
@@ -228,6 +238,18 @@ class FakeRemoteBindings {
       approvalAnswers.add((sessionId: sessionId, decision: decision));
       return decision == 'approve' ? 'Yes (enter)' : 'No (esc)';
     },
+    answerApprovalOption: !answersOptions
+        ? null
+        : (sessionId, decision, optionId) async {
+            final refusal = approvalRefusal;
+            if (refusal != null) throw refusal;
+            approvalOptionAnswers.add((
+              sessionId: sessionId,
+              decision: decision,
+              optionId: optionId,
+            ));
+            return optionId;
+          },
     answerQuestion: (request) async {
       questionAnswers.add(request);
       return request.decline ? 'declined' : 'answered';

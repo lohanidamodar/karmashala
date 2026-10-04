@@ -73,7 +73,18 @@ class RemoteHostBindings {
     this.readRecordState = _recordStateUnknown,
     this.sessionOptions = _noSessionOptions,
     this.configureSession = _noConfigure,
+    this.answerApprovalOption,
   });
+
+  /// Answers a pending approval with one of the agent's own options
+  /// ([RemoteApprovalRequest.options]); [decision] is what that option means.
+  /// Null on a host that cannot, which then answers [decision] instead.
+  final Future<String> Function(
+    String sessionId,
+    String decision,
+    String optionId,
+  )?
+  answerApprovalOption;
 
   /// The models and permission modes [String] session can be put on.
   final Future<RemoteSessionOptions> Function(String sessionId) sessionOptions;
