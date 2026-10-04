@@ -68,6 +68,52 @@ class FileEditRecord {
   /// no line numbers, so a diff from it must not print a `@@ -a,b +c,d @@` header.
   bool get isFragment => recordedDiff == null && kind == FileEditKind.modified;
 
+  /// The wire form a transcript page carries; absent fields are left out.
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'kind': kind.name,
+    if (toolName.isNotEmpty) 'toolName': toolName,
+    'oldText': ?oldText,
+    'newText': ?newText,
+    'recordedDiff': ?recordedDiff,
+    'renamedTo': ?renamedTo,
+  };
+
+  /// Null when `path` is missing; an unknown `kind` reads as modified.
+  static FileEditRecord? fromJson(Map<String, Object?> json) {
+    final path = json['path'];
+    if (path is! String || path.isEmpty) return null;
+    String? text(String key) => switch (json[key]) {
+      final String value => value,
+      _ => null,
+    };
+    return FileEditRecord(
+      path: path,
+      kind:
+          FileEditKind.values.asNameMap()[json['kind']] ??
+          FileEditKind.modified,
+      toolName: text('toolName') ?? '',
+      oldText: text('oldText'),
+      newText: text('newText'),
+      recordedDiff: text('recordedDiff'),
+      renamedTo: text('renamedTo'),
+    );
+  }
+
+  FileEditRecord copyWith({
+    String? oldText,
+    String? newText,
+    String? recordedDiff,
+  }) => FileEditRecord(
+    path: path,
+    kind: kind,
+    toolName: toolName,
+    oldText: oldText ?? this.oldText,
+    newText: newText ?? this.newText,
+    recordedDiff: recordedDiff ?? this.recordedDiff,
+    renamedTo: renamedTo,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is FileEditRecord &&
