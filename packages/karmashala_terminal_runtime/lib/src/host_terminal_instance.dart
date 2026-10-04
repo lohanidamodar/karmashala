@@ -49,9 +49,32 @@ typedef TerminalOpener =
     final said = error.message.trim();
     final detail = error.detail ?? said;
     final short = said.isNotEmpty && said.length <= 160 && !said.contains('\n');
-    return (said: short ? said : plain, detail: detail.isEmpty ? plain : detail);
+    return (
+      said: short ? said : plain,
+      detail: detail.isEmpty ? plain : detail,
+    );
   }
   return (said: plain, detail: '$error');
+}
+
+/// How long a pane waits for the server to start or resume its terminal. A
+/// pane left waiting is live and blank with no way forward.
+const Duration kPaneOpenWithin = Duration(seconds: 60);
+
+/// The server took longer than [within] to start a pane's terminal.
+final class _OpenTimedOut implements ExplainedFailure {
+  const _OpenTimedOut(this.within);
+
+  final Duration within;
+
+  @override
+  String get message => "The server didn't start this session. Retry.";
+
+  @override
+  String get detail =>
+      'The Karmashala server did not answer the request to start or resume '
+      'this terminal within ${within.inSeconds} s, so the pane stopped '
+      'waiting. Nothing is known to be running for it.';
 }
 
 /// How long a pane waits before each attempt to reach its host again after the
@@ -100,6 +123,7 @@ class HostTerminalInstance
     bool drawsAtSessionGrid = false,
     bool indicClusterWidthFromBase = false,
     this.redialDelays = kHostRedialDelays,
+    this.openWithin = kPaneOpenWithin,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory),
        _atSessionGrid = ValueNotifier(drawsAtSessionGrid) {
@@ -177,6 +201,9 @@ class HostTerminalInstance
 
   /// See [kHostRedialDelays]; shorter in tests.
   final List<Duration> redialDelays;
+
+  /// How long [opener] may take before the pane gives up on it.
+  final Duration openWithin;
 
   /// Attaches to a session somebody else started (a run the server hosts, or
   /// a restored pane's) and never starts one: a session that is gone ends the
@@ -500,7 +527,8 @@ class HostTerminalInstance
     } on Object catch (e) {
       _fail(
         "Can't reach the Karmashala server. Retry in a moment.",
-        detail: 'Could not ask the session host on ${access.address} about '
+        detail:
+            'Could not ask the session host on ${access.address} about '
             'itself: $e',
         didNotStart: true,
       );
@@ -510,7 +538,8 @@ class HostTerminalInstance
     if (!deployment.isReady) {
       _fail(
         _serverUnavailable(deployment),
-        detail: 'The session host on ${access.address} is not available: '
+        detail:
+            'The session host on ${access.address} is not available: '
             '${deployment.reason}',
         didNotStart: true,
       );
@@ -795,7 +824,10 @@ class HostTerminalInstance
     var fresh = false;
     final open = opener;
     if (open != null && !redialing && !_opened) {
-      final opening = await open(width, height);
+      final opening = await open(
+        width,
+        height,
+      ).timeout(openWithin, onTimeout: () => throw _OpenTimedOut(openWithin));
       _opened = true;
       if (opening.sessionId != sessionId) {
         throw HostLinkException(
