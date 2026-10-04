@@ -50,12 +50,15 @@ void main() {
         ),
       );
 
-      /// Claude Code's prompt as its screen draws it (2.1.287's options, with
-      /// the optional Ultraplan row ahead of keep planning).
+      /// Claude Code 2.1.287's prompt as its screen draws it: a clear-context
+      /// yes, the mode yeses, and the optional Ultraplan row ahead of keep
+      /// planning.
       const screenMenu = AgentScreenMenu(
         prompt: ['Would you like to proceed?'],
         options: [
+          'Yes, clear context (31% used) and use auto mode',
           'Yes, and use auto mode',
+          'Yes, auto-accept edits',
           'Yes, manually approve edits',
           'No, refine with Ultraplan in a cloud session',
           'No, keep planning',
@@ -64,12 +67,16 @@ void main() {
       );
 
       Future<(ChatCardHarness, RecordingPromptAnswers, List<String>)> open(
-        WidgetTester tester,
-      ) async {
+        WidgetTester tester, {
+        String? permissionMode,
+        bool menuReadable = true,
+      }) async {
         late final ChatCardHarness h;
         final interrupts = <String>[];
         final answers = RecordingPromptAnswers(
-          menu: kind == ChatCardSession.terminalCli ? screenMenu : null,
+          menu: kind == ChatCardSession.terminalCli && menuReadable
+              ? screenMenu
+              : null,
           onAnswer: (_) => h.status(
             ChatCardHarness.statusOf(kind, AgentActivityStatus.working),
           ),
@@ -78,6 +85,7 @@ void main() {
           kind,
           messages: turn(),
           status: asking,
+          permissionMode: permissionMode,
           overrides: [
             sessionPromptAnswersProvider.overrideWithValue(answers),
             sessionAnswerableProvider.overrideWithValue((_) => true),
@@ -118,17 +126,56 @@ void main() {
         expect(find.byKey(const ValueKey('dock-allow-once')), findsNothing);
       });
 
-      testWidgets('Approve plan is the prompt\'s own approve', (tester) async {
-        final (_, answers, _) = await open(tester);
+      if (kind == ChatCardSession.acp) {
+        // The server picks the allow at or below the session's rung
+        // (acp_plan_permission_test.dart).
+        testWidgets('Approve plan is the request\'s approve', (tester) async {
+          final (_, answers, _) = await open(tester);
 
-        await tester.tap(find.text('Approve plan'));
-        await tester.pumpAndSettle();
+          await tester.tap(find.text('Approve plan'));
+          await tester.pumpAndSettle();
 
-        final answer = answers.answers.single as ApprovalAnswerRequest;
-        expect(answer.approve, isTrue);
-        expect(answer.ask?.toolUseId, 'plan-1');
-        expect(card, findsNothing);
-      });
+          final answer = answers.answers.single as ApprovalAnswerRequest;
+          expect(answer.approve, isTrue);
+          expect(answer.ask?.toolUseId, 'plan-1');
+          expect(card, findsNothing);
+        });
+      } else {
+        for (final (mode, chosen) in [
+          (null, 'Yes, manually approve edits'),
+          ('mode=manual', 'Yes, manually approve edits'),
+          ('mode=acceptEdits', 'Yes, auto-accept edits'),
+          // No bypass row here: auto mode is the highest at or below it.
+          ('mode=bypassPermissions', 'Yes, and use auto mode'),
+          // Approving a plan leaves read-only; asking is the floor.
+          ('mode=plan', 'Yes, manually approve edits'),
+        ]) {
+          testWidgets('Approve plan at ${mode ?? 'the default'} never raises '
+              'the session: "$chosen"', (tester) async {
+            final (_, answers, _) = await open(tester, permissionMode: mode);
+
+            await tester.tap(find.text('Approve plan'));
+            await tester.pumpAndSettle();
+
+            final answer = answers.answers.single as MenuAnswerRequest;
+            expect(answer.menuId, screenMenu.id);
+            expect(screenMenu.options[answer.option], chosen);
+            expect(card, findsNothing);
+          });
+        }
+
+        testWidgets('Approve plan sends nothing when the prompt cannot be '
+            'read', (tester) async {
+          final (_, answers, _) = await open(tester, menuReadable: false);
+
+          await tester.tap(find.text('Approve plan'));
+          await tester.pumpAndSettle();
+
+          expect(answers.answers, isEmpty);
+          expect(find.textContaining('nothing was sent'), findsOneWidget);
+          expect(card, findsOneWidget);
+        });
+      }
 
       testWidgets('Keep planning picks the agent\'s own keep-planning answer', (
         tester,
@@ -144,7 +191,10 @@ void main() {
           case ChatCardSession.terminalCli:
             answer as MenuAnswerRequest;
             expect(answer.menuId, screenMenu.id);
-            expect(answer.option, 3);
+            expect(
+              answer.option,
+              screenMenu.options.indexOf('No, keep planning'),
+            );
           // The request's reject is "No, keep planning".
           case ChatCardSession.acp:
             answer as ApprovalAnswerRequest;
@@ -169,40 +219,41 @@ void main() {
     });
   }
 
-  testWidgets('a tool the descriptor does not name stays an ordinary approval', (
-    tester,
-  ) async {
-    final h = await ChatCardHarness.open(
-      ChatCardSession.terminalCli,
-      messages: [
-        TranscriptMessage(
-          role: 'tool',
-          text: '',
-          tool: const ToolActivity(name: 'Bash', subject: 'make plan'),
-          pendingToolUseId: 'call-1',
-          at: testTime,
-        ),
-      ],
-      status: ChatCardHarness.statusOf(
+  testWidgets(
+    'a tool the descriptor does not name stays an ordinary approval',
+    (tester) async {
+      final h = await ChatCardHarness.open(
         ChatCardSession.terminalCli,
-        AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.approval,
-        toolAsk: AgentToolAsk(
-          toolName: 'Bash',
-          input: const {'command': 'make plan', 'plan': 'not one'},
-          at: testTime,
-          toolUseId: 'call-1',
+        messages: [
+          TranscriptMessage(
+            role: 'tool',
+            text: '',
+            tool: const ToolActivity(name: 'Bash', subject: 'make plan'),
+            pendingToolUseId: 'call-1',
+            at: testTime,
+          ),
+        ],
+        status: ChatCardHarness.statusOf(
+          ChatCardSession.terminalCli,
+          AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+          toolAsk: AgentToolAsk(
+            toolName: 'Bash',
+            input: const {'command': 'make plan', 'plan': 'not one'},
+            at: testTime,
+            toolUseId: 'call-1',
+          ),
         ),
-      ),
-      overrides: [sessionAnswerableProvider.overrideWithValue((_) => true)],
-    );
-    addTearDown(h.dispose);
-    await tester.pumpWidget(chatWithDock(h.container));
-    await tester.pumpAndSettle();
+        overrides: [sessionAnswerableProvider.overrideWithValue((_) => true)],
+      );
+      addTearDown(h.dispose);
+      await tester.pumpWidget(chatWithDock(h.container));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('plan-approval:call-1')), findsNothing);
-    expect(find.byKey(const ValueKey('chat-ask:call-1')), findsOneWidget);
-  });
+      expect(find.byKey(const ValueKey('plan-approval:call-1')), findsNothing);
+      expect(find.byKey(const ValueKey('chat-ask:call-1')), findsOneWidget);
+    },
+  );
 
   /// An ACP session asking about one switch_mode call, titled [title].
   Future<void> acpAsk(

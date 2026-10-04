@@ -1,3 +1,4 @@
+import '../../permissions/permission_risk.dart';
 import 'agent_tool_ask.dart';
 
 /// **How an agent asks to leave plan mode and carry its plan out**, and how
@@ -14,8 +15,54 @@ class AgentPlanApprovalSupport {
     this.toolKind,
     this.planKey = 'plan',
     this.keepPlanningOption,
+    this.approveOptions = const {},
+    this.skippedOptions = const [],
     required this.evidence,
   }) : assert(toolName != null || toolKind != null);
+
+  /// For a prompt whose approve is picked off the screen: a pattern for each
+  /// "yes" option's words → the permission value (an axis value id on the
+  /// descriptor) it switches the session to. Empty where the approve is the
+  /// prompt's own, chosen elsewhere (an ACP server's rung rule).
+  final Map<String, String> approveOptions;
+
+  /// Patterns for "yes" options never chosen whatever they permit — one that
+  /// also clears the conversation.
+  final List<String> skippedOptions;
+
+  /// **The approve option among [options] that keeps the session where it
+  /// is**: the highest whose permission value [rungOf] puts at or below
+  /// [ceiling]. Null when none does, or none can be read — then nothing may be
+  /// pressed, since the highlighted one can be above it.
+  int? approveIn(
+    List<String> options, {
+    required PermissionRisk ceiling,
+    required PermissionRisk? Function(String valueId) rungOf,
+  }) {
+    bool any(Iterable<String> patterns, String option) => patterns.any(
+      (p) => RegExp(p, caseSensitive: false).hasMatch(option),
+    );
+    int? chosen;
+    PermissionRisk? at;
+    for (var i = 0; i < options.length; i++) {
+      final option = options[i].trim();
+      if (any(skippedOptions, option)) continue;
+      String? value;
+      for (final MapEntry(key: pattern, value: id) in approveOptions.entries) {
+        if (RegExp(pattern, caseSensitive: false).hasMatch(option)) {
+          value = id;
+          break;
+        }
+      }
+      final rung = value == null ? null : rungOf(value);
+      if (rung == null || !rung.isAtMost(ceiling)) continue;
+      if (at == null || !rung.isAtMost(at)) {
+        chosen = i;
+        at = rung;
+      }
+    }
+    return chosen;
+  }
 
   /// The CLI's own tool the ask names, when a hook names one.
   final String? toolName;

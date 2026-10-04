@@ -887,11 +887,24 @@ const claudeCodeDescriptor = AgentDescriptor(
   planApproval: AgentPlanApprovalSupport(
     toolName: 'ExitPlanMode',
     keepPlanningOption: r'^No, keep planning\b',
+    // The yeses by what they switch to (the axis below). Bypass is checked
+    // before auto, and either before "accept edits", whose words the first
+    // two can contain.
+    approveOptions: {
+      r'^Yes\b.*bypass permissions': 'bypassPermissions',
+      r'^Yes\b.*auto mode': 'auto',
+      r'^Yes\b.*accept edits': 'acceptEdits',
+      r'^Yes\b.*manually approve edits': 'manual',
+    },
+    skippedOptions: [r'clear context'],
     evidence:
         'claude.exe 2.1.287 string table, read 2026-10-04: "Would you like to '
         'proceed?" with yes-* options, an optional "No, refine with Ultraplan '
         'in a cloud session", then "No, keep planning" (an input row, '
-        'placeholder "Tell Claude what to change"); ExitPlanMode input `plan`',
+        'placeholder "Tell Claude what to change"); ExitPlanMode input `plan`; '
+        'yes labels "Yes, and use auto mode", "Yes, auto-accept edits", "Yes, '
+        'manually approve edits", values yes-resume-auto-mode / '
+        'yes-accept-edits / yes-default-keep-context / yes-auto-clear-context',
   ),
   skills: AgentSkillSupport.homeDirectory(
     ['.claude', 'skills'],

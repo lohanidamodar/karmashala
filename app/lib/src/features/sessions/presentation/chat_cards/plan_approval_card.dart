@@ -6,6 +6,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 
+import '../../../agents/application/agent_providers.dart';
+import '../../application/session_launcher.dart';
 import '../../application/session_prompt_answers.dart';
 import '../../application/session_turn_interrupt.dart';
 
@@ -60,15 +62,67 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
   }
 
   Future<String?> _approve() async {
-    await ref
-        .read(sessionPromptAnswersProvider)
-        .answer(
+    final answers = ref.read(sessionPromptAnswersProvider);
+    if (widget.support.approveOptions.isNotEmpty) {
+      // Picked off the screen: Enter would take the highlighted yes, which
+      // can be above the session's rung.
+      final menu = answers.menuOnScreen(widget.sessionId);
+      final option = menu == null
+          ? null
+          : widget.support.approveIn(
+              menu.options,
+              ceiling: _ceiling(),
+              rungOf: _rungOf,
+            );
+      if (menu == null || option == null) {
+        return 'No way to approve on ${widget.agentName}\'s screen keeps '
+            'this session\'s permissions, so nothing was sent. Answer it in '
+            'the terminal.';
+      }
+      await answers.answer(
+        MenuAnswerRequest(
+          sessionId: widget.sessionId,
+          menuId: menu.id,
+          option: option,
+        ),
+      );
+      return null;
+    }
+    await answers.answer(
           ApprovalAnswerRequest(
             sessionId: widget.sessionId,
             approve: true,
             ask: PromptAsk.drawnFrom(widget.report),
           ),
         );
+    return null;
+  }
+
+  /// The most an approval may leave the session at: its own rung, and never
+  /// below asking — approving a plan leaves read-only.
+  PermissionRisk _ceiling() {
+    final effective = ref
+        .read(sessionLauncherProvider)
+        .effectivePermissionFor(widget.sessionId);
+    final risk = effective?.descriptor?.launch.permission.riskOf(
+      effective.selection,
+    );
+    if (risk == null || risk.isAtMost(PermissionRisk.readOnly)) {
+      return PermissionRisk.ask;
+    }
+    return risk;
+  }
+
+  /// What one of the agent's permission values permits, off its descriptor.
+  PermissionRisk? _rungOf(String valueId) {
+    final descriptor = ref
+        .read(agentRegistryProvider)
+        .byId(widget.report.agentId);
+    for (final axis in descriptor?.launch.permission.axes ?? const []) {
+      for (final value in axis.values) {
+        if (value.id == valueId) return value.permits;
+      }
+    }
     return null;
   }
 

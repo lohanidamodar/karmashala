@@ -46,6 +46,7 @@ class ChatCardHarness {
     required List<TranscriptMessage> messages,
     AgentStatusReport? status,
     List<Override> overrides = const [],
+    String? permissionMode,
   }) async {
     final agentId = agentIdOf(kind);
     final db = TestMachine();
@@ -61,6 +62,7 @@ class ChatCardHarness {
           repositoryId: 'r1',
           agentInstallationId: 'a1',
           title: 'Chat cards',
+          permissionMode: permissionMode,
           useWorktree: false,
           status: SessionStatus.running,
           createdAt: testTime,
