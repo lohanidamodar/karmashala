@@ -97,6 +97,106 @@ void main() {
       )).single.tool!;
       expect(tool.edits, isEmpty);
     });
+
+    Map<String, Object?> claudeResult(Map<String, Object?> toolUseResult) => {
+      'type': 'user',
+      'timestamp': '2026-10-04T10:00:01.000Z',
+      'message': {
+        'content': [
+          {
+            'type': 'tool_result',
+            'tool_use_id': 'toolu_1',
+            'content': 'The file has been updated.',
+          },
+        ],
+      },
+      'toolUseResult': toolUseResult,
+    };
+
+    test('the result\'s structuredPatch replaces the input, with line '
+        'numbers', () async {
+      final path = await write('edit-result.jsonl', [
+        claudeCall('MultiEdit', {
+          'file_path': '/src/a.dart',
+          'edits': [
+            {'old_string': 'b', 'new_string': 'c'},
+            {'old_string': 'x', 'new_string': 'y'},
+          ],
+        }),
+        claudeResult({
+          'filePath': '/src/a.dart',
+          'oldString': 'b',
+          'newString': 'c',
+          'originalFile': 'a\nb\nd\nx\n',
+          'structuredPatch': [
+            {
+              'oldStart': 10,
+              'oldLines': 4,
+              'newStart': 10,
+              'newLines': 4,
+              'lines': [' a', '-b', '+c', ' d', '-x', '+y'],
+            },
+          ],
+        }),
+      ]);
+
+      final tool = (await readCliTranscript(
+        path,
+        AgentIds.claudeCode,
+      )).single.tool!;
+      final edit = tool.edits.single;
+      expect(edit.recordedDiff, startsWith('@@ -10,4 +10,4 @@\n a\n-b\n+c'));
+      expect(edit.oldText, isNull, reason: 'the whole file is not carried');
+      expect(tool.output, 'The file has been updated.');
+    });
+
+    test('a Write that created its file reads as created', () async {
+      final path = await write('write-result.jsonl', [
+        claudeCall('Write', {'file_path': '/src/new.dart', 'content': 'x\n'}),
+        claudeResult({
+          'type': 'create',
+          'filePath': '/src/new.dart',
+          'content': 'x\n',
+          'structuredPatch': <Object?>[],
+        }),
+      ]);
+      final edit = (await readCliTranscript(
+        path,
+        AgentIds.claudeCode,
+      )).single.tool!.edits.single;
+      expect(edit.kind, FileEditKind.created);
+      expect(edit.newText, 'x\n');
+    });
+
+    test('a failed edit keeps what the input asked for', () async {
+      final path = await write('edit-failed.jsonl', [
+        claudeCall('Edit', {
+          'file_path': '/src/a.dart',
+          'old_string': 'a',
+          'new_string': 'b',
+        }),
+        {
+          'type': 'user',
+          'message': {
+            'content': [
+              {
+                'type': 'tool_result',
+                'tool_use_id': 'toolu_1',
+                'content': 'String not found',
+                'is_error': true,
+              },
+            ],
+          },
+          'toolUseResult': 'Error: String not found',
+        },
+      ]);
+      final tool = (await readCliTranscript(
+        path,
+        AgentIds.claudeCode,
+      )).single.tool!;
+      expect(tool.isError, isTrue);
+      expect(tool.edits.single.newText, 'b');
+    });
   });
 
   group('Codex', () {
@@ -151,6 +251,52 @@ void main() {
       ]);
       final tool = (await readCliTranscript(path, AgentIds.codex)).single.tool!;
       expect(tool.edits, hasLength(3));
+    });
+
+    test('older Codex ran the patch through `shell`', () async {
+      final path = await write('codex-shell.jsonl', [
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_3',
+          'arguments': jsonEncode({
+            'command': ['apply_patch', patch],
+            'workdir': '/src',
+          }),
+        }),
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_4',
+          'arguments': jsonEncode({
+            'command': ['bash', '-lc', "apply_patch <<'EOF'\n$patch\nEOF\n"],
+          }),
+        }),
+      ]);
+      final rows = await readCliTranscript(path, AgentIds.codex);
+      for (final row in rows) {
+        expect(row.tool!.edits.map((e) => e.path), [
+          'docs/new.md',
+          'lib/main.dart',
+          'old.txt',
+        ]);
+        expect(row.tool!.subject, 'docs/new.md');
+      }
+    });
+
+    test('a shell command that is not a patch carries no edits', () async {
+      final path = await write('codex-ls.jsonl', [
+        codexCall({
+          'type': 'function_call',
+          'name': 'shell',
+          'call_id': 'call_5',
+          'arguments': jsonEncode({
+            'command': ['bash', '-lc', 'echo "*** Begin Patch"'],
+          }),
+        }),
+      ]);
+      final tool = (await readCliTranscript(path, AgentIds.codex)).single.tool!;
+      expect(tool.edits, isEmpty);
     });
 
     test('a patch with no file header reads as no edits', () {

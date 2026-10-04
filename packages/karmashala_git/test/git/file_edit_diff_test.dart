@@ -380,6 +380,70 @@ void main() {
       expect(diff.removed, 1);
     });
 
+    test('a real-shaped Edit result keeps its line numbers, context and '
+        'counts, even for content that starts with -- or ++', () {
+      // The shape Claude Code writes: every patch line carries its own
+      // ' ', '+' or '-' prefix. Contents are made up.
+      final edit = claudeFileEdits({
+        'type': 'user',
+        'toolUseResult': {
+          'filePath': '/repo/docs/config.md',
+          'oldString': 'retries: 3',
+          'newString': 'retries: 5',
+          'originalFile': 'title: Demo\n---\nretries: 3\n',
+          'structuredPatch': [
+            {
+              'oldStart': 40,
+              'oldLines': 5,
+              'newStart': 40,
+              'newLines': 5,
+              'lines': [
+                ' title: Demo',
+                '----',
+                '+++ notes',
+                '-retries: 3',
+                '+retries: 5',
+                ' timeout: 10',
+                ' ',
+              ],
+            },
+          ],
+          'userModified': false,
+          'replaceAll': false,
+        },
+      }).single;
+
+      expect(
+        edit.recordedDiff,
+        '@@ -40,5 +40,5 @@\n title: Demo\n----\n+++ notes\n'
+        '-retries: 3\n+retries: 5\n timeout: 10\n ',
+      );
+      final diff = buildFileEditDiff(edit);
+      expect(diff.status, FileEditDiffStatus.ok);
+      expect(diff.added, 2);
+      expect(diff.removed, 2);
+      expect(diff.lines.map((l) => l.kind), [
+        DiffLineKind.hunk,
+        DiffLineKind.context,
+        DiffLineKind.removed,
+        DiffLineKind.added,
+        DiffLineKind.removed,
+        DiffLineKind.added,
+        DiffLineKind.context,
+        DiffLineKind.context,
+      ]);
+      expect(newFileLineNumbers(diff.lines), [
+        null,
+        40,
+        null,
+        41,
+        null,
+        42,
+        43,
+        44,
+      ]);
+    });
+
     test('a new file is all additions and says so', () {
       final diff = buildFileEditDiff(
         const FileEditRecord(

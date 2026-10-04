@@ -110,7 +110,8 @@ void main() {
         ),
       );
       expect(diffRows(tester), ['-int a = 1;', '+int a = 2;']);
-      expect(shown('/src/a.dart'), findsOneWidget);
+      expect(find.text('a.dart'), findsOneWidget);
+      expect(find.text('/src/'), findsOneWidget);
       expect(shown('+1'), findsOneWidget);
       expect(shown('−1'), findsOneWidget);
     });
@@ -159,6 +160,31 @@ void main() {
       await tester.tap(fold);
       await tester.pump();
       expect(diffRows(tester), contains(' line 0'));
+    });
+
+    testWidgets('at phone width the file name survives a long path', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const dir =
+          r'C:\Users\someone\projects\a-rather-deep\monorepo\packages\feature';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ToolEditDiffCard(
+              activity: acpEdit('$dir\\settings_screen.dart', 'a', 'b'),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final name = find.text('settings_screen.dart');
+      expect(name, findsOneWidget);
+      final box = tester.getRect(name);
+      expect(box.right, lessThanOrEqualTo(390));
+      expect(box.width, greaterThan(0));
     });
 
     testWidgets('a cut change says so', (tester) async {
