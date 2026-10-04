@@ -437,6 +437,42 @@ void main() {
       expect(sent.state, QueuedMessageState.delivered);
     });
 
+    test('ended by the person mid-turn, Resume now resumes it with the '
+        'head', () async {
+      await restart();
+      await runAgent();
+      hook('UserPromptSubmit');
+      send('a');
+      queue.pause('s1');
+      launcher.handles.last.finish(0);
+      await pumpEventQueue();
+      status.tick();
+      queue.hostSessionEnded('karmashala_s1');
+      await pumpEventQueue();
+      expect(queue.busy('s1'), isFalse, reason: 'nothing runs its turn');
+
+      final sent = await queue.sendNext('s1');
+      expect(resumed, [('s1', 'a')]);
+      expect(sent.state, QueuedMessageState.delivered);
+    });
+
+    test('ended before its status was read again, Resume now still resumes '
+        'it', () async {
+      await restart();
+      await runAgent();
+      hook('UserPromptSubmit');
+      send('a');
+      launcher.handles.last.finish(0);
+      await pumpEventQueue();
+      queue.hostSessionEnded('karmashala_s1');
+      await pumpEventQueue();
+      expect(announced.last.single.hold?.kind, QueueHoldKind.stopped);
+
+      final sent = await queue.sendNext('s1');
+      expect(resumed, [('s1', 'a')]);
+      expect(sent.state, QueuedMessageState.delivered);
+    });
+
     test('a process that ends with messages waiting tells them', () async {
       await restart();
       await runAgent();

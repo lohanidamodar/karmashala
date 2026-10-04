@@ -59,6 +59,11 @@ class TurnSettlement {
   bool running(String sessionId) {
     final runtime = status.acpRuntimeOf(sessionId);
     if (runtime != null) return runtime.inTurn;
+    // A turn its process took with it is over, whatever was last read of it.
+    if (!status.holds(sessionId)) {
+      if (_midTurn.contains(sessionId)) _settle(sessionId);
+      return false;
+    }
     final kind = status.statusOf(sessionId)?.report.status;
     if (_working(kind)) return true;
     if (!_unread(kind) || !_midTurn.contains(sessionId)) return false;

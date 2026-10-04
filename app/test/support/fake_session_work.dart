@@ -51,6 +51,10 @@ class FakeSessionWork {
   /// server queues it.
   final busy = <String>{};
 
+  /// Set to refuse `sessions.queue.sendNext` in these words, as the server
+  /// refuses a resume that would not start.
+  String? sendNextRefusesWith;
+
   /// What each session holds queued, in order.
   final queues = <String, List<QueuedMessage>>{};
 
@@ -117,6 +121,9 @@ class FakeSessionWork {
         _tellQueue(request.sessionId);
         return cancelled;
       case SessionQueueSendNext(:final sessionId):
+        if (sendNextRefusesWith case final words?) {
+          throw DataRefused(DataRefusalCode.failed, words);
+        }
         if (queue.isEmpty) {
           throw const DataRefused.notFound('nothing waits in this queue');
         }

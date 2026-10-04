@@ -60,7 +60,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
 }
 
 /// Why the queue waits past the turn's end, over its messages.
-class _HoldLine extends ConsumerWidget {
+class _HoldLine extends ConsumerStatefulWidget {
   const _HoldLine({
     required this.sessionId,
     required this.hold,
@@ -72,31 +72,52 @@ class _HoldLine extends ConsumerWidget {
   final List<QueuedMessage> messages;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HoldLine> createState() => _HoldLineState();
+}
+
+class _HoldLineState extends ConsumerState<_HoldLine> {
+  /// Set while Send next or Resume now is on its way: a resume takes seconds.
+  String? _pending;
+
+  String get sessionId => widget.sessionId;
+  QueueHold get hold => widget.hold;
+  List<QueuedMessage> get messages => widget.messages;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = ref.watch(clockProvider).nowUtc().toLocal();
     final caps = ref.watch(capabilitiesProvider);
     final controls = caps.sessionQueueControl;
+    final pending = _pending;
     final actions = !controls
         ? const <Widget>[]
+        : pending != null
+        ? [
+            TextButton(
+              key: const ValueKey('queue-action-pending'),
+              onPressed: null,
+              child: Text(pending),
+            ),
+          ]
         : switch (hold.kind) {
             QueueHoldKind.paused => [
               TextButton(
                 key: const ValueKey('queue-send-next'),
-                onPressed: () => _sendNext(context, ref),
+                onPressed: () => _sendNext(context),
                 child: const Text('Send next'),
               ),
               TextButton(
                 key: const ValueKey('queue-cancel-all'),
-                onPressed: () => _cancelAll(context, ref),
+                onPressed: () => _cancelAll(context),
                 child: const Text('Cancel all'),
               ),
             ],
             QueueHoldKind.stopped when caps.mayStart => [
               TextButton(
                 key: const ValueKey('queue-resume-now'),
-                onPressed: () => _sendNext(context, ref, resuming: true),
+                onPressed: () => _sendNext(context, resuming: true),
                 child: const Text('Resume now'),
               ),
             ],
@@ -139,23 +160,23 @@ class _HoldLine extends ConsumerWidget {
     );
   }
 
-  Future<void> _sendNext(
-    BuildContext context,
-    WidgetRef ref, {
-    bool resuming = false,
-  }) async {
+  Future<void> _sendNext(BuildContext context, {bool resuming = false}) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    setState(() => _pending = resuming ? 'Resuming…' : 'Sending…');
     try {
       await ref.read(sessionQueueActionsProvider).sendNext(sessionId);
-    } on DataRefused catch (refusal) {
+    } on Object catch (error) {
       final what = resuming ? 'resume it' : 'send it';
+      final why = error is DataRefused ? error.message : '$error';
       messenger?.showSnackBar(
-        SnackBar(content: Text('Could not $what: ${refusal.message}')),
+        SnackBar(content: Text('Could not $what: $why')),
       );
+    } finally {
+      if (mounted) setState(() => _pending = null);
     }
   }
 
-  Future<void> _cancelAll(BuildContext context, WidgetRef ref) async {
+  Future<void> _cancelAll(BuildContext context) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       await ref

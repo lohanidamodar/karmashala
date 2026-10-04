@@ -241,6 +241,31 @@ void main() {
   }
 
   for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, a session the person ended: Resume now refused '
+        'says why and keeps the message waiting', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'first');
+      server.sessionWork
+        ..running.remove('acp-1')
+        ..sendNextRefusesWith = 'Codex would not start: log in first'
+        ..holdQueue('acp-1', const QueueHold(QueueHoldKind.stopped));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('queue-resume-now')));
+      await tester.pump();
+      expect(
+        find.text('Could not resume it: Codex would not start: log in first'),
+        findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent, isEmpty);
+      expect(find.text('first'), findsOneWidget);
+      expect(find.byKey(const ValueKey('queue-resume-now')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
     testWidgets('on a $name, long queued messages are clamped to three lines '
         'and the running turn\'s Stop stays above the composer', (
       tester,
