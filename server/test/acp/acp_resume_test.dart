@@ -82,7 +82,7 @@ void main() {
       'INSERT INTO agent_installations (id, agent_kind, environment_id, '
       'executable_path, created_at, executable_by_user) '
       'VALUES (?, ?, ?, ?, ?, ?);',
-      ['acp1', AgentIds.claudeAcp, 'local', 'npx.cmd', '$t0', 1],
+      ['acp1', AgentIds.grok, 'local', 'npx.cmd', '$t0', 1],
     );
     SessionDao(database).insert(
       Session(

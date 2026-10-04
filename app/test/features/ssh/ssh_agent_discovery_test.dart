@@ -70,8 +70,13 @@ void main() {
         clock: FixedClock(testTime),
       ).discover();
 
-      expect(found.map((i) => i.agentId), [AgentIds.claudeCode]);
-      final claude = found.single;
+      // One `claude` is both Claude Code and Claude's chat form, which
+      // speaks the same binary's stream-json.
+      expect(found.map((i) => i.agentId), [
+        AgentIds.claudeCode,
+        AgentIds.claudeAcp,
+      ]);
+      final claude = found.firstWhere((i) => i.agentId == AgentIds.claudeCode);
       expect(claude.executable.path, '/home/dev/.local/bin/claude');
       // The installation is bound to the remote environment, so it can never be
       // confused with a local one at the same path (principle 2 / principle 4).

@@ -15,6 +15,7 @@ import 'package:karmashala_session/session.dart' show Session;
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../automations/daemon_agents.dart';
+import '../../sessions/delegation_results.dart' show DelegatedChild;
 import '../../sessions/launch/server_session_launcher.dart';
 import '../../sessions/session_subagents.dart' show boundedText;
 import '../../status/child_turn_wait.dart';
@@ -62,6 +63,7 @@ class LaunchToolSet extends ServerToolSet {
     this.tokensOf,
     this.endChild,
     this.callHolds,
+    this.delegate,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -104,6 +106,11 @@ class LaunchToolSet extends ServerToolSet {
   /// `subagent_run` call: its parent owns its turn, not a boot's continue.
   final void Function(String sessionId, bool held)? callHolds;
 
+  /// Watches an async child, whose result is then pushed to its parent
+  /// (`DelegationResults.watch`); null where this server pushes nothing, and
+  /// async mode is refused in words.
+  final void Function(DelegatedChild child)? delegate;
+
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
 
@@ -113,6 +120,9 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
+    if (tool == 'delegation_capabilities') {
+      return runTool(() async => _capabilities(arguments, callerSessionId));
+    }
     if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
       tool: tool,
@@ -121,9 +131,130 @@ class LaunchToolSet extends ServerToolSet {
       start: () => runTool(
         () async => tool == 'subagent_run'
             ? await _run(arguments, callerSessionId)
-            : (await _open(arguments, callerSessionId)).answer,
+            : await _openTool(arguments, callerSessionId),
       ),
     );
+  }
+
+  /// Whether [args] ask for async mode, refused in words when it cannot be.
+  bool _async(Map<String, dynamic> args, String? callerSessionId, String tool) {
+    final mode = (args['mode'] as String?)?.trim() ?? '';
+    final fallback = tool == 'subagent_run' ? 'wait' : 'detached';
+    if (mode.isEmpty || mode == fallback) return false;
+    if (mode != 'async') {
+      throw ArgumentError(
+        'Unknown mode "$mode": "$fallback" (the default) or "async".',
+      );
+    }
+    if (callerSessionId == null) {
+      throw ArgumentError(
+        'mode "async" reports back to the session that called it, and this '
+        'call came from no session.',
+      );
+    }
+    if (delegate == null) {
+      throw StateError('This server cannot push results; omit mode.');
+    }
+    return true;
+  }
+
+  Future<Map<String, Object?>> _openTool(
+    Map<String, dynamic> args,
+    String? callerSessionId,
+  ) async {
+    final reportsBack = _async(args, callerSessionId, 'open_new_session');
+    final started = _context.now();
+    final opened = await _open(args, callerSessionId);
+    if (!reportsBack) return opened.answer;
+    delegate!(
+      DelegatedChild(
+        childId: opened.session.id,
+        parentId: callerSessionId!,
+        title: opened.session.title,
+        agent: agents.nameOf(opened.agentId),
+        model: opened.session.modelId,
+        startedAt: started,
+      ),
+    );
+    return {
+      ...opened.answer,
+      'reportsBack': true,
+      'note': _asyncNote(opened.session.id),
+    };
+  }
+
+  static String _asyncNote(String id) =>
+      'End your turn now rather than polling: when the child\'s first turn '
+      'ends, its result (agent, model, how long, its final answer) arrives '
+      'as a message from Karmashala — at once if you are idle, after your '
+      'turn if you are working. Child: session $id.';
+
+  /// `delegation_capabilities`: the agents and models the caller can hand a
+  /// child, in the caller's environment unless one is named.
+  Map<String, Object?> _capabilities(
+    Map<String, dynamic> args,
+    String? callerSessionId,
+  ) {
+    final caller = callerSessionId == null
+        ? null
+        : SessionDao(_context.database).getById(callerSessionId);
+    final environmentId =
+        (args['environmentId'] as String?) ??
+        (caller == null
+            ? null
+            : _repositories.getById(caller.repositoryId)?.path.environmentId) ??
+        localHostEnvironmentId;
+    final installs = launches.installationsIn(environmentId);
+    final picked =
+        launches.defaultInstallationIn(environmentId) ?? installs.firstOrNull;
+    final depth = launches.depthForChildOf(callerSessionId);
+    return {
+      'environmentId': environmentId,
+      'agents': [
+        for (final install in installs)
+          _agentCapabilities(install, isDefault: install.id == picked?.id),
+      ],
+      'depth': depth.isAllowed ? depth.depth : null,
+      'canDelegate': depth.isAllowed,
+      if (!depth.isAllowed) 'refusal': depth.refusal,
+      'modes': const ['wait', 'async'],
+      'note':
+          'Pass agentInstallationId (or cli) and model to subagent_run or '
+          'open_new_session. Prefer mode "async" and end your turn: results '
+          'are pushed to you. An agent whose models list is empty takes no '
+          'model choice from here.',
+    };
+  }
+
+  Map<String, Object?> _agentCapabilities(
+    AgentInstallation install, {
+    required bool isDefault,
+  }) {
+    final descriptor = agents.descriptorOf(install.agentId);
+    final models = descriptor == null
+        ? const <AgentModelOption>[]
+        : modelOptionsFor(descriptor);
+    return {
+      'agentInstallationId': install.id,
+      'cli': install.agentId,
+      'name': agents.nameOf(install.agentId),
+      'default': isDefault,
+      'protocol': descriptor?.acp == null ? 'terminal' : 'acp',
+      'models': [
+        for (final option in models)
+          if (option.isSelectable)
+            {
+              'id': option.model.id,
+              'label': option.model.label,
+              if (option.model.summary.isNotEmpty)
+                'summary': option.model.summary,
+            },
+      ],
+      if (descriptor?.acp != null)
+        'modelsNote':
+            'An ACP agent announces its models once it runs; any listed here '
+            'are what this build knows.',
+    };
   }
 
   /// `subagent_run`: [_open]'s launch — its depth cap and permission carry —
@@ -136,8 +267,9 @@ class LaunchToolSet extends ServerToolSet {
     if (prompt.isEmpty) {
       throw ArgumentError('prompt is required and cannot be blank.');
     }
+    final reportsBack = _async(args, callerSessionId, 'subagent_run');
     final turns = this.turns;
-    if (turns == null) {
+    if (turns == null && !reportsBack) {
       throw StateError(
         'This server keeps no session status, so it cannot wait for a '
         'subagent. Use open_new_session and session_wait.',
@@ -160,10 +292,35 @@ class LaunchToolSet extends ServerToolSet {
       inCallerTree: true,
     );
     final session = opened.session;
+    if (reportsBack) {
+      delegate!(
+        DelegatedChild(
+          childId: session.id,
+          parentId: callerSessionId!,
+          title: session.title,
+          agent: agents.nameOf(opened.agentId),
+          model: session.modelId,
+          startedAt: started,
+          endOnAnswer: args['keepOpen'] != true,
+        ),
+      );
+      return <String, Object?>{
+        'state': 'started',
+        'mode': 'async',
+        'childSessionId': session.id,
+        'title': session.title,
+        'agent': agents.nameOf(opened.agentId),
+        'model': session.modelId ?? "the agent's default (not recorded)",
+        'depth': opened.answer['depth'],
+        'permissionMode': opened.answer['permissionMode'],
+        'permissionCapped': ?opened.answer['permissionCapped'],
+        'note': _asyncNote(session.id),
+      };
+    }
     final ChildTurnOutcome outcome;
     callHolds?.call(session.id, true);
     try {
-      outcome = await turns.firstTurn(
+      outcome = await turns!.firstTurn(
         session.id,
         bound: bound,
         since: started,
@@ -684,6 +841,15 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'own mode and "autoRun"; a mode above that is refused, and only '
               'the user can raise it, from the new session\'s permission chip.',
         },
+        'mode': {
+          'type': 'string',
+          'enum': ['detached', 'async'],
+          'description':
+              '"detached" (default): nothing comes back unless you ask with '
+              'session_wait. "async": when the new session\'s first turn '
+              'ends, its result is pushed to you as a message — end your '
+              'turn rather than polling. The session is never ended for you.',
+        },
       },
       'required': <String>[],
     },
@@ -779,8 +945,39 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'session_send; end it with session_end when done. Default '
               'false: an answered child is ended.',
         },
+        'mode': {
+          'type': 'string',
+          'enum': ['wait', 'async'],
+          'description':
+              '"wait" (default): this call blocks until the child answers. '
+              '"async": answers at once with childSessionId; when the child\'s '
+              'first turn ends its result — agent, model, duration and final '
+              'answer — is pushed to you as a message, batched with others '
+              'that finish together. Start several, then end your turn; do '
+              'not poll. Recommended for long or parallel work.',
+        },
       },
       'required': <String>['prompt'],
+    },
+  },
+  {
+    'name': 'delegation_capabilities',
+    'description':
+        'What you can delegate to: the agents installed where you run (or in '
+        'environmentId), each with its installation id, protocol and the '
+        'models it can be started on, which one is the default, and whether '
+        'your nesting depth still allows starting a child. Read this before '
+        'choosing cli/agentInstallationId and model for subagent_run or '
+        'open_new_session.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'environmentId': {
+          'type': 'string',
+          'description': 'Defaults to your own environment.',
+        },
+      },
+      'required': <String>[],
     },
   },
 ];

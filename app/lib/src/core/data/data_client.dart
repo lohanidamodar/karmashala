@@ -320,6 +320,17 @@ class DataClient {
   Stream<SessionUsageChanged> get sessionUsageChanges =>
       _sessionUsageChanges.stream;
 
+  /// The slash commands each session's agent accepts, by session id, as last
+  /// told. In memory only, like [sessionModes].
+  final sessionCommands = <String, SessionCommandsChanged>{};
+
+  final _sessionCommandChanges =
+      StreamController<SessionCommandsChanged>.broadcast(sync: true);
+
+  /// A session's agent announced or changed its slash commands.
+  Stream<SessionCommandsChanged> get sessionCommandChanges =>
+      _sessionCommandChanges.stream;
+
   /// Each session's queued messages — queued, delivering and failed — as
   /// the server last told them, by session id. In memory only: forgotten
   /// when the link drops, and listed again by whoever shows them.
@@ -1035,6 +1046,11 @@ class DataClient {
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
         case final SessionAgentChanged change:
           if (!_sessionAgentChanges.isClosed) _sessionAgentChanges.add(change);
+        case final SessionCommandsChanged change:
+          sessionCommands[change.sessionId] = change;
+          if (!_sessionCommandChanges.isClosed) {
+            _sessionCommandChanges.add(change);
+          }
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1254,6 +1270,7 @@ class DataClient {
     unawaited(_sessionModeChanges.close());
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
+    unawaited(_sessionCommandChanges.close());
     unawaited(_sessionQueueChanges.close());
     unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());

@@ -138,7 +138,7 @@ void main() {
     );
     AgentInstallation installation({
       String environmentId = 'wsl:Ubuntu',
-      String path = '/usr/bin/npx',
+      String path = '/opt/runner/run-agent',
       List<String> leadingArguments = const ['-y', 'mine-pkg'],
     }) => AgentInstallation(
       id: 'i1',
@@ -172,7 +172,7 @@ void main() {
 
         expect(version, '2.3.4');
         final request = runner.startRequests.single;
-        expect(request.executable, '/usr/bin/npx');
+        expect(request.executable, '/opt/runner/run-agent');
         expect(request.arguments, ['-y', 'mine-pkg', '--acp']);
         expect(request.environment, {'A': '1'});
         expect(request.workingDirectory!.environmentId, wsl.id);

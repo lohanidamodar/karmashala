@@ -109,7 +109,7 @@ void main() {
       'executable_path, created_at, executable_by_user) '
       'VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?);',
       [
-        'acp1', AgentIds.claudeAcp, 'local', 'npx.cmd', '$t0', 1, //
+        'acp1', AgentIds.grok, 'local', 'npx.cmd', '$t0', 1, //
         'cc1', AgentIds.claudeCode, 'local', '/bin/claude', '$t0', 1,
       ],
     );

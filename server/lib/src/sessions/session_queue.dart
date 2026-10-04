@@ -298,6 +298,35 @@ class SessionQueue implements ResumeQueue {
     return AdmitQueued(message, dao.positionOf(sessionId, message.seq));
   }
 
+  /// Puts a delegated child's result [text] into [sessionId]'s queue, waking
+  /// it when idle. When [replacing] still waits, its text is replaced instead
+  /// (a batch growing). Unlike a send, it never lifts
+  /// a person's pause nor resumes a session nothing runs.
+  QueuedMessage postDelegation(
+    String sessionId,
+    String text, {
+    String? replacing,
+    String? originId,
+  }) {
+    if (replacing != null && dao.editText(replacing, text, now: _now())) {
+      _announce(sessionId);
+      return dao.getById(replacing)!;
+    }
+    final message = dao.enqueue(
+      id: _newId(),
+      sessionId: sessionId,
+      text: text,
+      origin: QueuedMessageOrigin.delegation,
+      originId: originId,
+      now: _now(),
+    );
+    _withQueued.add(sessionId);
+    log?.call('queue $sessionId: ${message.id} holds delegated results');
+    _announce(sessionId);
+    _kick(sessionId);
+    return message;
+  }
+
   /// Reports the immediate delivery [admit] allowed.
   void afterImmediate(String sessionId, {required bool delivered}) {
     _inFlight.remove(sessionId);

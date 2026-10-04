@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/agents/application/agent_latest_versions
 import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_builtin_agent_row.dart'
-    show acpAgentsNote;
+    show AcpAgentDetails, acpAgentsNote;
 import 'package:karmashala/src/features/settings/presentation/agents_and_accounts_page.dart';
 import 'package:karmashala/src/features/settings/presentation/environment_chips.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
@@ -38,6 +38,11 @@ void main() {
   /// A terminal agent's descriptor id, taken from the registry by capability
   /// so this test names none.
   late String terminalId;
+
+  /// [terminalId]'s chat form.
+  late String chatFormId;
+
+  /// A shipped agent that is a chat alone, run through npx.
   late String npxAcpId;
 
   setUp(() {
@@ -47,17 +52,25 @@ void main() {
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     final registry = AgentRegistry.builtIn;
-    terminalId = registry.adapters.firstWhere((a) => a.acp == null).id;
+    terminalId = registry.folded.firstWhere((f) => f.hasBoth).terminalId!;
+    chatFormId = registry.formsOf(terminalId).chatId!;
     npxAcpId = registry.adapters
-        .firstWhere((a) => a.acp?.npxPackage != null)
+        .firstWhere(
+          (a) =>
+              a.acp?.npxPackage != null && registry.foldedIdOf(a.id) == a.id,
+        )
         .id;
   });
 
-  /// Claude-shaped: one terminal agent on two machines, one shipped ACP agent
-  /// through npx, and one row a person added, found on Windows.
+  /// Claude-shaped: one terminal agent on two machines and its chat form on
+  /// the same binary, one shipped chat-alone agent through npx, and one row
+  /// a person added, found on Windows.
   void seedInstalls() {
     db.server.installationRows
       ..insert(agentInstallation(id: 'a1', agentId: terminalId))
+      ..insert(
+        agentInstallation(id: 'a4', agentId: chatFormId, version: null),
+      )
       ..insert(
         agentInstallation(
           id: 'a2',
@@ -137,7 +150,8 @@ void main() {
     await pump(tester);
 
     expect(find.text('DEFAULTS'), findsOneWidget);
-    expect(find.text('5 agents · 1 installed on 2 machines'), findsOneWidget);
+    // Claude Code with its chat form counted once, and the npx agent.
+    expect(find.text('5 agents · 2 installed on 2 machines'), findsOneWidget);
     expect(find.text('Discover agents'), findsOneWidget);
     expect(find.text('Agent for new sessions'), findsOneWidget);
     expect(find.text('AGENTS · 3'), findsOneWidget);
@@ -199,34 +213,22 @@ void main() {
   ) async {
     await pump(tester);
     final registry = AgentRegistry.builtIn;
-    final terminal = registry.adapters.where((a) => a.acp == null);
-    final acp = registry.adapters.where((a) => a.acp != null);
-
-    for (final adapter in terminal) {
-      final binary = adapter.descriptor.binaries.posix.first;
-      expect(
-        find.text(
-          'Not installed. Install `$binary` on a machine Karmashala reaches.',
-        ),
-        findsOneWidget,
-      );
-    }
-    // A chat form is listed inside its agent's card: only the agents that
-    // are a chat alone have a line of their own.
-    for (final adapter in acp.where(
-      (a) => registry.foldedIdOf(a.id) == a.id,
-    )) {
+    // One line per agent: a chat form is listed inside its agent's folded
+    // card, so only each agent's own form says it here.
+    final lines = <String, int>{};
+    for (final forms in registry.folded) {
+      final adapter = registry.adapterFor(forms.agentId)!;
       final binary = adapter.descriptor.binaries.posix.first;
       // npx is offered only for an agent that ships as an npm package; one
       // the registry ships as an archive is installed from the row instead.
-      final npx = adapter.acp!.npxPackage == null ? '' : ', or add it with npx';
-      expect(
-        find.text(
+      final npx = adapter.acp?.npxPackage == null ? '' : ', or add it with npx';
+      final line =
           'Not installed. Install `$binary` on a machine Karmashala reaches'
-          '$npx.',
-        ),
-        findsOneWidget,
-      );
+          '$npx.';
+      lines[line] = (lines[line] ?? 0) + 1;
+    }
+    for (final MapEntry(key: line, value: count) in lines.entries) {
+      expect(find.text(line), findsNWidgets(count), reason: line);
     }
     expect(
       find.byTooltip('Not installed on any machine'),
@@ -244,24 +246,29 @@ void main() {
     seedInstalls();
     await pump(tester);
     final package = AgentRegistry.builtIn.byId(npxAcpId)!.acp!.npxPackage;
-    // A chat form of a terminal agent: shown inside that agent's card.
-    expect(find.text('npx -y $package'), findsNothing);
-    await tester.tap(
-      expandButton(nameOf(AgentRegistry.builtIn.foldedIdOf(npxAcpId))),
-    );
-    await tester.pumpAndSettle();
 
+    // A chat alone is one line of its own.
     expect(find.text('npx -y $package'), findsOneWidget);
     expect(expandButton(nameOf(npxAcpId)), findsNothing);
     // Run from its package: npx's own version is never the agent's.
     expect(find.text('via npx · downloaded on first start'), findsOneWidget);
-    expect(find.text('version not read'), findsNothing);
     expect(find.text('Account not read yet'), findsNothing);
     expect(
       find.text('${nameOf(npxAcpId)} · machines'.toUpperCase()),
       findsNothing,
     );
-    // Said once over the chat form, and once over the chat-only agents.
+    expect(find.text(acpAgentsNote), findsOneWidget);
+
+    // A chat form of a terminal agent is shown inside that agent's card.
+    Finder chatLaunch() => find.descendant(
+      of: find.byType(AcpAgentDetails),
+      matching: find.text(r'C:\Users\me\.bin\claude.exe'),
+    );
+    expect(chatLaunch(), findsNothing);
+    await tester.tap(expandButton(nameOf(terminalId)));
+    await tester.pumpAndSettle();
+    // The same binary as its terminal form.
+    expect(chatLaunch(), findsOneWidget);
     expect(find.text(acpAgentsNote), findsNWidgets(2));
   });
 
@@ -365,7 +372,7 @@ void main() {
     await pump(tester);
     // A chat-only agent is one line: nothing to choose.
     expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
-    final chatFormed = AgentRegistry.builtIn.foldedIdOf(npxAcpId);
+    final chatFormed = terminalId;
     await tester.tap(expandButton(nameOf(chatFormed)));
     await tester.pumpAndSettle();
     final container = ProviderScope.containerOf(

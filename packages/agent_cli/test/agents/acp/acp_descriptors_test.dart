@@ -45,11 +45,13 @@ void main() {
         expect(adapter.acp, same(descriptor.acp));
         expect(adapter.capabilities, contains(AgentCapability.acp));
         expect(descriptor.acp!.clientName, 'Karmashala');
-        // Each is reachable without an install of its own: an npm package,
-        // or a registry archive Karmashala installs.
+        // Each is reachable without an adapter of its own to install: an npm
+        // package, a registry archive Karmashala installs, or the agent's
+        // own binary spoken to through a native bridge.
         expect(
           descriptor.acp!.npxPackage != null ||
-              descriptor.acp!.registryId != null,
+              descriptor.acp!.registryId != null ||
+              descriptor.acp!.nativeBridge != null,
           isTrue,
         );
       });
@@ -170,16 +172,48 @@ void main() {
   });
 
   test('the declared argv and packages', () {
-    expect(claudeAcpDescriptor.acp!.arguments, isEmpty);
+    // Claude chat is the person's own `claude` over its stream-json mode,
+    // translated in-process: no adapter package.
+    expect(claudeAcpDescriptor.binaries.windows, ['claude']);
+    expect(claudeAcpDescriptor.binaries.posix, ['claude']);
+    expect(claudeAcpDescriptor.acp!.npxPackage, isNull);
     expect(
-      claudeAcpDescriptor.acp!.npxPackage,
-      '@agentclientprotocol/claude-agent-acp',
+      claudeAcpDescriptor.acp!.nativeBridge,
+      AcpNativeBridge.claudeStreamJson,
     );
-    expect(codexAcpDescriptor.acp!.arguments, isEmpty);
+    // Its modes are evidenced by the protocol it is spoken in, not an
+    // adapter it no longer runs.
+    final permission = claudeAcpDescriptor.launch.permission;
+    for (final evidence in [
+      permission.evidence,
+      for (final axis in permission.axes)
+        for (final value in axis.values) value.evidence,
+    ]) {
+      expect(evidence, contains('stream-json'));
+      expect(evidence, contains('2.1.287'));
+      expect(evidence, isNot(contains('claude-agent-acp')));
+    }
+    expect(claudeAcpDescriptor.acp!.arguments, [
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages',
+      '--permission-prompt-tool',
+      'stdio',
+      '--allow-dangerously-skip-permissions',
+    ]);
+    // Codex's chat is its own binary's app-server, translated in-process.
+    expect(codexAcpDescriptor.acp!.arguments, ['app-server']);
+    expect(codexAcpDescriptor.acp!.npxPackage, isNull);
     expect(
-      codexAcpDescriptor.acp!.npxPackage,
-      '@agentclientprotocol/codex-acp',
+      codexAcpDescriptor.acp!.nativeBridge,
+      AcpNativeBridge.codexAppServer,
     );
+    expect(codexAcpDescriptor.binaries.windows, ['codex']);
+    expect(codexAcpDescriptor.binaries.posix, ['codex']);
     expect(grokDescriptor.acp!.arguments, ['agent', 'stdio']);
     expect(grokDescriptor.acp!.npxPackage, '@xai-official/grok');
   });

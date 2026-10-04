@@ -218,14 +218,26 @@ _acpGoldens = [
   (
     id: 'claude-acp',
     displayName: 'Claude (ACP)',
-    executable: 'claude-agent-acp',
-    acpArguments: [],
+    // Claude's own binary in stream-json mode, bridged to ACP in-process.
+    executable: 'claude',
+    acpArguments: [
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages',
+      '--permission-prompt-tool',
+      'stdio',
+      '--allow-dangerously-skip-permissions',
+    ],
   ),
   (
     id: 'codex-acp',
     displayName: 'Codex (ACP)',
-    executable: 'codex-acp',
-    acpArguments: [],
+    executable: 'codex',
+    acpArguments: ['app-server'],
   ),
   (
     id: 'antigravity-acp',

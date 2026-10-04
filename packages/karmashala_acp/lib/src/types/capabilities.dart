@@ -46,15 +46,15 @@ final class FsCapabilities {
   };
 }
 
-/// What this client offers the agent. Terminals (`terminal/*`) are never
-/// advertised in this cut, so `terminal` is always false on the wire;
-/// `auth.terminal` says whether the client can run the agent's program in an
-/// interactive terminal for a `terminal` auth method.
+/// What this client offers the agent. [terminal] is whether it answers
+/// `terminal/*`; `auth.terminal` says whether the client can run the agent's
+/// program in an interactive terminal for a `terminal` auth method.
 @immutable
 final class ClientCapabilities {
   const ClientCapabilities({
     this.fs = const FsCapabilities(readTextFile: true, writeTextFile: true),
     this.authTerminal = true,
+    this.terminal = false,
   });
 
   final FsCapabilities fs;
@@ -62,7 +62,8 @@ final class ClientCapabilities {
   /// Whether the agent may advertise `terminal` auth methods.
   final bool authTerminal;
 
-  bool get terminal => false;
+  /// Whether the agent may run commands through `terminal/*`.
+  final bool terminal;
 
   JsonMap toJson() => {
     'fs': fs.toJson(),

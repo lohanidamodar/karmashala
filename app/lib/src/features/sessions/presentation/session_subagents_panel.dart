@@ -155,8 +155,8 @@ class _Body extends StatelessWidget {
             icon: AppIcons.treeStructure,
             text: 'No subagents or child sessions yet.',
           ),
-        for (final entry in entries)
-          _EntryRow(parentSessionId: sessionId, entry: entry),
+        for (final (entry, depth) in subagentLineage(entries))
+          _EntryRow(parentSessionId: sessionId, entry: entry, depth: depth),
         if (note != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -199,6 +199,18 @@ class _Message extends StatelessWidget {
   }
 }
 
+/// [entries] and every child below them, depth first, each with how deep it
+/// sits under the session the panel is for (0 for its own).
+Iterable<(SessionSubagent, int)> subagentLineage(
+  List<SessionSubagent> entries, [
+  int depth = 0,
+]) sync* {
+  for (final entry in entries) {
+    yield (entry, depth);
+    yield* subagentLineage(entry.children, depth + 1);
+  }
+}
+
 /// How long [entry] ran, or has run so far; null when it never said when it
 /// started.
 Duration? subagentDuration(SessionSubagent entry, DateTime now) {
@@ -238,10 +250,17 @@ String subagentLinkLabel(String? link) => switch (SessionLink.parse(link)) {
 };
 
 class _EntryRow extends ConsumerWidget {
-  const _EntryRow({required this.parentSessionId, required this.entry});
+  const _EntryRow({
+    required this.parentSessionId,
+    required this.entry,
+    this.depth = 0,
+  });
 
   final String parentSessionId;
   final SessionSubagent entry;
+
+  /// Levels below the panel's session: indented on a guide line per level.
+  final int depth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -270,80 +289,115 @@ class _EntryRow extends ConsumerWidget {
       SubagentState.done => scheme.primary,
       _ => scheme.onSurfaceVariant,
     };
+    final below = entry.children.length;
     return InkWell(
       key: ValueKey('subagent-${entry.id}'),
       onTap: () => _open(context, ref),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: Touch.target),
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.lg,
-            vertical: Insets.sm,
+          padding: EdgeInsets.only(
+            left: Insets.lg + depth * Insets.lg,
+            right: Insets.lg,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  look.icon,
-                  size: Chrome.iconSmall,
-                  color: color,
-                  semanticLabel: look.label,
-                ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: depth == 0
+                  ? null
+                  : Border(left: BorderSide(color: scheme.outlineVariant)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: depth == 0 ? 0 : Insets.sm,
+                top: Insets.sm,
+                bottom: Insets.sm,
               ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                        if (entry.kind == SubagentKind.childSession)
-                          Padding(
-                            padding: const EdgeInsets.only(left: Insets.xs),
-                            child: Text(
-                              subagentLinkLabel(entry.link),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    Text(
-                      facts,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (result != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: Insets.xs),
-                        child: Text(
-                          result,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+              child: _row(theme, scheme, look, color, facts, result, below),
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _row(
+    ThemeData theme,
+    ColorScheme scheme,
+    ({IconData icon, String label}) look,
+    Color color,
+    String facts,
+    String? result,
+    int below,
+  ) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Icon(
+          look.icon,
+          size: Chrome.iconSmall,
+          color: color,
+          semanticLabel: look.label,
+        ),
+      ),
+      const SizedBox(width: Insets.sm),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                if (entry.kind == SubagentKind.childSession)
+                  Padding(
+                    padding: const EdgeInsets.only(left: Insets.xs),
+                    child: Text(
+                      subagentLinkLabel(entry.link),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                if (below > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: Insets.xs),
+                    child: Text(
+                      below == 1 ? '1 child' : '$below children',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            Text(
+              facts,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            if (result != null)
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs),
+                child: Text(
+                  result,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
 
   Future<void> _open(BuildContext context, WidgetRef ref) async {
     final childId = entry.childSessionId;

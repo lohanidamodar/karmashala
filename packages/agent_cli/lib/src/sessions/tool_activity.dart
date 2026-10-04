@@ -1,5 +1,11 @@
 import '../util/bounded_text.dart';
+import '../agents/claude_code/claude_file_edits.dart';
 import '../agents/domain/agent_plan.dart';
+import '../agents/domain/file_edit.dart';
+import 'tool_edits.dart';
+
+export '../agents/domain/file_edit.dart';
+export 'tool_edits.dart';
 
 /// What one tool call in a transcript is actually *about*.
 ///
@@ -21,6 +27,9 @@ class ToolActivity {
     this.outputTruncated = false,
     this.isError = false,
     this.plan,
+    this.kind,
+    this.edits = const [],
+    this.editsTruncated = false,
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -59,6 +68,18 @@ class ToolActivity {
   /// largest transcript is 43.8 MB.
   final AgentPlan? plan;
 
+  /// What the agent says the call is, where its protocol says (ACP's `kind`:
+  /// `edit`, `read`, `execute`, …). Null for a CLI transcript, which names
+  /// the tool instead.
+  final String? kind;
+
+  /// The files this call writes and what it writes to them, already bounded
+  /// by [boundedToolEdits]. Empty for every call that writes nothing.
+  final List<FileEditRecord> edits;
+
+  /// Whether [edits] lost content to the bound.
+  final bool editsTruncated;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -76,6 +97,9 @@ class ToolActivity {
     if (outputTruncated) 'outputTruncated': true,
     if (isError) 'isError': true,
     'plan': ?plan?.toJson(),
+    'kind': ?kind,
+    if (edits.isNotEmpty) 'edits': [for (final edit in edits) edit.toJson()],
+    if (editsTruncated) 'editsTruncated': true,
   };
 
   /// Throws [FormatException] when `name` is not a string; any other field
@@ -84,6 +108,7 @@ class ToolActivity {
     final name = json['name'];
     if (name is! String) throw const FormatException('tool: no name');
     final plan = json['plan'];
+    final edits = json['edits'];
     return ToolActivity(
       name: name,
       subject: _stringOrNull(json['subject']),
@@ -94,25 +119,44 @@ class ToolActivity {
       plan: plan is Map
           ? AgentPlan.fromJson(plan.cast<String, Object?>())
           : null,
+      kind: _stringOrNull(json['kind']),
+      edits: edits is List
+          ? [
+              for (final edit in edits)
+                if (edit is Map)
+                  ?FileEditRecord.fromJson(edit.cast<String, Object?>()),
+            ]
+          : const [],
+      editsTruncated: json['editsTruncated'] == true,
     );
   }
 
   static String? _stringOrNull(Object? value) => value is String ? value : null;
 
-  /// This call with the answer it eventually got.
+  /// This call with the answer it eventually got. [edits] replaces the call's
+  /// own when the result recorded better ones; null keeps them.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
     bool isError = false,
-  }) => ToolActivity(
-    name: name,
-    subject: subject,
-    imagePath: imagePath,
-    output: output,
-    outputTruncated: outputTruncated,
-    isError: isError,
-    plan: plan,
-  );
+    List<FileEditRecord>? edits,
+  }) {
+    final (kept, cut) = edits == null
+        ? (this.edits, editsTruncated)
+        : boundedToolEdits(edits);
+    return ToolActivity(
+      name: name,
+      subject: subject,
+      imagePath: imagePath,
+      output: output,
+      outputTruncated: outputTruncated,
+      isError: isError,
+      plan: plan,
+      kind: kind,
+      edits: kept,
+      editsTruncated: cut,
+    );
+  }
 }
 
 /// The most of one tool result the transcript keeps.
@@ -200,11 +244,16 @@ ToolActivity toolActivityFor(String name, Object? input) {
   final subject = plan?.headline ?? entry?.value;
   final isFile =
       plan == null && entry != null && kToolFileKeys.contains(entry.key);
+  final (edits, cut) = boundedToolEdits(
+    fileEditsFromToolCall(name: name, input: input),
+  );
   return ToolActivity(
     name: name,
     subject: subject,
     imagePath: isFile && looksLikeImagePath(entry.value) ? entry.value : null,
     plan: plan,
+    edits: edits,
+    editsTruncated: cut,
   );
 }
 

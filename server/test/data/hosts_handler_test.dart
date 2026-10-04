@@ -335,16 +335,20 @@ void main() {
         [found('new', r'C:\found.exe')],
         readings: {'mine': ExecutableReachability.usable},
       );
+      // Codex's own rows: the pin also records its chat form, one program
+      // (installation_pin_forms_test.dart).
+      List<AgentInstallation> codex() =>
+          rows().where((r) => r.agentId == 'codex').toList();
       expect(kept.pinned.single.id, 'mine');
-      expect(rows().single.executable.path, r'C:\pin.exe');
+      expect(codex().single.executable.path, r'C:\pin.exe');
 
       final moved = reconcile(
         [found('new', r'C:\found.exe')],
         readings: {'mine': ExecutableReachability.missing},
       );
       expect(moved.pathChanges.single.to, r'C:\found.exe');
-      expect(rows().single.id, 'mine');
-      expect(rows().single.executableByUser, isFalse);
+      expect(codex().single.id, 'mine');
+      expect(codex().single.executableByUser, isFalse);
     });
 
     test('a CLI not found is removed — unless a session points at it', () {

@@ -15,6 +15,8 @@ import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
+import 'package:karmashala_host/src/sessions/delegation_results.dart'
+    show DelegatedChild;
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/status/child_turn_wait.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
@@ -54,6 +56,7 @@ void main() {
   late StreamController<String> settledTurns;
   late List<String> endedChildren;
   late List<(String, bool)> holds;
+  late List<DelegatedChild> delegated;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -69,6 +72,7 @@ void main() {
     settledTurns = StreamController<String>.broadcast(sync: true);
     endedChildren = [];
     holds = [];
+    delegated = [];
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -141,6 +145,7 @@ void main() {
       tokensOf: (_) async => 4200,
       endChild: (sessionId) async => endedChildren.add(sessionId),
       callHolds: (sessionId, held) => holds.add((sessionId, held)),
+      delegate: delegated.add,
     );
   });
 
@@ -458,6 +463,105 @@ void main() {
       expect(pty.started, isEmpty);
     },
   );
+
+  group('async mode', () {
+    test('subagent_run starts the child and answers at once; its result is '
+        'pushed, the child ended once it answers', () async {
+      insertCaller('caller');
+      final result =
+          (await tools
+                      .call('subagent_run', {
+                        'projectId': 'p1',
+                        'prompt': 'Audit the cart',
+                        'model': 'claude-haiku',
+                        'mode': 'async',
+                      }, 'caller')!
+                      .timeout(const Duration(seconds: 5)))!
+              as Map<String, Object?>;
+      expect(result['state'], 'started');
+      expect(result['mode'], 'async');
+      expect(result['childSessionId'], 'new-1');
+      expect(result['note'], contains('End your turn'));
+      final watched = delegated.single;
+      expect(watched.childId, 'new-1');
+      expect(watched.parentId, 'caller');
+      expect(watched.model, 'claude-haiku');
+      expect(watched.agent, isNotEmpty);
+      expect(watched.endOnAnswer, isTrue);
+      expect(holds, isEmpty, reason: 'no call waits on an async child');
+    });
+
+    test('keepOpen keeps an async child open', () async {
+      insertCaller('caller');
+      await tools.call('subagent_run', {
+        'projectId': 'p1',
+        'prompt': 'Look',
+        'mode': 'async',
+        'keepOpen': true,
+      }, 'caller');
+      expect(delegated.single.endOnAnswer, isFalse);
+    });
+
+    test('open_new_session reports back in async mode, and never ends the '
+        'session', () async {
+      insertCaller('caller');
+      final result =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'prompt': 'Write the docs',
+                'mode': 'async',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(result['reportsBack'], isTrue);
+      expect(delegated.single.childId, result['sessionId']);
+      expect(delegated.single.endOnAnswer, isFalse);
+    });
+
+    test('async needs a calling session to report back to', () async {
+      await expectLater(
+        tools.call('open_new_session', {
+          'projectId': 'p1',
+          'prompt': 'x',
+          'mode': 'async',
+        }, null),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(pty.started, isEmpty);
+    });
+
+    test('an unknown mode is refused before anything starts', () async {
+      insertCaller('caller');
+      await expectLater(
+        tools.call('subagent_run', {
+          'projectId': 'p1',
+          'prompt': 'x',
+          'mode': 'later',
+        }, 'caller'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(pty.started, isEmpty);
+    });
+  });
+
+  test('delegation_capabilities lists the agents and models a session can '
+      'delegate to, and how deep it may go', () async {
+    insertCaller('caller');
+    final result =
+        (await tools.call('delegation_capabilities', const {}, 'caller'))!
+            as Map<String, Object?>;
+    final agents = (result['agents']! as List).cast<Map<String, Object?>>();
+    final claude = agents.single;
+    expect(claude['agentInstallationId'], 'a1');
+    expect(claude['cli'], AgentIds.claudeCode);
+    expect(claude['name'], isNotEmpty);
+    expect(claude['default'], isTrue);
+    final models = (claude['models']! as List).cast<Map<String, Object?>>();
+    expect(models, isNotEmpty);
+    expect(models.first['id'], isNotEmpty);
+    expect(result['depth'], 1);
+    expect(result['canDelegate'], isTrue);
+    expect(result['modes'], ['wait', 'async']);
+  });
 
   test('a blank prompt is refused', () async {
     await expectLater(

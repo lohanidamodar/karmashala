@@ -197,10 +197,25 @@ const Map<String, ToolKind> _kindByName = {
   'call_mcp_tool': ToolKind.mcp,
 };
 
-ToolKind toolKindOf(String name) {
+/// [name]'s kind, or, for a name we do not know, the agent's own [kind] where
+/// its protocol gives one: an ACP call is named by a sentence like
+/// `Edit lib/a.dart`.
+ToolKind toolKindOf(String name, {String? kind}) {
   if (name.startsWith('mcp__')) return ToolKind.mcp;
-  return _kindByName[name.toLowerCase()] ?? ToolKind.other;
+  return _kindByName[name.toLowerCase()] ??
+      _kindByAcpKind[kind] ??
+      ToolKind.other;
 }
+
+const Map<String, ToolKind> _kindByAcpKind = {
+  'read': ToolKind.read,
+  'edit': ToolKind.edit,
+  'delete': ToolKind.edit,
+  'move': ToolKind.edit,
+  'search': ToolKind.search,
+  'execute': ToolKind.command,
+  'fetch': ToolKind.webFetch,
+};
 
 /// `Worked for 2m 12s` — how long a run took, from its first timestamped call
 /// to its last. Null when fewer than two calls carry a time, or they span less
@@ -240,7 +255,7 @@ String describeToolRun(Iterable<ChatMessage> messages) {
     final tool = message.tool;
     if (tool == null) continue;
     if (tool.isError) failed++;
-    final kind = toolKindOf(tool.name);
+    final kind = toolKindOf(tool.name, kind: tool.kind);
     calls[kind] = (calls[kind] ?? 0) + 1;
     if (kind != ToolKind.read && kind != ToolKind.edit) continue;
     final subject = tool.subject;

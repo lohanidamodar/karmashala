@@ -25,54 +25,27 @@ import '../acp/acp_fixture.dart' show RecordingHost;
 /// agent's own login, so it skips unless KARMASHALA_LIVE_ACP=1 and WSL
 /// answers `command -v npx`. What no fake can measure: that the adapter's
 /// file tools, permission requests and exit meet this runtime as designed.
+/// Grok is the shipped agent still run that way; it needs its own login.
 void main() {
   final wsl = _Wsl.detect();
   final skip = wsl.skipReason;
 
   test(
-    'claude-agent-acp under acceptEdits: start, a plain reply, a file '
-    'written without asking, stop',
+    'grok under acceptEdits: start, a plain reply, a file written, stop',
     () => _exercise(
       wsl,
-      agentId: AgentIds.claudeAcp,
-      agentName: 'Claude (ACP)',
-      spec: claudeAcpDescriptor.acp!,
-      package: '@agentclientprotocol/claude-agent-acp',
+      agentId: AgentIds.grok,
+      agentName: 'Grok',
+      spec: grokDescriptor.acp!,
+      package: '@xai-official/grok',
       risk: PermissionRisk.acceptEdits,
     ),
     skip: skip,
     timeout: const Timeout(Duration(minutes: 4)),
   );
-
-  test(
-    'claude-agent-acp under ask: the write asks permission, which the '
-    'runtime holds for the checkpoint and answers',
-    () => _exercise(
-      wsl,
-      agentId: AgentIds.claudeAcp,
-      agentName: 'Claude (ACP)',
-      spec: claudeAcpDescriptor.acp!,
-      package: '@agentclientprotocol/claude-agent-acp',
-      risk: PermissionRisk.ask,
-      expectPermission: true,
-    ),
-    skip: skip,
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
-
-  test(
-    'codex-acp under acceptEdits: start, a plain reply, a file written, stop',
-    () => _exercise(
-      wsl,
-      agentId: AgentIds.codexAcp,
-      agentName: 'Codex (ACP)',
-      spec: codexAcpDescriptor.acp!,
-      package: '@agentclientprotocol/codex-acp',
-      risk: PermissionRisk.acceptEdits,
-    ),
-    skip: skip,
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
+  // Claude's and Codex's chat run their own binaries, not an adapter:
+  // claude_stream_json_live_test.dart and codex_app_server_live_test.dart
+  // drive them. Grok is the agent still run as an npm package.
 }
 
 Future<void> _exercise(

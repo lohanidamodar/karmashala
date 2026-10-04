@@ -2723,6 +2723,14 @@
               "bypass"
             ],
             "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "detached",
+              "async"
+            ],
+            "description": "\"detached\" (default): nothing comes back unless you ask with session_wait. \"async\": when the new session's first turn ends, its result is pushed to you as a message — end your turn rather than polling. The session is never ended for you."
           }
         },
         "required": []
@@ -2798,6 +2806,14 @@
           "keepOpen": {
             "type": "boolean",
             "description": "Keep the child open after it answers, for a follow-up with session_send; end it with session_end when done. Default false: an answered child is ended."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "wait",
+              "async"
+            ],
+            "description": "\"wait\" (default): this call blocks until the child answers. \"async\": answers at once with childSessionId; when the child's first turn ends its result — agent, model, duration and final answer — is pushed to you as a message, batched with others that finish together. Start several, then end your turn; do not poll. Recommended for long or parallel work."
           }
         },
         "required": [
@@ -2810,6 +2826,27 @@
         "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "delegation_capabilities",
+      "description": "What you can delegate to: the agents installed where you run (or in environmentId), each with its installation id, protocol and the models it can be started on, which one is the default, and whether your nesting depth still allows starting a child. Read this before choosing cli/agentInstallationId and model for subagent_run or open_new_session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environmentId": {
+            "type": "string",
+            "description": "Defaults to your own environment."
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
       }
     },
     {
@@ -5585,6 +5622,10 @@
     "subagent_run": {
       "category": "sessions",
       "summary": "Run a subagent on any agent and model; get its answer, then it ends."
+    },
+    "delegation_capabilities": {
+      "category": "sessions",
+      "summary": "The agents and models you can delegate to, and whether you still may."
     },
     "get_usage": {
       "category": "sessions",

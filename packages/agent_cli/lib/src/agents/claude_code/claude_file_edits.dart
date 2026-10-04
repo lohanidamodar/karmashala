@@ -146,6 +146,11 @@ class ClaudeFileEditCollector {
   }
 }
 
+/// The edit a Claude `toolUseResult` records, with the real line numbers of
+/// its `structuredPatch`; null when the result is not a file write.
+FileEditRecord? claudeResultEdit(Object? toolUseResult) =>
+    toolUseResult is Map ? _claudeResultEdit(toolUseResult) : null;
+
 /// One edit out of a Claude `toolUseResult`, or null when the result is not a
 /// file write (a Bash result, a Read, …).
 FileEditRecord? _claudeResultEdit(Map<Object?, Object?> result) {

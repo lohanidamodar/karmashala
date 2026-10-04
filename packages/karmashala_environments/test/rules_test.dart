@@ -247,6 +247,23 @@ void main() {
       expect(p.inserts.single.leadingArguments, ['-y', 'other-pkg']);
     });
 
+    test('a row found through npx, whose agent now runs its own binary, '
+        'moves to the binary and drops the npx arguments', () {
+      final p = plan(
+        [
+          row('stale', r'C:\npm\npx.cmd', agentId: 'codex-acp').copyWith(
+            leadingArguments: ['-y', '@agentclientprotocol/codex-acp'],
+          ),
+        ],
+        [row('new', r'C:\codex\codex.exe', agentId: 'codex-acp')],
+        probed: const {'codex-acp'},
+      );
+      expect(p.inserts, isEmpty);
+      expect(p.moves, {'stale': r'C:\codex\codex.exe'});
+      expect(p.leadingArguments, {'stale': <String>[]});
+      expect(p.present.single.leadingArguments, isEmpty);
+    });
+
     test('a pinned path that is not observed broken is not overruled', () {
       final p = plan(
         [row('mine', r'C:\mine.exe', byUser: true)],

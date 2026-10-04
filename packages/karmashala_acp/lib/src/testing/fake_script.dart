@@ -83,6 +83,42 @@ sealed class FakeStep {
 
   const factory FakeStep.writeFile(String path, String content) =
       FakeWriteFileStep;
+
+  /// Runs [command] in a client terminal: `terminal/create`, a `tool_call`
+  /// embedding it, then `terminal/kill` when [kill], `wait_for_exit`,
+  /// `output`, and `release` unless [release] is false.
+  const factory FakeStep.terminal({
+    required String toolCallId,
+    required String command,
+    List<String> args,
+    String? cwd,
+    int? outputByteLimit,
+    Map<String, String> env,
+    bool kill,
+    bool release,
+  }) = FakeTerminalStep;
+}
+
+final class FakeTerminalStep extends FakeStep {
+  const FakeTerminalStep({
+    required this.toolCallId,
+    required this.command,
+    this.args = const [],
+    this.cwd,
+    this.outputByteLimit,
+    this.env = const {},
+    this.kill = false,
+    this.release = true,
+  });
+
+  final String toolCallId;
+  final String command;
+  final List<String> args;
+  final String? cwd;
+  final int? outputByteLimit;
+  final Map<String, String> env;
+  final bool kill;
+  final bool release;
 }
 
 final class FakeMessageStep extends FakeStep {

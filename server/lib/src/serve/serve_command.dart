@@ -41,6 +41,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_session_engine/store.dart'
     show
         DecisionRecordDao,
+        SessionDelegationDao,
         ImportedSessionDao,
         SessionDao,
         SessionAgentSpanDao,
@@ -53,6 +54,7 @@ import 'package:path/path.dart' as p;
 
 import '../acp/acp_auth.dart';
 import '../acp/acp_runtimes.dart';
+import '../acp/acp_titles.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
 import '../acp/acp_version_probe.dart';
@@ -73,6 +75,7 @@ import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
 import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
+import '../sessions/delegation_results.dart';
 import '../sessions/session_queue.dart';
 import '../status/turn_settlement.dart';
 import '../sessions/session_ends_with_server.dart';
@@ -889,6 +892,7 @@ Future<int> runServe(
     agentStatus: status,
     checkpoints: checkpoints,
     data: data,
+    titles: AcpTitles(sessionSync.rows),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   final sessionUsage = SessionUsageDao(database);
@@ -896,6 +900,7 @@ Future<int> runServe(
     messages: sessionMessages,
     usage: sessionUsage,
     host: acpHost,
+    openLink: openInThisMachinesBrowser,
     runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
@@ -1356,6 +1361,24 @@ Future<int> runServe(
     answerOf: answerOf,
     settled: turnSettlement.settled,
   );
+  Future<void> endChild(String sessionId) async {
+    final id = hostSessionIdOf(sessionId);
+    if (registry.findProcess(id) != null) await registry.close(id);
+  }
+
+  // An async child's result is pushed into its parent's queue when its turn
+  // ends; a person's Stop on the child keeps it theirs.
+  final delegations = DelegationResults(
+    turnOf: (childId, since) =>
+        childTurns.firstTurn(childId, bound: kDelegationBound, since: since),
+    answerOf: answerOf,
+    queue: sessionQueue,
+    store: SessionDelegationDao(database),
+    isLive: prompts.status.holds,
+    endChild: endChild,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  )..start();
+  sessionInput.interrupted = delegations.stopped;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1378,6 +1401,8 @@ Future<int> runServe(
         queue: sessionQueue,
         typist: typist,
         answerOf: answerOf,
+        sentBy: delegations.sent,
+        endedBy: delegations.endedBy,
         resumeWith: (sessionId, prompt) async {
           final started = await launches.resume(sessionId, prompt: prompt);
           data.tellIntent(
@@ -1402,11 +1427,9 @@ Future<int> runServe(
         turns: childTurns,
         tokensOf: (sessionId) async =>
             (await sessionRecordReadings.tokensOf(sessionId)).total,
-        endChild: (sessionId) async {
-          final id = hostSessionIdOf(sessionId);
-          if (registry.findProcess(id) != null) await registry.close(id);
-        },
+        endChild: endChild,
         callHolds: openTurns.heldByCall,
+        delegate: delegations.watch,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
@@ -1617,6 +1640,7 @@ Future<int> runServe(
   storeDesk.close();
   await attention.close();
   await queueEnds.cancel();
+  await delegations.close();
   await sessionQueue.close();
   await turnSettlement.close();
   await status.close();

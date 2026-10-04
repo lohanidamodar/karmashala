@@ -25,6 +25,11 @@ abstract final class AcpVocabulary {
     AcpMethods.sessionRequestPermission,
     AcpMethods.fsReadTextFile,
     AcpMethods.fsWriteTextFile,
+    AcpMethods.terminalCreate,
+    AcpMethods.terminalOutput,
+    AcpMethods.terminalWaitForExit,
+    AcpMethods.terminalKill,
+    AcpMethods.terminalRelease,
   ];
 
   /// Transport-level methods either side may send.
@@ -122,6 +127,11 @@ abstract final class AcpMethods {
   static const sessionRequestPermission = 'session/request_permission';
   static const fsReadTextFile = 'fs/read_text_file';
   static const fsWriteTextFile = 'fs/write_text_file';
+  static const terminalCreate = 'terminal/create';
+  static const terminalOutput = 'terminal/output';
+  static const terminalWaitForExit = 'terminal/wait_for_exit';
+  static const terminalKill = 'terminal/kill';
+  static const terminalRelease = 'terminal/release';
   static const cancelRequest = r'$/cancel_request';
 }
 

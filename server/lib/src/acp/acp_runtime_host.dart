@@ -1,6 +1,10 @@
 import 'package:agent_cli/descriptors.dart' show AgentStatusReport;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
+    show
+        SessionCommandsChanged,
+        SessionConfigOptionsChanged,
+        SessionModesChanged,
+        SessionUsageChanged;
 
 /// What an [AcpSessionRuntime] asks of the server around it: where its
 /// status goes, the checkpoint hold before a write, who hears of its modes,
@@ -33,6 +37,13 @@ abstract class AcpRuntimeHost {
 
   /// The agent reported its context use and cost (`usage_update`).
   void usageChanged(SessionUsageChanged change);
+
+  /// The agent announced or changed the slash commands it accepts.
+  void commandsChanged(SessionCommandsChanged change) {}
+
+  /// The agent named the conversation (`session_info_update`); [title] is
+  /// trimmed and never empty.
+  void titleChanged(String sessionId, String title) {}
 
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);

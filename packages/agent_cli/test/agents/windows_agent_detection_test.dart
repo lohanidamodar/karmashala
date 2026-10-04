@@ -67,12 +67,18 @@ void main() {
           hostEnvironment: const {},
         ).discover();
 
-        expect(found.map((i) => i.agentId), [AgentIds.codex]);
-        expect(
-          found.single.executable.path,
-          r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
-        );
-        expect(found.single.version, '0.145.0');
+        // Codex's chat runs the same binary's app-server.
+        expect(found.map((i) => i.agentId), [
+          AgentIds.codex,
+          AgentIds.codexAcp,
+        ]);
+        for (final codex in found) {
+          expect(
+            codex.executable.path,
+            r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
+          );
+          expect(codex.version, '0.145.0');
+        }
       },
     );
   });

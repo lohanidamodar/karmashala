@@ -44,7 +44,15 @@ void main() {
     createdAt: now,
   );
 
-  // Only Claude Code is installed, on the PATH.
+  // Only Claude Code is installed, on the PATH: one binary, found for its
+  // terminal agent and its chat agent.
+  const claudeAgents = [AgentIds.claudeCode, AgentIds.claudeAcp];
+  List<String> idsOf(Iterable<AgentInstallation> found) => [
+    for (final i in found) i.agentId,
+  ];
+  AgentInstallation terminal(Iterable<AgentInstallation> found) =>
+      found.singleWhere((i) => i.agentId == AgentIds.claudeCode);
+
   CommandResult claudeOnly(CommandRequest request) {
     if (request.executable == 'where') {
       return request.arguments.first == 'claude'
@@ -120,10 +128,7 @@ void main() {
         service.agentWork = _DetectionWork(detection);
 
         final before = (await app.handleLater(const AgentsDetect())).value;
-        expect(
-          before.environments.single.added.single.agentId,
-          AgentIds.claudeCode,
-        );
+        expect(idsOf(before.environments.single.added), claudeAgents);
 
         final row = AcpAgentRow(
           id: 'row-1',
@@ -196,7 +201,7 @@ void main() {
       expect(report.environments.single.removed.map((i) => i.agentId), [
         row.agentId,
       ]);
-      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+      expect(idsOf(rows()), claudeAgents);
       expect(toldChanges().whereType<InstallationRemoved>(), hasLength(1));
     });
 
@@ -242,8 +247,11 @@ void main() {
 
       final report = (await app.handleLater(const AgentsDetect())).value;
 
-      // Only the ACP agent was asked; the terminal agent answered --version.
-      expect(asked, ['${row.agentId}@windows:$minePath']);
+      // Only the ACP agents were asked; the terminal agent answered --version.
+      expect(asked, [
+        '${AgentIds.claudeAcp}@windows:$newPath',
+        '${row.agentId}@windows:$minePath',
+      ]);
       final mine = rows().singleWhere((i) => i.agentId == row.agentId);
       expect(mine.version, '1.0.91');
       expect(mine.versionReadAt, now);
@@ -252,7 +260,7 @@ void main() {
         scan.found.singleWhere((i) => i.agentId == row.agentId).version,
         '1.0.91',
       );
-      expect(scan.updated.single.to, '1.0.91');
+      expect(scan.updated.map((u) => u.to), everyElement('1.0.91'));
       expect(
         toldChanges().whereType<InstallationChanged>().map(
           (c) => c.installation.version,
@@ -266,20 +274,22 @@ void main() {
       final report = (await app.handleLater(const AgentsDetect())).value;
       final scan = report.environments.single;
       expect(scan.reachable, isTrue);
-      expect(scan.added.single.agentId, AgentIds.claudeCode);
-      expect(scan.added.single.executable.path, newPath);
-      expect(scan.added.single.version, '2.1.0');
-      // Every built-in but the one found, the ACP agents included.
+      expect(idsOf(scan.added), claudeAgents);
+      expect(scan.added.map((i) => i.executable.path), [newPath, newPath]);
+      expect(terminal(scan.added).version, '2.1.0');
+      // Every built-in but the ones found, the other ACP agents included.
       expect(scan.missing, [
         for (final id in AgentIds.builtIn)
-          if (id != AgentIds.claudeCode)
+          if (!claudeAgents.contains(id))
             AgentRegistry.builtIn.displayNameFor(id),
       ]);
 
-      expect(rows().single.agentId, AgentIds.claudeCode);
+      expect(idsOf(rows()), claudeAgents);
       expect(
-        toldChanges().whereType<InstallationChanged>().single.installation.id,
-        rows().single.id,
+        toldChanges().whereType<InstallationChanged>().map(
+          (c) => c.installation.id,
+        ),
+        rows().map((i) => i.id),
       );
 
       final log = AgentProbeLog(
@@ -316,9 +326,9 @@ void main() {
 
     test('a second detect finds the same row, not a second one', () async {
       await app.handleLater(const AgentsDetect());
-      final first = rows().single.id;
+      final first = rows().map((i) => i.id).toList();
       await app.handleLater(const AgentsDetect());
-      expect(rows().single.id, first);
+      expect(rows().map((i) => i.id), first);
     });
 
     test(
@@ -344,7 +354,7 @@ void main() {
         final report = (await app.handleLater(
           const AgentsDetect(environmentId: 'windows'),
         )).value;
-        expect(report.environments.single.added.single.agentId, 'claudeCode');
+        expect(idsOf(report.environments.single.added), claudeAgents);
         expect(
           rows().map((r) => r.id),
           contains('codex-kept'),
@@ -428,7 +438,7 @@ void main() {
       );
       service.agentWork = _DetectionWork(detection);
       await app.handleLater(const AgentsRepair(full: true));
-      expect(rows().map((i) => i.agentId), [AgentIds.claudeCode]);
+      expect(idsOf(rows()), claudeAgents);
 
       final row = AcpAgentRow(
         id: 'row-1',
@@ -459,7 +469,7 @@ void main() {
       )).value;
       expect(full.scan, isNotNull);
       expect(runner.requests, isNotEmpty);
-      expect(rows().single.agentId, AgentIds.claudeCode);
+      expect(idsOf(rows()), claudeAgents);
     });
   });
 
@@ -468,9 +478,9 @@ void main() {
       final found = (await app.handleLater(
         const AgentsDiscoverUnprobed(),
       )).value;
-      expect(found.single.agentId, AgentIds.claudeCode);
-      expect(rows().single.executable.path, newPath);
-      expect(toldChanges().whereType<InstallationChanged>(), hasLength(1));
+      expect(idsOf(found), claudeAgents);
+      expect(terminal(rows()).executable.path, newPath);
+      expect(toldChanges().whereType<InstallationChanged>(), hasLength(2));
 
       runner.requests.clear();
       final again = (await app.handleLater(
@@ -489,8 +499,8 @@ void main() {
       final changes = (await app.handleLater(
         const AgentsRefreshVersions(),
       )).value;
-      expect(changes.single.to, '2.2.0');
-      expect(rows().single.version, '2.2.0');
+      expect(changes.map((c) => c.to), contains('2.2.0'));
+      expect(terminal(rows()).version, '2.2.0');
     });
   });
 
@@ -564,16 +574,16 @@ void main() {
         final scan = report.environments.single;
         expect(scan.reachable, isTrue, reason: scan.error);
         expect(
-          scan.added.single.executable.path,
+          terminal(scan.added).executable.path,
           '/home/dev/.local/bin/claude',
         );
-        expect(scan.added.single.version, '2.1.0');
+        expect(terminal(scan.added).version, '2.1.0');
         expect(box.requests, isNotEmpty);
         expect(
           rows().where((r) => r.environmentId == sshEnvironmentId('h1')),
-          hasLength(1),
+          hasLength(2),
         );
-        expect(toldChanges().whereType<InstallationChanged>(), hasLength(1));
+        expect(toldChanges().whereType<InstallationChanged>(), hasLength(2));
       },
     );
 

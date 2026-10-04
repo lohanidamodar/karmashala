@@ -41,6 +41,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
+import '../application/session_commands_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -70,6 +71,8 @@ import 'message_composer.dart';
 import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
+import 'stop_children_offer.dart';
+import 'delegation_card.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -128,6 +131,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Which delegated agent hangs under which row, by the row's index in the
   /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
   var _subagents = <int, SubagentRef>{};
+
+  /// Children started together, by the row their folded card hangs under.
+  var _delegations = <int, List<DelegationCall>>{};
 
   /// Replaced only when [_subagents] changes: the transcript's rows compare
   /// their callbacks, and a fresh closure on every poll would rebuild them all.
@@ -294,7 +300,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
       (message, ordinal) {
         final reference = subagents[ordinal];
-        if (reference == null) return null;
+        if (reference == null) {
+          final calls = _delegations[ordinal];
+          return calls == null
+              ? null
+              : DelegationGroupCard(
+                  parentSessionId: widget.sessionId,
+                  calls: calls,
+                );
+        }
         return SubagentTurnsTile(
           reference: reference,
           resolveHostPath: _hostPathResolver(),
@@ -741,6 +755,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     }
     // An Esc closes an open prompt too: not one answered elsewhere.
     ref.read(ownPromptAnswersProvider).note(widget.sessionId);
+    offerToStopChildren(context, ref, widget.sessionId);
     if (ref.read(sessionInputProvider).viaServer) {
       unawaited(_interruptViaServer());
       return;
@@ -780,6 +795,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ComposerSnippet(label: snippet.label, text: snippet.command),
   ];
 
+  /// The agent's slash commands, as the composer's palette lists them. Only
+  /// an ACP agent announces any.
+  List<ComposerCommand> _commands() => [
+    for (final command in ref.read(sessionCommandsProvider(widget.sessionId)))
+      ComposerCommand(
+        name: command.name,
+        description: command.description,
+        hint: command.hint,
+      ),
+  ];
+
   /// The activity line over the composer. The delivery strip sits on the
   /// composer's channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
@@ -804,6 +830,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Read when the menu opens, never watched: the footer is
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
+          commands: _commands,
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           droppedFiles: _dropped.stream,
@@ -937,8 +964,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       earlier: earlier,
       agentOf: _agentsIn(messages),
     );
-    if (!mapEquals(subagents, _subagents)) {
+    final delegations = delegationGroups(out);
+    if (!mapEquals(subagents, _subagents) ||
+        delegationGroupsKey(delegations) != delegationGroupsKey(_delegations)) {
       _subagents = subagents;
+      _delegations = delegations;
       _detailBuilder = _subagentDetailFor(subagents);
     }
     return out;

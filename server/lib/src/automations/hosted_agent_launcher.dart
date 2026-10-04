@@ -21,6 +21,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
+import '../acp/acp_arguments.dart';
 import '../acp/acp_auth.dart' show AcpStartAuth;
 import '../acp/acp_runtimes.dart';
 import '../acp/acp_session_runtime.dart';
@@ -32,6 +33,8 @@ import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_session/lineage.dart';
+
+export '../acp/acp_arguments.dart' show acpArgumentsFor;
 
 /// The environment variable a hook and the MCP bridge read the session from.
 const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
@@ -419,9 +422,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       }
       // A fresh conversation in the row is started under the row's own id
       // (or the one given), so the row names it from the start.
-      if (launch.fresh &&
-          assignsOwnId &&
-          resuming.externalSessionId != ownId) {
+      if (launch.fresh && assignsOwnId && resuming.externalSessionId != ownId) {
         sessions.updateExternalSessionId(id, ownId);
       }
     } else {
@@ -922,29 +923,3 @@ String promptFilePointer(String path, {required bool isPacket}) => isPacket
           'carry out what it ends with.'
     : 'My opening message to you is in the file $path. Read all of it and '
           'act on it exactly as if I had typed it here.';
-
-/// The argv [installation] starts [spec]'s agent with over ACP: what
-/// discovery put in front (`-y <package>` for an agent found only through
-/// npx) and the spec's own mode arguments.
-///
-/// An installation recorded before discovery kept its leading arguments
-/// names `npx` with nothing to run; `npx --acp` then waits on a terminal
-/// nobody has, and the start hangs without a word. The package the
-/// descriptor declares fills that in. A person's own agent row names its
-/// package among its own arguments and declares none, so it is left as
-/// given.
-List<String> acpArgumentsFor(
-  AgentInstallation installation,
-  AcpLaunchSpec spec, {
-  required bool linux,
-}) {
-  final leading = installation.leadingArguments;
-  final package = spec.npxPackage;
-  final mode = spec.argumentsFor(linux: linux);
-  if (leading.isEmpty &&
-      package != null &&
-      isNpxExecutable(installation.executable.path)) {
-    return ['-y', package, ...mode];
-  }
-  return [...leading, ...mode];
-}

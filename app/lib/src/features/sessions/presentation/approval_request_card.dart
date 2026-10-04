@@ -31,6 +31,7 @@ import 'prompt_cards/question_prompt_card.dart';
 part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
 part 'approval_request_card/dock_buttons.dart';
+part 'approval_request_card/permission_options.dart';
 part 'approval_request_card/tool_ask_answers.dart';
 
 const _noLiveTerminal =

@@ -446,6 +446,47 @@ void main() {
       expect(row.titleByUser, isTrue);
     });
 
+    test('a send and an end are told who made them, for the delegation '
+        'push; a send that waited is not', () async {
+      final sent = <(String?, String, DateTime)>[];
+      final ended = <(String?, String)>[];
+      final told = SessionToolSet(
+        context,
+        prompts: prompts,
+        registry: registry,
+        waits: HostedSessionWait(
+          status: status,
+          deadline: (_) => deadline.future,
+        ),
+        typist: SessionToolSet.typistOver(
+          prompts,
+          poll: const Duration(milliseconds: 2),
+          typedPatience: const Duration(milliseconds: 20),
+          sendPatience: const Duration(milliseconds: 20),
+        ),
+        sentBy: (caller, id, at) => sent.add((caller, id, at)),
+        endedBy: (caller, id) => ended.add((caller, id)),
+      );
+      await runAgent('claude-code-tui');
+      await told.call('session_send', {
+        'sessionId': 's1',
+        'text': 'next part',
+      }, 'caller');
+      expect(sent, [('caller', 's1', t0)]);
+
+      final waiting = told.call('session_send', {
+        'sessionId': 's1',
+        'text': 'and wait',
+        'wait': true,
+      }, 'caller')!;
+      deadline.complete();
+      await waiting;
+      expect(sent, hasLength(1));
+
+      await told.call('session_end', {'sessionId': 's1'}, 'caller');
+      expect(ended, [('caller', 's1')]);
+    });
+
     test('every tool here answers itself: none is ever handed on', () {
       for (final tool in [
         'session_send',
