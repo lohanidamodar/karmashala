@@ -34,7 +34,11 @@ enum QueuedMessageOrigin {
   mcp,
 
   /// A scheduled resume the server fired.
-  automation;
+  automation,
+
+  /// Results of sessions this one delegated, pushed when their turns ended;
+  /// [QueuedMessage.originId] is the child that opened the row.
+  delegation;
 
   static QueuedMessageOrigin fromName(String? name) => values.firstWhere(
     (origin) => origin.name == name,

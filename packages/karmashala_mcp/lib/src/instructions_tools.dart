@@ -94,6 +94,7 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'get_usage',
       'open_new_session',
       'subagent_run',
+      'delegation_capabilities',
       'open_session',
     ],
     body: '''
@@ -226,6 +227,16 @@ which starts a second agent. `blocked` means the child stopped for a person;
 waiting longer will not clear it. A child that answers is ended then unless
 you pass `keepOpen: true`; `childOpen` says which. A child stopped by its
 usage limit stays open, and `resume` names the resume armed for it.
+
+**`mode: "async"` pushes the result to you; do not poll.** `subagent_run` and
+`open_new_session` with `mode: "async"` answer at once. When the child's first
+turn ends, a message tagged `[Karmashala]` arrives in your own queue with the
+child's id, agent, model, how long it took and its final answer (cut at 4000
+characters; `session_transcript` has the rest) — at once if you are idle,
+after your turn if you are working, several children in one message when they
+finish together. Start the children, then end your turn. A child a person
+stops reports nothing. `delegation_capabilities` lists the agents and models
+you can choose from.
 ''',
   ),
   McpGuide(
