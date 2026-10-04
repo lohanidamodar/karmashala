@@ -97,6 +97,23 @@ class ToolActivity {
     return s == null || s.isEmpty || s == name ? name : '$name($s)';
   }
 
+  /// [output] as a card shows it: an `exit N` line after `Exit code N`,
+  /// which only says the code again, is left out.
+  String? get shownOutput {
+    final text = output;
+    if (text == null) return null;
+    final lines = text.split('\n');
+    final code = RegExp(r'^Exit code (-?\d+)$').firstMatch(lines.first.trim());
+    if (code == null) return text;
+    final rest = [
+      for (final line in lines.skip(1))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    return rest.length == 1 && rest.single.toLowerCase() == 'exit ${code[1]}'
+        ? lines.first.trim()
+        : text;
+  }
+
   /// The wire form a server's transcript page carries. Absent fields are
   /// null or false; [imagePath] is spelled as the server's machine spells it.
   Map<String, Object?> toJson() => {

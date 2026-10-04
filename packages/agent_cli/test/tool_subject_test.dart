@@ -35,6 +35,17 @@ void main() {
     expect(toolActivityFor('Bash', {'command': 'ls'}).proposedPlan, isNull);
   });
 
+  test('a failed command\'s output does not say its exit code twice', () {
+    ToolActivity run(String output) =>
+        ToolActivity(name: 'Bash', output: output, isError: true);
+    expect(run('Exit code 1\nexit 1').shownOutput, 'Exit code 1');
+    expect(run('Exit code 3\n\nexit 3\n').shownOutput, 'Exit code 3');
+    expect(run('Exit code 1\nboom').shownOutput, 'Exit code 1\nboom');
+    expect(run('Exit code 1\nexit 2').shownOutput, 'Exit code 1\nexit 2');
+    expect(run('ok').shownOutput, 'ok');
+    expect(const ToolActivity(name: 'Bash').shownOutput, isNull);
+  });
+
   test('an input naming none of them has no subject', () {
     expect(toolSubjectEntryFor({'plan': 'x' * 400}), isNull);
     expect(toolSubjectEntryFor({'n': 3}), isNull);

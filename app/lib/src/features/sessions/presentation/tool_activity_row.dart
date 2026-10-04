@@ -139,7 +139,7 @@ class _OutputPanel extends StatelessWidget {
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
     final failure = SemanticColors.of(context).failure;
-    final output = activity.output ?? '';
+    final output = activity.shownOutput ?? '';
     final lines = output.isEmpty ? const <String>[] : output.split('\n');
     final hidden = lines.length - kInlineOutputLines;
     final mono = MonoStyles.small.copyWith(color: scheme.onSurface);
