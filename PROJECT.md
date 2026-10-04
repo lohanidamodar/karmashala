@@ -1442,3 +1442,18 @@ the relay — each works on the one per-user host there, the owner's included.
 
 The tests are `test/core/probe/`. Each guarded seam has a non-probe twin that
 proves the fixture can observe the write, so a green run is not an empty one.
+
+## 24. Plan and task tools in chat sessions
+
+The plan card draws what an agent's own plan tool publishes, and on
+2026-10-04 neither chat bridge had one. **Karmashala does not switch them
+off**; the CLIs do, and nothing here overrides them.
+
+- **Claude Code 2.1.287** offers `TodoWrite`/`TaskCreate`/`TaskUpdate` only
+  for older models (`claude-sonnet-4-*`, `claude-haiku-4-5`) or when
+  `CLAUDE_CODE_ENABLE_TODO_TOOLS=true` (read off the binary: `J1()` gates
+  them; `CLAUDE_CODE_ENABLE_TASKS=false` turns tasks off). A terminal session
+  on a current model lacks them the same way.
+- **Codex 0.160** reads `update_plan` from its own `[tools]` config
+  (`tools.update_plan`); the bridge's `thread/start` carries only `cwd` and the
+  MCP servers, so a thread has whatever the person's Codex config says.
