@@ -393,6 +393,8 @@ class _QuestionOr extends ConsumerWidget {
           agentName: agentName,
           question: question,
           chatLabel: chatRow,
+          // Docked, the dock's header already says who is asking.
+          showHeader: !_Docked.of(context),
           onAnswer: (answers, {decline = false, chat = false}) async {
             final said = _AnswerSaid.of(context);
             try {

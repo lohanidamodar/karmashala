@@ -24,6 +24,7 @@ class QuestionPromptCard extends StatefulWidget {
     required this.onAnswer,
     this.canAnswer = true,
     this.chatLabel,
+    this.showHeader = true,
     super.key,
   });
 
@@ -37,6 +38,10 @@ class QuestionPromptCard extends StatefulWidget {
   /// The agent's own row for leaving the question to talk it over ("Chat
   /// about this"), offered as its own action; null when it draws none.
   final String? chatLabel;
+
+  /// Whether the card says who is asking. Off under the ask dock's own
+  /// header, which already says it.
+  final bool showHeader;
 
   @override
   State<QuestionPromptCard> createState() => _QuestionPromptCardState();
@@ -138,23 +143,24 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Icon(
-              AppIcons.warningCircle,
-              size: density.iconSmall,
-              color: SemanticColors.of(context).attention,
-            ),
-            SizedBox(width: density.glyphGap),
-            Expanded(
-              child: Text(
-                '${widget.agentName} is asking you'
-                '${questions.length == 1 ? ' a question' : ' ${questions.length} questions'}',
-                style: theme.textTheme.labelLarge,
+        if (widget.showHeader)
+          Row(
+            children: [
+              Icon(
+                AppIcons.warningCircle,
+                size: density.iconSmall,
+                color: SemanticColors.of(context).attention,
               ),
-            ),
-          ],
-        ),
+              SizedBox(width: density.glyphGap),
+              Expanded(
+                child: Text(
+                  '${widget.agentName} is asking you'
+                  '${questions.length == 1 ? ' a question' : ' ${questions.length} questions'}',
+                  style: theme.textTheme.labelLarge,
+                ),
+              ),
+            ],
+          ),
         for (var i = 0; i < questions.length; i++) ...[
           SizedBox(height: density.lineGap * 2),
           _question(context, i),

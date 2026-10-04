@@ -206,4 +206,19 @@ void main() {
     expect(sent.single.answers, isEmpty);
     expect(inline, findsNothing);
   });
+
+  testWidgets('the card under its call says who is asking once', (
+    tester,
+  ) async {
+    await open(tester, messages: askingTurn(), question: () async => fruit());
+
+    expect(inline, findsOneWidget);
+    expect(
+      find.descendant(
+        of: inline,
+        matching: find.textContaining('is asking you a question'),
+      ),
+      findsOneWidget,
+    );
+  });
 }
