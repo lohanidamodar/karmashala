@@ -394,7 +394,10 @@ class AcpSessionRuntime implements ScreenSession {
     final settled = _turnSettled = Completer<StopReason?>();
     final turn = _turn = client.prompt(agent, prompt);
     unawaited(_settle(turn, settled));
-    if (notice != null) host.log('session $sessionId: $notice');
+    if (notice != null) {
+      host.log('session $sessionId: $notice');
+      host.notice(sessionId, notice);
+    }
     return notice;
   }
 

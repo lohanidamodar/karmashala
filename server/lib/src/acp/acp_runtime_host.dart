@@ -45,6 +45,10 @@ abstract class AcpRuntimeHost {
   /// trimmed and never empty.
   void titleChanged(String sessionId, String title) {}
 
+  /// A sentence for whoever watches [sessionId]: what a message it delivered
+  /// could not carry. Told however the message came.
+  void notice(String sessionId, String message) {}
+
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);
 

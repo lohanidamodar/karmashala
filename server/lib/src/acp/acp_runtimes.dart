@@ -6,6 +6,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         SessionCommandsChanged,
+        SessionNoticed,
         SessionConfigOptionsChanged,
         SessionModesChanged,
         SessionUsageChanged;
@@ -229,6 +230,11 @@ class ServerAcpHost extends AcpRuntimeHost {
   @override
   void titleChanged(String sessionId, String title) =>
       titles?.follow(sessionId, title);
+
+  @override
+  void notice(String sessionId, String message) => data.announce([
+    SessionNoticed(sessionId: sessionId, message: message),
+  ]);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

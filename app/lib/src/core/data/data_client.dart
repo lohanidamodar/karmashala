@@ -331,6 +331,13 @@ class DataClient {
   Stream<SessionCommandsChanged> get sessionCommandChanges =>
       _sessionCommandChanges.stream;
 
+  final _sessionNotices = StreamController<SessionNoticed>.broadcast(
+    sync: true,
+  );
+
+  /// What the server has to say of a session, as it says it. Never kept.
+  Stream<SessionNoticed> get sessionNotices => _sessionNotices.stream;
+
   /// Each session's queued messages — queued, delivering and failed — as
   /// the server last told them, by session id. In memory only: forgotten
   /// when the link drops, and listed again by whoever shows them.
@@ -1051,6 +1058,8 @@ class DataClient {
           if (!_sessionCommandChanges.isClosed) {
             _sessionCommandChanges.add(change);
           }
+        case final SessionNoticed change:
+          if (!_sessionNotices.isClosed) _sessionNotices.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1271,6 +1280,7 @@ class DataClient {
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
     unawaited(_sessionCommandChanges.close());
+    unawaited(_sessionNotices.close());
     unawaited(_sessionQueueChanges.close());
     unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());

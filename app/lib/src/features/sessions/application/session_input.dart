@@ -8,7 +8,6 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
 import 'session_message_typist.dart';
-import 'session_notice.dart';
 
 /// **Where a person's message and Stop are typed.** A server that offers it
 /// types them as host keys (`sessions.send`, `sessions.interrupt`), so this
@@ -46,11 +45,6 @@ class SessionInput {
             ? 'Queued for $sessionId at the server, place ${sent.position}'
             : 'Sent to $sessionId through the server: ${sent.via}',
       );
-      if (sent.notice case final notice?) {
-        _ref
-            .read(sessionNoticesProvider.notifier)
-            .post(sessionId, SessionNotice(message: notice));
-      }
       return sent.sent;
     } on DataRefused catch (refusal) {
       if (refusal.code != DataRefusalCode.notFound) {

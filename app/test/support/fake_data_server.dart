@@ -464,6 +464,9 @@ class FakeDataServer {
         case SessionCommandsChanged():
           // Told, never kept: the agent's runtime greets them.
           break;
+        case SessionNoticed():
+          // Told once, never kept.
+          break;
         case SessionUsageChanged():
           // Told, never kept: a late client reads it from `sessions.stats`.
           break;
