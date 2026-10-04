@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/session.dart';
 
+import 'launch/session_handoffs.dart' show isPromptFilePointer;
 import 'session_sync_rows.dart';
 
 /// Copies an agent's own name for a conversation — its title, a `/rename` —
@@ -49,6 +50,9 @@ class TitleSync {
       // and writing a preview would settle the row against a real name.
       final title = match.title?.trim() ?? '';
       if (title.isEmpty || title == row.title) continue;
+      // Opened through a file: the agent's name describes the pointer. Read
+      // off the conversation itself, which outlives the handoff's record.
+      if (isPromptFilePointer(match.preview)) continue;
       if (rows.edit(row.id, SessionPatch.rename(title)) == null) continue;
       renames++;
       renamed++;

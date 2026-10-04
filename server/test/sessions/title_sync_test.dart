@@ -95,6 +95,25 @@ void main() {
       expect(world.told, isEmpty);
     });
 
+    test('a name the agent gave the file pointer it was opened with, after '
+        'the handoff record is gone', () {
+      world.insert(row(title: 'Probe fixes round 1'));
+      expect(
+        sync(isRunning: (_) => true).sync([
+          storeSession(
+            'c1',
+            title: 'Handoff prompt file',
+            preview:
+                r'My opening message to you is in the file C:\t\message.md. '
+                'Read all of it and act on it exactly as if I had typed it '
+                'here.',
+          ),
+        ]),
+        0,
+      );
+      expect(world.row('s1')!.title, 'Probe fixes round 1');
+    });
+
     test('a row whose conversation the stores do not hold', () {
       world.insert(row());
       expect(sync().sync([storeSession('somebody-else', title: 'x')]), 0);
