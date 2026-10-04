@@ -649,15 +649,150 @@ void main() {
     },
   );
 
+  JsonMap question(String id, String text, [List<String>? choices]) => {
+    'id': id,
+    'header': 'Choose',
+    'question': text,
+    'isOther': false,
+    'isSecret': false,
+    'options': choices == null
+        ? null
+        : [
+            for (final c in choices) {'label': c, 'description': 'about $c'},
+          ],
+  };
+
+  test('a question with choices asks the person, even under autoRun, and '
+      'the choice reaches Codex', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/tool/requestUserInput', {
+          'itemId': 'ask-1',
+          'questions': [
+            question('q1', 'Which database?', ['sqlite', 'postgres']),
+          ],
+          'isBlocking': true,
+          'autoResolutionMs': null,
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex, risk: PermissionRisk.autoRun);
+    await runtime.start();
+    await runtime.send('Set it up');
+    await pump(40);
+    // Answering for the person would pick a choice they never saw.
+    expect(runtime.hasOpenPermission, isTrue);
+    expect(host.statuses.last.toolAsk?.toolName, 'Which database?');
+    await runtime.answerPermission(approve: true);
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['sqlite'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
+
+  test('every choice is an option a client can pick, and the one picked is '
+      'sent back', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/tool/requestUserInput', {
+          'itemId': 'ask-2',
+          'questions': [
+            question('q1', 'Which database?', ['sqlite', 'postgres']),
+          ],
+          'isBlocking': true,
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final offered = <List<JsonMap>>[];
+    await talkToAcpAgent(() async => codexAppServerBridge(codex.transport), (
+      peer,
+      init,
+    ) async {
+      peer.requests.listen((request) {
+        final options = request.paramsMap['options']! as List;
+        offered.add([for (final o in options) (o as Map).cast()]);
+        request.respond({
+          'outcome': {
+            'outcome': 'selected',
+            'optionId': options[1]['optionId'],
+          },
+        });
+      });
+      final created = await peer.call(AcpMethods.sessionNew, {
+        'cwd': temp.path,
+        'mcpServers': <Object?>[],
+      });
+      await peer.call(AcpMethods.sessionPrompt, {
+        'sessionId': (created! as Map)['sessionId'],
+        'prompt': [
+          {'type': 'text', 'text': 'Set it up'},
+        ],
+      });
+    });
+    expect(offered.single.map((o) => (o['name'], o['kind'])), [
+      ('sqlite', 'allow_always'),
+      ('postgres', 'allow_always'),
+      ('Skip the question', 'reject_once'),
+    ]);
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['postgres'],
+        },
+      },
+    });
+  });
+
+  test('a free-text question is declined, and the chat says so', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/tool/requestUserInput', {
+          'itemId': 'ask-3',
+          'questions': [question('q1', 'What should the table be called?')],
+          'isBlocking': true,
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Make a table');
+    await runtime.awaitTurn();
+    expect(await answered, {'answers': <String, Object?>{}});
+    expect(runtime.hasOpenPermission, isFalse);
+    final said = rows()
+        .where((r) => r.role == SessionMessageRole.agent)
+        .map((r) => r.text)
+        .join('\n');
+    expect(said, contains('What should the table be called?'));
+    expect(said, contains('declined'));
+    await runtime.stop();
+  });
+
   test(
-    'a question Codex asks the person is declined, not left hanging',
+    'an MCP server\'s request for input is declined, and the chat says so',
     () async {
       late Future<Object?> answered;
       final codex = FakeCodexAppServer(
         onTurn: (turn) async {
           answered = turn.ask('mcpServer/elicitation/request', {
-            'serverName': 'x',
-            'message': 'Pick one',
+            'serverName': 'tracker',
+            'mode': 'form',
+            'message': 'Pick a project',
+            'requestedSchema': <String, Object?>{},
           });
           await answered;
           turn.end('completed');
@@ -668,6 +803,13 @@ void main() {
       await runtime.send('Ask me');
       await runtime.awaitTurn();
       expect((await answered)! as Map, containsPair('action', 'decline'));
+      final said = rows()
+          .where((r) => r.role == SessionMessageRole.agent)
+          .map((r) => r.text)
+          .join('\n');
+      expect(said, contains('tracker'));
+      expect(said, contains('Pick a project'));
+      expect(said, contains('declined'));
       await runtime.stop();
     },
   );

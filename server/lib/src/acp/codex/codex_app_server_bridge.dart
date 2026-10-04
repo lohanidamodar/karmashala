@@ -770,15 +770,18 @@ final class CodexAppServerBridge implements AcpTransport {
             'scope': chosen == 'session' ? 'session' : 'turn',
           });
         case 'mcpServer/elicitation/request':
-          _say('Codex asked a question Karmashala cannot show; declined.');
+          _notice(
+            'The MCP server "${params['serverName']}" asked: '
+            '${params['message'] ?? '(no message)'} - declined, since '
+            "Karmashala's chat cannot fill in its form.",
+          );
           request.respond({
             'action': 'decline',
             'content': null,
             '_meta': null,
           });
         case 'item/tool/requestUserInput':
-          _say('Codex asked for input Karmashala cannot show; none was given.');
-          request.respond({'answers': const <String, Object?>{}});
+          request.respond({'answers': await _questions(params)});
         case 'execCommandApproval' || 'applyPatchApproval':
           request.respond({'decision': 'denied'});
         default:
@@ -803,6 +806,73 @@ final class CodexAppServerBridge implements AcpTransport {
     ('session', 'Allow for this session', 'allow_always'),
     ('decline', 'Reject', 'reject_once'),
   ];
+
+  /// Codex's questions, each with choices asked as a permission request
+  /// whose options are the choices; a free-text or secret one is declined,
+  /// and said in the chat. Choices are `allow_always` because a client that
+  /// answers for the person (autoRun) picks an `allow_once` unseen.
+  Future<JsonMap> _questions(JsonMap params) async {
+    final answers = <String, Object?>{};
+    for (final q in _list(params['questions'])) {
+      final id = '${q['id']}';
+      final text = '${q['question'] ?? q['header'] ?? ''}';
+      final choices = [
+        for (final o in _list(q['options']))
+          if (o['label'] case final String label) label,
+      ];
+      if (choices.isEmpty || q['isSecret'] == true) {
+        _notice(
+          'Codex asked: $text - declined, since Karmashala\'s chat cannot '
+          'answer a question without choices yet.',
+        );
+        continue;
+      }
+      final chosen = await _ask(
+        {
+          'toolCallId': '${params['itemId']}:$id',
+          'title': text,
+          'kind': 'other',
+          'status': 'pending',
+          'rawInput': {
+            'header': q['header'],
+            'question': text,
+            'options': q['options'],
+          },
+          '_meta': {
+            'codex': {'question': id},
+          },
+        },
+        [
+          for (final (i, label) in choices.indexed)
+            ('choice-$i', label, 'allow_always'),
+          ('skip', 'Skip the question', 'reject_once'),
+        ],
+      );
+      final index = chosen != null && chosen.startsWith('choice-')
+          ? int.tryParse(chosen.substring('choice-'.length))
+          : null;
+      if (index == null || index >= choices.length) {
+        _notice('Codex asked: $text - no choice was made, so none was sent.');
+        continue;
+      }
+      answers[id] = {
+        'answers': [choices[index]],
+      };
+    }
+    return answers;
+  }
+
+  var _notices = 0;
+
+  /// Said in the chat as a message of its own, not mixed into Codex's.
+  void _notice(String text) {
+    _say(text);
+    _update({
+      'sessionUpdate': 'agent_message_chunk',
+      'content': {'type': 'text', 'text': text},
+      'messageId': 'karmashala-notice-${++_notices}',
+    });
+  }
 
   /// The option the person chose, by id, or null when the turn was cancelled
   /// or the client could not be asked.
