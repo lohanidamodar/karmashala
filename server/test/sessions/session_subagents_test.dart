@@ -58,6 +58,7 @@ void main() {
   SessionSubagents reader({
     Map<String, List<TranscriptMessage>> messages = const {},
     List<Session> children = const [],
+    Map<String, List<Session>> descendants = const {},
     Map<String, SubagentState> live = const {},
     bool acp = false,
     bool switched = false,
@@ -65,7 +66,7 @@ void main() {
   }) => SessionSubagents(
     subagentAnswerOf: (path) async => subagentAnswers[path],
     messagesOf: (id) async => messages[id] ?? const [],
-    childrenOf: (_) => children,
+    childrenOf: (id) => id == 's1' ? children : (descendants[id] ?? const []),
     liveStateOf: (id) => live[id],
     agentNameOf: (_) => 'Codex',
     sessionTokens: (id) async => (total: 1200, gap: null),
@@ -192,6 +193,50 @@ void main() {
     expect(entry.finalResult, startsWith('All done'));
     expect(entry.finalResult!.length, kSubagentResultMaxChars);
     expect(entry.finalResultTruncated, isTrue);
+  });
+
+  test('a child carries its own children: the lineage as a tree, each with '
+      'its state and answer', () async {
+    Session grandchild(String id, String parent) => Session(
+      id: id,
+      repositoryId: 'r1',
+      agentInstallationId: 'a1',
+      title: 'Grandchild $id',
+      useWorktree: false,
+      status: SessionStatus.idle,
+      createdAt: t0.add(const Duration(minutes: 2)),
+      parentSessionId: parent,
+      parentLink: SessionLink.spawn,
+    );
+    final list = await reader(
+      messages: {
+        'g1': [TranscriptMessage(role: 'agent', text: 'g1 found it', at: t0)],
+      },
+      children: [child('c1'), child('c2')],
+      descendants: {
+        'c1': [grandchild('g1', 'c1'), grandchild('g2', 'c1')],
+        // A row that names its own ancestor never loops the reader.
+        'g1': [child('c1')],
+      },
+      live: {'c1': SubagentState.running, 'c2': SubagentState.done},
+    ).read(const SessionSubagentsRead('s1'));
+
+    expect(list.entries.map((e) => e.id), ['c1', 'c2']);
+    final c1 = list.entries.first;
+    expect(c1.children.map((e) => e.id), ['g1', 'g2']);
+    expect(c1.children.first.finalResult, 'g1 found it');
+    expect(c1.children.first.state, SubagentState.done);
+    expect(c1.children.first.children, isEmpty);
+    expect(list.entries.last.children, isEmpty);
+
+    final wire =
+        jsonDecode(
+              jsonEncode(const SessionSubagentsRead('s1').resultToJson(list)),
+            )
+            as Object?;
+    final read = const SessionSubagentsRead('s1').resultFromJson(wire);
+    expect(read.entries.first.children.map((e) => e.id), ['g1', 'g2']);
+    expect(read.entries.first.children.first.finalResult, 'g1 found it');
   });
 
   test('a live child is the status keeper\'s word, blocked included', () async {

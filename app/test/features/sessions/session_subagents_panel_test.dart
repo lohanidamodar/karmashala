@@ -59,7 +59,11 @@ void main() {
     ],
   );
 
-  Future<_Actions> pump(WidgetTester tester, Size size) async {
+  Future<_Actions> pump(
+    WidgetTester tester,
+    Size size, {
+    SessionSubagentList? shown,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -67,7 +71,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          sessionSubagentsProvider.overrideWith((ref, _) => Stream.value(list)),
+          sessionSubagentsProvider.overrideWith(
+            (ref, _) => Stream.value(shown ?? list),
+          ),
           clockProvider.overrideWithValue(
             _FixedClock(t0.add(const Duration(minutes: 4))),
           ),
@@ -126,6 +132,71 @@ void main() {
     );
     expect(find.text('handed off'), findsOneWidget);
     expect(find.text('handoff'), findsNothing);
+  });
+
+  group('lineage', () {
+    final tree = SessionSubagentList(
+      sessionId: 's1',
+      entries: [
+        SessionSubagent(
+          kind: SubagentKind.childSession,
+          id: 'c1',
+          title: 'Write the tests',
+          state: SubagentState.running,
+          agent: 'Codex',
+          model: 'gpt-5',
+          startedAt: t0,
+          childSessionId: 'c1',
+          link: 'spawn',
+          children: [
+            SessionSubagent(
+              kind: SubagentKind.childSession,
+              id: 'g1',
+              title: 'Check the fixtures',
+              state: SubagentState.done,
+              agent: 'Claude Code',
+              model: 'sonnet',
+              startedAt: t0.add(const Duration(minutes: 1)),
+              endedAt: t0.add(const Duration(minutes: 2)),
+              tokens: 500,
+              finalResult: 'Fixtures are fine.',
+              childSessionId: 'g1',
+              link: 'spawn',
+            ),
+          ],
+        ),
+      ],
+    );
+
+    for (final size in const [Size(390, 844), Size(1440, 900)]) {
+      testWidgets('a child\'s own children sit under it at '
+          '${size.width.toInt()} wide, each with its facts and result', (
+        tester,
+      ) async {
+        await pump(tester, size, shown: tree);
+        expect(find.byKey(const ValueKey('subagent-c1')), findsOneWidget);
+        expect(find.byKey(const ValueKey('subagent-g1')), findsOneWidget);
+        expect(
+          find.text('Claude Code · sonnet · Done · 1m 00s · 500 tokens'),
+          findsOneWidget,
+        );
+        expect(find.text('Fixtures are fine.'), findsOneWidget);
+        expect(find.text('1 child'), findsOneWidget);
+        // Nested: below its parent and indented past it.
+        final parentTitle = tester.getTopLeft(find.text('Write the tests'));
+        final childTitle = tester.getTopLeft(find.text('Check the fixtures'));
+        expect(childTitle.dy, greaterThan(parentTitle.dy));
+        expect(childTitle.dx, greaterThan(parentTitle.dx));
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a grandchild opens its own session', (tester) async {
+      final actions = await pump(tester, const Size(1440, 900), shown: tree);
+      await tester.tap(find.byKey(const ValueKey('subagent-g1')));
+      await tester.pumpAndSettle();
+      expect(actions.opened, ['g1']);
+    });
   });
 
   test('a link reads in words, never as its stored name', () {

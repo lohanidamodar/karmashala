@@ -33,7 +33,11 @@ const Duration kSubagentsRefresh = Duration(seconds: 3);
 /// When to ask again unprompted after [list], or null: only while an entry
 /// is running or blocked, since each ask re-reads records and tokens.
 Duration? subagentsRefreshAfter(SessionSubagentList list) =>
-    list.entries.any((entry) => entry.state.isLive) ? kSubagentsRefresh : null;
+    _anyLive(list.entries) ? kSubagentsRefresh : null;
+
+bool _anyLive(List<SessionSubagent> entries) => entries.any(
+  (entry) => entry.state.isLive || _anyLive(entry.children),
+);
 
 /// Session [sessionId]'s subagents and child sessions, as the server reads
 /// them (`sessions.subagents`): asked again on a notice of its transcript or
