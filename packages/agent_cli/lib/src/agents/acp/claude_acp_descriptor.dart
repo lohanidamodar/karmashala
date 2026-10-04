@@ -3,9 +3,11 @@ import '../domain/agent_descriptor.dart';
 import '../domain/agent_permission_support.dart';
 
 const _evidence =
-    '@agentclientprotocol/claude-agent-acp: session/new availableModes '
-    'plan, default, acceptEdits, bypassPermissions — declared from the '
-    'adapter source 2026-10-02, not yet read off a live session';
+    'Claude Code 2.1.287 in stream-json mode (claude -p --input-format '
+    'stream-json --output-format stream-json): the set_permission_mode '
+    'control answered plan, default, acceptEdits and, launched with '
+    '--allow-dangerously-skip-permissions, bypassPermissions — read off live '
+    'processes 2026-10-04';
 
 /// Claude Code as chat: the person's own `claude` in its stream-json mode
 /// (the protocol its Agent SDK speaks), translated to ACP in-process.

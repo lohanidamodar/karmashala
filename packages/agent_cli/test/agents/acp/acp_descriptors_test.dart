@@ -181,6 +181,18 @@ void main() {
       claudeAcpDescriptor.acp!.nativeBridge,
       AcpNativeBridge.claudeStreamJson,
     );
+    // Its modes are evidenced by the protocol it is spoken in, not an
+    // adapter it no longer runs.
+    final permission = claudeAcpDescriptor.launch.permission;
+    for (final evidence in [
+      permission.evidence,
+      for (final axis in permission.axes)
+        for (final value in axis.values) value.evidence,
+    ]) {
+      expect(evidence, contains('stream-json'));
+      expect(evidence, contains('2.1.287'));
+      expect(evidence, isNot(contains('claude-agent-acp')));
+    }
     expect(claudeAcpDescriptor.acp!.arguments, [
       '-p',
       '--input-format',
