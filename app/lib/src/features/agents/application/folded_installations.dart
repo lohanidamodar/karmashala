@@ -53,9 +53,9 @@ List<FoldedInstallations> foldInstallations(
     (groups[key] ??= []).add(install);
   }
   // An agent's machines side by side, agents in the order they came.
-  final agents = [
+  final agents = <String>{
     for (final (agentId, _) in groups.keys) agentId,
-  ].toSet().toList();
+  }.toList();
   final ordered = groups.entries.toList()
     ..sort((a, b) => agents.indexOf(a.key.$1) - agents.indexOf(b.key.$1));
   return [
