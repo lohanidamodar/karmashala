@@ -12,7 +12,9 @@ import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'tool_activity_row.dart';
+import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
+import 'turn_changed_files.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
 
@@ -94,7 +96,19 @@ bool _sameTool(ToolActivity? a, ToolActivity? b) {
       a.output == b.output &&
       a.outputTruncated == b.outputTruncated &&
       a.isError == b.isError &&
-      a.plan == b.plan;
+      a.plan == b.plan &&
+      a.kind == b.kind &&
+      a.editsTruncated == b.editsTruncated &&
+      _sameEdits(a.edits, b.edits);
+}
+
+bool _sameEdits(List<FileEditRecord> a, List<FileEditRecord> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// The most of [ChatTranscriptView]'s height its footer may take; the rest is
