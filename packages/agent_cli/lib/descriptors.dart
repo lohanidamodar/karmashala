@@ -59,6 +59,7 @@ export 'src/agents/domain/agent_descriptor.dart';
 // hooks report to, and over which transport. Here rather than in a mode of its
 // own because installing them is the host's job — this package only says what
 // each CLI supports.
+export 'src/agents/domain/agent_forms.dart';
 export 'src/agents/domain/agent_hook_endpoint.dart';
 export 'src/agents/domain/agent_hook_transport.dart';
 export 'src/agents/domain/agent_ids.dart';

@@ -150,11 +150,12 @@ class NativeSessionRow extends ConsumerWidget {
       agentMark: agentId == null
           ? null
           : AgentLogo(agentId: agentId, size: ExplorerRow.glyphSize),
-      agentName: agentId == null ? null : registry.displayNameFor(agentId),
+      // The form it started in, for an agent that has two: it never changes.
+      agentName: agentId == null ? null : registry.formLabelOf(agentId),
       environment: environment,
       statusLabel: _capitalised(lifecycle),
       agentLabel: [
-        agentId == null ? 'Agent' : registry.displayNameFor(agentId),
+        agentId == null ? 'Agent' : registry.formLabelOf(agentId),
         // The glyph says the lifecycle; a row claiming to be live with nothing
         // of ours running it still says so in words (`SessionStatus.labelWhen`).
         if (lifecycle != status.name) lifecycle,

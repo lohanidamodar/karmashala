@@ -849,6 +849,110 @@ void main() {
     expect(find.text(SlowStartNote.text), findsOneWidget);
     await closeAll(tester);
   });
+  group('an agent installed as a terminal and as a chat', () {
+    late _RecordingLauncher launcher;
+
+    Future<ProviderContainer> openWithChat(
+      WidgetTester tester, {
+      String? selected = 'r1',
+    }) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'ca1',
+          agentId: AgentIds.claudeAcp,
+          path: r'C:\npm\claude-agent-acp.cmd',
+        ),
+      );
+      final container = ProviderContainer(
+        parent: containerFor(selected: selected),
+        overrides: [
+          sessionLauncherProvider.overrideWith(
+            (ref) => launcher = _RecordingLauncher(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await open(tester, container);
+      return container;
+    }
+
+    Future<void> start(WidgetTester tester) async {
+      await tester.ensureVisible(startButton());
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('starts as a terminal until Chat is chosen', (tester) async {
+      await openWithChat(tester);
+      expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('agent-card:ca1')), findsNothing);
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('a dialog with no project opens on the form last chosen', (
+      tester,
+    ) async {
+      // Seen on a probe: with no project the dialog fell back to the first
+      // installation, the terminal form, whatever was chosen.
+      server.projectRows
+        ..delete('p1')
+        ..delete('p2');
+      final container = await openWithChat(tester, selected: null);
+      expect(find.text('No project'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      // The server's answer to a session with no project: its folder.
+      server.gitWork.answer = (request) {
+        if (request is! ScratchCheckoutCreate) return FakeGitWork.unhandled;
+        server.projectRows.insert(
+          project(
+            id: 'ps',
+            name: 'Scratch',
+            path: r'C:\Users\me\karmashala\scratch',
+            kind: Project.scratchKind,
+          ),
+        );
+        final folder = repository(
+          id: 'rs',
+          projectId: 'ps',
+          name: 'pong',
+          path: r'C:\Users\me\karmashala\scratch\pong',
+        );
+        server.repositoryRows.insert(folder);
+        return folder;
+      };
+      await open(tester, container);
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'ca1');
+      await closeAll(tester);
+    });
+
+    testWidgets('Chat starts the chat installation, and the next dialog '
+        'opens on Chat', (tester) async {
+      final container = await openWithChat(tester);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('Beta'),
+      );
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'ca1');
+
+      // The recorded launch failed, so the dialog is still up: close it and
+      // open a fresh one.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await open(tester, container);
+      await start(tester);
+      expect(launcher.requests.last.installation.id, 'ca1');
+      await closeAll(tester);
+    });
+  });
+
   testWidgets('an agent that asks to be logged in first offers Log in, '
       'which lists its methods', (tester) async {
     server.agentWork.acpAuthMethods['a1'] = const AcpAuthMethods(

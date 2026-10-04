@@ -57,31 +57,49 @@ class AcpBuiltInAgentRow extends ConsumerWidget {
       health: health,
       environmentIds: installs.map((i) => i.environmentId),
       tooltip: acpAgentsNote,
-      detail: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (installs.isEmpty)
-            Text(notInstalledLine(descriptor))
-          else ...[
-            AgentLaunchLines(installs: installs),
-            Text(
-              describeAgentVersions(
-                installs,
-                now: ref.watch(clockProvider).nowUtc(),
-              ),
-            ),
-            AcpLoginLines(installs: installs, agentName: name),
-          ],
-          AcpInstallActions(
-            descriptor: descriptor,
-            installedOn: {
-              for (final install in installs) install.environmentId,
-            },
-          ),
-        ],
-      ),
+      detail: AcpAgentDetails(descriptor: descriptor, installs: installs),
     );
   }
+}
+
+/// How an ACP agent — or an agent's chat form — launches on each machine,
+/// the version it reported, each installation's login, and an install
+/// action per machine it is not on.
+class AcpAgentDetails extends ConsumerWidget {
+  const AcpAgentDetails({
+    required this.descriptor,
+    required this.installs,
+    super.key,
+  });
+
+  final AgentDescriptor descriptor;
+  final List<AgentInstallation> installs;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (installs.isEmpty)
+        Text(notInstalledLine(descriptor))
+      else ...[
+        AgentLaunchLines(installs: installs),
+        Text(
+          describeAgentVersions(
+            installs,
+            now: ref.watch(clockProvider).nowUtc(),
+          ),
+        ),
+        AcpLoginLines(
+          installs: installs,
+          agentName: agentLabel(ref, descriptor.id),
+        ),
+      ],
+      AcpInstallActions(
+        descriptor: descriptor,
+        installedOn: {for (final install in installs) install.environmentId},
+      ),
+    ],
+  );
 }
 
 /// One launch per machine, in the ledger hand; the machine is named only when

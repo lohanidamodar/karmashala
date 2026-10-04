@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 
 /// The preference a person's Settings are kept under (`settings.v1`).
@@ -18,6 +19,7 @@ class LaunchSettings {
     this.existingSessionModes = const {},
     this.defaultModels = const {},
     this.letAgentsUpdateThemselves,
+    this.agentRunForms = const {},
   });
 
   /// Nothing set: every agent at its own defaults.
@@ -33,6 +35,16 @@ class LaunchSettings {
 
   /// Null is unset: off on Windows, on elsewhere.
   final bool? letAgentsUpdateThemselves;
+
+  /// Per folded agent id, how its new sessions run, as Settings wrote it.
+  final Map<String, String> agentRunForms;
+
+  /// The form a person chose for [agentId] (a folded id), or null when they
+  /// never chose — the agent then runs in the form it resolved to.
+  AgentRunForm? chosenRunFormOf(String agentId) {
+    final name = agentRunForms[agentId];
+    return name == null ? null : AgentRunForm.parse(name);
+  }
 
   /// Whether a launched agent may update itself, the unset case decided by
   /// the server's own OS.
@@ -95,6 +107,15 @@ class LaunchSettings {
         return value is String && value.isNotEmpty ? value : null;
       }
 
+      final forms = <String, String>{};
+      final rawForms = json['agentRunForms'];
+      if (rawForms is Map) {
+        for (final entry in rawForms.entries) {
+          if (entry.key is String && entry.value is String) {
+            forms[entry.key as String] = entry.value as String;
+          }
+        }
+      }
       final update = json['letAgentsUpdateThemselves'];
       return LaunchSettings(
         defaultAgent: text('defaultAgent'),
@@ -103,6 +124,7 @@ class LaunchSettings {
         existingSessionModes: existingModes,
         defaultModels: models,
         letAgentsUpdateThemselves: update is bool ? update : null,
+        agentRunForms: forms,
       );
     } on FormatException {
       return none;

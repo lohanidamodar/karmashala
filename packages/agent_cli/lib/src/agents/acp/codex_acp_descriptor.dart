@@ -13,6 +13,7 @@ const _evidence =
 /// protocol.
 const codexAcpDescriptor = AgentDescriptor(
   id: 'codex-acp',
+  chatFormOf: 'codex',
   displayName: 'Codex (ACP)',
   binaries: AgentBinaries(
     windows: ['codex'],

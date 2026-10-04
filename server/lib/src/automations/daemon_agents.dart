@@ -19,6 +19,9 @@ class DaemonAgents {
 
   AgentRegistry get _current => _now?.call() ?? _registry;
 
+  /// The registry as it is now: which agents are forms of one another.
+  AgentRegistry get registry => _current;
+
   /// Everything agent-specific the daemon may ask, behind one boundary.
   AgentAdapter? adapterOf(String agentId) => _current.adapterFor(agentId);
 

@@ -101,6 +101,7 @@ class AgentDescriptor {
     this.skills = const AgentSkillSupport.none(),
     this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
     this.acp,
+    this.chatFormOf,
   });
 
   final String id;
@@ -185,6 +186,11 @@ class AgentDescriptor {
   /// How this agent is driven over the Agent Client Protocol, or null for an
   /// agent that is a terminal program. See [AcpLaunchSpec].
   final AcpLaunchSpec? acp;
+
+  /// On a chat descriptor, the id of the terminal descriptor it is the chat
+  /// form of: the two are listed as one agent (`AgentRegistry.formsOf`).
+  /// Declared on the chat side, so a terminal agent needs no edit to gain one.
+  final String? chatFormOf;
 
   @override
   String toString() => 'AgentDescriptor($id)';

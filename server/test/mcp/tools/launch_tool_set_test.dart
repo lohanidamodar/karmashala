@@ -11,6 +11,7 @@ import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
@@ -43,10 +44,13 @@ void main() {
   late LaunchToolSet tools;
   var ids = 0;
   late List<(String, EnvironmentPath)> trusted;
+  late ServerSessionLauncher launches;
+  var settings = LaunchSettings.none;
 
   setUp(() {
     ids = 0;
     trusted = [];
+    settings = LaunchSettings.none;
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
     database.execute(
@@ -93,21 +97,20 @@ void main() {
       hostEnvironment: const {},
       environmentOf: rows.environment,
     );
-    tools = LaunchToolSet(
-      context,
-      launches: ServerSessionLauncher(
-        launcher: launcher,
-        registry: registry,
-        sessions: SessionDao(database),
-        rows: rows,
-        facts: DaemonCheckoutFacts(rows, windows: Platform.isWindows),
-        installationsIn: context.data.installationsIn,
-        pathProbe: const _Everywhere(),
-        directoryPresent: (_) => true,
-        trustScratchFolder: (installation, folder) async =>
-            trusted.add((installation.id, folder)),
-      ),
+    launches = ServerSessionLauncher(
+      launcher: launcher,
+      registry: registry,
+      sessions: SessionDao(database),
+      rows: rows,
+      facts: DaemonCheckoutFacts(rows, windows: Platform.isWindows),
+      installationsIn: context.data.installationsIn,
+      pathProbe: const _Everywhere(),
+      directoryPresent: (_) => true,
+      trustScratchFolder: (installation, folder) async =>
+          trusted.add((installation.id, folder)),
+      settings: () => settings,
     );
+    tools = LaunchToolSet(context, launches: launches);
   });
 
   tearDown(() async {
@@ -270,6 +273,114 @@ void main() {
       ),
     );
     expect(pty.started, isEmpty);
+  });
+
+  group('how the session runs', () {
+    /// Claude Code's chat form beside its terminal form here.
+    void installChat() => database.execute(
+      'INSERT INTO agent_installations (id, agent_kind, environment_id, '
+      'executable_path, created_at, executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?);',
+      ['c1', AgentIds.claudeAcp, 'local', '/bin/claude', '$t0', 0],
+    );
+
+    LaunchSettings chosen(String form) => LaunchSettings.parse(
+      '{"agentRunForms": {"${AgentIds.claudeCode}": "$form"}}',
+    );
+
+    test('Settings are read for each agent\'s chosen form', () {
+      expect(
+        chosen('chat').chosenRunFormOf(AgentIds.claudeCode),
+        AgentRunForm.chat,
+      );
+      expect(LaunchSettings.none.chosenRunFormOf(AgentIds.claudeCode), isNull);
+    });
+
+    test('with nothing named, the default agent runs in the form a person '
+        'chose for it', () {
+      installChat();
+      expect(launches.defaultInstallationIn('local')!.id, 'a1');
+      settings = chosen('chat');
+      expect(launches.defaultInstallationIn('local')!.id, 'c1');
+    });
+
+    test('a named form wins over the chosen one, for the default and for a '
+        'named cli', () async {
+      installChat();
+      settings = chosen('chat');
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'form': 'terminal',
+      }, null);
+      expect(SessionDao(database).getById('new-1')!.agentInstallationId, 'a1');
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'cli': 'claude',
+        'form': 'terminal',
+      }, null);
+      expect(SessionDao(database).getById('new-2')!.agentInstallationId, 'a1');
+    });
+
+    test('a named cli runs in the chosen form, as the default does', () {
+      installChat();
+      settings = chosen('chat');
+      final terminal = launches
+          .installationsIn('local')
+          .singleWhere((i) => i.id == 'a1');
+      expect(launches.installationFor(terminal).id, 'c1');
+      // Chosen but not installed here: the agent runs as it can.
+      expect(
+        launches
+            .installationFor(
+              launches.installationsIn('wsl1').single,
+            )
+            .id,
+        'a2',
+      );
+    });
+
+    test('a form that is not installed there is refused, nothing started', () async {
+      await expectLater(
+        tools.call('open_new_session', {'projectId': 'p1', 'form': 'chat'}, null),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('chat'),
+          ),
+        ),
+      );
+      expect(pty.started, isEmpty);
+    });
+
+    test('a form named wrong is refused', () async {
+      await expectLater(
+        tools.call('open_new_session', {'projectId': 'p1', 'form': 'tui'}, null),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(pty.started, isEmpty);
+    });
+
+    test('an installation named in the other form than the one asked for is '
+        'refused', () async {
+      await expectLater(
+        tools.call('open_new_session', {
+          'projectId': 'p1',
+          'agentInstallationId': 'a1',
+          'form': 'chat',
+        }, null),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('both tools offer the form', () {
+      for (final name in ['open_new_session', 'subagent_run']) {
+        final schema = tools.schemas.singleWhere((s) => s['name'] == name);
+        final properties =
+            (schema['inputSchema']! as Map)['properties']! as Map;
+        expect(properties, contains('form'), reason: name);
+      }
+    });
   });
 
   test('a cli nobody installed here is refused', () async {

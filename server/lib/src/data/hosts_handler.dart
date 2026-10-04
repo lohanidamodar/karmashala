@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/usage.dart';
@@ -21,8 +22,15 @@ import 'package:karmashala_store/database.dart';
 /// and never told as a change (`SshHostTouched` names the host only). None of
 /// it is logged: a refusal names what was wrong, never a value.
 class HostsHandler {
-  HostsHandler(this._db, this._now, {bool Function(String path)? opens})
-    : _opens = opens ?? _fileOpens,
+  HostsHandler(
+    this._db,
+    this._now, {
+    bool Function(String path)? opens,
+    AgentRegistry agents = AgentRegistry.builtIn,
+    required String Function() newId,
+  }) : _opens = opens ?? _fileOpens,
+      _agents = agents,
+      _newId = newId,
       _environments = ExecutionEnvironmentDao(_db),
       _sshHosts = SshHostDao(_db),
       _knownHosts = KnownHostDao(_db),
@@ -40,6 +48,11 @@ class HostsHandler {
   /// Whether a path on this machine is a file — what the server's own sweep
   /// reads of the rows it records.
   final bool Function(String path) _opens;
+
+  /// Which agents are forms of one program, so a pin is both forms'. The
+  /// shipped registry: only built-in agents pair.
+  final AgentRegistry _agents;
+  final String Function() _newId;
   final ExecutionEnvironmentDao _environments;
   final SshHostDao _sshHosts;
   final KnownHostDao _knownHosts;
@@ -360,7 +373,45 @@ class HostsHandler {
     if (!_installations.updatePath(row.id, path, byUser: true)) {
       throw DataRefused.invalid('$path is recorded for another installation.');
     }
+    _pinSameProgram(row, path, changes);
     return _installationChanged(row.id, changes);
+  }
+
+  /// [row]'s other forms on its machine that run the same binary, pinned to
+  /// [path] too — recorded there when discovery never found them. A pin that
+  /// stops working is then judged for each row alike, so both go back to
+  /// discovery together.
+  void _pinSameProgram(
+    AgentInstallation row,
+    String path,
+    List<DataChange> changes,
+  ) {
+    final here = _installations.getByEnvironment(row.environmentId);
+    for (final form in _agents.sameProgramFormsOf(row.agentId)) {
+      final other = here.where((i) => i.agentId == form).firstOrNull;
+      if (other == null) {
+        final pinned = AgentInstallation(
+          id: _newId(),
+          agentId: form,
+          executable: EnvironmentPath(
+            environmentId: row.environmentId,
+            path: path,
+          ),
+          executableByUser: true,
+          createdAt: _now(),
+        );
+        _installations.insert(pinned);
+        changes.add(InstallationChanged(pinned));
+        continue;
+      }
+      if (other.executable.path == path && other.executableByUser) continue;
+      if (!_installations.updatePath(other.id, path, byUser: true)) continue;
+      // The pinned binary is the program itself, not a package runner.
+      if (other.leadingArguments.isNotEmpty) {
+        _installations.updateLeadingArguments(other.id, const []);
+      }
+      _installationChanged(other.id, changes);
+    }
   }
 
   AgentInstallation _installation(String id) =>

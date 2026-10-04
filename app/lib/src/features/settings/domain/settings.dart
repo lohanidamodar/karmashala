@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
@@ -76,6 +77,7 @@ class Settings {
     this.permissions = const {},
     this.defaultModels = const {},
     this.flutterSdkPaths = const {},
+    this.agentRunForms = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
     this.keepAwake = false,
@@ -156,6 +158,11 @@ class Settings {
 
   /// Per-agent default models; an absent key passes no `--model` at all.
   final Map<String, String> defaultModels;
+
+  /// How a new session on each agent runs, keyed by the folded agent id
+  /// (`AgentRegistry.foldedIdOf`); absent reads as Terminal. The New Session
+  /// card writes the last choice here, so it is both the default and the memory.
+  final Map<String, String> agentRunForms;
 
   /// A hand-set `flutter` per `ExecutionEnvironment.id`, kept off the table
   /// discovery upserts so no sweep can overrule it (§20); absent means PATH.
@@ -362,6 +369,20 @@ class Settings {
   String? defaultModelFor(String agentId) => defaultModels[agentId];
 
   /// The `flutter` named for [environmentId], or null for "look on PATH" (§19).
+  AgentRunForm runFormFor(String agentId) =>
+      chosenRunFormFor(agentId) ?? AgentRunForm.terminal;
+
+  /// The form last chosen for [agentId], or null when it never was — a
+  /// default agent set to a chat form then keeps it.
+  AgentRunForm? chosenRunFormFor(String agentId) {
+    final name = agentRunForms[agentId];
+    return name == null ? null : AgentRunForm.parse(name);
+  }
+
+  Settings withAgentRunForm(String agentId, AgentRunForm form) => copyWith(
+    agentRunForms: {...agentRunForms, agentId: form.name},
+  );
+
   String? flutterSdkPathFor(String environmentId) =>
       flutterSdkPaths[environmentId];
 
@@ -372,6 +393,7 @@ class Settings {
     Map<String, AgentPermissions>? permissions,
     Map<String, String>? defaultModels,
     Map<String, String>? flutterSdkPaths,
+    Map<String, String>? agentRunForms,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
     bool? keepAwake,
@@ -443,6 +465,7 @@ class Settings {
     permissions: permissions ?? this.permissions,
     defaultModels: defaultModels ?? this.defaultModels,
     flutterSdkPaths: flutterSdkPaths ?? this.flutterSdkPaths,
+    agentRunForms: agentRunForms ?? this.agentRunForms,
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
         defaultTerminalProfileId ?? this.defaultTerminalProfileId,
@@ -617,6 +640,7 @@ class Settings {
     'permissions',
     'defaultModels',
     'flutterSdkPaths',
+    'agentRunForms',
   };
 
   Map<String, dynamic> toJson() => {
@@ -696,6 +720,7 @@ class Settings {
     },
     if (defaultModels.isNotEmpty) 'defaultModels': defaultModels,
     if (flutterSdkPaths.isNotEmpty) 'flutterSdkPaths': flutterSdkPaths,
+    if (agentRunForms.isNotEmpty) 'agentRunForms': agentRunForms,
   };
 
   static Settings fromJson(Map<String, dynamic> json) {
@@ -742,6 +767,17 @@ class Settings {
         }
       }
     }
+    final agentRunForms = <String, String>{};
+    final forms = json['agentRunForms'];
+    if (forms is Map) {
+      for (final entry in forms.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is String && value is String && value.isNotEmpty) {
+          agentRunForms[key] = value;
+        }
+      }
+    }
     final terminalId = json['defaultTerminalProfileId'];
     double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
@@ -752,6 +788,7 @@ class Settings {
       permissions: permissions,
       defaultModels: defaultModels,
       flutterSdkPaths: flutterSdkPaths,
+      agentRunForms: agentRunForms,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
       keepAwake: json['keepAwake'] == true,
@@ -971,7 +1008,8 @@ class Settings {
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions) &&
       _stringMapEquals(other.defaultModels, defaultModels) &&
-      _stringMapEquals(other.flutterSdkPaths, flutterSdkPaths);
+      _stringMapEquals(other.flutterSdkPaths, flutterSdkPaths) &&
+      _stringMapEquals(other.agentRunForms, agentRunForms);
 
   @override
   int get hashCode => Object.hash(
@@ -1052,6 +1090,9 @@ class Settings {
     ),
     Object.hashAllUnordered(
       terminalChordOverrides.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+    Object.hashAllUnordered(
+      agentRunForms.entries.map((e) => Object.hash(e.key, e.value)),
     ),
   );
 

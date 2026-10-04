@@ -63,6 +63,11 @@ class _TerminalAgentDetailsState extends ConsumerState<TerminalAgentDetails> {
         if (account.agentId == agentId) account,
     ];
     final descriptor = adapter?.descriptor;
+    final chat = registry.byId(registry.formsOf(agentId).chatId ?? '');
+    final chatInstalls = [
+      for (final install in ref.watch(agentInstallationsControllerProvider))
+        if (install.agentId == chat?.id) install,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -94,10 +99,31 @@ class _TerminalAgentDetailsState extends ConsumerState<TerminalAgentDetails> {
               run: _run,
             ),
           ),
+        if (chat != null)
+          SettingsSection(
+            title: '$name · chat'.toUpperCase(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SettingsNote(acpAgentsNote),
+                // In the ACP row's own help style, as it reads on that row.
+                DefaultTextStyle.merge(
+                  style: SettingsStyles.rowHelp(context),
+                  child: AcpAgentDetails(
+                    descriptor: chat,
+                    installs: chatInstalls,
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (descriptor != null)
           SettingsSection(
             title: '$name · behaviour'.toUpperCase(),
-            child: _AgentBehaviour(descriptor: descriptor),
+            child: _AgentBehaviour(
+              descriptor: descriptor,
+              hasChatForm: chat != null,
+            ),
           ),
       ],
     );
@@ -112,9 +138,12 @@ typedef _Run =
 /// so Codex's sandbox is its own row. Defaults only: a session that picks its
 /// own keeps it. Existing sessions' modes stay on Tools and reach.
 class _AgentBehaviour extends ConsumerWidget {
-  const _AgentBehaviour({required this.descriptor});
+  const _AgentBehaviour({required this.descriptor, required this.hasChatForm});
 
   final AgentDescriptor descriptor;
+
+  /// Whether the agent can also run as a chat, so new sessions get a choice.
+  final bool hasChatForm;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,6 +160,25 @@ class _AgentBehaviour extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (hasChatForm)
+          SettingsRow(
+            label: 'New sessions run as',
+            help:
+                'Also chosen on each New Session card; a session keeps the '
+                'form it started in.',
+            stackedFit: SettingsControlFit.start,
+            control: SegmentedButton<AgentRunForm>(
+              key: ValueKey('run-form:$id'),
+              showSelectedIcon: false,
+              segments: [
+                for (final form in AgentRunForm.values)
+                  ButtonSegment(value: form, label: Text(form.label)),
+              ],
+              selected: {settings.runFormFor(id)},
+              onSelectionChanged: (picked) =>
+                  controller.setAgentRunForm(id, picked.first),
+            ),
+          ),
         if (modelKnown)
           SettingsRow(
             label: 'Default model',

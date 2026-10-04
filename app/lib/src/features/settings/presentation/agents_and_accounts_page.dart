@@ -42,6 +42,7 @@ import 'settings_catalog.dart';
 import 'settings_notice.dart';
 import 'settings_page_body.dart' show SettingsAnchorTarget;
 import 'settings_row.dart';
+import 'settings_theme.dart' show SettingsStyles;
 import 'settings_section.dart';
 import 'terminal_agent_card.dart';
 import 'usage_and_limits_section.dart';
@@ -55,11 +56,12 @@ part 'agents_and_accounts_page/terminal_agent_details.dart';
 /// many installed on how many machines, Discover, the default agent — then
 /// three groups of agents and a fourth of what spans them.
 ///
-/// Grouped by capability, never by id: a terminal agent is one whose adapter
-/// has no `acp`; a shipped ACP agent has one and no row of its own; a row's
-/// agent is in `userAcpAgentIdsProvider`. Each terminal agent is a card that
-/// opens to its machines, executables, accounts and behaviour; each ACP agent
-/// is one line, because none of those apply to it.
+/// Grouped by capability, never by id, and one entry per agent
+/// (`AgentRegistry.folded`): an agent with a terminal form is a card that
+/// opens to its machines, executables, accounts, its chat form when it has
+/// one, and behaviour; a shipped agent with only a chat form is one line,
+/// because none of those apply to it; a row's agent is in
+/// `userAcpAgentIdsProvider`.
 ///
 /// Lays out its own anchors: the account and default-model anchors wrap the
 /// card they belong to, and open it when a link lands there.
@@ -73,11 +75,12 @@ class AgentsAndAccountsBody extends ConsumerWidget {
     final userAcp = ref.watch(userAcpAgentIdsProvider);
     final terminal = <AgentDescriptor>[];
     final builtInAcp = <AgentDescriptor>[];
-    for (final descriptor in registry.descriptors) {
-      if (!agentSpeaksAcp(registry, descriptor.id)) {
-        terminal.add(descriptor);
-      } else if (!userAcp.contains(descriptor.id)) {
-        builtInAcp.add(descriptor);
+    for (final forms in registry.folded) {
+      final terminalId = forms.terminalId;
+      if (terminalId != null) {
+        terminal.add(registry.byId(terminalId)!);
+      } else if (!userAcp.contains(forms.agentId)) {
+        builtInAcp.add(registry.byId(forms.agentId)!);
       }
     }
     List<AgentInstallation> installsOf(String id) => [
@@ -110,7 +113,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
         SettingsAnchorTarget(
           anchor: SettingsAnchor.executables,
           child: AgentsGroupSection(
-            title: 'Terminal agents',
+            title: 'Agents',
             count: terminal.length,
             anchors: const {
               SettingsAnchor.executables,
@@ -125,6 +128,10 @@ class AgentsAndAccountsBody extends ConsumerWidget {
                   TerminalAgentCard(
                     descriptor: descriptor,
                     installs: installsOf(descriptor.id),
+                    chatInstalls: [
+                      if (registry.formsOf(descriptor.id).chatId case final id?)
+                        ...installsOf(id),
+                    ],
                     anchors: anchorsFor(descriptor.id),
                     body: TerminalAgentDetails(agentId: descriptor.id),
                   ),

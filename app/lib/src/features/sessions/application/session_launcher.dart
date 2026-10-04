@@ -6,6 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/util/agent_cli_bridge.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/folded_installations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionStartSpec, SessionStarted;
 import 'package:agent_cli/descriptors.dart';
@@ -96,19 +97,27 @@ class SessionLauncher {
   final Set<String> _endingOnHost = {};
 
   /// The single default-installation resolution, as the New-session dialog
-  /// shows it (the server applies the same rule to an agent's request).
+  /// shows it (the server applies the same rule to an agent's request), in
+  /// the form chosen for that agent.
   AgentInstallation? defaultInstallationIn(String environmentId) {
     final installs = _ref
         .read(agentInstallationsDataProvider)
         .getByEnvironment(environmentId);
     if (installs.isEmpty) return null;
     final settings = _ref.read(settingsControllerProvider);
-    return resolveDefaultInstallation(
+    final resolved =
+        resolveDefaultInstallation(
           installs,
           defaultInstallationId: settings.defaultAgentInstallationId,
           defaultAgentId: settings.defaultAgent,
         ) ??
         installs.first;
+    return inChosenForm(
+      resolved,
+      installs,
+      _ref.read(agentRegistryProvider),
+      settings,
+    );
   }
 
   /// Asks the server to start [request] and shows it. The body is `_launch`,

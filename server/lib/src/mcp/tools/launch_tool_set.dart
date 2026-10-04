@@ -430,6 +430,15 @@ class LaunchToolSet extends ServerToolSet {
     }
   }
 
+  /// The `form` a caller named, or null for none; anything else is refused.
+  static AgentRunForm? _runForm(Object? value) {
+    if (value == null) return null;
+    for (final form in AgentRunForm.values) {
+      if (form.name == value) return form;
+    }
+    throw ArgumentError.value(value, 'form', 'must be "terminal" or "chat"');
+  }
+
   static String _firstLine(String prompt) {
     final line = prompt.split('\n').first.trim();
     return line.length <= 48 ? line : '${line.substring(0, 47)}…';
@@ -547,6 +556,8 @@ class LaunchToolSet extends ServerToolSet {
     }
     final agentInstallationId = args['agentInstallationId'] as String?;
     final cli = args['cli'] as String?;
+    final form = _runForm(args['form']);
+    final registry = _context.agents;
     AgentInstallation? install;
     if (agentInstallationId != null) {
       install = installs.where((i) => i.id == agentInstallationId).firstOrNull;
@@ -555,18 +566,34 @@ class LaunchToolSet extends ServerToolSet {
           'That agent installation is not available in this project.',
         );
       }
+      // A named installation is taken as named: one of the other form is a
+      // contradiction, not a request to switch.
+      if (form != null && registry.formOf(install.agentId) != form) {
+        throw StateError(
+          'Installation $agentInstallationId runs as '
+          '${registry.formOf(install.agentId).name}, not ${form.name}.',
+        );
+      }
     } else if (cli != null) {
-      final agentId = agentIdForName(_context.agents, cli);
-      install = installs.where((i) => i.agentId == agentId).firstOrNull;
+      final agentId = agentIdForName(registry, cli);
+      // Either form of the agent named; the form is decided below.
+      final agent = agentId == null ? null : registry.foldedIdOf(agentId);
+      install =
+          installs.where((i) => i.agentId == agentId).firstOrNull ??
+          installs
+              .where((i) => registry.foldedIdOf(i.agentId) == agent)
+              .firstOrNull;
       if (install == null) {
         throw StateError(
           '$cli is not installed in ${repo.path.environmentId}.',
         );
       }
+      install = launches.installationFor(install, form: form);
     } else {
       install =
           launches.defaultInstallationIn(repo.path.environmentId) ??
           installs.first;
+      if (form != null) install = launches.installationFor(install, form: form);
     }
 
     final permission = _spawnPermission(
@@ -764,6 +791,16 @@ final class _ContextClock implements Clock {
   DateTime nowUtc() => _context.now();
 }
 
+/// How the agent runs, for the tools that start one.
+const Map<String, Object?> _formSchema = {
+  'type': 'string',
+  'enum': ['terminal', 'chat'],
+  'description':
+      'How the agent runs: "terminal" (its CLI in a terminal) or "chat". '
+      'Omit for the form the person chose for that agent in Settings. Refused '
+      'when the agent is not installed in that form there.',
+};
+
 /// The schemas of the launch tools the server runs, moved from the app with
 /// their words unchanged.
 const List<Map<String, Object?>> launchToolSchemas = [
@@ -810,6 +847,7 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'string',
           'description': 'Specific installation id from list_agents.',
         },
+        'form': _formSchema,
         'repositoryId': {'type': 'string'},
         'title': {
           'type': 'string',
@@ -892,6 +930,7 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'string',
           'description': 'Specific installation id from list_agents.',
         },
+        'form': _formSchema,
         'model': {
           'type': 'string',
           'description':

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_self_update_providers.dart';
+import '../../agents/application/folded_installations.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
@@ -27,8 +28,10 @@ class DefaultAgentSection extends StatelessWidget {
   );
 }
 
-/// The row itself — the dropdown over every discovered installation, or the
+/// The row itself — the dropdown over every agent on every machine, or the
 /// note that there is none — so the Agents page's header strip can hold it.
+/// One entry per agent per machine: whether it starts as a terminal or a chat
+/// is the agent's own setting (`Settings.agentRunForms`).
 class DefaultAgentRow extends ConsumerWidget {
   const DefaultAgentRow({super.key});
 
@@ -42,12 +45,15 @@ class DefaultAgentRow extends ConsumerWidget {
         'No agents found. Discover agents looks for them on every machine.',
       );
     }
-    // Every discovered installation, not just the kind, and the saved value is
-    // clamped so the dropdown never holds an id with no matching item.
-    final currentId =
-        installations.any((i) => i.id == settings.defaultAgentInstallationId)
-        ? settings.defaultAgentInstallationId
-        : null;
+    final registry = ref.watch(agentRegistryProvider);
+    final groups = foldInstallations(registry, installations);
+    // The saved value is clamped so the dropdown never holds an id with no
+    // matching item; a saved chat form shows as its agent's entry.
+    final saved = settings.defaultAgentInstallationId;
+    final currentId = groups
+        .where((g) => g.installations.any((i) => i.id == saved))
+        .firstOrNull
+        ?.key;
     return SettingsRow(
       label: 'Agent for new sessions',
       help: 'Pre-selected when starting a session.',
@@ -56,12 +62,12 @@ class DefaultAgentRow extends ConsumerWidget {
         isExpanded: true,
         items: [
           const DropdownMenuItem(value: null, child: Text('None')),
-          for (final install in installations)
+          for (final group in groups)
             DropdownMenuItem(
-              value: install.id,
+              value: group.key,
               child: Text(
-                '${agentLabel(ref, install.agentId)} · '
-                '${ref.watch(environmentLabelForIdProvider(install.environmentId))}',
+                '${group.forms.displayName} · '
+                '${ref.watch(environmentLabelForIdProvider(group.environmentId))}',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -69,7 +75,7 @@ class DefaultAgentRow extends ConsumerWidget {
         onChanged: (id) {
           final install = id == null
               ? null
-              : installations.firstWhere((i) => i.id == id);
+              : groups.firstWhere((g) => g.key == id).first;
           controller.setDefaultAgentInstallation(install?.agentId, install?.id);
         },
       ),

@@ -62,7 +62,7 @@
     },
     {
       "name": "list_agents",
-      "description": "List the installed agents available to start sessions with — each is an (agentInstallationId, cli, environmentId) the caller can pass to open_new_session. Use this to map a user request like \"a codex session\" to a concrete installation.",
+      "description": "List the installed agents available to start sessions with — each is an (agentInstallationId, cli, environmentId) the caller can pass to open_new_session, with the agent it is and its form: \"terminal\" (the CLI in a terminal) or \"chat\". An agent installed in both forms has a row for each. Use this to map a user request like \"a codex session\" to a concrete installation.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -2718,6 +2718,14 @@
             "type": "string",
             "description": "Specific installation id from list_agents."
           },
+          "form": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "chat"
+            ],
+            "description": "How the agent runs: \"terminal\" (its CLI in a terminal) or \"chat\". Omit for the form the person chose for that agent in Settings. Refused when the agent is not installed in that form there."
+          },
           "repositoryId": {
             "type": "string"
           },
@@ -2780,6 +2788,14 @@
           "agentInstallationId": {
             "type": "string",
             "description": "Specific installation id from list_agents."
+          },
+          "form": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "chat"
+            ],
+            "description": "How the agent runs: \"terminal\" (its CLI in a terminal) or \"chat\". Omit for the form the person chose for that agent in Settings. Refused when the agent is not installed in that form there."
           },
           "model": {
             "type": "string",

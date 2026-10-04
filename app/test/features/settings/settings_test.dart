@@ -443,9 +443,42 @@ void main() {
         'explorerContextScope': 'c',
         'defaultModels': {'a': 'm'},
         'flutterSdkPaths': {'local': 'C:/flutter'},
+        'agentRunForms': {'a': 'chat'},
       });
       expect(Settings.jsonKeys, containsAll(full.toJson().keys));
       expect(Settings.jsonKeys, containsAll(const Settings().toJson().keys));
+    });
+  });
+
+  group('how an agent runs in a new session', () {
+    test('is Terminal until chosen, so nothing changes by surprise', () {
+      expect(const Settings().runFormFor('claudeCode'), AgentRunForm.terminal);
+    });
+
+    test('round-trips, and a Terminal choice is remembered as one', () {
+      expect(const Settings().chosenRunFormFor('a'), isNull);
+      final chat = const Settings().withAgentRunForm('a', AgentRunForm.chat);
+      expect(chat.runFormFor('a'), AgentRunForm.chat);
+      final back = Settings.fromJson(chat.toJson());
+      expect(back.runFormFor('a'), AgentRunForm.chat);
+      expect(back, chat);
+      final terminal = chat.withAgentRunForm('a', AgentRunForm.terminal);
+      expect(terminal.chosenRunFormFor('a'), AgentRunForm.terminal);
+      expect(terminal, isNot(const Settings()));
+    });
+
+    test('the controller saves it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(container.dispose);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setAgentRunForm('a', AgentRunForm.chat);
+      await pumpEventQueue();
+      final stored =
+          jsonDecode(server.store.read(SettingsRepository.key)!)
+              as Map<String, dynamic>;
+      expect(stored['agentRunForms'], {'a': 'chat'});
     });
   });
 
