@@ -387,6 +387,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _streamId = null;
     _streamed.clear();
     _lastUsage = null;
+    _reported = null;
     _tools.clear();
     _planCalls.clear();
     _tasks.clear();
@@ -607,7 +608,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       case 'result':
         _onResult(message);
       case 'rate_limit_event':
-        _rateLimit = jsonObject(message['rate_limit_info']);
+        _onRateLimit(jsonObject(message['rate_limit_info']));
     }
   }
 
@@ -878,25 +879,56 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     } else {
       final result = message['result'];
       final errors = message['errors'];
-      final limit = _rateLimit;
+      // Only a limit that refused, so a passing or warned one never reads as
+      // a usage limit.
+      final limit = _rateLimit?['status'] == 'rejected' ? _rateLimit : null;
       turn.completeError(
         AcpRpcError(
           JsonRpcErrorCodes.internalError,
-          result is String && result.isNotEmpty
+          limit != null
+              ? _limitWords(limit)
+              : result is String && result.isNotEmpty
               ? result
               : errors is List && errors.isNotEmpty
               ? errors.join('; ')
               : 'Claude Code ended the turn: $subtype',
           data: {
             'subtype': subtype,
+            'result': ?result,
             'apiErrorStatus': ?message['api_error_status'],
-            // Only a limit that refused, so a passing one never reads as it.
-            if (limit != null && limit['status'] != 'allowed')
-              'rateLimit': limit,
+            'rateLimit': ?limit,
           },
         ),
       );
     }
+  }
+
+  /// A refused limit in the words the runtime reads a usage limit and its
+  /// reset from.
+  static String _limitWords(JsonMap limit) {
+    final kind = limit['rateLimitType'] ?? 'usage';
+    final resets = limit['resetsAt'];
+    final at = resets is int
+        ? DateTime.fromMillisecondsSinceEpoch(resets * 1000, isUtc: true)
+        : null;
+    return "Claude Code's $kind usage limit is reached"
+        '${at == null ? '' : '; it resets at ${at.toIso8601String()}'}.';
+  }
+
+  /// The context and cost last reported, which a rate-limit update repeats.
+  ({int used, int size, num? cost})? _reported;
+  var _limitUnsent = false;
+
+  void _onRateLimit(JsonMap? info) {
+    if (info == null) return;
+    _rateLimit = info;
+    final reported = _reported;
+    if (reported == null) {
+      // A usage update needs the context; this one rides on the next.
+      _limitUnsent = true;
+      return;
+    }
+    _sendUsage(reported, {'rateLimit': info});
   }
 
   void _reportUsage(JsonMap result) {
@@ -912,26 +944,35 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       _ => 0,
     };
     final cost = result['total_cost_usd'];
-    _update({
-      'sessionUpdate': 'usage_update',
-      'used':
+    final reported = _reported = (
+      used:
           tokens('input_tokens') +
           tokens('cache_creation_input_tokens') +
           tokens('cache_read_input_tokens') +
           tokens('output_tokens'),
-      'size': size,
-      if (cost is num) 'cost': {'amount': cost, 'currency': 'USD'},
-      '_meta': {
-        'claudeCode': {
-          'durationMs': ?result['duration_ms'],
-          'durationApiMs': ?result['duration_api_ms'],
-          'numTurns': ?result['num_turns'],
-          'modelUsage': ?result['modelUsage'],
-          'origin': ?result['origin'],
-        },
-      },
+      size: size,
+      cost: cost is num ? cost : null,
+    );
+    _sendUsage(reported, {
+      'durationMs': ?result['duration_ms'],
+      'durationApiMs': ?result['duration_api_ms'],
+      'numTurns': ?result['num_turns'],
+      'modelUsage': ?result['modelUsage'],
+      'origin': ?result['origin'],
+      if (_limitUnsent) 'rateLimit': ?_rateLimit,
     });
+    _limitUnsent = false;
   }
+
+  void _sendUsage(({int used, int size, num? cost}) usage, JsonMap meta) =>
+      _update({
+        'sessionUpdate': 'usage_update',
+        'used': usage.used,
+        'size': usage.size,
+        if (usage.cost case final cost?)
+          'cost': {'amount': cost, 'currency': 'USD'},
+        '_meta': {'claudeCode': meta},
+      });
 
   // Claude's requests of the client.
 

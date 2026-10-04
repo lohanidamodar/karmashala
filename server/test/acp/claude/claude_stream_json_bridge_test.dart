@@ -10,7 +10,7 @@ import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
-    show kProtocolUsageLimitReason;
+    show kProtocolUsageLimitReason, usageLimitResetIn;
 import 'package:karmashala_host_protocol/protocol.dart'
     show SessionEndedWithoutCode, SessionExited;
 import 'package:karmashala_session_engine/store.dart';
@@ -477,6 +477,92 @@ void main() {
       expect(
         rows().where((r) => r.role == SessionMessageRole.agent && r.text != ''),
         isEmpty,
+      );
+      await rt.stop();
+    });
+
+    Json limit(String status, {int resetsAt = 1791127800}) => {
+      'status': status,
+      'resetsAt': resetsAt,
+      'rateLimitType': 'five_hour',
+      'overageStatus': 'rejected',
+      'isUsingOverage': false,
+      'unifiedWindows': {
+        'five_hour': {'utilization': 0.42, 'resetsAt': resetsAt},
+      },
+    };
+
+    test('rate-limit events are usage updates carrying the limits and their '
+        'reset in _meta', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.assistant('m1', [
+              {'type': 'text', 'text': 'One.'},
+            ]);
+            // Before any context size is known: held for the next update.
+            c.emit({
+              'type': 'rate_limit_event',
+              'rate_limit_info': limit('allowed'),
+            });
+            c.result();
+          },
+          (c, user) async {
+            c.emit({
+              'type': 'rate_limit_event',
+              'rate_limit_info': limit('allowed_warning'),
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('One');
+      await rt.awaitTurn();
+      Json? limitOf(Json update) =>
+          ((update['_meta'] as Json?)?['claudeCode'] as Json?)?['rateLimit']
+              as Json?;
+      expect(limitOf(updates('usage_update').last), limit('allowed'));
+      final before = updates('usage_update').length;
+      await rt.send('Two');
+      await rt.awaitTurn();
+      final passed = updates('usage_update').skip(before).first;
+      expect(limitOf(passed), limit('allowed_warning'));
+      // The context it reports is the last one known, not zero.
+      expect(passed['size'], 200000);
+      expect(passed['used'], greaterThan(0));
+      await rt.stop();
+    });
+
+    test('a limit Claude reports hit ends the turn as a usage limit, with '
+        'its reset where the queue reads it', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.emit({
+              'type': 'rate_limit_event',
+              'rate_limit_info': limit('rejected'),
+            });
+            c.result(
+              subtype: 'error_during_execution',
+              isError: true,
+              text: null,
+              stopReason: null,
+            );
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Hi');
+      await rt.awaitTurn();
+      final failed = host.statuses.last;
+      expect(failed.status, AgentActivityStatus.failed);
+      expect(failed.failureReason, kProtocolUsageLimitReason);
+      expect(
+        usageLimitResetIn(failed.evidence, DateTime.utc(2026, 10, 4)),
+        DateTime.fromMillisecondsSinceEpoch(1791127800 * 1000, isUtc: true),
       );
       await rt.stop();
     });
