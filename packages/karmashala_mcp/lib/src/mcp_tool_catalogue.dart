@@ -160,6 +160,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'open_new_session': McpToolAnnotations(movesAttention: true),
   // open_new_session's launch, tab included, then a wait on its answer.
   'subagent_run': McpToolAnnotations(movesAttention: true),
+  'delegation_capabilities': McpToolAnnotations.read,
   // Reveals or resumes; for an imported CLI session it opens an external
   // window, one per call — a driver once opened one per `list_sessions` row.
   'open_session': McpToolAnnotations(movesAttention: true),
@@ -616,6 +617,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'subagent_run': McpToolListing(
     McpToolCategory.sessions,
     'Run a subagent on any agent and model; get its answer, then it ends.',
+  ),
+  'delegation_capabilities': McpToolListing(
+    McpToolCategory.sessions,
+    'The agents and models you can delegate to, and whether you still may.',
   ),
   'open_session': McpToolListing(
     McpToolCategory.sessions,

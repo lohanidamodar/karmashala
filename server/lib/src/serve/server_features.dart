@@ -77,6 +77,9 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.subagents`: a session's subagents and child sessions, each
   // with its state, timing, tokens and last answer.
   'sessions.subagents',
+  // Each child session entry carries its own child sessions (`children`):
+  // the lineage as a tree.
+  'sessions.subagents.tree',
   // `sessions.switchAgent`: a session's agent switched in place, the same row
   // and chat, told as `sessionAgentChanged`; its transcript tags each row's
   // agent and marks each switch with an `agentSwitch` row.

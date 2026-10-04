@@ -55,6 +55,10 @@ class SessionInput {
   final void Function(String message)? log;
   final DateTime Function() _now;
 
+  /// Told each session a client stopped — a delegated child's result then
+  /// stays the person's (`DelegationResults.stopped`).
+  void Function(String sessionId)? interrupted;
+
   /// How long a device's `requestId` is remembered: longer than any resend
   /// the link's resume grace can carry.
   static const Duration keep = Duration(minutes: 10);
@@ -319,6 +323,7 @@ class SessionInput {
   /// Stop also pauses the queue: the turn's end it causes must not send the
   /// next message the person just stopped short of.
   Future<DataAck> _interrupt(String sessionId) async {
+    interrupted?.call(sessionId);
     final runtime = prompts.status.acpRuntimeOf(sessionId);
     if (runtime != null) {
       queue?.pause(sessionId);

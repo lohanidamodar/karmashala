@@ -13,6 +13,9 @@ import 'package:karmashala_session/session.dart';
 /// The most of a delegate's last answer one entry carries.
 const int kSubagentResultMaxChars = 4000;
 
+/// How many levels of child sessions one entry nests; past the spawn cap.
+const int kSubagentTreeDepth = 4;
+
 /// The last thing an agent said in [messages], or null when it has said
 /// nothing — or nothing since [since], when the turn is dated.
 ({String text, DateTime? at})? lastAgentAnswer(
@@ -134,6 +137,12 @@ class SessionSubagents {
   final bool Function(String sessionId)? switched;
   final Future<DateTime?> Function(String path) _modifiedAt;
 
+  static int _byStart(SessionSubagent a, SessionSubagent b) {
+    final at = a.startedAt, bt = b.startedAt;
+    if (at == null || bt == null) return 0;
+    return at.compareTo(bt);
+  }
+
   static Future<DateTime?> _fileModified(String path) async {
     try {
       final stat = await File(path).stat();
@@ -150,13 +159,10 @@ class SessionSubagents {
     final entries = <SessionSubagent>[
       if (!acp || (switched?.call(sessionId) ?? false))
         ...await _recorded(sessionId),
-      for (final child in childrenOf(sessionId)) await _child(child),
+      for (final child in childrenOf(sessionId))
+        await _child(child, seen: {sessionId}),
     ];
-    entries.sort((a, b) {
-      final at = a.startedAt, bt = b.startedAt;
-      if (at == null || bt == null) return 0;
-      return at.compareTo(bt);
-    });
+    entries.sort(_byStart);
     return SessionSubagentList(
       sessionId: sessionId,
       entries: entries,
@@ -241,7 +247,20 @@ class SessionSubagents {
     return out;
   }
 
-  Future<SessionSubagent> _child(Session child) async {
+  Future<SessionSubagent> _child(
+    Session child, {
+    required Set<String> seen,
+    int depth = 1,
+  }) async {
+    seen.add(child.id);
+    // A row naming its own ancestor would loop; deeper than the spawn cap
+    // allows is a broken chain, not lineage.
+    final children = <SessionSubagent>[
+      if (depth < kSubagentTreeDepth)
+        for (final grandchild in childrenOf(child.id))
+          if (!seen.contains(grandchild.id))
+            await _child(grandchild, seen: seen, depth: depth + 1),
+    ]..sort(_byStart);
     List<TranscriptMessage> messages;
     try {
       messages = await messagesOf(child.id);
@@ -298,6 +317,7 @@ class SessionSubagents {
       finalResultTruncated: cut,
       childSessionId: child.id,
       link: (child.parentLink ?? SessionLink.spawn).name,
+      children: children,
     );
   }
 }

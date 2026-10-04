@@ -72,6 +72,7 @@ class SessionSubagent {
     this.transcriptPath,
     this.childSessionId,
     this.link,
+    this.children = const [],
   });
 
   final SubagentKind kind;
@@ -106,6 +107,10 @@ class SessionSubagent {
   /// `spawn`, `handoff` or `fork`, for a child session.
   final String? link;
 
+  /// A child session's own child sessions, oldest first: the lineage below
+  /// it. Empty from a server without `sessions.subagents.tree`.
+  final List<SessionSubagent> children;
+
   Map<String, Object?> toJson() => {
     'kind': kind.name,
     'id': id,
@@ -122,6 +127,8 @@ class SessionSubagent {
     'transcriptPath': ?transcriptPath,
     'childSessionId': ?childSessionId,
     'link': ?link,
+    if (children.isNotEmpty)
+      'children': [for (final child in children) child.toJson()],
   };
 
   /// Throws [FormatException] without a kind, an id or a title.
@@ -158,6 +165,12 @@ class SessionSubagent {
       transcriptPath: string('transcriptPath'),
       childSessionId: string('childSessionId'),
       link: string('link'),
+      children: [
+        if (json['children'] case final List<Object?> children)
+          for (final child in children)
+            if (child is Map)
+              SessionSubagent.fromJson(child.cast<String, Object?>()),
+      ],
     );
   }
 }

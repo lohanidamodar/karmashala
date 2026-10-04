@@ -33,7 +33,11 @@ const Duration kSubagentsRefresh = Duration(seconds: 3);
 /// When to ask again unprompted after [list], or null: only while an entry
 /// is running or blocked, since each ask re-reads records and tokens.
 Duration? subagentsRefreshAfter(SessionSubagentList list) =>
-    list.entries.any((entry) => entry.state.isLive) ? kSubagentsRefresh : null;
+    _anyLive(list.entries) ? kSubagentsRefresh : null;
+
+bool _anyLive(List<SessionSubagent> entries) => entries.any(
+  (entry) => entry.state.isLive || _anyLive(entry.children),
+);
 
 /// Session [sessionId]'s subagents and child sessions, as the server reads
 /// them (`sessions.subagents`): asked again on a notice of its transcript or
@@ -104,6 +108,34 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
       unawaited(ask());
       return out.stream;
     });
+
+/// The child sessions of session [String] working now (not archived), by
+/// id: what Stop on the parent offers to stop too.
+final runningChildSessionsProvider = Provider.autoDispose
+    .family<List<String>, String>((ref, sessionId) {
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.status,
+      });
+      return [
+        for (final row in ref.read(sessionsDataProvider).getAll())
+          if (row.parentSessionId == sessionId &&
+              !row.isArchived &&
+              row.status.claimsLive &&
+              _working(
+                ref.watch(
+                  agentSessionStatusProvider(
+                    row.id,
+                  ).select((report) => report.asData?.value.status),
+                ),
+              ))
+            row.id,
+      ];
+    });
+
+bool _working(AgentActivityStatus? status) =>
+    status == AgentActivityStatus.working ||
+    status == AgentActivityStatus.awaitingApproval;
 
 /// How many child sessions session [String] has (not archived), and how many
 /// of those are working now. Read from the rows and their statuses this app
