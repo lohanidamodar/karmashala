@@ -769,18 +769,21 @@ void _parseClaudeLine(
     _retireReportedAgents(content, background, acrossBoundary);
   }
 
+  // A paste is recorded inside tags; the person's message is what they hold.
+  Object? said(Object? text) =>
+      role == 'user' && text is String ? _withoutPasteTags(text) : text;
   if (content is String) {
-    _add(out, role, content, at);
+    _add(out, role, said(content), at);
     return;
   }
   if (content is! List) return;
   for (final part in content) {
     if (part is String) {
-      _add(out, role, part, at);
+      _add(out, role, said(part), at);
     } else if (part is Map) {
       switch (part['type']) {
         case 'text':
-          _add(out, role, part['text'], at);
+          _add(out, role, said(part['text']), at);
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -826,6 +829,11 @@ void _parseClaudeLine(
     }
   }
 }
+
+/// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
+String _withoutPasteTags(String text) => text.replaceAll(_pasteTag, '');
+
+final _pasteTag = RegExp(r'</?pasted_content(?:\s+id="[^"]*")?>');
 
 /// The agent id a `toolUseResult` says went to the background, or null.
 ///
