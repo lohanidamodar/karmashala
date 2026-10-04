@@ -14,6 +14,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
 import 'acp_fixture.dart';
+import 'fake_codex_app_server.dart';
 
 /// Logging in to an ACP agent at the server: its methods read over a
 /// short-lived connection, `authenticate` asked and remembered only once it
@@ -218,6 +219,39 @@ void main() {
       expect(openedLinks, isEmpty);
     },
   );
+
+  test('a bridged agent\'s login link is opened here wherever it runs: the '
+      'bridge runs in this process and opens no browser of its own', () async {
+    final codexOnWindows = AgentInstallation(
+      id: 'cx-win',
+      agentId: AgentIds.codexAcp,
+      executable: const EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\codex\codex.exe',
+      ),
+      createdAt: t0,
+    );
+    AgentInstallationDao(database).insert(codexOnWindows);
+    final codex = FakeCodexAppServer(account: null);
+    final server = ServerAcpAuth(
+      installations: () => [codexOnWindows],
+      environments: () => [windows],
+      registry: () => AgentRegistry.builtIn,
+      choices: AcpAuthChoiceDao(database),
+      spawn: (environment, request) async {
+        spawned.add(request);
+        return codex.transport;
+      },
+      openLink: openedLinks.add,
+      now: () => t0,
+      readTimeout: const Duration(seconds: 5),
+      authenticateTimeout: const Duration(seconds: 5),
+    );
+    final state = await server.authenticate('cx-win', 'chatgpt');
+    expect(state.confirmed, isTrue);
+    expect(spawned.single.arguments, ['app-server']);
+    expect(openedLinks, [Uri.parse('https://auth.example.com/oauth?state=1')]);
+  });
 
   test('a browser login gets ten minutes; one not finished by then is ended '
       'and told in words, remembering nothing', () async {
