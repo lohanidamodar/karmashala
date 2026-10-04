@@ -53,7 +53,15 @@ class DaemonPromptAnswers implements PromptTerminals {
   /// Throws [SessionPromptRefusal], with nothing chosen, when it will not.
   Future<SessionApprovalAnswer> answer(PromptAnswerRequest request) async {
     final runtime = status.acpRuntimeOf(request.sessionId);
-    if (runtime == null) return answers.answer(request);
+    if (runtime == null) {
+      if (request is ApprovalAnswerRequest && request.optionId != null) {
+        throw const SessionPromptRefusal(
+          'only an agent spoken to over ACP names its own options; answer '
+          'this prompt with approve or deny',
+        );
+      }
+      return answers.answer(request);
+    }
     if (!exists(request.sessionId)) {
       throw const SessionPromptRefusal('no such session', notFound: true);
     }

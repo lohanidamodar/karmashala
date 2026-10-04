@@ -38,7 +38,7 @@ enum SessionWaitState {
 
 /// What a session is blocked on, in the source's own words.
 class SessionBlock {
-  const SessionBlock({required this.kind, this.text});
+  const SessionBlock({required this.kind, this.text, this.options = const []});
 
   /// `approvalPrompt` for a modal on screen, otherwise the inbox item's kind.
   final String kind;
@@ -46,6 +46,16 @@ class SessionBlock {
   /// The agent's own words, or null when the source gave none. Never
   /// synthesised — an absent line reads as "not recorded".
   final String? text;
+
+  /// The answers an ACP agent offered its approval, each one `session_answer`
+  /// can choose by id; empty for any other prompt.
+  final List<AgentToolAskOption> options;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'kind': kind,
+    'text': text,
+    if (options.isNotEmpty) 'options': [for (final o in options) o.toJson()],
+  };
 }
 
 /// One wait's answer.
@@ -115,12 +125,7 @@ Map<String, Object?> renderWaitOutcome(SessionWaitOutcome outcome) =>
           ? 'not recorded — this session\'s status carries no transcript '
                 'position, so whether it said anything is unknown'
           : 'the transcript this session\'s status is read from',
-      'blockedOn': outcome.blockedOn == null
-          ? null
-          : <String, Object?>{
-              'kind': outcome.blockedOn!.kind,
-              'text': outcome.blockedOn!.text,
-            },
+      'blockedOn': outcome.blockedOn?.toJson(),
       'exitCode': outcome.exitCode,
       'exitCodeKnown': outcome.exitCodeKnown,
       'inputSent': outcome.inputSent,

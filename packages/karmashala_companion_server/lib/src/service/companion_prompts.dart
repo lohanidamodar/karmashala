@@ -13,7 +13,22 @@ class CompanionPrompts {
   final PromptAnswering answers;
 
   /// `approval.answer`: what was chosen, in the agent's own words.
-  Future<String> answerApproval(String sessionId, String decision) async {
+  Future<String> answerApproval(String sessionId, String decision) =>
+      _approval(sessionId, decision);
+
+  /// `approval.answer` naming one of the agent's own options ([optionId]),
+  /// whose kind decides; [decision] is what it means.
+  Future<String> answerApprovalOption(
+    String sessionId,
+    String decision,
+    String optionId,
+  ) => _approval(sessionId, decision, optionId: optionId);
+
+  Future<String> _approval(
+    String sessionId,
+    String decision, {
+    String? optionId,
+  }) async {
     if (decision != 'approve' && decision != 'deny') {
       throw const RemoteApiRefusal(
         ErrorCode.badRequest,
@@ -25,6 +40,7 @@ class CompanionPrompts {
         ApprovalAnswerRequest(
           sessionId: sessionId,
           approve: decision == 'approve',
+          optionId: optionId,
         ),
       ),
     );
@@ -82,6 +98,15 @@ class CompanionPrompts {
           : RemoteWaitKind.unrecorded,
       approveLabel: evidence.approve?.label,
       denyLabel: evidence.deny?.label,
+      options: [
+        if (asking)
+          for (final option in report!.toolAsk?.options ?? const [])
+            RemoteApprovalOption(
+              id: option.id,
+              name: option.name,
+              kind: option.kind,
+            ),
+      ],
     );
   }
 

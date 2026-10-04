@@ -634,16 +634,19 @@ class CompanionClient {
   }
 
   /// Answers a pending approval; returns the label of the key the host
-  /// pressed, in the agent's own words.
+  /// pressed, in the agent's own words. [optionId] chooses one of the agent's
+  /// own options; [approve] is what it means, which an older host answers.
   Future<String> answerApproval(
     String sessionId, {
     required bool approve,
     String? approvalId,
+    String? optionId,
   }) async {
     final payload = await _request(FrameType.approvalAnswer, {
       'sessionId': sessionId,
       'decision': approve ? 'approve' : 'deny',
       'approvalId': ?approvalId,
+      'optionId': ?optionId,
     });
     final pressed = payload['pressed'];
     return pressed is String ? pressed : '';

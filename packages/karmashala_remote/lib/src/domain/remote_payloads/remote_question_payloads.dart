@@ -296,6 +296,51 @@ class RemoteMenuAnswerRequest {
   }
 }
 
+/// One answer an agent spoken to over ACP offers its own approval: [kind] is
+/// the protocol's word — `allow_once`, `allow_always`, `reject_once`,
+/// `reject_always` — or whatever else it said.
+class RemoteApprovalOption {
+  const RemoteApprovalOption({
+    required this.id,
+    required this.name,
+    required this.kind,
+  });
+
+  final String id;
+
+  /// The agent's own words for it.
+  final String name;
+  final String kind;
+
+  bool get allows => kind.startsWith('allow');
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name, 'kind': kind};
+
+  /// Null for a shape this build cannot read.
+  static RemoteApprovalOption? tryFromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'];
+    if (id is! String || id.isEmpty) return null;
+    final name = json['name'];
+    final kind = json['kind'];
+    return RemoteApprovalOption(
+      id: id,
+      name: name is String ? name : id,
+      kind: kind is String ? kind : '',
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteApprovalOption &&
+      other.id == id &&
+      other.name == name &&
+      other.kind == kind;
+
+  @override
+  int get hashCode => Object.hash(id, name, kind);
+}
+
 /// What `approval.requested` carries: the agent's own words, verbatim, or
 /// nothing — never a summary this code wrote.
 class RemoteApprovalRequest {
@@ -307,7 +352,13 @@ class RemoteApprovalRequest {
     this.denyLabel,
     this.question,
     this.menu,
+    this.options = const [],
   });
+
+  /// The answers an ACP agent offered, in its order, each chosen by
+  /// `approval.answer`'s `optionId`. Empty for any other prompt, and from an
+  /// older host.
+  final List<RemoteApprovalOption> options;
 
   final String sessionId;
   final List<String> evidence;
@@ -339,6 +390,7 @@ class RemoteApprovalRequest {
     if (denyLabel != null) 'deny': denyLabel,
     if (question != null) 'question': question!.toJson(),
     if (menu != null) 'menu': menu!.toJson(),
+    if (options.isNotEmpty) 'options': [for (final o in options) o.toJson()],
   };
 
   static RemoteApprovalRequest fromJson(Map<String, Object?> json) {
@@ -361,6 +413,11 @@ class RemoteApprovalRequest {
       denyLabel: json['deny'] is String ? json['deny']! as String : null,
       question: RemoteQuestion.tryFromJson(json['question']),
       menu: RemoteMenu.tryFromJson(json['menu']),
+      options: [
+        if (json['options'] case final List options)
+          for (final option in options)
+            ?RemoteApprovalOption.tryFromJson(option),
+      ],
     );
   }
 }

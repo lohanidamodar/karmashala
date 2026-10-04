@@ -15,6 +15,7 @@ class CompanionApprovalCard extends StatefulWidget {
     required this.onAnswer,
     this.onAnswerQuestion,
     this.onAnswerMenu,
+    this.onChooseOption,
     this.canAnswer = true,
     super.key,
   });
@@ -23,6 +24,10 @@ class CompanionApprovalCard extends StatefulWidget {
 
   /// Sends the decision to the host; awaited for a busy state.
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
+
+  /// Answers with one of [CompanionApproval.options]; null draws the plain
+  /// approve and deny instead.
+  final Future<void> Function(RemoteApprovalOption option)? onChooseOption;
 
   /// Answers a multiple-choice question; null where none can be answered.
   final CompanionQuestionAnswerFn? onAnswerQuestion;
@@ -52,14 +57,22 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
       widget.approval.waiting != RemoteWaitKind.input &&
       widget.approval.waiting != RemoteWaitKind.question &&
       (widget.approval.approveLabel != null ||
-          widget.approval.denyLabel != null);
+          widget.approval.denyLabel != null ||
+          _offersOptions);
 
-  Future<void> _answer(CompanionApprovalDecision decision) async {
+  /// The agent named its own answers, and this card can send one.
+  bool get _offersOptions =>
+      widget.approval.options.isNotEmpty && widget.onChooseOption != null;
+
+  Future<void> _answer(CompanionApprovalDecision decision) =>
+      _sending(() => widget.onAnswer(decision));
+
+  Future<void> _sending(Future<void> Function() send) async {
     if (_busy) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await widget.onAnswer(decision);
+      await send();
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text(e is GatewayException ? e.message : '$e')),
@@ -256,8 +269,32 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     }, style: theme.textTheme.labelSmall?.copyWith(color: scheme.error));
   }
 
+  /// The agent's own answers, in its words and order; allow-once filled.
+  Widget _options() {
+    final choose = widget.onChooseOption!;
+    return Wrap(
+      spacing: Insets.sm,
+      runSpacing: Insets.xs,
+      children: [
+        for (final option in widget.approval.options)
+          option.kind == 'allow_once'
+              ? FilledButton(
+                  key: ValueKey('approval-option-${option.id}'),
+                  onPressed: _busy ? null : () => _sending(() => choose(option)),
+                  child: Text(option.name),
+                )
+              : OutlinedButton(
+                  key: ValueKey('approval-option-${option.id}'),
+                  onPressed: _busy ? null : () => _sending(() => choose(option)),
+                  child: Text(option.name),
+                ),
+      ],
+    );
+  }
+
   /// The buttons, and the sentence explaining any that are missing.
   Widget _answers(ThemeData theme, ColorScheme scheme) {
+    if (_offersOptions) return _options();
     final approval = widget.approval;
     final hasApprove = approval.approveLabel != null;
     final hasDeny = approval.denyLabel != null;

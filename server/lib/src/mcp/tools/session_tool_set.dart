@@ -95,6 +95,17 @@ class SessionToolSet extends ServerToolSet {
       case 'session_answer':
         // A prompt is answered off the screen of the server that runs it.
         return runTool(() {
+          final decision = arguments['decision'];
+          final optionId = arguments['optionId'];
+          if (optionId != null && (optionId is! String || optionId.isEmpty)) {
+            throw ArgumentError('optionId must be an option id.');
+          }
+          if (optionId == null && decision != 'approve' && decision != 'deny') {
+            throw ArgumentError(
+              "decision must be 'approve' or 'deny', or optionId one of the "
+              'options the agent offered.',
+            );
+          }
           if (held && !runsHere) {
             _session(sessionId);
             throw StateError(_onBoxRefusal('answer its prompt'));
@@ -106,7 +117,12 @@ class SessionToolSet extends ServerToolSet {
               'answer. open_session resumes it.',
             );
           }
-          return _answer(sessionId, arguments['decision'], callerSessionId);
+          return _answer(
+            sessionId,
+            decision,
+            callerSessionId,
+            optionId: optionId as String?,
+          );
         });
       case 'session_send':
         return runTool(
@@ -167,18 +183,29 @@ class SessionToolSet extends ServerToolSet {
   Future<Object?> _answer(
     String sessionId,
     Object? decision,
-    String? callerSessionId,
-  ) async {
-    if (decision != 'approve' && decision != 'deny') {
-      throw ArgumentError("decision must be 'approve' or 'deny'.");
-    }
+    String? callerSessionId, {
+    String? optionId,
+  }) async {
     _session(sessionId);
+    // With an option, its own kind decides; this only fills the field.
+    final approve = optionId == null
+        ? decision == 'approve'
+        : prompts.status
+                  .statusOf(sessionId)
+                  ?.report
+                  .toolAsk
+                  ?.options
+                  .where((o) => o.id == optionId)
+                  .firstOrNull
+                  ?.allows ??
+              false;
     final SessionApprovalAnswer answer;
     try {
       answer = await prompts.answer(
         ApprovalAnswerRequest(
           sessionId: sessionId,
-          approve: decision == 'approve',
+          approve: approve,
+          optionId: optionId,
           // The caller read the screen; the menu reader and the question
           // guard still stand between it and a blind Enter.
           requireOpenPrompt: false,

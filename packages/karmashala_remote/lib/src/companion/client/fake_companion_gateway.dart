@@ -951,13 +951,19 @@ class FakeCompanionGateway implements CompanionGateway {
   /// Every [answerMenu], in order.
   final answeredMenus = <({String sessionId, String approvalId, int option})>[];
 
+  /// The option each [answerApproval] named, in order, for those that named
+  /// one.
+  final answeredApprovalOptions = <String>[];
+
   @override
   Future<void> answerApproval(
     String sessionId,
     String approvalId,
-    CompanionApprovalDecision decision,
-  ) async {
+    CompanionApprovalDecision decision, {
+    String? optionId,
+  }) async {
     _requireLink();
+    if (optionId != null) answeredApprovalOptions.add(optionId);
     answeredApprovals.add((
       sessionId: sessionId,
       approvalId: approvalId,

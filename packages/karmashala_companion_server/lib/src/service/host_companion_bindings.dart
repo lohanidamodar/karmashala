@@ -100,6 +100,10 @@ RemoteHostBindings hostCompanionBindings({
       sessionId,
       (prompts) => prompts.answerApproval(sessionId, decision),
     ),
+    answerApprovalOption: (sessionId, decision, optionId) => prompted(
+      sessionId,
+      (prompts) => prompts.answerApprovalOption(sessionId, decision, optionId),
+    ),
     approvalEvidenceFor: (sessionId) =>
         prompted(sessionId, (prompts) => prompts.approvalEvidence(sessionId)),
     answerQuestion: (request) => prompted(

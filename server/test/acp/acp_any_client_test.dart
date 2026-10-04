@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
-import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod;
+import 'package:karmashala_acp/karmashala_acp.dart'
+    show AuthMethod, PermissionSelected;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -528,6 +529,75 @@ void main() {
       expect(
         conversation('old'),
         containsAllInOrder(['run them', 'Tests pass.']),
+      );
+    });
+
+    test('session_wait lists the options the agent offered, and '
+        'session_answer chooses one by its id', () async {
+      agent = FakeAcpAgent(
+        sessionIdPrefix: 'agent-session',
+        turns: const [
+          FakeTurn([
+            FakeStep.toolCall(
+              toolCallId: 'c1',
+              title: 'Run tests',
+              permissionOptions: fakePermissionOptions,
+            ),
+            FakeStep.message('Tests pass.'),
+          ]),
+        ],
+      );
+      row('old');
+      await input().handle(
+        const SessionSend(sessionId: 'old', text: 'run them'),
+        null,
+      );
+      final runtime = runtimeOf('old');
+      while (!runtime.hasOpenPermission) {
+        await pump();
+      }
+
+      final waited =
+          await tools().call('session_wait', {
+                'sessionId': 'old',
+                'timeoutSeconds': 1,
+              }, 'caller-1')!
+              as Map;
+      final blocked = waited['blockedOn'] as Map;
+      expect(blocked['kind'], 'approvalPrompt');
+      expect(blocked['options'], [
+        {'id': 'allow', 'name': 'Allow', 'kind': 'allow_once'},
+        {'id': 'allow-always', 'name': 'Always allow', 'kind': 'allow_always'},
+        {'id': 'reject', 'name': 'Reject', 'kind': 'reject_once'},
+      ]);
+
+      await expectLater(
+        tools().call('session_answer', {
+          'sessionId': 'old',
+          'optionId': 'sudo',
+        }, 'caller-1'),
+        throwsA(isA<StateError>()),
+      );
+      final answered =
+          await tools().call('session_answer', {
+                'sessionId': 'old',
+                'optionId': 'allow-always',
+              }, 'caller-1')!
+              as Map;
+      expect(answered['answered'], 'Always allow');
+      expect(answered['effect'], contains('(allow_always)'));
+      await runtime.awaitTurn();
+      expect(
+        (agent.permissionOutcomes.single as PermissionSelected).optionId,
+        'allow-always',
+      );
+    });
+
+    test('session_answer needs a decision or an option', () async {
+      row('old');
+      await expectLater(
+        tools().call('session_answer', {'sessionId': 'old'}, 'caller-1'),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });

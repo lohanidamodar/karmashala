@@ -18,8 +18,8 @@ typedef SentFrame = ({
 });
 
 class Harness {
-  Harness({CapabilitySet? capabilities}) {
-    fake = FakeRemoteBindings()..addSession('s1');
+  Harness({CapabilitySet? capabilities, bool answersOptions = true}) {
+    fake = FakeRemoteBindings(answersOptions: answersOptions)..addSession('s1');
     api = HostSessionApi(
       device: fakeDevice(capabilities: capabilities),
       bindings: fake.bindings,
@@ -209,6 +209,44 @@ void main() {
       );
 
       expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+    });
+
+    test("an answer naming the agent's option chooses exactly it, and is "
+        'told by its decision', () async {
+      final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {
+          'sessionId': 's1',
+          'decision': 'approve',
+          'optionId': 'allow-always',
+        },
+      );
+
+      expect(harness.last.type, FrameType.result);
+      expect(harness.fake.approvalOptionAnswers, [
+        (sessionId: 's1', decision: 'approve', optionId: 'allow-always'),
+      ]);
+      expect(harness.fake.approvalAnswers, isEmpty);
+    });
+
+    test('a host that cannot choose options answers the decision', () async {
+      final harness = Harness(answersOptions: false);
+      harness.fake.setAwaitingApproval('s1');
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {
+          'sessionId': 's1',
+          'decision': 'approve',
+          'optionId': 'allow-always',
+        },
+      );
+
+      expect(harness.last.type, FrameType.result);
+      expect(harness.fake.approvalAnswers.single.decision, 'approve');
     });
 
     test('a handler that throws refuses one request and survives', () async {
