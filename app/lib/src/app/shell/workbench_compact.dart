@@ -103,9 +103,9 @@ class _CompactSessionBar extends StatelessWidget {
                         sessionId: sessionId,
                       ),
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DeliveryStateLine(sessionId: sessionId),
+                        child: DeliveryStateLine(
+                          sessionId: sessionId,
+                          singleLine: true,
                         ),
                       ),
                       // The mode chip is in the sheet: at phone width it

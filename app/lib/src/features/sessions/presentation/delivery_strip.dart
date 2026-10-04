@@ -532,7 +532,18 @@ class _DeliveryState extends StatelessWidget {
 /// The same state line, for the session bar under the terminal. **Facts above,
 /// controls below**: at the buttons' weight, eight peers read as one spill.
 class DeliveryStateLine extends ConsumerWidget {
-  const DeliveryStateLine({required this.sessionId, super.key});
+  const DeliveryStateLine({
+    required this.sessionId,
+    this.singleLine = false,
+    super.key,
+  });
+
+  /// One line only, as the phone's bar has: the facts that do not fit are
+  /// left out whole, in order, rather than cut at the edge.
+  final bool singleLine;
+
+  /// One line's height, the tallest fact's.
+  static const double _lineHeight = 24;
 
   /// Builds of the line, counted so a cost test can prove that a model change
   /// repaints the mark *inside* it and not the line around it.
@@ -553,18 +564,38 @@ class DeliveryStateLine extends ConsumerWidget {
     final hasModel = ref.watch(
       sessionModelProvider(sessionId).select(SessionModelMark.namesAModel),
     );
+    final facts = _deliveryFacts(
+      context,
+      delivery,
+      sessionId,
+      withModel: hasModel,
+    );
+    if (singleLine) {
+      // A fact that would wrap lands a whole line below, outside the clip.
+      return SizedBox(
+        height: _lineHeight,
+        child: Wrap(
+          spacing: Insets.sm,
+          runSpacing: _lineHeight,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          clipBehavior: Clip.hardEdge,
+          children: [
+            for (final fact in facts)
+              SizedBox(
+                height: _lineHeight,
+                child: Align(widthFactor: 1, child: fact),
+              ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: Insets.xs),
       child: Wrap(
         spacing: Insets.sm,
         runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: _deliveryFacts(
-          context,
-          delivery,
-          sessionId,
-          withModel: hasModel,
-        ),
+        children: facts,
       ),
     );
   }

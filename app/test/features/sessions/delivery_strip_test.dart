@@ -190,6 +190,8 @@ void main() {
     WidgetTester tester,
     SessionDelivery? delivery, {
     Size size = const Size(900, 600),
+    bool singleLine = false,
+    double? width,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -210,8 +212,19 @@ void main() {
                 : Future.value(delivery),
           ),
         ],
-        child: const MaterialApp(
-          home: Scaffold(body: DeliveryStateLine(sessionId: 's1')),
+        child: MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: DeliveryStateLine(
+                  sessionId: 's1',
+                  singleLine: singleLine,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -225,6 +238,43 @@ void main() {
     url: 'https://github.com/o/r/pull/12',
     mergeable: true,
   );
+
+  testWidgets('on one line, the facts that do not fit are left out whole, '
+      'never cut', (tester) async {
+    await pumpStateLine(
+      tester,
+      const SessionDelivery(
+        branch: 'main',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 6,
+        aheadOfBase: 3,
+        hasWorktree: true,
+      ),
+      size: const Size(390, 844),
+      singleLine: true,
+      width: 200,
+    );
+    expect(tester.takeException(), isNull);
+    final line = tester.getRect(find.byType(DeliveryStateLine));
+    for (final text in tester.widgetList<Text>(
+      find.descendant(
+        of: find.byType(DeliveryStateLine),
+        matching: find.byType(Text),
+      ),
+    )) {
+      final rect = tester.getRect(find.byWidget(text));
+      // Either drawn whole inside the line, or not on it at all.
+      final inside =
+          rect.left >= line.left - 0.5 &&
+          rect.right <= line.right + 0.5 &&
+          rect.top >= line.top - 0.5 &&
+          rect.bottom <= line.bottom + 0.5;
+      final outside = rect.top >= line.bottom || rect.left >= line.right;
+      expect(inside || outside, isTrue, reason: '${text.data} at $rect');
+    }
+    expect(line.height, lessThanOrEqualTo(32));
+  });
 
   testWidgets('shows the stage, the branch and the numbers behind it', (
     tester,
