@@ -224,8 +224,8 @@ _acpGoldens = [
   (
     id: 'codex-acp',
     displayName: 'Codex (ACP)',
-    executable: 'codex-acp',
-    acpArguments: [],
+    executable: 'codex',
+    acpArguments: ['app-server'],
   ),
   (
     id: 'antigravity-acp',

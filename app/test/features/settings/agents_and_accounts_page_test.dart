@@ -195,30 +195,21 @@ void main() {
   ) async {
     await pump(tester);
     final registry = AgentRegistry.builtIn;
-    final terminal = registry.adapters.where((a) => a.acp == null);
-    final acp = registry.adapters.where((a) => a.acp != null);
-
-    for (final adapter in terminal) {
-      final binary = adapter.descriptor.binaries.posix.first;
-      expect(
-        find.text(
-          'Not installed. Install `$binary` on a machine Karmashala reaches.',
-        ),
-        findsOneWidget,
-      );
-    }
-    for (final adapter in acp) {
+    // One line per agent; two agents of one binary (Codex and its chat)
+    // each say it.
+    final lines = <String, int>{};
+    for (final adapter in registry.adapters) {
       final binary = adapter.descriptor.binaries.posix.first;
       // npx is offered only for an agent that ships as an npm package; one
       // the registry ships as an archive is installed from the row instead.
-      final npx = adapter.acp!.npxPackage == null ? '' : ', or add it with npx';
-      expect(
-        find.text(
+      final npx = adapter.acp?.npxPackage == null ? '' : ', or add it with npx';
+      final line =
           'Not installed. Install `$binary` on a machine Karmashala reaches'
-          '$npx.',
-        ),
-        findsOneWidget,
-      );
+          '$npx.';
+      lines[line] = (lines[line] ?? 0) + 1;
+    }
+    for (final MapEntry(key: line, value: count) in lines.entries) {
+      expect(find.text(line), findsNWidgets(count), reason: line);
     }
     expect(
       find.byTooltip('Not installed on any machine'),
