@@ -254,6 +254,22 @@ void main() {
     expect(started.attachNotice, contains('no longer holds this conversation'));
   });
 
+  test('an unnamed chat session is named from its opening message, without '
+      'the scratch note ahead of it', () async {
+    final rows = CheckoutRows(database);
+    await launcher().startDetailed(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('acp1')!,
+        title: 'New session',
+        titleTyped: true,
+        prompt: withScratchPreamble(temp.path, 'Probe of the chat view'),
+      ),
+    );
+    expect(row('s1').title, 'Probe of the chat view');
+    expect(row('s1').titleByUser, isFalse);
+  });
+
   test('a PTY agent is untouched by the branch', () async {
     final rows = CheckoutRows(database);
     await launcher().start(

@@ -513,13 +513,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             typeable: launch.surface != SessionSurface.external,
           );
     final prompt = opening.argv;
-    // An agent pointed at a file would name the session after the pointer;
-    // an unnamed one is named from the message instead.
+    // An agent pointed at a file would name the session after the pointer,
+    // and one spoken to over its protocol may name it never; an unnamed one
+    // is named from the person's message instead, not from Karmashala's note.
     if (resuming == null &&
-        opening.byPointer &&
+        (opening.byPointer || acp != null) &&
         openingText != null &&
         isPlaceholderSessionTitle(session.title)) {
-      final named = sessionTitleFromMessage(openingText);
+      final named = sessionTitleFromMessage(
+        splitScratchPreamble(openingText).rest,
+      );
       sessions.updateTitle(id, named);
       session = session.copyWith(title: named);
     }
