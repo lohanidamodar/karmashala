@@ -11,6 +11,8 @@ import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/descriptors.dart';
 import '../../features/automations/presentation/scheduled_resume_chip.dart';
+import '../../features/sessions/presentation/queued_messages_strip.dart'
+    show QueuedCountChip;
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/editor/application/editor_tab_actions.dart';
 import '../../features/editor/application/open_documents.dart';
@@ -55,6 +57,8 @@ import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
 import '../widgets/adaptive_modal.dart';
 import 'zen_bar.dart' show kZenBarRoom;
+import '../../features/sessions/presentation/session_subagents_panel.dart'
+    show SessionSubagentsBadge;
 
 // Re-exported so `workbench.dart` stays the one import for the tab strip.
 export 'tab_strip_metrics.dart';
@@ -156,6 +160,14 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     if (sessionId == null) return;
     final paneId = sessionTerminalPane(ref, sessionId);
     if (paneId == _shownPane) return;
+    // A thread on its chat tab keeps it: a terminal arriving behind it — a
+    // resume, a switch to a terminal agent — is secondary (owner, 2026-10-03).
+    final chat = chatPaneId(sessionId);
+    if (_shownPane == chat &&
+        paneId != null &&
+        ref.read(paneSessionsProvider).sessionOf(chat) == sessionId) {
+      return;
+    }
     // A session that *had* a pane and no longer has one has been ended, which
     // is a different act from selecting one that never had a pane.
     final ended = _shownPane != null && paneId == null;

@@ -218,6 +218,53 @@ class AgentSystemPromptFileSupport {
       isSupported && path != null && path.isNotEmpty ? [token, path] : const [];
 }
 
+/// Whether an agent can be granted a directory beyond its workspace on its
+/// command line, and how.
+///
+/// The question a prompt written to a file turns on. An agent with no
+/// system-prompt file is handed a long or multi-line opening message as a
+/// file under Karmashala's data directory and told to read it; an agent that
+/// asks before it reads outside its workspace then asks about Karmashala's
+/// own file. Granting that one directory at launch lets it read the brief
+/// without asking, and nothing is written into the person's repository.
+class AgentExtraDirectorySupport {
+  /// The directory rides on [token], as two argv entries, one directory per
+  /// flag. [evidence] is what it was read off.
+  const AgentExtraDirectorySupport.flag(this.token, {required this.evidence})
+    : isSupported = true,
+      joined = false;
+
+  /// The directory rides in one argv entry, `<token>=<path>`: for an option
+  /// that takes several values and would otherwise swallow the prompt after it.
+  const AgentExtraDirectorySupport.joined(this.token, {required this.evidence})
+    : isSupported = true,
+      joined = true;
+
+  /// Nobody established one. **The default**: nothing is granted.
+  const AgentExtraDirectorySupport.unsupported()
+    : token = '',
+      evidence = '',
+      isSupported = false,
+      joined = false;
+
+  /// The option itself, e.g. `--add-dir`. Empty otherwise.
+  final String token;
+
+  /// Where this was verified. Empty exactly when nobody looked.
+  final String evidence;
+
+  final bool isSupported;
+
+  /// Whether the directory is joined to [token] with `=`.
+  final bool joined;
+
+  /// The arguments that grant this agent [path], or nothing.
+  List<String> argumentsFor(String? path) {
+    if (!isSupported || path == null || path.isEmpty) return const [];
+    return joined ? ['$token=$path'] : [token, path];
+  }
+}
+
 /// The key this agent binds to **paste the image on the clipboard**, by where
 /// it runs.
 ///

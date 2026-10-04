@@ -40,12 +40,16 @@ class ScheduledResumesSection extends ConsumerWidget {
           SettingsRow(
             label: 'When an agent hits its usage limit',
             help: switch (settings.usageLimitBehavior) {
-              UsageLimitBehavior.ask =>
-                'The session\'s bar says so and offers to resume at the reset.',
               UsageLimitBehavior.schedule =>
-                'A resume is armed at the reset without asking, where the '
-                    'session\'s mode does not stop to ask.',
-              UsageLimitBehavior.nothing => 'Nothing is said or scheduled.',
+                'A resume is armed at the reset, with a countdown and Cancel '
+                    'in the session\'s bar, unless the session\'s permission '
+                    'mode asks before acting. Choose Ask first or Do nothing '
+                    'to turn automatic resume off.',
+              UsageLimitBehavior.ask =>
+                'Automatic resume is off: the session\'s bar says so and '
+                    'offers to resume at the reset.',
+              UsageLimitBehavior.nothing =>
+                'Automatic resume is off: nothing is said or scheduled.',
             },
             controlMaxWidth: 320,
             control: DropdownButtonFormField<UsageLimitBehavior>(
@@ -71,6 +75,17 @@ class ScheduledResumesSection extends ConsumerWidget {
               value: settings.resumeMessage,
               onChanged: controller.setResumeMessage,
             ),
+          ),
+          SettingsSwitchRow(
+            label: 'Continue turns cut off when the session host stops',
+            // The server's kInterruptedTurnFreshness and kMaxAutomaticContinues.
+            help:
+                'If the session host stops or crashes while a turn is '
+                'running, the session is resumed when the host starts again '
+                'and told to carry on. Turns older than 12 hours are not '
+                'continued, nor a session cut off 3 times in a row.',
+            value: settings.continueInterruptedTurns,
+            onChanged: controller.setContinueInterruptedTurns,
           ),
           if (live.isEmpty)
             const SettingsNote('No resume is waiting.')

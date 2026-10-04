@@ -57,6 +57,13 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.send` to an ACP session nothing runs resumes it here and sends
   // the message as its first turn, answering `resumed` and any notice.
   'sessions.send.resumes',
+  // `sessions.send` while a turn runs is queued here and delivered one per
+  // turn; `sessions.queue.*` lists, edits and cancels, told by
+  // `sessionQueueChanged`.
+  'sessions.queue',
+  // `sessions.queue.sendNext`, a pause after Stop or End, and the hold told
+  // on each queued message.
+  'sessions.queue.control',
   // `sessions.setMode` and `.setConfigOption`: an ACP session's mode and
   // options, as its agent announces them.
   'sessions.setMode',
@@ -67,4 +74,11 @@ const Set<String> kServerFeatures = <String>{
   'acpAgents.install',
   // `acpAuth.*`: an ACP agent's login methods, chosen and remembered here.
   'acpAuth',
+  // `sessions.subagents`: a session's subagents and child sessions, each
+  // with its state, timing, tokens and last answer.
+  'sessions.subagents',
+  // `sessions.switchAgent`: a session's agent switched in place, the same row
+  // and chat, told as `sessionAgentChanged`; its transcript tags each row's
+  // agent and marks each switch with an `agentSwitch` row.
+  'sessions.switchAgent',
 };

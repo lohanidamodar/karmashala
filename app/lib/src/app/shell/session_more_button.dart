@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/sessions/presentation/session_repositories_bar.dart';
+import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 
 /// **⋯ on the pane status line**: the session's rarer verbs, which lived in
@@ -11,9 +12,16 @@ import '../../features/sessions/presentation/session_transcript_view.dart';
 /// carries title and state, the status line the rest). On the status line so
 /// terminal and chat view share them — one place per control.
 class SessionMoreButton extends StatefulWidget {
-  const SessionMoreButton({required this.sessionId, super.key});
+  const SessionMoreButton({
+    required this.sessionId,
+    this.compact = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Draws the subagent count as numbers only, for a bar short of width.
+  final bool compact;
 
   @override
   State<SessionMoreButton> createState() => _SessionMoreButtonState();
@@ -27,7 +35,20 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
   static const _width = 300.0;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      // ⋯ holds the way in; the count beside it says there is something
+      // there, at every width the status line has.
+      SessionSubagentsBadge(
+        sessionId: widget.sessionId,
+        compact: widget.compact,
+      ),
+      _menu(context),
+    ],
+  );
+
+  Widget _menu(BuildContext context) {
     final tones = SurfaceTones.of(context);
     return MenuAnchor(
       controller: _controller,
@@ -59,7 +80,9 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
       ],
       child: IconButton(
         key: const ValueKey('session-more'),
-        tooltip: 'More: recap, open in a system terminal, stop, repositories',
+        tooltip:
+            'More: recap, subagents, open in a system terminal, stop, '
+            'repositories',
         visualDensity: UiDensity.of(context).controlDensity,
         iconSize: Chrome.iconSmall,
         icon: const Icon(AppIcons.dotsThree),
@@ -92,6 +115,7 @@ class SessionMoreBody extends StatelessWidget {
         Row(
           children: [
             SessionRecapButton(sessionId: sessionId),
+            SessionSubagentsButton(sessionId: sessionId),
             OpenSessionInSystemTerminalButton(sessionId: sessionId),
             StopSessionButton(sessionId: sessionId),
           ],

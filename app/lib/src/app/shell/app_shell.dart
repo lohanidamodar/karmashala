@@ -34,6 +34,7 @@ import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../features/agents/application/agent_model_catalog_providers.dart';
 import '../../features/sessions/application/session_launch_refusal.dart';
+import '../../features/sessions/application/session_handoff_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
@@ -273,6 +274,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(usageLimitNoticesProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
+    // And for an agent switched from another client, whose old terminal
+    // here goes.
+    ref.watch(sessionSwitchFollowerProvider);
     // And for file autosave, whose window-focus trigger has to be heard while
     // no editor tab is on screen. Listened rather than watched: its state is a
     // tab's business, not the shell's.

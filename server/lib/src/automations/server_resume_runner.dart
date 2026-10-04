@@ -34,6 +34,21 @@ abstract interface class ResumeUsage {
   String? unreadableBecause(AgentInstallation installation);
 }
 
+/// The session's queue as a resume sends through it (`SessionQueue`): the
+/// one sender to a session, so a resume never races a queued message.
+abstract interface class ResumeQueue {
+  /// Sends a resume's [message] to the live session [sessionId] — its
+  /// queue's head in its place when one waits. Answers the text that went;
+  /// throws [StateError] in words when nothing did.
+  Future<String> sendForResume(String sessionId, String message);
+
+  /// Claims [sessionId]'s queued head to open a resumed start, or null.
+  QueuedMessage? claimHeadForResume(String sessionId);
+
+  /// How the [claimed] head went: [sent], or back at the queue's front.
+  void releaseClaimed(QueuedMessage claimed, {required bool sent});
+}
+
 /// What a resume's end is filed as, for its session's record.
 typedef ResumeDecision = ({
   String sessionId,
@@ -60,6 +75,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     required this.close,
     required this.now,
     this.statusOf,
+    this.promptOf,
     this.usage,
     this.onDecision,
     this.agents = const DaemonAgents(),
@@ -76,6 +92,11 @@ class ServerResumeRunner implements ScheduledResumeFiring {
 
   /// The running session this server holds for a row, or null.
   final HostSession? Function(String sessionId) runningOf;
+
+  /// How to send a turn to a row the server runs over a protocol (no
+  /// terminal to type into), or null when it runs none there.
+  final Future<void> Function(String message)? Function(String sessionId)?
+  promptOf;
 
   /// Ends the session the server runs for a row (a resume armed under
   /// another mode restarts it).
@@ -99,6 +120,10 @@ class ServerResumeRunner implements ScheduledResumeFiring {
   /// Set once the scheduler exists: every end goes through it, so every
   /// client is told how the resume ended.
   late AutomationScheduler scheduler;
+
+  /// Set once the server's queue exists; before then a message is typed or
+  /// prompted directly.
+  ResumeQueue? queue;
 
   /// Fails every row a server that stopped mid-resume left `firing`: a second
   /// try could send the message twice. Run before the scheduler starts.
@@ -152,7 +177,8 @@ class ServerResumeRunner implements ScheduledResumeFiring {
       );
       return;
     }
-    final live = runningOf(session.id) != null;
+    final live =
+        runningOf(session.id) != null || promptOf?.call(session.id) != null;
     if (live && !resume.liveWhenScheduled) {
       _finish(
         resume,
@@ -191,7 +217,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
 
     if (live && !_needsRestart(session, resume)) {
-      _sendToLive(resume, session, [note, usageNote]);
+      await _sendToLive(resume, session, [note, usageNote]);
     } else {
       await _resumeAndSend(resume, session, live, [note, usageNote]);
     }
@@ -293,11 +319,11 @@ class ServerResumeRunner implements ScheduledResumeFiring {
         agents.permissionOf(agentId, session.permissionMode).canonical;
   }
 
-  void _sendToLive(
+  Future<void> _sendToLive(
     ScheduledResume resume,
     Session session,
     List<String> notes,
-  ) {
+  ) async {
     final report = statusOf?.call(session.id)?.report;
     if (report != null && report.status == AgentActivityStatus.working) {
       _finish(
@@ -329,7 +355,57 @@ class ServerResumeRunner implements ScheduledResumeFiring {
       return;
     }
     final message = resume.message.trim();
+    if (queue case final queue?) {
+      final String sent;
+      try {
+        sent = await queue.sendForResume(session.id, message);
+      } on StateError catch (refused) {
+        _finish(
+          resume,
+          ScheduledResumeState.failed,
+          'The session refused the message: ${refused.message}',
+        );
+        return;
+      }
+      _finish(
+        resume,
+        ScheduledResumeState.done,
+        _join([
+          sent == message
+              ? 'The session was already open, and sent "$message".'
+              : 'The session was already open, and sent the queued message '
+                    '"$sent" in place of "$message".',
+          ...notes,
+        ]),
+        sent: sent,
+      );
+      return;
+    }
     final running = runningOf(session.id);
+    if (running == null) {
+      if (promptOf?.call(session.id) case final prompt?) {
+        try {
+          await prompt(message);
+        } on StateError catch (refused) {
+          _finish(
+            resume,
+            ScheduledResumeState.failed,
+            'The session refused the message: ${refused.message}',
+          );
+          return;
+        }
+        _finish(
+          resume,
+          ScheduledResumeState.done,
+          _join([
+            'The session was already open, and sent "$message".',
+            ...notes,
+          ]),
+          sent: message,
+        );
+        return;
+      }
+    }
     if (running == null || !running.typeAsHost(utf8.encode(message))) {
       _finish(
         resume,
@@ -401,14 +477,15 @@ class ServerResumeRunner implements ScheduledResumeFiring {
     }
     // The message rides the command line where the agent takes one there:
     // the CLI submits it when it is ready, nothing typed at a starting TUI.
-    final message = resume.message.trim();
-    final asArgument =
-        message.isNotEmpty &&
-        (agents
-                .descriptorOf(installation.agentId)
-                ?.launch
-                .acceptsPromptArgument ??
-            false);
+    // Over ACP the launcher sends it as the first prompt instead.
+    final descriptor = agents.descriptorOf(installation.agentId);
+    final takesOpening =
+        descriptor != null &&
+        (descriptor.acp != null || descriptor.launch.acceptsPromptArgument);
+    // A message queued while the limit held opens it in the resume's place.
+    final claimed = takesOpening ? queue?.claimHeadForResume(session.id) : null;
+    final message = claimed?.text ?? resume.message.trim();
+    final asArgument = message.isNotEmpty && takesOpening;
     try {
       if (live) {
         // Open under another mode than the one armed. Every refusal came
@@ -430,10 +507,26 @@ class ServerResumeRunner implements ScheduledResumeFiring {
         ),
       );
     } on Object catch (error) {
+      if (claimed != null) queue?.releaseClaimed(claimed, sent: false);
       _finish(
         resume,
         ScheduledResumeState.failed,
         'The session could not be resumed: $error',
+      );
+      return;
+    }
+    if (claimed != null) {
+      queue?.releaseClaimed(claimed, sent: true);
+      final instead = resume.message.trim();
+      _finish(
+        resume,
+        ScheduledResumeState.done,
+        _join([
+          'Resumed, and sent the queued message "$message"'
+              '${instead.isEmpty ? '' : ' in place of "$instead"'}.',
+          ...notes,
+        ]),
+        sent: message,
       );
       return;
     }

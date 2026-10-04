@@ -21,10 +21,14 @@ class SubagentTurnsTile extends ConsumerStatefulWidget {
     this.resolveHostPath,
     this.nesting = 0,
     this.sessionId,
+    this.initiallyExpanded = false,
     super.key,
   });
 
   final SubagentRef reference;
+
+  /// Read and open from the first frame, for a delegate opened on its own.
+  final bool initiallyExpanded;
 
   /// The session whose transcript names this delegate: the server reads its
   /// turns only for one of that session's own subagents. Null reads the path
@@ -48,6 +52,12 @@ class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
   /// Whether the transcript has ever been asked for. Separate from [_expanded]
   /// so collapsing does not re-read the file on the next open.
   bool _read = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = _read = widget.initiallyExpanded;
+  }
 
   void _toggle() => setState(() {
     _expanded = !_expanded;

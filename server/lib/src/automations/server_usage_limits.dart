@@ -12,6 +12,12 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_session/session.dart';
 
+import '../acp/acp_usage_limit.dart'
+    show
+        hasUsageLimitWording,
+        kProtocolLimitMinimumWait,
+        kProtocolUsageLimitReason,
+        usageLimitResetIn;
 import 'server_resume_runner.dart' show ResumeUsage, formatResumeClock;
 
 /// How old an agent's rate-limit record may be and still explain *this*
@@ -23,7 +29,7 @@ const Duration kLimitRecordFreshness = Duration(minutes: 10);
 /// `resumeMessages` per agent).
 const String kDefaultResumeMessage = 'continue';
 
-/// What the Settings choice `usageLimitBehavior` says to do.
+/// What the Settings choice `onUsageLimit` says to do.
 enum UsageLimitBehavior { ask, schedule, nothing }
 
 /// The usage-limit part of a client's settings (`settings.v1`), read afresh
@@ -34,7 +40,9 @@ typedef UsageLimitSettings = ({
 });
 
 /// Reads [UsageLimitSettings] out of `settings.v1`'s JSON; a missing or odd
-/// value is the default (ask; "continue").
+/// value is the default (schedule; "continue"). The legacy key
+/// `usageLimitBehavior` was saved on every write while `ask` was the default,
+/// so only its `nothing` is taken as chosen — as the app reads it.
 UsageLimitSettings usageLimitSettingsFrom(String? raw) {
   Map<String, Object?> json = const {};
   try {
@@ -43,10 +51,14 @@ UsageLimitSettings usageLimitSettingsFrom(String? raw) {
   } on FormatException {
     // Defaults.
   }
-  final behavior = UsageLimitBehavior.values.firstWhere(
-    (b) => b.name == json['usageLimitBehavior'],
-    orElse: () => UsageLimitBehavior.ask,
-  );
+  final behavior = json.containsKey('onUsageLimit')
+      ? UsageLimitBehavior.values.firstWhere(
+          (b) => b.name == json['onUsageLimit'],
+          orElse: () => UsageLimitBehavior.schedule,
+        )
+      : json['usageLimitBehavior'] == UsageLimitBehavior.nothing.name
+      ? UsageLimitBehavior.nothing
+      : UsageLimitBehavior.schedule;
   final message = json['resumeMessage'] is String
       ? json['resumeMessage']! as String
       : kDefaultResumeMessage;
@@ -72,6 +84,45 @@ String usageLimitSentence(UsageLimitHit hit, DateTime now) {
   final resets = hit.window.resetsAt;
   return '${hit.agentName} hit its ${hit.window.label} limit.'
       '${resets == null ? '' : ' Resets ${formatResumeClock(resets, now)}.'}';
+}
+
+/// Whether [report] is a turn that failed on [agentId]'s usage limit by the
+/// agent's own word — read at once, before any usage reading confirms it.
+bool endedOnUsageLimit(
+  AgentStatusReport report, {
+  String? agentId,
+  AgentRegistry agents = AgentRegistry.builtIn,
+}) {
+  if (report.status != AgentActivityStatus.failed) return false;
+  if (report.source == AgentStatusSource.protocol) {
+    return report.failureReason == kProtocolUsageLimitReason;
+  }
+  if (agentId == null) return false;
+  return switch (agents.adapterFor(agentId)?.usage?.limitEvidence) {
+    HookFailureReasonEvidence(:final reason) => report.failureReason == reason,
+    _ => false,
+  };
+}
+
+/// What holds a session's queue for its limit: the resume [live] for it, or
+/// a turn that just failed on the limit while none is armed yet.
+QueueHold? usageLimitQueueHold({
+  ScheduledResume? live,
+  AgentStatusReport? report,
+  String? agentId,
+  AgentRegistry agents = AgentRegistry.builtIn,
+}) {
+  if (live != null) {
+    return QueueHold(
+      live.windowLabel == null ? QueueHoldKind.scheduled : QueueHoldKind.limit,
+      until: live.fireAt,
+    );
+  }
+  if (report != null &&
+      endedOnUsageLimit(report, agentId: agentId, agents: agents)) {
+    return const QueueHold(QueueHoldKind.limit);
+  }
+  return null;
 }
 
 /// **A turn that ended on a usage limit, noticed by the server** (slice 5c)
@@ -221,30 +272,37 @@ class ServerUsageLimits {
         ?.usage
         ?.limitEvidence;
     final at = now();
+    // A protocol turn the agent refused on a limit, in its own words: a
+    // spent window in a reading names the reset when one can be read, else
+    // the words themselves when they carry it. A bare rate limit with a short
+    // retry is a passing throttle, not a limit to resume after.
+    if (entry.report.source == AgentStatusSource.protocol &&
+        entry.report.failureReason == kProtocolUsageLimitReason) {
+      final spent = await _spentWindow(installation, at);
+      if (spent != null) {
+        return (sessionId: session.id, agentName: name, window: spent);
+      }
+      final words = entry.report.evidence;
+      final resets = usageLimitResetIn(words, at);
+      if (resets == null) return null;
+      if (!hasUsageLimitWording(words) &&
+          resets.difference(at) < kProtocolLimitMinimumWait) {
+        return null;
+      }
+      return (
+        sessionId: session.id,
+        agentName: name,
+        window: UsageWindow(label: 'usage', resetsAt: resets),
+      );
+    }
     switch (evidence) {
       case HookFailureReasonEvidence(:final reason):
         if (entry.report.failureReason != reason) return null;
         // The same word can be a passing rate limit: only a spent window
         // makes it a usage limit, and only a reading names the reset.
-        final reader = usage;
-        if (reader == null || reader.unreadableBecause(installation) != null) {
-          return null;
-        }
-        final AgentUsage reading;
-        try {
-          reading = await reader.fetch(installation);
-        } on UsageException {
-          return null;
-        }
-        final blocking = blockingWindow(reading.windows, now: at);
-        if (blocking == null || blocking.reason != BlockingWindowReason.spent) {
-          return null;
-        }
-        return (
-          sessionId: session.id,
-          agentName: name,
-          window: blocking.window,
-        );
+        final window = await _spentWindow(installation, at);
+        if (window == null) return null;
+        return (sessionId: session.id, agentName: name, window: window);
       case StateFileRateLimitEvidence(:final read):
         final path = entry.session.stateFilePath;
         if (path == null || path.isEmpty) return null;
@@ -262,6 +320,29 @@ class ServerUsageLimits {
       case NoUsageLimitEvidence() || null:
         return null;
     }
+  }
+
+  /// The spent window a fresh reading of [installation]'s account names, or
+  /// null when there is none or no reading.
+  Future<UsageWindow?> _spentWindow(
+    AgentInstallation installation,
+    DateTime at,
+  ) async {
+    final reader = usage;
+    if (reader == null || reader.unreadableBecause(installation) != null) {
+      return null;
+    }
+    final AgentUsage reading;
+    try {
+      reading = await reader.fetch(installation);
+    } on UsageException {
+      return null;
+    }
+    final blocking = blockingWindow(reading.windows, now: at);
+    if (blocking == null || blocking.reason != BlockingWindowReason.spent) {
+      return null;
+    }
+    return blocking.window;
   }
 
   void _arm(

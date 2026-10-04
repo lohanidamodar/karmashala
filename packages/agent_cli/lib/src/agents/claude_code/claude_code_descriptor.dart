@@ -241,6 +241,17 @@ const claudeCodeDescriptor = AgentDescriptor(
     prompt: AgentPromptSupport.positional(
       evidence: 'claude --help (2.1.251): "Usage: claude [options] [prompt]"',
     ),
+    // So a brief it is told to read from Karmashala's data directory does not
+    // stop it on a Read approval (probe, 2026-10-04: a subagent child in ask
+    // mode). Joined with `=`: the option is variadic and would take the
+    // positional prompt after it as a second directory.
+    extraDirectory: AgentExtraDirectorySupport.joined(
+      '--add-dir',
+      evidence:
+          'claude 2.1.287 (Windows claude.exe) --help: '
+          '"--add-dir <directories...>  Additional directories to allow tool '
+          'access to"',
+    ),
     // **The handoff packet's way in that is not a paste.** Claude Code
     // collapses any paste over 800 characters or three lines into
     // `[Pasted text #N]`, so a packet delivered as text is the difference

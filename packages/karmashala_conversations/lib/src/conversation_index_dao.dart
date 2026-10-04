@@ -363,9 +363,13 @@ class ConversationIndexDao {
         '(t.session_id IN (SELECT external_session_id FROM sessions '
         'WHERE repository_id IN $repositories) '
         'OR t.session_id IN (SELECT external_id FROM imported_sessions '
-        'WHERE repository_id IN $repositories))',
+        'WHERE repository_id IN $repositories) '
+        // An earlier agent's part of a switched thread.
+        'OR t.session_id IN (SELECT sp.external_session_id '
+        'FROM session_agent_spans sp JOIN sessions s ON s.id = sp.session_id '
+        'WHERE s.repository_id IN $repositories))',
       );
-      params.addAll([scope, scope]);
+      params.addAll([scope, scope, scope]);
     }
     if (exclude.isNotEmpty) {
       where.add(
@@ -428,6 +432,26 @@ class ConversationIndexDao {
     }
   }
 
+  /// The session holding each of [conversationIds] that only a switched
+  /// thread's earlier span names — no row names it by that id any more.
+  Map<String, String> switchedRowsOf(Iterable<String> conversationIds) {
+    final ids = conversationIds.toSet();
+    if (ids.isEmpty) return const {};
+    final marks = List.filled(ids.length, '?').join(', ');
+    statements++;
+    return {
+      for (final row in _db.query(
+        'SELECT sp.external_session_id AS id, sp.session_id AS row_id '
+        'FROM session_agent_spans sp '
+        'WHERE sp.external_session_id IN ($marks) '
+        'AND NOT EXISTS (SELECT 1 FROM sessions s '
+        'WHERE s.external_session_id = sp.external_session_id);',
+        [...ids],
+      ))
+        row['id'] as String: row['row_id'] as String,
+    };
+  }
+
   /// Which of [conversationIds] a session or imported record still names.
   Set<String> _openable(Set<String> conversationIds) {
     if (conversationIds.isEmpty) return const {};
@@ -438,8 +462,10 @@ class ConversationIndexDao {
         'SELECT external_session_id AS id FROM sessions '
         'WHERE external_session_id IN ($marks) '
         'UNION SELECT external_id FROM imported_sessions '
-        'WHERE external_id IN ($marks);',
-        [...conversationIds, ...conversationIds],
+        'WHERE external_id IN ($marks) '
+        'UNION SELECT external_session_id FROM session_agent_spans '
+        'WHERE external_session_id IN ($marks);',
+        [...conversationIds, ...conversationIds, ...conversationIds],
       ))
         row['id'] as String,
     };
@@ -529,7 +555,9 @@ class ConversationIndexDao {
         'SELECT state.session_id AS session_id, state.cli AS cli, '
         'state.file_path AS file_path FROM conversation_index_state state '
         'WHERE EXISTS (SELECT 1 FROM sessions s '
-        'WHERE s.external_session_id = state.session_id);',
+        'WHERE s.external_session_id = state.session_id) '
+        'OR EXISTS (SELECT 1 FROM session_agent_spans sp '
+        'WHERE sp.external_session_id = state.session_id);',
       ))
         (
           sessionId: row['session_id'] as String,
@@ -566,7 +594,13 @@ class ConversationIndexDao {
         'a.agent_kind AS cli FROM sessions s '
         'JOIN agent_installations a ON a.id = s.agent_installation_id '
         "WHERE s.external_session_id IS NOT NULL "
-        "AND s.external_session_id <> '';",
+        "AND s.external_session_id <> '' "
+        // Each earlier agent of a switched thread, under its own agent.
+        'UNION SELECT sp.external_session_id, a.agent_kind '
+        'FROM session_agent_spans sp '
+        'JOIN agent_installations a ON a.id = sp.agent_installation_id '
+        "WHERE sp.external_session_id IS NOT NULL "
+        "AND sp.external_session_id <> '';",
       ))
         (sessionId: row['session_id'] as String, cli: row['cli'] as String),
     ];
@@ -585,8 +619,11 @@ class ConversationIndexDao {
       'WHERE external_id = ? '
       'UNION ALL SELECT a.agent_kind, NULL FROM sessions s '
       'JOIN agent_installations a ON a.id = s.agent_installation_id '
-      'WHERE s.external_session_id = ? LIMIT 1;',
-      [conversationId, conversationId, conversationId],
+      'WHERE s.external_session_id = ? '
+      'UNION ALL SELECT a.agent_kind, NULL FROM session_agent_spans sp '
+      'JOIN agent_installations a ON a.id = sp.agent_installation_id '
+      'WHERE sp.external_session_id = ? LIMIT 1;',
+      [conversationId, conversationId, conversationId, conversationId],
     );
     if (rows.isEmpty) return (cli: null, filePath: null);
     return (

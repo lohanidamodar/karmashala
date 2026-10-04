@@ -48,6 +48,10 @@ class SessionEndedWithoutCode extends SessionLifecycle {
   /// the signal's code is the host's doing, so none is kept.
   static const hostStopped = 'the session host stopped';
 
+  /// The reason a session's agent was stopped so another could take the same
+  /// session over: neither a crash nor a person's close.
+  static const switched = 'switched to another agent';
+
   final DateTime at;
   final String reason;
 }

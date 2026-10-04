@@ -455,6 +455,12 @@ class FakeDataServer {
           sessionModes[sessionId] = change;
         case SessionConfigOptionsChanged(:final sessionId):
           sessionConfigOptions[sessionId] = change;
+        case SessionQueueChanged():
+          // Told, never kept: a client lists the queue again.
+          break;
+        case SessionAgentChanged():
+          // Told, never kept: the row itself carries the agent.
+          break;
         case SessionUsageChanged():
           // Told, never kept: a late client reads it from `sessions.stats`.
           break;

@@ -220,6 +220,15 @@ void main() {
       expect(sessions, contains('session_wait'));
     });
 
+    test('the sessions guide says where a subagent runs and how to keep it '
+        'apart', () {
+      final sessions = kMcpGuides
+          .firstWhere((g) => g.topic == 'sessions')
+          .render();
+      expect(sessions, contains('runs in your own checkout and'));
+      expect(sessions, contains('pass `useWorktree`'));
+    });
+
     test('it handles only itself', () {
       expect(InstructionsTools.handles('instructions'), isTrue);
       expect(InstructionsTools.handles('instructions_list'), isFalse);

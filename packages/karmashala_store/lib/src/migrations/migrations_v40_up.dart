@@ -750,3 +750,48 @@ void _migrateToV70(Database db) {
     );
   ''');
 }
+
+/// Messages sent while a session's turn ran, kept here and delivered one per
+/// turn in `seq` order. `request_id` is the sender's key, so a resend after a
+/// restart finds its row rather than queueing it twice.
+void _migrateToV71(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_queued_messages (
+      id                TEXT PRIMARY KEY,
+      session_id        TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+      seq               INTEGER NOT NULL,
+      text              TEXT NOT NULL,
+      state             TEXT NOT NULL,
+      origin            TEXT NOT NULL,
+      origin_id         TEXT,
+      created_at        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      delivered_at      TEXT,
+      request_id        TEXT,
+      error             TEXT
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_queued_messages_session '
+    'ON session_queued_messages (session_id, state, seq);',
+  );
+}
+
+/// Each agent a session has run under, in switch order: the row keeps only
+/// the active one, so the earlier ones' conversations are named here. A row
+/// with none ran one agent; span 0 is written at the first switch.
+void _migrateToV72(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_agent_spans (
+      session_id            TEXT NOT NULL
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      seq                   INTEGER NOT NULL,
+      agent_installation_id TEXT NOT NULL,
+      external_session_id   TEXT,
+      started_at            TEXT NOT NULL,
+      first_message_ordinal INTEGER,
+      carried_packet        TEXT,
+      PRIMARY KEY (session_id, seq)
+    );
+  ''');
+}

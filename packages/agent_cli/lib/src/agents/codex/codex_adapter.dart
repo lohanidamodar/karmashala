@@ -26,6 +26,7 @@ import 'codex_one_shot.dart';
 import 'codex_rate_limit_reader.dart';
 import 'codex_stats.dart';
 import 'codex_store.dart';
+import 'codex_store_reader.dart' show codexInjectedContext;
 import 'codex_store_server.dart';
 import 'codex_usage_endpoint.dart';
 
@@ -59,8 +60,10 @@ class CodexAdapter extends AgentAdapter {
   AgentStore get store => const CodexStore();
 
   @override
-  AgentTranscripts get transcripts =>
-      const AgentTranscripts(dialect: TranscriptDialect.codexRollout);
+  AgentTranscripts get transcripts => const AgentTranscripts(
+    dialect: TranscriptDialect.codexRollout,
+    injected: codexInjectedContext,
+  );
 
   @override
   AgentStats get stats => const CodexStats();

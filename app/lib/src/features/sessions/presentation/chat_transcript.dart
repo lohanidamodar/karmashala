@@ -16,6 +16,7 @@ import 'tool_run.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
 
+part 'chat_transcript/agent_switch_rows.dart';
 part 'chat_transcript/message_rows.dart';
 part 'chat_transcript/tool_batch.dart';
 part 'chat_transcript/turn_meta.dart';
@@ -23,6 +24,10 @@ part 'chat_transcript/turn_meta.dart';
 /// The row the transcript view writes itself, saying a compaction happened
 /// here. Its own role, because an unknown role is read as the agent's.
 const String kCompactionNoticeRole = 'compaction';
+
+/// The row a switched session's transcript holds where another agent took
+/// over: drawn as a divider whose text is what that agent was handed.
+const String kAgentSwitchNoticeRole = 'agentSwitch';
 
 /// A normalized chat message for the transcript view, independent of whether it
 /// came from a native session's event log or an imported CLI transcript.
@@ -34,6 +39,8 @@ class ChatMessage {
     this.thinking,
     this.at,
     this.pending = false,
+    this.agentName,
+    this.agentId,
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -53,6 +60,11 @@ class ChatMessage {
   /// call answered with nothing has no output either.
   final bool pending;
 
+  /// The agent that spoke, named on the first agent row of a turn and on a
+  /// switch divider in a session that switched agent; null everywhere else.
+  final String? agentName;
+  final String? agentId;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -62,6 +74,8 @@ class ChatMessage {
           other.role == role &&
           other.at == at &&
           other.pending == pending &&
+          other.agentName == agentName &&
+          other.agentId == agentId &&
           other.thinking == thinking &&
           _sameTool(other.tool, tool) &&
           other.text == text;

@@ -73,20 +73,22 @@ void main() {
   String screenOf(HostTerminalInstance pane) =>
       terminalTailLines(pane.terminal, lines: 200).join('\n');
 
-  test('the pane asks the server for its terminal, then attaches to it',
-      () async {
-    final access = PaneAccess(readyDeployment());
-    final pane = paneOn(access);
-    await settle();
+  test(
+    'the pane asks the server for its terminal, then attaches to it',
+    () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
 
-    // The server builds the launch (slice 5a): the pane only names the
-    // session its own id gives, at its own grid.
-    expect(asked, [('karmashala_local_p1', 120, 40)]);
-    final channel = access.channels.single;
-    expect(channel.all<OpenMessage>(), isEmpty);
-    expect(channel.only<AttachMessage>().sessionId, 'karmashala_local_p1');
-    expect(pane.liveness.value, PaneLiveness.live);
-  });
+      // The server builds the launch (slice 5a): the pane only names the
+      // session its own id gives, at its own grid.
+      expect(asked, [('karmashala_local_p1', 120, 40)]);
+      final channel = access.channels.single;
+      expect(channel.all<OpenMessage>(), isEmpty);
+      expect(channel.only<AttachMessage>().sessionId, 'karmashala_local_p1');
+      expect(pane.liveness.value, PaneLiveness.live);
+    },
+  );
 
   HostTerminalInstance refusedPane(PaneAccess access, Object refusal) {
     final pane = HostTerminalInstance(
@@ -130,6 +132,27 @@ void main() {
     expect(screen, isNot(contains('could not start this pane')));
     expect(pane.failureDetail, long);
     expect(access.channels.single.all<AttachMessage>(), isEmpty);
+  });
+
+  test('a server that never answers the start ends the pane with a Retry '
+      'rather than leaving it blank and live', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = HostTerminalInstance(
+      id: 'p1',
+      title: 'Codex',
+      profileId: 'powershell',
+      access: access,
+      sessionId: 'karmashala_s1',
+      opener: (_, _) => Completer<TerminalOpening>().future,
+      openWithin: const Duration(milliseconds: 50),
+    );
+    addTearDown(pane.dispose);
+    pane.terminal.resize(120, 40);
+    await settle();
+
+    expect(pane.liveness.value, PaneLiveness.exited);
+    expect(pane.didNotStart, isTrue);
+    expect(pane.failureDetail, contains('did not answer'));
   });
 
   test('a refusal with no short words of its own says a plain line; what '
@@ -212,7 +235,10 @@ void main() {
 
       expect(pane.attachOnly, isTrue);
       final channel = access.channels.single;
-      expect(channel.only<AttachMessage>().sessionId, 'ssh:h1/karmashala_local_p1');
+      expect(
+        channel.only<AttachMessage>().sessionId,
+        'ssh:h1/karmashala_local_p1',
+      );
       expect(channel.all<OpenMessage>(), isEmpty);
       expect(pane.liveness.value, PaneLiveness.exited);
       expect(pane.didNotStart, isFalse, reason: 'ended, so its button starts');
@@ -228,7 +254,8 @@ void main() {
         'Details', () async {
       final access = PaneAccess(readyDeployment())
         ..attachRefusal = ProtocolErrorCode.internal
-        ..attachRefusalMessage = "Can't reach DO. Check that it's online, then "
+        ..attachRefusalMessage =
+            "Can't reach DO. Check that it's online, then "
             'Retry.'
         ..attachRefusalDetail = 'dev@203.0.113.9:22: connection refused';
       final pane = restoredBoxPane(access);
@@ -307,7 +334,10 @@ void main() {
       screenOf(pane),
       isNot(contains('the host stopped while it was running')),
     );
-    expect(pane.failureDetail, contains('the host stopped while it was running'));
+    expect(
+      pane.failureDetail,
+      contains('the host stopped while it was running'),
+    );
   });
 
   test(
@@ -743,30 +773,32 @@ void main() {
       return pane;
     }
 
-    test('two panes on one server share one channel, each on its own ref',
-        () async {
-      final access = PaneAccess(readyDeployment());
-      final first = attached(access, 'p1');
-      final second = attached(access, 'p2');
-      await settle();
+    test(
+      'two panes on one server share one channel, each on its own ref',
+      () async {
+        final access = PaneAccess(readyDeployment());
+        final first = attached(access, 'p1');
+        final second = attached(access, 'p2');
+        await settle();
 
-      final channel = access.channels.single;
-      expect(channel.all<HelloMessage>(), hasLength(1));
-      expect(channel.all<AttachMessage>().map((a) => a.sessionId), [
-        'karmashala_local_p1',
-        'karmashala_local_p2',
-      ]);
-      channel
-        ..pushOutput(0, 'ONE', ref: 1)
-        ..pushOutput(0, 'TWO', ref: 2);
-      await settle();
-      expect(screenOf(first), contains('ONE'));
-      expect(screenOf(first), isNot(contains('TWO')));
-      expect(screenOf(second), contains('TWO'));
+        final channel = access.channels.single;
+        expect(channel.all<HelloMessage>(), hasLength(1));
+        expect(channel.all<AttachMessage>().map((a) => a.sessionId), [
+          'karmashala_local_p1',
+          'karmashala_local_p2',
+        ]);
+        channel
+          ..pushOutput(0, 'ONE', ref: 1)
+          ..pushOutput(0, 'TWO', ref: 2);
+        await settle();
+        expect(screenOf(first), contains('ONE'));
+        expect(screenOf(first), isNot(contains('TWO')));
+        expect(screenOf(second), contains('TWO'));
 
-      first.terminal.textInput('x');
-      expect(channel.all<InputMessage>().single.sessionRef, 1);
-    });
+        first.terminal.textInput('x');
+        expect(channel.all<InputMessage>().single.sessionRef, 1);
+      },
+    );
 
     test('what the server says about who types reaches the pane, and Take '
         'over asks for the token', () async {

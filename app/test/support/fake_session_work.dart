@@ -47,14 +47,132 @@ class FakeSessionWork {
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
 
+  /// Sessions mid-turn: a send to one is queued (`sessions.queue`), as the
+  /// server queues it.
+  final busy = <String>{};
+
+  /// Set to refuse `sessions.queue.sendNext` in these words, as the server
+  /// refuses a resume that would not start.
+  String? sendNextRefusesWith;
+
+  /// What each session holds queued, in order.
+  final queues = <String, List<QueuedMessage>>{};
+
+  var _queuedIds = 0;
+
+  /// Every queue request, in order.
+  final queueAsked = <SessionInputRequest<Object?>>[];
+
+  /// The turn of [sessionId] ended: its head is delivered, as the server's
+  /// queue delivers one per turn.
+  void deliverHead(String sessionId) {
+    final queue = queues[sessionId] ?? [];
+    if (queue.isEmpty) return;
+    final head = queue.removeAt(0);
+    sent.add(SessionSend(sessionId: sessionId, text: head.text));
+    _tellQueue(sessionId);
+  }
+
+  /// What holds each session's queue, marked on its queued messages.
+  final holds = <String, QueueHold>{};
+
+  /// The server holds [sessionId]'s queue for [hold], or lets it go.
+  void holdQueue(String sessionId, QueueHold? hold) {
+    if (hold == null) {
+      holds.remove(sessionId);
+    } else {
+      holds[sessionId] = hold;
+    }
+    _tellQueue(sessionId);
+  }
+
+  List<QueuedMessage> _told(String sessionId) {
+    final hold = holds[sessionId];
+    return [
+      for (final message in queues[sessionId] ?? const <QueuedMessage>[])
+        hold != null && message.state == QueuedMessageState.queued
+            ? message.copyWith(hold: hold)
+            : message,
+    ];
+  }
+
+  void _tellQueue(String sessionId) => _server._tell(null, [
+    SessionQueueChanged(sessionId: sessionId, messages: _told(sessionId)),
+  ]);
+
+  Object? _queueRequest(SessionInputRequest<Object?> request) {
+    queueAsked.add(request);
+    final queue = queues[request.sessionId] ??= [];
+    switch (request) {
+      case SessionQueueList():
+        return _told(request.sessionId);
+      case SessionQueueEdit(:final id, :final text):
+        final at = queue.indexWhere((m) => m.id == id);
+        if (at < 0) throw const DataRefused.notFound('no such message');
+        final edited = queue[at] = queue[at].copyWith(text: text);
+        _tellQueue(request.sessionId);
+        return edited;
+      case SessionQueueCancel(:final id):
+        final at = queue.indexWhere((m) => m.id == id);
+        if (at < 0) throw const DataRefused.notFound('no such message');
+        final cancelled = queue
+            .removeAt(at)
+            .copyWith(state: QueuedMessageState.cancelled);
+        _tellQueue(request.sessionId);
+        return cancelled;
+      case SessionQueueSendNext(:final sessionId):
+        if (sendNextRefusesWith case final words?) {
+          throw DataRefused(DataRefusalCode.failed, words);
+        }
+        if (queue.isEmpty) {
+          throw const DataRefused.notFound('nothing waits in this queue');
+        }
+        final head = queue.removeAt(0);
+        running.add(sessionId);
+        sent.add(SessionSend(sessionId: sessionId, text: head.text));
+        _tellQueue(sessionId);
+        return head.copyWith(state: QueuedMessageState.delivered);
+      case SessionSend() || SessionInterrupt():
+        return null;
+    }
+  }
+
   Object? _input(SessionInputRequest<Object?> request) {
+    if (request
+        case SessionQueueList() ||
+            SessionQueueEdit() ||
+            SessionQueueCancel() ||
+            SessionQueueSendNext()) {
+      return _queueRequest(request);
+    }
+    if (request case SessionSend(
+      :final sessionId,
+      :final text,
+    ) when typesSends && busy.contains(sessionId)) {
+      final queue = queues[sessionId] ??= [];
+      final message = QueuedMessage(
+        id: 'q${++_queuedIds}',
+        sessionId: sessionId,
+        seq: queue.length + 1,
+        text: text,
+        state: QueuedMessageState.queued,
+        origin: QueuedMessageOrigin.app,
+        createdAt: DateTime.utc(2026, 10, 3),
+        updatedAt: DateTime.utc(2026, 10, 3),
+      );
+      queue.add(message);
+      _tellQueue(sessionId);
+      return SessionSent(
+        sent: true,
+        via: SessionSent.queuedVia,
+        queuedId: message.id,
+        position: queue.length,
+      );
+    }
     if (!typesSends) {
       throw const DataRefused.unavailable('this fake types into no sessions');
     }
-    final sessionId = switch (request) {
-      SessionSend(:final sessionId) => sessionId,
-      SessionInterrupt(:final sessionId) => sessionId,
-    };
+    final sessionId = request.sessionId;
     var resumed = false;
     if (!running.contains(sessionId)) {
       final row = _server.sessionRows.getById(sessionId);
@@ -139,10 +257,21 @@ class FakeSessionWork {
             parentLink: SessionLink.fork,
           ),
         );
+      case final SessionSwitchAgent r:
+        switches.add(r);
+        final before = _server.sessionRows.getById(r.sessionId)!;
+        _server.sessionRows.put(
+          before.copyWith(agentInstallationId: r.targetInstallationId),
+        );
+        final row = _server.sessionRows.getById(r.sessionId)!;
+        return SessionStarted(session: row, launch: _launchOf(row));
       case SessionForkFromCheckpoint():
         throw const DataRefused.invalid('not scripted');
     }
   }
+
+  /// Every switch asked of the server, in order.
+  final switches = <SessionSwitchAgent>[];
 
   SessionStarted _start(SessionStartSpec spec) {
     // A conversation the server already runs is answered as it is.

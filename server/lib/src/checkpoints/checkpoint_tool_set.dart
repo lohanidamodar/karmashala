@@ -41,6 +41,7 @@ class CheckpointToolSet extends ServerToolSet {
           arguments['id'] as String?,
           confirm: arguments['confirm'] == true,
           paths: (arguments['paths'] as List?)?.whereType<String>().toList(),
+          requestedBy: callerSessionId,
         ),
         _ => throw ArgumentError('Unknown tool: $tool'),
       };
@@ -100,12 +101,14 @@ class CheckpointToolSet extends ServerToolSet {
     String? id, {
     required bool confirm,
     List<String>? paths,
+    String? requestedBy,
   }) async {
     final checkpoint = _requireCheckpoint(id);
     final answer = await _checkpoints.restore(
       checkpoint,
       confirm: confirm,
       paths: paths ?? const [],
+      requestedBy: requestedBy,
     );
     final conflict = answer.conflict;
     if (conflict != null) {

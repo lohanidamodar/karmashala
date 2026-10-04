@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 /// A bottom sheet on a compact window, a dialog elsewhere (PROJECT.md §6).
@@ -87,5 +88,87 @@ Future<T?> showAdaptiveModal<T>({
         ),
       );
     },
+  );
+}
+
+/// A bottom sheet on a compact window, a panel along the window's end edge
+/// elsewhere (PROJECT.md §6): for a list read beside the work it describes.
+/// [builder] draws a body that scrolls itself.
+Future<T?> showAdaptiveSidePanel<T>({
+  required BuildContext context,
+  required String title,
+  required WidgetBuilder builder,
+  double width = 440,
+}) {
+  final size = MediaQuery.sizeOf(context);
+  if (WidthClass.of(size.width).isCompact) {
+    return showAdaptiveModal<T>(
+      context: context,
+      title: title,
+      builder: builder,
+      heightFactor: 0.8,
+    );
+  }
+  final motion = Motion.of(context);
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.26),
+    transitionDuration: motion.base,
+    pageBuilder: (context, _, _) {
+      final theme = Theme.of(context);
+      return Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: Material(
+          elevation: 8,
+          color: SurfaceTones.of(context).raised,
+          child: SizedBox(
+            width: math.min(width, size.width),
+            height: double.infinity,
+            child: SafeArea(
+              left: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Insets.lg,
+                      Insets.sm,
+                      Insets.sm,
+                      Insets.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: const Icon(AppIcons.x),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(child: builder(context)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, _, child) => SlideTransition(
+      position: Tween(
+        begin: const Offset(1, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+      child: child,
+    ),
   );
 }

@@ -68,6 +68,7 @@ class HostedLaunch {
     this.rows = 40,
     this.followSettings = false,
     this.fresh = false,
+    this.freshConversationId,
   });
 
   final Repository repository;
@@ -153,6 +154,11 @@ class HostedLaunch {
   /// With [resuming]: keep the row and start a **new** conversation in it —
   /// a row whose agent never named one, or one a person restarts afresh.
   final bool fresh;
+
+  /// With [fresh]: the id the new conversation is started under where the
+  /// agent takes one, over the row's own — which an earlier agent of a
+  /// switched row already holds.
+  final String? freshConversationId;
 }
 
 /// What a start produced.
@@ -390,6 +396,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         (resumeId == null || resumeId.isEmpty) &&
         !forking &&
         agents.assignsOwnSessionId(agentId);
+    final ownId = (launch.fresh ? launch.freshConversationId : null) ?? id;
 
     final Session session;
     if (resuming != null) {
@@ -410,10 +417,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       if (resumeId != null && resumeId != resuming.externalSessionId) {
         sessions.updateExternalSessionId(id, resumeId);
       }
-      // A fresh conversation in the row is started under the row's own id,
-      // so the row names it from the start.
-      if (launch.fresh && assignsOwnId && resuming.externalSessionId != id) {
-        sessions.updateExternalSessionId(id, id);
+      // A fresh conversation in the row is started under the row's own id
+      // (or the one given), so the row names it from the start.
+      if (launch.fresh &&
+          assignsOwnId &&
+          resuming.externalSessionId != ownId) {
+        sessions.updateExternalSessionId(id, ownId);
       }
     } else {
       final named = newSessionTitle(launch.title, typed: launch.titleTyped);
@@ -486,6 +495,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             kind,
             isPacket: typedPacket,
           );
+    // A prompt that went to a file is read from the data directory, which an
+    // agent that can be granted it gets, so it does not ask to leave its
+    // workspace for Karmashala's own file.
+    final handedFile =
+        acp == null &&
+        prompt != (typedPacket ? launch.systemPrompt : launch.prompt);
+    final files = handoffFiles;
+    final readableDirectory = handedFile && files != null
+        ? agentConfigPathFor(files.directory.path, kind)
+        : null;
     final newConversation = resumeId == null || resumeId.isEmpty;
     final permission = launch.followSettings
         ? agents.permissionOf(
@@ -523,11 +542,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             descriptor,
             permission,
             modelId: modelId,
-            sessionId: assignsOwnId ? id : null,
+            sessionId: assignsOwnId ? ownId : null,
             resumeSessionId: forking ? null : resumeId,
             forkSessionId: launch.forkConversationId,
             prompt: prompt,
             systemPromptFilePath: systemPromptPath,
+            extraDirectoryPath: readableDirectory,
             suppressSelfUpdate: suppressUpdate,
           );
     final agentLaunch = AgentPaneLaunch(

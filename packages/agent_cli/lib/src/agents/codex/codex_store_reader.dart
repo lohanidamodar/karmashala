@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../domain/agent_ids.dart';
 import '../../environments/environment_path.dart';
 import '../../cli_detection/domain/detected_session.dart';
+import '../adapter/injected_context.dart';
 import '../adapter/store_server_launch.dart';
 import '../../cli_detection/data/store_scan_slots.dart';
 import '../../cli_detection/data/store_session_reader.dart';
@@ -37,11 +38,26 @@ class CodexRolloutCache {
 bool isInteractiveCodexSource(Object? source) =>
     source == null || source == 'cli' || source == 'vscode';
 
+/// What Codex writes into its rollouts that nobody said: every `developer`
+/// message (skills, permissions, collaboration mode), and these user-role
+/// blocks. Seen in Codex CLI 0.160 rollouts.
+const codexInjectedContext = InjectedTranscriptContext(
+  roles: {'developer', 'system'},
+  blocks: [
+    InjectedBlock('INSTRUCTIONS', heading: '# AGENTS.md instructions'),
+    InjectedBlock('environment_context'),
+    InjectedBlock('user_instructions'),
+    InjectedBlock('recommended_plugins'),
+    InjectedBlock('skills_instructions'),
+    InjectedBlock('plugins_instructions'),
+    InjectedBlock('apps_instructions'),
+  ],
+);
+
 /// Whether a user-role message is context Codex injected rather than what a
-/// person typed: a whole `<tag>…</tag>` block such as `<recommended_plugins>`,
-/// `<environment_context>` or `<user_instructions>`.
+/// person typed ([codexInjectedContext]).
 bool isInjectedCodexContext(String text) =>
-    RegExp(r'^\s*<([a-z_][a-z0-9_-]*)[^>]*>[\s\S]*</\1>\s*$').hasMatch(text);
+    codexInjectedContext.isInjected('user', text);
 
 class _CachedRollout {
   const _CachedRollout({

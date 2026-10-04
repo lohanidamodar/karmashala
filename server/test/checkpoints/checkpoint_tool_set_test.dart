@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
@@ -139,6 +140,34 @@ void main() {
     },
     skip: hasGit ? false : 'git is not on PATH',
   );
+
+  test('a restore while the session\'s turn runs is refused, naming it; the '
+      'session\'s own agent may still restore', () async {
+    final taken =
+        ((await call('checkpoint_capture') as Map)['checkpoint'] as Map)['id']
+            as String;
+    writeReadme('hub\nnewer\n');
+    w.checkpoints.recorder.observe('s1', AgentActivityStatus.working);
+    await w.settle();
+
+    await expectLater(
+      call('checkpoint_restore', {'id': taken, 'confirm': true}, 's2'),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'm',
+          contains('A turn of "session s1" is running'),
+        ),
+      ),
+    );
+    expect(File(p.join(w.hub, 'README.md')).readAsStringSync(), 'hub\nnewer\n');
+
+    final done =
+        await call('checkpoint_restore', {'id': taken, 'confirm': true}, 's1')
+            as Map<String, dynamic>;
+    expect(done['restored'], isTrue);
+    expect(File(p.join(w.hub, 'README.md')).readAsStringSync(), 'hub\n');
+  }, skip: hasGit ? false : 'git is not on PATH');
 
   test('errors are the app\'s, in its words', () async {
     await expectLater(

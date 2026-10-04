@@ -11,8 +11,11 @@ import 'package:karmashala_session_engine/store.dart'
     show SessionDao, SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import '../../domain/session_registry.dart';
+import '../../sessions/session_subagents.dart' show boundedText;
+import '../../status/child_turn_wait.dart';
 import '../../status/daemon_prompt_answers.dart';
 import '../../status/hosted_session_wait.dart';
+import '../../sessions/session_queue.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_tool_schemas.dart';
@@ -31,8 +34,10 @@ class SessionToolSet extends ServerToolSet {
     required this.prompts,
     required this.registry,
     this.resumeWith,
+    this.queue,
     HostedSessionWait? waits,
     SessionMessageTypist? typist,
+    this.answerOf,
   }) : _sessions = SessionDao(_context.database),
        waits = waits ?? HostedSessionWait(status: prompts.status) {
     this.typist = typist ?? typistOver(prompts);
@@ -42,10 +47,18 @@ class SessionToolSet extends ServerToolSet {
   final DaemonPromptAnswers prompts;
   final SessionRegistry registry;
 
+  /// Where a `session_send` waits while the target's turn runs; null sends
+  /// at once, as before the queue.
+  final SessionQueue? queue;
+
   /// Resumes a session that is not running with [prompt] as its opening
   /// message, and shows it in the person's window; null refuses instead.
   final Future<void> Function(String sessionId, String prompt)? resumeWith;
   final HostedSessionWait waits;
+
+  /// What a session said last, which a wait that settles ready answers with;
+  /// null where this server reads no transcripts.
+  final AnswerOf? answerOf;
   late final SessionMessageTypist typist;
   final SessionDao _sessions;
 
@@ -193,6 +206,7 @@ class SessionToolSet extends ServerToolSet {
 
   /// Relays [text] into [sessionId]'s composer under the sender's own name;
   /// the delivery is a keystroke, so an open prompt or question refuses it.
+  /// While the target's turn runs, the message waits in [queue] instead.
   Future<Object?> _send(
     String sessionId,
     String text, {
@@ -205,32 +219,6 @@ class SessionToolSet extends ServerToolSet {
       throw ArgumentError('text is required and cannot be blank.');
     }
     final session = _session(sessionId);
-    if (!held && resumeWith == null) {
-      throw StateError(
-        'That session is not running, so there is nothing to type into. '
-        'open_session resumes it.',
-      );
-    }
-    final report = prompts.status.statusOf(sessionId)?.report;
-    if (report?.hasOpenQuestion ?? false) {
-      throw StateError(
-        'That session is asking a multiple-choice question, so this would '
-        'type into the question rather than send a message. Read it with '
-        'session_transcript and answer it in the terminal or from the '
-        'companion app, or wait for it to be answered and send then.',
-      );
-    }
-    if (report?.hasOpenPrompt ?? false) {
-      throw StateError(
-        'That session has an approval prompt open, so this would press keys in '
-        'that prompt rather than send a message — measured against all three '
-        'CLIs, none delivered the text and two of them decided the pending '
-        'request. Read what is being asked with session_transcript and answer '
-        'it with session_answer, which presses the key that agent itself names '
-        'and records who decided. Or wait for the prompt to clear and send '
-        'then.',
-      );
-    }
     if (wait) {
       if (waits.blockedOn(sessionId) case final block?) {
         throw StateError(
@@ -270,30 +258,8 @@ class SessionToolSet extends ServerToolSet {
         ? null
         : SessionAttribution(sessionId: sender.id, title: sender.title);
     final message = attribution == null ? text : attribution.render(text);
-    // Not running: the message is its resume's opening prompt, as the app's
-    // composer resumed a stopped session with what was typed. An agent over
-    // ACP takes it as `session/prompt`, one turn at a time.
-    final runtime = prompts.status.acpRuntimeOf(sessionId);
-    final bool delivered;
-    if (runtime != null) {
-      try {
-        await runtime.send(message);
-      } on StateError catch (error) {
-        throw StateError('NOTHING WAS SENT: ${error.message}.');
-      }
-      delivered = true;
-    } else {
-      delivered = held
-          ? await typist.send(sessionId, message)
-          : await resumeWith!(sessionId, message).then((_) => true);
-    }
-    if (!delivered) {
-      throw StateError(
-        'That session\'s process ended before the message could be typed '
-        'into it. open_session resumes it.',
-      );
-    }
-    if (relayed) {
+    void recordRelay() {
+      if (!relayed) return;
       _context.write(
         RelayRecord(
           SessionRelay(
@@ -305,6 +271,32 @@ class SessionToolSet extends ServerToolSet {
         ),
       );
     }
+
+    final admission =
+        queue?.admit(
+          sessionId,
+          message,
+          origin: QueuedMessageOrigin.mcp,
+          originId: caller,
+        ) ??
+        const AdmitNow();
+    if (admission is AdmitQueued) {
+      recordRelay();
+      return _queuedAnswer(
+        session,
+        admission,
+        attribution: attribution,
+        wait: wait,
+        timeoutSeconds: timeoutSeconds,
+      );
+    }
+    var delivered = false;
+    try {
+      delivered = await _deliverNow(sessionId, message, held: held);
+    } finally {
+      queue?.afterImmediate(sessionId, delivered: delivered);
+    }
+    recordRelay();
     final answer = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
@@ -326,6 +318,113 @@ class SessionToolSet extends ServerToolSet {
     return <String, Object?>{...answer, ...renderWaitOutcome(outcome)};
   }
 
+  /// Types or sends [message] into [sessionId] now, resuming it when nothing
+  /// runs it. True once it is in; throws in words when it is refused.
+  Future<bool> _deliverNow(
+    String sessionId,
+    String message, {
+    required bool held,
+  }) async {
+    if (!held && resumeWith == null) {
+      throw StateError(
+        'That session is not running, so there is nothing to type into. '
+        'open_session resumes it.',
+      );
+    }
+    final report = prompts.status.statusOf(sessionId)?.report;
+    if (report?.hasOpenQuestion ?? false) {
+      throw StateError(
+        'That session is asking a multiple-choice question, so this would '
+        'type into the question rather than send a message. Read it with '
+        'session_transcript and answer it in the terminal or from the '
+        'companion app, or wait for it to be answered and send then.',
+      );
+    }
+    if (report?.hasOpenPrompt ?? false) {
+      throw StateError(
+        'That session has an approval prompt open, so this would press keys in '
+        'that prompt rather than send a message — measured against all three '
+        'CLIs, none delivered the text and two of them decided the pending '
+        'request. Read what is being asked with session_transcript and answer '
+        'it with session_answer, which presses the key that agent itself names '
+        'and records who decided. Or wait for the prompt to clear and send '
+        'then.',
+      );
+    }
+    // Not running: the message is its resume's opening prompt, as the app's
+    // composer resumed a stopped session with what was typed. An agent over
+    // ACP takes it as `session/prompt`, one turn at a time.
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    if (runtime != null) {
+      try {
+        await runtime.send(message);
+      } on StateError catch (error) {
+        throw StateError('NOTHING WAS SENT: ${error.message}.');
+      }
+      return true;
+    }
+    final delivered = held
+        ? await typist.send(sessionId, message)
+        : await resumeWith!(sessionId, message).then((_) => true);
+    if (!delivered) {
+      throw StateError(
+        'That session\'s process ended before the message could be typed '
+        'into it. open_session resumes it.',
+      );
+    }
+    return true;
+  }
+
+  /// A message queued behind the target's running turn. With [wait], blocks
+  /// until it is delivered and the session settles, within one bound.
+  Future<Object?> _queuedAnswer(
+    Session session,
+    AdmitQueued queued, {
+    required SessionAttribution? attribution,
+    required bool wait,
+    num? timeoutSeconds,
+  }) async {
+    final answer = <String, Object?>{
+      'sessionId': session.id,
+      'title': session.title,
+      'delivered': false,
+      'queued': true,
+      'queuedId': queued.message.id,
+      'position': queued.position,
+      'attribution': attribution?.line,
+      'note':
+          'That session is working, so the message waits at the server and '
+          'is delivered when its turn ends, one message per turn. Do not '
+          'send it again.',
+    };
+    final queue = this.queue;
+    if (!wait || queue == null) return answer;
+    final bound = sessionWaitBoundFor(timeoutSeconds);
+    final started = DateTime.now();
+    final settled = await queue
+        .settled(queued.message.id)
+        .timeout(bound, onTimeout: () => queued.message);
+    if (settled.state != QueuedMessageState.delivered) {
+      return <String, Object?>{
+        ...answer,
+        'queueState': settled.state.name,
+        'error': ?settled.error,
+      };
+    }
+    final left = bound - DateTime.now().difference(started);
+    final outcome = await waits.wait(
+      session.id,
+      bound: left.isNegative ? Duration.zero : left,
+      inputSent: true,
+    );
+    return <String, Object?>{
+      ...answer,
+      'delivered': true,
+      'queueState': settled.state.name,
+      ...renderWaitOutcome(outcome),
+    };
+  }
+
   /// Blocks until [sessionId] settles, and says what it settled on.
   Future<Object?> _wait(String sessionId, {num? timeoutSeconds}) async {
     final session = _session(sessionId);
@@ -333,10 +432,21 @@ class SessionToolSet extends ServerToolSet {
       sessionId,
       bound: sessionWaitBoundFor(timeoutSeconds),
     );
+    final ready =
+        outcome.state == SessionWaitState.idle ||
+        outcome.state == SessionWaitState.done;
+    final answer = ready ? await answerOf?.call(sessionId) : null;
+    final (text, cut) = answer == null
+        ? (null, false)
+        : boundedText(answer.text, kFinalAnswerMaxChars);
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
       ...renderWaitOutcome(outcome),
+      if (ready && answerOf != null) ...{
+        'finalAnswer': text ?? 'not recorded',
+        if (cut) 'finalAnswerTruncated': true,
+      },
     };
   }
 
@@ -476,6 +586,8 @@ class SessionToolSet extends ServerToolSet {
         'host is not running it, so there is nothing to end.',
       );
     }
+    // What waits for it is paused, so the queue never resumes it.
+    queue?.pause(sessionId);
     try {
       await registry.close(hostSessionIdOf(sessionId));
     } on UnknownSession {

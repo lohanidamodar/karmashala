@@ -27,7 +27,11 @@ import '../application/session_actions.dart';
 import '../application/delivery_update_service.dart';
 import '../application/session_archive_service.dart';
 import '../application/session_handoff_service.dart';
+import '../application/acp_session_providers.dart';
+import '../application/host_lifecycle/host_lifecycle_providers.dart';
 import '../application/session_providers.dart';
+import '../application/session_resume_providers.dart';
+import '../application/session_signals.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
@@ -564,6 +568,64 @@ class DeliveryStateLine extends ConsumerWidget {
   }
 }
 
+/// The stage's icon and word. `working` is the git stage "nothing recorded
+/// yet", which over a session nothing runs read as the agent working.
+class _StageMark extends ConsumerWidget {
+  const _StageMark({
+    required this.sessionId,
+    required this.delivery,
+    required this.colour,
+    required this.style,
+  });
+
+  final String sessionId;
+  final SessionDelivery delivery;
+  final Color colour;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watchSession(sessionId);
+    final stage = delivery.stage;
+    final row = ref.read(sessionsDataProvider).getById(sessionId);
+    // Judged by what runs it, not by the row's word: after a restart a row
+    // can still say running, or unknown, with nothing behind it.
+    final runs =
+        ref.watch(
+          sessionWhereaboutsProvider(sessionId).select((w) => w.hostedLive),
+        ) ||
+        ref.read(sessionRunningOnHostProvider)(sessionId) ||
+        (row != null &&
+            row.status.claimsLive &&
+            ref.watch(isAcpSessionProvider(sessionId)));
+    final stopped = stage == DeliveryStage.working && row != null && !runs;
+    // The uncommitted count is its own fact beside this one.
+    final word = stopped ? 'Not running' : stage.label;
+    return Row(
+      key: const ValueKey('delivery-stage'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          stopped ? AppIcons.stopCircle : _stageIcon(stage),
+          size: Chrome.iconSmall,
+          color: colour,
+        ),
+        const SizedBox(width: Insets.xs),
+        // Ends rather than overflows a line the chips beside it have narrowed.
+        Flexible(
+          child: Text(
+            word,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style?.copyWith(color: colour),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// What the state line is made of, as separate pieces — a list, because both
 /// hosts wrap them in a [Wrap] of their own. [withModel] is about the *host*.
 List<Widget> _deliveryFacts(
@@ -589,13 +651,11 @@ List<Widget> _deliveryFacts(
   return [
     // A dot as well as a colour: state must never be carried by colour
     // alone, and the stage's own name is beside it regardless.
-    Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(_stageIcon(stage), size: Chrome.iconSmall, color: colour),
-        const SizedBox(width: Insets.xs),
-        Text(stage.label, style: label?.copyWith(color: colour)),
-      ],
+    _StageMark(
+      sessionId: sessionId,
+      delivery: delivery,
+      colour: colour,
+      style: label,
     ),
     // Beside the stage: how far the work got, and whether anything checked it.
     // Drawn in every state — a fact that vanishes reads as a clean bill.

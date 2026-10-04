@@ -14,6 +14,9 @@ class ServerSessionWork implements SessionWork {
   final ServerSessionLauncher launches;
   final SessionContinuations continuations;
 
+  /// Told before a person's End stops row [String]: its queue pauses.
+  void Function(String sessionId)? ending;
+
   @override
   Future<Object?> handle(SessionWorkRequest<Object?> request) async {
     try {
@@ -46,6 +49,12 @@ class ServerSessionWork implements SessionWork {
           intoNewWorktree: r.newWorktree,
           permissionMode: r.permissionMode,
           sourceBrief: r.sourceBrief,
+        ),
+        final SessionSwitchAgent r => await continuations.switchAgent(
+          sessionId: r.sessionId,
+          targetInstallationId: r.targetInstallationId,
+          instruction: r.instruction,
+          permissionMode: r.permissionMode,
         ),
         final SessionFork r => await continuations.fork(
           sessionId: r.sessionId,
@@ -80,6 +89,7 @@ class ServerSessionWork implements SessionWork {
   }
 
   Future<DataAck> _end(String sessionId) async {
+    ending?.call(sessionId);
     await launches.end(sessionId);
     return const DataAck();
   }

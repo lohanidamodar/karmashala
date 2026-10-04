@@ -14,8 +14,10 @@ import 'package:agent_cli/read.dart'
 import 'package:path/path.dart' as p;
 import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_session/session.dart' show SessionAgentSpan;
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
 
+import 'session_agent_stitching.dart';
 import 'session_message_transcripts.dart';
 import 'session_records.dart';
 
@@ -42,6 +44,7 @@ class SessionTranscripts {
   SessionTranscripts({
     required this.lookUp,
     this.messages,
+    this.spans,
     bool Function(String sessionId)? servesFromMessages,
     this.interval = const Duration(seconds: 1),
     this.tick = const Duration(milliseconds: 250),
@@ -56,6 +59,10 @@ class SessionTranscripts {
 
   /// The table-backed source, for the sessions [servesFromMessages] names.
   final SessionMessageTranscriptSource? messages;
+
+  /// How a session that switched agent is read, span by span; null reads
+  /// every session from one source.
+  final AgentSpanReaders? spans;
 
   /// Whether a session's transcript is the server's own rows rather than its
   /// agent's file. The runtime wires it to "this session's agent is ACP".
@@ -127,6 +134,14 @@ class SessionTranscripts {
       messages: messages.sublist(from, end),
       path: path,
     );
+  }
+
+  /// Every row of [sessionId]'s transcript as it stands now; empty while there
+  /// is none to read.
+  Future<List<TranscriptMessage>> messagesOf(String sessionId) async {
+    final held = _hold(sessionId);
+    await _refresh(held);
+    return held.messages;
   }
 
   /// One page of [SessionTranscriptTurns.sessionId]'s turns, text only: what
@@ -281,6 +296,8 @@ class SessionTranscripts {
   }
 
   Future<void> _read(_Held held) async {
+    final switched = spans?.spansOf(held.sessionId) ?? const [];
+    if (switched.isNotEmpty) return _readStitched(held, switched);
     if (servesFromMessages(held.sessionId)) return _readMessages(held);
     final now = _now();
     if (held.tail == null) {
@@ -393,6 +410,80 @@ class SessionTranscripts {
         ..revision = latest;
     }
     held.cost = clock.elapsed;
+  }
+
+  /// Each span from its own source, one after another. A span whose record
+  /// is not found yet contributes nothing and is looked for again.
+  Future<void> _readStitched(_Held held, List<SessionAgentSpan> all) async {
+    final readers = spans!;
+    final clock = Stopwatch()..start();
+    final sources = <SpanSource>[];
+    for (final span in all) {
+      final installation = span.agentInstallationId;
+      if (readers.speaksAcp(installation)) {
+        sources.add((
+          span: span,
+          fromMessages: true,
+          rows: _messageRows(held),
+        ));
+        continue;
+      }
+      sources.add((
+        span: span,
+        fromMessages: false,
+        rows: await _fileRows(held, readers, span),
+      ));
+    }
+    final next = stitchAgentSpans(sources);
+    if (!held.stitched) {
+      // A new generation: the rows a client holds were one source's.
+      held
+        ..stitched = true
+        ..generation = '';
+    }
+    _absorb(held, next);
+    held.cost = clock.elapsed;
+  }
+
+  List<TranscriptMessage> _messageRows(_Held held) {
+    final source = messages;
+    if (source == null) return const [];
+    final latest = source.latestRevision(held.sessionId);
+    if (held.spanMessages == null || held.spanMessagesRevision != latest) {
+      held
+        ..spanMessages = source.readAll(held.sessionId).messages
+        ..spanMessagesRevision = latest;
+    }
+    return held.spanMessages!;
+  }
+
+  Future<List<TranscriptMessage>> _fileRows(
+    _Held held,
+    AgentSpanReaders readers,
+    SessionAgentSpan span,
+  ) async {
+    final agentId = readers.agentIdOf(span.agentInstallationId);
+    final conversation = span.externalSessionId;
+    if (agentId == null || conversation == null || conversation.isEmpty) {
+      return const [];
+    }
+    final key = '$agentId/$conversation';
+    var tail = held.spanTails[key];
+    if (tail == null) {
+      final String? path;
+      try {
+        path = await readers.locate(agentId, conversation);
+      } on Object {
+        return const [];
+      }
+      if (path == null) return const [];
+      tail = held.spanTails[key] = CliTranscriptTail(path, agentId);
+    }
+    try {
+      return held.spanRows[key] = await tail.read();
+    } on Object {
+      return held.spanRows[key] ?? const [];
+    }
   }
 
   void _absent(_Held held, ChatViewEvidence absence) {
@@ -580,6 +671,13 @@ class _Held {
   /// The revision each row of [messages] last changed at.
   List<int> changedAt = [];
 
+  /// Read span by span, since the session first switched agent.
+  bool stitched = false;
+  final spanTails = <String, CliTranscriptTail>{};
+  final spanRows = <String, List<TranscriptMessage>>{};
+  List<TranscriptMessage>? spanMessages;
+  int spanMessagesRevision = -1;
+
   Future<void> lock = Future.value();
   bool polling = false;
   Duration cost = Duration.zero;
@@ -596,6 +694,7 @@ bool sameTranscriptMessage(TranscriptMessage a, TranscriptMessage b) =>
         a.at == b.at &&
         a.pendingToolUseId == b.pendingToolUseId &&
         a.pendingBackgroundAgentId == b.pendingBackgroundAgentId &&
+        a.agentInstallationId == b.agentInstallationId &&
         _sameCompaction(a.compaction, b.compaction) &&
         _sameSubagent(a.subagent, b.subagent) &&
         _sameTool(a.tool, b.tool));

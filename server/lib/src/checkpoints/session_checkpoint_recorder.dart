@@ -121,6 +121,7 @@ class ServerCheckpointRecorder {
         _serialSnapshotting(
           sessionId,
           (snapshotted) => _captureTurn(sessionId, edge, snapshotted),
+          early: true,
         ),
       );
     } on Object catch (error) {
@@ -213,14 +214,14 @@ class ServerCheckpointRecorder {
           turn,
           snapshotted,
         );
-      }),
+      }, early: true),
     );
   }
 
   Future<void> _captureTurn(
     String sessionId,
     TurnEdge edge,
-    void Function() snapshotted,
+    Future<void> Function() snapshotted,
   ) async {
     if (_closed) return;
     final starting = edge == TurnEdge.started;
@@ -270,7 +271,7 @@ class ServerCheckpointRecorder {
     List<EnvironmentPath> repos,
     CheckpointReason reason,
     _Turn turn,
-    void Function() snapshotted,
+    Future<void> Function() snapshotted,
   ) async {
     final taken = <({EnvironmentPath repo, String tree, bool late})>[];
     for (final repo in repos) {
@@ -296,7 +297,7 @@ class ServerCheckpointRecorder {
         _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
       }
     }
-    snapshotted();
+    await snapshotted();
     for (final (:repo, :tree, :late) in taken) {
       if (_closed) return;
       try {
@@ -388,24 +389,36 @@ class ServerCheckpointRecorder {
   /// [_serial], for a [task] that says when its snapshots are taken (calling
   /// the function it is given) before it is done: what [settled] waits for.
   /// A task that never says is taken to have snapshotted when it ends.
+  ///
+  /// An [early] task starts once the one before it has *snapshotted*, and the
+  /// future `snapshotted()` answers is when it may record: a held tool must
+  /// not wait for the previous capture's commit and diff (measured on
+  /// Windows: ~0.5 s of a 1.5 s hold).
   Future<T> _serialSnapshotting<T>(
     String sessionId,
-    Future<T> Function(void Function() snapshotted) task,
-  ) {
+    Future<T> Function(Future<void> Function() snapshotted) task, {
+    bool early = false,
+  }) {
     final previous = _queues[sessionId] ?? Future<void>.value();
+    final start = early
+        ? (_snapshots[sessionId] ?? Future<void>.value())
+        : previous;
     final snapped = Completer<void>();
-    void snapshotted() {
+    Future<void> snapshotted() {
       if (!snapped.isCompleted) snapped.complete();
+      return previous;
     }
 
-    final result = previous.then((_) => task(snapshotted));
-    final tail = result.then<void>((_) {}, onError: (Object _) {});
-    tail.whenComplete(snapshotted);
+    final result = start.then((_) => task(snapshotted));
+    final ended = result.then<void>((_) {}, onError: (Object _) {});
+    ended.whenComplete(snapshotted);
+    // Ended only once every task before it has: what runs next sees all rows.
+    final tail = Future.wait([ended, previous]).then<void>((_) {});
     _queues[sessionId] = tail;
     tail.whenComplete(() {
       if (identical(_queues[sessionId], tail)) _queues.remove(sessionId);
     });
-    // A task starts only once the one before it has ended, so its own
+    // A task starts only once the one before it has snapshotted, so its own
     // snapshot is the last of every queued before it.
     final snapshots = snapped.future;
     _snapshots[sessionId] = snapshots;

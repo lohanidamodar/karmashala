@@ -158,6 +158,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'get_usage': McpToolAnnotations.read,
   // Lands in a pane, and `openAgentTab` makes that tab active and focused.
   'open_new_session': McpToolAnnotations(movesAttention: true),
+  // open_new_session's launch, tab included, then a wait on its answer.
+  'subagent_run': McpToolAnnotations(movesAttention: true),
   // Reveals or resumes; for an imported CLI session it opens an external
   // window, one per call — a driver once opened one per `list_sessions` row.
   'open_session': McpToolAnnotations(movesAttention: true),
@@ -611,6 +613,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.sessions,
     'Start a new agent session in a project, as a tab in Karmashala.',
   ),
+  'subagent_run': McpToolListing(
+    McpToolCategory.sessions,
+    'Run a subagent on any agent and model; get its answer, then it ends.',
+  ),
   'open_session': McpToolListing(
     McpToolCategory.sessions,
     'Reattach to a session or resume it; an imported one opens a window.',
@@ -621,7 +627,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'session_send': McpToolListing(
     McpToolCategory.sessions,
-    'Send a message to a session, as typing into its message box would.',
+    'Send a message to a session; queued at the server while it works.',
   ),
   'session_draft': McpToolListing(
     McpToolCategory.sessions,

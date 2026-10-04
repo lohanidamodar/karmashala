@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
+import '../../agents/adapter/injected_context.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
@@ -56,6 +57,11 @@ class CompactionBoundary {
   String toString() => 'CompactionBoundary(${trigger ?? 'unrecorded'})';
 }
 
+/// The role of the row a switched session's transcript holds where another
+/// agent took over: its text is what that agent was handed, and its
+/// [TranscriptMessage.agentInstallationId] the agent taking over.
+const String kAgentSwitchRole = 'agentSwitch';
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -69,6 +75,7 @@ class TranscriptMessage {
     this.pendingBackgroundAgentId,
     this.thinking,
     this.compaction,
+    this.agentInstallationId,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -132,6 +139,24 @@ class TranscriptMessage {
   /// [CompactionBoundary].
   final CompactionBoundary? compaction;
 
+  /// The installation that spoke this row, set only in a session that switched
+  /// agent; null everywhere else, including every row a file reader returns.
+  final String? agentInstallationId;
+
+  /// This row with [agentInstallationId] set.
+  TranscriptMessage withAgent(String? installationId) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: installationId,
+  );
+
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
   /// lossless for every field above: lowerCamel names, a null field left out,
   /// [at] as ISO-8601 UTC. A field added to this class is added here too.
@@ -145,6 +170,7 @@ class TranscriptMessage {
     'pendingToolUseId': ?pendingToolUseId,
     'pendingBackgroundAgentId': ?pendingBackgroundAgentId,
     'compaction': ?compaction?.toJson(),
+    'agentInstallationId': ?agentInstallationId,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -181,6 +207,7 @@ class TranscriptMessage {
       compaction: compaction is Map
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
+      agentInstallationId: string('agentInstallationId'),
     );
   }
 }
@@ -225,6 +252,13 @@ String? transcriptFileFor(String filePath, String cli) {
 TranscriptDialect transcriptDialectFor(String cli) =>
     _transcriptsFor(cli)?.dialect ?? TranscriptDialect.claudeJsonl;
 
+/// A fresh parse of [cli]'s transcript, skipping what its adapter declares
+/// nobody said.
+_TranscriptParse _parseFor(String cli) => _TranscriptParse(
+  transcriptDialectFor(cli),
+  _transcriptsFor(cli)?.injected ?? InjectedTranscriptContext.none,
+);
+
 /// What [cli]'s adapter says about its transcripts, from the shipped registry
 /// — these readers run on worker isolates, where nothing else is reachable.
 AgentTranscripts? _transcriptsFor(String cli) =>
@@ -255,6 +289,7 @@ Future<List<TranscriptMessage>> readCliTranscript(
     filePath,
     transcriptDialectFor(cli),
     subagentsDirectory,
+    injected: _transcriptsFor(cli)?.injected,
   );
 }
 
@@ -262,12 +297,16 @@ Future<List<TranscriptMessage>> _readTranscriptFile(
   String path,
   String filePath,
   TranscriptDialect dialect,
-  String? subagentsDirectory,
-) async {
+  String? subagentsDirectory, {
+  InjectedTranscriptContext? injected,
+}) async {
   final file = File(path);
   if (!await file.exists()) return const [];
 
-  final parse = _TranscriptParse(dialect);
+  final parse = _TranscriptParse(
+    dialect,
+    injected ?? InjectedTranscriptContext.none,
+  );
   try {
     // Bounded rather than `LineSplitter`: a record is materialised whole and
     // `jsonDecode` has no streaming form, so the largest record — not the
@@ -288,9 +327,13 @@ Future<List<TranscriptMessage>> _readTranscriptFile(
 /// parse can be stopped at a record boundary and resumed when more is appended
 /// — see [CliTranscriptTail].
 class _TranscriptParse {
-  _TranscriptParse(this.dialect);
+  _TranscriptParse(
+    this.dialect, [
+    this.injected = InjectedTranscriptContext.none,
+  ]);
 
   final TranscriptDialect dialect;
+  final InjectedTranscriptContext injected;
   final List<TranscriptMessage> messages = [];
   // Correlates a result back to the call it answers: Claude Code echoes the
   // `tool_use.id` as `tool_use_id`, Codex echoes `call_id`. Kept for the whole
@@ -316,7 +359,7 @@ class _TranscriptParse {
   CompactionBoundary? pendingCompaction;
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
-  _TranscriptParse copy() => _TranscriptParse(dialect)
+  _TranscriptParse copy() => _TranscriptParse(dialect, injected)
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -339,7 +382,7 @@ class _TranscriptParse {
     // Claude's shape is the default: it is the least-wrong guess for an
     // agent we have no reader for.
     if (dialect == TranscriptDialect.codexRollout) {
-      _parseCodexLine(decoded, messages, pending, at);
+      _parseCodexLine(decoded, messages, pending, at, injected);
     } else if (dialect == TranscriptDialect.antigravityJsonl) {
       _parseAntigravityLine(decoded, messages, at);
     } else {
@@ -845,12 +888,13 @@ void _parseCodexLine(
   List<TranscriptMessage> out,
   Map<String, int> pending,
   DateTime? at,
+  InjectedTranscriptContext injected,
 ) {
   final payload = json['payload'];
   if (payload is! Map) return;
   switch (payload['type']) {
     case 'message':
-      _parseCodexMessage(payload, out, at);
+      _parseCodexMessage(payload, out, at, injected);
     // Codex names its shell differently depending on the tool surface —
     // `function_call` for the classic `shell`, `custom_tool_call` for the
     // `exec` sandbox — but both carry a name, a `call_id` and an answer.
@@ -895,18 +939,23 @@ void _parseCodexMessage(
   Map<dynamic, dynamic> payload,
   List<TranscriptMessage> out,
   DateTime? at,
+  InjectedTranscriptContext injected,
 ) {
-  final role = payload['role'] == 'user' ? 'user' : 'agent';
+  final said = payload['role'];
+  final role = said == 'user' ? 'user' : 'agent';
+  bool skipped(Object? text) =>
+      text is String && injected.isInjected(said is String ? said : null, text);
   final content = payload['content'];
   if (content is String) {
-    _add(out, role, content, at);
+    if (!skipped(content)) _add(out, role, content, at);
     return;
   }
   if (content is! List) return;
   for (final block in content) {
     if (block is! Map) continue;
     final t = block['type'];
-    if (t == 'input_text' || t == 'output_text' || t == 'text') {
+    if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
+        !skipped(block['text'])) {
       _add(out, role, block['text'], at);
     }
   }

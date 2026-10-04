@@ -320,6 +320,27 @@ class DataClient {
   Stream<SessionUsageChanged> get sessionUsageChanges =>
       _sessionUsageChanges.stream;
 
+  /// Each session's queued messages — queued, delivering and failed — as
+  /// the server last told them, by session id. In memory only: forgotten
+  /// when the link drops, and listed again by whoever shows them.
+  final sessionQueues = <String, List<QueuedMessage>>{};
+
+  final _sessionQueueChanges = StreamController<SessionQueueChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's queued messages moved.
+  Stream<SessionQueueChanged> get sessionQueueChanges =>
+      _sessionQueueChanges.stream;
+
+  final _sessionAgentChanges = StreamController<SessionAgentChanged>.broadcast(
+    sync: true,
+  );
+
+  /// A session's agent was switched in place, with every agent it ran under.
+  Stream<SessionAgentChanged> get sessionAgentChanges =>
+      _sessionAgentChanges.stream;
+
   /// Every session's status the server keeps (slice 5c), by the workspace
   /// row it opens under — greeted whole on subscribe, then kept by each
   /// change.
@@ -1009,6 +1030,11 @@ class DataClient {
         case final SessionUsageChanged change:
           sessionUsage[change.sessionId] = change;
           if (!_sessionUsageChanges.isClosed) _sessionUsageChanges.add(change);
+        case final SessionQueueChanged change:
+          sessionQueues[change.sessionId] = change.messages;
+          if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
+        case final SessionAgentChanged change:
+          if (!_sessionAgentChanges.isClosed) _sessionAgentChanges.add(change);
         case final TerminalChange change:
           switch (change) {
             case TerminalChanged(:final terminal):
@@ -1133,6 +1159,7 @@ class DataClient {
     _endpoint = null;
     // What the server's connections were doing is no longer known.
     sshConnections.clear();
+    sessionQueues.clear();
     _setConnection(
       const DataConnection(
         DataLinkState.connecting,
@@ -1227,6 +1254,8 @@ class DataClient {
     unawaited(_sessionModeChanges.close());
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
+    unawaited(_sessionQueueChanges.close());
+    unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     unawaited(notes.dispose());

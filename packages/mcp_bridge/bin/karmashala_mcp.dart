@@ -131,13 +131,17 @@ class _Bridge {
   Future<Object?> _call(String tool, Map<String, dynamic> arguments) async {
     final config = await _loadConfig();
     final payload = _payloadFor(tool, arguments, config);
+    // As long as the tool itself may wait: a flat minute cut a 240 s
+    // subagent_run off at 60 s. A server that hangs up still fails at once.
+    final bound = localRpcAnswerTimeout(tool, arguments);
     if (config.socketPath case final socketPath?) {
       String raw;
       try {
-        raw = await LocalRpcClient.call(socketPath, payload);
-      } on Object {
+        raw = await LocalRpcClient.call(socketPath, payload, timeout: bound);
+      } on LocalRpcUnreachable {
         // The app may have restarted while this long-lived bridge stayed up.
-        // Re-read the handshake once so a moved socket is picked up.
+        // Re-read the handshake once so a moved socket is picked up. Only an
+        // unsent request is retried: a sent one may already be running.
         _config = null;
         final fresh = await _loadConfig();
         final freshSocket = fresh.socketPath;
@@ -145,6 +149,7 @@ class _Bridge {
         raw = await LocalRpcClient.call(
           freshSocket,
           _payloadFor(tool, arguments, fresh),
+          timeout: bound,
         );
       }
       final decoded = jsonDecode(raw);
@@ -152,7 +157,7 @@ class _Bridge {
       final error = decoded is Map ? decoded['error'] : 'unknown error';
       throw StateError('$error');
     }
-    final client = HttpClient();
+    final client = HttpClient()..connectionTimeout = kLocalRpcConnectTimeout;
     try {
       final request = await client.postUrl(
         Uri.parse('http://127.0.0.1:${config.port}/rpc'),
@@ -161,8 +166,8 @@ class _Bridge {
         ..set(HttpHeaders.authorizationHeader, 'Bearer ${config.token}')
         ..contentType = ContentType.json;
       request.write(payload);
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(bound);
+      final body = await response.transform(utf8.decoder).join().timeout(bound);
       final decoded = jsonDecode(body);
       if (decoded is Map && decoded['ok'] == true) return decoded['result'];
       final error = decoded is Map ? decoded['error'] : 'unknown error';

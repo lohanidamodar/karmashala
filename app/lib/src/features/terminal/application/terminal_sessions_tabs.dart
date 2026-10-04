@@ -130,7 +130,12 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// Opens a new tab running an agent CLI in a PTY and makes it active. The
   /// pane is an ordinary terminal, which is what makes any registry agent usable
   /// without a protocol adapter.
+  ///
+  /// A live pane already running [launch]'s session on the same agent is
+  /// brought forward instead: two openers of one session (a switch followed
+  /// here, the server's intent, Quick open) must not stack terminals on it.
   ({String tabId, String paneId}) openAgentTab(AgentPaneLaunch launch) {
+    if (_livePaneRunning(launch) case final existing?) return existing;
     final tabId = _newId();
     final paneId = _createAgentPane(launch);
     _tabs.add(
@@ -154,6 +159,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
     String slotPaneId,
     AgentPaneLaunch launch,
   ) {
+    if (_livePaneRunning(launch) case final existing?) return existing;
     final tab = _tabContaining(slotPaneId);
     if (tab == null || !_isEmptyRegion(slotPaneId)) return null;
 
@@ -168,6 +174,27 @@ extension TerminalTabVerbs on TerminalSessionsController {
     _focusActivePane();
     persistStructure();
     return (tabId: tab.id, paneId: paneId);
+  }
+
+  /// The live pane already running [launch]'s session on its agent, focused,
+  /// or null.
+  ({String tabId, String paneId})? _livePaneRunning(AgentPaneLaunch launch) {
+    final sessionId = launch.sessionId;
+    if (sessionId == null) return null;
+    for (final MapEntry(key: paneId, value: instance) in _instances.entries) {
+      final running = instance.agentLaunch;
+      if (running?.sessionId != sessionId ||
+          running?.agentId != launch.agentId ||
+          !instance.liveness.value.isLive) {
+        continue;
+      }
+      final tab = _tabContaining(paneId);
+      if (tab == null) continue;
+      focusPane(paneId);
+      _publish();
+      return (tabId: tab.id, paneId: paneId);
+    }
+    return null;
   }
 
   String _createAgentPane(AgentPaneLaunch launch) {

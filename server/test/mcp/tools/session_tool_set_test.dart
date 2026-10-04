@@ -7,6 +7,8 @@ import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
+import 'package:karmashala_host/src/sessions/session_input.dart';
+import 'package:karmashala_host/src/sessions/session_queue.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
 import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
 import 'package:karmashala_host/src/status/hosted_session_wait.dart';
@@ -264,6 +266,56 @@ void main() {
       expect(resumed.single.$1, 's1');
       expect(resumed.single.$2, contains('carry on'));
       expect(resumed.single.$2, contains('Orchestrator'));
+    });
+
+    test('to a session mid-turn is queued, not typed, and delivered under '
+        'the sender\'s name when the turn ends', () async {
+      final typist = SessionToolSet.typistOver(
+        prompts,
+        poll: const Duration(milliseconds: 2),
+        typedPatience: const Duration(milliseconds: 20),
+        sendPatience: const Duration(milliseconds: 20),
+      );
+      final queue = SessionQueue(
+        dao: SessionQueueDao(database),
+        status: status,
+      );
+      addTearDown(queue.close);
+      SessionInput(prompts: prompts, typist: typist, queue: queue);
+      queue.start();
+      final queuing = SessionToolSet(
+        context,
+        prompts: prompts,
+        registry: registry,
+        queue: queue,
+        typist: typist,
+      );
+      final agent = await runAgent('claude-code-tui');
+      status.hook(hook('UserPromptSubmit'));
+
+      final answer =
+          await queuing.call('session_send', {
+                'sessionId': 's1',
+                'text': 'run the tests',
+              }, 'caller')!
+              as Map<String, Object?>;
+      expect(answer['queued'], isTrue);
+      expect(answer['delivered'], isFalse);
+      expect(answer['position'], 1);
+      expect(answer['note'], contains('Do not send it again'));
+      expect(agent.writes, isEmpty);
+      expect(context.write(const RelaysTo('s1', 5)).relays, hasLength(1));
+
+      status.hook(hook('Stop'));
+      final settled = await queue.settled(answer['queuedId']! as String);
+      expect(settled.state, QueuedMessageState.delivered);
+      expect(
+        typedInto(agent),
+        startsWith(
+          '[message from the Karmashala session "Orchestrator" (caller)]'
+          '\n\nrun the tests',
+        ),
+      );
     });
 
     test('a caller outside a session must name one', () async {

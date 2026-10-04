@@ -258,7 +258,12 @@ class FakeAcpAgent {
     } finally {
       if (active.isCancelled) reason = StopReason.cancelled;
       _activeTurn = null;
-      request.respond({'stopReason': reason.toJson()});
+      final error = turn.error;
+      if (error != null && !active.isCancelled) {
+        request.fail(error.code, error.message, data: error.data);
+      } else {
+        request.respond({'stopReason': reason.toJson()});
+      }
     }
   }
 

@@ -267,6 +267,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setContinueInterruptedTurns(bool value) {
+    state = state.copyWith(continueInterruptedTurns: value);
+    _save();
+  }
+
   void setResumeMessage(String value) {
     state = state.copyWith(resumeMessage: value.trim());
     _save();
@@ -520,8 +525,9 @@ class SettingsController extends Notifier<Settings> {
   /// [_raw] first: the copy tells its listeners synchronously, and this
   /// write must not read as another client's.
   void _save() {
-    final raw = _raw = SettingsRepository.encode(state);
-    ref.read(settingsRepositoryProvider).saveRaw(raw);
+    final repository = ref.read(settingsRepositoryProvider);
+    final raw = _raw = SettingsRepository.encode(state, over: repository.raw());
+    repository.saveRaw(raw);
   }
 }
 

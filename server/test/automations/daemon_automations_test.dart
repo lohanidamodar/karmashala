@@ -12,9 +12,15 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:karmashala_acp/testing.dart' show FakeAcpAgent, FakeTurn;
 import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
 import 'package:karmashala_session/session.dart'
-    show SessionEnding, SessionStatus;
+    show
+        QueuedMessage,
+        QueuedMessageOrigin,
+        QueuedMessageState,
+        SessionEnding,
+        SessionStatus;
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
@@ -22,6 +28,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:test/test.dart';
+
+import '../acp/acp_fixture.dart';
 
 Future<void> pump() async {
   for (var i = 0; i < 20; i++) {
@@ -41,6 +49,40 @@ class _NoCheckpoints implements RunBaseCheckpoint {
     taken.add(runId);
     return 'cp-$runId';
   }
+}
+
+/// A session queue holding at most one message, [head].
+class _Queue implements ResumeQueue {
+  String? head;
+  final sent = <String>[];
+  final released = <(String, bool)>[];
+
+  @override
+  Future<String> sendForResume(String sessionId, String message) async {
+    final text = head ?? message;
+    head = null;
+    sent.add(text);
+    return text;
+  }
+
+  @override
+  QueuedMessage? claimHeadForResume(String sessionId) => switch (head) {
+    final text? => QueuedMessage(
+      id: 'q1',
+      sessionId: sessionId,
+      seq: 1,
+      text: text,
+      state: QueuedMessageState.delivering,
+      origin: QueuedMessageOrigin.app,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+    null => null,
+  };
+
+  @override
+  void releaseClaimed(QueuedMessage claimed, {required bool sent}) =>
+      released.add((claimed.text, sent));
 }
 
 /// The account's usage as a test sets it.
@@ -150,7 +192,10 @@ void main() {
   /// What the server started on an SSH box (slice 5d), by launch.
   final onBox = <AgentPaneLaunch>[];
 
-  Future<void> startDaemon({bool reachesBoxes = false}) async {
+  Future<void> startDaemon({
+    bool reachesBoxes = false,
+    ResumeQueue? queue,
+  }) async {
     onBox.clear();
     automations = DaemonAutomations(
       reachesBox: reachesBoxes ? (_) => true : null,
@@ -188,6 +233,7 @@ void main() {
       onDecision: (decision) =>
           decisions.add((decision.sessionId, decision.summary)),
     );
+    automations.resumeQueue = queue;
     await automations.start(recording.changes);
     await pump();
   }
@@ -582,6 +628,59 @@ void main() {
       ]);
       expect(typed, 'continue\r');
       expect(launcher.started, hasLength(1), reason: 'nothing new started');
+    });
+
+    test('a session the server runs over ACP gets the message as its next '
+        'prompt', () async {
+      final process = FakeAcpProcess(FakeAcpAgent(turns: [const FakeTurn([])]));
+      final runtime = registry.openAcp(
+        hostSessionIdOf('s1'),
+        runtimeOver(
+          process,
+          database: db,
+          workingDirectory: data.path,
+          sessionId: 's1',
+        ),
+      );
+      await runtime.start();
+      armResume(status: 'running', liveWhenScheduled: true);
+      await startDaemon();
+      await runtime.awaitTurn();
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(ended.reason, contains('already open, and sent "continue"'));
+      expect(process.agent.prompts.single.single.toJson()['text'], 'continue');
+      expect(launcher.started, isEmpty, reason: 'nothing new started');
+      await runtime.stop();
+    });
+
+    test('a live session\'s resume sends through its queue, the queued '
+        'message in its place', () async {
+      armResume(status: 'running', liveWhenScheduled: true);
+      registry.open(
+        hostSessionIdOf('s1'),
+        const PtySpawnRequest(argv: ['claude'], workingDirectory: '/src/r1'),
+      );
+      final queue = _Queue()..head = 'run the migrations next';
+      await startDaemon(queue: queue);
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(ended.reason, contains('the queued message'));
+      expect(ended.reason, contains('in place of "continue"'));
+      expect(queue.sent, ['run the migrations next']);
+      expect(launcher.handles.single.writes, isEmpty, reason: 'one sender');
+    });
+
+    test('a resumed start opens with the queued head, which is reported '
+        'sent', () async {
+      armResume();
+      final queue = _Queue()..head = 'run the migrations next';
+      await startDaemon(queue: queue);
+      final ended = resume();
+      expect(ended.state, ScheduledResumeState.done, reason: ended.reason);
+      expect(launcher.started.single.argv.last, 'run the migrations next');
+      expect(queue.released, [('run the migrations next', true)]);
+      expect(decisions.single.$2, contains('run the migrations next'));
     });
 
     test('a session somebody resumed by hand before its time is let '

@@ -60,6 +60,23 @@ class CheckpointConflict implements Exception {
   String toString() => 'CheckpointConflict: $message';
 }
 
+/// Raised by a per-path restore naming paths that are in neither the
+/// checkpoint nor the working tree. Nothing was written.
+class CheckpointPathsNotFound implements Exception {
+  CheckpointPathsNotFound(this.checkpoint, this.paths);
+  final Checkpoint checkpoint;
+  final List<String> paths;
+
+  String get message =>
+      '${paths.map((path) => '"$path"').join(', ')} not found in checkpoint '
+      '${checkpoint.sequence} or the working tree of '
+      '${checkpoint.repository.path}. Nothing was restored. Name paths '
+      'relative to the repository, as checkpoint_list lists them.';
+
+  @override
+  String toString() => 'CheckpointPathsNotFound: $message';
+}
+
 /// What a restore did.
 class RestoreOutcome {
   const RestoreOutcome({
@@ -142,8 +159,27 @@ class CheckpointService {
     final git = _gitFor(repo);
     final key = '${repo.environmentId}\u0000${repo.path}';
     final dirs = _dirs[key] ??= await git.checkpointDirs(repo);
-    await git.ensureCheckpointDirs(repo, dirs);
-    return git.writeWorkingTree(repo, dirs);
+    return _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+  }
+
+  final Map<String, Future<void>> _indexUsers = {};
+
+  /// Runs [work] alone on [repo]'s private index and scratch patch. Sessions
+  /// share a checkout, and git refuses a second writer of one index outright.
+  Future<T> _exclusive<T>(EnvironmentPath repo, Future<T> Function() work) {
+    final key = '${repo.environmentId}\u0000${repo.path}';
+    final result = (_indexUsers[key] ?? Future<void>.value()).then(
+      (_) => work(),
+    );
+    final tail = result.then<void>((_) {}, onError: (Object _) {});
+    _indexUsers[key] = tail;
+    tail.whenComplete(() {
+      if (identical(_indexUsers[key], tail)) _indexUsers.remove(key);
+    });
+    return result;
   }
 
   /// Records [tree], a [snapshot] of [repo], as a checkpoint of [sessionId]:
@@ -326,6 +362,38 @@ class CheckpointService {
 
   // --- restore ---------------------------------------------------------------
 
+  /// The conflict [restore] of [checkpoint] would refuse with unless
+  /// `confirm` — a tree moved since its last checkpoint, saved first exactly as
+  /// a refused restore saves it — or null when it would go ahead. Writes no
+  /// file of the working tree, so several repositories can be asked first.
+  Future<CheckpointConflict?> restoreConflict(Checkpoint checkpoint) async {
+    final repo = checkpoint.repository;
+    final git = _gitFor(repo);
+    final dirs = await git.checkpointDirs(repo);
+    final current = await _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+    final latest = latestCheckpointIn(
+      await records.forSession(checkpoint.sessionId),
+      repository: repo,
+    );
+    if (latest == null || latest.treeSha == current) return null;
+    final safety = await capture(
+      repo,
+      sessionId: checkpoint.sessionId,
+      reason: CheckpointReason.safety,
+      label: 'before restoring checkpoint ${checkpoint.sequence}',
+    );
+    final refusal = checkpointRestoreRefusal(
+      treeMovedSinceLastCheckpoint: true,
+      safetySequence: safety?.sequence,
+    );
+    return refusal == null
+        ? null
+        : CheckpointConflict(refusal, safetyCheckpoint: safety);
+  }
+
   /// Puts [repo]'s working tree back to what [checkpoint] holds. A safety
   /// checkpoint is taken first, and a moved tree is refused without [confirm].
   Future<RestoreOutcome> restore(
@@ -335,10 +403,36 @@ class CheckpointService {
   }) async {
     final repo = checkpoint.repository;
     final git = _gitFor(repo);
+    // git names every path with forward slashes; a Windows spelling would
+    // match nothing and be answered "already there".
+    final env = environmentOf(repo.environmentId);
+    if (env != null && usesWindowsPaths(env.kind)) {
+      selection = [
+        for (final choice in selection)
+          HunkSelection(choice.path.replaceAll(r'\', '/'), hunks: choice.hunks),
+      ];
+    }
     final dirs = await git.checkpointDirs(repo);
-    await git.ensureCheckpointDirs(repo, dirs);
+    final current = await _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+    if (selection.isNotEmpty) {
+      final asked = [for (final choice in selection) choice.path];
+      final known = {
+        for (final tree in {checkpoint.treeSha, current})
+          ...await git.filesInTree(repo, tree, paths: asked),
+      };
+      final missing = [
+        for (final path in asked)
+          if (!known.any((name) => name == path || name.startsWith('$path/')))
+            path,
+      ];
+      if (missing.isNotEmpty) {
+        throw CheckpointPathsNotFound(checkpoint, missing);
+      }
+    }
 
-    final current = await git.writeWorkingTree(repo, dirs);
     final latest = latestCheckpointIn(
       await records.forSession(checkpoint.sessionId),
       repository: checkpoint.repository,
@@ -392,7 +486,10 @@ class CheckpointService {
 
     // The patch describes checkpoint -> now, so applying it backwards turns now
     // into the checkpoint, without this code writing to the working tree itself.
-    await git.applyPatch(repo, dirs, wanted, reverse: true);
+    await _exclusive(
+      repo,
+      () => git.applyPatch(repo, dirs, wanted, reverse: true),
+    );
 
     final changed = await git.diffNameStatus(
       repo,
@@ -433,11 +530,10 @@ class CheckpointService {
     final git = _gitFor(repo);
     final patch = buildPatch(splitUnifiedDiff(await git.diff(repo)), selection);
     if (patch.trim().isEmpty) return;
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      cached: true,
+      () => git.applyPatch(repo, dirs, patch, cached: true),
     );
   }
 
@@ -452,12 +548,10 @@ class CheckpointService {
       selection,
     );
     if (patch.trim().isEmpty) return;
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      cached: true,
-      reverse: true,
+      () => git.applyPatch(repo, dirs, patch, cached: true, reverse: true),
     );
   }
 
@@ -479,11 +573,10 @@ class CheckpointService {
         label: 'before reverting hunks',
       );
     }
-    await git.applyPatch(
+    final dirs = await git.checkpointDirs(repo);
+    await _exclusive(
       repo,
-      await git.checkpointDirs(repo),
-      patch,
-      reverse: true,
+      () => git.applyPatch(repo, dirs, patch, reverse: true),
     );
   }
 

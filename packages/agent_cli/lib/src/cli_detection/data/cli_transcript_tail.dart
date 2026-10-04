@@ -134,7 +134,7 @@ Future<_TailStep> _parseWhole(
   if (!await File(path).exists()) {
     return (state: null, messages: const <TranscriptMessage>[]);
   }
-  final state = _TailState(_TranscriptParse(transcriptDialectFor(cli)));
+  final state = _TailState(_parseFor(cli));
   try {
     return await _advance(state, path, filePath, subagentsDirectory);
   } catch (_) {

@@ -53,6 +53,7 @@ class DaemonCheckpoints {
     void Function(String message)? log,
   }) : _heldHere = heldHere,
        _sessions = SessionDao(database),
+       _repositories = RepositoryDao(database),
        _dao = CheckpointDao(database),
        _log = log ?? _silent {
     final now = clock ?? _utcNow;
@@ -74,7 +75,7 @@ class DaemonCheckpoints {
       service: service,
       targets: ServerCheckpointTargets(
         sessions: _sessions,
-        repositories: RepositoryDao(database),
+        repositories: _repositories,
         environments: environments,
         checkpoints: _dao,
         service: service,
@@ -100,6 +101,7 @@ class DaemonCheckpoints {
   final Duration hold;
   final bool Function(String sessionId) _heldHere;
   final SessionDao _sessions;
+  final RepositoryDao _repositories;
   final CheckpointDao _dao;
   final void Function(String message) _log;
   final hints = CheckpointTurnHints();
@@ -280,13 +282,23 @@ class DaemonCheckpoints {
 
   /// Puts [checkpoint] back — every file, or only [paths] — in its session's
   /// queue, so it never races a turn's capture over the private index. A tree
-  /// that moved is answered with the conflict unless [confirm].
+  /// that moved is answered with the conflict unless [confirm]. Refused while
+  /// the session's turn runs, unless that session itself ([requestedBy]) asks.
   Future<CheckpointRestoreAnswer> restore(
     Checkpoint checkpoint, {
     bool confirm = false,
     List<String> paths = const [],
+    String? requestedBy,
   }) {
     _reachable(checkpoint.repository);
+    final running = turnRunningIn(checkpoint.sessionId, requestedBy);
+    if (running != null) {
+      throw DataRefused.invalid(
+        'A turn of "$running" is running: restoring now would change files '
+        'under its agent mid-turn. Nothing was changed. Restore once the turn '
+        'has ended, or stop it first.',
+      );
+    }
     return recorder.queued(checkpoint.sessionId, () async {
       try {
         return CheckpointRestoreAnswer.restored(
@@ -298,8 +310,17 @@ class DaemonCheckpoints {
         );
       } on CheckpointConflict catch (conflict) {
         return CheckpointRestoreAnswer.refused(conflict);
+      } on CheckpointPathsNotFound catch (missing) {
+        throw DataRefused.notFound(missing.message);
       }
     });
+  }
+
+  /// The title of [sessionId] while its turn runs and someone other than that
+  /// session asks to change its files; null when they may.
+  String? turnRunningIn(String sessionId, String? requestedBy) {
+    if (requestedBy == sessionId || !recorder.inTurn(sessionId)) return null;
+    return _sessions.getById(sessionId)?.title ?? sessionId;
   }
 
   Checkpoint _existing(String id) =>
@@ -317,11 +338,12 @@ class DaemonCheckpoints {
 
   // Forks from a checkpoint (`session_fork_from_checkpoint`).
 
-  /// The checkpoint a fork of [sessionId] names — by [checkpointId] or by
-  /// [turn] (the one taken as that turn started) — refused rather than
-  /// guessed: `ArgumentError` for naming neither or both, `StateError` for
-  /// one that is not there or not that session's, in the tool's words.
-  Checkpoint forkCheckpoint({
+  /// The checkpoints a fork of [sessionId] names — the one [checkpointId]
+  /// names, or by [turn] one per repository that turn touched, each taken as
+  /// the turn started ([checkpointsAtTurn]) — refused rather than guessed:
+  /// `ArgumentError` for naming neither or both, `StateError` for one that is
+  /// not there or not that session's, in the tool's words.
+  List<Checkpoint> forkCheckpoints({
     required String sessionId,
     String? checkpointId,
     int? turn,
@@ -342,11 +364,11 @@ class DaemonCheckpoints {
           '${checkpoint.sessionId}, not $sessionId.',
         );
       }
-      return checkpoint;
+      return [checkpoint];
     }
     final chain = _dao.forSession(sessionId);
-    final checkpoint = checkpointAtTurn(chain, turn!);
-    if (checkpoint == null) {
+    final checkpoints = checkpointsAtTurn(chain, turn!);
+    if (checkpoints.isEmpty) {
       final available = forkableTurns(chain);
       throw StateError(
         available.isEmpty
@@ -357,7 +379,18 @@ class DaemonCheckpoints {
                   '${available.join(', ')}.',
       );
     }
-    return checkpoint;
+    return checkpoints;
+  }
+
+  /// The conflict restoring [checkpoint] without confirm would be refused
+  /// with, asked in its session's queue and writing no file — so a fork over
+  /// several repositories can stop before it changes any of them.
+  Future<CheckpointConflict?> forkConflict(Checkpoint checkpoint) {
+    _reachable(checkpoint.repository);
+    return recorder.queued(
+      checkpoint.sessionId,
+      () => service.restoreConflict(checkpoint),
+    );
   }
 
   /// Why the working-tree half of forking [sessionId] from [checkpoint]
@@ -368,8 +401,10 @@ class DaemonCheckpoints {
     Checkpoint checkpoint, {
     required String sessionId,
     required bool intoNewWorktree,
+    String? requestedBy,
   }) => checkpointForkFileRefusal(
     intoNewWorktree: intoNewWorktree,
+    turnRunningIn: turnRunningIn(checkpoint.sessionId, requestedBy),
     unsupportedEnvironmentReason: service.unsupportedReason(
       checkpoint.repository,
     ),
@@ -377,33 +412,33 @@ class DaemonCheckpoints {
       for (final session in sessionsWorkingIn(
         checkpoint.repository,
         excluding: sessionId,
-        among: _sessions.getAll(),
+        among: [
+          // Only a live agent guards; one with no directory recorded runs in
+          // its repository's checkout.
+          for (final session in _sessions.getAll())
+            if (_live(session))
+              if (session.workingDirectory == null && session.worktree == null)
+                session.copyWith(
+                  workingDirectory: _repositories
+                      .getById(session.repositoryId)
+                      ?.path,
+                )
+              else
+                session,
+        ],
         pathsMatch: samePath,
       ))
         session.title,
     ],
   );
 
-  /// Restores [checkpoint]'s tree into its checkout for a fork — call only
-  /// when [forkFileRefusal] said null, and before starting the fork. A tree
-  /// that moved without [confirm] throws `StateError` in the fork's words
-  /// (nothing changed, no session started, where the current tree was
-  /// saved).
-  Future<RestoreOutcome> restoreForFork(
-    Checkpoint checkpoint, {
-    bool confirm = false,
-  }) async {
-    final answer = await restore(checkpoint, confirm: confirm);
-    final conflict = answer.conflict;
-    if (conflict != null) {
-      throw StateError(
-        '${conflict.message} Nothing was changed and no session was '
-        'started. The current working tree is saved as checkpoint '
-        '${conflict.safetyCheckpoint?.id}.',
-      );
-    }
-    return answer.outcome!;
-  }
+  /// Whether [session]'s agent may be working right now: one this server runs
+  /// or sees mid-turn, or a row whose status claims a live agent. An ended
+  /// row, or one nothing can see (`unknown`), never guards a checkout.
+  bool _live(Session session) =>
+      _heldHere(session.id) ||
+      recorder.inTurn(session.id) ||
+      (!session.isOver && session.status.claimsLive);
 }
 
 final class _FunctionClock implements Clock {

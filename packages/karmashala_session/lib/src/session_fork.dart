@@ -33,10 +33,13 @@ class SessionForkPlan {
 
   /// Decides for a session of [agentName] under [descriptor], whose CLI-side
   /// conversation id is [externalSessionId] — null when we never learned one.
+  /// [switched]: more than one agent ran the session, so the CLI's own fork
+  /// would carry only its own part of the thread.
   static SessionForkPlan decide({
     required AgentDescriptor? descriptor,
     required String agentName,
     String? externalSessionId,
+    bool switched = false,
   }) {
     final fork =
         descriptor?.launch.fork ?? const AgentForkSupport.unsupported();
@@ -44,6 +47,14 @@ class SessionForkPlan {
 
     switch (fork.style) {
       case AgentForkStyle.native:
+        if (switched) {
+          return SessionForkPlan._(
+            SessionForkKind.handoff,
+            'More than one agent has run this session, and $agentName\'s own '
+            'fork would carry only its part of the conversation. This will '
+            'hand off a written recap of the whole thread instead.',
+          );
+        }
         if (id.isEmpty) {
           return SessionForkPlan._(
             SessionForkKind.handoff,

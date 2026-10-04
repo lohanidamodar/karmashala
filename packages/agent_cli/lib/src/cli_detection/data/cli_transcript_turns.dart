@@ -170,7 +170,7 @@ Future<TranscriptTurnsRead> _turnsFrom(
   Set<String> roles,
   TranscriptResumePoint from,
 ) async {
-  final parse = _TranscriptParse(transcriptDialectFor(cli));
+  final parse = _parseFor(cli);
   final read = await readBoundedLinesFrom(
     File(path),
     from.end,

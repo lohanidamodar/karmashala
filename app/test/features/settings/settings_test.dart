@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:karmashala_devices/devices.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/app/shell/shell_area.dart';
@@ -395,6 +397,73 @@ void main() {
       repo.save(const Settings(defaultAgent: AgentIds.antigravity));
       expect(repo.load().defaultAgent, AgentIds.antigravity);
     });
+
+    test('a save keeps keys this build does not know', () {
+      final repo = SettingsRepository(FakeDataServer().store);
+      repo.saveRaw(
+        jsonEncode({'fromANewerClient': 'kept', 'quitAsks': true}),
+      );
+      repo.save(const Settings(quitAsks: false));
+      final stored = jsonDecode(repo.raw()!) as Map<String, dynamic>;
+      expect(stored['fromANewerClient'], 'kept');
+      expect(stored['quitAsks'], false);
+    });
+
+    test('a known key the settings leave out is cleared, not kept', () {
+      final repo = SettingsRepository(FakeDataServer().store);
+      repo.save(const Settings(terminalThemeSource: 'iterm'));
+      repo.save(const Settings());
+      final stored = jsonDecode(repo.raw()!) as Map<String, dynamic>;
+      expect(stored.containsKey('terminalThemeSource'), isFalse);
+    });
+
+    test('every key the settings write is a key they own', () {
+      final full = Settings.fromJson({
+        'defaultAgent': 'a',
+        'defaultAgentInstallationId': 'i',
+        'defaultTerminalProfileId': 't',
+        kAndroidSdkPathSetting: 'C:/sdk',
+        'explorerPaneWidth': 400,
+        'sidebarArea': 'sessions',
+        'resumeMessages': {'a': 'go on'},
+        'windowWidth': 800,
+        'windowHeight': 600,
+        'defaultSystemTerminalId': 's',
+        'customTerminalPath': 'p',
+        'defaultCodeEditorId': 'e',
+        'customEditorPath': 'q',
+        'useInAppFilePicker': true,
+        'launcherHotkeyJson': '{}',
+        'letAgentsUpdateThemselves': true,
+        'terminalChordOverrides': {'x': true},
+        'terminalThemeSource': 'iterm',
+        'hiddenSidePanelSurfaces': ['notes'],
+        'explorerProjectDetails': false,
+        'explorerEnvironmentScope': 'e',
+        'explorerContextScope': 'c',
+        'defaultModels': {'a': 'm'},
+        'flutterSdkPaths': {'local': 'C:/flutter'},
+      });
+      expect(Settings.jsonKeys, containsAll(full.toJson().keys));
+      expect(Settings.jsonKeys, containsAll(const Settings().toJson().keys));
+    });
+  });
+
+  test('a setting changed in the app keeps a newer client\'s key', () async {
+    final server = FakeDataServer();
+    server.store.write(
+      SettingsRepository.key,
+      jsonEncode({'fromANewerClient': 1, 'quitAsks': true}),
+    );
+    final container = ProviderContainer(overrides: [await server.override()]);
+    addTearDown(container.dispose);
+    container.read(settingsControllerProvider.notifier).setQuitAsks(false);
+    await pumpEventQueue();
+    final stored =
+        jsonDecode(server.store.read(SettingsRepository.key)!)
+            as Map<String, dynamic>;
+    expect(stored['fromANewerClient'], 1);
+    expect(stored['quitAsks'], false);
   });
 
   group('SettingsController', () {

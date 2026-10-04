@@ -40,6 +40,13 @@ class PaneSessions {
   /// window does not hold.
   String? sessionOf(String paneId) => _sessionByPane[paneId];
 
+  /// Every terminal pane of this window opened for [sessionId], live or not —
+  /// its chat pane left out.
+  List<String> terminalPanesOf(String sessionId) => [
+    for (final paneId in _panesBySession[sessionId] ?? const <String>[])
+      if (chatPaneSessionId(paneId) == null) paneId,
+  ];
+
   /// A pane of this window showing [sessionId] whose liveness passes [where];
   /// with no [where], a live one before any other. Null when none does.
   String? paneOf(String sessionId, {bool Function(PaneLiveness)? where}) {

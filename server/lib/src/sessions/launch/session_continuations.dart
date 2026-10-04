@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:agent_cli/read.dart' show readCliTranscript;
+import 'package:agent_cli/read.dart'
+    show TranscriptMessage, kAgentSwitchRole, readCliTranscript;
+import 'package:karmashala_host_protocol/protocol.dart'
+    show SessionEndedWithoutCode;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_checkpoints/checkpoints.dart';
@@ -17,15 +20,19 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart'
-    show DecisionRecordDao, SessionDao;
+    show DecisionRecordDao, SessionAgentSpanDao, SessionDao;
 
 import '../../automations/daemon_agents.dart';
 import '../../checkpoints/daemon_checkpoints.dart';
 import '../../data/conversations_handler.dart' show TranscriptStores;
+import '../../domain/uuid.dart';
 import '../../mcp/tools/checkout_delivery.dart';
 import '../../mcp/tools/checkout_reach.dart';
 import '../../status/hosted_session_wait.dart';
+import '../session_agent_stitching.dart' show kSwitchInstruction;
 import 'server_session_launcher.dart';
+
+export '../session_agent_stitching.dart' show kSwitchInstruction;
 
 /// How many of the source's snapshots a packet offers.
 const int kHandoffCheckpointCount = 8;
@@ -40,6 +47,7 @@ class HandoffTarget {
     required this.permission,
     required this.isSameAgent,
     this.refusal,
+    this.resumesConversation = false,
   });
 
   final AgentInstallation installation;
@@ -52,6 +60,10 @@ class HandoffTarget {
 
   /// Why this target cannot receive a handoff, or null when it can.
   final String? refusal;
+
+  /// For a switch in place: this agent ran the session before, and its own
+  /// conversation is resumed rather than a new one started.
+  final bool resumesConversation;
 
   bool get canReceive => refusal == null;
 }
@@ -78,10 +90,19 @@ class SessionContinuations {
     this.forks,
     this.waits,
     this.send,
+    this.spans,
+    this.conversationOf,
+    this.turnRunning,
+    this.nextMessageOrdinal,
+    this.onSwitched,
+    this.cancelResume,
+    this.holdQueue,
+    this.releaseQueue,
     this.agents = const DaemonAgents(),
     this.registry = AgentRegistry.builtIn,
     this.log,
-  });
+    DateTime Function()? now,
+  }) : _now = now ?? (() => DateTime.now().toUtc());
 
   final ServerSessionLauncher launches;
   final SessionDao sessions;
@@ -103,14 +124,45 @@ class SessionContinuations {
   /// Types a message into a session the server runs; false when nothing runs
   /// it.
   final Future<bool> Function(String sessionId, String text)? send;
+
+  /// Each agent a session ran under; null refuses a switch in place.
+  final SessionAgentSpanDao? spans;
+
+  /// A session's transcript as the server serves it — stitched across its
+  /// agents, each row tagged — for a switch's recap; null reads the agent's
+  /// own file as a handoff does.
+  final Future<List<TranscriptMessage>> Function(String sessionId)?
+  conversationOf;
+
+  /// Whether a session's turn is running, or a message is on its way to it.
+  final bool Function(String sessionId)? turnRunning;
+
+  /// The ordinal the next `session_messages` row of a session takes.
+  final int Function(String sessionId)? nextMessageOrdinal;
+
+  /// Cancels a session's armed resume with the reason given; true when one
+  /// was waiting. A switch cancels the leaving agent's: at its reset the
+  /// resume would type that agent's message into another.
+  final bool Function(String sessionId, String reason)? cancelResume;
+
+  /// Holds a session's queue busy while its agent is switched, and lets it
+  /// go: a send meanwhile waits for the new agent.
+  final void Function(String sessionId)? holdQueue;
+  final void Function(String sessionId)? releaseQueue;
+
+  /// Told once a session's agent was switched and the new one started.
+  final void Function(String sessionId, List<SessionAgentSpan> spans)?
+  onSwitched;
   final DaemonAgents agents;
   final AgentRegistry registry;
   final void Function(String message)? log;
+  final DateTime Function() _now;
 
   // --- what can be offered ---------------------------------------------------
 
-  /// The agents [sessionId] could be continued in, in registry order.
-  List<HandoffTarget> targetsFor(String sessionId) {
+  /// The agents [sessionId] could be continued in, in registry order. [inPlace]
+  /// judges each as a switch of this session rather than a new one.
+  List<HandoffTarget> targetsFor(String sessionId, {bool inPlace = false}) {
     final session = sessions.getById(sessionId);
     if (session == null) return const [];
     final repository = rows.repository(session.repositoryId);
@@ -122,34 +174,55 @@ class SessionContinuations {
       for (final installation in launches.installationsIn(
         repository.path.environmentId,
       ))
-        _target(sessionId, installation, sourceAgentId),
+        _target(session, installation, sourceAgentId, inPlace: inPlace),
     ];
   }
 
   HandoffTarget _target(
-    String sessionId,
+    Session session,
     AgentInstallation installation,
-    String? sourceAgentId,
-  ) {
+    String? sourceAgentId, {
+    bool inPlace = false,
+  }) {
     final descriptor = registry.byId(installation.agentId);
     final name = registry.displayNameFor(installation.agentId);
-    final starting = _startingMode(sessionId, installation.agentId);
+    final starting = _startingMode(session.id, installation.agentId);
+    final same = installation.agentId == sourceAgentId;
     return HandoffTarget(
       installation: installation,
       descriptor: descriptor,
       agentName: name,
       permission: carryPermission(starting.risk, descriptor, targetName: name),
-      isSameAgent: installation.agentId == sourceAgentId,
-      refusal: _refusalFor(descriptor, name),
+      isSameAgent: same,
+      // Another installation of the same agent is a switch like any other:
+      // it starts its own conversation, never the other one's.
+      refusal: inPlace
+          ? (installation.id == session.agentInstallationId
+                ? '$name already runs this session.'
+                : _refusalFor(
+                    descriptor,
+                    name,
+                    speaksAcp: _speaksAcp(installation.agentId),
+                  ))
+          : _refusalFor(descriptor, name),
+      resumesConversation:
+          inPlace && _earlierConversation(session, installation.id) != null,
     );
   }
 
-  String? _refusalFor(AgentDescriptor? descriptor, String name) {
+  bool _speaksAcp(String agentId) => agents.adapterOf(agentId)?.acp != null;
+
+  String? _refusalFor(
+    AgentDescriptor? descriptor,
+    String name, {
+    bool speaksAcp = false,
+  }) {
     if (descriptor == null) {
       return 'Karmashala has no descriptor for this agent, so it cannot be '
           'told anything at launch.';
     }
-    if (!descriptor.launch.acceptsPromptArgument) {
+    // Over ACP the packet is the first prompt, never argv.
+    if (!speaksAcp && !descriptor.launch.acceptsPromptArgument) {
       return '$name takes no opening prompt, so the handoff packet could not '
           'be delivered — the new session would start knowing nothing.';
     }
@@ -169,6 +242,7 @@ class SessionContinuations {
           ? 'this agent'
           : registry.displayNameFor(agentId),
       externalSessionId: session.externalSessionId,
+      switched: spans?.hasSpans(sessionId) ?? false,
     );
   }
 
@@ -185,6 +259,8 @@ class SessionContinuations {
     HandoffSourceBrief? sourceBrief,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
+    List<TranscriptMessage>? conversation,
+    String? missedBy,
   }) async {
     final session =
         sessions.getById(sessionId) ??
@@ -197,12 +273,25 @@ class SessionContinuations {
     final directory =
         session.workingDirectory ?? session.worktree ?? repository?.path;
     final recorded = _decisionsFor(sessionId, decisionBudget);
-    final recap = await _recapFor(
-      session,
-      agentId,
-      sourceName,
-      budget.reducedBy(recorded.cost),
-    );
+    // A switched session's thread is every agent's turns, stitched; the
+    // current agent's own record holds only its part.
+    final thread =
+        conversation ??
+        (spans?.hasSpans(sessionId) ?? false
+            ? await _conversationOf(sessionId)
+            : null);
+    final recap = thread != null
+        ? _recapOf(
+            missedTurns(thread, missedBy),
+            sourceName,
+            budget.reducedBy(recorded.cost),
+          )
+        : await _recapFor(
+            session,
+            agentId,
+            sourceName,
+            budget.reducedBy(recorded.cost),
+          );
     final changes = directory == null ? null : await _changesIn(directory);
     final delivery = repository == null
         ? null
@@ -370,10 +459,55 @@ class SessionContinuations {
                 text: message.text.trim(),
               ),
       ], budget);
-      return (turns: trimmed.turns, omitted: trimmed.omitted, unreadable: false);
+      return (
+        turns: trimmed.turns,
+        omitted: trimmed.omitted,
+        unreadable: false,
+      );
     } on Object {
       return (turns: const <HandoffTurn>[], omitted: 0, unreadable: true);
     }
+  }
+
+  /// [conversation]'s spoken turns, each agent's named by its own row tag.
+  ({List<HandoffTurn> turns, int omitted, bool unreadable}) _recapOf(
+    List<TranscriptMessage> conversation,
+    String sourceName,
+    HandoffRecapBudget budget,
+  ) {
+    final names = <String, String>{};
+    String speaker(TranscriptMessage message) {
+      if (message.role == 'user') return 'The user';
+      final installation = message.agentInstallationId;
+      if (installation == null) return sourceName;
+      return names[installation] ??= switch (rows
+          .installation(installation)
+          ?.agentId) {
+        final String agentId => registry.displayNameFor(agentId),
+        null => sourceName,
+      };
+    }
+
+    final trimmed = trimRecap([
+      for (final message in conversation)
+        if (message.role == 'user' || message.role == 'agent')
+          if (message.text.trim().isNotEmpty)
+            HandoffTurn(speaker: speaker(message), text: message.text.trim()),
+    ], budget);
+    return (turns: trimmed.turns, omitted: trimmed.omitted, unreadable: false);
+  }
+
+  /// The installation [session] would resume [installationId]'s own
+  /// conversation under: the one it left when it last switched away.
+  String? _earlierConversation(Session session, String installationId) {
+    if (session.agentInstallationId == installationId) return null;
+    final known = spans?.forSession(session.id) ?? const <SessionAgentSpan>[];
+    for (final span in known.reversed) {
+      if (span.agentInstallationId != installationId) continue;
+      final id = span.externalSessionId;
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
   }
 
   Future<List<HandoffChange>?> _changesIn(EnvironmentPath directory) async {
@@ -608,6 +742,215 @@ class SessionContinuations {
     return started;
   }
 
+  /// **Hands [sessionId] to [targetInstallationId] in place**: the same row
+  /// and chat, the running agent stopped (`switched`), the new one started
+  /// with what it missed — resuming its own conversation when it ran this
+  /// session before and can resume, else a new one with the whole packet.
+  /// Refused mid-turn, on an archived or external session, and for an agent
+  /// that could not be told anything.
+  Future<SessionStarted> switchAgent({
+    required String sessionId,
+    required String targetInstallationId,
+    String instruction = '',
+    String? permissionMode,
+  }) async {
+    final ledger =
+        spans ??
+        (throw StateError('This server cannot switch a session\'s agent.'));
+    final session =
+        sessions.getById(sessionId) ??
+        (throw const LaunchTargetMissing('This session no longer exists.'));
+    if (session.isArchived) {
+      throw StateError('This session is archived; restore it to switch.');
+    }
+    if (session.surface == SessionSurface.external) {
+      throw StateError(
+        'This session runs in a terminal window Karmashala does not own, so '
+        'its agent cannot be stopped to switch.',
+      );
+    }
+    final context = _contextFor(session, targetInstallationId);
+    final sourceAgentId = rows
+        .installation(session.agentInstallationId)
+        ?.agentId;
+    final target = _target(
+      session,
+      context.installation,
+      sourceAgentId,
+      inPlace: true,
+    );
+    if (target.refusal case final refusal?) throw StateError(refusal);
+    if (turnRunning?.call(sessionId) ?? false) {
+      throw StateError(
+        'A turn is running in this session. Switch once it settles, or stop '
+        'it first.',
+      );
+    }
+    // Held busy until the new agent runs: a send meanwhile queues for it
+    // rather than racing its start.
+    holdQueue?.call(sessionId);
+    try {
+      return await _switchHeld(
+        session: session,
+        context: context,
+        ledger: ledger,
+        sourceAgentId: sourceAgentId,
+        instruction: instruction,
+        permissionMode: permissionMode,
+      );
+    } finally {
+      releaseQueue?.call(sessionId);
+    }
+  }
+
+  Future<SessionStarted> _switchHeld({
+    required Session session,
+    required ({
+      Repository repository,
+      AgentInstallation installation,
+      AgentDescriptor? descriptor,
+      String agentName,
+    })
+    context,
+    required SessionAgentSpanDao ledger,
+    required String? sourceAgentId,
+    required String instruction,
+    required String? permissionMode,
+  }) async {
+    final sessionId = session.id;
+    final targetInstallationId = context.installation.id;
+
+    final targetAcp = _speaksAcp(context.installation.agentId);
+    final sourceAcp = sourceAgentId != null && _speaksAcp(sourceAgentId);
+    final earlier = _earlierConversation(session, targetInstallationId);
+    final resumable =
+        earlier != null &&
+        (targetAcp || (context.descriptor?.launch.resume.isSupported ?? false));
+    final conversation = await _conversationOf(sessionId);
+    final said = instruction.trim().isEmpty
+        ? kSwitchInstruction
+        : instruction.trim();
+    final packet = await buildPacket(
+      sessionId: sessionId,
+      targetAgentName: context.agentName,
+      instruction: said,
+      conversation: conversation,
+      missedBy: resumable ? targetInstallationId : null,
+    );
+    final carried = _resolvePermission(
+      sessionId: sessionId,
+      descriptor: context.descriptor,
+      targetAgentId: context.installation.agentId,
+      targetName: context.agentName,
+      chosen: permissionMode == null
+          ? null
+          : PermissionSelection.parse(permissionMode),
+    );
+    final rendered = packet.render();
+    final support =
+        context.descriptor?.launch.systemPromptFile ??
+        const AgentSystemPromptFileSupport.unchecked();
+    // The packet as a system-prompt file where the agent takes one, resumed
+    // or not: a prompt file outside the workspace makes it ask to read it.
+    final asFile = !targetAcp && support.isSupported;
+    log?.call(
+      'Switch of $sessionId from ${sourceAgentId ?? 'unknown'} to '
+      '${context.installation.agentId}: '
+      '${resumable ? 'resuming $earlier' : 'new conversation'} '
+      'packet=${rendered.length} chars '
+      'delivery=${asFile ? support.token : 'typed'} '
+      'mode=${carried?.canonical ?? 'default'}',
+    );
+
+    await launches.end(
+      sessionId,
+      quietly: true,
+      reason: SessionEndedWithoutCode.switched,
+    );
+    final firstSwitch = !ledger.hasSpans(sessionId);
+    final span = ledger.recordSwitch(
+      session: session,
+      toInstallationId: targetInstallationId,
+      toExternalSessionId: resumable ? earlier : null,
+      at: _now(),
+      firstMessageOrdinal: targetAcp
+          ? nextMessageOrdinal?.call(sessionId) ?? 0
+          : null,
+      leavingFirstMessageOrdinal: sourceAcp ? 0 : null,
+      carriedPacket: rendered,
+    );
+    // The row's mode and model were the last agent's words for them.
+    sessions
+      ..updatePermissionMode(sessionId, carried?.canonical)
+      ..updateModel(sessionId, null);
+    // An agent that takes our id starts under the row's — unless an earlier
+    // agent of this row already holds it, as another installation of the
+    // same agent does: one id is never claimed by two conversations.
+    final rowIdTaken = ledger
+        .forSession(sessionId)
+        .any((s) => s.externalSessionId == sessionId);
+    final SessionStarted started;
+    try {
+      started = await launches.resume(
+        sessionId,
+        prompt: asFile ? said : rendered,
+        systemPrompt: asFile ? rendered : null,
+        freshConversationId: !resumable && rowIdTaken ? newUuid() : null,
+      );
+    } on Object catch (error) {
+      ledger.undoSwitch(session, fromSeq: firstSwitch ? 0 : span.seq);
+      sessions.updatePermissionMode(sessionId, session.permissionMode);
+      sessions.updateModel(sessionId, session.modelId);
+      onSwitched?.call(sessionId, ledger.forSession(sessionId));
+      // The agent that was stopped for the switch is started again, so a
+      // failed switch leaves the session as it found it where it can.
+      final previous = _agentNameOf(session);
+      final why = error is StateError ? error.message : '$error';
+      var restored = false;
+      try {
+        await launches.resume(sessionId);
+        restored = true;
+      } on Object catch (again) {
+        log?.call(
+          'Switch of $sessionId failed, and $previous did not '
+          'start again either: $again',
+        );
+      }
+      throw StateError(
+        restored
+            ? '${context.agentName} did not start ($why). $previous runs '
+                  'this session again.'
+            : '${context.agentName} did not start ($why), and $previous, '
+                  'stopped for the switch, did not start again. Send a '
+                  'message, or resume it, to continue with $previous.',
+      );
+    }
+    onSwitched?.call(sessionId, ledger.forSession(sessionId));
+    final leaving = _agentNameOf(session);
+    final cancelled =
+        cancelResume?.call(
+          sessionId,
+          'The session switched from $leaving to ${context.agentName}, so '
+          'the resume scheduled for $leaving was cancelled.',
+        ) ??
+        false;
+    if (!cancelled) return started;
+    return started.withNotice(
+      'The resume scheduled for $leaving was cancelled: it would have '
+      'typed $leaving\'s message into ${context.agentName}.',
+    );
+  }
+
+  Future<List<TranscriptMessage>?> _conversationOf(String sessionId) async {
+    final read = conversationOf;
+    if (read == null) return null;
+    try {
+      return await read(sessionId);
+    } on Object {
+      return null;
+    }
+  }
+
   Future<SessionStarted> _continue({
     required String sessionId,
     required String targetInstallationId,
@@ -683,9 +1026,11 @@ class SessionContinuations {
     return started;
   }
 
-  /// Forks [sessionId] **and** puts its working tree back to a checkpoint;
-  /// answers both halves separately, as `session_fork_from_checkpoint` reads
-  /// them, never a fork that only half happened described as whole.
+  /// Forks [sessionId] **and** puts its working tree back to a checkpoint —
+  /// by turn, every repository that turn touched, each from its own
+  /// checkpoint; answers both halves separately and per repository, as
+  /// `session_fork_from_checkpoint` reads them, never a fork that only half
+  /// happened described as whole.
   Future<Map<String, Object?>> forkFromCheckpoint({
     required String sessionId,
     String? checkpointId,
@@ -694,53 +1039,161 @@ class SessionContinuations {
     bool newWorktree = false,
     bool confirm = false,
     bool preview = false,
+    String? requestedBy,
   }) async {
     final work =
         forks ??
         (throw StateError('This server keeps no checkpoints to fork from.'));
-    final checkpoint = work.forkCheckpoint(
+    final checkpoints = work.forkCheckpoints(
       sessionId: sessionId,
       checkpointId: checkpointId,
       turn: turn,
     );
     final plan = forkPlanFor(sessionId);
-    final fileRefusal = work.forkFileRefusal(
-      checkpoint,
-      sessionId: sessionId,
-      intoNewWorktree: newWorktree,
-    );
+    final asked = [
+      for (final checkpoint in checkpoints)
+        (
+          checkpoint: checkpoint,
+          refusal: work.forkFileRefusal(
+            checkpoint,
+            sessionId: sessionId,
+            intoNewWorktree: newWorktree,
+            requestedBy: requestedBy,
+          ),
+        ),
+    ];
     if (preview) {
+      final repositories = [
+        for (final (:checkpoint, :refusal) in asked)
+          {
+            'repository': checkpoint.repository.path,
+            'environmentId': checkpoint.repository.environmentId,
+            'checkpoint': _checkpointJson(checkpoint),
+            'wouldRestore': refusal == null,
+            'reason': ?refusal,
+          },
+      ];
       return {
         'preview': true,
         'route': plan.kind.name,
         'explanation': plan.explanation,
-        'checkpoint': _checkpointJson(checkpoint),
+        'checkpoint': _checkpointJson(checkpoints.first),
         'conversation': _conversationJson(),
-        'files': {
-          'wouldRestore': fileRefusal == null,
-          'repository': checkpoint.repository.path,
-          'reason': ?fileRefusal,
-        },
+        'repositories': repositories,
+        if (repositories.length == 1) 'files': repositories.single,
       };
     }
     if (plan.isRefused) throw StateError(plan.explanation);
-    // The files first: a refusal here must not leave a session behind.
-    RestoreOutcome? restored;
-    if (fileRefusal == null) {
-      restored = await work.restoreForFork(checkpoint, confirm: confirm);
+
+    // Every moved tree is found before any is written: a fork that would need
+    // confirm in one repository changes none of them.
+    if (!confirm) {
+      final conflicts =
+          <({Checkpoint checkpoint, CheckpointConflict conflict})>[];
+      for (final (:checkpoint, :refusal) in asked) {
+        if (refusal != null) continue;
+        final conflict = await work.forkConflict(checkpoint);
+        if (conflict != null) {
+          conflicts.add((checkpoint: checkpoint, conflict: conflict));
+        }
+      }
+      if (conflicts.isNotEmpty) {
+        throw StateError(_forkConflictMessage(conflicts, of: asked.length));
+      }
     }
-    final started = await fork(
-      sessionId: sessionId,
-      instruction: instruction,
-      intoNewWorktree: newWorktree,
-    );
+
+    // The files first: a refusal here must not leave a session behind.
+    final done = <({ForkedRepository forked, bool attempted})>[];
+    final outcomes = <RestoreOutcome?>[];
+    for (final (:checkpoint, :refusal) in asked) {
+      if (refusal != null) {
+        done.add((
+          forked: ForkedRepository(checkpoint, refusal: refusal),
+          attempted: false,
+        ));
+        outcomes.add(null);
+        continue;
+      }
+      // No safety checkpoint is taken of a tree already recorded; then the
+      // latest checkpoint is the way back.
+      final before = latestCheckpointIn(
+        work.forSession(checkpoint.sessionId),
+        repository: checkpoint.repository,
+      );
+      String? failed;
+      RestoreOutcome? outcome;
+      try {
+        final answer = await work.restore(
+          checkpoint,
+          confirm: confirm,
+          requestedBy: requestedBy,
+        );
+        outcome = answer.outcome;
+        if (answer.conflict case final conflict?) {
+          failed =
+              'The files were left as they are: they changed while the fork '
+              'was being made. Their current tree is saved as checkpoint '
+              '${conflict.safetyCheckpoint?.id ?? before?.id}; run the fork '
+              'again with confirm true to restore anyway.';
+        }
+      } on Object catch (error) {
+        failed =
+            'The files were left as they are: restoring them failed: $error';
+      }
+      done.add((
+        forked: ForkedRepository(
+          checkpoint,
+          refusal: failed,
+          alreadyThere: outcome?.alreadyThere,
+          restoredFiles: outcome?.files.length ?? 0,
+          undoCheckpointId: outcome == null || outcome.alreadyThere
+              ? null
+              : (outcome.safetyCheckpoint ?? before)?.id,
+        ),
+        attempted: true,
+      ));
+      outcomes.add(outcome);
+    }
+    final wrote = [
+      for (final d in done)
+        if (d.forked.restored) d.forked,
+    ];
+    final failures = [
+      for (final d in done)
+        if (d.attempted && d.forked.refusal != null) d.forked,
+    ];
+    if (wrote.isEmpty && failures.isNotEmpty) {
+      final why = [
+        for (final f in failures)
+          '${f.checkpoint.repository.path}: ${f.refusal}',
+      ];
+      throw StateError(
+        'No session was started and no file was changed. ${why.join(' ')}',
+      );
+    }
+
+    final SessionStarted started;
+    try {
+      started = await fork(
+        sessionId: sessionId,
+        instruction: instruction,
+        intoNewWorktree: newWorktree,
+      );
+    } on Object catch (error) {
+      if (wrote.isEmpty) rethrow;
+      throw StateError(
+        'No session was started: $error. The files were already restored: '
+        '${[for (final r in wrote) _restoredClause(r)].join(' ')}',
+      );
+    }
     final halves = checkpointForkHalves(
       route: plan.kind.name,
-      checkpoint: checkpoint,
-      fileRefusal: fileRefusal,
-      alreadyThere: restored?.alreadyThere,
-      restoredFiles: restored?.files.length ?? 0,
+      repositories: [for (final d in done) d.forked],
     );
+    final repositories = [
+      for (final (i, d) in done.indexed)
+        _forkedRepositoryJson(d.forked, outcomes[i]),
+    ];
     return {
       'sessionId': started.sessionId,
       'title': started.session.title,
@@ -748,26 +1201,77 @@ class SessionContinuations {
       'link': SessionLink.fork.name,
       'route': plan.kind.name,
       'explanation': plan.explanation,
-      'checkpoint': _checkpointJson(checkpoint),
+      'checkpoint': _checkpointJson(checkpoints.first),
       'delivered': halves.delivered,
       'notDelivered': halves.notDelivered,
       'conversation': _conversationJson(),
-      'files': {
-        'restored': restored != null && !restored.alreadyThere,
-        'repository': checkpoint.repository.path,
-        'reason': ?fileRefusal,
-        if (restored != null) ...{
-          'alreadyThere': restored.alreadyThere,
-          'safetyCheckpointId': restored.safetyCheckpoint?.id,
-          'paths': [
-            for (final file in restored.files)
-              {'path': file.path, 'status': file.type.name},
-          ],
-        },
-      },
+      'repositories': repositories,
+      if (repositories.length == 1) 'files': repositories.single,
       if (started.session.worktree != null)
         'worktree': started.session.worktree!.path,
     };
+  }
+
+  static Map<String, Object?> _forkedRepositoryJson(
+    ForkedRepository forked,
+    RestoreOutcome? outcome,
+  ) => {
+    'repository': forked.checkpoint.repository.path,
+    'environmentId': forked.checkpoint.repository.environmentId,
+    'checkpoint': _checkpointJson(forked.checkpoint),
+    'restored': forked.restored,
+    'reason': ?forked.refusal,
+    if (outcome != null) ...{
+      'alreadyThere': outcome.alreadyThere,
+      'safetyCheckpointId': outcome.safetyCheckpoint?.id,
+      if (forked.restored) 'undoCheckpointId': forked.undoCheckpointId,
+      'paths': [
+        for (final file in outcome.files)
+          {'path': file.path, 'status': file.type.name},
+      ],
+    },
+  };
+
+  /// One restored repository and its way back, for a fork that then failed.
+  static String _restoredClause(ForkedRepository r) {
+    final count = r.restoredFiles;
+    final undo = r.undoCheckpointId == null
+        ? '.'
+        : '; checkpoint_restore ${r.undoCheckpointId} puts them back as they '
+              'were.';
+    return '${r.checkpoint.repository.path} to checkpoint '
+        '${r.checkpoint.sequence} ($count file${count == 1 ? '' : 's'})$undo';
+  }
+
+  /// Why a fork stopped before writing anything: the repositories whose tree
+  /// moved since their last checkpoint, and where each was saved.
+  static String _forkConflictMessage(
+    List<({Checkpoint checkpoint, CheckpointConflict conflict})> conflicts, {
+    required int of,
+  }) {
+    if (of == 1) {
+      final conflict = conflicts.single.conflict;
+      return '${conflict.message} Nothing was changed and no session was '
+          'started. The current working tree is saved as checkpoint '
+          '${conflict.safetyCheckpoint?.id}.';
+    }
+    final which = [
+      for (final (:checkpoint, :conflict) in conflicts)
+        if (conflict.safetyCheckpoint case final saved?)
+          '${checkpoint.repository.path} has changed since its last '
+              'checkpoint; its current tree is saved as checkpoint '
+              '${saved.id}.'
+        else
+          '${checkpoint.repository.path} has changed since its last '
+              'checkpoint.',
+    ];
+    final count = conflicts.length == 1
+        ? 'one of them has'
+        : '${conflicts.length} of them have';
+    return 'Nothing was changed and no session was started: this fork '
+        'restores $of repositories, and $count changes that are not in the '
+        'checkpoint. ${which.join(' ')} Nothing is lost either way; fork again '
+        'with confirm true to restore them all anyway.';
   }
 
   static Map<String, Object?> _checkpointJson(Checkpoint checkpoint) => {
@@ -901,10 +1405,29 @@ class SessionContinuations {
         );
       }
       if (source.isNotEmpty) {
-        log?.call('Carried ${source.length} decision(s) from $from into $into.');
+        log?.call(
+          'Carried ${source.length} decision(s) from $from into $into.',
+        );
       }
     } on Object catch (error) {
       log?.call('Could not carry decisions from $from: $error');
     }
   }
+}
+
+/// The turns of [conversation] after [installationId] last spoke in it —
+/// all of them when it never did, or when [installationId] is null.
+List<TranscriptMessage> missedTurns(
+  List<TranscriptMessage> conversation,
+  String? installationId,
+) {
+  if (installationId == null) return conversation;
+  for (var i = conversation.length - 1; i >= 0; i--) {
+    final message = conversation[i];
+    if (message.agentInstallationId == installationId &&
+        message.role != kAgentSwitchRole) {
+      return conversation.sublist(i + 1);
+    }
+  }
+  return conversation;
 }

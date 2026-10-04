@@ -169,7 +169,10 @@ class ServerSessionLauncher {
 
   /// Starts what [spec] asks for. Throws [LaunchTargetMissing], or
   /// [StateError] / [ArgumentError] in the words a person or agent reads.
-  Future<SessionStarted> start(SessionStartSpec spec) async {
+  Future<SessionStarted> start(
+    SessionStartSpec spec, {
+    String? freshConversationId,
+  }) async {
     if (spec.restartSessionId != null &&
         (spec.resumeConversationId != null ||
             spec.forkConversationId != null)) {
@@ -306,6 +309,7 @@ class ServerSessionLauncher {
         recordDirectory: recordDirectory,
         resuming: reused,
         fresh: restarting,
+        freshConversationId: restarting ? freshConversationId : null,
         resumeConversationId: restarting ? null : resumeId,
         forkConversationId: spec.forkConversationId,
         parentSessionId: spec.parentSessionId,
@@ -338,12 +342,52 @@ class ServerSessionLauncher {
   /// Continues session [sessionId] on its own conversation (a fresh one in
   /// its own row when it never named one), in its own directory and mode.
   /// One already running here is answered as it is. [restart] ends it first.
+  /// A resume of a row another resume is still starting waits for that one,
+  /// so two callers never start two processes (a boot's automatic continue
+  /// and a client reopening the same row).
   Future<SessionStarted> resume(
     String sessionId, {
     bool restart = false,
     String? prompt,
+    String? systemPrompt,
+    String? freshConversationId,
     int columns = 120,
     int rows = 40,
+  }) {
+    Future<SessionStarted> now() => _resume(
+      sessionId,
+      restart: restart,
+      prompt: prompt,
+      systemPrompt: systemPrompt,
+      freshConversationId: freshConversationId,
+      columns: columns,
+      rows: rows,
+    );
+    final inFlight = _resuming[sessionId];
+    final started = inFlight == null
+        ? now()
+        : inFlight.then((_) => now(), onError: (Object _) => now());
+    _resuming[sessionId] = started;
+    unawaited(
+      started.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+        if (identical(_resuming[sessionId], started)) {
+          _resuming.remove(sessionId);
+        }
+      }),
+    );
+    return started;
+  }
+
+  final Map<String, Future<SessionStarted>> _resuming = {};
+
+  Future<SessionStarted> _resume(
+    String sessionId, {
+    required bool restart,
+    required String? prompt,
+    required int columns,
+    required int rows,
+    String? systemPrompt,
+    String? freshConversationId,
   }) async {
     final row =
         sessions.getById(sessionId) ??
@@ -375,16 +419,22 @@ class ServerSessionLauncher {
         existingWorktree: row.worktree,
         workingDirectory: row.workingDirectory,
         prompt: prompt,
+        systemPrompt: systemPrompt,
         columns: columns,
         rows: rows,
       ),
+      freshConversationId: freshConversationId,
     );
   }
 
   /// Ends the agent behind [sessionId]; the row and transcript stay, and the
   /// ending is recorded as the server's. Throws [LaunchTargetMissing] when
   /// nothing runs it (unless [quietly]).
-  Future<void> end(String sessionId, {bool quietly = false}) async {
+  Future<void> end(
+    String sessionId, {
+    bool quietly = false,
+    String? reason,
+  }) async {
     final hostId = hostSessionIdOf(sessionId);
     final session = registry.findProcess(hostId);
     if (session == null || session.lifecycle.hasEnded) {
@@ -394,7 +444,7 @@ class ServerSessionLauncher {
       );
     }
     try {
-      await registry.close(hostId);
+      await registry.close(hostId, reason: reason);
     } on UnknownSession {
       if (quietly) return;
       throw const LaunchTargetMissing(

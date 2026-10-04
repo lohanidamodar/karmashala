@@ -93,6 +93,7 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'list_agents',
       'get_usage',
       'open_new_session',
+      'subagent_run',
       'open_session',
     ],
     body: '''
@@ -191,16 +192,40 @@ read both, and never read a missing key as a half that happened.
 The file half is the destructive one, on `checkpoint_restore`'s terms: a safety
 checkpoint first, and a tree that has moved refused unless `confirm`. It is
 **refused outright**, and named in `notDelivered` rather than failing the call,
-when another session is recorded working in that checkout — rolling it back
-would take work that is not yours — when the repository cannot be checkpointed
+when another session whose agent is still running is recorded working in that
+checkout — rolling it back would take work that is not yours; an ended session
+never blocks it — when the repository cannot be checkpointed
 from here, and when `newWorktree` is true, because a checkpoint restores only
 into the checkout it was taken in. `preview: true` reports both decisions
 without touching a file.
 
+A fork by `turn` restores **every repository that turn touched**, each from its
+own checkpoint at the turn's start. `repositories` reports each one: restored,
+with its own `undoCheckpointId`, or left as it is with the reason, also in
+`notDelivered`. A tree that has moved in any of them stops the whole fork before
+a file changes, unless `confirm`.
+
 **Starting sessions is capped on purpose.** Sessions you start with
-`open_new_session` are recorded as your children and nesting is limited. If a
-call is refused for depth, that is the answer: do the work yourself rather than
-looking for another way to delegate it.
+`open_new_session` or `subagent_run` are recorded as your children and nesting
+is limited. If a call is refused for depth, that is the answer: do the work
+yourself rather than looking for another way to delegate it.
+
+**`subagent_run` shares your tree unless told otherwise.** With no
+`projectId` and no `scratch`, the child runs in your own checkout and
+directory — your worktree when you are in one — so what it edits is what you
+see. Two agents editing the same files at once collide; pass `useWorktree` for
+a child that edits while you keep working.
+
+**`subagent_run` returns an answer only when the child's turn finished.**
+`finalAnswer` is the child's last message from its own record; when none was
+recorded it says so rather than handing you an empty string. `running` means
+your `timeoutSeconds` ran out, not that the child failed: the child keeps
+working, so wait on `childSessionId` with `session_wait` — which also returns
+`finalAnswer` once the child is ready — and do not call `subagent_run` again,
+which starts a second agent. `blocked` means the child stopped for a person;
+waiting longer will not clear it. A child that answers is ended then unless
+you pass `keepOpen: true`; `childOpen` says which. A child stopped by its
+usage limit stays open, and `resume` names the resume armed for it.
 ''',
   ),
   McpGuide(

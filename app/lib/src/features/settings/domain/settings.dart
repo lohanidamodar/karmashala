@@ -96,9 +96,10 @@ class Settings {
     this.editorWordWrap = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
-    this.usageLimitBehavior = UsageLimitBehavior.ask,
+    this.usageLimitBehavior = UsageLimitBehavior.schedule,
     this.resumeMessage = kDefaultResumeMessage,
     this.resumeMessages = const {},
+    this.continueInterruptedTurns = true,
     this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
@@ -224,6 +225,10 @@ class Settings {
 
   /// The message last used per agent id, so the dialog opens on it.
   final Map<String, String> resumeMessages;
+
+  /// Whether the server resumes a session whose turn its stop or crash cut
+  /// off, and tells it so. The server reads this key itself.
+  final bool continueInterruptedTurns;
 
   /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
   /// one of its sections, or a context inside it. Absent means expanded, so a
@@ -390,6 +395,7 @@ class Settings {
     UsageLimitBehavior? usageLimitBehavior,
     String? resumeMessage,
     Map<String, String>? resumeMessages,
+    bool? continueInterruptedTurns,
     List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
@@ -462,6 +468,8 @@ class Settings {
     usageLimitBehavior: usageLimitBehavior ?? this.usageLimitBehavior,
     resumeMessage: resumeMessage ?? this.resumeMessage,
     resumeMessages: resumeMessages ?? this.resumeMessages,
+    continueInterruptedTurns:
+        continueInterruptedTurns ?? this.continueInterruptedTurns,
     collapsedExplorerNodes:
         collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
@@ -542,6 +550,75 @@ class Settings {
     );
   }
 
+  /// Every key this build reads or writes. A save replaces these and keeps
+  /// the rest, so a key a newer client added survives this one's save.
+  static const Set<String> jsonKeys = {
+    'defaultAgent',
+    'defaultAgentInstallationId',
+    'themeMode',
+    'defaultTerminalProfileId',
+    'keepAwake',
+    'closeToTray',
+    'autoStart',
+    'simulatorSlimming',
+    'simulatorSlimmingKept',
+    'androidSlimming',
+    'androidSlimmingEnabled',
+    'androidEmulatorGpu',
+    kAndroidSdkPathSetting,
+    'explorerPaneWidth',
+    'detailSidebarWidth',
+    'compactDensity',
+    'accent',
+    'separation',
+    'sidebarArea',
+    'editorWordWrap',
+    'editorAutoSave',
+    'editorAutoSaveDelayMs',
+    kUsageLimitSettingKey,
+    kLegacyUsageLimitSettingKey,
+    'resumeMessage',
+    'resumeMessages',
+    'continueInterruptedTurns',
+    'collapsedExplorerNodes',
+    'windowWidth',
+    'windowHeight',
+    'defaultSystemTerminalId',
+    'customTerminalPath',
+    'defaultCodeEditorId',
+    'customEditorPath',
+    'useInAppFilePicker',
+    'showHiddenFiles',
+    'launcherHotkeyJson',
+    'launcherHotkeyEnabled',
+    'pinnedProjectIds',
+    'pinnedSessionIds',
+    'shellIntegrationEnabled',
+    'restoreLivePanes',
+    'quitAsks',
+    'quitReopens',
+    'quitKeepsHostSessions',
+    'letAgentsUpdateThemselves',
+    'terminalChordOverrides',
+    'terminalThemeSource',
+    'uiTextScale',
+    'terminalFontSize',
+    'notesEnabled',
+    'hideEmptySections',
+    'explorerAgentFilter',
+    'hiddenSidePanelSurfaces',
+    'explorerProjectDetails',
+    'explorerEnvironmentScope',
+    'explorerContextScope',
+    'debugMode',
+    'logVerbosity',
+    'logToFile',
+    'logBufferSize',
+    'permissions',
+    'defaultModels',
+    'flutterSdkPaths',
+  };
+
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent,
     if (defaultAgentInstallationId != null)
@@ -570,9 +647,10 @@ class Settings {
     'editorWordWrap': editorWordWrap,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
-    'usageLimitBehavior': usageLimitBehavior.name,
+    kUsageLimitSettingKey: usageLimitBehavior.name,
     'resumeMessage': resumeMessage,
     if (resumeMessages.isNotEmpty) 'resumeMessages': resumeMessages,
+    'continueInterruptedTurns': continueInterruptedTurns,
     'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
@@ -711,9 +789,7 @@ class Settings {
           ? json['editorWordWrap'] as bool
           : false,
       editorAutoSave: EditorAutoSave.fromName(json['editorAutoSave']),
-      usageLimitBehavior: UsageLimitBehavior.fromName(
-        json['usageLimitBehavior'],
-      ),
+      usageLimitBehavior: UsageLimitBehavior.fromSettingsJson(json),
       resumeMessage: json['resumeMessage'] is String
           ? json['resumeMessage'] as String
           : kDefaultResumeMessage,
@@ -723,6 +799,7 @@ class Settings {
             if (entry.key is String && entry.value is String)
               entry.key as String: entry.value as String,
       },
+      continueInterruptedTurns: json['continueInterruptedTurns'] != false,
       editorAutoSaveDelayMs: json['editorAutoSaveDelayMs'] is int
           ? (json['editorAutoSaveDelayMs'] as int).clamp(
               kMinEditorAutoSaveDelayMs,
@@ -857,6 +934,7 @@ class Settings {
       other.usageLimitBehavior == usageLimitBehavior &&
       other.resumeMessage == resumeMessage &&
       _stringMapEquals(other.resumeMessages, resumeMessages) &&
+      other.continueInterruptedTurns == continueInterruptedTurns &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
@@ -947,6 +1025,7 @@ class Settings {
           quitKeepsHostSessions,
           usageLimitBehavior,
           resumeMessage,
+          continueInterruptedTurns,
           Object.hashAllUnordered(
             resumeMessages.entries.map((e) => Object.hash(e.key, e.value)),
           ),

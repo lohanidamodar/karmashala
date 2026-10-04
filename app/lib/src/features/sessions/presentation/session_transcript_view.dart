@@ -22,6 +22,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/installation_labels.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -63,8 +64,10 @@ import 'package:karmashala_session/launch.dart';
 import 'activity_strip.dart';
 import 'chat_transcript.dart';
 import 'end_session_action.dart';
+import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
+import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
 
@@ -196,6 +199,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     if (queued == null || queued.isEmpty) return;
     final existing = _composer.text.trimRight();
     _composer.text = existing.isEmpty ? queued : '$existing\n\n$queued';
+    _composer.selection = TextSelection.collapsed(
+      offset: _composer.text.length,
+    );
+  }
+
+  /// A queued message that failed, back in the box to send again — appended
+  /// after any draft, never sent.
+  void _backToComposer(String text) {
+    if (_leaving) return;
+    final existing = _composer.text.trimRight();
+    _composer.text = existing.isEmpty ? text : '$existing\n\n$text';
     _composer.selection = TextSelection.collapsed(
       offset: _composer.text.length,
     );
@@ -781,9 +795,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             : null;
         return MessageComposer(
           controller: _composer,
-          // Attachments and the message, nothing else: mode, model
-          // and stats are on the pane's status bar (owner, 2026-09-28).
-          chips: const [],
+          // Mode, model and stats are on the pane's status bar (owner,
+          // 2026-09-28); switching agent is the composer's (2026-10-03).
+          chips: [
+            if (caps.switchAgent)
+              SwitchAgentControl(sessionId: widget.sessionId),
+          ],
           // Read when the menu opens, never watched: the footer is
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
@@ -813,28 +830,21 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The strips scroll among themselves in whatever the
-          // composer leaves; none of them may push the box away.
+          // What was sent while the turn ran, waiting at the server below
+          // the transcript it will join: it scrolls in whatever the
+          // composer leaves, and may not push the box away.
           Flexible(
             child: SingleChildScrollView(
               primary: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // The ask, the delivery facts, Ship and the notices
-                  // are the pane's status bar's, in both views; the
-                  // chat keeps only what is its own. Directly above
-                  // the box: "what is it doing right now" was only
-                  // answerable by scrolling to the end.
-                  ActivityStrip(
-                    sessionId: widget.sessionId,
-                    onStop: _interruptTurn,
-                  ),
-                ],
+              child: QueuedMessagesStrip(
+                sessionId: widget.sessionId,
+                onBackToComposer: _backToComposer,
               ),
             ),
           ),
+          // Directly above the box and outside the scroll, so a long queue
+          // never hides the running turn or its Stop.
+          ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
             constraints: BoxConstraints(
@@ -896,6 +906,24 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
+  /// Each agent of a switched thread by name — with where it lives when two
+  /// installations of one agent took turns in it.
+  TranscriptAgent? Function(String) _agentsIn(List<TranscriptMessage> messages) {
+    final rows = ref.read(agentInstallationsDataProvider);
+    final labels = installationLabelsOf(
+      {for (final message in messages) ?message.agentInstallationId},
+      rows: rows,
+      environments: ref.read(environmentsDataProvider),
+      registry: ref.read(agentRegistryProvider),
+    );
+    return (installationId) {
+      final agentId = rows.getById(installationId)?.agentId;
+      final name = labels[installationId];
+      if (agentId == null || name == null) return null;
+      return (name: name, agentId: agentId);
+    };
+  }
+
   /// The agent's own transcript as chat messages. The subagent a row spawned
   /// travels beside them, not inside [ChatMessage], which has no room for it.
   List<ChatMessage> _fromTranscript(
@@ -907,6 +935,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       messages,
       subagents: subagents,
       earlier: earlier,
+      agentOf: _agentsIn(messages),
     );
     if (!mapEquals(subagents, _subagents)) {
       _subagents = subagents;
@@ -1137,6 +1166,9 @@ class _OpenLinkBody extends StatelessWidget {
 String? sessionTerminalPane(WidgetRef ref, String sessionId) =>
     ref.read(paneSessionsProvider).paneOf(sessionId);
 
+/// The agent a switched session's row names, as its turns are labelled.
+typedef TranscriptAgent = ({String name, String agentId});
+
 /// A CLI transcript as chat messages, with a compacted session's history shown
 /// **once** — the summary restates everything before the last boundary.
 @visibleForTesting
@@ -1144,6 +1176,7 @@ List<ChatMessage> chatMessagesFromTranscript(
   List<TranscriptMessage> messages, {
   Map<int, SubagentRef>? subagents,
   int earlier = 0,
+  TranscriptAgent? Function(String installationId)? agentOf,
 }) {
   // The **last** boundary: a session compacted twice has restated its history
   // twice, and only the newest summary covers all of it. [earlier] rows come
@@ -1181,18 +1214,36 @@ List<ChatMessage> chatMessagesFromTranscript(
     );
   }
 
+  // In a switched session an agent is named where it starts speaking — the
+  // thread's first agent row, and the first after each switch — not on every
+  // turn it goes on taking: the divider already says who took over.
+  String? lastNamed;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
     final reference = message.subagent;
     if (reference != null) subagents?[out.length] = reference;
+    final installation = message.agentInstallationId;
+    final switching = message.role == kAgentSwitchRole;
+    final named =
+        installation != null &&
+        (switching ||
+            (message.role == 'agent' && installation != lastNamed));
+    final agent = named ? agentOf?.call(installation) : null;
+    if (switching) {
+      lastNamed = null;
+    } else if (named) {
+      lastNamed = installation;
+    }
     out.add(
       ChatMessage(
-        role: message.role,
+        role: switching ? kAgentSwitchNoticeRole : message.role,
         text: message.text,
         tool: message.tool,
         thinking: message.thinking,
         at: message.at,
         pending: message.pendingToolUseId != null,
+        agentName: named ? agent?.name ?? 'another agent' : null,
+        agentId: agent?.agentId,
       ),
     );
   }

@@ -1,4 +1,5 @@
 import '../../cli_detection/data/transcript_dialect.dart';
+import 'injected_context.dart';
 
 /// How an agent's transcript is read into the conversation the app draws.
 class AgentTranscripts {
@@ -6,7 +7,11 @@ class AgentTranscripts {
     required this.dialect,
     this.buildsChatView = true,
     this.redirect,
+    this.injected = InjectedTranscriptContext.none,
   });
+
+  /// Records the agent writes into its transcript that nobody said.
+  final InjectedTranscriptContext injected;
 
   /// The line format `readCliTranscript` parses this agent's records with.
   final TranscriptDialect dialect;

@@ -3,9 +3,12 @@ import 'dart:convert';
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_session/session.dart'
+    show QueuedMessage, QueuedMessageOrigin;
 
 import '../acp/acp_session_runtime.dart';
 import '../status/daemon_prompt_answers.dart';
+import 'session_queue.dart';
 
 /// **A client's chat sends and Stop, typed here as host keys** (Stage 2
 /// step 2): past the write token, so a phone never takes a session's input or
@@ -20,15 +23,21 @@ import '../status/daemon_prompt_answers.dart';
 /// conversation in the same row otherwise), so every client — a phone,
 /// another desktop, an agent's `session_send` — continues it alike. A resume
 /// refused is answered in its words, and nothing is sent.
+///
+/// With a [queue], a send while the turn runs waits there and is delivered
+/// by [deliverNow] when the turn ends.
 class SessionInput {
   SessionInput({
     required this.prompts,
     required this.typist,
     this.resumesOnSend,
     this.resume,
+    this.queue,
     this.log,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now {
+    queue?.deliver = (sessionId, text) => deliverNow(sessionId, text);
+  }
 
   final DaemonPromptAnswers prompts;
   final SessionMessageTypist typist;
@@ -40,6 +49,9 @@ class SessionInput {
   /// first turn — `ServerSessionLauncher.resume`.
   final Future<SessionStarted> Function(String sessionId, String prompt)?
   resume;
+
+  /// Where a send waits while the session's turn runs; null sends at once.
+  final SessionQueue? queue;
   final void Function(String message)? log;
   final DateTime Function() _now;
 
@@ -54,22 +66,29 @@ class SessionInput {
   /// Answers [request] from [device] (null: this machine), once per
   /// `requestId`: a resend of one that went through joins or repeats its
   /// answer and types nothing. A refused one is forgotten, so an explicit
-  /// retry is tried again.
-  Future<Object?> handle(SessionInputRequest<Object?> request, String? device) {
+  /// retry is tried again. [origin] names a sender other than a data link.
+  Future<Object?> handle(
+    SessionInputRequest<Object?> request,
+    String? device, {
+    QueuedMessageOrigin? origin,
+  }) {
     final id = request.requestId;
-    if (id == null || id.isEmpty || id.length > 128) return _run(request);
+    if (id == null || id.isEmpty || id.length > 128) {
+      return _run(request, device, origin);
+    }
     _forgetOld();
-    final sessionId = switch (request) {
-      SessionSend(:final sessionId) => sessionId,
-      SessionInterrupt(:final sessionId) => sessionId,
-    };
-    final key = [device ?? 'local', request.kind, sessionId, id].join('\u0000');
+    final key = [
+      device ?? 'local',
+      request.kind,
+      request.sessionId,
+      id,
+    ].join('\u0000');
     final remembered = _ledger[key];
     if (remembered != null) {
       log?.call('${request.kind} $id repeated: answered as the first');
       return remembered.answer;
     }
-    final answer = _run(request);
+    final answer = _run(request, device, origin);
     final entry = _ledger[key] = _Remembered(answer, _now());
     unawaited(
       answer.then<void>(
@@ -84,21 +103,45 @@ class SessionInput {
 
   /// Every refusal is logged as well as answered: the sender's only other
   /// trace of it is a snackbar.
-  Future<Object?> _run(SessionInputRequest<Object?> request) async {
+  Future<Object?> _run(
+    SessionInputRequest<Object?> request,
+    String? device,
+    QueuedMessageOrigin? origin,
+  ) async {
     try {
       return await switch (request) {
-        final SessionSend r => _send(r.sessionId, r.text),
+        final SessionSend r => _send(
+          r.sessionId,
+          r.text,
+          origin:
+              origin ??
+              (device == null
+                  ? QueuedMessageOrigin.app
+                  : QueuedMessageOrigin.device),
+          originId: device,
+          requestId: r.requestId,
+        ),
         SessionInterrupt(:final sessionId) => _interrupt(sessionId),
+        SessionQueueList(:final sessionId) => Future.value(
+          _queue().list(sessionId),
+        ),
+        SessionQueueEdit(:final sessionId, :final id, :final text) =>
+          Future<QueuedMessage>.sync(() => _queue().edit(sessionId, id, text)),
+        SessionQueueSendNext(:final sessionId) => _queue().sendNext(sessionId),
+        SessionQueueCancel(:final sessionId, :final id) =>
+          Future<QueuedMessage>.sync(() => _queue().cancel(sessionId, id)),
       };
     } on DataRefused catch (refusal) {
-      final sessionId = switch (request) {
-        SessionSend(:final sessionId) => sessionId,
-        SessionInterrupt(:final sessionId) => sessionId,
-      };
-      log?.call('${request.kind} $sessionId refused: ${refusal.message}');
+      log?.call(
+        '${request.kind} ${request.sessionId} refused: ${refusal.message}',
+      );
       rethrow;
     }
   }
+
+  SessionQueue _queue() =>
+      queue ??
+      (throw const DataRefused.unavailable('this server queues no messages'));
 
   void _forgetOld() {
     final cutoff = _now().subtract(keep);
@@ -128,7 +171,47 @@ class SessionInput {
   /// with no screen to read a Return back off.
   static const String viaProtocol = 'protocol';
 
-  Future<SessionSent> _send(String sessionId, String text) async {
+  Future<SessionSent> _send(
+    String sessionId,
+    String text, {
+    required QueuedMessageOrigin origin,
+    String? originId,
+    String? requestId,
+  }) async {
+    if (text.trim().isEmpty) {
+      throw const DataRefused.invalid('there is no message to send');
+    }
+    final queue = this.queue;
+    if (queue == null) return deliverNow(sessionId, text);
+    switch (queue.admit(
+      sessionId,
+      text,
+      origin: origin,
+      originId: originId,
+      requestId: requestId,
+    )) {
+      case AdmitQueued(:final message, :final position):
+        return SessionSent(
+          sent: true,
+          via: SessionSent.queuedVia,
+          queuedId: message.id,
+          position: position,
+        );
+      case AdmitNow():
+        var delivered = false;
+        try {
+          final sent = await deliverNow(sessionId, text);
+          delivered = true;
+          return sent;
+        } finally {
+          queue.afterImmediate(sessionId, delivered: delivered);
+        }
+    }
+  }
+
+  /// Delivers [text] to [sessionId] now: over its protocol, by resuming it,
+  /// or typed into its screen. Refused in words when it cannot be.
+  Future<SessionSent> deliverNow(String sessionId, String text) async {
     if (text.trim().isEmpty) {
       throw const DataRefused.invalid('there is no message to send');
     }
@@ -233,15 +316,19 @@ class SessionInput {
     );
   }
 
+  /// Stop also pauses the queue: the turn's end it causes must not send the
+  /// next message the person just stopped short of.
   Future<DataAck> _interrupt(String sessionId) async {
     final runtime = prompts.status.acpRuntimeOf(sessionId);
     if (runtime != null) {
+      queue?.pause(sessionId);
       runtime.cancel();
       return const DataAck();
     }
     if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }
+    queue?.pause(sessionId);
     return const DataAck();
   }
 }

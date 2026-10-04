@@ -125,7 +125,8 @@ SessionChange? sessionChangeOf(ReplicaChange<Session> change) {
         before.worktree != after.worktree ||
         before.useWorktree != after.useWorktree ||
         before.workingDirectory != after.workingDirectory ||
-        before.externalSessionId != after.externalSessionId)
+        before.externalSessionId != after.externalSessionId ||
+        before.agentInstallationId != after.agentInstallationId)
       SessionChangeKind.placement,
     if (before.permissionMode != after.permissionMode ||
         before.modelId != after.modelId ||

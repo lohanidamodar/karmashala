@@ -63,8 +63,8 @@ void main() {
               '"payload":{"id":"$id","cwd":"$cwd",'
               '"timestamp":"2026-09-05T07:57:55.000Z"}}',
           '{"type":"response_item","payload":{"type":"message","role":"user",'
-              '"content":[{"type":"input_text","text":"<recommended_plugins> '
-              'Here is a list of plugins that</recommended_plugins>"}]}}',
+              '"content":[{"type":"input_text","text":"<recommended_plugins>\\n'
+              'Here is a list of plugins that\\n</recommended_plugins>"}]}}',
           '{"type":"response_item","payload":{"type":"message","role":"user",'
               '"content":[{"type":"input_text","text":"the real question"}]}}',
         ].join('\n'),

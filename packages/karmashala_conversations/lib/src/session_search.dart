@@ -129,6 +129,9 @@ class SessionSearchService {
     ]);
     final terms = _excerptTerms(tokens, repairs);
 
+    final switched = dao.switchedRowsOf([
+      for (final entry in page) entry.row.sessionId,
+    ]);
     final hits = <ConversationHit>[];
     for (final entry in page) {
       final turn = turns[entry.row.bestTurnId];
@@ -148,6 +151,7 @@ class SessionSearchService {
           indexedAt: entry.row.indexedAt,
           matches: entry.row.matches,
           tier: entry.tier,
+          rowId: switched[entry.row.sessionId],
         ),
       );
     }
