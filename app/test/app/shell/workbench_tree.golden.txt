@@ -2786,16 +2786,18 @@ WorkbenchView
                                                                                         DeliveryStateLine
                                                                                           Padding
                                                                                             Wrap
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Text text="Working"
-                                                                                                  RichText
+                                                                                              _StageMark
+                                                                                                Row key=[<'delivery-stage'>]
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="Working"
+                                                                                                      RichText
                                                                                               SessionVerdictMark
                                                                                                 Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                                                                                   RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
@@ -4071,16 +4073,18 @@ WorkbenchView
                                                                                         DeliveryStateLine
                                                                                           Padding
                                                                                             Wrap
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Text text="Working"
-                                                                                                  RichText
+                                                                                              _StageMark
+                                                                                                Row key=[<'delivery-stage'>]
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="Working"
+                                                                                                      RichText
                                                                                               SessionVerdictMark
                                                                                                 Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                                                                                   RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
@@ -4944,16 +4948,18 @@ WorkbenchView
                                                                                         DeliveryStateLine
                                                                                           Padding
                                                                                             Wrap
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Text text="Working"
-                                                                                                  RichText
+                                                                                              _StageMark
+                                                                                                Row key=[<'delivery-stage'>]
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="Working"
+                                                                                                      RichText
                                                                                               SessionVerdictMark
                                                                                                 Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                                                                                   RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
@@ -5846,16 +5852,18 @@ WorkbenchView
                                                   DeliveryStateLine
                                                     Padding
                                                       Wrap
-                                                        Row
-                                                          Icon
-                                                            Semantics
-                                                              ExcludeSemantics
-                                                                SizedBox
-                                                                  Center
-                                                                    RichText
-                                                          SizedBox
-                                                          Text text="Working"
-                                                            RichText
+                                                        _StageMark
+                                                          Row key=[<'delivery-stage'>]
+                                                            Icon
+                                                              Semantics
+                                                                ExcludeSemantics
+                                                                  SizedBox
+                                                                    Center
+                                                                      RichText
+                                                            SizedBox
+                                                            Flexible
+                                                              Text text="Working"
+                                                                RichText
                                                         SessionVerdictMark
                                                           Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                                             RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
@@ -5897,139 +5905,86 @@ WorkbenchView
                                         LayoutBuilder
                                           _SessionActionRow
                                             Row
-                                              PermissionModeChip
-                                                PopupMenuButton<PermissionChoice>
-                                                  Semantics
-                                                    Tooltip tooltip=""
-                                                      InkWell
-                                                        _InkResponseStateWidget
-                                                          _ParentInkResponseProvider
-                                                            Actions
-                                                              _ActionsScope
-                                                                Focus
-                                                                  _FocusInheritedScope
-                                                                    Semantics
-                                                                      MouseRegion
-                                                                        Builder
-                                                                          DefaultSelectionStyle
-                                                                            Semantics
-                                                                              GestureDetector
-                                                                                RawGestureDetector
-                                                                                  Listener
-                                                                                    Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
-                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                        OverlayPortal
-                                                                                          _OverlayPortal
-                                                                                            Semantics
-                                                                                              _ExclusiveMouseRegion
-                                                                                                Listener
-                                                                                                  Semantics
-                                                                                                    MouseRegion
-                                                                                                      PickerFace
-                                                                                                        TouchTarget
-                                                                                                          Container
-                                                                                                            DecoratedBox
-                                                                                                              Padding
-                                                                                                                Row
-                                                                                                                  Icon
-                                                                                                                    Semantics
-                                                                                                                      ExcludeSemantics
-                                                                                                                        SizedBox
-                                                                                                                          Center
-                                                                                                                            RichText
-                                                                                                                  SizedBox
-                                                                                                                  Flexible
-                                                                                                                    ConstrainedBox
-                                                                                                                      Text text="Ask"
-                                                                                                                        RichText
-                                                                                                                  SizedBox
-                                                                                                                  Flexible
-                                                                                                                    Text text="· default"
-                                                                                                                      RichText
-                                                                                                                  Icon
-                                                                                                                    Semantics
-                                                                                                                      ExcludeSemantics
-                                                                                                                        SizedBox
-                                                                                                                          Center
-                                                                                                                            RichText
-                                              SessionModePicker
-                                                SizedBox
-                                              SizedBox
-                                              Flexible
-                                                OperatorChip
-                                                  Tooltip tooltip="This agent reads Karmashala but cannot act on it. Click to let it operate Karmashala — or start a message with /operator."
-                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                      OverlayPortal
-                                                        _OverlayPortal
-                                                          Semantics
-                                                            _ExclusiveMouseRegion
-                                                              Listener
-                                                                Semantics
-                                                                  MouseRegion
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
+                                              Expanded
+                                                SingleChildScrollView
+                                                  Scrollable
+                                                    StretchingOverscrollIndicator
+                                                      NotificationListener<ScrollNotification>
+                                                        AnimatedBuilder
+                                                          ClipRect
+                                                            StretchEffect
+                                                              Transform
+                                                                NotificationListener<ScrollMetricsNotification>
+                                                                  _ScrollSemantics key=[GlobalKey#…]
+                                                                    _ScrollableScope
+                                                                      Listener
+                                                                        RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
+                                                                          _GestureSemantics
+                                                                            Listener
+                                                                              Semantics
+                                                                                IgnorePointer key=[GlobalKey#…]
+                                                                                  _SingleChildViewport
+                                                                                    Row
+                                                                                      PermissionModeChip
+                                                                                        PopupMenuButton<PermissionChoice>
                                                                                           Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  PickerFace
-                                                                                                    TouchTarget
-                                                                                                      Container
-                                                                                                        DecoratedBox
-                                                                                                          Padding
-                                                                                                            Row
-                                                                                                              Icon
-                                                                                                                Semantics
-                                                                                                                  ExcludeSemantics
-                                                                                                                    SizedBox
-                                                                                                                      Center
-                                                                                                                        RichText
-                                                                                                              SizedBox
-                                                                                                              Flexible
-                                                                                                                Text text="Read-only"
-                                                                                                                  RichText
-                                                                                                              SizedBox
-                                                                                                              Flexible
-                                                                                                                Text text="· Karmashala"
-                                                                                                                  RichText
-                                                                                                              Icon
-                                                                                                                Semantics
-                                                                                                                  ExcludeSemantics
-                                                                                                                    SizedBox
-                                                                                                                      Center
-                                                                                                                        RichText
-                                              SizedBox
-                                              Flexible
-                                                SessionModelChip
-                                                  ModelChip
-                                                    PopupMenuButton<ModelChoice>
-                                                      Semantics
-                                                        Tooltip tooltip=""
-                                                          InkWell
-                                                            _InkResponseStateWidget
-                                                              _ParentInkResponseProvider
-                                                                Actions
-                                                                  _ActionsScope
-                                                                    Focus
-                                                                      _FocusInheritedScope
-                                                                        Semantics
-                                                                          MouseRegion
-                                                                            Builder
-                                                                              DefaultSelectionStyle
-                                                                                Semantics
-                                                                                  GestureDetector
-                                                                                    RawGestureDetector
-                                                                                      Listener
-                                                                                        Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                            Tooltip tooltip=""
+                                                                                              InkWell
+                                                                                                _InkResponseStateWidget
+                                                                                                  _ParentInkResponseProvider
+                                                                                                    Actions
+                                                                                                      _ActionsScope
+                                                                                                        Focus
+                                                                                                          _FocusInheritedScope
+                                                                                                            Semantics
+                                                                                                              MouseRegion
+                                                                                                                Builder
+                                                                                                                  DefaultSelectionStyle
+                                                                                                                    Semantics
+                                                                                                                      GestureDetector
+                                                                                                                        RawGestureDetector
+                                                                                                                          Listener
+                                                                                                                            Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
+                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                OverlayPortal
+                                                                                                                                  _OverlayPortal
+                                                                                                                                    Semantics
+                                                                                                                                      _ExclusiveMouseRegion
+                                                                                                                                        Listener
+                                                                                                                                          Semantics
+                                                                                                                                            MouseRegion
+                                                                                                                                              PickerFace
+                                                                                                                                                TouchTarget
+                                                                                                                                                  Container
+                                                                                                                                                    DecoratedBox
+                                                                                                                                                      Padding
+                                                                                                                                                        Row
+                                                                                                                                                          Icon
+                                                                                                                                                            Semantics
+                                                                                                                                                              ExcludeSemantics
+                                                                                                                                                                SizedBox
+                                                                                                                                                                  Center
+                                                                                                                                                                    RichText
+                                                                                                                                                          SizedBox
+                                                                                                                                                          Flexible
+                                                                                                                                                            ConstrainedBox
+                                                                                                                                                              Text text="Ask"
+                                                                                                                                                                RichText
+                                                                                                                                                          SizedBox
+                                                                                                                                                          Flexible
+                                                                                                                                                            Text text="· default"
+                                                                                                                                                              RichText
+                                                                                                                                                          Icon
+                                                                                                                                                            Semantics
+                                                                                                                                                              ExcludeSemantics
+                                                                                                                                                                SizedBox
+                                                                                                                                                                  Center
+                                                                                                                                                                    RichText
+                                                                                      SessionModePicker
+                                                                                        SizedBox
+                                                                                      SizedBox
+                                                                                      OperatorChip
+                                                                                        Tooltip tooltip="This agent reads Karmashala but cannot act on it. Click to let it operate Karmashala — or start a message with /operator."
                                                                                           RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                             OverlayPortal
                                                                                               _OverlayPortal
@@ -6038,38 +5993,151 @@ WorkbenchView
                                                                                                     Listener
                                                                                                       Semantics
                                                                                                         MouseRegion
-                                                                                                          PickerFace
-                                                                                                            TouchTarget
-                                                                                                              Container
-                                                                                                                DecoratedBox
-                                                                                                                  Padding
-                                                                                                                    Row
-                                                                                                                      Icon
+                                                                                                          InkWell
+                                                                                                            _InkResponseStateWidget
+                                                                                                              _ParentInkResponseProvider
+                                                                                                                Actions
+                                                                                                                  _ActionsScope
+                                                                                                                    Focus
+                                                                                                                      _FocusInheritedScope
                                                                                                                         Semantics
-                                                                                                                          ExcludeSemantics
-                                                                                                                            SizedBox
-                                                                                                                              Center
-                                                                                                                                RichText
-                                                                                                                      SizedBox
-                                                                                                                      Flexible
-                                                                                                                        ConstrainedBox
-                                                                                                                          Text text="default"
-                                                                                                                            RichText
-                                                                                                                      Icon
-                                                                                                                        Semantics
-                                                                                                                          ExcludeSemantics
-                                                                                                                            SizedBox
-                                                                                                                              Center
-                                                                                                                                RichText
+                                                                                                                          MouseRegion
+                                                                                                                            Builder
+                                                                                                                              DefaultSelectionStyle
+                                                                                                                                Semantics
+                                                                                                                                  GestureDetector
+                                                                                                                                    RawGestureDetector
+                                                                                                                                      Listener
+                                                                                                                                        PickerFace
+                                                                                                                                          TouchTarget
+                                                                                                                                            Container
+                                                                                                                                              DecoratedBox
+                                                                                                                                                Padding
+                                                                                                                                                  Row
+                                                                                                                                                    Icon
+                                                                                                                                                      Semantics
+                                                                                                                                                        ExcludeSemantics
+                                                                                                                                                          SizedBox
+                                                                                                                                                            Center
+                                                                                                                                                              RichText
+                                                                                                                                                    SizedBox
+                                                                                                                                                    Flexible
+                                                                                                                                                      Text text="Read-only"
+                                                                                                                                                        RichText
+                                                                                                                                                    SizedBox
+                                                                                                                                                    Flexible
+                                                                                                                                                      Text text="· Karmashala"
+                                                                                                                                                        RichText
+                                                                                                                                                    Icon
+                                                                                                                                                      Semantics
+                                                                                                                                                        ExcludeSemantics
+                                                                                                                                                          SizedBox
+                                                                                                                                                            Center
+                                                                                                                                                              RichText
+                                                                                      SizedBox
+                                                                                      SessionModelChip
+                                                                                        ModelChip
+                                                                                          PopupMenuButton<ModelChoice>
+                                                                                            Semantics
+                                                                                              Tooltip tooltip=""
+                                                                                                InkWell
+                                                                                                  _InkResponseStateWidget
+                                                                                                    _ParentInkResponseProvider
+                                                                                                      Actions
+                                                                                                        _ActionsScope
+                                                                                                          Focus
+                                                                                                            _FocusInheritedScope
+                                                                                                              Semantics
+                                                                                                                MouseRegion
+                                                                                                                  Builder
+                                                                                                                    DefaultSelectionStyle
+                                                                                                                      Semantics
+                                                                                                                        GestureDetector
+                                                                                                                          RawGestureDetector
+                                                                                                                            Listener
+                                                                                                                              Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                  OverlayPortal
+                                                                                                                                    _OverlayPortal
+                                                                                                                                      Semantics
+                                                                                                                                        _ExclusiveMouseRegion
+                                                                                                                                          Listener
+                                                                                                                                            Semantics
+                                                                                                                                              MouseRegion
+                                                                                                                                                PickerFace
+                                                                                                                                                  TouchTarget
+                                                                                                                                                    Container
+                                                                                                                                                      DecoratedBox
+                                                                                                                                                        Padding
+                                                                                                                                                          Row
+                                                                                                                                                            Icon
+                                                                                                                                                              Semantics
+                                                                                                                                                                ExcludeSemantics
+                                                                                                                                                                  SizedBox
+                                                                                                                                                                    Center
+                                                                                                                                                                      RichText
+                                                                                                                                                            SizedBox
+                                                                                                                                                            Flexible
+                                                                                                                                                              ConstrainedBox
+                                                                                                                                                                Text text="default"
+                                                                                                                                                                  RichText
+                                                                                                                                                            Icon
+                                                                                                                                                              Semantics
+                                                                                                                                                                ExcludeSemantics
+                                                                                                                                                                  SizedBox
+                                                                                                                                                                    Center
+                                                                                                                                                                      RichText
                                               SizedBox
-                                              Expanded
-                                                Align
-                                                  DeliveryStrip
-                                                    LayoutBuilder
-                                                      Row
-                                                        Flexible
+                                              Flexible
+                                                DeliveryStrip
+                                                  LayoutBuilder
+                                                    Row
+                                                      Flexible
+                                                        _BarAction
+                                                          Tooltip tooltip="Asks the agent: “Commit the changes.”"
+                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                              OverlayPortal
+                                                                _OverlayPortal
+                                                                  Semantics
+                                                                    _ExclusiveMouseRegion
+                                                                      Listener
+                                                                        Semantics
+                                                                          MouseRegion
+                                                                            Semantics
+                                                                              InkWell
+                                                                                _InkResponseStateWidget
+                                                                                  _ParentInkResponseProvider
+                                                                                    Actions
+                                                                                      _ActionsScope
+                                                                                        Focus
+                                                                                          _FocusInheritedScope
+                                                                                            Semantics
+                                                                                              MouseRegion
+                                                                                                Builder
+                                                                                                  DefaultSelectionStyle
+                                                                                                    Semantics
+                                                                                                      GestureDetector
+                                                                                                        RawGestureDetector
+                                                                                                          Listener
+                                                                                                            Container
+                                                                                                              DecoratedBox
+                                                                                                                Padding
+                                                                                                                  Row
+                                                                                                                    Icon
+                                                                                                                      Semantics
+                                                                                                                        ExcludeSemantics
+                                                                                                                          SizedBox
+                                                                                                                            Center
+                                                                                                                              RichText
+                                                                                                                    SizedBox
+                                                                                                                    Flexible
+                                                                                                                      Text text="Commit"
+                                                                                                                        RichText
+                                                      SizedBox
+                                                      _ShipMenu
+                                                        Builder
                                                           _BarAction
-                                                            Tooltip tooltip="Asks the agent: “Commit the changes.”"
+                                                            Tooltip tooltip="Review, checks, pull request and handing the session on"
                                                               RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                 OverlayPortal
                                                                   _OverlayPortal
@@ -6106,51 +6174,8 @@ WorkbenchView
                                                                                                                                 RichText
                                                                                                                       SizedBox
                                                                                                                       Flexible
-                                                                                                                        Text text="Commit"
+                                                                                                                        Text text="Ship ▾"
                                                                                                                           RichText
-                                                        SizedBox
-                                                        _ShipMenu
-                                                          Builder
-                                                            _BarAction
-                                                              Tooltip tooltip="Review, checks, pull request and handing the session on"
-                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                  OverlayPortal
-                                                                    _OverlayPortal
-                                                                      Semantics
-                                                                        _ExclusiveMouseRegion
-                                                                          Listener
-                                                                            Semantics
-                                                                              MouseRegion
-                                                                                Semantics
-                                                                                  InkWell
-                                                                                    _InkResponseStateWidget
-                                                                                      _ParentInkResponseProvider
-                                                                                        Actions
-                                                                                          _ActionsScope
-                                                                                            Focus
-                                                                                              _FocusInheritedScope
-                                                                                                Semantics
-                                                                                                  MouseRegion
-                                                                                                    Builder
-                                                                                                      DefaultSelectionStyle
-                                                                                                        Semantics
-                                                                                                          GestureDetector
-                                                                                                            RawGestureDetector
-                                                                                                              Listener
-                                                                                                                Container
-                                                                                                                  DecoratedBox
-                                                                                                                    Padding
-                                                                                                                      Row
-                                                                                                                        Icon
-                                                                                                                          Semantics
-                                                                                                                            ExcludeSemantics
-                                                                                                                              SizedBox
-                                                                                                                                Center
-                                                                                                                                  RichText
-                                                                                                                        SizedBox
-                                                                                                                        Flexible
-                                                                                                                          Text text="Ship ▾"
-                                                                                                                            RichText
                                               SessionMoreButton
                                                 Row
                                                   SessionSubagentsBadge
