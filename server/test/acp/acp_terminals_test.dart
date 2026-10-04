@@ -176,24 +176,17 @@ void main() {
     await runtime.stop();
   });
 
-  test('a command with its arguments runs as given; a Windows session runs '
-      'a bare command line in PowerShell', () async {
+  test('a command with its arguments runs as given', () async {
     final runner = scripted(const []);
-    final terminals = terminalsOver(runner, posix: false);
+    final terminals = terminalsOver(runner);
     await terminals.handle('terminal/create', {
       'sessionId': 's',
       'command': 'git',
       'args': ['status', '--short'],
     });
-    await terminals.handle('terminal/create', {
-      'sessionId': 's',
-      'command': 'Get-ChildItem -Force',
-    });
-    final [direct, shell] = runner.startRequests;
+    final direct = runner.startRequests.single;
     expect(direct.executable, 'git');
     expect(direct.arguments, ['status', '--short']);
-    expect(shell.executable, 'powershell.exe');
-    expect(shell.arguments.last, 'Get-ChildItem -Force');
     await terminals.releaseAll();
   });
 

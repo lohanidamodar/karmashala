@@ -1,9 +1,17 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io' show File;
 
 import 'package:agent_cli/process.dart'
-    show CommandRequest, EnvironmentPath, ProcessHandle;
+    show
+        CommandRequest,
+        CommandResult,
+        CommandRunner,
+        EnvironmentPath,
+        ProcessHandle,
+        kProbeTimeout;
+import 'package:path/path.dart' as p;
 import 'package:karmashala_acp/karmashala_acp.dart'
     show AcpMethods, AcpRpcError, JsonMap, JsonMapReads, JsonRpcErrorCodes;
 
@@ -14,6 +22,38 @@ const int kAcpTerminalMaxBytes = 1024 * 1024;
 
 /// How much of a released terminal's output is kept, for the chat to show.
 const int kAcpReleasedTerminalBytes = 64 * 1024;
+
+/// The variable a Windows `cmd.exe` terminal reads its command line from.
+const String kAcpTerminalCommandVariable = 'KARMASHALA_TERMINAL_COMMAND';
+
+/// Git Bash's `sh` on the machine [runner] reaches: Git found by name, as
+/// every other git call here finds it, then `bin\sh.exe` above it — which is
+/// the shell Claude Code's own Bash tool runs on Windows. Null without one.
+Future<String?> findGitShell(CommandRunner runner) async {
+  final CommandResult found;
+  try {
+    found = await runner.run(
+      const CommandRequest(
+        executable: 'where',
+        arguments: ['git'],
+        timeout: kProbeTimeout,
+      ),
+    );
+  } on Object {
+    return null;
+  }
+  if (!found.ok) return null;
+  for (final line in const LineSplitter().convert(found.stdout)) {
+    var dir = p.windows.dirname(line.trim());
+    // `Git\cmd\git.exe`, or `Git\mingw64\bin\git.exe`.
+    for (var up = 0; up < 3 && dir.isNotEmpty; up++) {
+      dir = p.windows.dirname(dir);
+      final sh = p.windows.join(dir, 'bin', 'sh.exe');
+      if (File(sh).existsSync()) return sh;
+    }
+  }
+  return null;
+}
 
 /// A terminal's output as last read: what [AcpTerminals.snapshot] answers.
 typedef AcpTerminalSnapshot = ({String output, bool truncated, int? exitCode});
@@ -27,8 +67,9 @@ class AcpTerminals {
     required this.scope,
     required this.environmentId,
     required this.posix,
+    Future<String?> Function()? gitShell,
     this.maxBytes = kAcpTerminalMaxBytes,
-  });
+  }) : _gitShell = gitShell ?? _noGitShell;
 
   final Future<ProcessHandle> Function(CommandRequest request) start;
 
@@ -36,9 +77,16 @@ class AcpTerminals {
   final AcpPathScope scope;
   final String environmentId;
 
-  /// Whether a bare command line runs through `sh -c`; else PowerShell.
+  /// Whether a bare command line runs through `sh -c`; else, on Windows,
+  /// Git Bash's `sh` when [_gitShell] finds one, and `cmd.exe` when not.
   final bool posix;
   final int maxBytes;
+
+  /// Git Bash's `sh` on a Windows machine, or null; asked once.
+  final Future<String?> Function() _gitShell;
+  Future<String?>? _gitShellFound;
+
+  static Future<String?> _noGitShell() async => null;
 
   /// Told the terminal's id each time its output or its exit moves.
   void Function(String terminalId)? onOutput;
@@ -100,7 +148,7 @@ class AcpTerminals {
     final ProcessHandle process;
     try {
       process = await start(
-        _request(
+        await _request(
           command,
           args,
           EnvironmentPath(environmentId: environmentId, path: cwd.agent),
@@ -119,24 +167,34 @@ class AcpTerminals {
   }
 
   /// A command with its arguments runs as given; a bare command line goes to
-  /// the session's shell, which is what an agent writing `npm test` means.
-  CommandRequest _request(
+  /// the shell an agent's own shell tool uses there, which is what an agent
+  /// writing `npm ci && npm test` means.
+  Future<CommandRequest> _request(
     String command,
     List<String> args,
     EnvironmentPath cwd,
     Map<String, String> env,
-  ) {
-    final direct = args.isNotEmpty || !command.contains(RegExp(r'\s'));
-    final (executable, arguments) = direct
-        ? (command, args)
-        : posix
-        ? ('sh', ['-c', command])
-        : ('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command]);
+  ) async {
+    CommandRequest request(String executable, List<String> arguments) =>
+        CommandRequest(
+          executable: executable,
+          arguments: arguments,
+          workingDirectory: cwd,
+          environment: env,
+        );
+    if (args.isNotEmpty || !command.contains(RegExp(r'\s'))) {
+      return request(command, args);
+    }
+    if (posix) return request('sh', ['-c', command]);
+    final sh = await (_gitShellFound ??= _gitShell());
+    if (sh != null) return request(sh, ['-c', command]);
+    // cmd expands the variable before it parses `&&` or quotes, and no
+    // Windows argument quoting stands between the line and cmd.
     return CommandRequest(
-      executable: executable,
-      arguments: arguments,
+      executable: 'cmd.exe',
+      arguments: const ['/d', '/c', '%$kAcpTerminalCommandVariable%'],
       workingDirectory: cwd,
-      environment: env,
+      environment: {...env, kAcpTerminalCommandVariable: command},
     );
   }
 
@@ -210,19 +268,23 @@ class _Terminal {
       process.stdoutLines.listen(_line, onError: (Object _) {}),
       process.stderrLines.listen(_line, onError: (Object _) {}),
     ];
-    final drained = Future.wait([for (final s in streams) s.asFuture<void>()])
-        .catchError((Object _) => const <void>[]);
-    finished = process.exitCode.then((code) async {
-      // The last lines can trail the exit; never wait on them for ever.
-      await drained.timeout(const Duration(seconds: 2), onTimeout: () => []);
-      exitCode = code;
-      changed();
-      return code;
-    }, onError: (Object _) {
-      exitCode = -1;
-      changed();
-      return -1;
-    });
+    final drained = Future.wait([
+      for (final s in streams) s.asFuture<void>(),
+    ]).catchError((Object _) => const <void>[]);
+    finished = process.exitCode.then(
+      (code) async {
+        // The last lines can trail the exit; never wait on them for ever.
+        await drained.timeout(const Duration(seconds: 2), onTimeout: () => []);
+        exitCode = code;
+        changed();
+        return code;
+      },
+      onError: (Object _) {
+        exitCode = -1;
+        changed();
+        return -1;
+      },
+    );
   }
 
   final ProcessHandle process;

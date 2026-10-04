@@ -103,6 +103,7 @@ class AcpRuntimes {
           EnvironmentKind.windowsNative => false,
           _ => true,
         },
+        gitShell: () => findGitShell(runnerFor(start.environment)),
       ),
     );
   }
