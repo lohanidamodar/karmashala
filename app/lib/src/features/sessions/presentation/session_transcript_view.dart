@@ -71,6 +71,7 @@ import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
 import 'stop_children_offer.dart';
+import 'delegation_card.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -129,6 +130,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Which delegated agent hangs under which row, by the row's index in the
   /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
   var _subagents = <int, SubagentRef>{};
+
+  /// Children started together, by the row their folded card hangs under.
+  var _delegations = <int, List<DelegationCall>>{};
 
   /// Replaced only when [_subagents] changes: the transcript's rows compare
   /// their callbacks, and a fresh closure on every poll would rebuild them all.
@@ -295,7 +299,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
       (message, ordinal) {
         final reference = subagents[ordinal];
-        if (reference == null) return null;
+        if (reference == null) {
+          final calls = _delegations[ordinal];
+          return calls == null
+              ? null
+              : DelegationGroupCard(
+                  parentSessionId: widget.sessionId,
+                  calls: calls,
+                );
+        }
         return SubagentTurnsTile(
           reference: reference,
           resolveHostPath: _hostPathResolver(),
@@ -939,8 +951,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       earlier: earlier,
       agentOf: _agentsIn(messages),
     );
-    if (!mapEquals(subagents, _subagents)) {
+    final delegations = delegationGroups(out);
+    if (!mapEquals(subagents, _subagents) ||
+        delegationGroupsKey(delegations) != delegationGroupsKey(_delegations)) {
       _subagents = subagents;
+      _delegations = delegations;
       _detailBuilder = _subagentDetailFor(subagents);
     }
     return out;
