@@ -59,20 +59,7 @@ void main() {
     skip: skip,
     timeout: const Timeout(Duration(minutes: 4)),
   );
-
-  test(
-    'codex-acp under acceptEdits: start, a plain reply, a file written, stop',
-    () => _exercise(
-      wsl,
-      agentId: AgentIds.codexAcp,
-      agentName: 'Codex (ACP)',
-      spec: codexAcpDescriptor.acp!,
-      package: '@agentclientprotocol/codex-acp',
-      risk: PermissionRisk.acceptEdits,
-    ),
-    skip: skip,
-    timeout: const Timeout(Duration(minutes: 4)),
-  );
+  // Codex's chat is no adapter: codex_app_server_live_test.dart drives it.
 }
 
 Future<void> _exercise(
