@@ -5,6 +5,8 @@ import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/read.dart' show TranscriptMessage, kAgentSwitchRole;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionTranscriptRead;
+import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart'
+    show promptFilePointer;
 import 'package:karmashala_host/src/sessions/session_agent_stitching.dart';
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart';
 import 'package:karmashala_host/src/sessions/session_transcripts.dart';
@@ -156,6 +158,17 @@ void main() {
       texts([
         row('user', 'My opening message to you is in the file '
             '/data/handoff/prompt-s.md. Read all of it.', 1),
+        row('agent', 'ok', 2),
+      ]),
+      ['the packet', 'ok'],
+    );
+    expect(
+      texts([
+        row(
+          'user',
+          promptFilePointer('/tmp/karmashala-1/s/brief.md', isPacket: true),
+          1,
+        ),
         row('agent', 'ok', 2),
       ]),
       ['the packet', 'ok'],

@@ -1241,6 +1241,8 @@ Future<int> runServe(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   handoffs.onPending = handoffDelivery.watch;
+  sessionSync.titles.openedByPointer = (row) =>
+      handoffs.openedByPointer(row.id);
   Set<String> liveSessions() => {
     for (final row in sessionRows.getClaimingLive()) row.id,
   };
@@ -1304,6 +1306,8 @@ Future<int> runServe(
     // An ACP session's transcript is the rows its runtime wrote (C3).
     messages: SessionMessageTranscriptSource(sessionMessages),
     servesFromMessages: speaksAcp,
+    // A pointer opening reads as the message it stood for.
+    openingBehindPointer: handoffs.openingBehindPointer,
     // A session that switched agent is read span by span.
     spans: AgentSpanReaders(
       spansOf: (sessionId) {

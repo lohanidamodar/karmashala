@@ -399,7 +399,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         agents.assignsOwnSessionId(agentId);
     final ownId = (launch.fresh ? launch.freshConversationId : null) ?? id;
 
-    final Session session;
+    Session session;
     if (resuming != null) {
       session = resuming.copyWith(
         status: SessionStatus.running,
@@ -510,6 +510,16 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             typeable: launch.surface != SessionSurface.external,
           );
     final prompt = opening.argv;
+    // An agent pointed at a file would name the session after the pointer;
+    // an unnamed one is named from the message instead.
+    if (resuming == null &&
+        opening.byPointer &&
+        openingText != null &&
+        isPlaceholderSessionTitle(session.title)) {
+      final named = sessionTitleFromMessage(openingText);
+      sessions.updateTitle(id, named);
+      session = session.copyWith(title: named);
+    }
     // A file is read from the session's own temp folder, which an agent that
     // can be granted it gets, so it does not ask to leave its workspace.
     final readableDirectory = opening.folder;
@@ -993,6 +1003,9 @@ class _Opening {
   final String? argv;
   final String? folder;
   final bool pending;
+
+  /// Whether argv carries a pointer at a file rather than the message.
+  bool get byPointer => pending && argv != null;
 }
 
 /// How a packet rides as a system prompt: inline [text] or a file at [path].

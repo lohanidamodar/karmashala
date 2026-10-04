@@ -197,4 +197,15 @@ void main() {
       );
     });
   });
+
+  test('an agent pointed at a file for its opening names the pointer, so its '
+      'name is not taken', () {
+    world.insert(row(title: 'Fix the cart'));
+    final subject = sync()..openedByPointer = (row) => row.id == 's1';
+    expect(
+      subject.sync([storeSession('c1', title: 'Read opening message file')]),
+      0,
+    );
+    expect(world.row('s1')!.title, 'Fix the cart');
+  });
 }

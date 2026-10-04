@@ -30,3 +30,18 @@ bool isPlaceholderSessionTitle(String title) {
     byUser: typed && !isPlaceholderSessionTitle(trimmed),
   );
 }
+
+/// What a session started with [message] is called while nobody has named
+/// it: its first line, without a heading's marks, cut near 60 characters.
+String sessionTitleFromMessage(String message) {
+  final line = message
+      .split('\n')
+      .map((l) => l.replaceFirst(RegExp(r'^\s*#+\s*'), '').trim())
+      .firstWhere((l) => l.isNotEmpty, orElse: () => '')
+      .replaceAll(RegExp(r'\s+'), ' ');
+  if (line.isEmpty) return kUnnamedSessionTitle;
+  if (line.length <= 60) return line;
+  final cut = line.substring(0, 60);
+  final space = cut.lastIndexOf(' ');
+  return '${(space > 30 ? cut.substring(0, space) : cut).trimRight()}…';
+}

@@ -94,10 +94,9 @@ void main() {
   });
 
   group('the files launches wrote before', () {
-    File old(String name) =>
-        File(p.join(legacy.path, name))
-          ..createSync(recursive: true)
-          ..writeAsStringSync('x');
+    File old(String name) => File(p.join(legacy.path, name))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('x');
 
     test('are swept for every session not live, the folder with them', () {
       old('prompt-gone.md');

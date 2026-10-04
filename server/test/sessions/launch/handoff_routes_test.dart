@@ -88,6 +88,7 @@ void main() {
     String? prompt,
     String? packet,
     String repository = 'r1',
+    String title = 'cart',
     bool windows = true,
     SessionSurface surface = SessionSurface.pane,
   }) {
@@ -106,7 +107,7 @@ void main() {
       HostedLaunch(
         repository: rows.repository(repository)!,
         installation: rows.installation(installation)!,
-        title: 'cart',
+        title: title,
         prompt: prompt,
         systemPrompt: packet,
         surface: surface,
@@ -186,6 +187,32 @@ void main() {
       final arguments = started.external!.arguments;
       expect(arguments.last, contains(handoffs.folderOf('s-cc').path));
       expect(row('s-cc', HandoffKind.opening)!.route, HandoffRoute.file);
+    });
+  });
+
+  group('the title', () {
+    test('an unnamed session pointed at a file is named from the message, '
+        'not the pointer', () async {
+      final started = await launch(
+        'cx',
+        prompt: '# Speed up the cart\n\nThe totals are slow.',
+        title: '',
+      );
+      expect(started.session.title, 'Speed up the cart');
+      final saved = SessionDao(database).getById('s-cx')!;
+      expect(saved.title, 'Speed up the cart');
+      expect(saved.titleByUser, isFalse);
+    });
+
+    test('an unnamed session typed into waits for the agent to name it from '
+        'the message it has', () async {
+      final started = await launch('cc', prompt: multiLine, title: '');
+      expect(started.session.title, 'Session');
+    });
+
+    test('a named session keeps its name', () async {
+      final started = await launch('cx', prompt: multiLine);
+      expect(started.session.title, 'cart');
     });
   });
 

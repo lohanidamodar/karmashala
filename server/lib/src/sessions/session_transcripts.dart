@@ -17,6 +17,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/session.dart' show SessionAgentSpan;
 import 'package:karmashala_session/transcript.dart' show ChatViewEvidence;
 
+import 'launch/session_handoffs.dart' show isPromptFilePointer;
 import 'session_agent_stitching.dart';
 import 'session_message_transcripts.dart';
 import 'session_records.dart';
@@ -45,6 +46,7 @@ class SessionTranscripts {
     required this.lookUp,
     this.messages,
     this.spans,
+    this.openingBehindPointer,
     bool Function(String sessionId)? servesFromMessages,
     this.interval = const Duration(seconds: 1),
     this.tick = const Duration(milliseconds: 250),
@@ -63,6 +65,10 @@ class SessionTranscripts {
   /// How a session that switched agent is read, span by span; null reads
   /// every session from one source.
   final AgentSpanReaders? spans;
+
+  /// The opening message a session's agent was pointed at a file for, while
+  /// it is held: shown as its first turn in place of the pointer.
+  final String? Function(String sessionId)? openingBehindPointer;
 
   /// Whether a session's transcript is the server's own rows rather than its
   /// agent's file. The runtime wires it to "this session's agent is ACP".
@@ -362,7 +368,7 @@ class SessionTranscripts {
     held
       ..cost = clock.elapsed
       ..stamp = stamp;
-    _absorb(held, next);
+    _absorb(held, _withOpening(held.sessionId, next));
   }
 
   /// The table's rows: whole on the first read and after a shrink, else only
@@ -441,7 +447,7 @@ class SessionTranscripts {
         ..stitched = true
         ..generation = '';
     }
-    _absorb(held, next);
+    _absorb(held, _withOpening(held.sessionId, next));
     held.cost = clock.elapsed;
   }
 
@@ -494,6 +500,28 @@ class SessionTranscripts {
       ..messages = const []
       ..changedAt = []
       ..revision += 1;
+  }
+
+  /// [rows] with a pointer first turn shown as the message it stood for.
+  List<TranscriptMessage> _withOpening(
+    String sessionId,
+    List<TranscriptMessage> rows,
+  ) {
+    final at = rows.indexWhere((m) => m.role == 'user');
+    if (at < 0 || !isPromptFilePointer(rows[at].text)) return rows;
+    final real = openingBehindPointer?.call(sessionId);
+    if (real == null) return rows;
+    final pointer = rows[at];
+    return [
+      ...rows.take(at),
+      TranscriptMessage(
+        role: pointer.role,
+        text: real,
+        at: pointer.at,
+        agentInstallationId: pointer.agentInstallationId,
+      ),
+      ...rows.skip(at + 1),
+    ];
   }
 
   void _absorb(_Held held, List<TranscriptMessage> next) {
