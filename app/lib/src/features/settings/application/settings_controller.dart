@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'package:riverpod/riverpod.dart';
 
@@ -467,6 +468,13 @@ class SettingsController extends Notifier<Settings> {
   /// Sets the per-agent default model; a null [modelId] passes no flag at all.
   void setDefaultModel(String agentId, String? modelId) {
     state = state.withDefaultModel(agentId, modelId);
+    _save();
+  }
+
+  /// Sets how new sessions on the folded agent [agentId] run.
+  void setAgentRunForm(String agentId, AgentRunForm form) {
+    if (state.runFormFor(agentId) == form) return;
+    state = state.withAgentRunForm(agentId, form);
     _save();
   }
 
