@@ -22,9 +22,22 @@ void main() {
     expect(argv.last, 'Read the brief.');
   });
 
-  test('an agent that declares no such option is granted nothing', () {
+  test('Claude Code is granted it in one entry, so its prompt stays the '
+      'prompt', () {
     final argv = agentPaneArguments(
       registry.byId(AgentIds.claudeCode),
+      PermissionSelection.empty,
+      extraDirectoryPath: r'C:\data\handoff',
+      prompt: 'Read the brief.',
+    );
+    expect(argv, contains(r'--add-dir=C:\data\handoff'));
+    expect(argv, isNot(contains('--add-dir')));
+    expect(argv.last, 'Read the brief.');
+  });
+
+  test('an agent that declares no such option is granted nothing', () {
+    final argv = agentPaneArguments(
+      registry.byId(AgentIds.antigravity),
       PermissionSelection.empty,
       extraDirectoryPath: r'C:\data\handoff',
     );

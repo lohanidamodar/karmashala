@@ -85,20 +85,19 @@ void main() {
     return pty.started.last.argv;
   }
 
-  test('a prompt handed over as a file grants Codex the directory it is in',
-      () async {
-    final argv = await launch('cx', 'line one\nline "two"');
-    final at = argv.indexOf('--add-dir');
-    expect(at, isNot(-1));
-    expect(argv[at + 1], handoff.path);
-    expect(argv.last, contains(handoff.path));
-    expect(argv.indexOf('--add-dir'), lessThan(argv.length - 1));
-    // Nothing of it in the checkout.
-    expect(
-      Directory(temp.path).listSync().whereType<File>(),
-      isEmpty,
-    );
-  });
+  test(
+    'a prompt handed over as a file grants Codex the directory it is in',
+    () async {
+      final argv = await launch('cx', 'line one\nline "two"');
+      final at = argv.indexOf('--add-dir');
+      expect(at, isNot(-1));
+      expect(argv[at + 1], handoff.path);
+      expect(argv.last, contains(handoff.path));
+      expect(argv.indexOf('--add-dir'), lessThan(argv.length - 1));
+      // Nothing of it in the checkout.
+      expect(Directory(temp.path).listSync().whereType<File>(), isEmpty);
+    },
+  );
 
   test('a prompt that rides on the command line grants nothing', () async {
     final argv = await launch('cx', 'make the cart faster');
@@ -106,8 +105,17 @@ void main() {
     expect(argv.last, 'make the cart faster');
   });
 
-  test('an agent with no such option is granted nothing', () async {
+  test('Claude Code is granted it in one entry, and its pointer stays the '
+      'prompt', () async {
     final argv = await launch('cc', 'line one\nline two');
+    expect(argv, contains('--add-dir=${handoff.path}'));
     expect(argv, isNot(contains('--add-dir')));
+    expect(argv.last, contains(handoff.path));
+    expect(argv.last, isNot(startsWith('--')));
+  });
+
+  test('Claude Code, prompt on the command line, is granted nothing', () async {
+    final argv = await launch('cc', 'make the cart faster');
+    expect(argv.where((a) => a.startsWith('--add-dir')), isEmpty);
   });
 }

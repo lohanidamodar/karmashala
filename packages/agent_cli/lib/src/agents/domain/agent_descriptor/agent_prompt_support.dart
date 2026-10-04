@@ -231,13 +231,21 @@ class AgentExtraDirectorySupport {
   /// The directory rides on [token], as two argv entries, one directory per
   /// flag. [evidence] is what it was read off.
   const AgentExtraDirectorySupport.flag(this.token, {required this.evidence})
-    : isSupported = true;
+    : isSupported = true,
+      joined = false;
+
+  /// The directory rides in one argv entry, `<token>=<path>`: for an option
+  /// that takes several values and would otherwise swallow the prompt after it.
+  const AgentExtraDirectorySupport.joined(this.token, {required this.evidence})
+    : isSupported = true,
+      joined = true;
 
   /// Nobody established one. **The default**: nothing is granted.
   const AgentExtraDirectorySupport.unsupported()
     : token = '',
       evidence = '',
-      isSupported = false;
+      isSupported = false,
+      joined = false;
 
   /// The option itself, e.g. `--add-dir`. Empty otherwise.
   final String token;
@@ -247,9 +255,14 @@ class AgentExtraDirectorySupport {
 
   final bool isSupported;
 
+  /// Whether the directory is joined to [token] with `=`.
+  final bool joined;
+
   /// The arguments that grant this agent [path], or nothing.
-  List<String> argumentsFor(String? path) =>
-      isSupported && path != null && path.isNotEmpty ? [token, path] : const [];
+  List<String> argumentsFor(String? path) {
+    if (!isSupported || path == null || path.isEmpty) return const [];
+    return joined ? ['$token=$path'] : [token, path];
+  }
 }
 
 /// The key this agent binds to **paste the image on the clipboard**, by where
