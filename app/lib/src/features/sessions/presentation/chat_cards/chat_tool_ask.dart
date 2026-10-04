@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../agents/application/agent_providers.dart';
 import '../../application/session_status_providers.dart';
 import '../approval_request_card.dart';
+import 'plan_approval_card.dart';
 
 /// Sessions whose open ask the chat is drawing under its call right now. The
 /// dock steps aside for them, so one set of answers is on screen.
@@ -18,12 +20,15 @@ class ChatInlineAsks extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
 
+  // Both are told a microtask late, when the scope may already be gone.
   void shown(String sessionId) {
-    if (!state.contains(sessionId)) state = {...state, sessionId};
+    if (ref.mounted && !state.contains(sessionId)) {
+      state = {...state, sessionId};
+    }
   }
 
   void gone(String sessionId) {
-    if (state.contains(sessionId)) {
+    if (ref.mounted && state.contains(sessionId)) {
       state = {...state}..remove(sessionId);
     }
   }
@@ -74,13 +79,9 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
   void _tell(bool shown) {
     _shown = shown;
     final sessionId = widget.sessionId;
-    scheduleMicrotask(() {
-      try {
-        shown ? _asks.shown(sessionId) : _asks.gone(sessionId);
-      } on StateError {
-        // The scope went with the tree.
-      }
-    });
+    scheduleMicrotask(
+      () => shown ? _asks.shown(sessionId) : _asks.gone(sessionId),
+    );
   }
 
   @override
@@ -92,6 +93,29 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
     );
     if (asking != _shown) _tell(asking);
     if (!asking) return const SizedBox.shrink();
+    // A plan prompt, when the agent's descriptor says this ask is one.
+    final report = ref
+        .read(agentSessionStatusProvider(widget.sessionId))
+        .asData
+        ?.value;
+    final descriptor = report == null
+        ? null
+        : ref.read(agentRegistryProvider).byId(report.agentId);
+    final support = descriptor?.planApproval;
+    final plan = support?.planIn(report?.toolAsk);
+    if (report != null && support != null && plan != null) {
+      return Padding(
+        key: ValueKey('plan-approval:${widget.toolUseId}'),
+        padding: const EdgeInsets.only(top: Insets.sm),
+        child: PlanApprovalCard(
+          sessionId: widget.sessionId,
+          report: report,
+          plan: plan,
+          support: support,
+          agentName: descriptor!.displayName,
+        ),
+      );
+    }
     return Padding(
       key: ValueKey('chat-ask:${widget.toolUseId}'),
       padding: const EdgeInsets.only(top: Insets.sm),

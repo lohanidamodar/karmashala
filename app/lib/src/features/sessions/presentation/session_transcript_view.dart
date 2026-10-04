@@ -6,8 +6,6 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_agent_status/karmashala_agent_status.dart'
-    show SessionPromptRefusal;
 
 import '../../snippets/application/snippet_providers.dart';
 import '../application/session_activity_providers.dart';
@@ -41,7 +39,6 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
-import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
@@ -49,6 +46,7 @@ import '../application/session_engine_provider.dart';
 import '../application/session_input.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
+import '../application/session_turn_interrupt.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport;
 import '../application/session_ui_providers.dart';
@@ -752,43 +750,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// pressed by the server when it offers it, else typed into the agent's
   /// pane. Said, not silent, when nothing runs the session.
   void _interruptTurn() {
-    if (!ref.read(capabilitiesProvider).maySend) {
-      _say(kPromptNotGranted);
-      return;
-    }
-    // An Esc closes an open prompt too: not one answered elsewhere.
-    ref.read(ownPromptAnswersProvider).note(widget.sessionId);
-    if (ref.read(sessionInputProvider).viaServer) {
-      unawaited(_interruptViaServer());
-      return;
-    }
-    _interruptInPane();
-  }
-
-  void _interruptInPane() {
-    final paneId = sessionTerminalPane(ref, widget.sessionId);
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-    final live =
-        paneId != null &&
-        ref.read(terminalSessionsControllerProvider).livenessOf(paneId).isLive;
-    final instance = paneId == null ? null : terminals.instanceFor(paneId);
-    if (!live || instance == null) {
-      _say('No live terminal runs this session, so there is nothing to stop.');
-      return;
-    }
-    instance.terminal.textInput('\x1b');
-  }
-
-  Future<void> _interruptViaServer() async {
-    try {
-      // One the server does not run may still run in a pane here.
-      if (!await ref.read(sessionInputProvider).interrupt(widget.sessionId) &&
-          mounted) {
-        _interruptInPane();
-      }
-    } on SessionPromptRefusal catch (refusal) {
-      _say('Could not stop it: ${refusal.message}');
-    }
+    unawaited(
+      ref.read(sessionTurnInterruptProvider)(widget.sessionId).then((why) {
+        if (why != null) _say(why);
+      }),
+    );
   }
 
   /// The snippet library, as the composer's menu lists it.

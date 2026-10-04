@@ -2,6 +2,7 @@ import '../../permissions/permission_risk.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_mcp_config.dart';
 import '../domain/agent_plan.dart';
+import '../domain/agent_plan_approval.dart';
 import '../domain/agent_question.dart';
 import '../domain/agent_screen_menu.dart';
 import '../domain/agent_permission_support.dart';
@@ -881,6 +882,17 @@ const claudeCodeDescriptor = AgentDescriptor(
   // reader looks the same value up by tool name, and two copies of a schema is
   // how one of them goes stale.
   plan: kClaudeCodeTodoWrite,
+  // Keep planning by its words: the decline picks the first `^No`, and the
+  // Ultraplan row can come before it.
+  planApproval: AgentPlanApprovalSupport(
+    toolName: 'ExitPlanMode',
+    keepPlanningOption: r'^No, keep planning\b',
+    evidence:
+        'claude.exe 2.1.287 string table, read 2026-10-04: "Would you like to '
+        'proceed?" with yes-* options, an optional "No, refine with Ultraplan '
+        'in a cloud session", then "No, keep planning" (an input row, '
+        'placeholder "Tell Claude what to change"); ExitPlanMode input `plan`',
+  ),
   skills: AgentSkillSupport.homeDirectory(
     ['.claude', 'skills'],
     projectDirectorySegments: ['.claude', 'skills'],

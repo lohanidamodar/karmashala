@@ -1,6 +1,7 @@
 import '../../permissions/permission_risk.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_permission_support.dart';
+import '../domain/agent_plan_approval.dart';
 
 const _evidence =
     '@agentclientprotocol/claude-agent-acp: session/new availableModes '
@@ -23,6 +24,15 @@ const claudeAcpDescriptor = AgentDescriptor(
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
     homeVariable: 'CLAUDE_CONFIG_DIR',
+  ),
+  // The adapter's reject on this request is "No, keep planning".
+  planApproval: AgentPlanApprovalSupport(
+    toolName: 'Approve Plan',
+    evidence:
+        '@agentclientprotocol/claude-agent-acp 0.85.1, read 2026-10-04: '
+        'ExitPlanModeReporter titles the call "Approve Plan" with rawInput '
+        '`plan`; buildExitPlanModePermissionOptions offers the allow options '
+        'then reject("No, keep planning")',
   ),
   acp: AcpLaunchSpec(
     npxPackage: '@agentclientprotocol/claude-agent-acp',

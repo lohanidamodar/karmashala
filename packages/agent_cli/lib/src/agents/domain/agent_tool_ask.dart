@@ -84,14 +84,16 @@ class AgentToolAsk {
 Map<String, Object?> pruneToolInput(Map<Object?, Object?> input) {
   const bodies = {'content', 'new_string', 'old_string', 'edits'};
   const longest = 2000;
-  // The command is the one field shown whole: it is what is being approved.
+  // A command and a plan are shown whole: each is what is being approved.
   const longestCommand = 8000;
   final pruned = <String, Object?>{};
   for (final MapEntry(:key, :value) in input.entries) {
     if (key is! String || bodies.contains(key)) continue;
     switch (value) {
       case final String text:
-        final cap = key == 'command' ? longestCommand : longest;
+        final cap = key == 'command' || key == 'plan'
+            ? longestCommand
+            : longest;
         pruned[key] = text.length <= cap ? text : '${text.substring(0, cap)}…';
       case num() || bool():
         pruned[key] = value;
