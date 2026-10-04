@@ -235,12 +235,11 @@ class AppPromptTerminals implements PromptTerminals {
   /// that opened it — else this app's reading of the agent's transcript.
   @override
   Future<AgentQuestionSet?> openQuestion(String sessionId) async {
-    // The host keeps one only while its hook is the status's word; without
-    // that, the record is read as for any pane.
-    if (_ref.read(hostLifecycleSubscriberProvider)?.knows(sessionId) ?? false) {
-      final hosted = _ref.read(hostAgentStatusesProvider).of(sessionId);
-      if (hosted?.question case final question?) return question;
-    }
+    // The host keeps one only while its hook or the agent's protocol is the
+    // status's word; without that, the record is read as for any pane. A chat
+    // session has no record to read it from.
+    final hosted = _ref.read(hostAgentStatusesProvider).of(sessionId);
+    if (hosted?.question case final question?) return question;
     final agentId = agentOf(sessionId)?.id;
     if (agentId == null) return null;
     return _ref.read(transcriptOpenQuestionProvider)(sessionId, agentId);

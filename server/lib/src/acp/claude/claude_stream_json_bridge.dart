@@ -1209,47 +1209,47 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     };
   }
 
-  /// Claude's questions, each asked as a permission whose options are its
-  /// choices; the chosen labels go back as `answers`, keyed by question, as
-  /// Claude reads them. ACP selects one option, so a multi-select question
-  /// is answered with one choice or in the person's reply. A question with
-  /// no choices, or one asked where nobody answers prompts (bypass, which
-  /// the runtime answers itself), is shown in the chat and declined.
+  /// Claude's questions, asked together as one permission that carries them
+  /// whole under `_meta.karmashala.questions`; a client that can show them
+  /// answers "Send answer" with `_meta.karmashala.answers` (question text to
+  /// the chosen labels, comma-joined, or the person's own words), which go
+  /// back as `answers` as Claude reads them. Questions without choices, ones
+  /// asked where nobody answers prompts (bypass, which the runtime answers
+  /// itself), or ones left to the person's reply are shown in the chat and
+  /// declined.
   Future<JsonMap> _ask(String id, JsonMap input) async {
     final questions = jsonObjects(input['questions']);
-    final answers = <String, String>{};
-    final unasked = <JsonMap>[];
-    for (final question in questions) {
-      final text = '${question['question'] ?? ''}';
-      final choices = [
-        for (final option in jsonObjects(question['options']))
-          if (option['label'] case final String label) (label, option),
-      ];
-      if (choices.isEmpty || _mode == 'bypassPermissions') {
-        unasked.add(question);
-        continue;
-      }
+    final askable =
+        questions.isNotEmpty &&
+        _mode != 'bypassPermissions' &&
+        questions.every(
+          (q) => jsonObjects(q['options']).any((o) => o['label'] is String),
+        );
+    if (askable) {
       Object? answer;
       try {
         answer = await _acp.call(AcpMethods.sessionRequestPermission, {
           'sessionId': _sessionId,
           'toolCall': {
             'toolCallId': id,
-            'title': text,
+            'title': questions.length == 1
+                ? '${questions.single['question'] ?? ''}'
+                : '${questions.length} questions',
             'kind': 'other',
             'status': 'pending',
             'rawInput': input,
-            'content': [ClaudeTools.text(_questionWords(question))],
+            'content': [
+              ClaudeTools.text(
+                [for (final q in questions) _questionWords(q)].join('\n\n'),
+              ),
+            ],
             '_meta': {
-              'claudeCode': {
-                'toolName': 'AskUserQuestion',
-                'multiSelect': question['multiSelect'] == true,
-              },
+              'claudeCode': {'toolName': 'AskUserQuestion'},
+              'karmashala': {'questions': questions},
             },
           },
           'options': [
-            for (final (i, (label, _)) in choices.indexed)
-              _option('choice-$i', label, 'allow_once'),
+            _option('answer', 'Send answer', 'allow_once'),
             _option('reply', 'Answer in my reply', 'reject_once'),
           ],
         });
@@ -1257,32 +1257,27 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         answer = null;
       }
       final outcome = jsonObject(jsonObject(answer)?['outcome']) ?? const {};
-      final chosen = outcome['outcome'] == 'selected'
-          ? outcome['optionId']
-          : null;
-      if (chosen == null) {
+      if (outcome['outcome'] != 'selected') {
         return const {
           'behavior': 'deny',
           'message': 'The person cancelled the turn.',
           'interrupt': true,
         };
       }
-      final index = chosen is String && chosen.startsWith('choice-')
-          ? int.tryParse(chosen.substring('choice-'.length))
-          : null;
-      if (index == null || index >= choices.length) {
-        unasked.add(question);
-      } else {
-        answers[text] = choices[index].$1;
+      final answers = jsonObject(
+        jsonObject(jsonObject(outcome['_meta'])?['karmashala'])?['answers'],
+      );
+      if (outcome['optionId'] == 'answer' &&
+          answers != null &&
+          answers.isNotEmpty &&
+          answers.values.every((a) => a is String)) {
+        return {
+          'behavior': 'allow',
+          'updatedInput': {...input, 'answers': answers},
+        };
       }
     }
-    if (unasked.isEmpty) {
-      return {
-        'behavior': 'allow',
-        'updatedInput': {...input, 'answers': answers},
-      };
-    }
-    final shown = [for (final q in unasked) _questionWords(q)].join('\n\n');
+    final shown = [for (final q in questions) _questionWords(q)].join('\n\n');
     _chunk(
       'agent_message_chunk',
       '\n\nClaude asked:\n\n$shown\n\nAnswer in your next message.\n',
@@ -1292,8 +1287,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       'behavior': 'deny',
       'message':
           'The person will answer in their next message instead. '
-          '${answers.isEmpty ? '' : 'Answered so far: ${jsonEncode(answers)}. '}'
-          'Unanswered: ${[for (final q in unasked) q['question']].join('; ')}',
+          'Unanswered: ${[for (final q in questions) q['question']].join('; ')}',
     };
   }
 
@@ -1302,8 +1296,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     for (final option in jsonObjects(question['options']))
       '- ${option['label']}'
           '${option['description'] is String ? ': ${option['description']}' : ''}',
-    if (question['multiSelect'] == true)
-      '(Several may apply: pick one here, or answer in your reply.)',
+    if (question['multiSelect'] == true) '(Several may apply.)',
   ].join('\n');
 
   static JsonMap _option(String id, String name, String kind) => {

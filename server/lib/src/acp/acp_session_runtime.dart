@@ -251,6 +251,9 @@ class AcpSessionRuntime implements ScreenSession {
   /// The call the open permission request is about, or null.
   String? get pendingToolCallId => _pending?.call.toolCallId;
 
+  /// The questions the open request asks, when it is a question.
+  AgentQuestionSet? get openQuestion => _pending?.question;
+
   @override
   SessionLifecycle get lifecycle => _lifecycle;
 
@@ -619,6 +622,82 @@ class AcpSessionRuntime implements ScreenSession {
           '${approve ? 'Allowed' : 'Rejected'} "${pending.title}" by choosing '
           '"${option.name}" (${option.kind.raw}).',
       granted: approve,
+      toolTitle: pending.title,
+    );
+  }
+
+  /// Answers the open question [toolUseId] with [answers], one per question:
+  /// chosen labels (comma-joined where several may be picked) or the
+  /// person's own words go back to the agent. Throws [SessionPromptRefusal],
+  /// with nothing sent, when no such question is open or an answer does not
+  /// fit it.
+  Future<AcpPermissionAnswer> answerQuestion({
+    required String toolUseId,
+    required List<AgentQuestionAnswer> answers,
+  }) async {
+    final pending = _pending;
+    final question = pending?.question;
+    if (pending == null || question == null) {
+      throw const SessionPromptRefusal(
+        'this session has no question open to answer',
+      );
+    }
+    if (question.toolUseId != toolUseId) {
+      throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
+    }
+    final asked = question.questions;
+    if (answers.length != asked.length) {
+      throw SessionPromptRefusal(
+        'there are ${asked.length} questions to answer, and '
+        '${answers.length} answers were given',
+      );
+    }
+    final said = <String, String>{};
+    for (final (i, answer) in answers.indexed) {
+      final q = asked[i];
+      final text = answer.text?.trim();
+      if (text != null) {
+        if (text.isEmpty) {
+          throw SessionPromptRefusal(
+            '"${q.question}" was answered with nothing',
+          );
+        }
+        said[q.question] = text;
+        continue;
+      }
+      final chosen = answer.chosen;
+      if (chosen.isEmpty ||
+          (!q.multiSelect && chosen.length > 1) ||
+          chosen.any((c) => c < 0 || c >= q.options.length)) {
+        throw SessionPromptRefusal(
+          'the answer to "${q.question}" does not fit its '
+          '${q.options.length} options',
+        );
+      }
+      said[q.question] = [
+        for (final c in chosen) q.options[c].label,
+      ].join(', ');
+    }
+    final send = pending.options.where((o) => o.kind.allows).firstOrNull;
+    if (send == null) {
+      throw SessionPromptRefusal(
+        '$agentName offered no way to answer "${pending.title}"',
+      );
+    }
+    _pending = null;
+    pending.completer.complete(
+      PermissionOutcome.selected(
+        send.optionId,
+        meta: {
+          'karmashala': {'answers': said},
+        },
+      ),
+    );
+    _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    return AcpPermissionAnswer(
+      answered: said.values.join('; '),
+      effect: 'Answered "${pending.title}".',
+      granted: true,
       toolTitle: pending.title,
     );
   }
@@ -1128,8 +1207,12 @@ class AcpSessionRuntime implements ScreenSession {
     List<PermissionOption> options,
   ) async {
     final title = _titleOf(call);
+    final question = _questionIn(call);
     final rung = risk;
-    if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
+    // A question is the person's to answer at any rung.
+    if (question == null &&
+        rung != null &&
+        !rung.isAtMost(PermissionRisk.acceptEdits)) {
       final switching = _modeSwitchingAllow(options);
       final once = switching != null
           ? switching.option
@@ -1141,13 +1224,16 @@ class AcpSessionRuntime implements ScreenSession {
         return PermissionOutcome.selected(once.optionId);
       }
     }
-    final pending = _PendingPermission(call, options, title);
+    final pending = _PendingPermission(call, options, title, question);
     _pending = pending;
     final now = _now();
     final input = call.rawInput;
     _publish(
       AgentActivityStatus.awaitingApproval,
-      waiting: AgentWaitKind.approval,
+      waiting: question == null
+          ? AgentWaitKind.approval
+          : AgentWaitKind.question,
+      question: question,
       evidence: [title],
       toolAsk: AgentToolAsk(
         toolName: title,
@@ -1172,6 +1258,16 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// The questions a bridge carried whole under `_meta.karmashala.questions`
+  /// — Claude's AskUserQuestion — or null for an ordinary permission.
+  static AgentQuestionSet? _questionIn(ToolCallUpdate call) {
+    final carried = asJsonMap(call.meta?['karmashala'])?['questions'];
+    if (carried == null) return null;
+    return AgentQuestionSet.fromToolInput(call.toolCallId, {
+      'questions': carried,
+    });
   }
 
   void _resolvePending(PermissionOutcome outcome) {
@@ -1305,6 +1401,7 @@ class AcpSessionRuntime implements ScreenSession {
     AgentToolAsk? toolAsk,
     DateTime? waitingSince,
     List<String> inFlight = const [],
+    AgentQuestionSet? question,
   }) {
     host.status(
       sessionId,
@@ -1322,6 +1419,7 @@ class AcpSessionRuntime implements ScreenSession {
         waitingSince: waitingSince,
         inFlight: inFlight,
       ),
+      question: question,
     );
   }
 
@@ -1420,11 +1518,14 @@ class AcpSessionRuntime implements ScreenSession {
 }
 
 final class _PendingPermission {
-  _PendingPermission(this.call, this.options, this.title);
+  _PendingPermission(this.call, this.options, this.title, this.question);
 
   final ToolCallUpdate call;
   final List<PermissionOption> options;
   final String title;
+
+  /// The questions this request asks, when it is a question.
+  final AgentQuestionSet? question;
   final completer = Completer<PermissionOutcome>();
 }
 

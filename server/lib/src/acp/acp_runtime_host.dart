@@ -1,4 +1,5 @@
-import 'package:agent_cli/descriptors.dart' show AgentStatusReport;
+import 'package:agent_cli/descriptors.dart'
+    show AgentQuestionSet, AgentStatusReport;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         SessionCommandsChanged,
@@ -18,7 +19,11 @@ abstract class AcpRuntimeHost {
   static const AcpRuntimeHost none = _NoHost();
 
   /// The agent's own word about what it is doing, for the row [sessionId].
-  void status(String sessionId, AgentStatusReport report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  });
 
   /// Completes once the before-turn checkpoint of [sessionId] is taken, so a
   /// write the agent is about to make lands after it. Bounded by the caller.
@@ -63,7 +68,11 @@ final class _NoHost extends AcpRuntimeHost {
   const _NoHost();
 
   @override
-  void status(String sessionId, AgentStatusReport report) {}
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) {}
 
   @override
   Future<void> checkpointSettled(String sessionId) async {}

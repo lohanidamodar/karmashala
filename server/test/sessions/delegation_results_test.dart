@@ -539,8 +539,11 @@ final class _DaemonHost extends AcpRuntimeHost {
   final DaemonAgentStatus _status;
 
   @override
-  void status(String sessionId, AgentStatusReport report) =>
-      _status.report(sessionId, report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) => _status.report(sessionId, report);
 
   @override
   Future<void> checkpointSettled(String sessionId) async {}

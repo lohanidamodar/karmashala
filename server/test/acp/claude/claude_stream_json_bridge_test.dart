@@ -3,7 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart'
-    show AcpLaunchSpec, AcpNativeBridge, AgentActivityStatus, PermissionRisk;
+    show
+        AcpLaunchSpec,
+        AcpNativeBridge,
+        AgentActivityStatus,
+        AgentQuestionAnswer,
+        PermissionRisk;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionPromptRefusal;
 import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
@@ -854,8 +861,59 @@ void main() {
           c.result();
         };
 
-    test("a single-choice question asks the person with Claude's choices, "
-        'and the choice goes back as the answer', () async {
+    test('every question goes in one request, carried with its choices and '
+        'whether several may be picked; the runtime holds them as an open '
+        'question', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([
+            question(),
+            question(
+              text: 'Which fruits?',
+              choices: ['Apple', 'Pear', 'Plum'],
+              multiSelect: true,
+            ),
+          ], answered),
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      final asks = wire
+          .where((m) => m['method'] == 'session/request_permission')
+          .toList();
+      expect(asks, hasLength(1));
+      final toolCall = (asks.single['params'] as Json)['toolCall'] as Json;
+      final carried =
+          ((toolCall['_meta'] as Json)['karmashala'] as Json)['questions']
+              as List;
+      expect(carried, hasLength(2));
+      expect((carried[1] as Json)['multiSelect'], isTrue);
+      final open = rt.openQuestion!;
+      expect(open.toolUseId, 'q');
+      expect(open.questions.map((q) => q.multiSelect), [false, true]);
+
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.options([0, 2]),
+        ],
+      );
+      final response = await answered.future;
+      expect(response['behavior'], 'allow');
+      expect((response['updatedInput'] as Json)['answers'], {
+        'Which fruit?': 'Pear',
+        'Which fruits?': 'Apple, Plum',
+      });
+      expect(rt.openQuestion, isNull);
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
+    test('an answer in the person\'s own words goes back as written', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(
         turns: [
@@ -866,64 +924,57 @@ void main() {
       await rt.start();
       await rt.send('Ask me');
       await until(() => rt.hasOpenPermission);
-      final asked = wire.firstWhere(
-        (m) => m['method'] == 'session/request_permission',
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [AgentQuestionAnswer.text('Mango')],
       );
-      final params = asked['params'] as Json;
-      expect((params['toolCall'] as Json)['title'], 'Which fruit?');
-      expect(
-        [for (final o in params['options'] as List) (o as Json)['name']],
-        ['Apple', 'Pear', 'Answer in my reply'],
-      );
-      expect(
-        [for (final o in params['options'] as List) (o as Json)['kind']],
-        ['allow_once', 'allow_once', 'reject_once'],
-      );
-      // The runtime's approve takes the first choice.
-      await rt.answerPermission(approve: true);
       final response = await answered.future;
-      expect(response['behavior'], 'allow');
-      expect(response['updatedInput'], {
-        'questions': [question()],
-        'answers': {'Which fruit?': 'Apple'},
+      expect((response['updatedInput'] as Json)['answers'], {
+        'Which fruit?': 'Mango',
       });
       await rt.awaitTurn();
       await rt.stop();
     });
 
-    test('any choice can be the answer, and several questions are asked in '
-        'turn', () async {
+    test('an answer for another question, or one that does not fit, is '
+        'refused with nothing sent', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(
         turns: [
-          asking([
-            question(),
-            question(text: 'Which colour?', choices: ['Red', 'Green']),
-          ], answered),
+          asking([question()], answered),
         ],
       );
-      final bridged = bridgedAcpTransport(_spec, await machine.spawn());
-      final client = AcpAgentClient(
-        AcpPeer(bridged.output, bridged.input),
-        handler: _Choosing((o) => o.name == 'Pear' || o.name == 'Green'),
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      await expectLater(
+        rt.answerQuestion(
+          toolUseId: 'other',
+          answers: const [AgentQuestionAnswer.option(0)],
+        ),
+        throwsA(isA<SessionPromptRefusal>()),
       );
-      await client.initialize(
-        clientInfo: const ClientInfo(name: 't', version: '0'),
+      await expectLater(
+        rt.answerQuestion(
+          toolUseId: 'q',
+          answers: const [AgentQuestionAnswer.option(5)],
+        ),
+        throwsA(isA<SessionPromptRefusal>()),
       );
-      final session = await client.newSession(cwd: temp.path);
-      final turn = client.prompt(session.sessionId, [ContentBlock.text('Go')]);
-      final response = await answered.future;
-      expect((response['updatedInput'] as Json)['answers'], {
-        'Which fruit?': 'Pear',
-        'Which colour?': 'Green',
-      });
-      expect(await turn, StopReason.endTurn);
-      await client.close();
+      expect(answered.isCompleted, isFalse);
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [AgentQuestionAnswer.option(0)],
+      );
+      expect((await answered.future)['behavior'], 'allow');
+      await rt.awaitTurn();
+      await rt.stop();
     });
 
-    test('a multi-select question offers each choice and "Answer in my '
-        'reply"; answering in the reply declines it and puts the question '
-        'in the chat', () async {
+    test('a question offers "Send answer" and "Answer in my reply"; '
+        'answering in the reply declines it and puts the question in the '
+        'chat', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(
         turns: [
@@ -941,7 +992,7 @@ void main() {
               as Json;
       expect(
         [for (final o in params['options'] as List) (o as Json)['name']],
-        ['Apple', 'Pear', 'Answer in my reply'],
+        ['Send answer', 'Answer in my reply'],
       );
       await rt.answerPermission(approve: false);
       final response = await answered.future;

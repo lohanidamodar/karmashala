@@ -188,10 +188,14 @@ class DaemonAgentStatus {
 
   /// What the agent of row [sessionId] said of itself over its protocol
   /// (`AgentStatusSource.protocol`), from the ACP runtime that holds it.
-  void report(String sessionId, AgentStatusReport report) {
+  void report(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) {
     final rowId = _rowOf(hostSessionIdOf(sessionId));
     if (rowId == null) return;
-    _announce(keeper.report(rowId, report));
+    _announce(keeper.report(rowId, report, question: question));
   }
 
   void _announce(HostedAgentStatus? status) {

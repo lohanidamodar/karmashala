@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_agent_statuses.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show HostedAgentStatus;
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     show HostSessionState;
@@ -205,6 +208,54 @@ void main() {
     expect(sent.single.toolUseId, 'toolu_1');
     expect(sent.single.answers, isEmpty);
     expect(inline, findsNothing);
+  });
+
+  testWidgets('a chat session\'s questions, kept only by its host, are one '
+      'card, the multi-select one saying any may be chosen', (tester) async {
+    final status = ChatCardHarness.statusOf(
+      ChatCardSession.acp,
+      AgentActivityStatus.awaitingApproval,
+      waiting: AgentWaitKind.question,
+    );
+    final h = await ChatCardHarness.open(
+      ChatCardSession.acp,
+      messages: askingTurn(),
+      status: status,
+      overrides: [sessionAnswerableProvider.overrideWithValue((_) => true)],
+    );
+    addTearDown(h.dispose);
+    h.container.read(hostAgentStatusesProvider).replaceAll([
+      HostedAgentStatus(
+        sessionId: 's1',
+        report: status,
+        question: AgentQuestionSet(
+          toolUseId: 'toolu_1',
+          questions: [
+            fruit().questions.single,
+            const AgentQuestion(
+              question: 'Which colours?',
+              multiSelect: true,
+              options: [
+                AgentQuestionOption(label: 'Red'),
+                AgentQuestionOption(label: 'Blue'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ]);
+    await tester.pumpWidget(chatWithDock(h.container));
+    await tester.pumpAndSettle();
+
+    expect(inline, findsOneWidget);
+    expect(find.text('Pick a fruit'), findsOneWidget);
+    expect(find.text('Which colours?'), findsOneWidget);
+    // The multi-select one alone says any may be chosen.
+    expect(
+      find.descendant(of: inline, matching: find.text('Choose any.')),
+      findsOneWidget,
+    );
+    expect(find.text('Send answer'), findsOneWidget);
   });
 
   testWidgets('the card under its call says who is asking once', (

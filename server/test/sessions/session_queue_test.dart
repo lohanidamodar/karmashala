@@ -175,8 +175,7 @@ void main() {
       expect(delivered, ['second']);
     });
 
-    test('a held session queues every send and delivers once let go',
-        () async {
+    test('a held session queues every send and delivers once let go', () async {
       await runAgent();
       queue.hold('s1');
       expect(queue.busy('s1'), isTrue);
@@ -577,8 +576,11 @@ final class _DaemonHost extends AcpRuntimeHost {
   final DaemonAgentStatus _status;
 
   @override
-  void status(String sessionId, AgentStatusReport report) =>
-      _status.report(sessionId, report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) => _status.report(sessionId, report);
 
   @override
   Future<void> checkpointSettled(String sessionId) async {}

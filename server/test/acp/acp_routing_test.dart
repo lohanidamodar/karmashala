@@ -5,6 +5,8 @@ import 'package:karmashala_acp/karmashala_acp.dart'
     show
         ConfigOption,
         ConfigSelectOption,
+        PermissionOption,
+        PermissionOptionKind,
         SessionMode,
         SessionModeState,
         StopReason,
@@ -174,6 +176,78 @@ void main() {
     status.tick();
     expect(status.statusOf('s1'), isNull);
     expect(status.holds('s1'), isFalse);
+  });
+
+  test('a question carried whole is an open question with every question '
+      'in it, answered with the picks', () async {
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: [
+          const FakeTurn([
+            FakeStep.toolCall(
+              toolCallId: 'q1',
+              title: '2 questions',
+              permissionOptions: [
+                PermissionOption(
+                  optionId: 'answer',
+                  name: 'Send answer',
+                  kind: PermissionOptionKind.allowOnce,
+                ),
+                PermissionOption(
+                  optionId: 'reply',
+                  name: 'Answer in my reply',
+                  kind: PermissionOptionKind.rejectOnce,
+                ),
+              ],
+              meta: {
+                'karmashala': {
+                  'questions': [
+                    {
+                      'question': 'Which colour?',
+                      'options': [
+                        {'label': 'Red'},
+                        {'label': 'Blue'},
+                      ],
+                    },
+                    {
+                      'question': 'Which fruits?',
+                      'multiSelect': true,
+                      'options': [
+                        {'label': 'Apple'},
+                        {'label': 'Pear'},
+                        {'label': 'Plum'},
+                      ],
+                    },
+                  ],
+                },
+              },
+            ),
+          ]),
+        ],
+      ),
+    );
+    final runtime = await open(process);
+    await runtime.send('Ask');
+    await pump();
+    expect(report().hasOpenQuestion, isTrue);
+    final asked = await prompts.openQuestion('s1');
+    expect(asked!.toolUseId, 'q1');
+    expect(asked.questions, hasLength(2));
+    expect(asked.questions.last.multiSelect, isTrue);
+
+    final answer = await prompts.answer(
+      const QuestionAnswerRequest(
+        sessionId: 's1',
+        toolUseId: 'q1',
+        answers: [
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.options([0, 2]),
+        ],
+      ),
+    );
+    expect(answer.answered, 'Blue; Apple, Plum');
+    expect(await runtime.awaitTurn(), StopReason.endTurn);
+    expect(report().hasOpenQuestion, isFalse);
   });
 
   test('an answer naming another call is refused as stale, and one with no '
@@ -390,8 +464,11 @@ final class _DaemonHost extends AcpRuntimeHost {
   final DaemonAgentStatus _status;
 
   @override
-  void status(String sessionId, AgentStatusReport report) =>
-      _status.report(sessionId, report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) => _status.report(sessionId, report, question: question);
 
   @override
   Future<void> checkpointSettled(String sessionId) async {}

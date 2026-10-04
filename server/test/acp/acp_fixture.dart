@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart'
-    show AcpLaunchSpec, AgentStatusReport, PermissionRisk;
+    show AcpLaunchSpec, AgentQuestionSet, AgentStatusReport, PermissionRisk;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
@@ -30,8 +30,11 @@ class RecordingHost extends AcpRuntimeHost {
   var settledCalls = 0;
 
   @override
-  void status(String sessionId, AgentStatusReport report) =>
-      statuses.add(report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) => statuses.add(report);
 
   @override
   Future<void> checkpointSettled(String sessionId) {

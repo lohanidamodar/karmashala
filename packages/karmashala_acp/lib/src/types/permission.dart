@@ -35,14 +35,17 @@ final class PermissionOption {
 sealed class PermissionOutcome {
   const PermissionOutcome();
 
-  const factory PermissionOutcome.selected(String optionId) =
+  const factory PermissionOutcome.selected(String optionId, {JsonMap? meta}) =
       PermissionSelected;
 
   const factory PermissionOutcome.cancelled() = PermissionCancelled;
 
   factory PermissionOutcome.fromJson(JsonMap json) =>
       switch (json.string('outcome')) {
-        'selected' => PermissionSelected(json.string('optionId') ?? ''),
+        'selected' => PermissionSelected(
+          json.string('optionId') ?? '',
+          meta: json.object('_meta'),
+        ),
         _ => const PermissionCancelled(),
       };
 
@@ -50,12 +53,19 @@ sealed class PermissionOutcome {
 }
 
 final class PermissionSelected extends PermissionOutcome {
-  const PermissionSelected(this.optionId);
+  const PermissionSelected(this.optionId, {this.meta});
 
   final String optionId;
 
+  /// What the client says beyond the choice — a question's answers.
+  final JsonMap? meta;
+
   @override
-  JsonMap toJson() => {'outcome': 'selected', 'optionId': optionId};
+  JsonMap toJson() => {
+    'outcome': 'selected',
+    'optionId': optionId,
+    '_meta': ?meta,
+  };
 
   @override
   bool operator ==(Object other) =>

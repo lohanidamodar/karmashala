@@ -205,8 +205,11 @@ class ServerAcpHost extends AcpRuntimeHost {
   void Function(String sessionId)? transcriptsChanged;
 
   @override
-  void status(String sessionId, AgentStatusReport report) =>
-      agentStatus.report(sessionId, report);
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) => agentStatus.report(sessionId, report, question: question);
 
   @override
   Future<void> checkpointSettled(String sessionId) => checkpoints.recorder
@@ -255,9 +258,8 @@ class ServerAcpHost extends AcpRuntimeHost {
       data.announce([change]);
 
   @override
-  void notice(String sessionId, String message) => data.announce([
-    SessionNoticed(sessionId: sessionId, message: message),
-  ]);
+  void notice(String sessionId, String message) =>
+      data.announce([SessionNoticed(sessionId: sessionId, message: message)]);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

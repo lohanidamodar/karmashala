@@ -65,17 +65,25 @@ class DaemonPromptAnswers implements PromptTerminals {
     if (!exists(request.sessionId)) {
       throw const SessionPromptRefusal('no such session', notFound: true);
     }
-    if (request is! ApprovalAnswerRequest) {
-      throw const SessionPromptRefusal(
-        'an agent spoken to over ACP has no menu or question to answer; '
-        'approve or deny its permission request',
-      );
-    }
-    final answered = await runtime.answerPermission(
-      approve: request.approve,
-      toolCallId: request.ask?.toolUseId,
-      optionId: request.optionId,
-    );
+    final answered = await switch (request) {
+      QuestionAnswerRequest(chat: true) => throw const SessionPromptRefusal(
+        "this agent's questions offer no way to talk them over",
+      ),
+      // Declined: left to the person's next message, as the agent offers.
+      QuestionAnswerRequest(decline: true, :final toolUseId) =>
+        runtime.answerPermission(approve: false, toolCallId: toolUseId),
+      QuestionAnswerRequest(:final toolUseId, :final answers) =>
+        runtime.answerQuestion(toolUseId: toolUseId, answers: answers),
+      ApprovalAnswerRequest() => runtime.answerPermission(
+        approve: request.approve,
+        toolCallId: request.ask?.toolUseId,
+        optionId: request.optionId,
+      ),
+      MenuAnswerRequest() => throw const SessionPromptRefusal(
+        'an agent spoken to over ACP has no menu to answer; approve or deny '
+        'its permission request',
+      ),
+    };
     final filed = approvalDecisionRecord(
       sessionId: request.sessionId,
       granted: answered.granted,

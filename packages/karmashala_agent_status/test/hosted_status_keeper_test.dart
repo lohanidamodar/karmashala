@@ -125,6 +125,48 @@ void main() {
       expect(answered.question, isNull);
     });
 
+    test('a protocol report that is a question keeps the question it asks, '
+        'until the agent moves on', () {
+      AgentStatusReport protocol(AgentActivityStatus status, AgentWaitKind w) =>
+          AgentStatusReport(
+            agentId: claude.id,
+            sessionId: 'conv-1',
+            status: status,
+            source: AgentStatusSource.protocol,
+            observedAt: clock.now,
+            waiting: w,
+          );
+      final set = AgentQuestionSet.fromToolInput('q1', {
+        'questions': [
+          {
+            'question': 'Which fruits?',
+            'multiSelect': true,
+            'options': [
+              {'label': 'Apple'},
+              {'label': 'Pear'},
+            ],
+          },
+        ],
+      })!;
+      final asked = keeper.report(
+        'row-1',
+        protocol(
+          AgentActivityStatus.awaitingApproval,
+          AgentWaitKind.question,
+        ),
+        question: set,
+      );
+      expect(asked!.report.hasOpenQuestion, isTrue);
+      expect(asked.question!.questions.single.multiSelect, isTrue);
+
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      final moved = keeper.report(
+        'row-1',
+        protocol(AgentActivityStatus.working, AgentWaitKind.unrecorded),
+      );
+      expect(moved!.question, isNull);
+    });
+
     test('a hook naming no row is found by the conversation it names', () {
       hook('UserPromptSubmit');
       expect(keeper.sessionForConversation(claude.id, 'conv-1'), 'row-1');

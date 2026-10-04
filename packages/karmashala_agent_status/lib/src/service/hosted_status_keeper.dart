@@ -166,12 +166,18 @@ class HostedStatusKeeper {
 
   /// Folds in the agent's own word about itself, sent over its protocol
   /// ([AgentStatusSource.protocol]): ranked as a hook is, and the ask it
-  /// carries kept for the dock. The new status when its evidence moved.
-  HostedAgentStatus? report(String sessionId, AgentStatusReport report) {
+  /// carries kept for the dock, with the [question] it asks when it is one.
+  /// The new status when its evidence moved.
+  HostedAgentStatus? report(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) {
     final kept = _sessions[sessionId];
     if (kept == null) return null;
     if (report.sessionId.isNotEmpty) kept.conversationId = report.sessionId;
     _reports.record(report);
+    if (report.hasOpenQuestion && question != null) kept.question = question;
     if (report.status != AgentActivityStatus.unknown &&
         report.status != kept.hookStatus) {
       kept.hookStatus = report.status;

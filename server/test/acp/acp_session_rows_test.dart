@@ -24,7 +24,11 @@ class _StatusHost extends RecordingHost {
   final DaemonAgentStatus _status;
 
   @override
-  void status(String sessionId, AgentStatusReport report) {
+  void status(
+    String sessionId,
+    AgentStatusReport report, {
+    AgentQuestionSet? question,
+  }) {
     super.status(sessionId, report);
     _status.report(sessionId, report);
   }

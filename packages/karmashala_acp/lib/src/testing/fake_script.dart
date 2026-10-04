@@ -54,6 +54,7 @@ sealed class FakeStep {
     List<PermissionOption>? permissionOptions,
     List<ToolCallContent> completedContent,
     Object? rawOutput,
+    JsonMap? meta,
   }) = FakeToolCallStep;
 
   const factory FakeStep.plan(List<PlanEntry> entries) = FakePlanStep;
@@ -148,6 +149,7 @@ final class FakeToolCallStep extends FakeStep {
     this.permissionOptions,
     this.completedContent = const [],
     this.rawOutput,
+    this.meta,
   });
 
   final String toolCallId;
@@ -159,6 +161,9 @@ final class FakeToolCallStep extends FakeStep {
   final List<ToolCallContent> completedContent;
   final Object? rawOutput;
 
+  /// The call's `_meta`, as the agent sends it.
+  final JsonMap? meta;
+
   ToolCallUpdate get opening => ToolCallUpdate(
     toolCallId: toolCallId,
     isNew: true,
@@ -167,6 +172,7 @@ final class FakeToolCallStep extends FakeStep {
     status: ToolCallStatus.pending,
     rawInput: rawInput,
     locations: locations,
+    meta: meta,
   );
 }
 

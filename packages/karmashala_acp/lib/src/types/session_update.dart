@@ -137,6 +137,7 @@ final class ToolCallUpdate extends SessionUpdate {
     this.locations,
     this.rawInput,
     this.rawOutput,
+    this.meta,
   });
 
   factory ToolCallUpdate.fromJson(JsonMap json, {required bool isNew}) =>
@@ -163,6 +164,7 @@ final class ToolCallUpdate extends SessionUpdate {
         },
         rawInput: json['rawInput'],
         rawOutput: json['rawOutput'],
+        meta: json.object('_meta'),
       );
 
   final String toolCallId;
@@ -176,6 +178,9 @@ final class ToolCallUpdate extends SessionUpdate {
   final List<ToolCallLocation>? locations;
   final Object? rawInput;
   final Object? rawOutput;
+
+  /// The call's `_meta`: what an agent says of it beyond the protocol.
+  final JsonMap? meta;
 
   @override
   String get sessionUpdate => isNew ? 'tool_call' : 'tool_call_update';
@@ -200,6 +205,7 @@ final class ToolCallUpdate extends SessionUpdate {
     },
     'rawInput': rawInput,
     'rawOutput': rawOutput,
+    '_meta': meta,
   });
 
   /// [update] laid over this call: present fields replace, absent ones keep.
