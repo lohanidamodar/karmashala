@@ -602,6 +602,11 @@ class AcpSessionRuntime implements ScreenSession {
       host.commandsChanged(_commandsChange(update.commands));
       return;
     }
+    if (update is SessionInfoUpdate) {
+      final title = update.title?.trim() ?? '';
+      if (title.isNotEmpty) host.titleChanged(sessionId, title);
+      return;
+    }
     // A load replays the conversation the rows already hold.
     if (_loading) return;
     if (update is CurrentModeUpdate) {

@@ -41,6 +41,10 @@ abstract class AcpRuntimeHost {
   /// The agent announced or changed the slash commands it accepts.
   void commandsChanged(SessionCommandsChanged change) {}
 
+  /// The agent named the conversation (`session_info_update`); [title] is
+  /// trimmed and never empty.
+  void titleChanged(String sessionId, String title) {}
+
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);
 

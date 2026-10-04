@@ -19,6 +19,7 @@ import '../status/daemon_agent_status.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
+import 'acp_titles.dart';
 import 'acp_transport.dart';
 
 /// What the launcher asks an ACP runtime to run: decided by the one launch
@@ -136,6 +137,7 @@ class ServerAcpHost extends AcpRuntimeHost {
     required this.agentStatus,
     required this.checkpoints,
     required this.data,
+    this.titles,
     this.hold = kAcpCheckpointHold,
     void Function(String message)? log,
   }) : _log = log;
@@ -143,6 +145,9 @@ class ServerAcpHost extends AcpRuntimeHost {
   final DaemonAgentStatus agentStatus;
   final DaemonCheckpoints checkpoints;
   final DataService data;
+
+  /// Where the agent's titles go; null keeps the rows' own.
+  final AcpTitles? titles;
   final Duration hold;
   final void Function(String message)? _log;
 
@@ -190,6 +195,10 @@ class ServerAcpHost extends AcpRuntimeHost {
   @override
   void commandsChanged(SessionCommandsChanged change) =>
       data.announce([change]);
+
+  @override
+  void titleChanged(String sessionId, String title) =>
+      titles?.follow(sessionId, title);
 
   @override
   void messagesChanged(String sessionId) => transcriptsChanged?.call(sessionId);

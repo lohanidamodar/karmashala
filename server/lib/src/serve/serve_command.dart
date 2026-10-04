@@ -53,6 +53,7 @@ import 'package:path/path.dart' as p;
 
 import '../acp/acp_auth.dart';
 import '../acp/acp_runtimes.dart';
+import '../acp/acp_titles.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
 import '../acp/acp_version_probe.dart';
@@ -889,6 +890,7 @@ Future<int> runServe(
     agentStatus: status,
     checkpoints: checkpoints,
     data: data,
+    titles: AcpTitles(sessionSync.rows),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   final sessionUsage = SessionUsageDao(database);
