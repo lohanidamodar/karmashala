@@ -91,10 +91,17 @@ class AgentStatusService {
       grid.status == AgentActivityStatus.awaitingApproval ||
       grid.status == AgentActivityStatus.failed;
 
-  /// Whether [grid] shows a prompt the agent drew after [hook] said its turn
-  /// ended — the one case a screen outranks a fresh hook.
-  static bool promptAfter(AgentStatusReport hook, AgentStatusReport? grid) =>
-      hook.status == AgentActivityStatus.idle &&
+  /// Whether [grid] shows a prompt the agent drew after [hook] — the one case
+  /// a screen outranks a fresh hook: after the turn ended, or, when the
+  /// screen is known to be read since the hook ([screenAfterHook]), while it
+  /// runs, as a second prompt in one turn fires no hook of its own.
+  static bool promptAfter(
+    AgentStatusReport hook,
+    AgentStatusReport? grid, {
+    bool screenAfterHook = false,
+  }) =>
+      (hook.status == AgentActivityStatus.idle ||
+          (screenAfterHook && hook.status == AgentActivityStatus.working)) &&
       grid != null &&
       grid.status == AgentActivityStatus.awaitingApproval;
 
@@ -111,8 +118,13 @@ class AgentStatusService {
     AgentStatusReport? hook,
     AgentStatusReport? grid,
     AgentStatusReport? state,
+    bool screenAfterHook = false,
   }) {
-    if (hook != null) return promptAfter(hook, grid) ? grid! : hook;
+    if (hook != null) {
+      return promptAfter(hook, grid, screenAfterHook: screenAfterHook)
+          ? grid!
+          : hook;
+    }
     if (grid != null && escalates(grid)) return grid;
     if (state != null) return state;
     if (grid != null) return grid;

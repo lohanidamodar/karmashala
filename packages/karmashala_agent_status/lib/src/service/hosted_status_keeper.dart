@@ -238,6 +238,8 @@ class HostedStatusKeeper {
         now: now,
         hook: hook,
         grid: grid,
+        // Beside a hook, a grid is only read when the screen came after it.
+        screenAfterHook: hook != null && grid != null,
       );
       // The last hook, however old, before "nothing is known": the app's
       // transcript fallback is not here, and an agent that stopped says so

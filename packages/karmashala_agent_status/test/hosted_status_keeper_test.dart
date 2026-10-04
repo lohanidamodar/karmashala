@@ -336,6 +336,21 @@ void main() {
       expect(report?.status, AgentActivityStatus.awaitingApproval);
     });
 
+    test('a permission prompt drawn while the turn runs is the word, though '
+        'no hook said so', () {
+      // A second prompt in one turn: the hooks said working, and the prompt
+      // came after them with no notification of its own.
+      keeper.track('row-1', agentId: claude.id);
+      hook('UserPromptSubmit');
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      final modal = keeper.screen(
+        'row-1',
+        screenOf('claude-code-permission-modal', 1.0, claude),
+      );
+      expect(modal!.report.hasOpenPrompt, isTrue);
+      expect(modal.report.source, AgentStatusSource.terminalGrid);
+    });
+
     test('a fresh hook outranks the screen, a stale one does not', () {
       keeper.track('row-1', agentId: claude.id);
       final idleScreen = screenOf('claude-code-tui', 0.85, claude);
