@@ -611,6 +611,12 @@ const claudeCodeDescriptor = AgentDescriptor(
     inFlightPath: {
       'Stop': ['background_tasks'],
     },
+    // 2.1.283's entry: `description` always, `command` for a shell.
+    inFlightLabelPaths: [
+      ['description'],
+      ['command'],
+      ['type'],
+    ],
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,

@@ -86,6 +86,14 @@ class WorkspaceSessionEntry {
   String toString() => 'WorkspaceSessionEntry($id, $title)';
 }
 
+/// What a session's turn handed off to and is still running, for its row; null
+/// when nothing is.
+String? inFlightClause(List<String> work) => switch (work) {
+  [] => null,
+  [final only] => 'still running: $only',
+  _ => '${work.length} still running',
+};
+
 /// The clauses that tell two same-titled sessions apart: the project, the
 /// folder only when it is not just the project's name again, and the branch
 /// only when a reading already named one. Never a guess at any of them.

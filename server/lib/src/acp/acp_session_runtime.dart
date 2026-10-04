@@ -660,6 +660,7 @@ class AcpSessionRuntime implements ScreenSession {
       _publish(
         _agentWorking ? AgentActivityStatus.working : AgentActivityStatus.idle,
         detail: _agentWorking ? _agentTurnDetail : reason?.raw,
+        inFlight: _agentInFlight,
       );
     }
     if (identical(_turnSettled, settled)) _turnSettled = null;
@@ -670,16 +671,27 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// The agent working on a turn no prompt asked for: working while it runs,
   /// idle after. A prompt's own turn keeps its status meanwhile.
-  void _agentTurn({required bool started}) {
-    if (started == _agentWorking) return;
+  void _agentTurn({required bool started, List<String> inFlight = const []}) {
+    final work = started ? inFlight : const <String>[];
+    if (started == _agentWorking && _sameWork(work, _agentInFlight)) return;
+    final was = _agentWorking;
     _agentWorking = started;
+    _agentInFlight = work;
     if (_turn != null) return;
-    if (!started) _writer.turnEnded();
+    if (!started && was) _writer.turnEnded();
     _publish(
       started ? AgentActivityStatus.working : AgentActivityStatus.idle,
       detail: _agentTurnDetail,
+      inFlight: work,
     );
   }
+
+  /// Background work the agent said it is still running, while it works on
+  /// its own turn.
+  List<String> _agentInFlight = const [];
+
+  static bool _sameWork(List<String> a, List<String> b) =>
+      a.join('\u0000') == b.join('\u0000');
 
   void _onUpdate(SessionUpdateEvent event) {
     final agent = _agentSessionId;
@@ -723,7 +735,11 @@ class AcpSessionRuntime implements ScreenSession {
       return;
     }
     if (update is UnknownUpdate && update.kind == AcpExtensions.agentTurn) {
-      _agentTurn(started: update.raw['state'] == 'started');
+      final inFlight = update.raw['inFlight'];
+      _agentTurn(
+        started: update.raw['state'] == 'started',
+        inFlight: inFlight is List ? inFlight.whereType<String>().toList() : [],
+      );
       return;
     }
     if (update is UnknownUpdate && update.kind == AcpExtensions.compaction) {
@@ -1207,6 +1223,7 @@ class AcpSessionRuntime implements ScreenSession {
     String? failureReason,
     AgentToolAsk? toolAsk,
     DateTime? waitingSince,
+    List<String> inFlight = const [],
   }) {
     host.status(
       sessionId,
@@ -1222,6 +1239,7 @@ class AcpSessionRuntime implements ScreenSession {
         failureReason: failureReason,
         toolAsk: toolAsk,
         waitingSince: waitingSince,
+        inFlight: inFlight,
       ),
     );
   }

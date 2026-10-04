@@ -426,6 +426,136 @@ void main() {
 
       expect(report.status, AgentActivityStatus.idle);
     });
+
+    test('it names the work still running', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+
+      expect(report.inFlight, ['Run echo subagent-ran command']);
+    });
+
+    // The owner's report: subagents still working, the session filed under
+    // Ready with a tick. Claude Code's 60-second "waiting for your input"
+    // nudge checks only the main thread, so it fires mid-subagent.
+    test('the idle nudge while it runs does not finish the session', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification('idle_prompt', 'Claude is waiting for your input'),
+      );
+
+      expect(report.status, AgentActivityStatus.working);
+      expect(report.inFlight, ['Run echo subagent-ran command']);
+      expect(
+        reports.latest('claudeCode', 's1')!.status,
+        AgentActivityStatus.working,
+      );
+    });
+
+    test('nor does the nudge after the subagent\'s own tool calls', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final tool = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: body('s1'),
+      );
+      expect(tool.inFlight, ['Run echo subagent-ran command']);
+
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification('idle_prompt', 'Claude is waiting for your input'),
+      );
+
+      expect(report.status, AgentActivityStatus.working);
+    });
+
+    test('a prompt opening meanwhile still needs you', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification(
+          'permission_prompt',
+          'Claude needs your permission to use Bash',
+        ),
+      );
+
+      expect(report.status, AgentActivityStatus.awaitingApproval);
+    });
+
+    test('the Stop that lists nothing lets the session rest', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final ended = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: false),
+      );
+      expect(ended.status, AgentActivityStatus.idle);
+      expect(ended.inFlight, isEmpty);
+
+      final nudge = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification('idle_prompt', 'Claude is waiting for your input'),
+      );
+      expect(nudge.status, AgentActivityStatus.idle);
+    });
+
+    test('the session ending lets go of it too', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'SessionEnd',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'SessionEnd',
+          'reason': 'other',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.inFlight, isEmpty);
+    });
+
+    test('another session is not held by it', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: body('s2'),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
   });
 
   test('a missing event or agent never throws', () {

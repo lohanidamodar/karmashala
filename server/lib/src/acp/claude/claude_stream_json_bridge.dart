@@ -678,6 +678,19 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// Whether Claude is working on a turn no prompt asked for.
   var _agentTurnOpen = false;
 
+  /// Background tasks Claude launched and has not reported on: task id to
+  /// what it is doing. The session is not finished while any runs.
+  final _background = <String, String>{};
+
+  void _openAgentTurn() {
+    _agentTurnOpen = true;
+    _update({
+      'sessionUpdate': AcpExtensions.agentTurn,
+      'state': 'started',
+      if (_background.isNotEmpty) 'inFlight': [..._background.values],
+    });
+  }
+
   void _onClaude(JsonMap message) {
     if (_compacted(message)) return;
     final parent = message['parent_tool_use_id'];
@@ -686,8 +699,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         !_agentTurnOpen &&
         _sessionId.isNotEmpty &&
         (type == 'assistant' || type == 'stream_event' || type == 'user')) {
-      _agentTurnOpen = true;
-      _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'started'});
+      _openAgentTurn();
     }
     switch (type) {
       case 'stream_event':
@@ -899,7 +911,29 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       case 'compact_boundary':
         _compaction = jsonObject(message['compact_metadata']) ?? const {};
       case 'task_started' || 'task_progress' || 'task_notification':
+        _trackBackground(message);
         _onTask(message);
+    }
+  }
+
+  void _trackBackground(JsonMap message) {
+    final id = message['task_id'];
+    if (id is! String) return;
+    final before = _background.length;
+    switch (message['subtype']) {
+      case 'task_started' when message['is_backgrounded'] != false:
+        final description = message['description'];
+        _background[id] = description is String && description.isNotEmpty
+            ? description
+            : 'background task';
+      case 'task_notification':
+        _background.remove(id);
+      default:
+        return;
+    }
+    // While Claude rests on them, the session says what is left.
+    if (_agentTurnOpen && _turn == null && _background.length != before) {
+      if (_background.isNotEmpty) _openAgentTurn();
     }
   }
 
@@ -960,13 +994,17 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     // A turn Claude began itself (a background task finishing) carries its
     // origin and answers no prompt, even one queued behind it.
     if (turn == null || message['origin'] != null) {
-      if (_agentTurnOpen) {
+      // Claude's own turn ended, but work it launched still runs.
+      if (_agentTurnOpen && _background.isEmpty) {
         _agentTurnOpen = false;
         _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
       }
       return;
     }
     _turn = null;
+    // The prompt's turn ended and handed off to background work: said before
+    // the answer, so the session never reads finished in between.
+    if (_background.isNotEmpty && !_agentTurnOpen) _openAgentTurn();
     final subtype = message['subtype'];
     final isError = message['is_error'] == true;
     if (_cancelling) {

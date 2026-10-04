@@ -101,6 +101,7 @@ class AgentStatusReport {
     this.failureReason,
     this.toolAsk,
     this.waitingSince,
+    this.inFlight = const [],
   });
 
   /// This report with the ask it is about and when the wait began — both
@@ -120,6 +121,7 @@ class AgentStatusReport {
         failureReason: failureReason,
         toolAsk: toolAsk,
         waitingSince: waitingSince,
+        inFlight: inFlight,
       );
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -197,6 +199,11 @@ class AgentStatusReport {
   /// 42s" counts from the ask, not from whoever looked last. Null when it is
   /// not waiting, or the source could not tell.
   final DateTime? waitingSince;
+
+  /// **Work still running after the turn handed off** — a background subagent
+  /// or shell — named in the agent's own words. Non-empty only while the agent
+  /// said so; a session holding any is working, however long it stays quiet.
+  final List<String> inFlight;
 
   /// **Whether a prompt with options is on this session's screen right now.**
   ///
@@ -421,6 +428,7 @@ class AgentHookSpec {
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
     this.inFlightPath = const {},
+    this.inFlightLabelPaths = const [],
     this.eventEnding = const {},
     this.failureReasonPath = const [],
     this.endingReasonPath = const [],
@@ -552,6 +560,10 @@ class AgentHookSpec {
   /// distinguish 'session is done' from 'session is paused waiting for
   /// background work to wake it'."*
   final Map<String, List<String>> inFlightPath;
+
+  /// Where one [inFlightPath] entry names itself — candidate paths, first
+  /// non-empty string winning — so a row can say what is still running.
+  final List<List<String>> inFlightLabelPaths;
 
   /// Hook event name → what that event says about the **session's** ending.
   ///

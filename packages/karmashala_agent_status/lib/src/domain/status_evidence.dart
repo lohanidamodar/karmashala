@@ -12,8 +12,11 @@ bool sameStatusEvidence(AgentStatusReport a, AgentStatusReport b) =>
     a.agentId == b.agentId &&
     a.sessionId == b.sessionId &&
     a.waitingSince == b.waitingSince &&
-    (a.toolAsk == null ? b.toolAsk == null : a.toolAsk!.sameCallAs(b.toolAsk)) &&
-    _sameLines(a.evidence, b.evidence);
+    (a.toolAsk == null
+        ? b.toolAsk == null
+        : a.toolAsk!.sameCallAs(b.toolAsk)) &&
+    _sameLines(a.evidence, b.evidence) &&
+    _sameLines(a.inFlight, b.inFlight);
 
 bool _sameLines(List<String> a, List<String> b) {
   if (a.length != b.length) return false;
