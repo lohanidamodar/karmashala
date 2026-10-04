@@ -1,3 +1,5 @@
+import 'package:agent_cli/stream.dart'
+    show delegatedChildIdOf, isDelegationToolName;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -14,14 +16,13 @@ import 'session_subagents_panel.dart'
 /// One child-starting call in a parent's chat: the child it started, once
 /// the call answered, and what it was asked.
 class DelegationCall {
-  const DelegationCall({required this.title, this.childId});
+  const DelegationCall({this.title, this.childId});
 
-  final String title;
+  /// What the call names it by; null when it carried no subject, as an ACP
+  /// agent's call does — the child's own session title stands in.
+  final String? title;
   final String? childId;
 }
-
-final _launch = RegExp(r'(^|[_.:/])(subagent_run|open_new_session)$');
-final _childId = RegExp(r'"(?:childSessionId|sessionId)"\s*:\s*"([^"]+)"');
 
 /// The child-starting calls of each turn that made two or more, keyed by the
 /// row the folded card hangs under: the turn's first words after the calls,
@@ -35,14 +36,14 @@ Map<int, List<DelegationCall>> delegationGroups(List<ChatMessage> messages) {
     int? first, last;
     for (var i = turnStart; i < end; i++) {
       final tool = messages[i].tool;
-      if (tool == null || !_launch.hasMatch(tool.name)) continue;
+      if (tool == null || !isDelegationToolName(tool.name)) continue;
       first ??= i;
       last = i;
       final subject = tool.subject?.split('\n').first.trim();
       calls.add(
         DelegationCall(
-          title: subject == null || subject.isEmpty ? 'Child session' : subject,
-          childId: _childId.firstMatch(tool.output ?? '')?.group(1),
+          title: subject == null || subject.isEmpty ? null : subject,
+          childId: delegatedChildIdOf(tool.output),
         ),
       );
     }
@@ -245,7 +246,7 @@ class _ChildLine extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              call.title,
+              call.title ?? entry?.title ?? 'Child session',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium,
