@@ -160,8 +160,8 @@ class Settings {
   final Map<String, String> defaultModels;
 
   /// How a new session on each agent runs, keyed by the folded agent id
-  /// (`AgentRegistry.foldedIdOf`); absent is Terminal. The New Session card
-  /// writes the last choice here, so it is both the default and the memory.
+  /// (`AgentRegistry.foldedIdOf`); absent reads as Terminal. The New Session
+  /// card writes the last choice here, so it is both the default and the memory.
   final Map<String, String> agentRunForms;
 
   /// A hand-set `flutter` per `ExecutionEnvironment.id`, kept off the table
@@ -370,15 +370,17 @@ class Settings {
 
   /// The `flutter` named for [environmentId], or null for "look on PATH" (§19).
   AgentRunForm runFormFor(String agentId) =>
-      AgentRunForm.parse(agentRunForms[agentId]);
+      chosenRunFormFor(agentId) ?? AgentRunForm.terminal;
 
-  /// Sets how new sessions on [agentId] run; Terminal removes the key.
+  /// The form last chosen for [agentId], or null when it never was — a
+  /// default agent set to a chat form then keeps it.
+  AgentRunForm? chosenRunFormFor(String agentId) {
+    final name = agentRunForms[agentId];
+    return name == null ? null : AgentRunForm.parse(name);
+  }
+
   Settings withAgentRunForm(String agentId, AgentRunForm form) => copyWith(
-    agentRunForms: {
-      for (final entry in agentRunForms.entries)
-        if (entry.key != agentId) entry.key: entry.value,
-      if (form != AgentRunForm.terminal) agentId: form.name,
-    },
+    agentRunForms: {...agentRunForms, agentId: form.name},
   );
 
   String? flutterSdkPathFor(String environmentId) =>

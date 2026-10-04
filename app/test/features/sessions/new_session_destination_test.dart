@@ -849,6 +849,68 @@ void main() {
     expect(find.text(SlowStartNote.text), findsOneWidget);
     await closeAll(tester);
   });
+  group('an agent installed as a terminal and as a chat', () {
+    late _RecordingLauncher launcher;
+
+    Future<ProviderContainer> openWithChat(WidgetTester tester) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'ca1',
+          agentId: AgentIds.claudeAcp,
+          path: r'C:\npm\claude-agent-acp.cmd',
+        ),
+      );
+      final container = ProviderContainer(
+        parent: containerFor(selected: 'r1'),
+        overrides: [
+          sessionLauncherProvider.overrideWith(
+            (ref) => launcher = _RecordingLauncher(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await open(tester, container);
+      return container;
+    }
+
+    Future<void> start(WidgetTester tester) async {
+      await tester.ensureVisible(startButton());
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('starts as a terminal until Chat is chosen', (tester) async {
+      await openWithChat(tester);
+      expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('agent-card:ca1')), findsNothing);
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('Chat starts the chat installation, and the next dialog '
+        'opens on Chat', (tester) async {
+      final container = await openWithChat(tester);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      await choose(
+        tester,
+        current: find.text('Alpha'),
+        option: find.text('Beta'),
+      );
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'ca1');
+
+      // The recorded launch failed, so the dialog is still up: close it and
+      // open a fresh one.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await open(tester, container);
+      await start(tester);
+      expect(launcher.requests.last.installation.id, 'ca1');
+      await closeAll(tester);
+    });
+  });
+
   testWidgets('an agent that asks to be logged in first offers Log in, '
       'which lists its methods', (tester) async {
     server.agentWork.acpAuthMethods['a1'] = const AcpAuthMethods(

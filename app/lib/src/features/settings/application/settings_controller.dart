@@ -473,7 +473,7 @@ class SettingsController extends Notifier<Settings> {
 
   /// Sets how new sessions on the folded agent [agentId] run.
   void setAgentRunForm(String agentId, AgentRunForm form) {
-    if (state.runFormFor(agentId) == form) return;
+    if (state.chosenRunFormFor(agentId) == form) return;
     state = state.withAgentRunForm(agentId, form);
     _save();
   }

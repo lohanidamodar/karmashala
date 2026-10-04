@@ -26,8 +26,13 @@ void main() {
     db = TestMachine();
     FakeDataServer().runsOn(db);
     db.server.environmentRows.upsert(windowsEnv());
+    // Not a form of Claude Code, whose card the fixture's own install draws.
     npxAcpId = AgentRegistry.builtIn.adapters
-        .firstWhere((a) => a.acp?.npxPackage != null)
+        .firstWhere(
+          (a) =>
+              a.acp?.npxPackage != null &&
+              AgentRegistry.builtIn.foldedIdOf(a.id) != AgentIds.claudeCode,
+        )
         .id;
   });
 
@@ -104,11 +109,120 @@ void main() {
         .where((a) => a.acp != null)
         .map((a) => a.id)
         .toList();
+    // Installed only as chat: the forms with no terminal agent installed here.
+    final chatOnly = acp
+        .where(
+          (id) => AgentRegistry.builtIn.foldedIdOf(id) != AgentIds.claudeCode,
+        )
+        .length;
     await pump(tester, [
       agentInstallation(),
       for (final id in acp) agentInstallation(id: 'i-$id', agentId: id),
     ]);
+    // Claude's chat form folds into its terminal card, which reads the
+    // account once.
     expect(find.text('Checking usage…'), findsOneWidget);
-    expect(find.text(kAcpUsageLimitsNote), findsNWidgets(acp.length));
+    expect(find.text(kAcpUsageLimitsNote), findsNWidgets(chatOnly));
+  });
+
+  group('an agent with a terminal and a chat form', () {
+    AgentInstallation chat() =>
+        agentInstallation(id: 'chat', agentId: AgentIds.claudeAcp);
+
+    Future<List<AgentInstallation>> pumpPicking(
+      WidgetTester tester,
+      List<AgentInstallation> installations, {
+      AgentInstallation? selected,
+    }) async {
+      final picked = <AgentInstallation>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            await db.server.override(),
+            agentUsageProvider.overrideWith(
+              (ref, installation) => const AsyncLoading<AgentUsage>(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: NewSessionAgentCards(
+                installations: installations,
+                selected: selected,
+                onSelected: picked.add,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return picked;
+    }
+
+    testWidgets('is one card, named once, with a Terminal | Chat choice', (
+      tester,
+    ) async {
+      await pumpPicking(tester, [agentInstallation(), chat()]);
+      expect(find.byKey(const ValueKey('agent-card:a1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('agent-card:chat')), findsNothing);
+      expect(find.text('Claude Code'), findsOneWidget);
+      expect(find.text('Claude (ACP)'), findsNothing);
+      expect(find.byKey(const ValueKey('agent-form:a1:terminal')), findsOne);
+      expect(find.byKey(const ValueKey('agent-form:a1:chat')), findsOne);
+      // Its usage is the account's, read once.
+      expect(find.text('Checking usage…'), findsOneWidget);
+      expect(find.text(kAcpUsageLimitsNote), findsNothing);
+    });
+
+    testWidgets('Chat picks the chat installation and is remembered', (
+      tester,
+    ) async {
+      final picked = await pumpPicking(tester, [agentInstallation(), chat()]);
+      await tester.tap(find.byKey(const ValueKey('agent-form:a1:chat')));
+      await tester.pumpAndSettle();
+      expect(picked.map((i) => i.id), ['chat']);
+      // A tap on the card now starts it as a chat, the form last chosen.
+      await tester.tap(find.text('Claude Code'));
+      await tester.pumpAndSettle();
+      expect(picked.map((i) => i.id), ['chat', 'chat']);
+    });
+
+    testWidgets('a tap on the card picks Terminal until Chat is chosen', (
+      tester,
+    ) async {
+      final picked = await pumpPicking(tester, [agentInstallation(), chat()]);
+      await tester.tap(find.text('Claude Code'));
+      await tester.pumpAndSettle();
+      expect(picked.map((i) => i.id), ['a1']);
+    });
+
+    testWidgets('the form picked is the one the card shows selected', (
+      tester,
+    ) async {
+      final installs = [agentInstallation(), chat()];
+      await pumpPicking(tester, installs, selected: installs.last);
+      final choice = tester.widget<SegmentedButton<AgentRunForm>>(
+        find.byType(SegmentedButton<AgentRunForm>),
+      );
+      expect(choice.selected, {AgentRunForm.chat});
+    });
+  });
+
+  testWidgets('an agent with one form offers no choice', (tester) async {
+    await pump(tester, [
+      agentInstallation(id: 'x', agentId: AgentIds.codex),
+      agentInstallation(id: 'g', agentId: AgentIds.grok),
+    ]);
+    expect(find.byKey(const ValueKey('agent-card:x')), findsOneWidget);
+    expect(find.byKey(const ValueKey('agent-card:g')), findsOneWidget);
+    expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
+  });
+
+  testWidgets('installed only as chat, a paired agent is one card under the '
+      'agent\'s name, with no choice', (tester) async {
+    await pump(tester, [
+      agentInstallation(id: 'cx', agentId: AgentIds.codexAcp),
+    ]);
+    expect(find.text('Codex CLI'), findsOneWidget);
+    expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
   });
 }

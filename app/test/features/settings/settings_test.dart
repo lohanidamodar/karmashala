@@ -455,15 +455,16 @@ void main() {
       expect(const Settings().runFormFor('claudeCode'), AgentRunForm.terminal);
     });
 
-    test('round-trips, and Terminal is stored as no entry', () {
+    test('round-trips, and a Terminal choice is remembered as one', () {
+      expect(const Settings().chosenRunFormFor('a'), isNull);
       final chat = const Settings().withAgentRunForm('a', AgentRunForm.chat);
       expect(chat.runFormFor('a'), AgentRunForm.chat);
       final back = Settings.fromJson(chat.toJson());
       expect(back.runFormFor('a'), AgentRunForm.chat);
       expect(back, chat);
       final terminal = chat.withAgentRunForm('a', AgentRunForm.terminal);
-      expect(terminal.toJson().containsKey('agentRunForms'), isFalse);
-      expect(terminal, const Settings());
+      expect(terminal.chosenRunFormFor('a'), AgentRunForm.terminal);
+      expect(terminal, isNot(const Settings()));
     });
 
     test('the controller saves it', () async {
