@@ -5,6 +5,8 @@ import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao, SessionMessageRole;
 
+import 'acp_tool_json.dart';
+
 /// **An ACP session's `session/update`s as `session_messages` rows** (design
 /// C3/C4): the prompt as a `user` row, chunks coalesced into one `agent` row
 /// until a new `messageId`, a tool call or the turn's end closes it, each tool
@@ -141,7 +143,7 @@ class AcpConversationWriter {
       _closeAgentRow();
       final row = _append(
         SessionMessageRole.tool,
-        toolJson: jsonEncode(update.toToolCallJson()),
+        toolJson: jsonEncode(storedToolCallJson(update)),
       );
       _tools[update.toolCallId] = _ToolRow(row, update);
       _render(
@@ -151,7 +153,10 @@ class AcpConversationWriter {
     }
     final merged = known.state.merge(update);
     known.state = merged;
-    messages.patch(known.rowId, toolJson: jsonEncode(merged.toToolCallJson()));
+    messages.patch(
+      known.rowId,
+      toolJson: jsonEncode(storedToolCallJson(merged)),
+    );
     onChanged();
     if (update.status != null) {
       _render('[tool] ${_titleOf(merged)} (${update.status!.raw})');
