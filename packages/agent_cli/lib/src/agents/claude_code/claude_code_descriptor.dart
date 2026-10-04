@@ -778,6 +778,9 @@ const claudeCodeDescriptor = AgentDescriptor(
       // simply write it in a message. What keeps it honest is the composer
       // check in `TerminalGridStatusSource`, not this list.
       GridMatcher('Esc to cancel'),
+      // The plan prompt, whose 2.1.287 footer names neither key ("ctrl+g to
+      // edit in Notepad · <plan file>"; probe, 2026-10-04).
+      GridMatcher('Would you like to proceed?'),
     ],
     working: [GridMatcher('esc to interrupt')],
     // Two footers, because the hint segment is mode-dependent: a session in

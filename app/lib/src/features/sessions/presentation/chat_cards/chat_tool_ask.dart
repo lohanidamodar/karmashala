@@ -51,11 +51,16 @@ class ChatToolAsk extends ConsumerStatefulWidget {
   const ChatToolAsk({
     required this.sessionId,
     required this.toolUseId,
+    this.toolName,
     super.key,
   });
 
   final String sessionId;
   final String toolUseId;
+
+  /// The pending call's own tool, which names a plan prompt the screen
+  /// shows when no hook said which call it is about.
+  final String? toolName;
 
   @override
   ConsumerState<ChatToolAsk> createState() => _ChatToolAskState();
@@ -86,11 +91,26 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
     );
   }
 
+  /// A plan prompt read off the screen: an approval no hook named a call
+  /// for, while this pending call is the agent's plan tool.
+  bool _screenPlanPrompt(AgentStatusReport? report, AgentRegistry registry) =>
+      report != null &&
+      report.toolAsk == null &&
+      report.status == AgentActivityStatus.awaitingApproval &&
+      report.waiting == AgentWaitKind.approval &&
+      widget.toolName != null &&
+      registry.byId(report.agentId)?.planApproval?.toolName == widget.toolName;
+
   @override
   Widget build(BuildContext context) {
     final status = agentSessionStatusProvider(widget.sessionId);
+    final registry = ref.read(agentRegistryProvider);
     final approval = ref.watch(
-      status.select((s) => asksAboutCall(s.asData?.value, widget.toolUseId)),
+      status.select((s) {
+        final report = s.asData?.value;
+        return asksAboutCall(report, widget.toolUseId) ||
+            _screenPlanPrompt(report, registry);
+      }),
     );
     // A question names its call in the question itself, read off the hook or
     // the agent's record.
@@ -117,7 +137,9 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
         ? null
         : ref.read(agentRegistryProvider).byId(report.agentId);
     final support = descriptor?.planApproval;
-    final plan = support?.planIn(report?.toolAsk);
+    final plan =
+        support?.planIn(report?.toolAsk) ??
+        (_screenPlanPrompt(report, registry) ? '' : null);
     if (report != null && support != null && plan != null) {
       return Padding(
         key: ValueKey('plan-approval:${widget.toolUseId}'),

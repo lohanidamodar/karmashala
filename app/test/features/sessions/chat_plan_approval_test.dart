@@ -363,6 +363,72 @@ void main() {
     expect(find.byKey(const ValueKey('plan-approval:mode-1')), findsNothing);
     expect(find.byKey(const ValueKey('chat-ask:mode-1')), findsOneWidget);
   });
+
+  testWidgets('with no hook, the screen\'s plan prompt still brings the card: '
+      'the plan quoted off the screen, and Approve keeps the session\'s rung', (
+    tester,
+  ) async {
+    const screen = [
+      'Ready to code?',
+      'Plan: Add NOTES.md',
+      'Claude has written up a plan and is ready to execute. Would you like '
+          'to proceed?',
+      '❯ 1. Yes, and use auto mode',
+      '  2. Yes, manually approve edits',
+      '  3. Tell Claude what to change',
+    ];
+    const drawn = AgentScreenMenu(
+      prompt: [
+        'Claude has written up a plan and is ready to execute. Would you like '
+            'to proceed?',
+      ],
+      options: [
+        'Yes, and use auto mode',
+        'Yes, manually approve edits',
+        'Tell Claude what to change',
+      ],
+      highlighted: 0,
+    );
+    final answers = RecordingPromptAnswers(menu: drawn);
+    final h = await ChatCardHarness.open(
+      ChatCardSession.terminalCli,
+      messages: [
+        TranscriptMessage(
+          role: 'tool',
+          text: '',
+          tool: const ToolActivity(name: 'ExitPlanMode'),
+          pendingToolUseId: 'plan-1',
+          at: testTime,
+        ),
+      ],
+      // The grid's reading: an approval, its screen as evidence, no call.
+      status: ChatCardHarness.statusOf(
+        ChatCardSession.terminalCli,
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+        evidence: screen,
+      ),
+      overrides: [
+        sessionPromptAnswersProvider.overrideWithValue(answers),
+        sessionAnswerableProvider.overrideWithValue((_) => true),
+      ],
+    );
+    addTearDown(h.dispose);
+    await tester.pumpWidget(chatWithDock(h.container));
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('plan-approval:plan-1'));
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.textContaining('Add NOTES.md')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Approve plan'));
+    await tester.pumpAndSettle();
+    final answer = answers.answers.single as MenuAnswerRequest;
+    expect(drawn.options[answer.option], 'Yes, manually approve edits');
+  });
 }
 
 /// Records what the card types into the session as a message.

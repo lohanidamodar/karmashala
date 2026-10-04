@@ -306,7 +306,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               );
         final ask = callId == null
             ? null
-            : ChatToolAsk(sessionId: widget.sessionId, toolUseId: callId);
+            : ChatToolAsk(
+                sessionId: widget.sessionId,
+                toolUseId: callId,
+                toolName: message.tool?.name,
+              );
         if (subagent == null || ask == null) return subagent ?? ask;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

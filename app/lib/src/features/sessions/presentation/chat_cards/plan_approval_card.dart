@@ -243,7 +243,14 @@ class _PlanApprovalCardState extends ConsumerState<PlanApprovalCard> {
               child: SingleChildScrollView(
                 primary: false,
                 padding: const EdgeInsets.all(Insets.md),
-                child: MarkdownMessage(widget.plan, selectable: false),
+                // No plan text when no hook carried it: 2.1.287 records the
+                // call's input empty. The screen's own rows, quoted.
+                child: widget.plan.isEmpty
+                    ? SelectableText(
+                        widget.report.evidence.join('\n'),
+                        style: MonoStyles.body,
+                      )
+                    : MarkdownMessage(widget.plan, selectable: false),
               ),
             ),
           ),
