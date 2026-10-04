@@ -267,6 +267,32 @@ void main() {
     expect(container.read(terminalVisibleProvider), isTrue);
   });
 
+  testWidgets('a running session with no pane here yet is never offered a '
+      'resume, on a phone either', (tester) async {
+    // A resume of a session that runs would start a second copy of it.
+    db.server.sessionRows.insert(
+      Session(
+        id: 'live',
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'Live work',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: testTime,
+        externalSessionId: 'ext-live',
+      ),
+    );
+    await mount(tester);
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    container.read(selectedSessionIdProvider.notifier).select('live');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resume in a terminal'), findsNothing);
+    expect(find.textContaining('is running'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('(d) a tap that cannot resume anything still shows no chat', (
     tester,
   ) async {

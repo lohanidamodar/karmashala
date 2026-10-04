@@ -29,6 +29,8 @@ import '../../features/sessions/application/session_agent_providers.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';
+import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart'
+    show hostLifecycleSubscriberProvider;
 import '../../features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import '../../features/sessions/presentation/approval_request_card.dart';

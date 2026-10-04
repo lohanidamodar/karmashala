@@ -88,11 +88,23 @@ class _NoPaneForSession extends ConsumerWidget {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Whether the session runs — here or at the server. Then its terminal is
+  /// on its way, and a resume would start a second copy.
+  bool _running(WidgetRef ref) {
+    if (!session.native) return false;
+    ref.watchSessionKinds(const {SessionChangeKind.status});
+    final row = ref.read(sessionsDataProvider).getById(session.id);
+    return row?.status == SessionStatus.running ||
+        (ref.read(hostLifecycleSubscriberProvider)?.isRunning(session.id) ??
+            false);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final canResume = _canResume(ref);
+    final running = _running(ref);
+    final canResume = !running && _canResume(ref);
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -116,7 +128,10 @@ class _NoPaneForSession extends ConsumerWidget {
               ),
               const SizedBox(height: Insets.xs),
               Text(
-                canResume
+                running
+                    ? 'This session is running. Its terminal opens here once '
+                          'it is connected; the conversation can be read now.'
+                    : canResume
                     ? 'No terminal of ours is running this session. Resume it '
                           'to pick the conversation up in one.'
                     : 'No terminal of ours is running this session, and we '
