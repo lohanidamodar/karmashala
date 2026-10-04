@@ -921,7 +921,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     if (id is! String) return;
     final before = _background.length;
     switch (message['subtype']) {
-      case 'task_started' when message['is_backgrounded'] != false:
+      // Only a task Claude says it backgrounded: one without the field may
+      // never report back, and would hold a finished turn open.
+      case 'task_started' when message['is_backgrounded'] == true:
         final description = message['description'];
         _background[id] = description is String && description.isNotEmpty
             ? description

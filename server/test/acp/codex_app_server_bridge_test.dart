@@ -416,6 +416,8 @@ void main() {
 
     expect(host.usage.last.contextUsed, 1800);
     expect(host.usage.last.contextSize, 200000);
+    // The turn over, nothing holds the session working.
+    expect(statuses().last, AgentActivityStatus.idle);
     await runtime.stop();
   });
 

@@ -10,6 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
 import '../../automations/application/automation_check_runner.dart';
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../git/application/remote_links.dart';
@@ -32,6 +33,7 @@ import '../application/host_lifecycle/host_lifecycle_providers.dart';
 import '../application/session_providers.dart';
 import '../application/session_resume_providers.dart';
 import '../application/session_signals.dart';
+import '../application/session_status_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
@@ -569,7 +571,7 @@ class DeliveryStateLine extends ConsumerWidget {
 }
 
 /// The stage's icon and word. `working` is the git stage "nothing recorded
-/// yet", which over a session nothing runs read as the agent working.
+/// yet", which read as the agent working whenever the agent was not.
 class _StageMark extends ConsumerWidget {
   const _StageMark({
     required this.sessionId,
@@ -599,8 +601,18 @@ class _StageMark extends ConsumerWidget {
             row.status.claimsLive &&
             ref.watch(isAcpSessionProvider(sessionId)));
     final stopped = stage == DeliveryStage.working && row != null && !runs;
+    final agentWorking = ref.watch(
+      agentSessionStatusProvider(
+        sessionId,
+      ).select((report) => report.value?.status == AgentActivityStatus.working),
+    );
     // The uncommitted count is its own fact beside this one.
-    final word = stopped ? 'Not running' : stage.label;
+    final word = switch (stage) {
+      _ when stopped => 'Not running',
+      DeliveryStage.working when !agentWorking =>
+        delivery.isDirty ? 'Uncommitted' : 'No changes yet',
+      _ => stage.label,
+    };
     return Row(
       key: const ValueKey('delivery-stage'),
       mainAxisSize: MainAxisSize.min,

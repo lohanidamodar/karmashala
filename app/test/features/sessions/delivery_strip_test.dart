@@ -129,6 +129,8 @@ void main() {
         createdAt: testTime,
       ),
     );
+    // Its agent at work; the cases about a finished turn say otherwise.
+    server.attention.statusOf('s1', AgentActivityStatus.working);
   });
 
   /// Nowhere to continue to: these tests are about the delivery actions, and
@@ -243,6 +245,42 @@ void main() {
     expect(find.text('work'), findsOneWidget);
     expect(find.text('2 uncommitted'), findsOneWidget);
     expect(find.text('3 ahead of origin/main'), findsOneWidget);
+  });
+
+  // Seen on a chat session: its turn had ended and the bar still said
+  // "Working", because the stage word for "nothing committed yet" is that.
+  group('a running session whose turn has ended is not called Working', () {
+    testWidgets('with work uncommitted', (tester) async {
+      server.attention.statusOf('s1', AgentActivityStatus.idle);
+      await pumpStateLine(
+        tester,
+        const SessionDelivery(branch: 'work', dirtyFiles: 2, hasWorktree: true),
+      );
+
+      expect(find.text('Working'), findsNothing);
+      expect(find.text('Uncommitted'), findsOneWidget);
+    });
+
+    testWidgets('with nothing changed', (tester) async {
+      server.attention.statusOf('s1', AgentActivityStatus.idle);
+      await pumpStateLine(
+        tester,
+        const SessionDelivery(branch: 'work', hasWorktree: true),
+      );
+
+      expect(find.text('Working'), findsNothing);
+      expect(find.text('No changes yet'), findsOneWidget);
+    });
+
+    testWidgets('nor when nothing has said what it is doing', (tester) async {
+      server.attention.statusOf('s1', AgentActivityStatus.unknown);
+      await pumpStateLine(
+        tester,
+        const SessionDelivery(branch: 'work', hasWorktree: true),
+      );
+
+      expect(find.text('Working'), findsNothing);
+    });
   });
 
   group('the two hosts', () {
