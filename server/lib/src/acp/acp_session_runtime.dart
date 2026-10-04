@@ -19,6 +19,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessageDao, SessionUsageDao, SessionUsageTurn;
+import 'package:path/path.dart' as p;
 
 import '../domain/screen_facts.dart';
 import '../domain/screen_session.dart';
@@ -26,6 +27,7 @@ import '../domain/uuid.dart';
 import 'acp_conversation_writer.dart';
 import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
+import 'acp_prompt_images.dart';
 import 'acp_runtime_host.dart';
 import 'acp_transport.dart';
 import 'acp_usage_limit.dart';
@@ -347,7 +349,9 @@ class AcpSessionRuntime implements ScreenSession {
   }
 
   /// Sends [text] as the next turn. Refuses in words while a turn is open.
-  Future<void> send(String text) async {
+  /// Answers what the sender should be told, or null: why an attached image
+  /// went to the agent as its path rather than as an image.
+  Future<String?> send(String text) async {
     final client = _client;
     final agent = _agentSessionId;
     if (_lifecycle.hasEnded) {
@@ -367,12 +371,51 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     if (text.trim().isEmpty) throw StateError('there is no message to send');
+    final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
     _publish(AgentActivityStatus.working, detail: AcpMethods.sessionPrompt);
     final settled = _turnSettled = Completer<StopReason?>();
-    final turn = _turn = client.prompt(agent, [ContentBlock.text(text)]);
+    final turn = _turn = client.prompt(agent, prompt);
     unawaited(_settle(turn, settled));
+    if (notice != null) host.log('session $sessionId: $notice');
+    return notice;
+  }
+
+  /// [text] as prompt blocks: its attached images as image blocks when the
+  /// agent takes them, each one that cannot be left as its path; and what
+  /// the sender should be told of any left.
+  (List<ContentBlock>, String?) _promptOf(String text) {
+    final attached = splitAttachedImages(text);
+    final count = attached.paths.length;
+    if (count == 0) return ([ContentBlock.text(text)], null);
+    if (!_capabilities.promptCapabilities.image) {
+      return (
+        [ContentBlock.text(text)],
+        '$agentName does not take images in a prompt, so '
+            '${count == 1 ? 'the image was sent as its path' : 'the images were sent as their paths'}.',
+      );
+    }
+    final images = <ContentBlock>[];
+    final sent = <String>{};
+    final refused = <String>[];
+    for (final path in attached.paths) {
+      final (:image, :refusal) = promptImage(path);
+      if (image != null) {
+        images.add(image);
+        sent.add(path);
+      } else {
+        refused.add(
+          '${p.basename(path)} was sent as its path, not as an image: '
+          '$refusal.',
+        );
+      }
+    }
+    final rest = attached.textWithout(sent);
+    return (
+      [if (rest.trim().isNotEmpty) ContentBlock.text(rest), ...images],
+      refused.isEmpty ? null : refused.join(' '),
+    );
   }
 
   /// Completes when the open turn has ended and its status is published;

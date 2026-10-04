@@ -28,6 +28,7 @@ class FakeAcpAgent {
     this.supportsLoadSession = true,
     this.holdsNoConversations = false,
     this.supportsLogout = false,
+    this.supportsImages = false,
     this.authenticateRefusal,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
@@ -56,6 +57,9 @@ class FakeAcpAgent {
 
   /// Whether `initialize` advertises `auth.logout`, and `logout` answers.
   final bool supportsLogout;
+
+  /// Whether `initialize` advertises `promptCapabilities.image`.
+  final bool supportsImages;
 
   /// When set, `authenticate` fails -32603 with these words.
   final String? authenticateRefusal;
@@ -120,6 +124,7 @@ class FakeAcpAgent {
               authMethods: authMethods,
               agentInfo: agentInfo,
               supportsLogout: supportsLogout,
+              supportsImages: supportsImages,
             ),
           );
         case AcpMethods.authenticate:
@@ -412,12 +417,13 @@ abstract final class InitializeResultJson {
     required List<AuthMethod> authMethods,
     required AgentInfo agentInfo,
     bool supportsLogout = false,
+    bool supportsImages = false,
   }) => {
     'protocolVersion': protocolVersion,
     'agentCapabilities': {
       'loadSession': loadSession,
       'promptCapabilities': {
-        'image': false,
+        'image': supportsImages,
         'audio': false,
         'embeddedContext': true,
       },
