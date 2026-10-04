@@ -27,6 +27,7 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
       'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
       'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
       'sessionAgentChanged' => SessionAgentChanged.fromJson(json),
+      'sessionCommandsChanged' => SessionCommandsChanged.fromJson(json),
       _ => null,
     };
 
@@ -380,5 +381,71 @@ final class SessionAgentChanged extends DataChange {
     'sessionId': sessionId,
     'agentInstallationId': agentInstallationId,
     'spans': [for (final span in spans) span.toJson()],
+  };
+}
+
+/// A slash command a session's agent accepts in a prompt (ACP
+/// `available_commands_update`), in its own words. [name] has no slash.
+final class SessionCommand {
+  const SessionCommand({
+    required this.name,
+    required this.description,
+    this.hint,
+  });
+
+  factory SessionCommand.fromJson(Map<String, Object?> json) => SessionCommand(
+    name: json['name']! as String,
+    description: json['description'] as String? ?? '',
+    hint: json['hint'] as String?,
+  );
+
+  final String name;
+  final String description;
+
+  /// What the agent says to type after the command, when it takes input.
+  final String? hint;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'description': description,
+    'hint': ?hint,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionCommand &&
+      other.name == name &&
+      other.description == description &&
+      other.hint == hint;
+
+  @override
+  int get hashCode => Object.hash(name, description, hint);
+}
+
+/// Session [sessionId]'s agent now accepts [commands]: the whole list each
+/// time, as the agent tells it. Not stored; an empty list is none.
+final class SessionCommandsChanged extends DataChange {
+  const SessionCommandsChanged({
+    required this.sessionId,
+    required this.commands,
+  });
+
+  factory SessionCommandsChanged.fromJson(Map<String, Object?> json) =>
+      SessionCommandsChanged(
+        sessionId: json['sessionId']! as String,
+        commands: [
+          for (final row in (json['commands'] as List?) ?? const [])
+            SessionCommand.fromJson((row as Map).cast<String, Object?>()),
+        ],
+      );
+
+  final String sessionId;
+  final List<SessionCommand> commands;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionCommandsChanged',
+    'sessionId': sessionId,
+    'commands': [for (final command in commands) command.toJson()],
   };
 }

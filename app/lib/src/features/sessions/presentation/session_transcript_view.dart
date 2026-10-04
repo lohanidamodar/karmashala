@@ -41,6 +41,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
+import '../application/session_commands_providers.dart';
 import '../application/ask_resolutions.dart' show ownPromptAnswersProvider;
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -780,6 +781,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ComposerSnippet(label: snippet.label, text: snippet.command),
   ];
 
+  /// The agent's slash commands, as the composer's palette lists them. Only
+  /// an ACP agent announces any.
+  List<ComposerCommand> _commands() => [
+    for (final command in ref.read(sessionCommandsProvider(widget.sessionId)))
+      ComposerCommand(
+        name: command.name,
+        description: command.description,
+        hint: command.hint,
+      ),
+  ];
+
   /// The activity line over the composer. The delivery strip sits on the
   /// composer's channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
@@ -804,6 +816,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Read when the menu opens, never watched: the footer is
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
+          commands: _commands,
           // Read per paste or attach, like the snippets: never watched.
           server: _pickServer,
           droppedFiles: _dropped.stream,

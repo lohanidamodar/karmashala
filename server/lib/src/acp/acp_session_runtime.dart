@@ -8,6 +8,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal, kPromptChangedRefusal;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        SessionCommand,
+        SessionCommandsChanged,
         SessionConfigChoice,
         SessionConfigOption,
         SessionConfigOptionsChanged,
@@ -157,6 +159,7 @@ class AcpSessionRuntime implements ScreenSession {
   AgentCapabilities _capabilities = const AgentCapabilities();
   SessionModeState? _modes;
   List<ConfigOption>? _configOptions;
+  List<AvailableCommand>? _commands;
   UsageUpdate? _latestUsage;
   UsageUpdate? _turnUsage;
   String? _agentSessionId;
@@ -189,6 +192,13 @@ class AcpSessionRuntime implements ScreenSession {
   /// before it has started.
   SessionConfigOptionsChanged? get configOptions =>
       _configOptionsChange(_configOptions);
+
+  /// The slash commands the agent accepts, as last announced; null until it
+  /// has announced any.
+  SessionCommandsChanged? get commands => switch (_commands) {
+    final commands? => _commandsChange(commands),
+    null => null,
+  };
 
   bool get inTurn => _turn != null;
 
@@ -585,9 +595,15 @@ class AcpSessionRuntime implements ScreenSession {
         event.sessionId != agent) {
       return;
     }
+    final update = event.update;
+    // Not conversation: an agent may announce these while it loads.
+    if (update is AvailableCommandsUpdate) {
+      _commands = update.commands;
+      host.commandsChanged(_commandsChange(update.commands));
+      return;
+    }
     // A load replays the conversation the rows already hold.
     if (_loading) return;
-    final update = event.update;
     if (update is CurrentModeUpdate) {
       final modes = _modes;
       if (modes != null && modes.currentModeId != update.currentModeId) {
@@ -837,9 +853,25 @@ class AcpSessionRuntime implements ScreenSession {
     if (!_started) return;
     _modes = null;
     _configOptions = null;
+    _commands = null;
     _announceModes();
     _announceConfigOptions();
+    host.commandsChanged(_commandsChange(const []));
   }
+
+  SessionCommandsChanged _commandsChange(List<AvailableCommand> commands) =>
+      SessionCommandsChanged(
+        sessionId: sessionId,
+        commands: [
+          for (final command in commands)
+            if (command.name.isNotEmpty)
+              SessionCommand(
+                name: command.name,
+                description: command.description,
+                hint: command.inputHint,
+              ),
+        ],
+      );
 
   // Permissions.
 
