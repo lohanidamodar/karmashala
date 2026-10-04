@@ -12,6 +12,7 @@ class WorkbenchTabChip extends StatelessWidget {
     required this.onTap,
     required this.label,
     this.leading,
+    this.mark,
     this.trailing,
     this.onSecondaryTapDown,
     this.onClose,
@@ -42,6 +43,11 @@ class WorkbenchTabChip extends StatelessWidget {
   final VoidCallback onTap;
   final String label;
   final Widget? leading;
+
+  /// The tab's session's agent, between [leading] and the title. Dropped on a
+  /// chip narrower than [kMinTabWidth], where the title needs the room more.
+  final Widget? mark;
+
   final Widget? trailing;
   final GestureTapDownCallback? onSecondaryTapDown;
 
@@ -77,44 +83,55 @@ class WorkbenchTabChip extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           onSecondaryTapDown: onSecondaryTapDown,
-          child: Container(
-            height: dense ? Chrome.paneStrip : Chrome.tabStrip,
-            constraints: const BoxConstraints(maxWidth: kMaxTabWidth),
-            padding: EdgeInsets.only(
-              left: dense ? Insets.xs : Insets.sm,
-              right: trailing == null ? Insets.sm : 2,
-            ),
-            decoration: BoxDecoration(
-              border: Border(
-                top: dense ? BorderSide.none : rule,
-                bottom: dense ? rule : BorderSide.none,
-                // A hairline only when the user asked for lines between
-                // regions; otherwise the tones part the tabs.
-                right: BorderSide(color: tones.line),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Container(
+              height: dense ? Chrome.paneStrip : Chrome.tabStrip,
+              constraints: const BoxConstraints(maxWidth: kMaxTabWidth),
+              padding: EdgeInsets.only(
+                left: dense ? Insets.xs : Insets.sm,
+                right: trailing == null ? Insets.sm : 2,
               ),
-            ),
-            // Fills the slot the strip gave it rather than hugging its title:
-            // at a uniform extent, a short name left the X floating mid-tab.
-            child: Row(
-              children: [
-                ?leading,
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
-                        .copyWith(
-                          // Full ink only where the keyboard is: a strip nobody
-                          // types in must not compete with the one that is.
-                          color: needsYou || (selected && (accented ?? true))
-                              ? scheme.onSurface
-                              : scheme.onSurfaceVariant,
-                        ),
-                  ),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: dense ? BorderSide.none : rule,
+                  bottom: dense ? rule : BorderSide.none,
+                  // A hairline only when the user asked for lines between
+                  // regions; otherwise the tones part the tabs.
+                  right: BorderSide(color: tones.line),
                 ),
-                if (trailing != null) ...[const SizedBox(width: 2), trailing!],
-              ],
+              ),
+              // Fills the slot the strip gave it rather than hugging its title:
+              // at a uniform extent, a short name left the X floating mid-tab.
+              child: Row(
+                children: [
+                  ?leading,
+                  if (mark case final mark?
+                      when constraints.maxWidth >= kMinTabWidth)
+                    Padding(
+                      padding: const EdgeInsets.only(right: Insets.xs),
+                      child: mark,
+                    ),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
+                          .copyWith(
+                            // Full ink only where the keyboard is: a strip nobody
+                            // types in must not compete with the one that is.
+                            color: needsYou || (selected && (accented ?? true))
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 2),
+                    trailing!,
+                  ],
+                ],
+              ),
             ),
           ),
         ),

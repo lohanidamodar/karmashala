@@ -38,6 +38,10 @@ class _TabChip extends ConsumerWidget {
       // A document tab has nothing running in it, so it wears what it is rather
       // than a liveness dot reporting `exited`.
       icon: documentIconFor(tab),
+      mark: switch (_agentId(ref)) {
+        final agentId? => AgentLogo(agentId: agentId, size: Chrome.iconSmall),
+        null => null,
+      },
       unsaved: _hasUnsaved(ref),
       selected: selected,
       accented: accented,
@@ -190,6 +194,17 @@ class _TabChip extends ConsumerWidget {
       }
     }
     return strongest;
+  }
+
+  /// The agent of the session in the focused pane, else in the first pane that
+  /// holds one; null for a tab holding no session.
+  String? _agentId(WidgetRef ref) {
+    for (final paneId in [tab.focusedPaneId, ...tab.layout.panes]) {
+      if (ref.watch(paneAgentIdProvider(paneId)) case final agentId?) {
+        return agentId;
+      }
+    }
+    return null;
   }
 
   /// What the agent in this tab is doing, or null when it holds none. Pane by

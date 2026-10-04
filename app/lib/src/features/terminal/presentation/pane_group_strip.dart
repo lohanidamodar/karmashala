@@ -9,6 +9,8 @@ import '../../../app/shell/workbench_tab_chip.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import '../../agents/presentation/agent_logo.dart';
+import '../../sessions/application/session_agent_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -236,6 +238,7 @@ class PaneTabChip extends ConsumerWidget {
     // redraws nothing. Null when the liveness marker takes the slot back.
     final activity = ref.watch(paneAgentActivityProvider(paneId));
     final title = ref.watch(terminalPaneTitleProvider(paneId));
+    final agentId = ref.watch(paneAgentIdProvider(paneId));
 
     final chip = WorkbenchTabChip(
       selected: selected,
@@ -253,6 +256,9 @@ class PaneTabChip extends ConsumerWidget {
       leading: activity == null
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: activity),
+      mark: agentId == null
+          ? null
+          : AgentLogo(agentId: agentId, size: Chrome.iconSmall),
       label: title,
       tooltip: title,
       trailing: DenseIconButton(

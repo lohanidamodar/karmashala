@@ -66,6 +66,7 @@ class TerminalTabChip extends StatelessWidget {
     this.onSavePreset,
     this.agentStatus,
     this.icon,
+    this.mark,
     this.unsaved = false,
     this.accented = true,
     super.key,
@@ -88,6 +89,9 @@ class TerminalTabChip extends StatelessWidget {
   /// process: a document has no liveness, and `exited` would read as a session
   /// that died.
   final IconData? icon;
+
+  /// The mark of the agent whose session this tab holds, before its title.
+  final Widget? mark;
 
   /// Whether this tab holds edits that are not on disk. Drawn as a dot in place
   /// of the close glyph — a different mark, not a different colour.
@@ -141,6 +145,7 @@ class TerminalTabChip extends StatelessWidget {
           : status == null
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: status),
+      mark: mark,
       label: title,
       trailing: _TabCloseButton(
         unsaved: unsaved,
