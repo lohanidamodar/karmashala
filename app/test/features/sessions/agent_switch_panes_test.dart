@@ -7,8 +7,9 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart' show AgentPaneLaunch;
+import 'package:karmashala/src/features/terminal/application/client_intents.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionAgentChanged;
+    show OpenSessionTab, SessionAgentChanged;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
@@ -74,8 +75,10 @@ void main() {
       ...tab.layout.panes,
   ];
 
-  String? front() =>
-      container.read(terminalSessionsControllerProvider).activeTab?.focusedPaneId;
+  String? front() => container
+      .read(terminalSessionsControllerProvider)
+      .activeTab
+      ?.focusedPaneId;
 
   String openAgent(String agentId) => terminals()
       .openAgentTab(
@@ -97,7 +100,10 @@ void main() {
     expect(panes(), isNot(contains(old)));
     expect(terminals().instanceFor(old), isNull);
     final fresh = panes().where((p) => p != chatPaneId('s1')).single;
-    expect(terminals().instanceFor(fresh)!.agentLaunch!.agentId, AgentIds.codex);
+    expect(
+      terminals().instanceFor(fresh)!.agentLaunch!.agentId,
+      AgentIds.codex,
+    );
     expect(front(), chatPaneId('s1'));
     expect(container.read(sessionsDataProvider).getById('s1')!.paneId, fresh);
   });
@@ -119,23 +125,29 @@ void main() {
     expect(front(), chatPaneId('s1'));
   });
 
-  test('Codex to Claude to Codex leaves one terminal, the current agent\'s',
-      () async {
-    db.server.sessionRows.put(
-      db.server.sessionRows.getById('s1')!.copyWith(agentInstallationId: 'cx'),
-    );
-    openAgent(AgentIds.codex);
-    await switchTo('cc');
-    await switchTo('cx');
+  test(
+    'Codex to Claude to Codex leaves one terminal, the current agent\'s',
+    () async {
+      db.server.sessionRows.put(
+        db.server.sessionRows
+            .getById('s1')!
+            .copyWith(agentInstallationId: 'cx'),
+      );
+      openAgent(AgentIds.codex);
+      await switchTo('cc');
+      await switchTo('cx');
 
-    final terminalPanes = panes().where((p) => p != chatPaneId('s1')).toList();
-    expect(terminalPanes, hasLength(1));
-    expect(
-      terminals().instanceFor(terminalPanes.single)!.agentLaunch!.agentId,
-      AgentIds.codex,
-    );
-    expect(front(), chatPaneId('s1'));
-  });
+      final terminalPanes = panes()
+          .where((p) => p != chatPaneId('s1'))
+          .toList();
+      expect(terminalPanes, hasLength(1));
+      expect(
+        terminals().instanceFor(terminalPanes.single)!.agentLaunch!.agentId,
+        AgentIds.codex,
+      );
+      expect(front(), chatPaneId('s1'));
+    },
+  );
 
   test('to an ACP agent: no terminal at all, the chat in front', () async {
     final old = openAgent(AgentIds.claudeCode);
@@ -164,8 +176,10 @@ void main() {
         .reopenSwitchedPane(stale);
 
     expect(result, isNotNull);
-    expect(terminals().instanceFor(stale)?.agentLaunch?.agentId,
-        isNot(AgentIds.claudeCode));
+    expect(
+      terminals().instanceFor(stale)?.agentLaunch?.agentId,
+      isNot(AgentIds.claudeCode),
+    );
   });
 
   test('a pane of the row\'s own agent is left to its Restart', () async {
@@ -178,6 +192,68 @@ void main() {
 
     expect(result, isNull);
     expect(panes(), contains(own));
+  });
+
+  List<String> terminalPanes() =>
+      panes().where((p) => p != chatPaneId('s1')).toList();
+
+  test('a switch made from another client and the server asking to show it '
+      'leave one chat tab and one terminal; Quick open twice adds '
+      'nothing', () async {
+    final follow = container.listen(sessionSwitchFollowerProvider, (_, _) {});
+    addTearDown(follow.close);
+    container.read(clientIntentsProvider);
+    final old = openAgent(AgentIds.claudeCode);
+    terminals().openChatTab('s1');
+    // The server ended the old agent; its pane has noticed.
+    (terminals().instanceFor(old)! as FakeTerminalInstance).exitWith(0);
+    db.server.sessionRows.put(
+      db.server.sessionRows.getById('s1')!.copyWith(agentInstallationId: 'cx'),
+    );
+
+    // As an MCP `session_handoff inPlace` tells it: the switch, and a tab.
+    server.writeAsAnotherClient(const [
+      SessionAgentChanged(
+        sessionId: 's1',
+        agentInstallationId: 'cx',
+        spans: [],
+      ),
+    ]);
+    server.sessionWork.tellIntent(
+      const OpenSessionTab(
+        sessionId: 's1',
+        title: 'Limit test',
+        launch: AgentPaneLaunch(
+          agentId: AgentIds.codex,
+          executable: 'codex',
+          sessionId: 's1',
+        ),
+      ),
+    );
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(terminalPanes(), hasLength(1));
+    expect(
+      terminals().instanceFor(terminalPanes().single)!.agentLaunch!.agentId,
+      AgentIds.codex,
+    );
+    expect(panes().where((p) => p == chatPaneId('s1')), hasLength(1));
+
+    for (var i = 0; i < 2; i++) {
+      await container.read(explorerActionsProvider).openNative('s1');
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(terminalPanes(), hasLength(1));
+    expect(panes().where((p) => p == chatPaneId('s1')), hasLength(1));
+  });
+
+  test('a terminal asked for twice on one session is one pane', () {
+    final first = openAgent(AgentIds.codex);
+    final second = openAgent(AgentIds.codex);
+    expect(second, first);
+    expect(panes(), [first]);
   });
 
   test('a switch made from another client closes the old terminal here and '
@@ -202,7 +278,10 @@ void main() {
 
     expect(terminals().instanceFor(old), isNull);
     final fresh = panes().where((p) => p != chatPaneId('s1')).single;
-    expect(terminals().instanceFor(fresh)!.agentLaunch!.agentId, AgentIds.codex);
+    expect(
+      terminals().instanceFor(fresh)!.agentLaunch!.agentId,
+      AgentIds.codex,
+    );
     expect(front(), chatPaneId('s1'));
   });
 }
