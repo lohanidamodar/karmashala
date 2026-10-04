@@ -113,6 +113,58 @@ void main() {
       expect(world.probeLog.entries().keys, [AgentIds.codex]);
     });
 
+    test('an npx row its agent no longer runs through is repaired', () async {
+      // Recorded when Claude's chat form was an npx package; it now runs the
+      // person's own `claude`, and the row would be refused at launch.
+      const npx = r'C:\Program Files\nodejs\npx.cmd';
+      const claude = r'C:\Users\d\.local\bin\claude.exe';
+      world.installations.insert(
+        agentInstallation(
+          id: 'chat-row',
+          agentId: AgentIds.claudeAcp,
+          path: npx,
+        ).copyWith(leadingArguments: ['-y', '@zed-industries/claude-code-acp']),
+      );
+      final sweep = workspaceWith(
+        probe: FakePathProbe(files: const {npx, claude}),
+        responder: (req) => req.executable == 'where'
+            ? (req.arguments.single == 'claude'
+                  ? const CommandResult(
+                      exitCode: 0,
+                      stdout: '$claude\r\n',
+                      stderr: '',
+                    )
+                  : _notOnPath)
+            : const CommandResult(exitCode: 0, stdout: '2.1.287', stderr: ''),
+      );
+
+      final report = await sweep.repairBrokenPaths();
+
+      final row = world.installations.getById('chat-row')!;
+      expect(row.executable.path, claude);
+      expect(row.leadingArguments, isEmpty);
+      expect(report.broken.map((r) => r.installation.id), ['chat-row']);
+      expect(report.repaired.map((r) => r.installation.id), ['chat-row']);
+    });
+
+    test('an npx row its agent still runs through is left alone', () async {
+      const npx = r'C:\Program Files\nodejs\npx.cmd';
+      world.installations.insert(
+        agentInstallation(
+          agentId: AgentIds.grok,
+          path: npx,
+        ).copyWith(leadingArguments: ['-y', '@xai-official/grok']),
+      );
+      final sweep = workspaceWith(
+        probe: FakePathProbe(files: const {npx}),
+        responder: (_) => fail('nothing should have been spawned'),
+      );
+
+      final report = await sweep.repairBrokenPaths();
+
+      expect(report.isClean, isTrue);
+    });
+
     test('a successful repair updates the path and the version', () async {
       world.installations.insert(
         agentInstallation(

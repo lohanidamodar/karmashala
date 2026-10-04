@@ -273,6 +273,33 @@ bool isNpxExecutable(String executable) {
       npxBinaries.posix.contains(name);
 }
 
+/// Whether [installation] is an npx row that [spec] would no longer start:
+/// the agent is spoken to through a bridge now, or names another package (or
+/// none) than the row runs. Such a row was recorded before the agent left npx.
+bool isStaleNpxRow(AgentInstallation installation, AcpLaunchSpec? spec) {
+  if (spec == null || !isNpxExecutable(installation.executable.path)) {
+    return false;
+  }
+  final leading = installation.leadingArguments;
+  final package = spec.npxPackage;
+  return spec.nativeBridge != null ||
+      (leading.isNotEmpty &&
+          (package == null || _npxPackageIn(leading) != package));
+}
+
+/// The package an npx row's leading arguments run, without its version:
+/// `-y @scope/name@1.2` names `@scope/name`.
+String? _npxPackageIn(List<String> leading) {
+  final words = [
+    for (final word in leading)
+      if (!word.startsWith('-')) word,
+  ];
+  if (words.isEmpty) return null;
+  final spelled = words.first;
+  final at = spelled.lastIndexOf('@');
+  return at > 0 ? spelled.substring(0, at) : spelled;
+}
+
 /// Everything one sweep of one environment established — including the two
 /// facts a bare list of hits cannot express: which agents were asked about and
 /// not installed, and whether the environment could be reached at all.

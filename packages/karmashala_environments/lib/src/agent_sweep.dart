@@ -449,12 +449,17 @@ class AgentSweep {
     ];
   }
 
+  /// Whether [row] is an npx row its agent no longer starts through.
+  bool _staleNpx(AgentInstallation row) =>
+      isStaleNpxRow(row, registry.byId(row.agentId)?.acp);
+
   /// Repairs the recorded rows whose path no longer opens — a self-update
-  /// that hid its binary behind junctions. [full] re-probes everything.
+  /// that hid its binary behind junctions — or that run through npx when the
+  /// agent no longer does. [full] re-probes everything.
   Future<AgentPathRepairReport> repairBrokenPaths({bool full = false}) async {
     final broken = [
       for (final reading in readStoredPaths())
-        if (reading.isBroken) reading,
+        if (reading.isBroken || _staleNpx(reading.installation)) reading,
     ];
     if (broken.isEmpty && !full) {
       return AgentPathRepairReport(checkedAt: clock.nowUtc());
@@ -478,7 +483,8 @@ class AgentSweep {
       final now = after[was.installation.id];
       // Gone: the sweep established it is not installed there.
       if (now == null) continue;
-      (now.isUsable ? repaired : unresolved).add(now);
+      (now.isUsable && !_staleNpx(now.installation) ? repaired : unresolved)
+          .add(now);
     }
     return AgentPathRepairReport(
       checkedAt: clock.nowUtc(),
