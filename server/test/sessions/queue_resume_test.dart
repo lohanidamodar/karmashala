@@ -245,4 +245,92 @@ void main() {
     expect(head.error, isNotEmpty);
     expect(pty.started, isEmpty);
   });
+
+  group('a session started by any path, its reader silent', () {
+    const quiet = Duration(milliseconds: 300);
+    String? pausedStore;
+
+    /// A queue told of every start, as `serve` tells it the lifecycle's.
+    SessionQueue starting() {
+      var n = 0;
+      final queue = SessionQueue(
+        dao: dao,
+        status: status,
+        quietPeriod: quiet,
+        quietPoll: const Duration(milliseconds: 10),
+        readPaused: () => pausedStore,
+        writePaused: (value) => pausedStore = value,
+        newId: () => 'q${++n}',
+        now: () => t0,
+      )..deliver = ((_, text) async => delivered.add(text));
+      final opened = registry.changes.listen((change) {
+        if (change is SessionOpened) {
+          queue.hostSessionStarted(change.process.id);
+        }
+      });
+      addTearDown(() async {
+        await opened.cancel();
+        await queue.close();
+      });
+      return queue..start();
+    }
+
+    Future<void> startUpScreen() async {
+      pty.handles.last.emit(utf8.encode('› Ask Codex to do anything\r\n'));
+      await pumpEventQueue();
+    }
+
+    setUp(() => pausedStore = null);
+
+    test('takes its head once the start-up screen has been quiet', () async {
+      queued('old', 'earlier');
+      starting();
+
+      await launches.resume('s1');
+      await startUpScreen();
+      expect(status.statusOf('s1'), isNull, reason: 'nothing reads it');
+      expect(delivered, isEmpty);
+
+      await Future<void>.delayed(quiet * 3);
+      expect(delivered, ['earlier']);
+    });
+
+    test('waits while the start-up screen still moves', () async {
+      queued('old', 'earlier');
+      final queue = starting();
+
+      await launches.resume('s1');
+      for (var i = 0; i < 15; i++) {
+        pty.handles.last.emit(utf8.encode('loading $i\r\n'));
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      expect(delivered, isEmpty);
+      expect(queue.busy('s1'), isTrue, reason: 'still starting');
+    });
+
+    test(
+      'a pause survives a server restart and holds through a resume',
+      () async {
+        queued('old', 'earlier');
+        final before = starting();
+        before.pause('s1');
+        expect(before.list('s1').single.hold?.kind, QueueHoldKind.paused);
+        await before.close();
+
+        final after = starting();
+        expect(after.list('s1').single.hold?.kind, QueueHoldKind.paused);
+        await launches.resume('s1');
+        await startUpScreen();
+        await Future<void>.delayed(quiet * 3);
+        expect(delivered, isEmpty);
+        expect(after.list('s1').single.hold?.kind, QueueHoldKind.paused);
+
+        // Asking for the next one is the person going on.
+        await after.sendNext('s1');
+        await pumpEventQueue();
+        expect(delivered, ['earlier']);
+        expect(pausedStore, anyOf(isNull, '[]'));
+      },
+    );
+  });
 }

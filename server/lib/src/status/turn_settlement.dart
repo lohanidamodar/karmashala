@@ -70,6 +70,16 @@ class TurnSettlement {
     return !quiet(sessionId);
   }
 
+  /// Row [sessionId]'s agent just started, by whatever path: its start-up is
+  /// a turn of its own until it reads idle or its screen goes quiet, so a
+  /// reader that never says idle still lets it settle.
+  void started(String sessionId) {
+    if (status.acpRuntimeOf(sessionId) != null) return;
+    _midTurn.add(sessionId);
+    _screens.remove(sessionId);
+    quiet(sessionId);
+  }
+
   /// Whether [sessionId]'s screen has shown nothing new for [quietPeriod].
   /// Not yet, it is read on each [poll] until it has, and [settled] tells it.
   bool quiet(String sessionId) {

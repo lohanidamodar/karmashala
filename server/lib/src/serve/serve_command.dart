@@ -1075,6 +1075,9 @@ Future<int> runServe(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
+    // A person's pause outlives a restart: it is theirs to lift.
+    readPaused: () => database.readMetadata(kQueuePausedKey),
+    writePaused: (value) => database.writeMetadata(kQueuePausedKey, value),
     resumesOnSend: speaksAcp,
     // A PTY session nothing runs is resumed for its queue, never left
     // holding it.
@@ -1175,9 +1178,12 @@ Future<int> runServe(
     settled: turnSettlement.settled,
   );
   sessionQueue.start();
-  // A process ending tells what waits for it that nothing runs it now.
+  // A process starting or ending tells what waits for it: a start-up is a
+  // turn whose end delivers; an end leaves nothing running it.
   final queueEnds = server.lifecycle.events.listen((event) {
-    if (event.kind != LifecycleEventKind.started) {
+    if (event.kind == LifecycleEventKind.started) {
+      sessionQueue.hostSessionStarted(event.sessionId);
+    } else {
       sessionQueue.hostSessionEnded(event.sessionId);
     }
   });

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -12,6 +13,10 @@ import '../automations/server_resume_runner.dart' show ResumeQueue;
 import '../domain/uuid.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/turn_settlement.dart';
+
+/// The app-metadata key holding the sessions whose person paused their
+/// queue: a JSON list of ids, so a restart keeps the pause.
+const String kQueuePausedKey = 'queue_paused.v1';
 
 /// What [SessionQueue.admit] decided for one message.
 sealed class QueueAdmission {
@@ -59,6 +64,8 @@ class SessionQueue implements ResumeQueue {
     this.limitHold,
     this.personTypedAt,
     this.typingGrace = const Duration(seconds: 5),
+    this.readPaused,
+    this.writePaused,
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
@@ -104,6 +111,11 @@ class SessionQueue implements ResumeQueue {
   /// When a person last typed into row [String]'s terminal, or null: a
   /// message typed then would land in their draft.
   final DateTime? Function(String sessionId)? personTypedAt;
+
+  /// Where the paused sessions are kept (app metadata), so a restart does not
+  /// turn a person's pause into a delivery.
+  final String? Function()? readPaused;
+  final void Function(String value)? writePaused;
 
   /// How long after a person's keystroke a PTY delivery waits.
   final Duration typingGrace;
@@ -183,6 +195,7 @@ class SessionQueue implements ResumeQueue {
       _announce(sessionId);
     }
     _withQueued.addAll(dao.sessionsWithQueued());
+    _loadPaused();
     // Each is told what holds it — a session nothing runs says so.
     refreshAll();
     if (_subscriptions.isNotEmpty) return;
@@ -262,7 +275,7 @@ class SessionQueue implements ResumeQueue {
       }
     }
     // Sending again is going on: it joins the end and delivery resumes.
-    _paused.remove(sessionId);
+    _unpause(sessionId);
     if (!busy(sessionId) &&
         !dao.hasWaiting(sessionId) &&
         !_holdsNewMessages(sessionId)) {
@@ -440,7 +453,7 @@ class SessionQueue implements ResumeQueue {
     if (dao.head(sessionId) == null) {
       _withQueued.remove(sessionId);
       // Nothing left to hold: a later message is not born paused.
-      _paused.remove(sessionId);
+      _unpause(sessionId);
       return;
     }
     final hold = _holdOf(sessionId);
@@ -628,6 +641,7 @@ class SessionQueue implements ResumeQueue {
   /// it, until they send again or ask for the next one ([sendNext]).
   void pause(String sessionId) {
     if (!dao.hasWaiting(sessionId) || !_paused.add(sessionId)) return;
+    _savePaused();
     log?.call('queue $sessionId: paused, as the session was stopped');
     _announce(sessionId);
   }
@@ -663,6 +677,19 @@ class SessionQueue implements ResumeQueue {
     return dao.getById(head.id)!;
   }
 
+  /// [hostSessionId]'s agent started, by whatever path — Resume now, an
+  /// opened session, an automatic continue, a limit's resume. Its start-up
+  /// counts as a turn ([TurnSettlement.started]), whose end delivers what
+  /// waits, holds still applying.
+  void hostSessionStarted(String hostSessionId) {
+    const prefix = 'karmashala_';
+    if (!hostSessionId.startsWith(prefix)) return;
+    final sessionId = hostSessionId.substring(prefix.length);
+    if (hostSessionIdOf(sessionId) != hostSessionId) return;
+    turns.started(sessionId);
+    if (_withQueued.contains(sessionId)) _kick(sessionId);
+  }
+
   /// Looks again at [hostSessionId]'s queue once its process ended: nothing
   /// runs it now, which its clients are told.
   void hostSessionEnded(String hostSessionId) {
@@ -691,6 +718,31 @@ class SessionQueue implements ResumeQueue {
     );
     return true;
   }
+
+  void _unpause(String sessionId) {
+    if (_paused.remove(sessionId)) _savePaused();
+  }
+
+  /// The pauses a restart found, kept only where messages still wait.
+  void _loadPaused() {
+    final raw = readPaused?.call();
+    if (raw == null || raw.isEmpty) return;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      decoded = null;
+    }
+    final kept = [
+      if (decoded is List)
+        for (final id in decoded)
+          if (id is String && dao.hasWaiting(id)) id,
+    ];
+    _paused.addAll(kept);
+    if (decoded is! List || kept.length != decoded.length) _savePaused();
+  }
+
+  void _savePaused() => writePaused?.call(jsonEncode([..._paused]));
 
   QueueHold? _holdOf(String sessionId) {
     if (_paused.contains(sessionId)) {
