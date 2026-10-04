@@ -198,26 +198,24 @@ void main() {
     final terminal = registry.adapters.where((a) => a.acp == null);
     final acp = registry.adapters.where((a) => a.acp != null);
 
-    for (final adapter in terminal) {
-      final binary = adapter.descriptor.binaries.posix.first;
+    // One line per agent; two agents on one binary (Claude Code and its chat
+    // agent both run `claude`) each say it.
+    final lines = <String>[
+      for (final adapter in terminal)
+        'Not installed. Install `${adapter.descriptor.binaries.posix.first}` '
+            'on a machine Karmashala reaches.',
+      for (final adapter in acp)
+        'Not installed. Install `${adapter.descriptor.binaries.posix.first}` '
+            'on a machine Karmashala reaches'
+            // npx is offered only for an agent that ships as an npm package;
+            // one the registry ships as an archive is installed from the row.
+            '${adapter.acp!.npxPackage == null ? '' : ', or add it with npx'}.',
+    ];
+    for (final line in lines.toSet()) {
       expect(
-        find.text(
-          'Not installed. Install `$binary` on a machine Karmashala reaches.',
-        ),
-        findsOneWidget,
-      );
-    }
-    for (final adapter in acp) {
-      final binary = adapter.descriptor.binaries.posix.first;
-      // npx is offered only for an agent that ships as an npm package; one
-      // the registry ships as an archive is installed from the row instead.
-      final npx = adapter.acp!.npxPackage == null ? '' : ', or add it with npx';
-      expect(
-        find.text(
-          'Not installed. Install `$binary` on a machine Karmashala reaches'
-          '$npx.',
-        ),
-        findsOneWidget,
+        find.text(line),
+        findsNWidgets(lines.where((l) => l == line).length),
+        reason: line,
       );
     }
     expect(
