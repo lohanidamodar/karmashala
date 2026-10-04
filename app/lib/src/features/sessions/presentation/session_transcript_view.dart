@@ -70,6 +70,7 @@ import 'message_composer.dart';
 import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
+import 'stop_children_offer.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -741,6 +742,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     }
     // An Esc closes an open prompt too: not one answered elsewhere.
     ref.read(ownPromptAnswersProvider).note(widget.sessionId);
+    offerToStopChildren(context, ref, widget.sessionId);
     if (ref.read(sessionInputProvider).viaServer) {
       unawaited(_interruptViaServer());
       return;

@@ -105,6 +105,34 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
       return out.stream;
     });
 
+/// The child sessions of session [String] working now (not archived), by
+/// id: what Stop on the parent offers to stop too.
+final runningChildSessionsProvider = Provider.autoDispose
+    .family<List<String>, String>((ref, sessionId) {
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.status,
+      });
+      return [
+        for (final row in ref.read(sessionsDataProvider).getAll())
+          if (row.parentSessionId == sessionId &&
+              !row.isArchived &&
+              row.status.claimsLive &&
+              _working(
+                ref.watch(
+                  agentSessionStatusProvider(
+                    row.id,
+                  ).select((report) => report.asData?.value.status),
+                ),
+              ))
+            row.id,
+      ];
+    });
+
+bool _working(AgentActivityStatus? status) =>
+    status == AgentActivityStatus.working ||
+    status == AgentActivityStatus.awaitingApproval;
+
 /// How many child sessions session [String] has (not archived), and how many
 /// of those are working now. Read from the rows and their statuses this app
 /// already holds, so a status line can show it without asking the server;
