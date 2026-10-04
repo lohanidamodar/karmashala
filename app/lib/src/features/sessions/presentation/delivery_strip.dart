@@ -27,10 +27,12 @@ import '../application/session_actions.dart';
 import '../application/delivery_update_service.dart';
 import '../application/session_archive_service.dart';
 import '../application/session_handoff_service.dart';
+import '../application/acp_session_providers.dart';
+import '../application/host_lifecycle/host_lifecycle_providers.dart';
 import '../application/session_providers.dart';
+import '../application/session_resume_providers.dart';
 import '../application/session_signals.dart';
 import 'package:karmashala_session/delivery.dart';
-import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
 
@@ -586,10 +588,17 @@ class _StageMark extends ConsumerWidget {
     ref.watchSession(sessionId);
     final stage = delivery.stage;
     final row = ref.read(sessionsDataProvider).getById(sessionId);
-    final stopped =
-        stage == DeliveryStage.working &&
-        row != null &&
-        (row.status.isEnded || row.status == SessionStatus.unknown);
+    // Judged by what runs it, not by the row's word: after a restart a row
+    // can still say running, or unknown, with nothing behind it.
+    final runs =
+        ref.watch(
+          sessionWhereaboutsProvider(sessionId).select((w) => w.hostedLive),
+        ) ||
+        ref.read(sessionRunningOnHostProvider)(sessionId) ||
+        (row != null &&
+            row.status.claimsLive &&
+            ref.watch(isAcpSessionProvider(sessionId)));
+    final stopped = stage == DeliveryStage.working && row != null && !runs;
     // The uncommitted count is its own fact beside this one.
     final word = stopped ? 'Not running' : stage.label;
     return Row(

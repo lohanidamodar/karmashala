@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,6 +54,19 @@ const _sharing = AgentDescriptor(
     interactiveResume: AgentResume.flag('--resume'),
     // So a session started with an opening prompt records that prompt, which
     // is what pressing Start used to run a second time.
+    prompt: AgentPromptSupport.positional(),
+    allowsConcurrentResume: true,
+  ),
+);
+
+/// The agent a session is switched to.
+const _other = AgentDescriptor(
+  id: 'other',
+  displayName: 'Other Agent',
+  binaries: AgentBinaries(windows: ['other'], posix: ['other']),
+  launch: AgentLaunchSpec(
+    permission: testPermissionSupport,
+    interactiveResume: AgentResume.flag('--resume'),
     prompt: AgentPromptSupport.positional(),
     allowsConcurrentResume: true,
   ),
@@ -108,7 +122,10 @@ ProviderContainer containerOver(
     commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
     idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
     agentRegistryProvider.overrideWithValue(
-      const AgentRegistry([DataOnlyAgentAdapter(_sharing)]),
+      const AgentRegistry([
+        DataOnlyAgentAdapter(_sharing),
+        DataOnlyAgentAdapter(_other),
+      ]),
     ),
     settingsControllerProvider.overrideWith(_StaticSettings.new),
     // The whereabouts provider watches this for a "last seen" time; a real
@@ -285,6 +302,73 @@ void main() {
     expect(launcher.reveal(sessionId), isFalse);
     // But it is a pane, and it is this session's.
     expect(launcher.dormantPaneFor(sessionId), paneOf(next, sessionId));
+  });
+
+  test('after a restart, the restored panes of a switched session each show '
+      'that nothing runs, and Resume leaves one terminal on its current '
+      'agent', () async {
+    final db = await seededDatabase();
+    db.server.installationRows.insert(
+      agentInstallation(id: 'a2', agentId: 'other', path: r'C:inother'),
+    );
+
+    final first = containerOver(db);
+    final sessionId = await startSession(first);
+    final terminals = first.read(terminalSessionsControllerProvider.notifier);
+    final current = paneOf(first, sessionId);
+    // A second terminal on the row, of the agent it was switched to.
+    final switched = terminals
+        .openAgentTab(
+          AgentPaneLaunch(
+            agentId: 'other',
+            executable: 'other',
+            sessionId: sessionId,
+          ),
+        )
+        .paneId;
+    terminals.persistLayout();
+    first.dispose();
+    db.server.sessionRows.put(
+      db.server.sessionRows
+          .getById(sessionId)!
+          .copyWith(
+            agentInstallationId: 'a2',
+            status: SessionStatus.unknown,
+            externalSessionId: 'ext-1',
+          ),
+    );
+
+    final next = containerOver(db, idPrefix: 't-');
+    addTearDown(next.dispose);
+    final restored = next.read(terminalSessionsControllerProvider);
+    // Each pane is restored history: its bar says so and offers Resume.
+    expect(restored.livenessOf(current), PaneLiveness.restored);
+    expect(restored.livenessOf(switched), PaneLiveness.restored);
+    next.read(terminalSessionsControllerProvider.notifier).focusPane(current);
+    expect(
+      next.read(terminalSessionsControllerProvider).livenessOf(current),
+      PaneLiveness.restored,
+      reason: 'focusing a restored agent pane starts nothing',
+    );
+
+    // Resume on the pane of the agent the row has left.
+    final result = await next
+        .read(explorerActionsProvider)
+        .resumeRestoredPane(current);
+
+    expect(result.outcome, ExplorerOutcome.resumed, reason: result.message);
+    final state = next.read(terminalSessionsControllerProvider);
+    final panes = [for (final tab in state.tabs) ...tab.layout.panes];
+    expect(panes, [switched]);
+    expect(state.livenessOf(switched), PaneLiveness.live);
+    expect(
+      next
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(switched)!
+          .agentLaunch!
+          .agentId,
+      'other',
+    );
   });
 
   /// The button on the pane itself.
