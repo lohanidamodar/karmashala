@@ -98,6 +98,10 @@ class _CompactSessionBar extends StatelessWidget {
                   constraints: const BoxConstraints(minHeight: Touch.target),
                   child: Row(
                     children: [
+                      SessionAgentMark(
+                        key: SessionAgentMark.barKey,
+                        sessionId: sessionId,
+                      ),
                       Expanded(
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,

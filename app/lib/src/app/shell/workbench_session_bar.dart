@@ -275,6 +275,8 @@ class _SessionStatusLine extends StatelessWidget {
           // One line, whatever the branch is called: the facts slide under the
           // controls rather than wrapping the bar to a second row. The resume
           // chip rides with them: it is nothing, and no width, until armed.
+          // The agent leads, outside the scroll, so it never slides away.
+          SessionAgentMark(key: SessionAgentMark.barKey, sessionId: sessionId),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -345,6 +347,7 @@ class _SessionFactsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
+      SessionAgentMark(key: SessionAgentMark.barKey, sessionId: sessionId),
       Expanded(
         // Scrolled rather than squeezed: under the floor, sharing the pixels
         // out leaves none of them legible.

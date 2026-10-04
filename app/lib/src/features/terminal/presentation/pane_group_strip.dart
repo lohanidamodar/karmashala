@@ -9,6 +9,9 @@ import '../../../app/shell/workbench_tab_chip.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import '../../agents/presentation/agent_logo.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../sessions/application/session_agent_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -236,6 +239,7 @@ class PaneTabChip extends ConsumerWidget {
     // redraws nothing. Null when the liveness marker takes the slot back.
     final activity = ref.watch(paneAgentActivityProvider(paneId));
     final title = ref.watch(terminalPaneTitleProvider(paneId));
+    final agentId = ref.watch(paneAgentIdProvider(paneId));
 
     final chip = WorkbenchTabChip(
       selected: selected,
@@ -253,8 +257,16 @@ class PaneTabChip extends ConsumerWidget {
       leading: activity == null
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: activity),
+      mark: agentId == null
+          ? null
+          : AgentLogo(agentId: agentId, size: Chrome.iconSmall),
       label: title,
-      tooltip: title,
+      tooltip: tabTitleTooltip(
+        title,
+        agentId == null
+            ? null
+            : ref.watch(agentRegistryProvider).displayNameFor(agentId),
+      ),
       trailing: DenseIconButton(
         tooltip: liveness.isLive
             ? 'Close pane (the session keeps running)'
@@ -271,7 +283,10 @@ class PaneTabChip extends ConsumerWidget {
       // the pointer.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: PaneDragFeedback(title: title),
-      childWhenDragging: Opacity(opacity: 0.4, child: chip),
+      childWhenDragging: TooltipVisibility(
+        visible: false,
+        child: Opacity(opacity: 0.4, child: chip),
+      ),
       child: chip,
     );
   }
