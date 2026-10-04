@@ -106,7 +106,14 @@ class _TerminalAgentDetailsState extends ConsumerState<TerminalAgentDetails> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SettingsNote(acpAgentsNote),
-                AcpAgentDetails(descriptor: chat, installs: chatInstalls),
+                // In the ACP row's own help style, as it reads on that row.
+                DefaultTextStyle.merge(
+                  style: SettingsStyles.rowHelp(context),
+                  child: AcpAgentDetails(
+                    descriptor: chat,
+                    installs: chatInstalls,
+                  ),
+                ),
               ],
             ),
           ),

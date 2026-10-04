@@ -42,6 +42,7 @@ import 'settings_catalog.dart';
 import 'settings_notice.dart';
 import 'settings_page_body.dart' show SettingsAnchorTarget;
 import 'settings_row.dart';
+import 'settings_theme.dart' show SettingsStyles;
 import 'settings_section.dart';
 import 'terminal_agent_card.dart';
 import 'usage_and_limits_section.dart';
