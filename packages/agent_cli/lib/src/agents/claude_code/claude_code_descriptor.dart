@@ -820,6 +820,8 @@ const claudeCodeDescriptor = AgentDescriptor(
     hookEvent: 'PreToolUse',
     keysFor: claudeQuestionKeys,
     declineKeys: '\x1b',
+    // Drawn below the answers on 2.1.274 and 2.1.287 (probe, 2026-10-04).
+    chatRow: 'Chat about this',
   ),
   // Measured on 2.1.274 (folder trust, permission, MCP server): `❯ ` marks the
   // highlighted row, ↓/↑ move it, Enter confirms it.
@@ -886,7 +888,7 @@ const claudeCodeDescriptor = AgentDescriptor(
   // Ultraplan row can come before it.
   planApproval: AgentPlanApprovalSupport(
     toolName: 'ExitPlanMode',
-    keepPlanningOption: r'^No, keep planning\b',
+    keepPlanningOption: r'^No, keep planning',
     // The yeses by what they switch to (the axis below). Bypass is checked
     // before auto, and either before "accept edits", whose words the first
     // two can contain.

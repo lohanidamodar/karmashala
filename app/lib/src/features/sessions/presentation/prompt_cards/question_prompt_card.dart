@@ -7,7 +7,11 @@ import 'package:karmashala_remote/client.dart' show GatewayException;
 
 /// Answers an agent's multiple-choice question from the phone.
 typedef CompanionQuestionAnswerFn =
-    Future<void> Function(List<RemoteQuestionAnswer> answers, {bool decline});
+    Future<void> Function(
+      List<RemoteQuestionAnswer> answers, {
+      bool decline,
+      bool chat,
+    });
 
 /// An agent's multiple-choice question: each question's options to tap, an
 /// own-words box on a single-choice one, and a decline. **No Approve**: on a
@@ -19,6 +23,7 @@ class QuestionPromptCard extends StatefulWidget {
     required this.question,
     required this.onAnswer,
     this.canAnswer = true,
+    this.chatLabel,
     super.key,
   });
 
@@ -28,6 +33,10 @@ class QuestionPromptCard extends StatefulWidget {
 
   /// Whether this phone holds the `approve` capability.
   final bool canAnswer;
+
+  /// The agent's own row for leaving the question to talk it over ("Chat
+  /// about this"), offered as its own action; null when it draws none.
+  final String? chatLabel;
 
   @override
   State<QuestionPromptCard> createState() => _QuestionPromptCardState();
@@ -88,12 +97,16 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
           : RemoteQuestionAnswer.options(_chosen[i].toList()..sort()),
   ];
 
-  Future<void> _send({bool decline = false}) async {
+  Future<void> _send({bool decline = false, bool chat = false}) async {
     if (_busy) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await widget.onAnswer(decline ? const [] : _answers, decline: decline);
+      await widget.onAnswer(
+        decline || chat ? const [] : _answers,
+        decline: decline,
+        chat: chat,
+      );
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text(e is GatewayException ? e.message : '$e')),
@@ -162,6 +175,11 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
                 onPressed: _busy ? null : () => _send(decline: true),
                 child: const Text('Decline'),
               ),
+              if (widget.chatLabel case final chat?)
+                OutlinedButton(
+                  onPressed: _busy ? null : () => _send(chat: true),
+                  child: Text(chat),
+                ),
               FilledButton(
                 onPressed: _busy || !_complete ? null : _send,
                 child: const Text('Send answer'),

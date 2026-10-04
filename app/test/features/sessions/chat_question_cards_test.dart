@@ -5,7 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart'
+    show HostSessionState;
+
+import '../../support/fake_host_lifecycle.dart';
 
 import '../../support/fixtures.dart';
 import 'chat_cards_support.dart';
@@ -43,6 +48,7 @@ void main() {
     WidgetTester tester, {
     required List<TranscriptMessage> messages,
     required Future<AgentQuestionSet?> Function() question,
+    bool hostRuns = false,
   }) async {
     late final ChatCardHarness h;
     final sent = <RemoteQuestionAnswerRequest>[];
@@ -52,6 +58,11 @@ void main() {
       status: asking,
       overrides: [
         sessionAnswerableProvider.overrideWithValue((_) => true),
+        if (hostRuns)
+          hostLifecycleSourceProvider.overrideWithValue(
+            FakeHostLifecycle()
+              ..snapshot = [hostFacts('s1', HostSessionState.running)],
+          ),
         transcriptOpenQuestionProvider.overrideWithValue(
           (sessionId, agentId) => question(),
         ),
@@ -63,6 +74,16 @@ void main() {
       ],
     );
     addTearDown(h.dispose);
+    if (hostRuns) {
+      // The host runs the session and kept no question: no hook carried one.
+      h.container.listen(hostLifecycleSubscriberProvider, (_, _) {});
+      h.container.read(hostLifecycleSubscriberProvider)!.nudge();
+      await tester.pump();
+      expect(
+        h.container.read(hostLifecycleSubscriberProvider)!.knows('s1'),
+        isTrue,
+      );
+    }
     await tester.pumpWidget(chatWithDock(h.container));
     await tester.pumpAndSettle();
     return (h, sent);
@@ -114,7 +135,9 @@ void main() {
     expect(inline, findsOneWidget);
     // One form on screen: the chat's, not the dock's as well.
     expect(find.text('Send answer'), findsOneWidget);
-    await tester.tap(find.descendant(of: inline, matching: find.text('Banana')));
+    await tester.tap(
+      find.descendant(of: inline, matching: find.text('Banana')),
+    );
     await tester.pump();
     await tester.tap(
       find.descendant(of: inline, matching: find.text('Send answer')),
@@ -147,6 +170,40 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(sent.single.answers.single.options, [0, 1]);
+    expect(inline, findsNothing);
+  });
+
+  testWidgets('a session the host runs, whose host kept no question from a '
+      'hook, still gets it from the agent\'s record', (tester) async {
+    await open(
+      tester,
+      messages: askingTurn(),
+      question: () async => fruit(),
+      hostRuns: true,
+    );
+
+    expect(inline, findsOneWidget);
+    expect(find.text('Banana'), findsOneWidget);
+    expect(find.text('Send answer'), findsOneWidget);
+  });
+
+  testWidgets('"Chat about this" is its own action, sent as such', (
+    tester,
+  ) async {
+    final (_, sent) = await open(
+      tester,
+      messages: askingTurn(),
+      question: () async => fruit(),
+    );
+
+    await tester.tap(
+      find.descendant(of: inline, matching: find.text('Chat about this')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sent.single.chat, isTrue);
+    expect(sent.single.toolUseId, 'toolu_1');
+    expect(sent.single.answers, isEmpty);
     expect(inline, findsNothing);
   });
 }

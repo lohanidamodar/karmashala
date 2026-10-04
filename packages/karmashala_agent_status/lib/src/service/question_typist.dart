@@ -104,7 +104,7 @@ class SessionQuestionTypist {
             '"$label" ticked',
           );
         }
-        await _moveTo(sessionId, n + 2, 'Next');
+        await _moveTo(sessionId, n + 2, 'Next / Submit');
       }
       // Enter moves on: to the next tab, the review, or — for one
       // single-choice question — back to the conversation.
@@ -120,6 +120,44 @@ class SessionQuestionTypist {
         _press(sessionId, _enter);
       }
     }
+  }
+
+  /// Leaves the question to talk it over: the highlight to the row reading
+  /// [rowWords] ("Chat about this"), each step seen, then Enter. That row has
+  /// no number of its own the answer rows could be counted to.
+  Future<void> chatAbout(
+    String sessionId,
+    AgentQuestionSet set,
+    String rowWords,
+  ) async {
+    if (readScreen(sessionId) == null) {
+      throw const SessionPromptRefusal('this session has no live terminal');
+    }
+    final first = set.questions.first.question;
+    await _until(
+      sessionId,
+      (rows) => _shows(rows, first) && _at(rows) == 1,
+      'the question "$first"',
+    );
+    await Future<void>.delayed(settle);
+    final deadline = DateTime.now().add(screenPatience);
+    var marked = _marked(readScreen(sessionId) ?? const []);
+    while (!(marked?.contains(rowWords) ?? false)) {
+      if (marked == null || DateTime.now().isAfter(deadline)) {
+        throw SessionPromptRefusal(
+          'the highlight did not reach "$rowWords", so nothing was chosen '
+          '— check the terminal',
+        );
+      }
+      _press(sessionId, _down);
+      final before = marked;
+      final stepDeadline = DateTime.now().add(stepPatience);
+      while (marked == before && DateTime.now().isBefore(stepDeadline)) {
+        await Future<void>.delayed(poll);
+        marked = _marked(readScreen(sessionId) ?? const []);
+      }
+    }
+    _press(sessionId, _enter);
   }
 
   void _press(String sessionId, String keys) {
@@ -182,7 +220,8 @@ class SessionQuestionTypist {
     if (marked == null) return null;
     final number = RegExp(r'^(\d+)\.').firstMatch(marked);
     if (number != null) return int.parse(number[1]!);
-    if (marked == 'Next') return _nextRow(rows);
+    // 2.1.274 drew `Next`; 2.1.287 draws `Submit` in its place.
+    if (marked == 'Next' || marked == 'Submit') return _nextRow(rows);
     return null;
   }
 

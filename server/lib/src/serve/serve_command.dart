@@ -1309,6 +1309,7 @@ Future<int> runServe(
     speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
+  prompts.readQuestion = sessionRecordReadings.openQuestion;
   // Sessions' pictures (Stage 0 step 10), extracted from the same records.
   data.sessionMedia = SessionMedia(
     lookUp: sessionTranscripts.lookUp,

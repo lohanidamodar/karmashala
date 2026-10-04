@@ -157,6 +157,7 @@ class RemoteQuestionAnswerRequest {
     required this.toolUseId,
     this.answers = const [],
     this.decline = false,
+    this.chat = false,
   });
 
   final String sessionId;
@@ -166,11 +167,16 @@ class RemoteQuestionAnswerRequest {
   /// Dismiss the question without answering it.
   final bool decline;
 
+  /// Leave the question to talk it over ("Chat about this").
+  final bool chat;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'toolUseId': toolUseId,
     if (decline)
       'decline': true
+    else if (chat)
+      'chat': true
     else
       'answers': [for (final a in answers) a.toJson()],
   };
@@ -182,17 +188,19 @@ class RemoteQuestionAnswerRequest {
       throw const ProtocolException('bad question answer');
     }
     final decline = json['decline'] == true;
+    final chat = !decline && json['chat'] == true;
     final answers = json['answers'];
-    if (!decline && (answers is! List || answers.isEmpty)) {
+    if (!decline && !chat && (answers is! List || answers.isEmpty)) {
       throw const ProtocolException(
-        'a question answer needs answers or a decline',
+        'a question answer needs answers, a decline or a chat',
       );
     }
     return RemoteQuestionAnswerRequest(
       sessionId: sessionId,
       toolUseId: toolUseId,
       decline: decline,
-      answers: decline
+      chat: chat,
+      answers: decline || chat
           ? const []
           : [
               for (final a in answers! as List)

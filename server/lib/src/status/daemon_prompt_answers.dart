@@ -157,9 +157,15 @@ class DaemonPromptAnswers implements PromptTerminals {
   AgentStatusReport? statusOf(String sessionId) =>
       status.statusOf(sessionId)?.report;
 
+  /// Reads [sessionId]'s open question off its agent's record, for one no
+  /// hook carried: a probe has none, and a screen that moved after the hook
+  /// makes the grid the status's word, which drops the hook's question.
+  Future<AgentQuestionSet?> Function(String sessionId)? readQuestion;
+
   @override
   Future<AgentQuestionSet?> openQuestion(String sessionId) async =>
-      status.statusOf(sessionId)?.question;
+      status.statusOf(sessionId)?.question ??
+      await readQuestion?.call(sessionId);
 
   @override
   List<String>? screen(String sessionId) =>

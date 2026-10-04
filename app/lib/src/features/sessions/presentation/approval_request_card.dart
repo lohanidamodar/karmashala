@@ -377,6 +377,14 @@ class _QuestionOr extends ConsumerWidget {
       chatOpenQuestionProvider(sessionId).select((q) => q.value),
     );
     if (question == null) return orElse;
+    final agentId = ref
+        .read(agentSessionStatusProvider(sessionId))
+        .asData
+        ?.value
+        .agentId;
+    final chatRow = agentId == null
+        ? null
+        : ref.read(agentRegistryProvider).byId(agentId)?.questions?.chatRow;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -384,7 +392,8 @@ class _QuestionOr extends ConsumerWidget {
         QuestionPromptCard(
           agentName: agentName,
           question: question,
-          onAnswer: (answers, {decline = false}) async {
+          chatLabel: chatRow,
+          onAnswer: (answers, {decline = false, chat = false}) async {
             final said = _AnswerSaid.of(context);
             try {
               await ref.read(chatQuestionAnswerProvider)(
@@ -393,12 +402,19 @@ class _QuestionOr extends ConsumerWidget {
                   toolUseId: question.toolUseId,
                   answers: answers,
                   decline: decline,
+                  chat: chat,
                 ),
               );
             } on RemoteApiRefusal catch (refusal) {
               throw GatewayException(refusal.message);
             }
-            said?.say(decline ? 'Declined.' : 'Answered.');
+            said?.say(
+              decline
+                  ? 'Declined.'
+                  : chat
+                  ? 'Left to talk over.'
+                  : 'Answered.',
+            );
           },
         ),
         _TerminalLink(sessionId: sessionId),
