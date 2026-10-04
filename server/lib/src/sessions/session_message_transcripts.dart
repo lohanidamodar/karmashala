@@ -9,6 +9,7 @@ import 'package:agent_cli/stream.dart'
         FileEditRecord,
         ToolActivity,
         boundedToolEdits,
+        askedQuestionsIn,
         boundedToolOutput,
         proposedPlanIn,
         toolSubjectEntryFor;
@@ -138,6 +139,7 @@ class SessionMessageTranscriptSource {
         edits: edits,
         editsTruncated: editsCut || json[kEditsTruncatedKey] == true,
         proposedPlan: proposedPlanIn(json['rawInput']),
+        questions: askedQuestionsIn(json['rawInput']),
       ),
       pendingId: open ? (_string(json['toolCallId']) ?? row.id) : null,
     );

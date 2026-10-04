@@ -548,6 +548,37 @@ void main() {
       },
     );
 
+    testWidgets('an answered question shows each question with its pick', (
+      tester,
+    ) async {
+      final asked = ChatMessage(
+        role: 'tool',
+        text: 'AskUserQuestion',
+        tool: const ToolActivity(
+          name: 'AskUserQuestion',
+          output: 'answered',
+          questions: [
+            AskedQuestion(question: 'Which colour?', answer: 'Blue'),
+            AskedQuestion(question: 'Which fruits?', answer: 'Apple, Pear'),
+          ],
+        ),
+      );
+      expect(
+        transcriptRows([
+          tool('Read'),
+          asked,
+          tool('Read'),
+        ]).map((r) => (r.from, r.to)),
+        [(0, 1), (1, 2), (2, 3)],
+      );
+      await tester.pumpWidget(view([tool('Read'), asked, tool('Edit')]));
+      await tester.pumpAndSettle();
+      expect(find.text('Which colour?'), findsOneWidget);
+      expect(find.text('Blue'), findsOneWidget);
+      expect(find.text('Which fruits?'), findsOneWidget);
+      expect(find.text('Apple, Pear'), findsOneWidget);
+    });
+
     testWidgets('a live line whose call is named by its subject says it once', (
       tester,
     ) async {

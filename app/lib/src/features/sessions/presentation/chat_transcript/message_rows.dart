@@ -110,6 +110,12 @@ class _ChatMessageTile extends StatelessWidget {
                   !message.pending &&
                   message.tool!.output != null =>
             _AnsweredPlanCard(tool: message.tool!),
+          // Questions put to the person, once answered: each with its pick.
+          _
+              when (message.tool?.questions.isNotEmpty ?? false) &&
+                  !message.pending &&
+                  message.tool!.output != null =>
+            _AnsweredQuestionsCard(questions: message.tool!.questions),
           // Claude Code records an interruption as a user message; it is the
           // tool's note, not the person's words, so it is no bubble.
           'user' when _interruptionNote.hasMatch(message.text.trim()) =>
@@ -336,6 +342,61 @@ class _AnsweredPlanCard extends StatelessWidget {
           ),
           const SizedBox(height: Insets.sm),
           MarkdownMessage(tool.proposedPlan!),
+        ],
+      ),
+    );
+  }
+}
+
+/// The questions the agent asked, after the person answered: each question
+/// over the answer it got, or "answered in a message" when none came back
+/// here.
+class _AnsweredQuestionsCard extends StatelessWidget {
+  const _AnsweredQuestionsCard({required this.questions});
+
+  final List<AskedQuestion> questions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return TranscriptTurnFrame(
+      edge: scheme.outlineVariant,
+      padding: const EdgeInsets.all(Insets.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectionContainer.disabled(
+            child: Row(
+              children: [
+                Icon(
+                  AppIcons.question,
+                  size: Chrome.iconSmall,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: Insets.xs),
+                Text(
+                  questions.length == 1
+                      ? 'Asked you a question'
+                      : 'Asked you ${questions.length} questions',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final q in questions) ...[
+            const SizedBox(height: Insets.sm),
+            Text(q.question, style: theme.textTheme.bodyMedium),
+            Text(
+              q.answer ?? 'Answered in a message',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: q.answer == null ? null : FontWeight.w600,
+                color: q.answer == null ? scheme.onSurfaceVariant : null,
+              ),
+            ),
+          ],
         ],
       ),
     );

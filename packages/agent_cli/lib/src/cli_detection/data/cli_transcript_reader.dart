@@ -818,6 +818,7 @@ void _parseClaudeLine(
             output: _claudeResultText(part['content']),
             isError: isError,
             edits: written == null ? null : [written],
+            answers: answersIn(json['toolUseResult']),
           );
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
@@ -1031,6 +1032,7 @@ void _attachResult(
   required String output,
   required bool isError,
   List<FileEditRecord>? edits,
+  Map<String, String>? answers,
 }) {
   if (id is! String) return;
   final index = pending.remove(id);
@@ -1050,6 +1052,7 @@ void _attachResult(
       outputTruncated: truncated,
       isError: isError,
       edits: edits,
+      answers: answers,
     ),
     subagent: row.subagent,
     // Answered, so it is no longer outstanding — and this is the only place

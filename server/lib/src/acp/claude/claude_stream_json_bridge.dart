@@ -1271,6 +1271,14 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           answers != null &&
           answers.isNotEmpty &&
           answers.values.every((a) => a is String)) {
+        // The call keeps what was picked, for the chat to show.
+        if (_tools.containsKey(id)) {
+          _update({
+            'sessionUpdate': 'tool_call_update',
+            'toolCallId': id,
+            'rawInput': {...input, 'answers': answers},
+          });
+        }
         return {
           'behavior': 'allow',
           'updatedInput': {...input, 'answers': answers},

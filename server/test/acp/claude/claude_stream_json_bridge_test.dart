@@ -910,6 +910,14 @@ void main() {
       });
       expect(rt.openQuestion, isNull);
       await rt.awaitTurn();
+      // The call keeps every question with what was picked.
+      final call = rows()
+          .map(SessionMessageTranscriptSource.project)
+          .singleWhere((m) => m.tool?.questions.isNotEmpty ?? false);
+      expect(call.tool!.questions.map((q) => (q.question, q.answer)), [
+        ('Which fruit?', 'Pear'),
+        ('Which fruits?', 'Apple, Plum'),
+      ]);
       await rt.stop();
     });
 

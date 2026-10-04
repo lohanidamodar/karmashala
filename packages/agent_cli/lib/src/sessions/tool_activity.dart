@@ -31,6 +31,7 @@ class ToolActivity {
     this.edits = const [],
     this.editsTruncated = false,
     this.proposedPlan,
+    this.questions = const [],
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -85,6 +86,10 @@ class ToolActivity {
   /// (Claude's `ExitPlanMode` input `plan`). Null for every other call.
   final String? proposedPlan;
 
+  /// The questions this call put to the person, each with the answer once
+  /// one is known (Claude's `AskUserQuestion`). Empty for every other call.
+  final List<AskedQuestion> questions;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -106,6 +111,8 @@ class ToolActivity {
     if (edits.isNotEmpty) 'edits': [for (final edit in edits) edit.toJson()],
     if (editsTruncated) 'editsTruncated': true,
     'proposedPlan': ?proposedPlan,
+    if (questions.isNotEmpty)
+      'questions': [for (final q in questions) q.toJson()],
   };
 
   /// Throws [FormatException] when `name` is not a string; any other field
@@ -135,18 +142,26 @@ class ToolActivity {
           : const [],
       editsTruncated: json['editsTruncated'] == true,
       proposedPlan: _stringOrNull(json['proposedPlan']),
+      questions: switch (json['questions']) {
+        final List<Object?> list => [
+          for (final q in list) ?AskedQuestion.fromJson(q),
+        ],
+        _ => const [],
+      },
     );
   }
 
   static String? _stringOrNull(Object? value) => value is String ? value : null;
 
   /// This call with the answer it eventually got. [edits] replaces the call's
-  /// own when the result recorded better ones; null keeps them.
+  /// own when the result recorded better ones; null keeps them. [answers]
+  /// (question text to answer) answer [questions].
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
     bool isError = false,
     List<FileEditRecord>? edits,
+    Map<String, String>? answers,
   }) {
     final (kept, cut) = edits == null
         ? (this.edits, editsTruncated)
@@ -163,8 +178,68 @@ class ToolActivity {
       edits: kept,
       editsTruncated: cut,
       proposedPlan: proposedPlan,
+      questions: answers == null
+          ? questions
+          : [
+              for (final q in questions)
+                AskedQuestion(
+                  question: q.question,
+                  answer: answers[q.question] ?? q.answer,
+                ),
+            ],
     );
   }
+}
+
+/// One question a call put to the person, and the answer once known.
+class AskedQuestion {
+  const AskedQuestion({required this.question, this.answer});
+
+  final String question;
+  final String? answer;
+
+  Map<String, Object?> toJson() => {'question': question, 'answer': ?answer};
+
+  static AskedQuestion? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final question = json['question'];
+    if (question is! String) return null;
+    final answer = json['answer'];
+    return AskedQuestion(
+      question: question,
+      answer: answer is String ? answer : null,
+    );
+  }
+}
+
+/// The questions a call's [input] asks (`questions[].question`), each with
+/// its answer from the input's own `answers` when it carries them.
+List<AskedQuestion> askedQuestionsIn(Object? input) {
+  if (input is! Map) return const [];
+  final questions = input['questions'];
+  if (questions is! List) return const [];
+  final answers = input['answers'];
+  return [
+    for (final q in questions)
+      if (q is Map && q['question'] is String)
+        AskedQuestion(
+          question: q['question'] as String,
+          answer: answers is Map && answers[q['question']] is String
+              ? answers[q['question']] as String
+              : null,
+        ),
+  ];
+}
+
+/// A result's `answers` map, as question text to answer; null without one.
+Map<String, String>? answersIn(Object? result) {
+  if (result is! Map) return null;
+  final answers = result['answers'];
+  if (answers is! Map) return null;
+  return {
+    for (final MapEntry(:key, :value) in answers.entries)
+      if (key is String && value is String) key: value,
+  };
 }
 
 /// The most of one tool result the transcript keeps.
@@ -274,6 +349,7 @@ ToolActivity toolActivityFor(String name, Object? input) {
     edits: edits,
     editsTruncated: cut,
     proposedPlan: proposedPlanIn(input),
+    questions: askedQuestionsIn(input),
   );
 }
 
