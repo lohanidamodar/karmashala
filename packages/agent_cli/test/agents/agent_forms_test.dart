@@ -61,6 +61,34 @@ void main() {
     expect(registry.formLabelOf('roverCli'), 'roverCli');
   });
 
+  group('forms that are one program', () {
+    // A chat form run by the terminal form's own binary, as Claude's is once
+    // it speaks stream-json.
+    const sameBinary = AgentDescriptor(
+      id: 'claude-chat',
+      displayName: 'Claude chat',
+      binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+      acp: AcpLaunchSpec(),
+      chatFormOf: AgentIds.claudeCode,
+    );
+    final composed = AgentRegistry([
+      builtInAgentAdapters.firstWhere((a) => a.id == AgentIds.claudeCode),
+      const DataOnlyAgentAdapter(sameBinary),
+    ]);
+
+    test('a chat form on the terminal form\'s binary is the same program, '
+        'both ways', () {
+      expect(composed.sameProgramFormsOf(AgentIds.claudeCode), ['claude-chat']);
+      expect(composed.sameProgramFormsOf('claude-chat'), [AgentIds.claudeCode]);
+    });
+
+    test('a chat form on a binary of its own is a different program', () {
+      expect(registry.sameProgramFormsOf(AgentIds.antigravity), isEmpty);
+      expect(registry.sameProgramFormsOf(AgentIds.antigravityAcp), isEmpty);
+      expect(registry.sameProgramFormsOf(AgentIds.grok), isEmpty);
+    });
+  });
+
   test('an unknown id folds to itself and has no forms', () {
     final unknown = registry.formsOf('roverCli');
     expect(unknown.agentId, 'roverCli');

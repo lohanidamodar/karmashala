@@ -94,6 +94,25 @@ class AgentRegistry {
     return '${forms.displayName} · ${AgentRunForm.chat.label}';
   }
 
+  /// The other forms of [id]'s agent that run the same binary as [id] — one
+  /// program spoken to two ways — so a path pinned for one is the other's.
+  List<String> sameProgramFormsOf(String id) {
+    final own = byId(id);
+    if (own == null) return const [];
+    final agentId = foldedIdOf(id);
+    bool same(List<String> a, List<String> b) =>
+        a.join('\u0000') == b.join('\u0000');
+    return [
+      for (final d in descriptors)
+        if (d.id != id &&
+            (d.id == agentId || d.chatFormOf == agentId) &&
+            foldedIdOf(d.id) == agentId &&
+            same(d.binaries.windows, own.binaries.windows) &&
+            same(d.binaries.posix, own.binaries.posix))
+          d.id,
+    ];
+  }
+
   /// Every agent once, its forms folded together, in registry order.
   List<AgentForms> get folded => [
     for (final adapter in adapters)

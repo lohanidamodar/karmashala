@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart' show ImportedSession;
@@ -62,6 +63,7 @@ class DataService {
     String Function()? newId,
     bool Function(String sessionId)? runsSession,
     bool Function(String path)? opens,
+    AgentRegistry agents = AgentRegistry.builtIn,
   }) : _database = database,
        _now = clock ?? _utcNow {
     final filing = FilingLookup(database);
@@ -78,7 +80,13 @@ class DataService {
     _quickAccess = QuickAccessHandler(database);
     _pairings = PairingsHandler(database);
     _sessions = SessionsHandler(database, _now, runs: runsSession);
-    _hosts = HostsHandler(database, _now, opens: opens);
+    _hosts = HostsHandler(
+      database,
+      _now,
+      opens: opens,
+      agents: agents,
+      newId: newId ?? newUuid,
+    );
     _evidence = EvidenceHandler(database, _now);
     _acpAgents = AcpAgentsHandler(database, _now, newId ?? newUuid);
     conversations = ConversationsHandler(database, _Clock(_now));
