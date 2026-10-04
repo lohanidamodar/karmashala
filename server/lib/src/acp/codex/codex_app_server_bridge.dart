@@ -892,6 +892,10 @@ final class CodexAppServerBridge implements AcpTransport {
     if (login != null && !login.isCompleted) {
       login.complete({'success': false, 'error': 'Codex exited'});
     }
+    final turn = _turn;
+    if (turn != null && !turn.isCompleted) {
+      turn.completeError(const AcpPeerClosed('turn/start'));
+    }
     // The client's own peer fails its open prompt when its stream ends, as
     // it would for an ACP agent that died.
     unawaited(_client.close());
