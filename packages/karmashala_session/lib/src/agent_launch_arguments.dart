@@ -15,6 +15,7 @@ List<String> agentPaneArguments(
   String? forkSessionId,
   String? prompt,
   String? systemPromptFilePath,
+  String? systemPromptText,
   String? extraDirectoryPath,
   String? mcpUrl,
   String? mcpConfigPath,
@@ -31,6 +32,7 @@ List<String> agentPaneArguments(
     ...?launch?.model.argumentsFor(modelId),
     ...?launch?.extraDirectory.argumentsFor(extraDirectoryPath),
     ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
+    ...?launch?.systemPromptFile.argumentsForText(systemPromptText),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),

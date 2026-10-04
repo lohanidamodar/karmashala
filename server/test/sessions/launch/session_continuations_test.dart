@@ -15,7 +15,7 @@ import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/data/conversations_handler.dart'
     show TranscriptStores;
 import 'package:karmashala_host/src/mcp/tools/checkout_reach.dart';
-import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
+import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/sessions/launch/session_continuations.dart';
 import 'package:karmashala_session/events.dart';
@@ -121,8 +121,10 @@ void main() {
         newId: () => 'new-${++ids}',
         hostEnvironment: const {},
         environmentOf: rows.environment,
-        handoffFiles: HandoffPacketFiles(
-          Directory('${temp.path}${Platform.pathSeparator}handoff'),
+        handoffs: SessionHandoffs(
+          dao: SessionHandoffDao(database),
+          root: Directory('${temp.path}${Platform.pathSeparator}handoff'),
+          now: () => t0,
         ),
         // These cases read the prompt off argv; how a Windows-native launch
         // carries a long one is wsl_hosted_launch_test's.
@@ -234,21 +236,22 @@ void main() {
   });
 
   test(
-    'handoff to an agent that takes a file hands the packet over as one',
+    'handoff to an agent that takes a system prompt hands the packet over as '
+    'one, inline where the command line carries it',
     () async {
-      final started = await continuations.handoff(
+      await continuations.handoff(
         sessionId: 's1',
         targetInstallationId: 'a1',
         instruction: 'finish the cache',
       );
-      expect(pty.started.last.argv, contains('--append-system-prompt-file'));
-      expect(pty.started.last.argv.last, contains('finish the cache'));
+      final argv = pty.started.last.argv;
+      final at = argv.indexOf('--append-system-prompt');
+      expect(at, isNot(-1));
+      expect(argv[at + 1], contains('I cached the totals.'));
+      expect(argv.last, contains('finish the cache'));
       expect(
-        File(
-          '${temp.path}${Platform.pathSeparator}handoff'
-          '${Platform.pathSeparator}handoff-${started.sessionId}.md',
-        ).readAsStringSync(),
-        contains('I cached the totals.'),
+        Directory('${temp.path}${Platform.pathSeparator}handoff').existsSync(),
+        isFalse,
       );
     },
   );

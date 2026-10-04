@@ -51,4 +51,16 @@ void main() {
     );
     expect(argv, isNot(contains('--add-dir')));
   });
+
+  test('a packet the command line carries rides inline, before the prompt', () {
+    final argv = agentPaneArguments(
+      registry.byId(AgentIds.claudeCode),
+      PermissionSelection.empty,
+      systemPromptText: '# brief\nline two',
+      prompt: 'Carry on.',
+    );
+    final at = argv.indexOf('--append-system-prompt');
+    expect(argv[at + 1], '# brief\nline two');
+    expect(argv.last, 'Carry on.');
+  });
 }

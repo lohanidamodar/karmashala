@@ -71,8 +71,10 @@ bool isCarriedPacket(String text, String? packet) {
   }
   if (said == kSwitchInstruction) return true;
   return said.startsWith('# Handed off from ') ||
+      said.startsWith('Your brief for this session is in the file ') ||
+      // As sessions before the handoff store were handed theirs: the packet
+      // as a brief file, or typed through a prompt file.
       said.startsWith('Your handoff brief for this session is the file ') ||
-      // The packet typed through a prompt file, as a non-file agent gets it.
       (said.startsWith('My opening message to you is in the file ') &&
           said.contains('handoff'));
 }

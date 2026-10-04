@@ -184,6 +184,7 @@ class AgentSystemPromptFileSupport {
   const AgentSystemPromptFileSupport.append(
     this.token, {
     required this.evidence,
+    this.textToken = '',
   }) : isSupported = true,
        wasChecked = true;
 
@@ -191,18 +192,32 @@ class AgentSystemPromptFileSupport {
   /// that says so.
   const AgentSystemPromptFileSupport.absent({required this.evidence})
     : token = '',
+      textToken = '',
       isSupported = false,
       wasChecked = true;
 
   /// Nobody looked. **The default**, and never reported as an absence.
   const AgentSystemPromptFileSupport.unchecked()
     : token = '',
+      textToken = '',
       evidence = '',
       isSupported = false,
       wasChecked = false;
 
   /// The option itself, e.g. `--append-system-prompt-file`. Empty otherwise.
   final String token;
+
+  /// The option taking the same text inline, e.g. `--append-system-prompt`,
+  /// for a command line that carries it whole. Empty when there is none.
+  final String textToken;
+
+  bool get takesText => isSupported && textToken.isNotEmpty;
+
+  /// The arguments that hand this agent [text] inline, or nothing.
+  List<String> argumentsForText(String? text) =>
+      takesText && text != null && text.isNotEmpty
+      ? [textToken, text]
+      : const [];
 
   /// Where this was verified. Empty exactly when nobody looked.
   final String evidence;

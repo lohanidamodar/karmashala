@@ -12,6 +12,7 @@ export 'src/store/session_agent_span_dao.dart';
 export 'src/store/session_dao.dart';
 export 'src/store/session_delegation_dao.dart';
 export 'src/store/session_event_dao.dart';
+export 'src/store/session_handoff_dao.dart';
 export 'src/store/session_message_dao.dart';
 export 'src/store/session_placement.dart';
 export 'src/store/session_queue_dao.dart';

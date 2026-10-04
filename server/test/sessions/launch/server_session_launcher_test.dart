@@ -11,7 +11,9 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/data.dart' show DataService;
-import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
+import 'package:karmashala_host/src/sessions/launch/handoff_routes.dart'
+    show kPosixArgvTextLimit;
+import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
@@ -89,8 +91,10 @@ void main() {
           LaunchSettings.parse(database.readMetadata('settings.v1')),
       hasUsableLogin: (_) async => usableLogin,
       vaultNames: () => vault,
-      handoffFiles: HandoffPacketFiles(
-        Directory('${temp.path}${Platform.pathSeparator}handoff'),
+      handoffs: SessionHandoffs(
+        dao: SessionHandoffDao(database),
+        root: Directory('${temp.path}${Platform.pathSeparator}handoff'),
+        now: () => t0,
       ),
       links: SessionRepositoryDao(database),
       openAgent: openAgent,
@@ -473,7 +477,11 @@ void main() {
     openAgent = (launch, columns, rows) async => onBox.add(launch);
     launches = build();
     final started = await launches.start(
-      const SessionStartSpec(repositoryId: 'r9', installationId: 'a9', title: 't'),
+      const SessionStartSpec(
+        repositoryId: 'r9',
+        installationId: 'a9',
+        title: 't',
+      ),
     );
     expect(started.launch?.sshHostId, 'h1');
     expect(started.launch?.sessionId, 'new-1');
@@ -487,7 +495,11 @@ void main() {
       'in words and its row does not claim to run', () async {
     await expectLater(
       launches.start(
-        const SessionStartSpec(repositoryId: 'r9', installationId: 'a9', title: 't'),
+        const SessionStartSpec(
+          repositoryId: 'r9',
+          installationId: 'a9',
+          title: 't',
+        ),
       ),
       throwsA(isA<StateError>()),
     );
@@ -495,7 +507,8 @@ void main() {
     expect(pty.started, isEmpty);
   });
 
-  test('a packet travels as a file to an agent that takes one', () async {
+  test('a packet the command line carries rides inline to an agent that takes '
+      'one, and no file is written', () async {
     await launches.start(
       const SessionStartSpec(
         repositoryId: 'r1',
@@ -505,11 +518,32 @@ void main() {
         systemPrompt: 'THE PACKET',
       ),
     );
+    expect(argv(), contains('--append-system-prompt THE PACKET'));
+    expect(argv(), isNot(contains('--append-system-prompt-file')));
+    expect(
+      Directory('${temp.path}${Platform.pathSeparator}handoff').existsSync(),
+      isFalse,
+    );
+    expect(pty.started.last.argv.last, 'do it');
+  });
+
+  test('a packet too long for the command line travels as a file in the '
+      'session\'s temp folder', () async {
+    final packet = 'x' * (kPosixArgvTextLimit + 1);
+    await launches.start(
+      SessionStartSpec(
+        repositoryId: 'r1',
+        installationId: 'a1',
+        title: 't',
+        prompt: 'do it',
+        systemPrompt: packet,
+      ),
+    );
     final file = File(
       '${temp.path}${Platform.pathSeparator}handoff'
-      '${Platform.pathSeparator}handoff-new-1.md',
+      '${Platform.pathSeparator}new-1${Platform.pathSeparator}system-prompt.md',
     );
-    expect(file.readAsStringSync(), 'THE PACKET');
+    expect(file.readAsStringSync(), packet);
     expect(argv(), contains('--append-system-prompt-file ${file.path}'));
     expect(pty.started.last.argv.last, 'do it');
   });

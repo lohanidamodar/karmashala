@@ -22,6 +22,11 @@ class TitleSync {
   /// answer, which a row's recorded status can lag behind.
   final bool Function(Session row) isRunning;
 
+  /// Whether row's agent was pointed at a file for its opening message, so
+  /// its own name for the conversation describes the pointer. Set by the
+  /// server once its handoffs exist.
+  bool Function(Session row) openedByPointer = _nowhere;
+
   /// Rows renamed, over this sync's life.
   int renames = 0;
 
@@ -59,7 +64,7 @@ class TitleSync {
   bool _waitingForAName(Session row) {
     // Recorded on the row, not inferred in memory, or a restart makes every
     // title look like a person's.
-    if (row.titleByUser) return false;
+    if (row.titleByUser || openedByPointer(row)) return false;
     final title = row.title.trim();
     if (isPlaceholderSessionTitle(title)) return true;
     for (final descriptor in agents.descriptors) {

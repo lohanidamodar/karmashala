@@ -44,6 +44,7 @@ import 'package:karmashala_session_engine/store.dart'
         SessionDelegationDao,
         ImportedSessionDao,
         SessionDao,
+        SessionHandoffDao,
         SessionAgentSpanDao,
         SessionMessageDao,
         SessionQueueDao,
@@ -68,8 +69,9 @@ import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
 import '../sessions/launch/conversation_presence.dart';
-import '../sessions/launch/handoff_packet_files.dart';
+import '../sessions/launch/handoff_delivery.dart';
 import '../sessions/launch/launch_settings.dart';
+import '../sessions/launch/session_handoffs.dart';
 import '../sessions/launch/server_session_launcher.dart';
 import '../sessions/launch/server_session_work.dart';
 import '../sessions/launch/session_continuations.dart';
@@ -956,6 +958,13 @@ Future<int> runServe(
     for (final runtime in registry.acpRuntimes)
       if (!runtime.lifecycle.hasEnded) runtime.sessionId,
   };
+  // The texts a launch hands its agent: rows, and temp files only while used.
+  final handoffs = SessionHandoffs(
+    dao: SessionHandoffDao(database),
+    root: SessionHandoffs.rootFor(dataDirectory),
+    now: () => DateTime.now().toUtc(),
+    legacy: Directory(p.join(dataDirectory, 'handoff')),
+  );
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,
@@ -980,9 +989,7 @@ Future<int> runServe(
           localHostEnvironment(DateTime.now().toUtc()),
     ),
     vaultNames: () => {for (final name in envVault.names) name.name},
-    handoffFiles: HandoffPacketFiles(
-      Directory(p.join(dataDirectory, 'handoff')),
-    ),
+    handoffs: handoffs,
     links: SessionRepositoryDao(database),
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
@@ -1227,6 +1234,33 @@ Future<int> runServe(
     settled: turnSettlement.settled,
   );
   sessionQueue.start();
+  final handoffDelivery = HandoffDelivery.forServer(
+    handoffs: handoffs,
+    status: prompts.status,
+    turns: turnSettlement,
+    deliver: (sessionId, text) => sessionInput.deliverNow(sessionId, text),
+    queue: sessionQueue,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  handoffs.onPending = handoffDelivery.watch;
+  sessionSync.titles.openedByPointer = (row) =>
+      handoffs.openedByPointer(row.id);
+  Set<String> liveSessions() => {
+    for (final row in sessionRows.getClaimingLive()) row.id,
+  };
+  final legacyHandoffs = handoffs.sweepLegacy(live: liveSessions());
+  final sweptHandoffs = handoffs.sweep(live: liveSessions());
+  if (legacyHandoffs + sweptHandoffs > 0) {
+    errSink.writeln(
+      'karmashala_host: handoffs: swept $legacyHandoffs old file(s) and '
+      '$sweptHandoffs row(s) or folder(s)',
+    );
+  }
+  handoffDelivery.start();
+  final handoffSweep = Timer.periodic(
+    const Duration(hours: 1),
+    (_) => handoffs.sweep(live: liveSessions()),
+  );
   // A process starting or ending tells what waits for it: a start-up is a
   // turn whose end delivers; an end leaves nothing running it.
   final queueEnds = server.lifecycle.events.listen((event) {
@@ -1274,6 +1308,8 @@ Future<int> runServe(
     // An ACP session's transcript is the rows its runtime wrote (C3).
     messages: SessionMessageTranscriptSource(sessionMessages),
     servesFromMessages: speaksAcp,
+    // A pointer opening reads as the message it stood for.
+    openingBehindPointer: handoffs.openingBehindPointer,
     // A session that switched agent is read span by span.
     spans: AgentSpanReaders(
       spansOf: (sessionId) {
@@ -1641,6 +1677,8 @@ Future<int> runServe(
   await attention.close();
   await queueEnds.cancel();
   await delegations.close();
+  handoffSweep.cancel();
+  await handoffDelivery.close();
   await sessionQueue.close();
   await turnSettlement.close();
   await status.close();

@@ -19,7 +19,7 @@ import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/data/conversations_handler.dart'
     show TranscriptStores;
 import 'package:karmashala_host/src/mcp/tools/checkout_reach.dart';
-import 'package:karmashala_host/src/sessions/launch/handoff_packet_files.dart';
+import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/sessions/launch/session_continuations.dart';
 import 'package:karmashala_host/src/sessions/session_queue.dart';
@@ -164,8 +164,10 @@ void main() {
         newId: () => 'new-${++ids}',
         hostEnvironment: const {},
         environmentOf: checkoutRows.environment,
-        handoffFiles: HandoffPacketFiles(
-          Directory('${temp.path}${Platform.pathSeparator}handoff'),
+        handoffs: SessionHandoffs(
+          dao: SessionHandoffDao(database),
+          root: Directory('${temp.path}${Platform.pathSeparator}handoff'),
+          now: () => t0,
         ),
         acpRuntimes: (start) {
           acpStarts.add(start);
@@ -316,13 +318,12 @@ void main() {
     final argv = pty.started.last.argv;
     expect(argv.first, '/bin/claude');
     expect(argv.join(' '), contains('--resume conv-1'));
-    // The recap travels as a system-prompt file, the instruction as the turn:
-    // no prompt file outside the workspace for the agent to ask about.
-    expect(argv, contains('--append-system-prompt-file'));
+    // The recap travels as the system prompt — inline, as this command line
+    // carries it — and the instruction as the turn: no file for the agent to
+    // ask about.
+    expect(argv, contains('--append-system-prompt'));
     expect(argv.last, 'review them');
-    final packet = File(
-      argv[argv.indexOf('--append-system-prompt-file') + 1],
-    ).readAsStringSync();
+    final packet = argv[argv.indexOf('--append-system-prompt') + 1];
     expect(packet, contains('Tests added for the cache.'));
     expect(packet, isNot(contains('I cached the totals.')));
     expect(packet, contains('review them'));
@@ -338,24 +339,26 @@ void main() {
   test('an agent that names its conversation after it starts keeps it '
       'in its span, and a switch back to it resumes it', () async {
     await launches.resume('s1');
-    await continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+    await continuations.switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'c1',
+    );
     // Codex announces its own id only once it runs.
     rows().updateExternalSessionId('s1', 'codex-conv');
     expect(spans.forSession('s1').last.externalSessionId, 'codex-conv');
 
-    await reading(const []).switchAgent(
-      sessionId: 's1',
-      targetInstallationId: 'a1',
-    );
-    expect(
-      spans.forSession('s1').map((s) => s.externalSessionId),
-      ['conv-1', 'codex-conv', 'conv-1'],
-    );
+    await reading(
+      const [],
+    ).switchAgent(sessionId: 's1', targetInstallationId: 'a1');
+    expect(spans.forSession('s1').map((s) => s.externalSessionId), [
+      'conv-1',
+      'codex-conv',
+      'conv-1',
+    ]);
 
-    await reading(const []).switchAgent(
-      sessionId: 's1',
-      targetInstallationId: 'c1',
-    );
+    await reading(
+      const [],
+    ).switchAgent(sessionId: 's1', targetInstallationId: 'c1');
     expect(pty.started.last.argv.first, '/bin/codex');
     expect(pty.started.last.argv, contains('codex-conv'));
     expect(rows().getById('s1')!.externalSessionId, 'codex-conv');
@@ -445,10 +448,9 @@ void main() {
     rows().updateExternalSessionId('s1', 's1');
     await launches.resume('s1');
 
-    final started = await reading(const []).switchAgent(
-      sessionId: 's1',
-      targetInstallationId: 'a2',
-    );
+    final started = await reading(
+      const [],
+    ).switchAgent(sessionId: 's1', targetInstallationId: 'a2');
 
     expect(started.session.agentInstallationId, 'a2');
     final argv = pty.started.last.argv;
@@ -465,10 +467,9 @@ void main() {
     );
 
     // Back to the first installation: its own conversation, resumed.
-    await reading(const []).switchAgent(
-      sessionId: 's1',
-      targetInstallationId: 'a1',
-    );
+    await reading(
+      const [],
+    ).switchAgent(sessionId: 's1', targetInstallationId: 'a1');
     final back = pty.started.last.argv;
     expect(back.first, '/bin/claude');
     expect(back.join(' '), contains('--resume s1'));
@@ -519,7 +520,7 @@ void main() {
     expect(closeReasons, [SessionEndedWithoutCode.switched]);
     expect(registry.findAcp('karmashala_s3'), isNull);
     expect(pty.started.last.argv.first, '/bin/claude');
-    expect(pty.started.last.argv, contains('--append-system-prompt-file'));
+    expect(pty.started.last.argv, contains('--append-system-prompt'));
     final afterFirst = spans.forSession('s3');
     expect(afterFirst.first.firstMessageOrdinal, 0);
     expect(afterFirst.last.firstMessageOrdinal, isNull);
@@ -566,59 +567,65 @@ void main() {
     expect(targets.any((t) => t.resumesConversation), isFalse);
   });
 
-  test('a switch cancels the leaving agent\'s armed resume and says so',
-      () async {
-    await launches.resume('s1');
-    final cancelled = <(String, String)>[];
-    final started = await reading(
-      const [],
-      cancelResume: (id, reason) {
-        cancelled.add((id, reason));
-        return true;
-      },
-    ).switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+  test(
+    'a switch cancels the leaving agent\'s armed resume and says so',
+    () async {
+      await launches.resume('s1');
+      final cancelled = <(String, String)>[];
+      final started = await reading(
+        const [],
+        cancelResume: (id, reason) {
+          cancelled.add((id, reason));
+          return true;
+        },
+      ).switchAgent(sessionId: 's1', targetInstallationId: 'c1');
 
-    expect(cancelled.single.$1, 's1');
-    expect(cancelled.single.$2, contains('Claude Code'));
-    expect(started.switchNotice, contains('cancelled'));
-    expect(started.switchNotice, contains('Codex'));
-  });
+      expect(cancelled.single.$1, 's1');
+      expect(cancelled.single.$2, contains('Claude Code'));
+      expect(started.switchNotice, contains('cancelled'));
+      expect(started.switchNotice, contains('Codex'));
+    },
+  );
 
-  test('the session\'s queue is held for the whole switch and let go after',
-      () async {
-    await launches.resume('s1');
-    final events = <String>[];
-    await reading(
-      const [],
-      holdQueue: (id) => events.add('hold $id'),
-      releaseQueue: (id) => events.add('release $id'),
-    ).switchAgent(sessionId: 's1', targetInstallationId: 'c1');
-    expect(events, ['hold s1', 'release s1']);
-
-    // A switch that fails lets go too.
-    pty.failWith = const PtyException('no such program');
-    events.clear();
-    await expectLater(
-      reading(
+  test(
+    'the session\'s queue is held for the whole switch and let go after',
+    () async {
+      await launches.resume('s1');
+      final events = <String>[];
+      await reading(
         const [],
         holdQueue: (id) => events.add('hold $id'),
         releaseQueue: (id) => events.add('release $id'),
-      ).switchAgent(sessionId: 's1', targetInstallationId: 'a1'),
-      throwsA(anything),
-    );
-    expect(events, ['hold s1', 'release s1']);
-  });
+      ).switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+      expect(events, ['hold s1', 'release s1']);
+
+      // A switch that fails lets go too.
+      pty.failWith = const PtyException('no such program');
+      events.clear();
+      await expectLater(
+        reading(
+          const [],
+          holdQueue: (id) => events.add('hold $id'),
+          releaseQueue: (id) => events.add('release $id'),
+        ).switchAgent(sessionId: 's1', targetInstallationId: 'a1'),
+        throwsA(anything),
+      );
+      expect(events, ['hold s1', 'release s1']);
+    },
+  );
 
   test('a handoff or fork of a switched session carries every agent\'s '
       'turns, and the CLI\'s own fork is not offered', () async {
     await launches.resume('s1');
-    await continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1');
+    await continuations.switchAgent(
+      sessionId: 's1',
+      targetInstallationId: 'c1',
+    );
     rows().updateExternalSessionId('s1', 'conv-c');
     // Back on Claude Code, which forks natively on its own.
-    await reading(const []).switchAgent(
-      sessionId: 's1',
-      targetInstallationId: 'a1',
-    );
+    await reading(
+      const [],
+    ).switchAgent(sessionId: 's1', targetInstallationId: 'a1');
     final over = reading([
       _said('user', 'make the cart faster', 'a1'),
       _said('agent', 'I cached the totals.', 'a1'),

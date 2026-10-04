@@ -27,7 +27,8 @@ import '../acp/acp_runtimes.dart';
 import '../acp/acp_session_runtime.dart';
 import '../domain/session_registry.dart';
 import '../pty/environment_spawn.dart';
-import '../sessions/launch/handoff_packet_files.dart';
+import '../sessions/launch/handoff_routes.dart';
+import '../sessions/launch/session_handoffs.dart';
 import '../sessions/launch/launch_settings.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
@@ -221,7 +222,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.hasUsableLogin,
     this.runnerFor,
     this.vaultNames,
-    this.handoffFiles,
+    this.handoffs,
     this.links,
     this.acpRuntimes,
     this.acpAuth,
@@ -273,8 +274,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// The names the server's vault sets; a name set there is never withheld.
   final Set<String> Function()? vaultNames;
 
-  /// Where a handoff packet is written for an agent that takes a file.
-  final HandoffPacketFiles? handoffFiles;
+  /// Where the texts a launch hands its agent are kept, and how they go.
+  final SessionHandoffs? handoffs;
 
   /// Records a session's checkouts beside its primary one.
   final SessionRepositoryDao? links;
@@ -401,7 +402,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         agents.assignsOwnSessionId(agentId);
     final ownId = (launch.fresh ? launch.freshConversationId : null) ?? id;
 
-    final Session session;
+    Session session;
     if (resuming != null) {
       session = resuming.copyWith(
         status: SessionStatus.running,
@@ -479,33 +480,52 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     final credentials = inherits
         ? await _credentialDecision(installation)
         : InheritedCredentialDecision.none;
-    final systemPromptPath = _systemPromptFile(
-      id,
-      launch.systemPrompt,
-      descriptor,
-      kind,
-    );
-    // A packet that could not travel as a file travels as the opening message
-    // — it ends with the instruction, so nothing is lost.
-    final typedPacket = launch.systemPrompt != null && systemPromptPath == null;
-    final prompt = acp != null
-        ? (typedPacket ? launch.systemPrompt : launch.prompt)
-        : _promptOnArgv(
+    final throughPowerShell =
+        _windows && kind != EnvironmentKind.wsl && kind != EnvironmentKind.ssh;
+    final systemPrompt = acp != null
+        ? null
+        : _systemPromptHandoff(
             id,
-            typedPacket ? launch.systemPrompt : launch.prompt,
+            launch.systemPrompt,
+            descriptor,
             kind,
-            isPacket: typedPacket,
+            throughPowerShell: throughPowerShell,
           );
-    // A prompt that went to a file is read from the data directory, which an
-    // agent that can be granted it gets, so it does not ask to leave its
-    // workspace for Karmashala's own file.
-    final handedFile =
-        acp == null &&
-        prompt != (typedPacket ? launch.systemPrompt : launch.prompt);
-    final files = handoffFiles;
-    final readableDirectory = handedFile && files != null
-        ? agentConfigPathFor(files.directory.path, kind)
-        : null;
+    // A packet the agent takes no system prompt for is its opening message —
+    // it ends with the instruction, so nothing is lost.
+    final packetAsOpening =
+        (launch.systemPrompt?.trim().isNotEmpty ?? false) &&
+        systemPrompt == null;
+    final openingText = packetAsOpening ? launch.systemPrompt : launch.prompt;
+    final openingKind = packetAsOpening
+        ? HandoffKind.packet
+        : HandoffKind.opening;
+    final hasOpening = openingText?.trim().isNotEmpty ?? false;
+    final opening = acp != null
+        ? _protocolOpening(id, openingText, openingKind)
+        : _openingHandoff(
+            id,
+            openingText,
+            openingKind,
+            descriptor,
+            kind,
+            throughPowerShell: throughPowerShell,
+            typeable: launch.surface != SessionSurface.external,
+          );
+    final prompt = opening.argv;
+    // An agent pointed at a file would name the session after the pointer;
+    // an unnamed one is named from the message instead.
+    if (resuming == null &&
+        opening.byPointer &&
+        openingText != null &&
+        isPlaceholderSessionTitle(session.title)) {
+      final named = sessionTitleFromMessage(openingText);
+      sessions.updateTitle(id, named);
+      session = session.copyWith(title: named);
+    }
+    // A file is read from the session's own temp folder, which an agent that
+    // can be granted it gets, so it does not ask to leave its workspace.
+    final readableDirectory = opening.folder;
     final newConversation = resumeId == null || resumeId.isEmpty;
     final permission = launch.followSettings
         ? agents.permissionOf(
@@ -529,7 +549,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     // A conversation the agent keeps in a service of its own is attached to,
     // not resumed: the resume would be refused and the pane would die on it.
     // Never with something to say — an attach carries no prompt.
-    final attachId = acp != null || forking || newConversation || prompt != null
+    final attachId = acp != null || forking || newConversation || hasOpening
         ? null
         : await _backgroundSessionId(
             descriptor,
@@ -547,7 +567,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             resumeSessionId: forking ? null : resumeId,
             forkSessionId: launch.forkConversationId,
             prompt: prompt,
-            systemPromptFilePath: systemPromptPath,
+            systemPromptFilePath: systemPrompt?.path,
+            systemPromptText: systemPrompt?.text,
             extraDirectoryPath: readableDirectory,
             suppressSelfUpdate: suppressUpdate,
           );
@@ -672,6 +693,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       rethrow;
     }
     settleWorktree?.call(null);
+    if (opening.pending || (systemPrompt?.pending ?? false)) {
+      handoffs?.onPending?.call(id);
+    }
     onLaunched?.call(id, agentId, directory.path);
     return HostedStart(
       session: session,
@@ -760,6 +784,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       }
       if (prompt != null && prompt.trim().isNotEmpty) {
         await runtime.send(prompt);
+        handoffs?.consume(id);
       }
       settleWorktree?.call(null);
       onLaunched?.call(id, agentId, directory.path);
@@ -853,73 +878,144 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     );
   }
 
-  /// [prompt] as it can ride on the agent's command line in [kind].
+  /// [text], [sessionId]'s opening message, as the launch hands it over.
   ///
-  /// On a Windows-native launch the command crosses PowerShell 5.1, `cmd.exe`
-  /// (npm's `.cmd` shim) and the program's argv parser, and a prompt with a
-  /// `"` splits into several arguments — Codex read `and` as a subcommand —
-  /// while one with a newline arrives as its first line. So a prompt that
-  /// fails [survivesWindowsNativeArgv] is written to a file and the agent is
-  /// told, in one plain line, to read it. Everywhere else, and for a prompt
-  /// that survives, it is returned as it is; a file that cannot be written,
-  /// or a path that would not survive either, leaves it as it was.
-  String? _promptOnArgv(
+  /// A Windows-native command line crosses PowerShell 5.1, `cmd.exe` (npm's
+  /// `.cmd` shim) and the program's argv parser: a `"` splits it, a newline
+  /// cuts it to its first line. What argv cannot carry is typed into the
+  /// composer once the agent is ready where that is lossless for it, else
+  /// written to the session's temp folder and pointed at in one plain line.
+  /// Without a store, or when a file or its path cannot be had, [text] goes
+  /// on argv as it is.
+  _Opening _openingHandoff(
     String sessionId,
-    String? prompt,
+    String? text,
+    HandoffKind handoffKind,
+    AgentDescriptor? descriptor,
     EnvironmentKind kind, {
-    required bool isPacket,
+    required bool throughPowerShell,
+    required bool typeable,
   }) {
-    final text = prompt?.trim();
-    if (text == null || text.isEmpty) return prompt;
-    final throughPowerShell =
-        _windows && kind != EnvironmentKind.wsl && kind != EnvironmentKind.ssh;
-    if (!throughPowerShell || survivesWindowsNativeArgv(text)) return prompt;
-    final files = handoffFiles;
-    if (files == null) return prompt;
-    final written = files.writePrompt(
-      sessionId: sessionId,
-      prompt: text,
-      liveSessionIds: {for (final row in sessions.getClaimingLive()) row.id},
+    final trimmed = text?.trim();
+    final store = handoffs;
+    if (trimmed == null || trimmed.isEmpty || store == null) {
+      return _Opening(text);
+    }
+    final route = openingRoute(
+      trimmed,
+      descriptor: descriptor,
+      throughPowerShell: throughPowerShell,
+      typeable: typeable,
     );
-    final path = written == null ? null : agentConfigPathFor(written, kind);
-    if (path == null) return prompt;
-    final pointer = promptFilePointer(path, isPacket: isPacket);
-    return survivesWindowsNativeArgv(pointer) ? pointer : prompt;
+    if (route == HandoffRoute.typed) {
+      store.record(sessionId, handoffKind, trimmed, route);
+      return const _Opening(null, pending: true);
+    }
+    if (route == HandoffRoute.file) {
+      final written = store.writeFile(sessionId, handoffKind, trimmed);
+      final path = written == null ? null : agentConfigPathFor(written, kind);
+      final pointer = path == null
+          ? null
+          : promptFilePointer(
+              path,
+              isPacket: handoffKind == HandoffKind.packet,
+            );
+      if (pointer != null &&
+          (!throughPowerShell || survivesWindowsNativeArgv(pointer))) {
+        store.record(sessionId, handoffKind, trimmed, route);
+        return _Opening(
+          pointer,
+          folder: agentConfigPathFor(store.folderOf(sessionId).path, kind),
+          pending: true,
+        );
+      }
+      store.consume(sessionId, kind: handoffKind);
+    }
+    store.record(sessionId, handoffKind, trimmed, HandoffRoute.argv);
+    return _Opening(text);
   }
 
-  /// The system-prompt file [text] is handed over as, spelled as the agent in
-  /// [kind] names it, or null — every null falls back to the opening message.
-  String? _systemPromptFile(
+  /// [text] as an ACP agent's first `session/prompt`, recorded until sent.
+  _Opening _protocolOpening(
+    String sessionId,
+    String? text,
+    HandoffKind handoffKind,
+  ) {
+    final trimmed = text?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) {
+      handoffs?.record(sessionId, handoffKind, trimmed, HandoffRoute.protocol);
+    }
+    return _Opening(text);
+  }
+
+  /// [text], a packet, as [descriptor]'s agent takes a system prompt — inline
+  /// where the command line carries it, else a file spelled as the agent in
+  /// [kind] names it — or null: it then travels as the opening message.
+  _SystemPrompt? _systemPromptHandoff(
     String sessionId,
     String? text,
     AgentDescriptor? descriptor,
-    EnvironmentKind kind,
-  ) {
+    EnvironmentKind kind, {
+    required bool throughPowerShell,
+  }) {
     final content = text?.trim();
-    final files = handoffFiles;
-    if (content == null || content.isEmpty || files == null) return null;
-    final support =
-        descriptor?.launch.systemPromptFile ??
-        const AgentSystemPromptFileSupport.unchecked();
-    if (!support.isSupported) return null;
-    final written = files.write(
-      sessionId: sessionId,
-      packet: content,
-      liveSessionIds: {for (final row in sessions.getClaimingLive()) row.id},
+    final store = handoffs;
+    if (content == null || content.isEmpty || store == null) return null;
+    final route = systemPromptRoute(
+      content,
+      support:
+          descriptor?.launch.systemPromptFile ??
+          const AgentSystemPromptFileSupport.unchecked(),
+      throughPowerShell: throughPowerShell,
     );
-    return written == null ? null : agentConfigPathFor(written, kind);
+    if (route == HandoffRoute.argv) {
+      store.record(
+        sessionId,
+        HandoffKind.systemPrompt,
+        content,
+        HandoffRoute.argv,
+      );
+      return _SystemPrompt(text: content);
+    }
+    if (route != HandoffRoute.file) return null;
+    final written = store.writeFile(
+      sessionId,
+      HandoffKind.systemPrompt,
+      content,
+    );
+    final path = written == null ? null : agentConfigPathFor(written, kind);
+    if (path == null) {
+      store.consume(sessionId, kind: HandoffKind.systemPrompt);
+      return null;
+    }
+    store.record(
+      sessionId,
+      HandoffKind.systemPrompt,
+      content,
+      HandoffRoute.file,
+    );
+    return _SystemPrompt(path: path, pending: true);
   }
 }
 
-/// The one plain line an agent is handed in place of a prompt written to
-/// [path] — quote-free, so it survives the Windows-native launch itself.
-///
-/// A handoff packet ([isPacket]) is the agent's whole brief and ends with what
-/// to do, so it is framed as the brief — the same standing Claude Code gives a
-/// packet appended to its system prompt — not as a document to look at.
-String promptFilePointer(String path, {required bool isPacket}) => isPacket
-    ? 'Your handoff brief for this session is the file $path. Read all of it '
-          'before doing anything else, treat it as your instructions, and '
-          'carry out what it ends with.'
-    : 'My opening message to you is in the file $path. Read all of it and '
-          'act on it exactly as if I had typed it here.';
+/// What a launch's opening message became: what rides on argv, the folder an
+/// agent pointed at a file is granted, and whether a row waits to be used.
+class _Opening {
+  const _Opening(this.argv, {this.folder, this.pending = false});
+
+  final String? argv;
+  final String? folder;
+  final bool pending;
+
+  /// Whether argv carries a pointer at a file rather than the message.
+  bool get byPointer => pending && argv != null;
+}
+
+/// How a packet rides as a system prompt: inline [text] or a file at [path].
+class _SystemPrompt {
+  const _SystemPrompt({this.text, this.path, this.pending = false});
+
+  final String? text;
+  final String? path;
+  final bool pending;
+}

@@ -820,3 +820,21 @@ void _migrateToV73(Database db) {
     'ON session_delegations (parent_session_id);',
   );
 }
+
+/// The texts a session is started with — an opening message, a handoff
+/// packet typed as one, a system prompt — held here instead of on disk, one
+/// per kind, until the launch has used them. `route` is how it went.
+void _migrateToV74(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_handoffs (
+      session_id  TEXT NOT NULL
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      kind        TEXT NOT NULL,
+      text        TEXT NOT NULL,
+      route       TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      consumed_at TEXT,
+      PRIMARY KEY (session_id, kind)
+    );
+  ''');
+}

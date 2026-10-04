@@ -30,4 +30,13 @@ void main() {
     expect(named.title, 'Nightly review');
     expect(named.byUser, isFalse);
   });
+
+  test('a message names a session by its first line', () {
+    expect(sessionTitleFromMessage('# Fix the cart\n\nMore'), 'Fix the cart');
+    expect(sessionTitleFromMessage('\n\n  make   it fast  '), 'make it fast');
+    final long = sessionTitleFromMessage('word ' * 40);
+    expect(long.length, lessThanOrEqualTo(61));
+    expect(long, endsWith('…'));
+    expect(sessionTitleFromMessage('   '), kUnnamedSessionTitle);
+  });
 }
