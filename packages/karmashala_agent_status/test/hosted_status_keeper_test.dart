@@ -150,10 +150,7 @@ void main() {
       })!;
       final asked = keeper.report(
         'row-1',
-        protocol(
-          AgentActivityStatus.awaitingApproval,
-          AgentWaitKind.question,
-        ),
+        protocol(AgentActivityStatus.awaitingApproval, AgentWaitKind.question),
         question: set,
       );
       expect(asked!.report.hasOpenQuestion, isTrue);
@@ -349,6 +346,24 @@ void main() {
       );
       expect(modal!.report.hasOpenPrompt, isTrue);
       expect(modal.report.source, AgentStatusSource.terminalGrid);
+    });
+
+    test('a turn the screen shows running well after the Stop is working, '
+        'though no hook started it', () {
+      // A background task's notice wakes the agent; no UserPromptSubmit fires.
+      keeper.track('row-1', agentId: claude.id);
+      final workingScreen = screenOf('claude-code-tui', 0.5, claude);
+      hook('Stop');
+      clock.now = clock.now.add(const Duration(milliseconds: 500));
+      expect(
+        keeper.screen('row-1', workingScreen),
+        isNull,
+        reason: 'a screen just after the Stop may not have redrawn yet',
+      );
+      clock.now = clock.now.add(const Duration(seconds: 5));
+      final woke = keeper.screen('row-1', workingScreen);
+      expect(woke!.report.status, AgentActivityStatus.working);
+      expect(woke.report.source, AgentStatusSource.terminalGrid);
     });
 
     test('a fresh hook outranks the screen, a stale one does not', () {

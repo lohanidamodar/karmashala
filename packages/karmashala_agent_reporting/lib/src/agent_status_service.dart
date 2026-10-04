@@ -119,11 +119,20 @@ class AgentStatusService {
     AgentStatusReport? grid,
     AgentStatusReport? state,
     bool screenAfterHook = false,
+    bool screenWellAfterHook = false,
   }) {
     if (hook != null) {
-      return promptAfter(hook, grid, screenAfterHook: screenAfterHook)
-          ? grid!
-          : hook;
+      if (promptAfter(hook, grid, screenAfterHook: screenAfterHook)) {
+        return grid!;
+      }
+      // A turn no hook announced (a background task's notice woke the
+      // agent): the screen shows it running well after the Stop.
+      if (screenWellAfterHook &&
+          hook.status == AgentActivityStatus.idle &&
+          grid?.status == AgentActivityStatus.working) {
+        return grid!;
+      }
+      return hook;
     }
     if (grid != null && escalates(grid)) return grid;
     if (state != null) return state;

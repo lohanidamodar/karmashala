@@ -240,6 +240,12 @@ class HostedStatusKeeper {
         grid: grid,
         // Beside a hook, a grid is only read when the screen came after it.
         screenAfterHook: hook != null && grid != null,
+        // Past a redraw's lag, so a spinner still fading is not a new turn.
+        screenWellAfterHook:
+            grid != null &&
+            since != null &&
+            tailAt != null &&
+            tailAt.difference(since) >= _redrawLag,
       );
       // The last hook, however old, before "nothing is known": the app's
       // transcript fallback is not here, and an agent that stopped says so
@@ -306,6 +312,9 @@ class HostedStatusKeeper {
         source: AgentStatusSource.none,
         observedAt: clock.nowUtc(),
       );
+
+  /// How long a TUI may take to redraw after a hook.
+  static const _redrawLag = Duration(seconds: 2);
 
   /// A hook is the agent's own word about itself; so is a report the agent
   /// sent over its protocol. A screen or state-file reading is ours.
