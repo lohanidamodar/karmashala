@@ -511,14 +511,16 @@ class AcpSessionRuntime implements ScreenSession {
     options: option.options,
   );
 
-  /// Answers the open permission request: allow with the first `allow_once`
-  /// (else `allow_always`) option, reject with `reject_once` (else
-  /// `reject_always`). Throws [SessionPromptRefusal] when none is open, when
-  /// [toolCallId] names another call, or when the agent offered no such
-  /// option. An edit waits for the before-turn checkpoint first.
+  /// Answers the open permission request: [optionId] chooses that option
+  /// exactly, its own kind deciding whether it allows; without one, allow
+  /// takes the first `allow_once` (else `allow_always`) option and reject
+  /// `reject_once` (else `reject_always`). Throws [SessionPromptRefusal] when
+  /// none is open, when [toolCallId] names another call, or when the agent
+  /// offered no such option. An edit waits for the before-turn checkpoint.
   Future<AcpPermissionAnswer> answerPermission({
     required bool approve,
     String? toolCallId,
+    String? optionId,
   }) async {
     final pending = _pending;
     if (pending == null) {
@@ -529,7 +531,19 @@ class AcpSessionRuntime implements ScreenSession {
     if (toolCallId != null && toolCallId != pending.call.toolCallId) {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
-    final option = _optionFor(pending.options, approve: approve);
+    final PermissionOption? option;
+    if (optionId != null) {
+      option = pending.options.where((o) => o.optionId == optionId).firstOrNull;
+      if (option == null) {
+        throw SessionPromptRefusal(
+          '$agentName offered no option "$optionId" for "${pending.title}"; '
+          'it offered ${pending.options.map((o) => o.name).join(', ')}',
+        );
+      }
+      approve = option.kind.allows;
+    } else {
+      option = _optionFor(pending.options, approve: approve);
+    }
     if (option == null) {
       throw SessionPromptRefusal(
         '$agentName offered no way to ${approve ? 'allow' : 'reject'} '
@@ -952,6 +966,14 @@ class AcpSessionRuntime implements ScreenSession {
         at: now,
         toolUseId: call.toolCallId,
         cwd: workingDirectory,
+        options: [
+          for (final option in options)
+            AgentToolAskOption(
+              id: option.optionId,
+              name: option.name,
+              kind: option.kind.raw,
+            ),
+        ],
       ),
       waitingSince: now,
     );

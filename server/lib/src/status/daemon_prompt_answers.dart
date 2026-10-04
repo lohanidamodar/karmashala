@@ -66,6 +66,7 @@ class DaemonPromptAnswers implements PromptTerminals {
     final answered = await runtime.answerPermission(
       approve: request.approve,
       toolCallId: request.ask?.toolUseId,
+      optionId: request.optionId,
     );
     final filed = approvalDecisionRecord(
       sessionId: request.sessionId,

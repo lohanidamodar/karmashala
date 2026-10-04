@@ -44,6 +44,7 @@ sealed class PromptAnswerRequest {
           approve: approve,
           requireOpenPrompt: json['requireOpenPrompt'] != false,
           ask: PromptAsk.fromJson(json['ask']),
+          optionId: json['optionId'] as String?,
           decidedBy: decidedBy,
           decidedBySessionId: decidedBySessionId,
         );
@@ -91,11 +92,17 @@ class ApprovalAnswerRequest extends PromptAnswerRequest {
     required this.approve,
     this.requireOpenPrompt = true,
     this.ask,
+    this.optionId,
     super.decidedBy,
     super.decidedBySessionId,
   });
 
   final bool approve;
+
+  /// One of the options the agent offered ([AgentToolAsk.options]) to choose
+  /// exactly — "allow always", "reject always" — rather than the first that
+  /// [approve] means. Its own kind then decides whether it approves.
+  final String? optionId;
 
   /// The prompt the answer was given to, as the card drew it. Null answers
   /// whatever prompt is open when it lands, as an older client's does.
@@ -106,6 +113,7 @@ class ApprovalAnswerRequest extends PromptAnswerRequest {
     sessionId: sessionId,
     approve: approve,
     requireOpenPrompt: requireOpenPrompt,
+    optionId: optionId,
     decidedBy: decidedBy,
     decidedBySessionId: decidedBySessionId,
   );
@@ -124,6 +132,7 @@ class ApprovalAnswerRequest extends PromptAnswerRequest {
     'requireOpenPrompt': requireOpenPrompt,
     // Additive: an older server ignores the key and answers as before.
     if (ask case final ask? when ask.names) 'ask': ask.toJson(),
+    'optionId': ?optionId,
   };
 }
 
