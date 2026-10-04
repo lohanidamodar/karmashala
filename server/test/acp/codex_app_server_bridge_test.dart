@@ -503,6 +503,17 @@ void main() {
     final codex = FakeCodexAppServer(
       onTurn: (turn) async {
         turn.delta('item/agentMessage/delta', 'msg-1', 'Working');
+        // Seen live: an interrupted command gets no item/completed.
+        turn.started({
+          'type': 'commandExecution',
+          'id': 'exec-sleep',
+          'command': 'sleep 90',
+          'cwd': temp.path,
+          'status': 'inProgress',
+          'commandActions': [
+            {'type': 'unknown', 'command': 'sleep 90'},
+          ],
+        });
         await turn.interrupted.future;
         turn.end('interrupted');
       },
@@ -518,6 +529,10 @@ void main() {
       'turnId': 'turn-1',
     });
     expect(statuses().last, AgentActivityStatus.idle);
+    final sleep = jsonDecode(
+      rows().firstWhere((r) => r.role == SessionMessageRole.tool).toolJson!,
+    );
+    expect(sleep['status'], 'failed');
     await runtime.stop();
   });
 

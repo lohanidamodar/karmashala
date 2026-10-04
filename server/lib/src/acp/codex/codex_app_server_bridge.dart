@@ -476,6 +476,18 @@ final class CodexAppServerBridge implements AcpTransport {
     if (done == null || done.isCompleted) return;
     if (_turnId != null && turn['id'] != _turnId) return;
     _flushOutput();
+    // Codex completes no item it interrupted: a call still open ended with
+    // the turn.
+    for (final id in List.of(_tools.keys)) {
+      _toolUpdate({
+        'toolCallId': id,
+        'status': 'failed',
+        '_meta': {
+          'codex': {'endedWithTurn': turn['status']},
+        },
+      });
+    }
+    _tools.clear();
     final meta = {
       'codex': _dropNulls({
         'turnId': turn['id'],
