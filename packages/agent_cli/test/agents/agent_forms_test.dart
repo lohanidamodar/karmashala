@@ -1,4 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:test/test.dart';
 
 void main() {
@@ -86,6 +88,35 @@ void main() {
       expect(registry.sameProgramFormsOf(AgentIds.antigravity), isEmpty);
       expect(registry.sameProgramFormsOf(AgentIds.antigravityAcp), isEmpty);
       expect(registry.sameProgramFormsOf(AgentIds.grok), isEmpty);
+    });
+  });
+
+  group('an installation in another form', () {
+    AgentInstallation install(String id, String agentId, String env) =>
+        AgentInstallation(
+          id: id,
+          agentId: agentId,
+          executable: EnvironmentPath(environmentId: env, path: '/bin/$id'),
+          createdAt: DateTime.utc(2026),
+        );
+    final terminal = install('t', AgentIds.claudeCode, 'local');
+    final chat = install('c', AgentIds.claudeAcp, 'local');
+    final farChat = install('f', AgentIds.claudeAcp, 'wsl');
+    final all = [terminal, chat, farChat];
+
+    test('is the same agent\'s installation of that form on that machine', () {
+      expect(registry.inForm(terminal, all, AgentRunForm.chat), chat);
+      expect(registry.inForm(chat, all, AgentRunForm.terminal), terminal);
+      expect(registry.inForm(terminal, all, AgentRunForm.terminal), terminal);
+    });
+
+    test('is null where that form is not installed there', () {
+      expect(
+        registry.inForm(terminal, [terminal, farChat], AgentRunForm.chat),
+        isNull,
+      );
+      final grok = install('g', AgentIds.grok, 'local');
+      expect(registry.inForm(grok, [grok], AgentRunForm.terminal), isNull);
     });
   });
 

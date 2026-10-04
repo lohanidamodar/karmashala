@@ -116,11 +116,37 @@ class ServerSessionLauncher {
   }
 
   /// "The default agent" of [environmentId], as the New-session dialog means
-  /// it: the one Settings names, else the first installed.
+  /// it: the one Settings names, else the first installed, in the form
+  /// chosen for it.
   AgentInstallation? defaultInstallationIn(String environmentId) {
     final installs = installationsIn(environmentId);
     if (installs.isEmpty) return null;
-    return _settings.defaultInstallationAmong(installs) ?? installs.first;
+    return installationFor(
+      _settings.defaultInstallationAmong(installs) ?? installs.first,
+    );
+  }
+
+  /// [install]'s agent on its machine as [form] — refused when that form is
+  /// not installed there — else in the form a person chose for the agent,
+  /// where it is installed, else [install] itself.
+  AgentInstallation installationFor(
+    AgentInstallation install, {
+    AgentRunForm? form,
+  }) {
+    final registry = agents.registry;
+    final installs = installationsIn(install.environmentId);
+    if (form != null) {
+      return registry.inForm(install, installs, form) ??
+          (throw StateError(
+            '${registry.foldedNameOf(install.agentId)} is not installed as '
+            '${form.name} in ${install.environmentId}.',
+          ));
+    }
+    final chosen = _settings.chosenRunFormOf(
+      registry.foldedIdOf(install.agentId),
+    );
+    if (chosen == null) return install;
+    return registry.inForm(install, installs, chosen) ?? install;
   }
 
   /// The mode [agentId] starts under for [purpose], [sessionMode] first,

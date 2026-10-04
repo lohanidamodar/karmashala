@@ -2698,6 +2698,14 @@
             "type": "string",
             "description": "Specific installation id from list_agents."
           },
+          "form": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "chat"
+            ],
+            "description": "How the agent runs: \"terminal\" (its CLI in a terminal) or \"chat\". Omit for the form the person chose for that agent in Settings. Refused when the agent is not installed in that form there."
+          },
           "repositoryId": {
             "type": "string"
           },
@@ -2760,6 +2768,14 @@
           "agentInstallationId": {
             "type": "string",
             "description": "Specific installation id from list_agents."
+          },
+          "form": {
+            "type": "string",
+            "enum": [
+              "terminal",
+              "chat"
+            ],
+            "description": "How the agent runs: \"terminal\" (its CLI in a terminal) or \"chat\". Omit for the form the person chose for that agent in Settings. Refused when the agent is not installed in that form there."
           },
           "model": {
             "type": "string",

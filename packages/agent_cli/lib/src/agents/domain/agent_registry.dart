@@ -2,6 +2,7 @@ import '../adapter/agent_adapter.dart';
 import '../adapter/built_in_agent_adapters.dart';
 import './agent_descriptor.dart';
 import './agent_forms.dart';
+import './agent_installation.dart';
 
 /// The set of agents the app knows about, in probe/display order.
 ///
@@ -111,6 +112,24 @@ class AgentRegistry {
             same(d.binaries.posix, own.binaries.posix))
           d.id,
     ];
+  }
+
+  /// [installation]'s agent installed as [form] on the same machine, among
+  /// [installations]; null when that form is not installed there.
+  AgentInstallation? inForm(
+    AgentInstallation installation,
+    Iterable<AgentInstallation> installations,
+    AgentRunForm form,
+  ) {
+    final id = formsOf(installation.agentId).idFor(form);
+    if (id == null) return null;
+    if (id == installation.agentId) return installation;
+    return installations
+        .where(
+          (i) =>
+              i.agentId == id && i.environmentId == installation.environmentId,
+        )
+        .firstOrNull;
   }
 
   /// Every agent once, its forms folded together, in registry order.
