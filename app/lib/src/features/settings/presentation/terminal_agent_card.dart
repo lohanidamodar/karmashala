@@ -19,12 +19,16 @@ class TerminalAgentCard extends ConsumerStatefulWidget {
     required this.descriptor,
     required this.installs,
     required this.body,
+    this.chatInstalls = const [],
     this.anchors = const {},
     super.key,
   });
 
   final AgentDescriptor descriptor;
   final List<AgentInstallation> installs;
+
+  /// The installations of the agent's chat form, when it has one.
+  final List<AgentInstallation> chatInstalls;
   final Widget body;
   final Set<SettingsAnchor> anchors;
 
@@ -51,6 +55,7 @@ class _TerminalAgentCardState extends ConsumerState<TerminalAgentCard> {
         TerminalAgentRow(
           descriptor: widget.descriptor,
           installs: widget.installs,
+          chatInstalls: widget.chatInstalls,
           trailing: IconButton(
             tooltip: _open ? 'Collapse $name' : 'Expand $name',
             icon: Icon(

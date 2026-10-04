@@ -50,16 +50,21 @@ class AgentsHeaderStrip extends ConsumerWidget {
   }
 }
 
-/// "7 agents · 3 installed on 2 machines", with what the last scan said
-/// under it — or that none has run yet this session.
+/// "5 agents · 3 installed on 2 machines", an agent's terminal and chat
+/// forms counted once, with what the last scan said under it — or that none
+/// has run yet this session.
 class AgentsSummaryRow extends ConsumerWidget {
   const AgentsSummaryRow({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final agents = ref.watch(agentRegistryProvider).descriptors.length;
+    final registry = ref.watch(agentRegistryProvider);
+    final agents = registry.folded.length;
     final installations = ref.watch(agentInstallationsControllerProvider);
-    final installed = installations.map((i) => i.agentId).toSet().length;
+    final installed = installations
+        .map((i) => registry.foldedIdOf(i.agentId))
+        .toSet()
+        .length;
     final machines = installations.map((i) => i.environmentId).toSet().length;
     final report = ref.watch(agentRedetectControllerProvider).report;
     return SettingsRow(

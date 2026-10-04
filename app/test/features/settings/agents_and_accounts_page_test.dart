@@ -11,6 +11,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_latest_versions_controller.dart';
 import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/acp_builtin_agent_row.dart'
     show acpAgentsNote;
 import 'package:karmashala/src/features/settings/presentation/agents_and_accounts_page.dart';
@@ -136,11 +137,11 @@ void main() {
     await pump(tester);
 
     expect(find.text('DEFAULTS'), findsOneWidget);
-    expect(find.text('8 agents · 2 installed on 2 machines'), findsOneWidget);
+    expect(find.text('5 agents · 1 installed on 2 machines'), findsOneWidget);
     expect(find.text('Discover agents'), findsOneWidget);
     expect(find.text('Agent for new sessions'), findsOneWidget);
-    expect(find.text('TERMINAL AGENTS · 3'), findsOneWidget);
-    expect(find.text('ACP AGENTS (BUILT-IN) · 4'), findsOneWidget);
+    expect(find.text('AGENTS · 3'), findsOneWidget);
+    expect(find.text('ACP AGENTS (BUILT-IN) · 1'), findsOneWidget);
     expect(find.text('YOUR ACP AGENTS · 1'), findsOneWidget);
     expect(find.text('USAGE AND MAINTENANCE'), findsOneWidget);
     expect(find.text('USAGE & LIMITS'), findsOneWidget);
@@ -184,6 +185,9 @@ void main() {
     expect(find.text('$name · behaviour'.toUpperCase()), findsOneWidget);
     expect(find.text('Default model'), findsOneWidget);
     expect(find.text('Executable path'), findsNWidgets(2));
+    // Its chat form is inside the same card, not an agent of its own.
+    expect(find.text('$name · chat'.toUpperCase()), findsOneWidget);
+    expect(find.text('New sessions run as'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Collapse $name'));
     await tester.pumpAndSettle();
@@ -207,7 +211,11 @@ void main() {
         findsOneWidget,
       );
     }
-    for (final adapter in acp) {
+    // A chat form is listed inside its agent's card: only the agents that
+    // are a chat alone have a line of their own.
+    for (final adapter in acp.where(
+      (a) => registry.foldedIdOf(a.id) == a.id,
+    )) {
       final binary = adapter.descriptor.binaries.posix.first;
       // npx is offered only for an agent that ships as an npm package; one
       // the registry ships as an archive is installed from the row instead.
@@ -222,7 +230,7 @@ void main() {
     }
     expect(
       find.byTooltip('Not installed on any machine'),
-      findsNWidgets(registry.adapters.length),
+      findsNWidgets(registry.folded.length),
     );
     // A folded card of a missing agent still opens: its behaviour and saved
     // accounts are settings whether or not it is installed today.
@@ -236,6 +244,12 @@ void main() {
     seedInstalls();
     await pump(tester);
     final package = AgentRegistry.builtIn.byId(npxAcpId)!.acp!.npxPackage;
+    // A chat form of a terminal agent: shown inside that agent's card.
+    expect(find.text('npx -y $package'), findsNothing);
+    await tester.tap(
+      expandButton(nameOf(AgentRegistry.builtIn.foldedIdOf(npxAcpId))),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('npx -y $package'), findsOneWidget);
     expect(expandButton(nameOf(npxAcpId)), findsNothing);
@@ -247,7 +261,8 @@ void main() {
       find.text('${nameOf(npxAcpId)} · machines'.toUpperCase()),
       findsNothing,
     );
-    expect(find.text(acpAgentsNote), findsOneWidget);
+    // Said once over the chat form, and once over the chat-only agents.
+    expect(find.text(acpAgentsNote), findsNWidgets(2));
   });
 
   testWidgets('an ACP agent\'s version, once read over the protocol, shows '
@@ -334,12 +349,40 @@ void main() {
 
   testWidgets('a group folds and opens again', (tester) async {
     await pump(tester);
-    await tester.tap(find.byTooltip('Collapse Terminal agents'));
+    await tester.tap(find.byTooltip('Collapse Agents'));
     await tester.pumpAndSettle();
     expect(expandButton(nameOf(terminalId)), findsNothing);
-    await tester.tap(find.byTooltip('Expand Terminal agents'));
+    await tester.tap(find.byTooltip('Expand Agents'));
     await tester.pumpAndSettle();
     expect(expandButton(nameOf(terminalId)), findsOneWidget);
+  });
+
+  testWidgets('an agent with a chat form sets how its new sessions run, '
+      'Terminal until changed; a chat-only agent has no such choice', (
+    tester,
+  ) async {
+    seedInstalls();
+    await pump(tester);
+    // A chat-only agent is one line: nothing to choose.
+    expect(find.byType(SegmentedButton<AgentRunForm>), findsNothing);
+    final chatFormed = AgentRegistry.builtIn.foldedIdOf(npxAcpId);
+    await tester.tap(expandButton(nameOf(chatFormed)));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(AgentsAndAccountsBody)),
+    );
+    final choice = find.byKey(ValueKey('run-form:$chatFormed'));
+    expect(
+      tester.widget<SegmentedButton<AgentRunForm>>(choice).selected,
+      {AgentRunForm.terminal},
+    );
+    await tester.ensureVisible(choice);
+    await tester.tap(find.descendant(of: choice, matching: find.text('Chat')));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(settingsControllerProvider).runFormFor(chatFormed),
+      AgentRunForm.chat,
+    );
   });
 
   const phone = WindowCell('390x844 (phone)', Size(390, 844));

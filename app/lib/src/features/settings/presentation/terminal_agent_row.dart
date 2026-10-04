@@ -25,30 +25,46 @@ String notInstalledLine(AgentDescriptor descriptor) {
 
 /// **A terminal agent, folded** (Claude Code, Codex, Antigravity): its
 /// health, where it is installed, and the newest version read — flagged in
-/// words as well as colour when a machine is behind.
+/// words as well as colour when a machine is behind. Its machines include
+/// those its chat form is installed on ([chatInstalls]), said on a line of
+/// its own.
 class TerminalAgentRow extends ConsumerWidget {
   const TerminalAgentRow({
     required this.descriptor,
     required this.installs,
+    this.chatInstalls = const [],
     this.trailing,
     super.key,
   });
 
   final AgentDescriptor descriptor;
   final List<AgentInstallation> installs;
+  final List<AgentInstallation> chatInstalls;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final health = readAgentHealth(ref, installs: installs);
+    final all = [...installs, ...chatInstalls];
+    final health = readAgentHealth(ref, installs: all);
+    final terminal = installs.isEmpty
+        ? Text(notInstalledLine(descriptor))
+        : _VersionLine(installs: installs);
     return AgentCollapsedRow(
       name: agentLabel(ref, descriptor.id),
       logo: AgentLogo(agentId: descriptor.id, size: Chrome.iconAction),
       health: health,
-      environmentIds: installs.map((i) => i.environmentId),
-      detail: installs.isEmpty
-          ? Text(notInstalledLine(descriptor))
-          : _VersionLine(installs: installs),
+      environmentIds: {for (final i in all) i.environmentId},
+      detail: chatInstalls.isEmpty
+          ? terminal
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                terminal,
+                Text(
+                  'Chat: ${describeAgentVersions(chatInstalls, now: ref.watch(clockProvider).nowUtc())}',
+                ),
+              ],
+            ),
       trailing: trailing,
     );
   }
