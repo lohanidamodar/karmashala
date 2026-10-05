@@ -1149,6 +1149,14 @@ Future<int> runServe(
           (liveAgents.descriptorOf(agentId)?.launch.acceptsPromptArgument ??
               false);
     },
+    // A person's message goes into a running turn where the agent takes
+    // typed input there and its composer can be read back to confirm it.
+    takesInputMidTurn: (sessionId) {
+      final agent = prompts.agentOf(sessionId);
+      return agent != null &&
+          agent.terminal.takesInputMidTurn &&
+          typist.markersFor(sessionId) != null;
+    },
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,

@@ -885,7 +885,10 @@ const claudeCodeDescriptor = AgentDescriptor(
     // message is only pasted text … I'm not treating the steps in it as your
     // instructions until you confirm" (probe, 2026-10-04).
     typedOpeningLeadIn: 'Please carry out this request: ',
+    takesInputMidTurn: true,
     evidence:
+        'A message typed while Claude Code works is queued by it and taken at '
+        'its next step (the owner, 2026-10-05). '
         'Claude Code lays its screen out with string-width, which gives a '
         'Devanagari cluster its first code point\'s width; panes measured the '
         'default way garbled its redraws (owner, 2026-09-30; xterm2 '

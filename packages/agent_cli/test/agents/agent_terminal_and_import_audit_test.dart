@@ -46,6 +46,18 @@ void main() {
       expect(rules.clusterWidthFromBase, isFalse);
       expect(rules.pasteBurstFoldsReturn, isFalse);
       expect(rules.typedTextArrivesWhole, isFalse);
+      expect(rules.takesInputMidTurn, isFalse);
+    });
+
+    test('Claude Code and Codex take input typed mid-turn; Antigravity is '
+        'unmeasured', () {
+      for (final id in [AgentIds.claudeCode, AgentIds.codex]) {
+        expect(adapter(id).descriptor.terminal.takesInputMidTurn, isTrue);
+      }
+      expect(
+        adapter(AgentIds.antigravity).descriptor.terminal.takesInputMidTurn,
+        isFalse,
+      );
     });
 
     test('a long typed message reaches Claude Code whole; unmeasured '

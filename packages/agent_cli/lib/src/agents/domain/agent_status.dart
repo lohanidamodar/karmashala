@@ -724,8 +724,14 @@ class AgentTerminalRules {
     this.pasteBurstFoldsReturn = false,
     this.typedTextArrivesWhole = false,
     this.typedOpeningLeadIn,
+    this.takesInputMidTurn = false,
     this.evidence,
   });
+
+  /// Whether a message typed and sent while the agent's turn runs is taken
+  /// by the agent itself — queued by its composer or read at its next step —
+  /// so a person's message need not wait for the turn's end.
+  final bool takesInputMidTurn;
 
   /// Words typed, on their own, before an opening message typed in: an agent
   /// that takes the opening for a paste reads a message that is only pasted

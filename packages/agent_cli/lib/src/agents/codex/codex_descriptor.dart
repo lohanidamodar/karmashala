@@ -699,9 +699,12 @@ const codexDescriptor = AgentDescriptor(
   ),
   terminal: AgentTerminalRules(
     pasteBurstFoldsReturn: true,
+    takesInputMidTurn: true,
     evidence:
         'Codex takes fast typing as a paste burst and folds the Return after '
-        'it into a newline; a typed message ends the burst with Ctrl+E first.',
+        'it into a newline; a typed message ends the burst with Ctrl+E first. '
+        'A message sent while a task runs is queued by Codex itself (the '
+        'owner, 2026-10-05).',
   ),
   mcpConfig: AgentMcpConfigSpec.undeclared(
     refusal:

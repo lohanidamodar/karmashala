@@ -94,12 +94,14 @@ void main() {
     Duration staleSweep = const Duration(seconds: 30),
     DateTime Function()? now,
     void Function(String message)? log,
+    bool Function(String)? takesInputMidTurn,
   }) {
     var n = 0;
     final queue = SessionQueue(
       dao: dao,
       status: status,
       resumesOnSend: resumesOnSend,
+      takesInputMidTurn: takesInputMidTurn,
       announce: (_, open) => announced.add(open),
       turnStartGrace: grace,
       quietPeriod: quiet,
@@ -228,6 +230,130 @@ void main() {
       await pumpEventQueue();
       expect(delivered, ['a', 'b']);
       expect(announced.last, isEmpty);
+    });
+
+    group('typed in mid-turn', () {
+      QueueAdmission typed(String text) => queue.admit(
+        's1',
+        text,
+        origin: QueuedMessageOrigin.device,
+        asTyping: true,
+      );
+
+      Future<void> overAgent({required bool takesInputMidTurn}) async {
+        await queue.close();
+        queue = queueOver(takesInputMidTurn: (_) => takesInputMidTurn)
+          ..deliver = ((_, text) async => delivered.add(text))
+          ..start();
+        await runAgent();
+        hook('UserPromptSubmit');
+        expect(queue.busy('s1'), isTrue);
+      }
+
+      test('an agent that takes input mid-turn is given the message at '
+          'once, and its turn\'s end sends nothing more', () async {
+        await overAgent(takesInputMidTurn: true);
+        final admission = typed('yes continue fixing');
+        expect(admission, isA<AdmitNow>());
+        expect((admission as AdmitNow).midTurn, isTrue);
+        expect(dao.open('s1'), isEmpty);
+        queue.afterImmediate('s1', delivered: true, midTurn: true);
+        expect(queue.busy('s1'), isTrue, reason: 'its own turn still runs');
+
+        hook('Stop');
+        await pumpEventQueue();
+        expect(queue.busy('s1'), isFalse);
+        expect(typed('next'), isA<AdmitNow>());
+      });
+
+      test('one that does not is queued for its turn\'s end', () async {
+        await overAgent(takesInputMidTurn: false);
+        final admission = typed('yes continue fixing');
+        expect(admission, isA<AdmitQueued>());
+        hook('Stop');
+        await pumpEventQueue();
+        expect(delivered, ['yes continue fixing']);
+      });
+
+      test('a message still waits behind earlier ones, and a paused queue '
+          'holds it', () async {
+        await overAgent(takesInputMidTurn: true);
+        expect(send('queued first'), isA<AdmitQueued>());
+        expect(typed('behind it'), isA<AdmitQueued>());
+        queue.setPaused('s1', paused: true);
+        hook('Stop');
+        await pumpEventQueue();
+        expect(delivered, isEmpty);
+        hook('UserPromptSubmit');
+        expect(typed('while paused'), isA<AdmitQueued>());
+      });
+
+      test('an ordinary send is not typed in mid-turn', () async {
+        await overAgent(takesInputMidTurn: true);
+        expect(send('from an agent'), isA<AdmitQueued>());
+      });
+
+      /// A composer that shows what was typed until Return lets it go,
+      /// or never takes the keys when [typeable] is false.
+      SessionInput inputOver({required bool typeable, List<String>? typed}) {
+        var field = '';
+        final input = SessionInput(
+          prompts: DaemonPromptAnswers(status: status, database: database),
+          typist: SessionMessageTypist(
+            poll: const Duration(milliseconds: 5),
+            readScreen: (_) => ['> $field'],
+            markersFor: (_) => const ['>'],
+            type: (_, text) {
+              if (!typeable) return false;
+              field = text;
+              return true;
+            },
+            press: (_, _) {
+              typed?.add(field);
+              field = '';
+              return true;
+            },
+          ),
+          queue: queue,
+        );
+        // What the queue delivers later is recorded, not typed.
+        queue.deliver = (_, text) async => delivered.add(text);
+        return input;
+      }
+
+      test('a phone message to a busy session is typed in and read back '
+          'off the screen', () async {
+        await overAgent(takesInputMidTurn: true);
+        final typed = <String>[];
+        final input = inputOver(typeable: true, typed: typed);
+        final sent =
+            await input.handle(
+                  const SessionSend(sessionId: 's1', text: 'yes continue'),
+                  'phone',
+                )
+                as SessionSent;
+        expect(sent.queued, isFalse);
+        expect(sent.via, SessionSent.readBack);
+        expect(typed, ['yes continue']);
+        expect(dao.open('s1'), isEmpty);
+      });
+
+      test('one the screen could not take falls back to the queue', () async {
+        await overAgent(takesInputMidTurn: true);
+        final input = inputOver(typeable: false);
+        final sent =
+            await input.handle(
+                  const SessionSend(sessionId: 's1', text: 'yes continue'),
+                  'phone',
+                )
+                as SessionSent;
+        expect((sent.queued, sent.position), (true, 1));
+        expect(dao.open('s1').single.origin, QueuedMessageOrigin.device);
+
+        hook('Stop');
+        await pumpEventQueue();
+        expect(delivered, ['yes continue']);
+      });
     });
 
     test('a turn that ends with background work running still delivers '

@@ -26,7 +26,11 @@ sealed class QueueAdmission {
 /// Deliver it now. The session is held busy until the caller reports the
 /// delivery with [SessionQueue.afterImmediate].
 final class AdmitNow extends QueueAdmission {
-  const AdmitNow();
+  const AdmitNow({this.midTurn = false});
+
+  /// Typed into the running turn, as a person typing would: a delivery
+  /// refused before anything was typed belongs in the queue instead.
+  final bool midTurn;
 }
 
 /// It waits at the server as [message], [position] among the session's
@@ -61,6 +65,7 @@ class SessionQueue implements ResumeQueue {
     this.resumesOnSend,
     this.resumeStopped,
     this.takesOpeningMessage,
+    this.takesInputMidTurn,
     this.limitHold,
     this.personTypedAt,
     this.typingGrace = const Duration(seconds: 5),
@@ -105,6 +110,11 @@ class SessionQueue implements ResumeQueue {
   /// Whether row [String]'s agent takes an opening message when it starts
   /// (`launch.acceptsPromptArgument`).
   final bool Function(String sessionId)? takesOpeningMessage;
+
+  /// Whether row [String]'s terminal agent takes a message typed while its
+  /// turn runs, and its screen can show it taken
+  /// (`AgentTerminalRules.takesInputMidTurn`).
+  final bool Function(String sessionId)? takesInputMidTurn;
 
   /// What holds row [String]'s queue on its usage limit or a scheduled
   /// resume, or null.
@@ -272,14 +282,22 @@ class SessionQueue implements ResumeQueue {
 
   /// Queues [text] when [sessionId] is busy or has messages waiting;
   /// otherwise claims the session for an immediate delivery. A [requestId]
-  /// already queued answers its row again.
+  /// already queued answers its row again. [asTyping] — a person's send —
+  /// goes into a running turn at once where the agent takes it there.
   QueueAdmission admit(
     String sessionId,
     String text, {
     required QueuedMessageOrigin origin,
     String? originId,
     String? requestId,
+    bool asTyping = false,
   }) {
+    if (asTyping && _takesTypedNow(sessionId, requestId)) {
+      _inFlight.add(sessionId);
+      _sawWorking.remove(sessionId);
+      log?.call('queue $sessionId: typed into the running turn');
+      return const AdmitNow(midTurn: true);
+    }
     final queued = queueIfBusy(
       sessionId,
       text,
@@ -361,11 +379,47 @@ class SessionQueue implements ResumeQueue {
     return message;
   }
 
-  /// Reports the immediate delivery [admit] allowed.
-  void afterImmediate(String sessionId, {required bool delivered}) {
+  /// Reports the immediate delivery [admit] allowed. One typed [midTurn]
+  /// starts no turn of its own: the running one's end is what to wait for.
+  void afterImmediate(
+    String sessionId, {
+    required bool delivered,
+    bool midTurn = false,
+  }) {
     _inFlight.remove(sessionId);
-    if (delivered) _awaitTurnStart(sessionId);
+    if (delivered && !midTurn) _awaitTurnStart(sessionId);
     _kick(sessionId);
+  }
+
+  /// Whether a person's send to [sessionId] goes into its running terminal
+  /// turn now: its agent takes typed input there, nothing waits ahead of it
+  /// or holds the queue, and nothing on screen would swallow the keys.
+  bool _takesTypedNow(String sessionId, String? requestId) {
+    if (!(takesInputMidTurn?.call(sessionId) ?? false)) return false;
+    if (requestId != null &&
+        requestId.isNotEmpty &&
+        dao.byRequest(sessionId, requestId) != null) {
+      return false;
+    }
+    if (_inFlight.contains(sessionId) || _held.contains(sessionId)) {
+      return false;
+    }
+    if (status.acpRuntimeOf(sessionId) != null || !status.holds(sessionId)) {
+      return false;
+    }
+    if (!turns.running(sessionId) && !_awaitingTurn.containsKey(sessionId)) {
+      return false;
+    }
+    if (dao.hasWaiting(sessionId) ||
+        _holdOf(sessionId) != null ||
+        _holdsNewMessages(sessionId)) {
+      return false;
+    }
+    final report = status.statusOf(sessionId)?.report;
+    if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
+      return false;
+    }
+    return !_personTyping(sessionId);
   }
 
   /// The messages [sessionId] holds, queued, delivering or failed, in order.

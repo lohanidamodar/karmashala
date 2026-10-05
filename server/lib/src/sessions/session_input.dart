@@ -202,25 +202,54 @@ class SessionInput {
       origin: origin,
       originId: originId,
       requestId: requestId,
+      // A person's send is typed in mid-turn, as typing at the desktop is.
+      asTyping:
+          origin == QueuedMessageOrigin.app ||
+          origin == QueuedMessageOrigin.device,
     )) {
       case AdmitQueued(:final message, :final position):
-        return SessionSent(
-          sent: true,
-          via: SessionSent.queuedVia,
-          queuedId: message.id,
-          position: position,
-        );
-      case AdmitNow():
+        return _queued(message, position);
+      case AdmitNow(:final midTurn):
         var delivered = false;
         try {
           final sent = await deliverNow(sessionId, text);
           delivered = true;
           return sent;
+        } on DataRefused catch (refusal) {
+          final nothingTyped =
+              refusal.code == DataRefusalCode.notFound ||
+              refusal.code == DataRefusalCode.conflict;
+          if (!midTurn || !nothingTyped) rethrow;
+          // Still claimed, so it is queued, never typed again here.
+          final queued = queue.queueIfBusy(
+            sessionId,
+            text,
+            origin: origin,
+            originId: originId,
+            requestId: requestId,
+          )!;
+          log?.call(
+            'sessions.send $sessionId: not typed into the running turn '
+            '(${refusal.message}); queued',
+          );
+          return _queued(queued.message, queued.position);
         } finally {
-          queue.afterImmediate(sessionId, delivered: delivered);
+          queue.afterImmediate(
+            sessionId,
+            delivered: delivered,
+            midTurn: midTurn,
+          );
         }
     }
   }
+
+  static SessionSent _queued(QueuedMessage message, int position) =>
+      SessionSent(
+        sent: true,
+        via: SessionSent.queuedVia,
+        queuedId: message.id,
+        position: position,
+      );
 
   /// Delivers [text] to [sessionId] now: over its protocol, by resuming it,
   /// or typed into its screen, after [leadIn] typed on its own. Refused in
