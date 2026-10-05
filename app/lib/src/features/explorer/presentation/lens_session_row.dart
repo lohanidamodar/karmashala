@@ -81,11 +81,10 @@ class LensSessionRow extends ConsumerWidget {
     final quietSince = state == AgentState.quiet
         ? ref.read(sessionStatusLookupProvider)(id)?.evidenceAt
         : null;
-    // Read, not watched, like [quietSince]: the state wakes the row.
+    // The strip's own runs, watched only while the row reads working: the
+    // hook's list of background work outlives a run whose end it missed.
     final stillRunning = state == AgentState.working
-        ? inFlightClause(
-            ref.read(sessionStatusLookupProvider)(id)?.inFlight ?? const [],
-          )
+        ? ref.watch(sessionStillRunningProvider(id))
         : null;
     final clauses = [
       ?stillRunning,

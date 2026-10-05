@@ -46,6 +46,11 @@ class SessionBackgroundRun {
   int get hashCode => Object.hash(run, startedAt, subagent?.filePath);
 }
 
+/// What [run] is called wherever it is listed.
+String backgroundRunTitle(BackgroundRun run) =>
+    run.description ??
+    (run.kind == BackgroundRunKind.agent ? 'Agent' : 'Command');
+
 /// The runs worth listing in [messages]: none while nothing runs, else the
 /// running ones and those that finished while they ran — its siblings — but
 /// not one that ended before any of them began.

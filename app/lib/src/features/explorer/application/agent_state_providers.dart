@@ -10,6 +10,7 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_statuses.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../sessions/application/background_runs_providers.dart';
 import '../../sessions/application/session_last_active_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
@@ -251,3 +252,14 @@ final sessionProjectNameProvider = Provider<String? Function(String sessionId)>(
     return null;
   },
 );
+
+/// Session [String]'s "still running" clause for its row, from the runs the
+/// composer's strip lists, so it clears when the last run ends; null when
+/// none runs.
+final sessionStillRunningProvider = Provider.autoDispose
+    .family<String?, String>(
+      (ref, sessionId) => inFlightClause([
+        for (final entry in ref.watch(sessionBackgroundRunsProvider(sessionId)))
+          if (entry.run.state.isRunning) backgroundRunTitle(entry.run),
+      ]),
+    );

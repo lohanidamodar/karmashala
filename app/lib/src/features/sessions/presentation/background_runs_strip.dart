@@ -207,9 +207,7 @@ class _RunRow extends StatelessWidget {
       _ => Icon(AppIcons.x, size: Chrome.iconSmall, color: scheme.error),
     };
     final subagent = entry.subagent;
-    final title =
-        run.description ??
-        (run.kind == BackgroundRunKind.agent ? 'Agent' : 'Command');
+    final title = backgroundRunTitle(run);
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.hair),
       child: Row(
