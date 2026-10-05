@@ -838,3 +838,11 @@ void _migrateToV74(Database db) {
     );
   ''');
 }
+
+/// Who cancelled a queued message — `device:<id>`, `app`, or the server for
+/// an ended session — so a cancel nobody remembers can be traced.
+void _migrateToV75(Database db) {
+  db.execute(
+    'ALTER TABLE session_queued_messages ADD COLUMN cancelled_by TEXT;',
+  );
+}

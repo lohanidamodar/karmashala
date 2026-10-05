@@ -444,6 +444,34 @@ void main() {
       expect(delivered, ['c', 'a']);
     });
 
+    test('a Remove records who removed it: a paired device, or this '
+        "machine's app", () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      final input = SessionInput(
+        prompts: DaemonPromptAnswers(status: status, database: database),
+        typist: SessionMessageTypist(
+          readScreen: (_) => null,
+          markersFor: (_) => null,
+          type: (_, _) => false,
+          press: (_, _) => false,
+        ),
+        queue: queue,
+      );
+      final a = send('a') as AdmitQueued;
+      final b = send('b') as AdmitQueued;
+      await input.handle(
+        SessionQueueCancel(sessionId: 's1', id: a.message.id),
+        'phone-1',
+      );
+      await input.handle(
+        SessionQueueCancel(sessionId: 's1', id: b.message.id),
+        null,
+      );
+      expect(dao.getById(a.message.id)!.cancelledBy, 'device:phone-1');
+      expect(dao.getById(b.message.id)!.cancelledBy, 'app');
+    });
+
     test('Send now refuses a message no longer waiting', () async {
       await runAgent();
       hook('UserPromptSubmit');

@@ -44,6 +44,24 @@ void main() {
     expect(dao.sessionsWithQueued(), ['s1']);
   });
 
+  test('a cancel records who cancelled it', () {
+    add('q1', 'one');
+    expect(
+      dao.transition(
+        'q1',
+        from: QueuedMessageState.queued,
+        to: QueuedMessageState.cancelled,
+        now: t0,
+        cancelledBy: 'device:phone-1',
+      ),
+      isTrue,
+    );
+    final cancelled = dao.getById('q1')!;
+    expect(cancelled.cancelledBy, 'device:phone-1');
+    expect(cancelled.error, isNull);
+    expect(add('q2', 'two').cancelledBy, isNull);
+  });
+
   test('a move is guarded on the state it leaves', () {
     add('q1', 'one');
     expect(

@@ -126,22 +126,27 @@ class SessionQueueDao {
       row['session_id']! as String,
   ];
 
-  /// Moves [id] from [from] to [to], and says whether it did.
+  /// Moves [id] from [from] to [to], and says whether it did. A cancel names
+  /// who asked for it in [cancelledBy].
   bool transition(
     String id, {
     required QueuedMessageState from,
     required QueuedMessageState to,
     required DateTime now,
     String? error,
+    String? cancelledBy,
   }) {
     _db.execute(
       'UPDATE session_queued_messages SET state = ?, updated_at = ?, '
-      'error = COALESCE(?, error), delivered_at = CASE WHEN ? THEN ? '
+      'error = COALESCE(?, error), '
+      'cancelled_by = COALESCE(?, cancelled_by), '
+      'delivered_at = CASE WHEN ? THEN ? '
       'ELSE delivered_at END WHERE id = ? AND state = ?;',
       [
         to.name,
         isoFromDate(now),
         error,
+        cancelledBy,
         intFromBool(to == QueuedMessageState.delivered),
         isoFromDate(now),
         id,
@@ -211,5 +216,6 @@ class SessionQueueDao {
         : dateFromIso(row['delivered_at']),
     requestId: row['request_id'] as String?,
     error: row['error'] as String?,
+    cancelledBy: row['cancelled_by'] as String?,
   );
 }

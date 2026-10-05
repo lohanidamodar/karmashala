@@ -2,16 +2,16 @@ import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
 /// v71: `session_queued_messages`, messages kept at the server while a turn
-/// runs, gone with their session.
+/// runs, gone with their session; v75: who cancelled one.
 void main() {
   late AppDatabase db;
 
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 74', () => expect(db.schemaVersion, 74));
+  test('the head is 75', () => expect(db.schemaVersion, 75));
 
-  test('v71 creates session_queued_messages', () {
+  test('v71 creates session_queued_messages, and v75 adds cancelled_by', () {
     final columns = db
         .query('PRAGMA table_info(session_queued_messages);')
         .map((r) => r['name']! as String)
@@ -29,6 +29,7 @@ void main() {
       'delivered_at',
       'request_id',
       'error',
+      'cancelled_by',
     ]);
   });
 

@@ -442,8 +442,9 @@ class SessionQueue implements ResumeQueue {
     return dao.getById(id)!;
   }
 
-  /// Cancels queued message [id], or dismisses a failed one.
-  QueuedMessage cancel(String sessionId, String id) {
+  /// Cancels queued message [id], or dismisses a failed one, at the word of
+  /// [by] (`device:<id>`, `app`), which the row keeps.
+  QueuedMessage cancel(String sessionId, String id, {String? by}) {
     final message = _own(sessionId, id);
     final from = message.state;
     final movable =
@@ -454,6 +455,7 @@ class SessionQueue implements ResumeQueue {
           from: from,
           to: QueuedMessageState.cancelled,
           now: _now(),
+          cancelledBy: by,
         )) {
       throw DataRefused(
         DataRefusalCode.conflict,
@@ -462,6 +464,7 @@ class SessionQueue implements ResumeQueue {
       );
     }
     final cancelled = dao.getById(id)!;
+    log?.call('queue $sessionId: $id cancelled by ${by ?? 'an unnamed caller'}');
     _settle(cancelled);
     _announce(sessionId);
     _kick(sessionId);

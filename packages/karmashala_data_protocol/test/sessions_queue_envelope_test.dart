@@ -168,4 +168,13 @@ void main() {
     final automation = QueuedMessageOrigin.fromName('automation');
     expect(automation, QueuedMessageOrigin.automation);
   });
+
+  test('who cancelled a message rides with it, absent when nobody did', () {
+    final cancelled = queued.copyWith(
+      state: QueuedMessageState.cancelled,
+      cancelledBy: 'device:phone-1',
+    );
+    expect(QueuedMessage.fromJson(wire(cancelled.toJson())), cancelled);
+    expect(queued.toJson().containsKey('cancelledBy'), isFalse);
+  });
 }

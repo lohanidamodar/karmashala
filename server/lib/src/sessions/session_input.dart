@@ -142,7 +142,13 @@ class SessionInput {
             () => _queue().setPaused(sessionId, paused: paused),
           ),
         SessionQueueCancel(:final sessionId, :final id) =>
-          Future<QueuedMessage>.sync(() => _queue().cancel(sessionId, id)),
+          Future<QueuedMessage>.sync(
+            () => _queue().cancel(
+              sessionId,
+              id,
+              by: device == null ? 'app' : 'device:$device',
+            ),
+          ),
       };
     } on DataRefused catch (refusal) {
       log?.call(

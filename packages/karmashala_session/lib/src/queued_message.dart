@@ -123,6 +123,7 @@ class QueuedMessage {
     this.deliveredAt,
     this.requestId,
     this.error,
+    this.cancelledBy,
     this.hold,
   });
 
@@ -142,6 +143,7 @@ class QueuedMessage {
     },
     requestId: json['requestId'] as String?,
     error: json['error'] as String?,
+    cancelledBy: json['cancelledBy'] as String?,
     hold: QueueHold.fromJson(json['hold']),
   );
 
@@ -162,6 +164,10 @@ class QueuedMessage {
   /// Why a [QueuedMessageState.failed] row failed, in words.
   final String? error;
 
+  /// Who cancelled a [QueuedMessageState.cancelled] row: `device:<id>` or
+  /// `app`. Null on a row cancelled before it was recorded.
+  final String? cancelledBy;
+
   /// What keeps a queued message waiting past the running turn: never
   /// stored, told by the server as it stands.
   final QueueHold? hold;
@@ -174,6 +180,7 @@ class QueuedMessage {
     DateTime? updatedAt,
     DateTime? deliveredAt,
     String? error,
+    String? cancelledBy,
     QueueHold? hold,
   }) => QueuedMessage(
     id: id,
@@ -188,6 +195,7 @@ class QueuedMessage {
     deliveredAt: deliveredAt ?? this.deliveredAt,
     requestId: requestId,
     error: error ?? this.error,
+    cancelledBy: cancelledBy ?? this.cancelledBy,
     hold: hold ?? this.hold,
   );
 
@@ -204,6 +212,7 @@ class QueuedMessage {
     'deliveredAt': ?deliveredAt?.toUtc().toIso8601String(),
     'requestId': ?requestId,
     'error': ?error,
+    'cancelledBy': ?cancelledBy,
     'hold': ?hold?.toJson(),
   };
 
@@ -222,6 +231,7 @@ class QueuedMessage {
       other.deliveredAt == deliveredAt &&
       other.requestId == requestId &&
       other.error == error &&
+      other.cancelledBy == cancelledBy &&
       other.hold == hold;
 
   @override
@@ -238,6 +248,7 @@ class QueuedMessage {
     deliveredAt,
     requestId,
     error,
+    cancelledBy,
     hold,
   );
 }
