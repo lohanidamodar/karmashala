@@ -42,10 +42,17 @@ String encodeScrollback(
   var total = 0;
   for (var i = end - 1; i >= start; i--) {
     // Every row but the newest also carries what joins the next one on.
-    final joint = i == end - 1 || _continues(lines[i], lines[i + 1])
+    // A row filled out to its edge is a TUI's drawing even when it ran on
+    // (ConPTY sends no line break after one), so it ends its line.
+    final joint =
+        i == end - 1 ||
+            (_continues(lines[i], lines[i + 1]) && !_endsInFill(lines[i]))
         ? ''
         : '\r\n';
-    final line = _encodeLine(lines[i]);
+    final line = _encodeLine(
+      lines[i],
+      endsLine: joint.isNotEmpty || i == end - 1,
+    );
     final cost = line.length + joint.length;
     if (newestFirst.isNotEmpty && total + cost > maxBytes) break;
     newestFirst.add('$line$joint');
@@ -85,8 +92,14 @@ bool _isBlank(BufferLine line) {
   return true;
 }
 
-/// One line as `ESC[0m` followed by one sequence per style run.
-String _encodeLine(BufferLine line) {
+/// Shortest run of one glyph out to the last column that reads as drawn to
+/// the width — a rule — rather than as text that happened to end there.
+const _kMinFillCells = 4;
+
+/// One line as `ESC[0m` followed by one sequence per style run. A row that
+/// [endsLine] keeps its trailing fill (see [_fillStart]) to one row when read
+/// back narrower, as a TUI would redraw it, instead of wrapping it into more.
+String _encodeLine(BufferLine line, {required bool endsLine}) {
   final out = StringBuffer('\x1b[0m');
 
   // The last non-blank cell; everything after it is dropped.
@@ -97,6 +110,8 @@ String _encodeLine(BufferLine line) {
     end--;
   }
   if (end == 0) return out.toString();
+  final fillEnd = end;
+  if (endsLine) end = _fillStart(line, end);
 
   // Style currently in effect for the parser, which ESC[0m just reset.
   var styleFg = 0;
@@ -143,8 +158,59 @@ String _encodeLine(BufferLine line) {
     assert(cell > runStart, 'the run must consume at least one cell');
   }
 
+  final codePoint = end < fillEnd ? line.getCodePoint(end) : 0;
+  final background = end < fillEnd ? line.getBackground(end) : 0;
+  final flags = end < fillEnd ? line.getAttributes(end) : 0;
+  // Spaces that paint nothing are dropped: one would wrap onto a row of its
+  // own behind text that fills the row it is read back into.
+  if (codePoint != 0 && (codePoint != 0x20 || background != 0 || flags != 0)) {
+    final foreground = line.getForeground(end);
+    if (foreground != styleFg || background != styleBg || flags != styleFlags) {
+      out.write(_sgr(foreground, background, flags));
+    }
+    final glyph = String.fromCharCode(codePoint);
+    // The first glyph wraps if the text before it filled the row, so the
+    // rest, written with autowrap off, can only overwrite its own row's end.
+    out.write(glyph);
+    if (fillEnd - end > 1) {
+      out.write('\x1b[?7l${glyph * (fillEnd - end - 1)}\x1b[?7h');
+    }
+  }
+
   return out.toString();
 }
+
+/// Whether [row] is filled to its last column by a fill of [_kMinFillCells]
+/// or more — never a word that soft-wrapping happened to break.
+bool _endsInFill(BufferLine row) =>
+    row.length - _fillStart(row, row.length) >= _kMinFillCells;
+
+/// Where [line]'s trailing fill starts, or [end] when it has none: trailing
+/// spaces, or one glyph other than a letter or digit repeated out to the last
+/// column.
+int _fillStart(BufferLine line, int end) {
+  final last = end - 1;
+  final codePoint = line.getCodePoint(last);
+  if (codePoint == 0 || line.getWidth(last) != 1) return end;
+  var start = last;
+  while (start > 0 &&
+      line.getCodePoint(start - 1) == codePoint &&
+      line.getWidth(start - 1) == 1 &&
+      line.getForeground(start - 1) == line.getForeground(last) &&
+      line.getBackground(start - 1) == line.getBackground(last) &&
+      line.getAttributes(start - 1) == line.getAttributes(last)) {
+    start--;
+  }
+  if (codePoint == 0x20) return start;
+  final drawn =
+      end == line.length &&
+      end - start >= _kMinFillCells &&
+      !_wordGlyph.hasMatch(String.fromCharCode(codePoint));
+  return drawn ? start : end;
+}
+
+/// A letter or digit: a run of one is text, whatever its length.
+final _wordGlyph = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
 /// The SGR sequence that sets exactly [foreground], [background] and [flags].
 /// Every code emitted here is handled by the vendored parser's `_csiHandleSgr`,

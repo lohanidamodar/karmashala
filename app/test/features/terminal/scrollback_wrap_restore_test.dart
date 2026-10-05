@@ -124,6 +124,105 @@ void main() {
     expect(rowsOf(restored), rowsOf(saved));
   });
 
+  group('a TUI drawn to the full width, restored into a narrower pane', () {
+    // Claude Code's input box as it reaches a pane: rule, prompt, rule, footer,
+    // each a row of the width it was drawn at, repainted in place by erasing
+    // the rows it drew (cursor up, erase line) and drawing them again.
+    String rule(int width) => '\x1b[38;2;136;136;136m${'─' * width}\x1b[0m';
+    String frame(int width, String prompt) =>
+        '${rule(width)}\r\n❯ $prompt\r\n${rule(width)}\r\n'
+        '\x1b[38;2;153;153;153m  manual mode on · ? for shortcuts\x1b[0m';
+    const erase = '\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[G';
+
+    Terminal claude(int width) {
+      final terminal = blank(width, height: 12)
+        ..write('● Both agents have finished.\r\n\r\n');
+      terminal.write(frame(width, ''));
+      for (final typed in ['are', 'are they', 'are they done yet?']) {
+        terminal.write('$erase${frame(width, typed)}');
+      }
+      return terminal;
+    }
+
+    test('the footer is drawn once, each rule on one row', () {
+      final saved = claude(120);
+      expect(rowsOf(saved), [
+        '● Both agents have finished.',
+        '',
+        '─' * 120,
+        '❯ are they done yet?',
+        '─' * 120,
+        '  manual mode on · ? for shortcuts',
+      ]);
+
+      final restored = blank(48)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), [
+        '● Both agents have finished.',
+        '',
+        '─' * 48,
+        '❯ are they done yet?',
+        '─' * 48,
+        '  manual mode on · ? for shortcuts',
+      ]);
+    });
+
+    test('a rule that ran on into the next row still restores as one', () {
+      // ConPTY sends a full-width row with no line break after it, so the
+      // terminal holds the prompt and footer as continuations of the rules.
+      final saved = blank(120, height: 12)
+        ..write(
+          '${rule(120)}❯ are they done yet?\r\n${rule(120)}'
+          '  manual mode on · ? for shortcuts',
+        );
+      expect(saved.mainBuffer.lines[1].isWrapped, isTrue);
+
+      final restored = blank(48)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), [
+        '─' * 48,
+        '❯ are they done yet?',
+        '─' * 48,
+        '  manual mode on · ? for shortcuts',
+      ]);
+    });
+
+    test('at the width it was saved at, it comes back cell for cell', () {
+      final saved = claude(60);
+      final restored = blank(60, height: 12)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), rowsOf(saved));
+      expect(wrapsOf(restored), wrapsOf(saved));
+    });
+
+    test('a row padded out with spaces gains no blank rows', () {
+      final saved = blank(120)
+        ..write('It took about 65 seconds.${' ' * 95}\r\nnext\r\n');
+      final restored = blank(40)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), ['It took about 65 seconds.', 'next']);
+    });
+
+    test('nor does one padded out and run on into the next', () {
+      final saved = blank(120)
+        ..write('It took about 65 seconds.${' ' * 95}next\r\n');
+      final restored = blank(40)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), ['It took about 65 seconds.', 'next']);
+    });
+
+    test('text that reaches the last column still wraps whole', () {
+      final text = prose(3, 120);
+      final saved = blank(120)..write('$text\r\nnext\r\n');
+      final restored = blank(50)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), [
+        ...wrapped([text], 50),
+        'next',
+      ]);
+    });
+
+    test('a rule after text that fills the row starts a row of its own', () {
+      final saved = blank(30)..write('${'a' * 20}${'═' * 10}\r\n');
+      final restored = blank(20)..write(encodeScrollback(saved));
+      expect(rowsOf(restored), ['a' * 20, '═' * 10]);
+    });
+  });
+
   test('the byte cap still counts every separator it writes', () {
     final saved = source(40);
     final whole = encodeScrollback(saved, maxBytes: 1 << 30);
