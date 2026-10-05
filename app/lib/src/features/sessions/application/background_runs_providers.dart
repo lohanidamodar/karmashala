@@ -90,3 +90,18 @@ final sessionBackgroundRunsProvider = Provider.autoDispose
       if (older != null && older.isNotEmpty) messages = [...older, ...messages];
       return backgroundRunsIn(messages);
     });
+
+/// Whether each session's background runs are folded to their one-line
+/// summary, as the person last left them; absent until they choose.
+class BackgroundRunsFolded extends Notifier<Map<String, bool>> {
+  @override
+  Map<String, bool> build() => const {};
+
+  void set(String sessionId, {required bool folded}) =>
+      state = {...state, sessionId: folded};
+}
+
+final backgroundRunsFoldedProvider =
+    NotifierProvider<BackgroundRunsFolded, Map<String, bool>>(
+      BackgroundRunsFolded.new,
+    );

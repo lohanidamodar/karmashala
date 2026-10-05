@@ -12,10 +12,16 @@ import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../application/background_runs_providers.dart';
 
+/// More rows than this and the strip starts folded to its summary.
+const kUnfoldedRunsMax = 3;
+
+/// How long a finished run stays listed; after that it is only counted.
+const kFinishedRunLingers = Duration(minutes: 5);
+
 /// **The background runs a session is waiting on**, above its composer: each
 /// agent or command it left running, how long it has run, and how the ones
-/// that finished since ended. An agent opens to its own turns. Nothing at all
-/// while nothing runs.
+/// that finished lately ended. An agent opens to its own turns. Nothing at all
+/// while nothing runs. Placed in a [Flexible]: unfolded, its rows scroll.
 class BackgroundRunsStrip extends ConsumerStatefulWidget {
   const BackgroundRunsStrip({required this.sessionId, super.key});
 
@@ -51,21 +57,79 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    return Padding(
+    final listed = [
+      for (final entry in runs)
+        if (entry.run.state.isRunning ||
+            now.difference(entry.run.endedAt ?? now) < kFinishedRunLingers)
+          entry,
+    ];
+    final done = runs.where((entry) => !entry.run.state.isRunning).length;
+    final folded =
+        ref.watch(
+          backgroundRunsFoldedProvider.select((all) => all[widget.sessionId]),
+        ) ??
+        listed.length > kUnfoldedRunsMax;
+    final strip = Padding(
       padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(_heading(runs), style: muted),
-          for (final entry in runs)
-            _RunRow(
-              entry: entry,
-              now: now,
-              sessionId: widget.sessionId,
+          InkWell(
+            onTap: () => ref
+                .read(backgroundRunsFoldedProvider.notifier)
+                .set(widget.sessionId, folded: !folded),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _heading(runs),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ),
+                if (done > 0) ...[
+                  Text(' · ', style: muted),
+                  Text('$done done', maxLines: 1, style: muted),
+                ],
+                const SizedBox(width: Insets.xs),
+                Icon(
+                  folded ? AppIcons.caretUp : AppIcons.caretDown,
+                  size: Chrome.iconSmall,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  semanticLabel: folded ? 'Show runs' : 'Hide runs',
+                ),
+              ],
+            ),
+          ),
+          if (!folded)
+            Flexible(
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final entry in listed)
+                      _RunRow(
+                        entry: entry,
+                        now: now,
+                        sessionId: widget.sessionId,
+                      ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
+    );
+    // Never more than a third of the view, and within what the composer
+    // leaves: 21 rows once hid the composer on a phone.
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height / 3,
+      ),
+      child: strip,
     );
   }
 
@@ -167,7 +231,9 @@ class _RunRow extends StatelessWidget {
       ),
     );
     final summary = run.summary;
-    final described = summary == null ? row : Tooltip(message: summary, child: row);
+    final described = summary == null
+        ? row
+        : Tooltip(message: summary, child: row);
     if (subagent == null) return described;
     return InkWell(
       onTap: () => showAdaptiveModal<void>(
