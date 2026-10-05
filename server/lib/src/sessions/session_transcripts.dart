@@ -105,12 +105,19 @@ class SessionTranscripts {
   /// whole, off this isolate, and not held — a row is expanded once, and one
   /// session's delegates came to 1,485 MiB. Refused `invalid` for a path
   /// outside the session's own subagents directory, so the request cannot
-  /// read any other file.
+  /// read any other file. An [SessionTranscriptSubagent.agentId] names
+  /// `agent-<id>.jsonl` in that directory: a background run's id.
   Future<TranscriptPage> subagent(SessionTranscriptSubagent request) async {
     final held = _hold(request.sessionId);
     await _refresh(held);
     final record = held.file;
-    final path = p.normalize(request.path);
+    final agentId = request.agentId;
+    if (agentId != null && !_agentIdShape.hasMatch(agentId)) {
+      throw const DataRefused.invalid('that is not an agent id');
+    }
+    final path = agentId != null && record != null
+        ? p.join(subagentsDirectoryFor(record), 'agent-$agentId.jsonl')
+        : p.normalize(request.path);
     if (record == null ||
         p.extension(path) != '.jsonl' ||
         !p.isWithin(subagentsDirectoryFor(record), path)) {
@@ -634,6 +641,9 @@ class SessionTranscripts {
   /// The most text one page carries: a message holds up to three 64 KiB
   /// fields, and a page must stay well inside the 16 MiB frame.
   static const int _kPageChars = 2 * 1024 * 1024;
+
+  /// An agent id names one file and no path: letters, digits, `-` and `_`.
+  static final RegExp _agentIdShape = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
   static int _chars(TranscriptMessage message) =>
       message.text.length +

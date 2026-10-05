@@ -19,6 +19,9 @@ const Set<String> kServerFeatures = <String>{
   'link.keepalive',
   // `sessions.transcript.subagent`: a delegate's turns (Stage 0 step 6).
   'sessions.transcript.subagent',
+  // ...named by a background agent's id (`agentId`), for a client with no
+  // path for it.
+  'sessions.transcript.subagent.agentId',
   // Readers of a record's raw lines, run on the server (Stage 0 step 7).
   'sessions.rewindPoints',
   'sessions.changedFiles',

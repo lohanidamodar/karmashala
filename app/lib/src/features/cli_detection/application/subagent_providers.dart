@@ -17,8 +17,13 @@ final subagentTurnsReaderProvider = Provider<SubagentTurnsReader>(
 
 /// Which subagent: the transcript path its `Task` row names, and the session
 /// that row is in — what the server checks the path against. Without a
-/// session the path is read off this client's disk.
-typedef SubagentTurnsKey = ({String? sessionId, String filePath});
+/// session the path is read off this client's disk. A background agent whose
+/// row names no file is asked for by its [agentId] instead, server only.
+typedef SubagentTurnsKey = ({
+  String? sessionId,
+  String filePath,
+  String? agentId,
+});
 
 /// One subagent's turns, read the first time its row is expanded. Keyed by the
 /// transcript path, so the same file expanded twice is not read twice.
@@ -29,6 +34,22 @@ typedef SubagentTurnsKey = ({String? sessionId, String filePath});
 final subagentTurnsProvider = FutureProvider.autoDispose
     .family<List<TranscriptMessage>, SubagentTurnsKey>((ref, key) async {
       final sessionId = key.sessionId;
+      final agentId = key.agentId;
+      if (agentId != null) {
+        if (sessionId == null ||
+            !ref.read(capabilitiesProvider).subagentByAgentId) {
+          throw const ServerTranscriptException(
+            'this server cannot read that agent\'s turns',
+          );
+        }
+        try {
+          return await ref
+              .read(serverTranscriptsProvider)
+              .subagent(sessionId, '', agentId: agentId);
+        } on DataRefused catch (refusal) {
+          throw ServerTranscriptException(refusal.message);
+        }
+      }
       if (sessionId != null && ref.read(capabilitiesProvider).chatViaServer) {
         try {
           return await ref

@@ -8,6 +8,7 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../application/background_runs_providers.dart';
@@ -53,6 +54,9 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
       _tick ??= Timer.periodic(kActivityTickInterval, (_) => setState(() {}));
     }
     final now = ref.read(clockProvider).nowUtc();
+    final byAgentId = ref.watch(
+      capabilitiesProvider.select((c) => c.subagentByAgentId),
+    );
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -118,6 +122,7 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
                         entry: entry,
                         now: now,
                         sessionId: widget.sessionId,
+                        byAgentId: byAgentId,
                       ),
                   ],
                 ),
@@ -174,11 +179,16 @@ class _RunRow extends StatelessWidget {
     required this.entry,
     required this.now,
     required this.sessionId,
+    required this.byAgentId,
   });
 
   final SessionBackgroundRun entry;
   final DateTime now;
   final String sessionId;
+
+  /// The server reads an agent's turns by its id, so an agent whose row
+  /// names no file still opens.
+  final bool byAgentId;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +249,10 @@ class _RunRow extends StatelessWidget {
     final described = summary == null
         ? row
         : Tooltip(message: summary, child: row);
-    if (subagent == null) return described;
+    // An agent whose row names no file is asked for by its own id.
+    final byId =
+        subagent == null && byAgentId && run.kind == BackgroundRunKind.agent;
+    if (subagent == null && !byId) return described;
     return InkWell(
       onTap: () => showAdaptiveModal<void>(
         context: context,
@@ -247,8 +260,17 @@ class _RunRow extends StatelessWidget {
         heightFactor: 0.8,
         builder: (_) => SingleChildScrollView(
           child: SubagentTurnsTile(
-            reference: subagent,
+            reference:
+                subagent ??
+                SubagentRef(
+                  toolUseId: run.id,
+                  filePath: '',
+                  agentType: '',
+                  description: title,
+                  spawnDepth: 1,
+                ),
             sessionId: sessionId,
+            agentId: byId ? run.id : null,
             initiallyExpanded: true,
           ),
         ),

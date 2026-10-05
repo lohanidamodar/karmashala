@@ -197,16 +197,23 @@ class ServerTranscripts {
       _read(SessionTranscriptRead(sessionId, limit: 1));
 
   /// A subagent's turns: the delegate at [path] of session [sessionId], read
-  /// on the server a page at a time. Throws [DataRefused].
+  /// on the server a page at a time, or the background agent [agentId] when
+  /// given. Throws [DataRefused].
   Future<List<TranscriptMessage>> subagent(
     String sessionId,
-    String path,
-  ) async {
+    String path, {
+    String? agentId,
+  }) async {
     final out = <TranscriptMessage>[];
     var after = 0;
     while (true) {
       final page = (await _client.send(
-        SessionTranscriptSubagent(sessionId, path, after: after),
+        SessionTranscriptSubagent(
+          sessionId,
+          path,
+          agentId: agentId,
+          after: after,
+        ),
       )).value;
       out.addAll(page.messages);
       after = page.from + page.messages.length;

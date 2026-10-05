@@ -21,11 +21,16 @@ class SubagentTurnsTile extends ConsumerStatefulWidget {
     this.resolveHostPath,
     this.nesting = 0,
     this.sessionId,
+    this.agentId,
     this.initiallyExpanded = false,
     super.key,
   });
 
   final SubagentRef reference;
+
+  /// A background agent's own id, read by the server in place of
+  /// [SubagentRef.filePath] when its row names no file.
+  final String? agentId;
 
   /// Read and open from the first frame, for a delegate opened on its own.
   final bool initiallyExpanded;
@@ -73,6 +78,7 @@ class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
             subagentTurnsProvider((
               sessionId: widget.sessionId,
               filePath: widget.reference.filePath,
+              agentId: widget.agentId,
             )),
           )
         : const AsyncValue<List<TranscriptMessage>>.loading();

@@ -38,7 +38,8 @@ DataRequest<Object?>? _sessionTranscriptRequestFromJson(
   ),
   SessionTranscriptSubagent.name => SessionTranscriptSubagent(
     args.string('sessionId'),
-    args.string('path'),
+    args.optionalString('path') ?? '',
+    agentId: args.optionalString('agentId'),
     after: args.optionalInt('after'),
     limit: args.optionalInt('limit'),
   ),
@@ -198,19 +199,38 @@ final class SessionTranscriptWatch extends SessionTranscriptRequest<DataAck> {
 /// Refused `invalid` for a [path] that is not one of [sessionId]'s
 /// subagents: the request reads no other file. An older server refuses the
 /// kind as `invalid` too; a client then reads its own disk, as before.
+///
+/// [SessionTranscriptSubagent.ofAgent] names a background agent by its run's
+/// id instead, for a client with no path for it; only a server offering
+/// [byAgentFeature] reads it.
 final class SessionTranscriptSubagent
     extends SessionTranscriptRequest<TranscriptPage> {
   const SessionTranscriptSubagent(
     this.sessionId,
     this.path, {
+    this.agentId,
     this.after,
     this.limit,
   });
 
+  const SessionTranscriptSubagent.ofAgent(
+    this.sessionId,
+    String this.agentId, {
+    this.after,
+    this.limit,
+  }) : path = '';
+
   static const String name = 'sessions.transcript.subagent';
+
+  /// The server feature that reads [agentId].
+  static const String byAgentFeature = 'sessions.transcript.subagent.agentId';
 
   final String sessionId;
   final String path;
+
+  /// The agent's own id (a background run's), read from the session's
+  /// subagents directory in place of [path].
+  final String? agentId;
   final int? after;
   final int? limit;
 
@@ -221,6 +241,7 @@ final class SessionTranscriptSubagent
   Map<String, Object?> argumentsToJson() => {
     'sessionId': sessionId,
     'path': path,
+    'agentId': ?agentId,
     'after': ?after,
     'limit': ?limit,
   };

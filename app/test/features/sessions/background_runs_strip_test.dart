@@ -11,6 +11,9 @@ import 'package:karmashala/src/features/sessions/application/background_runs_pro
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/background_runs_strip.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionTranscriptSubagent;
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -62,6 +65,8 @@ void main() {
     List<TranscriptMessage> messages, {
     DateTime? now,
     Size? size,
+    Set<String>? features,
+    List<SubagentTurnsKey>? asked,
   }) async {
     if (size != null) {
       tester.view.physicalSize = size;
@@ -111,9 +116,14 @@ void main() {
           sessionChatTranscriptProvider.overrideWith(
             (ref, id) => Stream.value(messages),
           ),
-          subagentTurnsProvider.overrideWith(
-            (ref, key) async => const <TranscriptMessage>[],
-          ),
+          subagentTurnsProvider.overrideWith((ref, key) async {
+            asked?.add(key);
+            return const <TranscriptMessage>[];
+          }),
+          if (features != null)
+            serverOfferProvider.overrideWithValue(
+              ServerOffer(sameMachine: false, features: features),
+            ),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -363,6 +373,48 @@ void main() {
     expect(find.text('Start the debug probe'), findsNothing);
     expect(find.text('1 done'), findsOneWidget);
     expect(find.text('1 background command running'), findsOneWidget);
+  });
+
+  group('on a phone, an agent the record names no file for', () {
+    TranscriptMessage unlinked() =>
+        launch('a9f3', 'Survey the parsers', BackgroundRunState.running);
+
+    testWidgets('opens to its own turns, asked by its id', (tester) async {
+      final asked = <SubagentTurnsKey>[];
+      await pump(
+        tester,
+        [unlinked()],
+        size: const Size(390, 844),
+        features: {
+          'sessions.transcript',
+          SessionTranscriptSubagent.byAgentFeature,
+        },
+        asked: asked,
+      );
+
+      await tester.tap(find.text('Survey the parsers'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SubagentTurnsTile), findsOneWidget);
+      expect(asked.single.sessionId, 's1');
+      expect(asked.single.agentId, 'a9f3');
+    });
+
+    testWidgets('is not offered by a server that cannot read it', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        [unlinked()],
+        size: const Size(390, 844),
+        features: {'sessions.transcript'},
+      );
+
+      await tester.tap(find.text('Survey the parsers'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SubagentTurnsTile), findsNothing);
+    });
   });
 
   test('a run whose end was not recorded is said so', () {
