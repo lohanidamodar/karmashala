@@ -44,7 +44,7 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
     // Wait for the refreshed list rather than reading the stale one: the device
     // that was just booted is precisely the one not in it yet.
     final devices = await ref.read(devicesProvider.future);
-    final device = devices.where((d) => d.serial == serial).firstOrNull;
+    final device = devices.where((d) => d.answersTo(serial)).firstOrNull;
     if (!mounted || device == null || !device.isReady) return;
     await _preview(device);
   }

@@ -54,7 +54,7 @@ enum LiveViewSelectionAction {
   final device = selectedSerial == null
       ? null
       : devices
-            .where((candidate) => candidate.serial == selectedSerial)
+            .where((candidate) => candidate.answersTo(selectedSerial))
             .firstOrNull;
   if (device == null || !device.isReady) {
     return (action: LiveViewSelectionAction.stop, device: null);
@@ -143,7 +143,7 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
           .read(devicesProvider)
           .asData
           ?.value
-          .where((d) => d.serial == serial && d.isReady)
+          .where((d) => d.answersTo(serial) && d.isReady)
           .firstOrNull;
       if (device != null) unawaited(_startStream(device));
     } else if (!on && _session != null) {
@@ -223,7 +223,7 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
     setState(() => _resuming = false);
     if (_liveSerial != serial) return;
     final device = devices
-        .where((candidate) => candidate.serial == serial && candidate.isReady)
+        .where((candidate) => candidate.answersTo(serial) && candidate.isReady)
         .firstOrNull;
     // Unplugged while the pane was away. The ordinary "pick a device" state —
     // not an error, and not a spinner with nothing behind it.
@@ -339,7 +339,7 @@ mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
         .read(devicesProvider)
         .asData
         ?.value
-        .where((candidate) => candidate.serial == serial)
+        .where((candidate) => candidate.answersTo(serial))
         .firstOrNull;
     if (device == null) return;
     if (manual) _restarts.reset();

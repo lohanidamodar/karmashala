@@ -99,7 +99,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     if (liveSerial != null &&
         deviceList.hasValue &&
         !deviceList.requireValue.any(
-          (d) => d.serial == liveSerial && d.isReady,
+          (d) => d.answersTo(liveSerial) && d.isReady,
         )) {
       unawaited(_stopAndRebuild());
     }
@@ -195,7 +195,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     final sdk = ref.watch(androidSdkProvider);
     final deviceList = ref.watch(devicesProvider);
     final devices = deviceList.asData?.value ?? const <AndroidDevice>[];
-    final device = devices.where((d) => d.serial == serial).firstOrNull;
+    final device = devices.where((d) => d.answersTo(serial)).firstOrNull;
     final ready = device != null && device.isReady;
     final on = ref.watch(androidLivePreviewsProvider).contains(serial);
     final busy = _starting || _resuming;
@@ -276,9 +276,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
           onStart: start,
           onStop: _stopAndRebuild,
           onRestart: on ? _restartStream : null,
-          onFiles: ready
-              ? () => DeviceFilesDialog.show(context, device)
-              : null,
+          onFiles: ready ? () => DeviceFilesDialog.show(context, device) : null,
         ),
         const DeviceRecordingBanner(),
         const Divider(height: 1),
@@ -303,10 +301,8 @@ class _DevicePaneState extends ConsumerState<DevicePane>
             // Reading a log is not driving: it works with the live view off.
             logcat: device == null
                 ? null
-                : (logHeight) => DeviceLogcatSection(
-                    device: device,
-                    logHeight: logHeight,
-                  ),
+                : (logHeight) =>
+                      DeviceLogcatSection(device: device, logHeight: logHeight),
           ),
         ),
       ],
@@ -342,7 +338,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     // view's device, and reading it from one place keeps them the same.
     final live = _liveSerial == null
         ? null
-        : devices.where((d) => d.serial == _liveSerial).firstOrNull;
+        : devices.where((d) => d.answersTo(_liveSerial)).firstOrNull;
     final paneDevice = live ?? selected;
 
     // Whether the simulator's picture is what this pane shows. Named once and

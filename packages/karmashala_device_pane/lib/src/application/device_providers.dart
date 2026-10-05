@@ -36,11 +36,12 @@ final adbServiceProvider = Provider<AdbService?>((ref) {
   return AdbService(runner: runner, sdk: sdk);
 });
 
-/// Connected devices and emulators. Refresh with `ref.invalidate`.
+/// Connected devices and emulators, a phone on a cable and on wireless adb
+/// listed once. Refresh with `ref.invalidate`.
 final devicesProvider = FutureProvider<List<AndroidDevice>>((ref) async {
   final adb = ref.watch(adbServiceProvider);
   if (adb == null) return const [];
-  return adb.listDevices();
+  return mergeDeviceTransports(await adb.listDevices());
 });
 
 /// AVDs known to the SDK, with any running one marked.
@@ -104,7 +105,7 @@ final selectedDeviceProvider = Provider<AndroidDevice?>((ref) {
   final serial = ref.watch(selectedDeviceSerialProvider);
   if (serial != null) {
     for (final device in devices) {
-      if (device.serial == serial) return device;
+      if (device.answersTo(serial)) return device;
     }
   }
   return ready.length == 1 ? ready.single : null;

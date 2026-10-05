@@ -42,7 +42,7 @@ class _Running extends ConsumerWidget {
     final known = devices.asData?.value;
     if (known == null) return 'Paused — looking for ${recording.target.id}.';
     final still = known
-        .where((d) => d.serial == recording.target.id)
+        .where((d) => d.answersTo(recording.target.id))
         .firstOrNull;
     if (still == null) {
       return 'Paused — ${recording.target.id} is no longer connected. Stop the '
