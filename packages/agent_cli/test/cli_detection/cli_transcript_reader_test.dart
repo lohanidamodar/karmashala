@@ -19,6 +19,26 @@ void main() {
     return file;
   }
 
+  test('a row Claude Code marks isMeta is never drawn as the person\'s '
+      'message', () async {
+    final file = write('meta.jsonl', [
+      '{"type":"user","message":{"role":"user","content":"look at this"}}',
+      '{"type":"user","isMeta":true,"message":{"role":"user","content":'
+          '[{"type":"text","text":"[Image: original 1080x2340, displayed at '
+          '923x2000.]"}]}}',
+      '{"type":"user","isMeta":true,"message":{"role":"user","content":'
+          '"<system-reminder>be brief</system-reminder>"}}',
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+    expect(messages.map((m) => '${m.role}:${m.text}'), [
+      'user:look at this',
+      'agent:ok',
+    ]);
+  });
+
   test('parses a Claude transcript into user/agent/tool messages', () async {
     final file = write('claude.jsonl', [
       '{"type":"user","message":{"role":"user","content":"hi there"}}',

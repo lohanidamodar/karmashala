@@ -772,18 +772,21 @@ void _parseClaudeLine(
   // A paste is recorded inside tags; the person's message is what they hold.
   Object? said(Object? text) =>
       role == 'user' && text is String ? _withoutPasteTags(text) : text;
+  // Text the harness added to a turn — a reminder, a skill's body, an image
+  // note — is marked isMeta: nobody typed it.
+  final meta = role == 'user' && json['isMeta'] == true;
   if (content is String) {
-    _add(out, role, said(content), at);
+    if (!meta) _add(out, role, said(content), at);
     return;
   }
   if (content is! List) return;
   for (final part in content) {
     if (part is String) {
-      _add(out, role, said(part), at);
+      if (!meta) _add(out, role, said(part), at);
     } else if (part is Map) {
       switch (part['type']) {
         case 'text':
-          _add(out, role, said(part['text']), at);
+          if (!meta) _add(out, role, said(part['text']), at);
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
