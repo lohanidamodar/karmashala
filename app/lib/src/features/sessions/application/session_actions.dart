@@ -431,9 +431,14 @@ class SessionActions {
     }
 
     final engine = _ref.read(sessionEngineProvider);
+    // Only an external-terminal session runs one-off turns here; one that ran
+    // in a pane is never left to a runtime of the engine's.
+    final inPane =
+        _ref.read(sessionsDataProvider).getById(sessionId)?.surface !=
+        SessionSurface.external;
 
     var resumed = false;
-    if (!engine.isActive(sessionId)) {
+    if (inPane || !engine.isActive(sessionId)) {
       // Resuming an agent still live elsewhere would start a second one on
       // the same conversation.
       if (_liveOutsideEngine(sessionId)) {
@@ -464,7 +469,10 @@ class SessionActions {
       }
       // A headless turn has nobody to ask its questions and approvals, so a
       // session that ran in a pane comes back in one, as Resume brings it.
-      if (session.surface != SessionSurface.external) {
+      if (inPane) {
+        // A runtime left from an earlier one-off turn ends first: two
+        // processes on one conversation.
+        await engine.stop(sessionId);
         await _resumeInPane(session, repo, installation, message: trimmed);
         return;
       }

@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show ResolvedPermission;
 import 'package:agent_cli/stream.dart' show FakeChatProtocol;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,35 @@ void main() {
     expect(container.read(sessionsStartingProvider), isEmpty);
   });
 
+  test('a one-off turn this app still holds for it does not take the '
+      'message: it ends, and the session comes back in a pane', () async {
+    // The probe's log, 2026-10-05: "Continued … through the engine:
+    // resumed=false" — an engine runtime left from an earlier headless turn
+    // swallowed the message.
+    final row = session(
+      id: 'pty-1',
+      agentInstallationId: 'pty',
+      status: SessionStatus.completed,
+    ).copyWith(externalSessionId: 'conv-1');
+    db.server.sessionRows.insert(row);
+    final container = await connect();
+    final engine = container.read(sessionEngineProvider);
+    await engine.resume(
+      session: row,
+      workingDirectory: repository().path,
+      installation: agentInstallation(id: 'pty'),
+      permission: ResolvedPermission.none,
+    );
+    expect(engine.isActive('pty-1'), isTrue);
+
+    await container
+        .read(sessionActionsProvider)
+        .continueSession('pty-1', 'please ask that again');
+
+    expect(starts().single.prompt, 'please ask that again');
+    expect(engine.isActive('pty-1'), isFalse);
+  });
+
   test('one that never named a conversation starts a fresh one in its own '
       'row, carrying the message', () async {
     db.server.sessionRows.insert(
@@ -124,10 +154,7 @@ void main() {
         id: 'ext-1',
         agentInstallationId: 'pty',
         status: SessionStatus.completed,
-      ).copyWith(
-        externalSessionId: 'conv-2',
-        surface: SessionSurface.external,
-      ),
+      ).copyWith(externalSessionId: 'conv-2', surface: SessionSurface.external),
     );
     final container = await connect();
 
