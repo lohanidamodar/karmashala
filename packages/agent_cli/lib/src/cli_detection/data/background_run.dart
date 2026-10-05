@@ -161,25 +161,41 @@ bool waitsOnBackground(
 /// every one of them.
 const String kTaskNotificationFallback = 'A background task reported back.';
 
+/// What an interim notice whose summary names no task is shown as.
+const String kTaskNotificationProgress = 'A background task reported progress.';
+
+/// Whether a `<task-notification>`'s [body] says its result may be interim:
+/// the run stopped with background work of its own and notifies again.
+bool isInterimTaskNotice(String body) => body.contains('may be interim');
+
 /// **The line a row made only of `<task-notification>` envelopes says** —
 /// each one's `<summary>`, a line apiece — or null when [text] is anything
 /// else. Claude Code writes a background run's completion into the parent
-/// transcript as a user row nobody typed.
+/// transcript as a user row nobody typed. An interim notice's summary still
+/// says "finished", so it is redrawn as progress.
 String? taskNotificationLine(String text) {
   final blocks = _envelope.allMatches(text).toList();
   if (blocks.isEmpty || text.replaceAll(_envelope, '').trim().isNotEmpty) {
     return null;
   }
-  return [
-    for (final block in blocks)
-      switch (_summary.firstMatch(block.group(0)!)?.group(1)?.trim()) {
-        final summary? when summary.isNotEmpty => summary,
-        _ => kTaskNotificationFallback,
-      },
-  ].join('\n');
+  return [for (final block in blocks) _noticeLine(block.group(0)!)].join('\n');
+}
+
+String _noticeLine(String block) {
+  final summary = _summary.firstMatch(block)?.group(1)?.trim() ?? '';
+  if (isInterimTaskNotice(block)) {
+    return switch (_outcome.firstMatch(summary)?.group(1)) {
+      final task? => '$task reported progress',
+      _ => kTaskNotificationProgress,
+    };
+  }
+  return summary.isEmpty ? kTaskNotificationFallback : summary;
 }
 
 final RegExp _envelope = RegExp(
   r'<task-notification>[\s\S]*?</task-notification>',
 );
 final RegExp _summary = RegExp(r'<summary>([\s\S]*?)</summary>');
+final RegExp _outcome = RegExp(
+  r'^(.*\S)\s+(?:finished|completed|failed|stopped|killed)$',
+);

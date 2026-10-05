@@ -226,6 +226,35 @@ void main() {
     );
   });
 
+  test('the chat note says "finished" only for the final notice; the '
+      'interim one reported progress', () async {
+    writeParent([
+      agentCall('toolu_1', 'Sleep 60 then report'),
+      agentLaunched('toolu_1', 'a1', 'Sleep 60 then report'),
+      notified(
+        'a1',
+        '2026-10-04T14:49:22.676Z',
+        status: 'completed',
+        summary: 'Agent "Sleep 60 then report" finished',
+        interim: true,
+      ),
+      notified(
+        'a1',
+        '2026-10-04T14:51:22.053Z',
+        status: 'completed',
+        summary: 'Agent "Sleep 60 then report" finished',
+      ),
+    ]);
+    final notes = [
+      for (final m in await read())
+        if (m.role == 'user') ?taskNotificationLine(m.text),
+    ];
+    expect(notes, [
+      'Agent "Sleep 60 then report" reported progress',
+      'Agent "Sleep 60 then report" finished',
+    ]);
+  });
+
   test('a background command is listed too, and how it ended', () async {
     writeParent([
       bashCall('toolu_3', 'Run the app tests'),
@@ -234,7 +263,8 @@ void main() {
         'brr24bsfs',
         '2026-10-04T14:55:00.000Z',
         status: 'failed',
-        summary: 'Background command "Run the app tests" failed with exit '
+        summary:
+            'Background command "Run the app tests" failed with exit '
             'code 1',
       ),
     ]);

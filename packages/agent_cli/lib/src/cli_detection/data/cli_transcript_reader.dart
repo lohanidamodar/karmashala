@@ -928,7 +928,7 @@ Iterable<_TaskNotice> _taskNotices(String text) sync* {
       id: id,
       status: _taskStatusPattern.firstMatch(body)?.group(1)?.trim(),
       summary: _taskSummaryPattern.firstMatch(body)?.group(1)?.trim(),
-      interim: body.contains('may be interim'),
+      interim: isInterimTaskNotice(body),
     );
   }
 }
