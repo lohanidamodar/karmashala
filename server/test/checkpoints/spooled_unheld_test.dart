@@ -84,12 +84,17 @@ void main() {
 
   test('the endpoint, when its hold is met, marks nothing: the warning is '
       'the spooled hook\'s, not every mid-turn snapshot\'s', () async {
+    // A hold that is met however loaded the machine: the default 1.5 s can
+    // expire under a full parallel suite, which is a different case.
+    await w.close();
+    w = await CheckpointWorld.create(hold: const Duration(seconds: 20));
     final file = p.join(w.app, 'main.txt');
     await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
     await w.hook('PreToolUse', w.edit(file));
+    expect(w.log.where((l) => l.contains('released a tool')), isEmpty);
     File(file).writeAsStringSync('one\nTWO\n');
     await w.hook('Stop');
-    await w.untilCheckpoints(w.app, 2);
+    await w.untilCheckpoints(w.app, 2, within: const Duration(seconds: 20));
     await w.settle();
     final nested = w.ofRepo(w.app);
     expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
