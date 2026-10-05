@@ -8,7 +8,6 @@ void main() {
   final roots = [
     Directory('lib'),
     Directory('../packages/karmashala_ui/lib'),
-    Directory('../packages/karmashala_companion/lib'),
     Directory('../packages/karmashala_device_pane/lib'),
   ];
 

@@ -20,9 +20,4 @@ void main() {
     expect(buildIdentity(), contains('version not recorded'));
     expect(buildIdentity(), isNot(contains('1.2.0')));
   });
-
-  test('defaults to the desktop mode, since only the companion sets one', () {
-    expect(appMode, 'desktop');
-    expect(buildIdentity(), contains('(desktop)'));
-  });
 }

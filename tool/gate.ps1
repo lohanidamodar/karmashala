@@ -27,7 +27,7 @@
 
 .PARAMETER Package
   A key of the map below. Every one of them — `core`, `media`, `agent_cli`,
-  `agent_reporting`, `automations`, `browser`, `companion`, `devices`, `mcp`,
+  `agent_reporting`, `automations`, `browser`, `devices`, `mcp`,
   `notifications`, `remote`, `session`, `ssh`, `git`, `flutter_apps`,
   `terminal_core`, `terminal_runtime` and `ui` — is extracted and cut over: the
   app holds no copy of any of them.
@@ -392,29 +392,12 @@ $map = [ordered]@{
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
-    # Both folders whole: what is left in them is the app's half of the link —
+    # The folder whole: what is left in it is the app's half of the link —
     # the DAOs, the host service, the providers, the secure store and the
-    # nineteen phone suites that bind a real relay or a real database — and
-    # `bound_frames_golden_test.dart` sits inside the first.
-    app  = @('test/features/remote', 'test/features/companion')
-    owns = @('lib/src/features/remote', 'lib/src/features/companion',
-             'test/features/remote', 'test/features/companion')
-  }
-  companion = @{
-    pkg  = 'packages/karmashala_companion'
-    # A Flutter package: it is the phone's screens, so its own half runs under
-    # `flutter test`.
-    flutter = $true
-    # `test/features/companion` whole: what is left in it is the app's half —
-    # the secure store, the push entry point, the composer's desktop picker,
-    # and the sixteen suites that stand a real relay or a real database behind
-    # the gateway. Two suites outside it reach the package: the shell that
-    # mounts its screens, and the token-debt sweep, which reads the package's
-    # `lib` beside the app's or it would stop guarding the touch surface.
-    app  = @('test/features/companion', 'test/app/companion',
-             'test/app/theme/ui_token_debt_test.dart')
-    owns = @('lib/src/features/companion',
-             'test/features/companion', 'test/app/companion')
+    # phone suites that bind a real relay or a real database — and
+    # `bound_frames_golden_test.dart` sits inside it.
+    app  = @('test/features/remote')
+    owns = @('lib/src/features/remote', 'test/features/remote')
   }
 }
 

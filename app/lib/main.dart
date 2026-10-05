@@ -12,9 +12,7 @@ import 'package:karmashala_remote/client.dart' show CompanionPairing;
 import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/server_session_root.dart';
-import 'src/app/companion/companion_bootstrap.dart';
 import 'src/core/capabilities/device_name.dart';
-import 'src/app/companion/companion_mode.dart';
 import 'src/core/capabilities/capabilities.dart';
 import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
@@ -41,10 +39,6 @@ import 'src/features/verification/application/verification_providers.dart';
 /// Application entry point. Logging and the uncaught-error handlers first, so
 /// whatever the bootstrap does next is on record if it fails.
 Future<void> main() async {
-  // A companion build boots its own shell and nothing below this line — no
-  // PTYs, no discovery, no control server, no tray, no window chrome.
-  if (CompanionMode.enabled) return runCompanionApp();
-
   ensureAppBinding();
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');

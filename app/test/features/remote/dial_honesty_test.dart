@@ -20,7 +20,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../remote/transport_harness.dart';
+import 'transport_harness.dart';
 
 /// A relay address nothing is listening on, so every dial is refused at once.
 final Uri _deadRelay = Uri.parse('ws://127.0.0.1:1');

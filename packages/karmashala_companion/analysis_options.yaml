@@ -1,2 +1,0 @@
-# The app's rules, unchanged — this package is analysed by the same gate.
-include: ../../analysis_options.yaml

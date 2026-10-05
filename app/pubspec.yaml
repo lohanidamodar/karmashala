@@ -22,11 +22,6 @@ dependencies:
   # it. No dependencies of its own; the app hands it the process.
   karmashala_browser:
     path: ../packages/karmashala_browser
-  # The phone: the companion's own application layer and every screen it
-  # draws. The desktop build reaches it only through `lib/src/app/companion`,
-  # which `KARMASHALA_MODE=companion` is the only entry to.
-  karmashala_companion:
-    path: ../packages/karmashala_companion
   # The Flutter-free core: logging, small utilities and path probing. A
   # workspace member, so this path resolves to the copy in the tree.
   karmashala_core:
@@ -180,13 +175,12 @@ dependencies:
     path: ../packages/karmashala_agent_status
   karmashala_local_ipc:
     path: ../packages/local_ipc
-  # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
+  # End-to-end sealing for a phone's link (XChaCha20-Poly1305, HKDF).
   cryptography: ^2.9.0
   file_selector: ^1.1.0
   flutter:
     sdk: flutter
-  # A phone's notifications while the app runs (Stage 3 step 2), and the
-  # companion build's until it is retired. No push.
+  # A phone's notifications while the app runs (Stage 3 step 2). No push.
   flutter_local_notifications: ^22.3.1
   flutter_markdown_plus: ^1.0.7
   flutter_riverpod: ^3.3.2
@@ -222,7 +216,7 @@ dependencies:
   media_kit_libs_windows_video: ^1.0.11
   media_kit_libs_macos_video: ^1.1.4
   media_kit_libs_linux: ^1.2.1
-  # The pairing QR scanner on a phone (and the companion build's).
+  # The pairing QR scanner on a phone.
   mobile_scanner: ^7.0.0
   media_kit_video: ^2.0.1
   pasteboard: ^0.5.0
@@ -244,7 +238,7 @@ dependencies:
   # was the alternative and would have re-derived its typed event model.
   vm_service: ^15.2.0
   wakelock_plus: ^1.8.0
-  # The relay client transport for the mobile companion.
+  # The relay client transport for a phone's link.
   web_socket_channel: ^3.0.3
   window_manager: ^0.5.1
   # Our fork of xterm2 — see https://github.com/lohanidamodar/xterm2 (branch
@@ -298,7 +292,7 @@ dev_dependencies:
   # Read back what the launch-at-login writes, in
   # test/features/system/launch_at_startup_windows_test.dart.
   win32_registry: ^3.0.3
-  # A real relay the companion suites pair and talk through, in-process. The
+  # A real relay the phone-link suites pair and talk through, in-process. The
   # LAN relay phones meet a machine at is the server's (`karmashala_host`),
   # never the app's.
   karmashala_relay:

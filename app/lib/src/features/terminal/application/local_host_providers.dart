@@ -39,7 +39,7 @@ final serverAccessProvider = Provider<HostSessionAccess?>(
 /// the server for data before the container exists and hands the same one
 /// to it — one access, so one measurement and one start.
 LocalHostSessionAccess? localHostSessionAccessFor(ProbeMode probe) {
-  // A companion build has no filesystem to find a binary in and no business
+  // A phone has no filesystem to find a binary in and no business
   // starting a daemon.
   if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
     return null;

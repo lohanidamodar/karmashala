@@ -18,7 +18,7 @@ enum PairingInputKind {
   unrecognised,
 }
 
-/// Sniffs [text] the way `CompanionGateway.pairWithCode` does.
+/// Sniffs [text]: a pairing payload, a typed code, or neither.
 PairingInputKind classifyPairingInput(String text) {
   final trimmed = text.trim();
   if (trimmed.isEmpty) return PairingInputKind.unrecognised;

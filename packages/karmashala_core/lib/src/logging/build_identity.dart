@@ -11,16 +11,10 @@ import 'dart:io';
 /// in a build that did not set it.
 const String appVersion = String.fromEnvironment('KARMASHALA_VERSION');
 
-/// Passed as `--dart-define=KARMASHALA_MODE=companion` by the companion build.
-const String appMode = String.fromEnvironment(
-  'KARMASHALA_MODE',
-  defaultValue: 'desktop',
-);
-
-/// `Karmashala 1.2.0+12 (desktop) on windows "10.0 (Build 26100)"`, with
+/// `Karmashala 1.2.0+12 on windows "10.0 (Build 26100)"`, with
 /// `version not recorded` in place of the version when the define is absent.
 String buildIdentity() {
   final version = appVersion.isEmpty ? 'version not recorded' : appVersion;
-  return 'Karmashala $version ($appMode) on ${Platform.operatingSystem} '
+  return 'Karmashala $version on ${Platform.operatingSystem} '
       '"${Platform.operatingSystemVersion}"';
 }
