@@ -160,10 +160,7 @@ void main() {
     ]);
 
     final messages = await read();
-    final runs = [
-      for (final m in messages)
-        if (m.background case final run?) run,
-    ];
+    final runs = [for (final m in messages) ?m.background];
     expect(runs.map((r) => r.id), ['a1', 'a2']);
     expect(runs.map((r) => r.description), [
       'Strip idle detection',
