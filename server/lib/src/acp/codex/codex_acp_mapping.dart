@@ -313,7 +313,10 @@ String codexInnerCommand(String commandLine) {
     return body.replaceAll(r"'\''", "'").replaceAll("''", "'");
   }
   if (arg.length >= 2 && arg.startsWith('"') && arg.endsWith('"')) {
-    return arg.substring(1, arg.length - 1).replaceAll(r'\"', '"');
+    // Joined POSIX-style, so a double-quoted body escapes these four.
+    return arg
+        .substring(1, arg.length - 1)
+        .replaceAllMapped(RegExp(r'\\([\\"$`])'), (m) => m[1]!);
   }
   return arg;
 }

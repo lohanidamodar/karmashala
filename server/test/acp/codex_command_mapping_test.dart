@@ -29,6 +29,17 @@ void main() {
       ),
       ("/bin/bash -lc 'ls -la'", 'ls -la'),
       ('bash -lc "git status"', 'git status'),
+      // Joined POSIX-style: a script holding a quote is double-quoted, with
+      // its backslashes, quotes, dollars and backticks escaped.
+      (
+        r'"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
+            r'''-Command "printf 'One line\\n' > c.txt"''',
+        r"printf 'One line\n' > c.txt",
+      ),
+      (
+        r'''/bin/bash -lc "echo 'it' \"\$HOME\" \`id\`"''',
+        r'''echo 'it' "$HOME" `id`''',
+      ),
       ('git status', 'git status'),
     ]) {
       final call = run(wrapped);
