@@ -126,6 +126,69 @@ void main() {
       expect(report.waiting, AgentWaitKind.approval);
     });
 
+    // Seen on the owner's phone, 2026-10-05: a question open while two
+    // background agents ran could not be answered. Each subagent's hooks fire
+    // under the parent's session_id, with an agent_id of their own.
+    test('a background subagent working does not close the main thread\'s '
+        'question', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: preToolUse('AskUserQuestion', {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        }),
+      );
+      for (final event in ['PreToolUse', 'PostToolUse']) {
+        receiver.handle(
+          agentId: 'claudeCode',
+          event: event,
+          body: jsonEncode({
+            'session_id': 's1',
+            'agent_id': 'a8989a29',
+            'hook_event_name': event,
+            'tool_name': 'Bash',
+            'tool_input': {'command': 'ls'},
+          }),
+        );
+      }
+      final latest = receiver.reports.latest('claudeCode', 's1')!;
+      expect(latest.hasOpenQuestion, isTrue);
+      expect(latest.evidence, ['Pick a fruit']);
+    });
+
+    test('the main thread\'s own tool call after it still ends the question', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: preToolUse('AskUserQuestion', {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        }),
+      );
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PostToolUse',
+        body: preToolUse('AskUserQuestion', const {}),
+      );
+      expect(
+        receiver.reports.latest('claudeCode', 's1')!.hasOpenQuestion,
+        isFalse,
+      );
+    });
+
     test('any other tool is still just work', () {
       final report = receiver.handle(
         agentId: 'claudeCode',

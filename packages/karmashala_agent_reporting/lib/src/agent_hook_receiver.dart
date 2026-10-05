@@ -161,6 +161,22 @@ class AgentHookReceiver {
     // latest word is that open question, the question stands. Anything else in
     // between (its own PostToolUse included) has already replaced it.
     final before = reports.latest(id, sessionId);
+    // **A subagent's event, under its parent's session id.** A background
+    // agent working says nothing about the question or prompt the main
+    // thread has open; only an ending or a failure outranks that.
+    final fromSubagent =
+        spec != null &&
+        spec.subagentIdPath.isNotEmpty &&
+        _stringAt(spec.subagentIdPath, payload).isNotEmpty;
+    if (fromSubagent &&
+        before != null &&
+        before.status == AgentActivityStatus.awaitingApproval &&
+        (before.waiting == AgentWaitKind.question ||
+            before.waiting == AgentWaitKind.approval) &&
+        ending == null &&
+        status != AgentActivityStatus.failed) {
+      return before;
+    }
     if (report.waiting == AgentWaitKind.approval &&
         before != null &&
         before.waiting == AgentWaitKind.question &&

@@ -479,7 +479,7 @@ void main() {
           isA<GatewayException>().having(
             (e) => e.message,
             'message',
-            contains('already been answered'),
+            contains('no longer waiting'),
           ),
         ),
       );

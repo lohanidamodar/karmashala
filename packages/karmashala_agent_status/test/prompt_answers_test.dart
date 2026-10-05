@@ -141,7 +141,7 @@ void main() {
         isA<SessionPromptRefusal>().having(
           (r) => r.message,
           'message',
-          contains('already been answered'),
+          contains('the question changed since it was shown'),
         ),
       ),
     );

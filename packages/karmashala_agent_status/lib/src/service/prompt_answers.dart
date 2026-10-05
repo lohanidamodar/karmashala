@@ -176,9 +176,16 @@ class SessionPromptAnswers implements PromptAnswering {
       );
     }
     final open = await terminals.openQuestion(sessionId);
-    if (open == null || open.toolUseId != request.toolUseId) {
+    // Neither case proves anybody answered it, so neither says so.
+    if (open == null) {
       throw const SessionPromptRefusal(
-        'this question has already been answered',
+        'no question could be read in this session now, so nothing was '
+        'answered',
+      );
+    }
+    if (open.toolUseId != request.toolUseId) {
+      throw const SessionPromptRefusal(
+        'the question changed since it was shown, so nothing was answered',
       );
     }
     if (request.decline) {

@@ -420,6 +420,7 @@ class AgentHookSpec {
     this.configKey = 'hooks',
     this.entryStyle = AgentHookEntryStyle.grouped,
     this.sessionIdPath = const ['session_id'],
+    this.subagentIdPath = const [],
     this.cwdPath = const ['cwd'],
     this.promptPath = const ['prompt'],
     this.toolInputPath = const ['tool_input'],
@@ -461,6 +462,10 @@ class AgentHookSpec {
 
   /// Where the agent's session id sits in the hook payload.
   final List<String> sessionIdPath;
+
+  /// Where a subagent's own id sits, on the events it fires under its
+  /// parent's session id; empty when this agent's hooks carry none.
+  final List<String> subagentIdPath;
 
   /// Where the directory the agent is working in sits in the payload, or empty
   /// when this agent's hooks carry none.

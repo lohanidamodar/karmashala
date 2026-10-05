@@ -386,7 +386,7 @@ class HostSessionApi {
               // Not a new error code: `tryParse` on an older companion answers
               // null for a wire word it has never seen.
               ErrorCode.badRequest,
-              'this approval has already been answered',
+              'this approval is no longer waiting for an answer',
             );
           }
           final optionId = envelope.payload['optionId'];
@@ -418,7 +418,7 @@ class HostSessionApi {
           if (!await _awaitingApproval(request.sessionId)) {
             throw const RemoteApiRefusal(
               ErrorCode.badRequest,
-              'this question has already been answered',
+              'this question is no longer waiting for an answer',
             );
           }
           final done = await bindings.answerQuestion(request);
@@ -439,7 +439,7 @@ class HostSessionApi {
           if (!await _awaitingApproval(request.sessionId)) {
             throw const RemoteApiRefusal(
               ErrorCode.badRequest,
-              'this prompt has already been answered',
+              'this prompt is no longer waiting for an answer',
             );
           }
           final chosen = await bindings.answerMenu(request);

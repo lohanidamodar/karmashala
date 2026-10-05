@@ -440,6 +440,9 @@ const claudeCodeDescriptor = AgentDescriptor(
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
     configFileName: 'settings.json',
+    // A subagent's events carry the parent's session_id and their own
+    // agent_id (captured below).
+    subagentIdPath: ['agent_id'],
     // **Two keys, because Claude Code's prose lives under two names.**
     //
     // `Notification` carries a `message` describing what it wants. It was

@@ -125,6 +125,34 @@ void main() {
       expect(answered.question, isNull);
     });
 
+    test('a question stays open while background agents work', () {
+      hook('PreToolUse', {
+        'tool_name': 'AskUserQuestion',
+        'tool_use_id': 'toolu_1',
+        'tool_input': {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        },
+      });
+      for (final event in ['PreToolUse', 'PostToolUse', 'PreToolUse']) {
+        clock.now = clock.now.add(const Duration(seconds: 1));
+        hook(event, {
+          'agent_id': 'a8989a29',
+          'tool_name': 'Bash',
+          'tool_use_id': 'toolu_sub',
+        });
+      }
+      final still = keeper.statusOf('row-1')!;
+      expect(still.report.hasOpenQuestion, isTrue);
+      expect(still.question!.toolUseId, 'toolu_1');
+    });
+
     test('a protocol report that is a question keeps the question it asks, '
         'until the agent moves on', () {
       AgentStatusReport protocol(AgentActivityStatus status, AgentWaitKind w) =>

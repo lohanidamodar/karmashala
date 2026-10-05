@@ -1701,7 +1701,7 @@ void main() {
         expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
         expect(
           harness.last.payload['message'],
-          'this approval has already been answered',
+          'this approval is no longer waiting for an answer',
         );
         // The point of refusing: nothing was typed into whatever prompt is
         // there now.
