@@ -747,6 +747,7 @@ void _parseClaudeLine(
   DateTime? at,
 ) {
   final type = json['type'];
+  runs.written(json['version']);
   // Session-level records: not turns, so they render nothing, but they are the
   // only thing that can retire a subagent nobody ever reported.
   if (type == 'system') {
@@ -821,7 +822,7 @@ void _parseClaudeLine(
             if (id is String) {
               pending[id] = out.length;
               if (isSubagentToolName(name)) tasks[id] = out.length;
-              runs.called(id, part['input']);
+              runs.called(id, part['input'], name: name);
             }
             out.add(
               TranscriptMessage(
@@ -856,6 +857,7 @@ void _parseClaudeLine(
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
           if (row != null) runs.launched(id, json['toolUseResult'], row);
+          runs.answered(id, json['toolUseResult'], isError: isError, at: at);
       }
     }
   }
@@ -922,14 +924,16 @@ typedef _TaskNotice = ({
 Iterable<_TaskNotice> _taskNotices(String text) sync* {
   for (final block in _taskNotificationPattern.allMatches(text)) {
     final body = block.group(1)!;
-    final id = _taskIdPattern.firstMatch(body)?.group(1);
-    if (id == null) continue;
-    yield (
-      id: id,
-      status: _taskStatusPattern.firstMatch(body)?.group(1)?.trim(),
-      summary: _taskSummaryPattern.firstMatch(body)?.group(1)?.trim(),
-      interim: isInterimTaskNotice(body),
-    );
+    final status = _taskStatusPattern.firstMatch(body)?.group(1)?.trim();
+    final summary = _taskSummaryPattern.firstMatch(body)?.group(1)?.trim();
+    final interim = isInterimTaskNotice(body);
+    // One notice may name several tasks: the CLI's account of those a
+    // previous process left, beside a scan marker that is no task.
+    for (final match in _taskIdPattern.allMatches(body)) {
+      final id = match.group(1)!;
+      if (id.startsWith('__orphan_summary')) continue;
+      yield (id: id, status: status, summary: summary, interim: interim);
+    }
   }
 }
 
@@ -953,17 +957,48 @@ class _BackgroundRuns {
   /// id: the result of a command names nothing.
   final Map<String, String> _described = {};
 
+  /// The task each `TaskStop` call names, by call id, until it answers.
+  final Map<String, String> _stopping = {};
+
+  /// The CLI version that wrote the last record, and the one each run was
+  /// launched under: one process writes one version.
+  String? _version;
+  final Map<String, String?> _launchedUnder = {};
+
   bool get anyRunning => _runs.values.any((run) => run.state.isRunning);
 
   _BackgroundRuns copy() => _BackgroundRuns()
     .._runs.addAll(_runs)
     .._rows.addAll(_rows)
     .._aside.addAll(_aside)
-    .._described.addAll(_described);
+    .._described.addAll(_described)
+    .._stopping.addAll(_stopping)
+    .._version = _version
+    .._launchedUnder.addAll(_launchedUnder);
 
-  /// A `tool_use` [input]: kept only when it asks for the background.
-  void called(Object? callId, Object? input) {
+  /// A record [version] wrote. Another version than a running one was
+  /// launched under is another process: the run died with its own, unsaid.
+  void written(Object? version) {
+    if (version is! String || version.isEmpty || version == _version) return;
+    _version = version;
+    for (final MapEntry(:key, :value) in [..._runs.entries]) {
+      final under = _launchedUnder[key];
+      if (!value.state.isRunning || under == null || under == version) {
+        continue;
+      }
+      _runs[key] = value.copyWith(state: BackgroundRunState.ended);
+      _aside.remove(key);
+    }
+  }
+
+  /// A `tool_use` [input]: kept only when it asks for the background, or
+  /// when it is a `TaskStop` naming a task.
+  void called(Object? callId, Object? input, {String? name}) {
     if (callId is! String || input is! Map) return;
+    if (name == 'TaskStop') {
+      if (input['task_id'] case final String task) _stopping[callId] = task;
+      return;
+    }
     if (input['run_in_background'] != true) return;
     final description = input['description'];
     if (description is String && description.isNotEmpty) {
@@ -994,6 +1029,26 @@ class _BackgroundRuns {
       description: named is String && named.isNotEmpty ? named : described,
     );
     _rows[id] = row;
+    _launchedUnder[id] = _version;
+  }
+
+  /// A `tool_result`: a `TaskStop` that answered without error ended the
+  /// task it named, and no notice follows.
+  void answered(
+    Object? callId,
+    Object? result, {
+    required bool isError,
+    DateTime? at,
+  }) {
+    final named = _stopping.remove(callId);
+    if (named == null || isError) return;
+    final task = result is Map && result['task_id'] is String
+        ? result['task_id'] as String
+        : named;
+    final run = _runs[task];
+    if (run == null || !run.state.isRunning) return;
+    _runs[task] = run.copyWith(state: BackgroundRunState.killed, endedAt: at);
+    _aside.remove(task);
   }
 
   /// The final notices in [content] end their runs; an interim one only

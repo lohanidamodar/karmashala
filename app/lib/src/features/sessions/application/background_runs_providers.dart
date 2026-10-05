@@ -24,11 +24,14 @@ class SessionBackgroundRun {
   final DateTime? startedAt;
   final SubagentRef? subagent;
 
-  /// How long it ran, or has run so far at [now]; null without a start.
+  /// How long it ran, or has run so far at [now]; null without a start, or
+  /// for a run that is over with no end recorded.
   Duration? elapsedAt(DateTime now) {
     final start = startedAt;
     if (start == null) return null;
-    final elapsed = (run.endedAt ?? now).difference(start);
+    final end = run.endedAt ?? (run.state.isRunning ? now : null);
+    if (end == null) return null;
+    final elapsed = end.difference(start);
     return elapsed.isNegative ? Duration.zero : elapsed;
   }
 

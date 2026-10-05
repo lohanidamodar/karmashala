@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/subagent_providers.dart';
 import 'package:karmashala/src/features/cli_detection/presentation/subagent_turns_tile.dart';
+import 'package:karmashala/src/features/sessions/application/background_runs_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/background_runs_strip.dart';
@@ -338,5 +339,45 @@ void main() {
     expect(find.text('Just finished'), findsOneWidget);
     expect(find.text('Finished long ago'), findsNothing);
     expect(find.text('2 done'), findsOneWidget);
+  });
+
+  testWidgets('one whose end nothing recorded reads so, never running, and '
+      'does not stay listed', (tester) async {
+    TranscriptMessage untimed(String id, String title, BackgroundRunState s) =>
+        TranscriptMessage(
+          role: 'tool',
+          text: 'Bash($title)',
+          tool: ToolActivity(name: 'Bash', subject: title, output: 'launched'),
+          background: BackgroundRun(
+            id: id,
+            kind: BackgroundRunKind.command,
+            state: s,
+            description: title,
+          ),
+        );
+    await pump(tester, [
+      untimed('r', 'Still going', BackgroundRunState.running),
+      untimed('lost', 'Start the debug probe', BackgroundRunState.ended),
+    ]);
+
+    expect(find.text('Start the debug probe'), findsNothing);
+    expect(find.text('1 done'), findsOneWidget);
+    expect(find.text('1 background command running'), findsOneWidget);
+  });
+
+  test('a run whose end was not recorded is said so', () {
+    expect(backgroundRunStateWord(BackgroundRunState.ended), 'not recorded');
+  });
+
+  test('nor does its time keep counting', () {
+    final lost = SessionBackgroundRun(
+      run: const BackgroundRun(
+        id: 'lost',
+        kind: BackgroundRunKind.command,
+        state: BackgroundRunState.ended,
+      ),
+      startedAt: issued,
+    );
+    expect(lost.elapsedAt(issued.add(const Duration(hours: 16))), isNull);
   });
 }

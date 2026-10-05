@@ -57,11 +57,14 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    bool lingers(BackgroundRun run) {
+      final ended = run.endedAt;
+      return ended != null && now.difference(ended) < kFinishedRunLingers;
+    }
+
     final listed = [
       for (final entry in runs)
-        if (entry.run.state.isRunning ||
-            now.difference(entry.run.endedAt ?? now) < kFinishedRunLingers)
-          entry,
+        if (entry.run.state.isRunning || lingers(entry.run)) entry,
     ];
     final done = runs.where((entry) => !entry.run.state.isRunning).length;
     final folded =
@@ -156,6 +159,16 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
   }
 }
 
+/// How a run's row names where it stands. A run that is over with no end
+/// recorded (its process went away unsaid) is never called running.
+String backgroundRunStateWord(BackgroundRunState state) => switch (state) {
+  BackgroundRunState.running => 'running',
+  BackgroundRunState.completed => 'done',
+  BackgroundRunState.failed => 'failed',
+  BackgroundRunState.killed => 'stopped',
+  BackgroundRunState.ended => 'not recorded',
+};
+
 class _RunRow extends StatelessWidget {
   const _RunRow({
     required this.entry,
@@ -177,13 +190,7 @@ class _RunRow extends StatelessWidget {
       color: scheme.onSurfaceVariant,
     );
     final elapsed = entry.elapsedAt(now);
-    final state = switch (run.state) {
-      BackgroundRunState.running => 'running',
-      BackgroundRunState.completed => 'done',
-      BackgroundRunState.failed => 'failed',
-      BackgroundRunState.killed => 'stopped',
-      BackgroundRunState.ended => 'ended',
-    };
+    final state = backgroundRunStateWord(run.state);
     final trailing = elapsed == null
         ? state
         : '$state · ${formatElapsed(elapsed)}';
