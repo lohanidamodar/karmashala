@@ -163,8 +163,9 @@ class HostTerminalInstance
     terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       if (_disposed) return;
       _recorder?.addResize(width, height);
-      // At the session's grid this size is the session's, never a wish.
-      if (drawsAtSessionGrid) return;
+      // At the session's grid this size is the session's, never a wish. Read
+      // live: the parameter of that name would miss a later fitToView.
+      if (_atSessionGrid.value) return;
       final link = _link;
       if (link != null) _tell(link, width, height);
     };
@@ -335,8 +336,13 @@ class HostTerminalInstance
     if (grid != null) terminal.resize(grid.$1, grid.$2);
     final link = _link;
     if (link == null) return;
-    // Said again in case the resize above changed nothing locally.
-    _tell(link, terminal.viewWidth, terminal.viewHeight);
+    // Said again in case the resize above changed nothing locally, and as
+    // asked: a settling terminal may not have landed it yet.
+    _tell(
+      link,
+      grid?.$1 ?? terminal.viewWidth,
+      grid?.$2 ?? terminal.viewHeight,
+    );
     await link.takeOver();
   }
 

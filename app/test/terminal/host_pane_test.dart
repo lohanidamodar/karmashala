@@ -50,8 +50,12 @@ void main() {
 
   setUp(asked.clear);
 
-  HostTerminalInstance paneOn(PaneAccess access) {
+  HostTerminalInstance paneOn(
+    PaneAccess access, {
+    bool drawsAtSessionGrid = false,
+  }) {
     final instance = HostTerminalInstance(
+      drawsAtSessionGrid: drawsAtSessionGrid,
       id: 'p1',
       title: 'Local',
       profileId: 'powershell',
@@ -526,6 +530,36 @@ void main() {
         .whereType<ResizeMessage>()
         .last;
     expect((resized.columns, resized.rows), (100, 30));
+  });
+
+  test('a phone pane fitted to its view keeps the session at its size as '
+      'the keyboard comes and goes', () async {
+    final access = PaneAccess(readyDeployment());
+    final pane = paneOn(access, drawsAtSessionGrid: true);
+    await settle();
+    List<(int, int)> told() => [
+      for (final m
+          in access.channels.single.received.whereType<ResizeMessage>())
+        (m.columns, m.rows),
+    ];
+
+    // Looking never resizes the session.
+    pane.terminal.resize(60, 30);
+    await Future<void>.delayed(kColumnResizeSettle * 2);
+    expect(told(), isNot(contains((60, 30))));
+
+    pane.viewGrid = (60, 30);
+    unawaited(pane.fitToView());
+    await Future<void>.delayed(kColumnResizeSettle * 2);
+    expect(told().last, (60, 30));
+
+    pane.terminal.resize(60, 18);
+    await Future<void>.delayed(kColumnResizeSettle * 2);
+    expect(told().last, (60, 18));
+
+    pane.terminal.resize(60, 30);
+    await Future<void>.delayed(kColumnResizeSettle * 2);
+    expect(told().last, (60, 30));
   });
 
   test(
