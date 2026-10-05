@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/launch.dart';
 
 import '../../../core/capabilities/capabilities.dart';
+import '../../explorer/application/environment_terminals_providers.dart'
+    show serverTerminalRecordsProvider;
+import '../../terminal/application/terminal_sessions_controller.dart'
+    show paneOfSessionProvider;
 import '../data/server_transcripts.dart';
 import 'session_activity_providers.dart' show hasReadableRecord;
 import 'session_chat_source.dart';
@@ -96,7 +100,33 @@ final sessionBackgroundRunsProvider = Provider.autoDispose
                 ?.olderPending
           : null;
       if (older != null && older.isNotEmpty) messages = [...older, ...messages];
-      return backgroundRunsIn(messages);
+      // A run its agent's process did not outlive is over, unsaid: the
+      // record carries no marker when the agent restarts on one version.
+      final paneId = ref.watch(paneOfSessionProvider(sessionId));
+      final paneStartedAt = paneId == null
+          ? null
+          : ref.watch(
+              serverTerminalRecordsProvider.select(
+                (records) => records
+                    .where((r) => r.paneId == paneId && r.isLive)
+                    .firstOrNull
+                    ?.startedAt,
+              ),
+            );
+      return List.unmodifiable([
+        for (final entry in backgroundRunsIn(messages))
+          lostToAgentRestart(
+                running: entry.run.state.isRunning,
+                startedAt: entry.startedAt,
+                agentStartedAt: paneStartedAt,
+              )
+              ? SessionBackgroundRun(
+                  run: entry.run.copyWith(state: BackgroundRunState.ended),
+                  startedAt: entry.startedAt,
+                  subagent: entry.subagent,
+                )
+              : entry,
+      ]);
     });
 
 /// Whether each session's background runs are folded to their one-line

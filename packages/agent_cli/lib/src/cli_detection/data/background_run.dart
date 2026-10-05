@@ -132,6 +132,20 @@ List<T> listedBackgroundRuns<T>(
   ];
 }
 
+/// Whether a run still marked running that began at [startedAt] was lost when
+/// its agent's process last started, at [agentStartedAt]: an agent restarted
+/// on the same version leaves no marker in its record, and nothing will
+/// report that run's end. False when either time is unknown.
+bool lostToAgentRestart({
+  required bool running,
+  required DateTime? startedAt,
+  required DateTime? agentStartedAt,
+}) =>
+    running &&
+    startedAt != null &&
+    agentStartedAt != null &&
+    startedAt.isBefore(agentStartedAt);
+
 /// How long after a session's last background run ends its status waits for
 /// the agent's own turn over the result before reading idle anyway.
 const Duration kBackgroundTurnGrace = Duration(seconds: 30);

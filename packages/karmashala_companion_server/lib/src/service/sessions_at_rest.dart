@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/read.dart' show ImportedSession;
+import 'package:agent_cli/read.dart'
+    show BackgroundRunState, ImportedSession, lostToAgentRestart;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/session.dart';
@@ -197,7 +198,9 @@ class SessionsAtRest {
   /// What [row]'s agent has in flight: the record's outstanding [calls], only
   /// while the agent is working in a session that has not ended; nothing
   /// otherwise — an answer, not an absence of one. Its [background] runs
-  /// whatever the turn is doing: they outlive the turn that started them.
+  /// whatever the turn is doing: they outlive the turn that started them —
+  /// but not their agent's process, so one begun before its pane last
+  /// started reads ended.
   RemoteSessionActivity _activity(
     String sessionId,
     Session? row,
@@ -207,11 +210,27 @@ class SessionsAtRest {
     final working =
         row != null &&
         agentIsWorking(row.status, agentStatusOf?.call(sessionId)?.status);
+    final paneStartedAt = screens.find(_hostIdOf(sessionId))?.startedAt;
     return RemoteSessionActivity(
       sessionId: sessionId,
       observedAt: _now().toUtc(),
       calls: working ? calls : const [],
-      background: background,
+      background: [
+        for (final run in background)
+          lostToAgentRestart(
+                running: run.isRunning,
+                startedAt: run.startedAt,
+                agentStartedAt: paneStartedAt,
+              )
+              ? RemoteBackgroundRun(
+                  id: run.id,
+                  agent: run.agent,
+                  state: BackgroundRunState.ended.name,
+                  description: run.description,
+                  startedAt: run.startedAt,
+                )
+              : run,
+      ],
     );
   }
 

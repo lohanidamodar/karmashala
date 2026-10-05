@@ -11,9 +11,11 @@ import 'package:karmashala/src/features/sessions/application/background_runs_pro
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/background_runs_strip.dart';
+import 'package:karmashala/src/features/explorer/application/environment_terminals_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionTranscriptSubagent;
+    show SessionTranscriptSubagent, TerminalRecord;
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -65,6 +67,7 @@ void main() {
     List<TranscriptMessage> messages, {
     DateTime? now,
     Size? size,
+    DateTime? paneStartedAt,
     Set<String>? features,
     List<SubagentTurnsKey>? asked,
   }) async {
@@ -124,6 +127,18 @@ void main() {
             serverOfferProvider.overrideWithValue(
               ServerOffer(sameMachine: false, features: features),
             ),
+          if (paneStartedAt != null) ...[
+            paneOfSessionProvider.overrideWith((ref, id) => 'p1'),
+            serverTerminalRecordsProvider.overrideWithValue([
+              TerminalRecord(
+                sessionId: 'karmashala_s1',
+                paneId: 'p1',
+                profileId: 'agent:claudeCode',
+                title: 'achiver',
+                startedAt: paneStartedAt,
+              ),
+            ]),
+          ],
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -415,6 +430,24 @@ void main() {
 
       expect(find.byType(SubagentTurnsTile), findsNothing);
     });
+  });
+
+  testWidgets('one begun before its agent\'s pane last started reads not '
+      'recorded: nothing will report its end', (tester) async {
+    final restarted = issued.add(const Duration(minutes: 2));
+    await pump(tester, [
+      launch('old', 'Before the restart', BackgroundRunState.running),
+      launch(
+        'new',
+        'After the restart',
+        BackgroundRunState.running,
+        at: restarted.add(const Duration(minutes: 1)),
+      ),
+    ], paneStartedAt: restarted);
+
+    expect(find.text('1 background agent running'), findsOneWidget);
+    expect(find.text('Before the restart'), findsNothing);
+    expect(find.text('After the restart'), findsOneWidget);
   });
 
   test('a run whose end was not recorded is said so', () {
