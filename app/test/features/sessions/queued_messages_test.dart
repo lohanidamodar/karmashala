@@ -88,12 +88,16 @@ void main() {
     SessionActivity? activity,
     bool withBar = false,
     int backgroundRuns = 0,
+    double keyboard = 0,
+    bool withAppBar = false,
   }) async {
     ticking = activity != null;
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
+    tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
     final container = ProviderContainer(
       overrides: [
         await server.override(),
@@ -148,6 +152,8 @@ void main() {
         container: container,
         child: MaterialApp(
           home: Scaffold(
+            // The phone's top bar.
+            appBar: withAppBar ? AppBar(title: const Text('Session')) : null,
             body: Column(
               children: [
                 // The session bar's chip, as the terminal view shows it.
@@ -192,6 +198,39 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('on a phone with the keyboard up, a queued message folds to '
+      'one line that opens the queue, never an empty box', (tester) async {
+    await pump(
+      tester,
+      size: phone,
+      keyboard: 300,
+      withAppBar: true,
+      withBar: true,
+      backgroundRuns: 1,
+      activity: SessionActivity([
+        OutstandingCall(
+          summary: 'Bash(flutter test)',
+          toolName: 'Bash',
+          startedAt: testTime,
+        ),
+      ]),
+    );
+    await send(tester, 'yes continue fixing');
+
+    expect(tester.takeException(), isNull);
+    final line = find.text('1 queued · Sends when the agent finishes its turn');
+    expect(line, findsOneWidget);
+    final rect = tester.getRect(line);
+    expect(rect.height, greaterThan(10));
+    expect(rect.bottom, lessThanOrEqualTo(phone.height - 300));
+    final strip = tester.getRect(find.byKey(const ValueKey('queued-strip')));
+    expect(strip.height, greaterThanOrEqualTo(rect.height));
+
+    await tester.tap(line);
+    await settle(tester);
+    expect(find.byKey(const ValueKey('queue-row-q1')), findsOneWidget);
+  });
 
   for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
     testWidgets('on a $name, a queue held on the usage limit says until '

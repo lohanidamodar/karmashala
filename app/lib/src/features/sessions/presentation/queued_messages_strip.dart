@@ -16,7 +16,8 @@ import 'session_queue_sheet.dart';
 /// a bubble on the sender's side, marked queued and when it will go, with
 /// Edit and Cancel at its top while it waits. A delivered one leaves here and
 /// shows in the transcript. Never taller than a quarter of the view: past
-/// that its bubbles scroll.
+/// that its bubbles scroll, and with less room than one bubble needs (the
+/// keyboard up) it folds to one line that opens the queue.
 class QueuedMessagesStrip extends ConsumerWidget {
   const QueuedMessagesStrip({
     super.key,
@@ -30,17 +31,28 @@ class QueuedMessagesStrip extends ConsumerWidget {
   /// Dismiss.
   final ValueChanged<String>? onBackToComposer;
 
+  /// Below this much room one bubble no longer fits whole.
+  static const foldBelow = 104.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = ref.watch(sessionQueueProvider(sessionId));
     if (messages.isEmpty) return const SizedBox.shrink();
+    final quarter = MediaQuery.sizeOf(context).height / 4;
+    return LayoutBuilder(
+      builder: (context, box) =>
+          box.maxHeight < foldBelow || quarter < foldBelow
+          ? _FoldedQueueLine(sessionId: sessionId, messages: messages)
+          : _strip(messages, quarter),
+    );
+  }
+
+  Widget _strip(List<QueuedMessage> messages, double quarter) {
     final hold = queueHoldOf(messages);
     var place = 0;
     return ConstrainedBox(
       key: const ValueKey('queued-strip'),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height / 4,
-      ),
+      constraints: BoxConstraints(maxHeight: quarter),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: Insets.md,
@@ -71,6 +83,59 @@ class QueuedMessagesStrip extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The strip folded to one line — how many wait and when they go — that
+/// opens the queue.
+class _FoldedQueueLine extends ConsumerWidget {
+  const _FoldedQueueLine({required this.sessionId, required this.messages});
+
+  final String sessionId;
+  final List<QueuedMessage> messages;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final now = ref.watch(clockProvider).nowUtc().toLocal();
+    final waiting = messages
+        .where((m) => m.state != QueuedMessageState.failed)
+        .length;
+    final words = waiting == 0
+        ? '${messages.length} not sent'
+        : '$waiting queued · ${queuedWhenWords(queueHoldOf(messages), now)}';
+    final color = waiting == 0 ? scheme.error : scheme.onSurfaceVariant;
+    return InkWell(
+      key: const ValueKey('queued-strip'),
+      onTap: () => showSessionQueue(context, sessionId),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.xs,
+        ),
+        child: Row(
+          children: [
+            Icon(AppIcons.stack, size: Chrome.iconSmall, color: color),
+            const SizedBox(width: Insets.xs),
+            Expanded(
+              child: Text(
+                words,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(color: color),
+              ),
+            ),
+            Icon(
+              AppIcons.caretUp,
+              size: Chrome.iconSmall,
+              color: scheme.onSurfaceVariant,
+              semanticLabel: 'Open the queue',
             ),
           ],
         ),
