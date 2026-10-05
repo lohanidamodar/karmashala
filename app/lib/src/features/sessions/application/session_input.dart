@@ -50,6 +50,12 @@ class SessionInput {
       if (refusal.code != DataRefusalCode.notFound) {
         throw SessionPromptRefusal(refusal.message);
       }
+      if (!_ref.read(capabilitiesProvider).typesIntoOwnPanes) {
+        throw const SessionPromptRefusal(
+          'the server is not holding this session right now — it may be '
+          'restarting — so nothing was sent. Send it again in a moment',
+        );
+      }
     }
     // A session the server cannot type into — a box whose link is down, a
     // pane this app runs itself — is typed into a pane here, as before step 2.

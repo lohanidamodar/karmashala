@@ -279,6 +279,11 @@ final class Capabilities {
   bool get sendViaServer =>
       serverOffers('sessions.send') && serverOffers('sessions.interrupt');
 
+  /// A send the server refuses for a session it does not hold may be typed
+  /// into a pane here. Not from another machine: every pane there is a view
+  /// of the server's own terminal, so typing into it loses the message.
+  bool get typesIntoOwnPanes => server.sameMachine;
+
   /// A send to an ACP session nothing runs is resumed by the server itself,
   /// so this client sends and asks for no resume of its own.
   bool get sendResumesAtServer =>
