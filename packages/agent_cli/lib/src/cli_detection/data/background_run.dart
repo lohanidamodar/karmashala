@@ -131,3 +131,28 @@ List<T> listedBackgroundRuns<T>(
           row,
   ];
 }
+
+/// How long after a session's last background run ends its status waits for
+/// the agent's own turn over the result before reading idle anyway.
+const Duration kBackgroundTurnGrace = Duration(seconds: 30);
+
+/// **Whether a session whose agent went idle at [idleAt] is still working on
+/// what it left in the background**: while any of [runs] runs, and after the
+/// last one ends until a turn ends after it — or [grace] passes with none.
+bool waitsOnBackground(
+  Iterable<BackgroundRun> runs, {
+  required DateTime idleAt,
+  required DateTime now,
+  Duration grace = kBackgroundTurnGrace,
+}) {
+  DateTime? lastEnded;
+  for (final run in runs) {
+    if (run.state.isRunning) return true;
+    final ended = run.endedAt;
+    if (ended != null && (lastEnded == null || ended.isAfter(lastEnded))) {
+      lastEnded = ended;
+    }
+  }
+  if (lastEnded == null || !idleAt.isBefore(lastEnded)) return false;
+  return now.difference(lastEnded) < grace;
+}

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart'
+    show BackgroundRun, BackgroundRunKind, BackgroundRunState;
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -99,6 +101,8 @@ void main() {
     int probeConcurrency = kStatusProbeConcurrency,
     Future<Map<String, String>> Function()? resolveTranscripts,
     List<String>? log,
+    Future<List<BackgroundRun>> Function(WatchedSession session)?
+    backgroundRunsOf,
   }) => ServerSessionStatus(
     statusService: service,
     agents: AgentRegistry.builtIn,
@@ -112,6 +116,7 @@ void main() {
     heldByHost: (session) => hosted.containsKey(session.openId),
     hostStatusFor: (session) => hosted[session.openId],
     log: log?.add,
+    backgroundRunsOf: backgroundRunsOf,
   );
 
   void addTranscriptSessions(int count, {String prefix = 'cli'}) {
@@ -476,6 +481,145 @@ void main() {
         isNull,
         reason: 'nobody watches it, so nobody holds a status for it',
       );
+      await status.close();
+    });
+  });
+
+  group('a session waiting on its background runs is working', () {
+    const row = WatchedSession(
+      key: AgentSessionKey(AgentIds.claudeCode, 'conv-1'),
+      label: 'Two background agents',
+      openId: 'row-1',
+      imported: false,
+    );
+
+    BackgroundRun run(BackgroundRunState state, {DateTime? endedAt}) =>
+        BackgroundRun(
+          id: 'a1',
+          kind: BackgroundRunKind.agent,
+          state: state,
+          description: 'Sleep 90 then report',
+          endedAt: endedAt,
+        );
+
+    void say(AgentActivityStatus status, Duration at) {
+      clock.now = _start.add(at);
+      hosted['row-1'] = HostedAgentStatus(
+        sessionId: 'row-1',
+        report: AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'conv-1',
+          status: status,
+          source: AgentStatusSource.hook,
+          observedAt: clock.now,
+        ),
+      );
+    }
+
+    test('until the last ends and the turn after it ends', () async {
+      watched.add(row);
+      var runs = [run(BackgroundRunState.running)];
+      final status = build(backgroundRunsOf: (_) async => runs);
+      final moves = <AgentActivityStatus>[];
+      status.statusChanges.listen((entry) => moves.add(entry.report.status));
+
+      say(AgentActivityStatus.working, Duration.zero);
+      status.hostStatusMoved('row-1');
+      say(AgentActivityStatus.idle, const Duration(seconds: 3));
+      status.hostStatusMoved('row-1');
+      await pumpEventQueue();
+      final held = status.reportForOpenId('row-1')!;
+      expect(held.status, AgentActivityStatus.working);
+      expect(held.inFlight, ['Sleep 90 then report']);
+
+      clock.now = _start.add(const Duration(seconds: 60));
+      await status.cycle();
+      await pumpEventQueue();
+      expect(
+        status.reportForOpenId('row-1')!.status,
+        AgentActivityStatus.working,
+      );
+
+      runs = [
+        run(
+          BackgroundRunState.completed,
+          endedAt: _start.add(const Duration(seconds: 90)),
+        ),
+      ];
+      clock.now = _start.add(const Duration(seconds: 91));
+      await status.cycle();
+      await pumpEventQueue();
+      expect(
+        status.reportForOpenId('row-1')!.status,
+        AgentActivityStatus.working,
+        reason: 'the agent has not yet taken its turn over the report',
+      );
+
+      say(AgentActivityStatus.working, const Duration(seconds: 92));
+      status.hostStatusMoved('row-1');
+      say(AgentActivityStatus.idle, const Duration(seconds: 95));
+      status.hostStatusMoved('row-1');
+      await pumpEventQueue();
+      expect(status.reportForOpenId('row-1')!.status, AgentActivityStatus.idle);
+      expect(
+        moves.where((s) => s == AgentActivityStatus.idle),
+        hasLength(1),
+        reason: 'one finish, at the end',
+      );
+      await status.close();
+    });
+
+    test('an idle with nothing in the background is told as it is', () async {
+      watched.add(row);
+      final status = build(backgroundRunsOf: (_) async => const []);
+      final events = <SessionStatusEntry>[];
+      status.hookChanges.listen(events.add);
+      say(AgentActivityStatus.working, Duration.zero);
+      status.hostStatusMoved('row-1');
+      say(AgentActivityStatus.idle, const Duration(seconds: 3));
+      status.hostStatusMoved('row-1');
+      await pumpEventQueue();
+      expect(events.last.report.status, AgentActivityStatus.idle);
+      expect(
+        events.where((e) => e.report.status == AgentActivityStatus.idle),
+        hasLength(1),
+      );
+      await status.close();
+    });
+
+    test('a hooked session holds the same way', () async {
+      addHookedSessions(1, event: 'UserPromptSubmit');
+      final status = build(
+        backgroundRunsOf: (_) async => [run(BackgroundRunState.running)],
+      );
+      await status.cycle();
+      receiver.handle(
+        agentId: AgentIds.claudeCode,
+        event: 'Stop',
+        body: '{"session_id":"hook-0"}',
+      );
+      status.hookReported(const AgentSessionKey(AgentIds.claudeCode, 'hook-0'));
+      await pumpEventQueue();
+      expect(
+        status.reportForOpenId('row-hook-0')!.status,
+        AgentActivityStatus.working,
+      );
+      await status.close();
+    });
+
+    test('a history session is never read for them', () async {
+      addTranscriptSessions(3);
+      var asked = 0;
+      final status = build(
+        backgroundRunsOf: (_) async {
+          asked++;
+          return const [];
+        },
+      );
+      await status.cycle();
+      await status.cycle();
+      await pumpEventQueue();
+      expect(asked, 0);
       await status.close();
     });
   });

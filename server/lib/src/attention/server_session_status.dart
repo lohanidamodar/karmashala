@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart' show BackgroundRun, waitsOnBackground;
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_core/util.dart';
@@ -55,6 +56,7 @@ class ServerSessionStatus {
     this.hostStatusFor,
     this.log,
     this.toolAsks,
+    this.backgroundRunsOf,
     this.stateFileSource = const AgentStateFileStatusSource(),
     this.probeBudget = kStatusProbeBudget,
     this.probeConcurrency = kStatusProbeConcurrency,
@@ -95,6 +97,12 @@ class ServerSessionStatus {
   /// hooks: what an open prompt asks about, carried on its status for the ask
   /// dock. Null carries none.
   final ToolAskTracker? toolAsks;
+
+  /// Every background run a live session's transcript records, read when
+  /// its agent goes idle: an idle with one still running reads `working`.
+  /// Set late, once the transcripts are; null reads none.
+  Future<List<BackgroundRun>> Function(WatchedSession session)?
+  backgroundRunsOf;
 
   final AgentStateFileStatusSource stateFileSource;
   final int probeBudget;
@@ -207,7 +215,8 @@ class ServerSessionStatus {
     tracked.query = query;
     tracked.hook = hook;
     tracked.wantsProbe = false;
-    tracked.publish(
+    _publish(
+      tracked,
       _asked(
         tracked,
         statusService.compose(query: query, now: now, hook: hook),
@@ -407,7 +416,7 @@ class ServerSessionStatus {
     if (descriptor == null) {
       tracked.hook = null;
       tracked.wantsProbe = false;
-      tracked.publish(statusService.unknownFor(query, now), now);
+      _publish(tracked, statusService.unknownFor(query, now), now);
       return;
     }
     final hook = statusService.hookReport(query, now);
@@ -428,7 +437,8 @@ class ServerSessionStatus {
       ..snapshot = null
       ..wantsProbe = false;
     final said = hostStatusFor?.call(tracked.session)?.report;
-    tracked.publish(
+    _publish(
+      tracked,
       AgentStatusReport(
         agentId: key.agentId,
         sessionId: key.sessionId,
@@ -463,7 +473,8 @@ class ServerSessionStatus {
             now,
             sessionId: query.sessionId,
           );
-    tracked.publish(
+    _publish(
+      tracked,
       _asked(
         tracked,
         statusService.compose(
@@ -476,6 +487,94 @@ class ServerSessionStatus {
       ),
       now,
     );
+  }
+
+  /// Publishes [raw] for [tracked] — or, while a live session's agent is idle
+  /// but its transcript has background work it has not finished with,
+  /// `working` with that work in flight. An idle not yet checked waits for
+  /// the read, so no finish is told that the read would take back.
+  void _publish(_Tracked tracked, AgentStatusReport raw, DateTime now) {
+    tracked.raw = raw;
+    final session = tracked.session;
+    final checks =
+        backgroundRunsOf != null &&
+        raw.status == AgentActivityStatus.idle &&
+        !session.imported &&
+        (_isHosted(session) || raw.source == AgentStatusSource.hook);
+    if (!checks) {
+      tracked
+        ..background = null
+        ..backgroundGeneration += 1;
+      tracked.publish(raw, now);
+      return;
+    }
+    final reading = tracked.background;
+    if (reading == null) {
+      _readBackground(tracked);
+      return;
+    }
+    final held = _held(raw, reading.runs, now);
+    tracked.publish(held, now);
+    if (!identical(held, raw) && now.difference(reading.at) >= interval) {
+      _readBackground(tracked);
+    }
+  }
+
+  /// [raw], or `working` with the runs still going named in flight.
+  static AgentStatusReport _held(
+    AgentStatusReport raw,
+    List<BackgroundRun> runs,
+    DateTime now,
+  ) {
+    if (!waitsOnBackground(runs, idleAt: raw.observedAt, now: now)) return raw;
+    return AgentStatusReport(
+      agentId: raw.agentId,
+      sessionId: raw.sessionId,
+      status: AgentActivityStatus.working,
+      observedAt: raw.observedAt,
+      source: raw.source,
+      detail: raw.detail,
+      sourceModifiedAt: raw.sourceModifiedAt,
+      evidence: raw.evidence,
+      inFlight: [
+        for (final run in runs)
+          if (run.state.isRunning) run.description ?? 'background work',
+      ],
+    );
+  }
+
+  void _readBackground(_Tracked tracked) {
+    final read = backgroundRunsOf;
+    if (read == null || tracked.readingBackground) return;
+    tracked.readingBackground = true;
+    final generation = tracked.backgroundGeneration;
+    unawaited(() async {
+      List<BackgroundRun> runs;
+      try {
+        runs = await read(tracked.session);
+      } on Object {
+        // A transcript that cannot be read holds nothing back.
+        runs = const [];
+      } finally {
+        tracked.readingBackground = false;
+      }
+      if (_disposed || !identical(_tracked[tracked.session.key], tracked)) {
+        return;
+      }
+      final raw = tracked.raw;
+      if (raw == null || raw.status != AgentActivityStatus.idle) return;
+      // A turn ran while this was read: what it launched may be missing.
+      if (generation != tracked.backgroundGeneration) {
+        _readBackground(tracked);
+        return;
+      }
+      final now = clock.nowUtc();
+      tracked.background = (runs: runs, at: now);
+      final before = tracked.report;
+      tracked.publish(_held(raw, runs, now), now);
+      if (sameStatusEvidence(before, tracked.report)) return;
+      if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
+    }());
   }
 
   /// [next] with the call an open prompt asks about and when its wait began,
@@ -627,6 +726,12 @@ class _Tracked {
 
   AgentStatusQuery? query;
   AgentStatusReport? hook;
+
+  /// The last report its sources gave, before any background hold.
+  AgentStatusReport? raw;
+  ({List<BackgroundRun> runs, DateTime at})? background;
+  var backgroundGeneration = 0;
+  var readingBackground = false;
 
   String get sortKey => session.key.toString();
 

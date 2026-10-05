@@ -1337,6 +1337,12 @@ Future<int> runServe(
   switchTranscripts = sessionTranscripts;
   acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
   data.sessionTranscripts = sessionTranscripts;
+  // A live session idle over background work it started still reads working,
+  // by the runs the chat lists.
+  attention.status.backgroundRunsOf = (session) async => [
+    for (final message in await sessionTranscripts.messagesOf(session.openId))
+      ?message.background,
+  ];
   // Rewind points, changed files and the open question (Stage 0 step 7):
   // the adapters' readers of raw lines, run over the same records; and each
   // session's counts with its agent's lifetime totals (step 9).

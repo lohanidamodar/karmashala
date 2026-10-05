@@ -1,4 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart'
+    show BackgroundRun, BackgroundRunKind, BackgroundRunState;
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:karmashala_core/util.dart';
@@ -137,6 +139,72 @@ void main() {
     expect(item.kind, InboxItemKind.finished);
     expect(item.seen, isFalse);
     expect(pushed.expand((items) => items).single.id, item.id);
+  });
+
+  test('a turn that hands off to background agents files no finish until '
+      'they and the turn after them end', () async {
+    await attention.close();
+    var runs = [
+      const BackgroundRun(
+        id: 'a1',
+        kind: BackgroundRunKind.agent,
+        state: BackgroundRunState.running,
+        description: 'Sleep 90 then report',
+      ),
+    ];
+    status = ServerSessionStatus(
+      statusService: AgentStatusService(
+        registry: AgentRegistry.builtIn,
+        hookReports: reports,
+        clock: clock,
+      ),
+      agents: AgentRegistry.builtIn,
+      loadSessions: () => watched,
+      clock: clock,
+      backgroundRunsOf: (_) async => runs,
+    );
+    attention = ServerAttention(
+      status: status,
+      tell: told.addAll,
+      clock: clock,
+      followUps: () => followUps,
+      resolveFollowUp: resolved.add,
+      sessionOf: (id) => id == 'row-1' ? session : null,
+      windows: () => windows,
+      onNewItems: pushed.add,
+    );
+
+    hook('PreToolUse');
+    await attention.poll();
+    clock.now = clock.now.add(const Duration(seconds: 5));
+    hook('Stop');
+    status.hookReported(key);
+    await pumpEventQueue();
+    await attention.poll();
+    await flush();
+    expect(news(), isEmpty, reason: 'its agents are still running');
+    expect(attention.inbox.isEmpty, isTrue);
+
+    runs = [
+      BackgroundRun(
+        id: 'a1',
+        kind: BackgroundRunKind.agent,
+        state: BackgroundRunState.completed,
+        description: 'Sleep 90 then report',
+        endedAt: clock.now.add(const Duration(seconds: 85)),
+      ),
+    ];
+    clock.now = clock.now.add(const Duration(seconds: 86));
+    hook('UserPromptSubmit');
+    status.hookReported(key);
+    clock.now = clock.now.add(const Duration(seconds: 4));
+    hook('Stop');
+    status.hookReported(key);
+    await pumpEventQueue();
+    await attention.poll();
+    await flush();
+    expect(news().single.reason, NotificationReason.finished);
+    expect(attention.inbox.items.single.kind, InboxItemKind.finished);
   });
 
   test('a prompt opening holds a person up until it is answered', () async {
