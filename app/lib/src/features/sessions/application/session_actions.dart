@@ -1,4 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
@@ -461,6 +462,12 @@ class SessionActions {
           'Run "Discover agents" in Settings.',
         );
       }
+      // A headless turn has nobody to ask its questions and approvals, so a
+      // session that ran in a pane comes back in one, as Resume brings it.
+      if (session.surface != SessionSurface.external) {
+        await _resumeInPane(session, repo, installation, message: trimmed);
+        return;
+      }
       final permission = _ref
           .read(sessionLauncherProvider)
           .resolvedPermissionFor(
@@ -484,10 +491,128 @@ class SessionActions {
       );
       _bump();
       resumed = true;
+      _offerResumeHere(sessionId);
     }
 
     _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
+  }
+
+  /// Relaunches [session]'s terminal at the server, claiming its restored
+  /// pane, with [message] as its first prompt: the server delivers it the way
+  /// the agent's descriptor declares. Shown as starting until it is up.
+  Future<void> _resumeInPane(
+    Session session,
+    Repository repo,
+    AgentInstallation installation, {
+    String? message,
+  }) async {
+    final launcher = _ref.read(sessionLauncherProvider);
+    final conversation = session.externalSessionId;
+    final hasConversation = conversation != null && conversation.isNotEmpty;
+    // A launch of a conversation another row runs only reveals that row, so
+    // the message goes to it rather than being dropped.
+    final twin = launcher.runningSessionWithExternalId(conversation);
+    if (twin != null && message != null) {
+      await launcher.show(twin.id);
+      if (!await _ref.read(sessionInputProvider).send(twin.id, message)) {
+        throw StateError(
+          '"${twin.title}" is already running this conversation, but it could '
+          'not be typed into, so nothing was sent.',
+        );
+      }
+      _log.info('Continued ${session.id}: typed into its twin ${twin.id}');
+      return;
+    }
+    final starting = _ref.read(sessionsStartingProvider.notifier)
+      ..add(session.id);
+    try {
+      final launched = await launcher.launch(
+        SessionLaunchRequest(
+          repository: repo,
+          installation: installation,
+          title: session.title,
+          purpose: SessionPurpose.existingSession,
+          resumeExternalSessionId: hasConversation ? conversation : null,
+          // No conversation to resume: a fresh one, in this row.
+          restartSessionId: hasConversation ? null : session.id,
+          existingWorktree: session.worktree,
+          workingDirectory: session.workingDirectory,
+          firstMessage: message,
+        ),
+      );
+      _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
+      final notice = launched.workingDirectoryNotice;
+      if (notice != null) {
+        _ref
+            .read(sessionNoticesProvider.notifier)
+            .post(
+              session.id,
+              SessionNotice(message: notice, tone: SessionNoticeTone.warning),
+            );
+      }
+      _log.info(
+        'Continued ${session.id}: resumed in pane ${launched.paneId} '
+        'to take the message=${message != null}',
+      );
+    } finally {
+      starting.remove(session.id);
+    }
+  }
+
+  /// Says, on a session in an external terminal, that the turn just run here
+  /// cannot ask anything, and offers to bring it back in a pane instead.
+  void _offerResumeHere(String sessionId) {
+    final notices = _ref.read(sessionNoticesProvider.notifier);
+    notices.post(
+      sessionId,
+      SessionNotice(
+        message:
+            'This session runs in an external terminal, so your message ran '
+            "here as a one-off turn: questions and approvals can't be asked "
+            'in it. Resume the session here to answer them.',
+        tone: SessionNoticeTone.warning,
+        sticky: true,
+        action: SessionNoticeAction(
+          label: 'Resume here',
+          onPressed: () {
+            notices.dismiss(sessionId);
+            unawaited(_resumeHere(sessionId));
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resumeHere(String sessionId) async {
+    try {
+      final session = _ref.read(sessionsDataProvider).getById(sessionId);
+      if (session == null) throw StateError('This session no longer exists.');
+      final repo = _ref
+          .read(workspaceDataProvider)
+          .repository(session.repositoryId);
+      final installation = _ref
+          .read(agentInstallationsDataProvider)
+          .getById(session.agentInstallationId);
+      if (repo == null || installation == null) {
+        throw StateError(
+          'The agent or repository for this session is no longer available.',
+        );
+      }
+      // The one-off turn ends first: two processes on one conversation.
+      await _ref.read(sessionEngineProvider).stop(sessionId);
+      await _resumeInPane(session, repo, installation);
+    } on Object catch (error) {
+      _ref
+          .read(sessionNoticesProvider.notifier)
+          .post(
+            sessionId,
+            SessionNotice(
+              message: error is StateError ? error.message : '$error',
+              tone: SessionNoticeTone.warning,
+            ),
+          );
+    }
   }
 
   /// Sends [text] to [row]'s agent over its protocol, at the server: a

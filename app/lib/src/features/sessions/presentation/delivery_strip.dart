@@ -34,6 +34,7 @@ import '../application/session_providers.dart';
 import '../application/session_resume_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_status_providers.dart';
+import '../application/session_ui_providers.dart' show sessionsStartingProvider;
 import 'package:karmashala_session/delivery.dart';
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
@@ -631,7 +632,15 @@ class _StageMark extends ConsumerWidget {
         (row != null &&
             row.status.claimsLive &&
             ref.watch(isAcpSessionProvider(sessionId)));
-    final stopped = stage == DeliveryStage.working && row != null && !runs;
+    // Relaunched to take a message: its pane is not up yet, but it is coming.
+    final starting =
+        stage == DeliveryStage.working &&
+        !runs &&
+        ref.watch(
+          sessionsStartingProvider.select((ids) => ids.contains(sessionId)),
+        );
+    final stopped =
+        stage == DeliveryStage.working && row != null && !runs && !starting;
     final agentWorking = ref.watch(
       agentSessionStatusProvider(
         sessionId,
@@ -639,6 +648,7 @@ class _StageMark extends ConsumerWidget {
     );
     // The uncommitted count is its own fact beside this one.
     final word = switch (stage) {
+      _ when starting => 'Starting',
       _ when stopped => 'Not running',
       DeliveryStage.working when !agentWorking =>
         delivery.isDirty ? 'Uncommitted' : 'No changes yet',

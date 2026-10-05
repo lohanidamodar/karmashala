@@ -148,3 +148,20 @@ final sessionTranscriptProvider = StreamProvider.autoDispose
         yield await records.listForSession(id);
       }
     });
+
+/// Sessions being relaunched to take a message typed while nothing ran them:
+/// shown as starting rather than not running until their pane is up.
+class SessionsStarting extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void add(String sessionId) => state = {...state, sessionId};
+
+  void remove(String sessionId) {
+    if (!state.contains(sessionId)) return;
+    state = {...state}..remove(sessionId);
+  }
+}
+
+final sessionsStartingProvider =
+    NotifierProvider<SessionsStarting, Set<String>>(SessionsStarting.new);

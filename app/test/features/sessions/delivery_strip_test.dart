@@ -16,6 +16,8 @@ import 'package:karmashala/src/features/sessions/application/session_archive_ser
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart'
+    show sessionsStartingProvider;
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -406,6 +408,22 @@ void main() {
         expect(find.text('Working'), findsNothing);
         expect(find.text('Not running'), findsOneWidget);
         expect(find.text('2 uncommitted'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('on a $name, a session being resumed to take a message '
+          'says Starting, not Not running', (tester) async {
+        hostRuns = false;
+        final row = server.sessionRows.getById('s1')!;
+        server.sessionRows.put(row.copyWith(status: SessionStatus.completed));
+        await pumpStateLine(tester, state, size: size);
+        ProviderScope.containerOf(
+          tester.element(find.byType(DeliveryStateLine)),
+        ).read(sessionsStartingProvider.notifier).add('s1');
+        await tester.pump();
+
+        expect(find.text('Starting'), findsOneWidget);
+        expect(find.text('Not running'), findsNothing);
         expect(tester.takeException(), isNull);
       });
 
