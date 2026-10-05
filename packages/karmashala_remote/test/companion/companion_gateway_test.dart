@@ -336,4 +336,22 @@ void main() {
       expect(updated.status, CompanionSessionStatus.needsYou);
     });
   });
+
+  group('a refusal from the machine', () {
+    test('a whole sentence the host wrote for a person is shown as it is', () {
+      expect(
+        machineRefusedSentence(
+          'This prompt was already answered — nothing was sent.',
+        ),
+        'This prompt was already answered — nothing was sent.',
+      );
+    });
+
+    test('a fragment is framed as the machine refusing', () {
+      expect(
+        machineRefusedSentence('that folder is gone'),
+        'The machine refused: that folder is gone.',
+      );
+    });
+  });
 }

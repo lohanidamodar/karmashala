@@ -3,6 +3,15 @@ part of 'remote_companion_gateway.dart';
 // Every way a request can fail, in a sentence a user can read — and the count
 // of unanswered requests that decides the link is no longer one.
 
+/// A host's refusal as the phone says it. A host that already wrote a whole
+/// sentence for a person is shown as is; a fragment is framed as a refusal.
+String machineRefusedSentence(String message) {
+  final trimmed = message.trim();
+  final sentence =
+      trimmed.endsWith('.') && trimmed[0] != trimmed[0].toLowerCase();
+  return sentence ? trimmed : 'The machine refused: $trimmed.';
+}
+
 /// The two refusals every unreachable-or-unpaired path shares; kept identical
 /// to the fake gateway's copy so the UI reads one voice.
 const String _kNotPaired = 'This phone is not paired with a host.';
@@ -124,7 +133,7 @@ extension _GatewayRefusals on RemoteCompanionGateway {
       'This app and the machine speak different protocol versions. '
           'Update whichever is older and pair again.',
     ErrorCode.notFound => 'The machine no longer has that session.',
-    ErrorCode.badRequest => 'The machine refused: ${error.message}.',
+    ErrorCode.badRequest => machineRefusedSentence(error.message),
     ErrorCode.unknownType =>
       'The machine did not understand the request — this app or Karmashala '
           'there is out of date.',

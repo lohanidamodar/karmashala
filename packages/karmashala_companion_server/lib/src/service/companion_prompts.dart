@@ -121,11 +121,17 @@ class CompanionPrompts {
         refusal.notFound || refusal.noTerminal
             ? ErrorCode.notFound
             : ErrorCode.badRequest,
-        refusal.message,
+        // A phone's card is usually minutes old: what it needs to hear is
+        // that the prompt is done, not how the screen changed.
+        refusal.stale ? kPromptAlreadyAnsweredOnPhone : refusal.message,
       );
     }
   }
 }
+
+/// What a phone is told when its answer reached a prompt that had gone.
+const String kPromptAlreadyAnsweredOnPhone =
+    'This prompt was already answered — nothing was sent.';
 
 /// The attention word a phone's list shows for [report]: a prompt waiting on
 /// a person, a failure, or nothing.

@@ -129,6 +129,9 @@ class _DeviceRuntime {
         if (watching) await push((api) => api.pollTranscript(sessionId));
         await push((api) => api.recheckApproval(sessionId));
       }
+      // Every card it was shown, subscribed or not: one left up after its
+      // prompt went can only be refused.
+      if (!_closed && peerLive) await push((api) => api.reconcileApprovals());
     } finally {
       _sweeping = false;
     }

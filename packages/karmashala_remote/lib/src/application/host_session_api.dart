@@ -633,8 +633,21 @@ class HostSessionApi {
   /// Re-evaluates every subscribed session and sends `session.changed` for
   /// the ones whose snapshot moved.
   Future<void> pushSessionsChanged() async {
-    for (final sessionId in _subscribed.toList()) {
+    final subscribed = _subscribed.toList();
+    for (final sessionId in subscribed) {
       await pushSessionChanged(sessionId);
+    }
+    await reconcileApprovals(except: subscribed.toSet());
+  }
+
+  /// Retires every approval card this device was shown that no longer waits,
+  /// subscribed or not: an approval reaches a phone in a pocket, so its end
+  /// must too — a prompt auto mode allowed before anyone tapped. [except]
+  /// names sessions this sweep already reconciled.
+  Future<void> reconcileApprovals({Set<String> except = const {}}) async {
+    for (final sessionId in _announcedApprovals.toList()) {
+      if (except.contains(sessionId)) continue;
+      await reconcileApproval(sessionId);
     }
   }
 

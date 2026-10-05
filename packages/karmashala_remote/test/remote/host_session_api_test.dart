@@ -1575,6 +1575,37 @@ void main() {
       },
     );
 
+    test(
+      'a phone in a pocket, never subscribed, is told when the prompt '
+      'leaves the screen: allowed by auto mode before anyone tapped',
+      () async {
+        // Seen on the phone, 2026-10-05: the card stayed, and its tap could
+        // only be refused.
+        final harness = await waiting();
+        harness.fake.setAwaitingApproval('s1', waiting: false);
+
+        await harness.api.reconcileApprovals();
+
+        final resolved = RemoteApprovalResolved.fromJson(
+          resolutions(harness).single.payload,
+        );
+        expect(resolved.sessionId, 's1');
+        expect(resolved.outcome, RemoteApprovalOutcome.elsewhere);
+
+        await harness.api.reconcileApprovals();
+        expect(resolutions(harness), hasLength(1), reason: 'said once');
+      },
+    );
+
+    test('a sweep of session news retires it too, subscribed or not', () async {
+      final harness = await waiting();
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      await harness.api.pushSessionsChanged();
+
+      expect(resolutions(harness), hasLength(1));
+    });
+
     test('and said once, not on every sweep after it', () async {
       final harness = await waiting();
       await harness.request(

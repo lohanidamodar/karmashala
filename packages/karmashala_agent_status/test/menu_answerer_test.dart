@@ -108,7 +108,25 @@ void main() {
 
     await expectLater(
       answerer.choose('s1', menuId: shown.id, option: 1),
-      throwsA(isA<SessionPromptRefusal>()),
+      throwsA(
+        isA<SessionPromptRefusal>().having((r) => r.stale, 'stale', isTrue),
+      ),
+    );
+    expect(pane.pressed, isEmpty);
+  });
+
+  test('an answer for a menu that has left the screen is stale: it was '
+      'answered, by a person or by auto mode', () async {
+    final pane = FakeMenuPane(trust);
+    final answerer = answererFor(pane);
+    final shown = answerer.read('s1')!;
+    pane.replacement = [' Allowed by auto mode classifier', ''];
+
+    await expectLater(
+      answerer.choose('s1', menuId: shown.id, option: 1),
+      throwsA(
+        isA<SessionPromptRefusal>().having((r) => r.stale, 'stale', isTrue),
+      ),
     );
     expect(pane.pressed, isEmpty);
   });

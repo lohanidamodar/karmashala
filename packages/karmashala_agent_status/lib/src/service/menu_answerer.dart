@@ -70,12 +70,18 @@ class SessionMenuAnswerer {
     // The screen itself, not the status: [menuId] already names the menu the
     // caller saw, and a status lagging the screen must not strand the answer.
     final menu = onScreen(sessionId);
+    // Both stale: the menu that was shown was answered — at the desk, or by
+    // the agent itself (auto mode) — before this arrived.
     if (menu == null) {
-      throw const SessionPromptRefusal('no menu is open in this session now');
+      throw const SessionPromptRefusal(
+        'no menu is open in this session now',
+        stale: true,
+      );
     }
     if (menu.id != menuId) {
       throw const SessionPromptRefusal(
         'the prompt changed since it was shown, so nothing was chosen',
+        stale: true,
       );
     }
     if (option < 0 || option >= menu.options.length) {

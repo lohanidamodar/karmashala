@@ -659,7 +659,7 @@ enum CompanionApprovalOutcome {
     CompanionApprovalOutcome.approved => 'Approved.',
     CompanionApprovalOutcome.denied => 'Declined.',
     CompanionApprovalOutcome.elsewhere =>
-      'That request was already answered elsewhere.',
+      'Already answered — at the desk, or allowed by auto mode.',
     CompanionApprovalOutcome.answered => 'Answered.',
   };
 }
