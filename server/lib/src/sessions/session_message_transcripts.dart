@@ -83,7 +83,23 @@ class SessionMessageTranscriptSource {
       at: row.createdAt,
       pendingToolUseId: tool?.pendingId,
       compaction: _compactionOf(row.messageId),
+      parentToolUseId: _parentIn(row.toolJson),
     );
+  }
+
+  /// The subagent call a tool row ran under, from the `parentToolUseId` its
+  /// agent put in its `_meta` (Claude's bridge does).
+  static String? _parentIn(String? toolJson) {
+    final meta = _object(toolJson)?['_meta'];
+    if (meta is! Map) return null;
+    for (final value in meta.values) {
+      if (value is Map) {
+        if (_string(value['parentToolUseId']) case final parent?) {
+          return parent;
+        }
+      }
+    }
+    return null;
   }
 
   /// The boundary a compaction row marks, as a terminal transcript's

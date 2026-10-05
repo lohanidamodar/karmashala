@@ -784,6 +784,11 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       return;
     }
     final tool = _tools[id] = _Tool(name, input, parent);
+    // A subagent's call is a step on its Agent call, where the chat draws it.
+    if (parent != null) {
+      final title = ClaudeTools.title(name, input);
+      _subagentSaid(parent, title == name ? name : '$name · $title');
+    }
     _update({
       'sessionUpdate': 'tool_call',
       ..._toolFields(id, tool),

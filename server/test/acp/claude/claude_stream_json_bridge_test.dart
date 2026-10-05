@@ -543,6 +543,17 @@ void main() {
         rows().where((r) => r.role == SessionMessageRole.agent && r.text != ''),
         isEmpty,
       );
+      // Its calls are steps on the Agent row, and their own rows say whose
+      // they are, so the chat draws them there and not at the top level.
+      expect(jsonEncode(calls['ag']!['content']), contains('Bash · ls'));
+      final projected = {
+        for (final row in rows())
+          if (row.toolJson != null)
+            (jsonDecode(row.toolJson!) as Json)['toolCallId']:
+                SessionMessageTranscriptSource.project(row),
+      };
+      expect(projected['sb']!.parentToolUseId, 'ag');
+      expect(projected['ag']!.parentToolUseId, isNull);
       await rt.stop();
     });
 

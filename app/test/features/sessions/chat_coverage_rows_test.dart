@@ -72,6 +72,25 @@ void main() {
     expect(find.textContaining('<command-name>'), findsNothing);
   });
 
+  test('a subagent\'s own calls are not drawn at the top level', () {
+    final chat = chatMessagesFromTranscript(const [
+      TranscriptMessage(
+        role: 'tool',
+        text: 'Agent(List files)',
+        tool: ToolActivity(name: 'Agent', subject: 'List files'),
+      ),
+      TranscriptMessage(
+        role: 'tool',
+        text: 'Bash(ls)',
+        tool: ToolActivity(name: 'Bash', subject: 'ls'),
+        parentToolUseId: 'ag',
+      ),
+      TranscriptMessage(role: 'agent', text: 'Done.'),
+    ]);
+
+    expect(chat.map((m) => m.text), ['Agent(List files)', 'Done.']);
+  });
+
   testWidgets('a prompt sent while the agent worked is marked so', (
     tester,
   ) async {

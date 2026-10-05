@@ -97,6 +97,7 @@ class TranscriptMessage {
     this.compaction,
     this.agentInstallationId,
     this.queued = false,
+    this.parentToolUseId,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -173,6 +174,10 @@ class TranscriptMessage {
   /// the CLI queued rather than recorded as a turn.
   final bool queued;
 
+  /// The subagent call a chat session's tool row ran under; its steps are
+  /// drawn on that call, not at the top level.
+  final String? parentToolUseId;
+
   /// This row with [thinking] set.
   TranscriptMessage withThinking(String? value) => TranscriptMessage(
     role: role,
@@ -187,6 +192,7 @@ class TranscriptMessage {
     compaction: compaction,
     agentInstallationId: agentInstallationId,
     queued: queued,
+    parentToolUseId: parentToolUseId,
   );
 
   /// This row with [agentInstallationId] set.
@@ -203,6 +209,7 @@ class TranscriptMessage {
     compaction: compaction,
     agentInstallationId: installationId,
     queued: queued,
+    parentToolUseId: parentToolUseId,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -221,6 +228,7 @@ class TranscriptMessage {
     'compaction': ?compaction?.toJson(),
     'agentInstallationId': ?agentInstallationId,
     if (queued) 'queued': true,
+    'parentToolUseId': ?parentToolUseId,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -263,6 +271,7 @@ class TranscriptMessage {
           : null,
       agentInstallationId: string('agentInstallationId'),
       queued: json['queued'] == true,
+      parentToolUseId: string('parentToolUseId'),
     );
   }
 }

@@ -1259,6 +1259,8 @@ List<ChatMessage> chatMessagesFromTranscript(
   String? lastNamed;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
+    // A subagent's own call: drawn as a step on its Agent row.
+    if (message.parentToolUseId != null) continue;
     if (summaryOf(message) case final summary?) {
       if (i == from && boundary != null) continue;
       final trigger = message.compaction!.trigger;
