@@ -895,7 +895,12 @@ void _parseClaudeLine(
   final message = json['message'];
   if (message is! Map) return;
   final content = message['content'];
-  final role = type == 'user' ? 'user' : 'agent';
+  // A failed API call, written by the CLI as an assistant turn.
+  final role = type == 'user'
+      ? 'user'
+      : json['isApiErrorMessage'] == true
+      ? 'error'
+      : 'agent';
   if (role == 'user' && (background.isNotEmpty || acrossBoundary.isNotEmpty)) {
     _retireReportedAgents(content, background, acrossBoundary);
   }
