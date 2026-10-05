@@ -11,6 +11,7 @@ import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
 import '../../agents/codex/codex_patch_edits.dart';
+import '../../agents/codex/codex_rollout_items.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
@@ -398,9 +399,11 @@ class _TranscriptParse {
   // Reasoning the model wrote before its next row, which is written on a
   // line of its own: spent on that row.
   String? pendingThinking;
+  _CodexCalls codex = _CodexCalls();
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
+    ..codex = codex.copy()
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -451,7 +454,7 @@ class _TranscriptParse {
     // Claude's shape is the default: it is the least-wrong guess for an
     // agent we have no reader for.
     if (dialect == TranscriptDialect.codexRollout) {
-      _parseCodexLine(decoded, messages, pending, at, injected);
+      _parseCodexLine(decoded, messages, pending, codex, at, injected);
     } else if (dialect == TranscriptDialect.antigravityJsonl) {
       _parseAntigravityLine(decoded, messages, at);
     } else {
@@ -1300,10 +1303,58 @@ String _claudeResultText(Object? content) {
   return parts.join('\n');
 }
 
+/// The Codex calls a turn has open, and which code-mode script has already
+/// handed its row to the first step it took.
+class _CodexCalls {
+  // Call id to whether it is a code-mode script, in the order they opened.
+  final Map<String, bool> open = {};
+  final Set<String> filled = {};
+
+  _CodexCalls copy() => _CodexCalls()
+    ..open.addAll(open)
+    ..filled.addAll(filled);
+
+  void clear() {
+    open.clear();
+    filled.clear();
+  }
+}
+
+/// A completed item's row. Inside a code-mode script the script's own row
+/// becomes the first step's; beside a call that draws itself (a patch, an
+/// MCP call) the item would draw it twice, so it is left out.
+void _addCodexItem(
+  Map<dynamic, dynamic> item,
+  List<TranscriptMessage> out,
+  Map<String, int> pending,
+  _CodexCalls codex,
+  DateTime? at,
+) {
+  final activity = codexItemActivity(item);
+  if (activity == null) return;
+  final script = codex.open.entries
+      .lastWhere((call) => call.value, orElse: () => const MapEntry('', false))
+      .key;
+  if (script.isEmpty && codex.open.isNotEmpty) return;
+  final row = TranscriptMessage(
+    role: 'tool',
+    text: activity.summary,
+    tool: activity,
+    at: at,
+  );
+  final slot = pending[script];
+  if (script.isNotEmpty && codex.filled.add(script) && slot != null) {
+    out[slot] = row.withThinking(out[slot].thinking);
+    return;
+  }
+  out.add(row);
+}
+
 void _parseCodexLine(
   Map<String, dynamic> json,
   List<TranscriptMessage> out,
   Map<String, int> pending,
+  _CodexCalls codex,
   DateTime? at,
   InjectedTranscriptContext injected,
 ) {
@@ -1312,6 +1363,12 @@ void _parseCodexLine(
   switch (payload['type']) {
     case 'message':
       _parseCodexMessage(payload, out, at, injected);
+    case 'item_completed' when json['type'] == 'event_msg':
+      final item = payload['item'];
+      if (item is Map) _addCodexItem(item, out, pending, codex, at);
+    case 'task_started' || 'task_complete' || 'turn_aborted'
+        when json['type'] == 'event_msg':
+      codex.clear();
     // Codex names its shell differently depending on the tool surface —
     // `function_call` for the classic `shell`, `custom_tool_call` for the
     // `exec` sandbox — but both carry a name, a `call_id` and an answer.
@@ -1319,6 +1376,8 @@ void _parseCodexLine(
     case 'custom_tool_call':
       final name = payload['name'];
       if (name is! String) return;
+      final script = kCodexCodeModeTools.contains(name);
+      if (payload['call_id'] case final String id) codex.open[id] = script;
       // `arguments` is a JSON *string* for Codex, which is why the plan reader
       // takes either — see [AgentPlanSupport.planIn]. Its headline is a better
       // subject than the fallback below, which for `update_plan` was the whole
@@ -1334,8 +1393,11 @@ void _parseCodexLine(
         name: name,
         // A patch's first line is `*** Begin Patch`; the file it touches is
         // what identifies it.
-        subject:
-            plan?.headline ?? edits.firstOrNull?.path ?? _codexSubject(payload),
+        subject: script
+            ? codexScriptSubject(payload['input'])
+            : plan?.headline ??
+                  edits.firstOrNull?.path ??
+                  _codexSubject(payload),
         plan: plan,
         edits: edits,
         editsTruncated: cut,
@@ -1353,6 +1415,13 @@ void _parseCodexLine(
       );
     case 'function_call_output':
     case 'custom_tool_call_output':
+      final id = payload['call_id'];
+      codex.open.remove(id);
+      // Its row went to the first step it took, which carries that answer.
+      if (codex.filled.remove(id)) {
+        pending.remove(id);
+        return;
+      }
       _attachResult(
         out,
         pending,
