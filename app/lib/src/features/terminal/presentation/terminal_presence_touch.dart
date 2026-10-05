@@ -68,6 +68,7 @@ class _TouchPresenceState extends State<_TouchPresence> {
                         _GridChip(
                           instance: instance,
                           atSessionGrid: atSessionGrid,
+                          sizedElsewhere: presence?.sizedElsewhere ?? false,
                           columns:
                               presence?.columns ?? instance.terminal.viewWidth,
                           rows: presence?.rows ?? instance.terminal.viewHeight,
@@ -144,24 +145,34 @@ class _GridChip extends StatelessWidget {
   const _GridChip({
     required this.instance,
     required this.atSessionGrid,
+    required this.sizedElsewhere,
     required this.columns,
     required this.rows,
   });
 
   final HostTerminalInstance instance;
   final bool atSessionGrid;
+
+  /// Another device sized the session: this is its grid, not a pick.
+  final bool sizedElsewhere;
   final int columns;
   final int rows;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = atSessionGrid ? '$columns×$rows' : 'Fitted';
+    final label = !atSessionGrid
+        ? 'Fitted'
+        : sizedElsewhere
+        ? 'Desktop size'
+        : '$columns×$rows';
     return Semantics(
       button: true,
-      label: atSessionGrid
-          ? 'Terminal drawn at the session size, $columns by $rows'
-          : 'Terminal fitted to this phone',
+      label: !atSessionGrid
+          ? 'Terminal fitted to this phone'
+          : sizedElsewhere
+          ? 'Terminal drawn at the desktop size, $columns by $rows'
+          : 'Terminal drawn at the session size, $columns by $rows',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => unawaited(_explain(context)),

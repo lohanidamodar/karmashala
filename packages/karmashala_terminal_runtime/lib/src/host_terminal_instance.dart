@@ -126,7 +126,8 @@ class HostTerminalInstance
     this.openWithin = kPaneOpenWithin,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory),
-       _atSessionGrid = ValueNotifier(drawsAtSessionGrid) {
+       _atSessionGrid = ValueNotifier(drawsAtSessionGrid),
+       _yieldsSize = drawsAtSessionGrid {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler()
       // Before the restored history is written, so it is measured the same
@@ -283,10 +284,18 @@ class HostTerminalInstance
   /// the server last said; null before it has.
   ValueListenable<HostPresence?> get presence => _presence;
 
-  /// Takes the session from whoever is typing in it: "Take over".
-  Future<void> takeOver() async => _link?.takeOver();
+  /// Takes the session from whoever is typing in it: "Take over". A pane that
+  /// yields the size takes it as well, fitted to its view.
+  Future<void> takeOver() async {
+    if (_yieldsSize && drawsAtSessionGrid) return fitToView();
+    await _link?.takeOver();
+  }
 
   final ValueNotifier<bool> _atSessionGrid;
+
+  /// Whether this pane goes back to the session's grid whenever another
+  /// client takes the session: its program then draws for that client's grid.
+  final bool _yieldsSize;
 
   /// Whether this pane draws at the session's grid and pans, rather than
   /// asking the session for its own (Stage 2 step 9). Such a pane attaches
@@ -780,7 +789,13 @@ class HostTerminalInstance
       );
       final live = link;
       _presenceSubscription = live.presence.listen((told) {
+        final before = _presence.value?.holder;
         _presence.value = told;
+        // Only on a change of holder: one said before this pane's own claim
+        // landed names the holder it is taking the session from.
+        if (_yieldsSize && told.heldElsewhere && told.holder != before) {
+          _atSessionGrid.value = true;
+        }
         if (drawsAtSessionGrid) {
           _followSessionGrid(live, told.columns, told.rows, holds: told.mine);
         }

@@ -49,7 +49,8 @@ extension _TouchPane on _TerminalPaneViewState {
   /// sideways; the desktop takes the width back when it types. Once per
   /// showing, and only on screen — a terminal kept behind the chat face does
   /// not take the session. "Back to the session's size" in the size chip
-  /// holds for the rest of that showing.
+  /// holds for the rest of that showing. Not while another device is typing:
+  /// its program draws for its grid, so only Take over fits it here.
   void _fitToPhoneOnShow({required bool atSessionGrid}) {
     final visible = Visibility.of(context);
     if (!visible) {
@@ -59,7 +60,9 @@ extension _TouchPane on _TerminalPaneViewState {
     final host = _host;
     if (_phoneFitted || !atSessionGrid || host == null) return;
     // Measured, and linked: presence arrives once the attach is answered.
-    if (host.viewGrid == null || host.presence.value == null) return;
+    final presence = host.presence.value;
+    if (host.viewGrid == null || presence == null) return;
+    if (presence.heldElsewhere) return;
     _phoneFitted = true;
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(host.fitToView());

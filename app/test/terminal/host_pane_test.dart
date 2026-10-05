@@ -562,6 +562,73 @@ void main() {
     expect(told().last, (60, 30));
   });
 
+  group('a phone pane and the size another device holds', () {
+    PresenceMessage heldBy(String? holder) => PresenceMessage(
+      sessionRef: 1,
+      holder: holder,
+      viewers: const ['karmashala'],
+      sizedFor: holder,
+      columns: 200,
+      rows: 50,
+    );
+
+    Future<HostTerminalInstance> phoneOnDesktopSession(
+      PaneAccess access,
+    ) async {
+      access.liveSessions.add('karmashala_local_p1');
+      access.grids['karmashala_local_p1'] = (200, 50);
+      final pane = paneOn(access, drawsAtSessionGrid: true)
+        ..viewGrid = (60, 30);
+      await settle();
+      return pane;
+    }
+
+    test('fitted, it draws at the session size again once another device '
+        'takes the session', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = await phoneOnDesktopSession(access);
+      unawaited(pane.fitToView());
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      expect(pane.drawsAtSessionGrid, isFalse);
+
+      access.channels.single.push(heldBy('desktop'));
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      expect(pane.drawsAtSessionGrid, isTrue);
+      expect(
+        (pane.terminal.viewWidth, pane.terminal.viewHeight),
+        (200, 50),
+      );
+    });
+
+    test('a word about the holder sent before its own claim landed does not '
+        'undo the fit', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = await phoneOnDesktopSession(access);
+      access.channels.single.push(heldBy('desktop'));
+      await settle();
+
+      unawaited(pane.fitToView());
+      access.channels.single.push(heldBy('desktop'));
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      expect(pane.drawsAtSessionGrid, isFalse);
+    });
+
+    test('Take over fits the session to the phone', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = await phoneOnDesktopSession(access);
+      final channel = access.channels.single..push(heldBy('desktop'));
+      await settle();
+      expect(pane.drawsAtSessionGrid, isTrue);
+
+      unawaited(pane.takeOver());
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      expect(pane.drawsAtSessionGrid, isFalse);
+      final resized = channel.all<ResizeMessage>().last;
+      expect((resized.columns, resized.rows), (60, 30));
+      expect(channel.all<ClaimMessage>().single.takeOver, isTrue);
+    });
+  });
+
   test(
     'a session found at another size is told the size of the pane',
     () async {
