@@ -11,8 +11,10 @@ import 'package:agent_cli/stream.dart'
         boundedToolEdits,
         askedQuestionsIn,
         boundedToolOutput,
+        looksLikeImagePath,
         proposedPlanIn,
-        toolSubjectEntryFor;
+        spillToolImage,
+        toolSubjectFor;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
 
@@ -81,7 +83,23 @@ class SessionMessageTranscriptSource {
       at: row.createdAt,
       pendingToolUseId: tool?.pendingId,
       compaction: _compactionOf(row.messageId),
+      parentToolUseId: _parentIn(row.toolJson),
     );
+  }
+
+  /// The subagent call a tool row ran under, from the `parentToolUseId` its
+  /// agent put in its `_meta` (Claude's bridge does).
+  static String? _parentIn(String? toolJson) {
+    final meta = _object(toolJson)?['_meta'];
+    if (meta is! Map) return null;
+    for (final value in meta.values) {
+      if (value is Map) {
+        if (_string(value['parentToolUseId']) case final parent?) {
+          return parent;
+        }
+      }
+    }
+    return null;
   }
 
   /// The boundary a compaction row marks, as a terminal transcript's
@@ -126,9 +144,10 @@ class SessionMessageTranscriptSource {
     return (
       activity: ToolActivity(
         name: named ?? _string(json['title']) ?? kind ?? 'tool',
+        imagePath: _imageOf(json, kind),
         subject:
             _subjectOf(json['locations']) ??
-            toolSubjectEntryFor(json['rawInput'])?.value ??
+            toolSubjectFor(named ?? '', json['rawInput']) ??
             // Its title says what it acts on when its kind names it.
             (named == null ? null : _string(json['title'])),
         output: output,
@@ -174,6 +193,40 @@ class SessionMessageTranscriptSource {
     'running',
   };
 
+  /// The image a call answered with — a link to an image file, or inline
+  /// image content, written to one — else the image file it looked at.
+  static String? _imageOf(Map<String, Object?> json, String? kind) {
+    final content = json['content'];
+    if (content is List) {
+      for (final block in content) {
+        final inner = block is Map ? block['content'] : null;
+        if (inner is! Map) continue;
+        final mime = _string(inner['mimeType']);
+        switch (inner['type']) {
+          case 'resource_link' || 'image' when _string(inner['uri']) != null:
+            final uri = Uri.tryParse(inner['uri'] as String);
+            if (uri == null || uri.scheme != 'file') continue;
+            final path = uri.toFilePath();
+            if (looksLikeImagePath(path)) return path;
+          case 'image':
+            final data = _string(inner['data']);
+            if (data == null) continue;
+            if (spillToolImage(data, mimeType: mime) case final path?) {
+              return path;
+            }
+        }
+      }
+    }
+    if (kind == 'edit' || kind == 'delete' || kind == 'move') return null;
+    final locations = json['locations'];
+    if (locations is! List) return null;
+    for (final location in locations) {
+      final path = location is Map ? _string(location['path']) : null;
+      if (path != null) return looksLikeImagePath(path) ? path : null;
+    }
+    return null;
+  }
+
   /// The first location's path, as the identifying line of the call.
   static String? _subjectOf(Object? locations) {
     if (locations is! List) return null;
@@ -207,14 +260,24 @@ class SessionMessageTranscriptSource {
 
   static String? _text(Object? value) => value is String ? value : null;
 
-  /// What the call's embedded terminals have printed so far, or null.
+  /// What a running call has printed so far — its embedded terminals, or the
+  /// text it streams as content (Codex's commands) — or null. Never a diff.
   static String? _terminalOutputOf(Map<String, Object?> json) {
     final content = json['content'];
     if (content is! List) return null;
     final printed = [
       for (final block in content)
-        if (block is Map && block['type'] == 'terminal')
-          if (block['output'] case final String text when text.isNotEmpty) text,
+        if (block is Map)
+          if (switch (block['type']) {
+                'terminal' => block['output'],
+                'content' => switch (block['content']) {
+                  {'type': 'text', 'text': final Object? text} => text,
+                  _ => null,
+                },
+                _ => null,
+              }
+              case final String text when text.isNotEmpty)
+            text,
     ];
     return printed.isEmpty ? null : printed.join('\n');
   }

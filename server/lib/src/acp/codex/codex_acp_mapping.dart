@@ -1,3 +1,4 @@
+import 'package:agent_cli/stream.dart' show webSearchResultLines;
 import 'package:karmashala_acp/karmashala_acp.dart' show JsonMap;
 import 'package:path/path.dart' as p;
 
@@ -388,12 +389,14 @@ JsonMap _webSearch(JsonMap item) {
   final action = item['action'];
   final url = action is Map ? action['url'] : null;
   final query = item['query'];
+  final results = webSearchResultLines(item['results']);
   return {
     'title': url is String
         ? 'Open $url'
         : 'Search the web${query is String && query.isNotEmpty ? ': $query' : ''}',
     'kind': 'fetch',
     'rawInput': _dropNulls({'query': query, 'action': action}),
+    if (results.isNotEmpty) 'content': [codexTextContent(results)],
   };
 }
 

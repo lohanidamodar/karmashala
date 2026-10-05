@@ -10,11 +10,17 @@ import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
+import '../../agents/claude_code/claude_local_commands.dart';
+import '../../agents/claude_code/claude_result_messages.dart';
+import '../../agents/claude_code/claude_tool_references.dart';
+import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
+import '../../agents/codex/codex_rollout_items.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
 import '../../sessions/tool_activity.dart';
+import '../../sessions/tool_images.dart';
 import './transcript_dialect.dart';
 import './subagent_transcript.dart';
 import './background_run.dart';
@@ -67,6 +73,14 @@ class CompactionBoundary {
 /// [TranscriptMessage.agentInstallationId] the agent taking over.
 const String kAgentSwitchRole = 'agentSwitch';
 
+/// The role of a row the CLI wrote about the session rather than a turn in
+/// it: what a hook said, an error, a compaction. Drawn as a small note.
+const String kTranscriptNoticeRole = 'notice';
+
+/// The role of a command the person ran in the CLI itself — a slash command,
+/// a `!` shell line — with what it printed as its tool's output.
+const String kTranscriptCommandRole = 'command';
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -82,6 +96,8 @@ class TranscriptMessage {
     this.thinking,
     this.compaction,
     this.agentInstallationId,
+    this.queued = false,
+    this.parentToolUseId,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -154,6 +170,31 @@ class TranscriptMessage {
   /// agent; null everywhere else, including every row a file reader returns.
   final String? agentInstallationId;
 
+  /// A `user` row the person sent while the agent was still working, which
+  /// the CLI queued rather than recorded as a turn.
+  final bool queued;
+
+  /// The subagent call a chat session's tool row ran under; its steps are
+  /// drawn on that call, not at the top level.
+  final String? parentToolUseId;
+
+  /// This row with [thinking] set.
+  TranscriptMessage withThinking(String? value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: value,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+  );
+
   /// This row with [agentInstallationId] set.
   TranscriptMessage withAgent(String? installationId) => TranscriptMessage(
     role: role,
@@ -167,6 +208,8 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: installationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -184,6 +227,8 @@ class TranscriptMessage {
     'background': ?background?.toJson(),
     'compaction': ?compaction?.toJson(),
     'agentInstallationId': ?agentInstallationId,
+    if (queued) 'queued': true,
+    'parentToolUseId': ?parentToolUseId,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -225,6 +270,8 @@ class TranscriptMessage {
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
       agentInstallationId: string('agentInstallationId'),
+      queued: json['queued'] == true,
+      parentToolUseId: string('parentToolUseId'),
     );
   }
 }
@@ -376,16 +423,22 @@ class _TranscriptParse {
   // compaction produces no row of its own — the row it belongs to is the next
   // one the file yields, and only this loop can see that happen.
   CompactionBoundary? pendingCompaction;
+  // Reasoning the model wrote before its next row, which is written on a
+  // line of its own: spent on that row.
+  String? pendingThinking;
+  _CodexCalls codex = _CodexCalls();
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
+    ..codex = codex.copy()
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
     ..background.addAll(background)
     ..acrossBoundary.addAll(acrossBoundary)
     ..runs = runs.copy()
-    ..pendingCompaction = pendingCompaction;
+    ..pendingCompaction = pendingCompaction
+    ..pendingThinking = pendingThinking;
 
   void add(String line) {
     if (line.isEmpty) return;
@@ -396,13 +449,39 @@ class _TranscriptParse {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    final thought = _reasoningOf(decoded, dialect);
+    if (thought != null) {
+      final held = pendingThinking;
+      pendingThinking = held == null ? thought : '$held\n\n$thought';
+    }
+    final first = messages.length;
+    _parse(decoded);
+    if (messages.length > first) _spendThinking(first);
+  }
+
+  /// Hangs held reasoning on the row at [index], unless that row is the
+  /// person's: reasoning nobody answered is dropped there.
+  void _spendThinking(int index) {
+    final thinking = pendingThinking;
+    if (thinking == null) return;
+    pendingThinking = null;
+    final row = messages[index];
+    if (row.role == kTranscriptNoticeRole) {
+      pendingThinking = thinking;
+      return;
+    }
+    if (row.role == 'user' || row.thinking != null) return;
+    messages[index] = row.withThinking(boundedText(thinking).$1);
+  }
+
+  void _parse(Map<String, dynamic> decoded) {
     // Read once per line and handed down: both CLIs carry it in the same
     // place, and every message the line produces was written at that instant.
     final at = _lineTimestamp(decoded);
     // Claude's shape is the default: it is the least-wrong guess for an
     // agent we have no reader for.
     if (dialect == TranscriptDialect.codexRollout) {
-      _parseCodexLine(decoded, messages, pending, at, injected);
+      _parseCodexLine(decoded, messages, pending, codex, at, injected);
     } else if (dialect == TranscriptDialect.antigravityJsonl) {
       _parseAntigravityLine(decoded, messages, at);
     } else {
@@ -453,6 +532,39 @@ CompactionBoundary? _compactionBoundaryOf(Map<String, dynamic> json) {
   if (metadata is! Map) return null;
   final trigger = metadata['trigger'];
   return CompactionBoundary(trigger: trigger is String ? trigger : null);
+}
+
+/// The reasoning [json] records, or null when it records none: Claude's
+/// `thinking` blocks (most are empty, kept only for their signature) and
+/// Codex's `reasoning` summary (whose body is encrypted).
+String? _reasoningOf(Map<String, dynamic> json, TranscriptDialect dialect) {
+  final List<String> parts;
+  if (dialect == TranscriptDialect.codexRollout) {
+    final payload = json['payload'];
+    if (payload is! Map || payload['type'] != 'reasoning') return null;
+    final summary = payload['summary'];
+    parts = [
+      if (summary is List)
+        for (final part in summary)
+          if (part is Map && part['text'] is String) part['text'] as String,
+    ];
+  } else if (dialect == TranscriptDialect.claudeJsonl) {
+    if (json['type'] != 'assistant') return null;
+    final message = json['message'];
+    final content = message is Map ? message['content'] : null;
+    parts = [
+      if (content is List)
+        for (final block in content)
+          if (block is Map &&
+              block['type'] == 'thinking' &&
+              block['thinking'] is String)
+            block['thinking'] as String,
+    ];
+  } else {
+    return null;
+  }
+  final text = parts.map((part) => part.trim()).where((p) => p.isNotEmpty);
+  return text.isEmpty ? null : text.join('\n\n');
 }
 
 /// [row] again, carrying the boundary it follows. One row per compaction.
@@ -524,6 +636,7 @@ Future<void> _attachSubagents(
       subagent: reference,
       at: row.at,
       pendingToolUseId: row.pendingToolUseId,
+      thinking: row.thinking,
       compaction: row.compaction,
     );
   });
@@ -762,16 +875,33 @@ void _parseClaudeLine(
         background.clear();
         acrossBoundary.clear();
         runs.killAgents(at);
+      case 'stop_hook_summary':
+        _add(out, kTranscriptNoticeRole, _stopHookNote(json), at);
+      case 'away_summary':
+        if (json['content'] case final String recap when recap.trim() != '') {
+          _add(out, kTranscriptNoticeRole, 'While you were away: $recap', at);
+        }
+      case 'local_command':
+        if (json['content'] case final String text) {
+          _addLocalCommand(text, out, at);
+        }
     }
     return;
   }
   if (type == 'attachment') {
     final attachment = json['attachment'];
     if (attachment is! Map) return;
-    // An envelope that arrived mid-turn is queued, not a user turn.
+    final hookNote = _hookNote(attachment);
+    if (hookNote != null) {
+      _add(out, kTranscriptNoticeRole, hookNote, at);
+      return;
+    }
+    // What arrived mid-turn is queued: a background run's notice, or a
+    // prompt the person sent while the agent worked.
     if (attachment['type'] == 'queued_command') {
       _retireReportedAgents(attachment['prompt'], background, acrossBoundary);
       runs.notified(attachment['prompt'], at);
+      _addQueuedPrompt(attachment, out, at);
       return;
     }
     if (attachment['type'] != 'task_status') return;
@@ -790,7 +920,12 @@ void _parseClaudeLine(
   final message = json['message'];
   if (message is! Map) return;
   final content = message['content'];
-  final role = type == 'user' ? 'user' : 'agent';
+  // A failed API call, written by the CLI as an assistant turn.
+  final role = type == 'user'
+      ? 'user'
+      : json['isApiErrorMessage'] == true
+      ? 'error'
+      : 'agent';
   if (role == 'user' && (background.isNotEmpty || acrossBoundary.isNotEmpty)) {
     _retireReportedAgents(content, background, acrossBoundary);
   }
@@ -803,7 +938,8 @@ void _parseClaudeLine(
   // note — is marked isMeta: nobody typed it.
   final meta = role == 'user' && json['isMeta'] == true;
   if (content is String) {
-    if (!meta) _add(out, role, said(content), at);
+    if (meta || (role == 'user' && _addLocalCommand(content, out, at))) return;
+    _add(out, role, said(content), at);
     return;
   }
   if (content is! List) return;
@@ -813,7 +949,11 @@ void _parseClaudeLine(
     } else if (part is Map) {
       switch (part['type']) {
         case 'text':
-          if (!meta) _add(out, role, said(part['text']), at);
+          if (!meta) {
+            _add(out, role, said(part['text']), at);
+          } else {
+            _foldSkillBody(part['text'], out);
+          }
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -849,10 +989,14 @@ void _parseClaudeLine(
             out,
             pending,
             id: id,
-            output: _claudeResultText(part['content']),
+            output:
+                claudeWebSearchText(json['toolUseResult']) ??
+                claudeResultMessage(json['toolUseResult']) ??
+                _claudeResultText(part['content']),
             isError: isError,
             edits: written == null ? null : [written],
             answers: answersIn(json['toolUseResult']),
+            image: () => _claudeResultImage(part['content']),
           );
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
@@ -861,6 +1005,146 @@ void _parseClaudeLine(
       }
     }
   }
+}
+
+/// What a hook attachment says, as Claude Code itself prints it, or null for
+/// one it keeps quiet: a success, context for the model, and a Stop hook's
+/// own rows (its summary speaks for them).
+String? _hookNote(Map<dynamic, dynamic> attachment) {
+  final name = attachment['hookName'];
+  final event = attachment['hookEvent'];
+  if (name is! String) return null;
+  if (event == 'Stop' || event == 'SubagentStop') return null;
+  String? said(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+  switch (attachment['type']) {
+    case 'hook_system_message':
+      final content = said(attachment['content']);
+      return content == null ? null : '$name hook: $content';
+    case 'hook_blocking_error':
+      final error = attachment['blockingError'];
+      final reason = said(error is Map ? error['blockingError'] : error);
+      return '$name hook blocked it${reason == null ? '' : ': $reason'}';
+    case 'hook_non_blocking_error':
+      final output =
+          said(attachment['stderr']) ??
+          said(attachment['stdout']) ??
+          'exit ${attachment['exitCode']}';
+      return '$name hook failed: $output';
+    case 'hook_error_during_execution':
+      final content = said(attachment['content']);
+      return '$name hook failed${content == null ? '' : ': $content'}';
+    case 'hook_stopped_continuation':
+      final message = said(attachment['message']);
+      return '$name hook stopped the agent'
+          '${message == null ? '' : ': $message'}';
+    case 'hook_cancelled' when attachment['timedOut'] == true:
+      return '$name hook timed out';
+  }
+  return null;
+}
+
+/// A Stop hook run's summary, in the CLI's words, or null when it had
+/// nothing to say.
+String? _stopHookNote(Map<String, dynamic> json) {
+  List<String> strings(Object? list) => [
+    if (list is List)
+      for (final item in list)
+        if (item is String && item.trim().isNotEmpty) item.trim(),
+  ];
+  final reason = json['stopReason'];
+  final lines = [
+    if (json['preventedContinuation'] == true &&
+        reason is String &&
+        reason.trim().isNotEmpty)
+      reason.trim(),
+    for (final error in strings(json['hookErrors'])) 'Stop hook error: $error',
+    for (final feedback in strings(json['hookAdditionalContext']))
+      'Stop hook feedback: $feedback',
+  ];
+  return lines.isEmpty ? null : lines.join('\n');
+}
+
+/// Adds the row for [text] when it records a command the person ran in the
+/// CLI, or hangs what one printed on the command above it; false for any
+/// other text.
+bool _addLocalCommand(String text, List<TranscriptMessage> out, DateTime? at) {
+  if (claudeLocalCommand(text) case (:final tool, text: final said)) {
+    out.add(
+      TranscriptMessage(
+        role: kTranscriptCommandRole,
+        text: said,
+        tool: tool,
+        at: at,
+      ),
+    );
+    return true;
+  }
+  final printed = claudeLocalCommandOutput(text);
+  if (printed == null) return false;
+  final last = out.lastOrNull;
+  final command = last?.role == kTranscriptCommandRole ? last!.tool : null;
+  if (command != null && command.output == null && printed.isNotEmpty) {
+    final (bounded, cut) = boundedToolOutput(printed);
+    out[out.length - 1] = TranscriptMessage(
+      role: last!.role,
+      text: last.text,
+      tool: command.withResult(output: bounded, outputTruncated: cut),
+      at: last.at,
+    );
+  }
+  return true;
+}
+
+/// A skill's body, which Claude Code loads as an isMeta turn right after its
+/// Skill call: it becomes that call's output. Other isMeta text stays hidden.
+void _foldSkillBody(Object? text, List<TranscriptMessage> out) {
+  if (text is! String) return;
+  final header = _skillBodyHeader.firstMatch(text);
+  final last = out.lastOrNull;
+  final call = last?.tool;
+  if (header == null || call == null || call.name != 'Skill') return;
+  final (body, cut) = boundedToolOutput(text.substring(header.end).trim());
+  out[out.length - 1] = TranscriptMessage(
+    role: last!.role,
+    text: last.text,
+    tool: call.withResult(output: body, outputTruncated: cut),
+    at: last.at,
+    thinking: last.thinking,
+    compaction: last.compaction,
+  );
+}
+
+final RegExp _skillBodyHeader = RegExp(
+  r'^Base directory for this skill:[^\n]*\n*',
+);
+
+/// A prompt the person sent while the agent worked, which the CLI keeps only
+/// as a `queued_command` attachment: their message, marked [queued]. A
+/// background run's notice arrives the same way and is not theirs.
+void _addQueuedPrompt(
+  Map<dynamic, dynamic> attachment,
+  List<TranscriptMessage> out,
+  DateTime? at,
+) {
+  if (attachment['commandMode'] == 'task-notification') return;
+  final prompt = attachment['prompt'];
+  final text = prompt is List
+      ? [
+          for (final block in prompt)
+            if (block is Map && block['text'] is String) block['text'],
+        ].join('\n')
+      : prompt;
+  if (text is! String || text.trim().isEmpty) return;
+  if (text.contains(_taskNotificationMarker)) return;
+  out.add(
+    TranscriptMessage(
+      role: 'user',
+      text: boundedText(_withoutPasteTags(text).trim()).$1,
+      at: at,
+      queued: true,
+    ),
+  );
 }
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
@@ -1134,16 +1418,41 @@ const String _taskNotificationMarker = '<task-notification>';
 /// Compiled once for the process: this runs on every user turn of every parse.
 final RegExp _taskIdPattern = RegExp(r'<task-id>([^<]*)</task-id>');
 
-/// The text of a Claude `tool_result`'s content.
-///
-/// `image` blocks are read for their existence and then dropped: their `data`
-/// is a base64 copy of the file, one real transcript carried 96 of them, and
-/// the picture is drawn from the path on disk instead
-/// (`TranscriptImagePreview`).
+/// The first image a Claude `tool_result` carried, written to a file; null
+/// without one.
+String? _claudeResultImage(Object? content) {
+  if (content is! List) return null;
+  for (final block in content) {
+    if (block is! Map || block['type'] != 'image') continue;
+    final source = block['source'];
+    if (source is! Map || source['data'] is! String) continue;
+    final media = source['media_type'];
+    return spillToolImage(
+      source['data'] as String,
+      mimeType: media is String ? media : null,
+    );
+  }
+  return null;
+}
+
+/// The first image a Codex call's output carried, written to a file; null
+/// without one.
+String? _codexResultImage(Object? output) {
+  if (output is! List) return null;
+  for (final block in output) {
+    if (block is Map && block['type'] == 'input_image') {
+      return spillToolImageUrl(block['image_url']);
+    }
+  }
+  return null;
+}
+
+/// The text of a Claude `tool_result`'s content. Its `image` blocks are
+/// drawn from a file instead: see [_claudeResultImage].
 String _claudeResultText(Object? content) {
   if (content is String) return content;
   if (content is! List) return '';
-  final parts = <String>[];
+  final parts = [?claudeLoadedToolsText(content)];
   for (final block in content) {
     if (block is Map && block['type'] == 'text' && block['text'] is String) {
       parts.add(block['text'] as String);
@@ -1152,18 +1461,103 @@ String _claudeResultText(Object? content) {
   return parts.join('\n');
 }
 
+/// The Codex calls a turn has open, and which code-mode script has already
+/// handed its row to the first step it took.
+class _CodexCalls {
+  // Call id to whether it is a code-mode script, in the order they opened.
+  final Map<String, bool> open = {};
+  final Set<String> filled = {};
+
+  _CodexCalls copy() => _CodexCalls()
+    ..open.addAll(open)
+    ..filled.addAll(filled);
+
+  void clear() {
+    open.clear();
+    filled.clear();
+  }
+}
+
+/// A completed item's row. Inside a code-mode script the script's own row
+/// becomes the first step's; beside a call that draws itself (a patch, an
+/// MCP call) the item would draw it twice, so it is left out.
+void _addCodexItem(
+  Map<dynamic, dynamic> item,
+  List<TranscriptMessage> out,
+  Map<String, int> pending,
+  _CodexCalls codex,
+  DateTime? at,
+) {
+  final activity = codexItemActivity(item);
+  if (activity == null) return;
+  final script = codex.open.entries
+      .lastWhere((call) => call.value, orElse: () => const MapEntry('', false))
+      .key;
+  if (script.isEmpty && codex.open.isNotEmpty) return;
+  final row = TranscriptMessage(
+    role: 'tool',
+    text: activity.summary,
+    tool: activity,
+    at: at,
+  );
+  final slot = pending[script];
+  if (script.isNotEmpty && codex.filled.add(script) && slot != null) {
+    out[slot] = row.withThinking(out[slot].thinking);
+    return;
+  }
+  out.add(row);
+}
+
 void _parseCodexLine(
   Map<String, dynamic> json,
   List<TranscriptMessage> out,
   Map<String, int> pending,
+  _CodexCalls codex,
   DateTime? at,
   InjectedTranscriptContext injected,
 ) {
   final payload = json['payload'];
   if (payload is! Map) return;
+  // The history Codex replaced with what it kept: the file still holds it.
+  if (json['type'] == 'compacted') {
+    _add(out, kTranscriptNoticeRole, 'Codex compacted its context', at);
+    return;
+  }
+  final event = json['type'] == 'event_msg';
   switch (payload['type']) {
     case 'message':
       _parseCodexMessage(payload, out, at, injected);
+    case 'item_completed' when event:
+      final item = payload['item'];
+      if (item is Map) _addCodexItem(item, out, pending, codex, at);
+    // Codex's own search, answered within the call: it is never pending.
+    case 'web_search_call':
+      final search = codexWebSearchActivity(payload);
+      out.add(
+        TranscriptMessage(
+          role: 'tool',
+          text: search.summary,
+          tool: search,
+          at: at,
+        ),
+      );
+    case 'task_started' when event:
+      codex.clear();
+    case 'task_complete' when event:
+      codex.clear();
+      final error = payload['error'];
+      if (error is Map) _add(out, 'error', error['message'], at);
+    case 'turn_aborted' when event:
+      codex.clear();
+      final reason = payload['reason'];
+      _add(
+        out,
+        kTranscriptNoticeRole,
+        reason == 'interrupted' || reason == null
+            ? 'Interrupted by you'
+            : 'Turn ended: $reason',
+        at,
+      );
     // Codex names its shell differently depending on the tool surface —
     // `function_call` for the classic `shell`, `custom_tool_call` for the
     // `exec` sandbox — but both carry a name, a `call_id` and an answer.
@@ -1171,6 +1565,8 @@ void _parseCodexLine(
     case 'custom_tool_call':
       final name = payload['name'];
       if (name is! String) return;
+      final script = kCodexCodeModeTools.contains(name);
+      if (payload['call_id'] case final String id) codex.open[id] = script;
       // `arguments` is a JSON *string* for Codex, which is why the plan reader
       // takes either — see [AgentPlanSupport.planIn]. Its headline is a better
       // subject than the fallback below, which for `update_plan` was the whole
@@ -1186,8 +1582,11 @@ void _parseCodexLine(
         name: name,
         // A patch's first line is `*** Begin Patch`; the file it touches is
         // what identifies it.
-        subject:
-            plan?.headline ?? edits.firstOrNull?.path ?? _codexSubject(payload),
+        subject: script
+            ? codexScriptSubject(payload['input'])
+            : plan?.headline ??
+                  edits.firstOrNull?.path ??
+                  _codexSubject(payload),
         plan: plan,
         edits: edits,
         editsTruncated: cut,
@@ -1205,12 +1604,20 @@ void _parseCodexLine(
       );
     case 'function_call_output':
     case 'custom_tool_call_output':
+      final id = payload['call_id'];
+      codex.open.remove(id);
+      // Its row went to the first step it took, which carries that answer.
+      if (codex.filled.remove(id)) {
+        pending.remove(id);
+        return;
+      }
       _attachResult(
         out,
         pending,
         id: payload['call_id'],
         output: _codexResultText(payload['output']),
         isError: false,
+        image: () => _codexResultImage(payload['output']),
       );
   }
 }
@@ -1292,12 +1699,15 @@ void _attachResult(
   required bool isError,
   List<FileEditRecord>? edits,
   Map<String, String>? answers,
+  String? Function()? image,
 }) {
   if (id is! String) return;
   final index = pending.remove(id);
   if (index == null || index >= out.length) return;
   final call = out[index].tool;
   if (call == null) return;
+  // Written to disk only for a call that names no image of its own.
+  final imagePath = call.imagePath == null ? image?.call() : null;
   // Only a call that was itself a write takes the result's edits.
   if (call.edits.isEmpty) edits = null;
   final trimmed = output.trimRight();
@@ -1312,6 +1722,7 @@ void _attachResult(
       isError: isError,
       edits: edits,
       answers: answers,
+      imagePath: imagePath,
     ),
     subagent: row.subagent,
     // Answered, so it is no longer outstanding — and this is the only place
@@ -1319,6 +1730,7 @@ void _attachResult(
     // dropping the id here is what keeps the call from looking in-flight
     // forever.
     at: row.at,
+    thinking: row.thinking,
     compaction: row.compaction,
   );
 }

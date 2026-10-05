@@ -125,10 +125,9 @@ void main() {
       expect(chat.first.role, kCompactionNoticeRole);
       expect(chat.first.text, contains('2 earlier messages'));
       expect(chat.first.text, contains('(auto)'));
-      expect(chat.map((m) => m.text).skip(1), [
-        'This session is being continued…',
-        'carry on',
-      ]);
+      // The summary is the notice's, folded: it is nobody's message.
+      expect(chat.first.detail, 'This session is being continued…');
+      expect(chat.map((m) => m.text).skip(1), ['carry on']);
       // The pre-compaction turns are gone from the *reading*, not from the
       // record — which is why the line says so.
       expect(chat.first.text, contains('search'));
@@ -155,7 +154,8 @@ void main() {
 
       expect(chat.first.text, contains('3 earlier messages'));
       expect(chat.first.text, contains('(manual)'));
-      expect(chat.map((m) => m.text).skip(1), ['second summary', 'three']);
+      expect(chat.first.detail, 'second summary');
+      expect(chat.map((m) => m.text).skip(1), ['three']);
     });
 
     test('an uncompacted transcript is passed through untouched', () {
@@ -168,7 +168,8 @@ void main() {
       expect(chat.map((m) => m.text), ['hi', 'hello']);
     });
 
-    test('a boundary with nothing before it draws no line', () {
+    test('a boundary with nothing before it counts nothing, and its summary '
+        'is still no bubble', () {
       const messages = [
         TranscriptMessage(
           role: 'user',
@@ -178,7 +179,9 @@ void main() {
         TranscriptMessage(role: 'agent', text: 'on we go'),
       ];
       final chat = chatMessagesFromTranscript(messages);
-      expect(chat.map((m) => m.role), ['user', 'agent']);
+      expect(chat.map((m) => m.role), [kCompactionNoticeRole, 'agent']);
+      expect(chat.first.text, isNot(contains('earlier')));
+      expect(chat.first.detail, 'summary');
     });
   });
 
@@ -209,5 +212,10 @@ void main() {
     expect(find.textContaining('1 earlier message'), findsOneWidget);
     // The pre-compaction turn is not drawn again above it.
     expect(find.text('do the thing'), findsNothing);
+    // The summary is folded under the notice until it is opened.
+    expect(find.text('the summary of it'), findsNothing);
+    await tester.tap(find.text('Summary'));
+    await tester.pumpAndSettle();
+    expect(find.text('the summary of it'), findsOneWidget);
   });
 }

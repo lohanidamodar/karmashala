@@ -172,13 +172,15 @@ class ToolActivity {
 
   /// This call with the answer it eventually got. [edits] replaces the call's
   /// own when the result recorded better ones; null keeps them. [answers]
-  /// (question text to answer) answer [questions].
+  /// (question text to answer) answer [questions]. [imagePath], the image
+  /// the result carried, is kept only when the call named none itself.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
     bool isError = false,
     List<FileEditRecord>? edits,
     Map<String, String>? answers,
+    String? imagePath,
   }) {
     final (kept, cut) = edits == null
         ? (this.edits, editsTruncated)
@@ -186,7 +188,7 @@ class ToolActivity {
     return ToolActivity(
       name: name,
       subject: subject,
-      imagePath: imagePath,
+      imagePath: this.imagePath ?? imagePath,
       output: output,
       outputTruncated: outputTruncated,
       isError: isError,
@@ -309,6 +311,7 @@ const List<String> kToolSubjectKeys = [
   'url',
   'query',
   'description',
+  'skill',
 ];
 
 /// The identifying line for a tool call's `input` map, or null when it carries
@@ -352,7 +355,7 @@ const Set<String> kToolFileKeys = {'file_path', 'notebook_path', 'path'};
 ToolActivity toolActivityFor(String name, Object? input) {
   final plan = agentPlanForToolCall(name, input);
   final entry = toolSubjectEntryFor(input);
-  final subject = plan?.headline ?? entry?.value;
+  final subject = plan?.headline ?? toolSubjectFor(name, input);
   final isFile =
       plan == null && entry != null && kToolFileKeys.contains(entry.key);
   final (edits, cut) = boundedToolEdits(
@@ -382,3 +385,41 @@ String? proposedPlanIn(Object? input) => switch (input) {
 /// path shares.
 (String, bool) boundedToolOutput(String text) =>
     boundedText(text, maxBytes: kMaxToolOutputBytes);
+
+/// Web search [results] — maps with a `url` and a `title` — one
+/// `title — url` line each.
+String webSearchResultLines(Object? results) => [
+  if (results is List)
+    for (final result in results)
+      if (result is Map && result['url'] is String)
+        if ((result['url'] as String).trim() case final url when url.isNotEmpty)
+          '${switch (result['title']) {
+            final String title when title.trim().isNotEmpty => title.trim(),
+            _ => url,
+          }} — $url',
+].join('\n');
+
+/// The identifying line for a call to [name] with [input]: the tools whose
+/// input has no one key that says it are named here, the rest by
+/// [toolSubjectEntryFor].
+String? toolSubjectFor(String name, Object? input) {
+  String? field(String key) {
+    final value = input is Map ? input[key] : null;
+    return value is String && value.trim().isNotEmpty ? value.trim() : null;
+  }
+
+  switch (name) {
+    // Its `message` is the whole letter; who it went to and what about is
+    // the line.
+    case 'SendMessage':
+      final to = field('to') ?? field('recipient');
+      final about =
+          field('summary') ?? field('message')?.split('\n').first.trim();
+      if (to != null || about != null) {
+        return [?to == null ? null : 'to $to', ?about].join(': ');
+      }
+    case 'TaskStop':
+      return field('task_id') ?? field('shell_id');
+  }
+  return toolSubjectEntryFor(input)?.value;
+}

@@ -10,7 +10,8 @@ import '../../agents/presentation/agent_logo.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
-import 'package:agent_cli/read.dart' show taskNotificationLine;
+import 'package:agent_cli/read.dart'
+    show kTranscriptNoticeRole, taskNotificationLine;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart' show splitScratchPreamble;
 import 'package:karmashala_ui/transcript.dart';
@@ -48,6 +49,8 @@ class ChatMessage {
     this.pendingToolUseId,
     this.agentName,
     this.agentId,
+    this.detail,
+    this.queued = false,
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -76,6 +79,12 @@ class ChatMessage {
   final String? agentName;
   final String? agentId;
 
+  /// Text folded under a notice until it is opened: what a compaction kept.
+  final String? detail;
+
+  /// A `user` row the person sent while the agent was still working.
+  final bool queued;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -89,6 +98,8 @@ class ChatMessage {
           other.agentName == agentName &&
           other.agentId == agentId &&
           other.thinking == thinking &&
+          other.detail == detail &&
+          other.queued == queued &&
           _sameTool(other.tool, tool) &&
           other.text == text;
 

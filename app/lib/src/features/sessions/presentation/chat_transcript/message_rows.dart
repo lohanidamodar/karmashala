@@ -137,6 +137,7 @@ class _ChatMessageTile extends StatelessWidget {
             detail: detail,
           ),
           kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
+          kTranscriptNoticeRole => _TranscriptNote(text: message.text),
           'error' => _ErrorMessageCard(message: message),
           _ => _ToolMessageCard(
             message: message,
@@ -220,12 +221,21 @@ class _UserMessageCard extends StatelessWidget {
         ),
       ),
     );
-    if (preamble == null) return bubble;
+    if (preamble == null && !message.queued) return bubble;
+    final muted = Theme.of(
+      context,
+    ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _SessionNote(text: preamble),
+        if (preamble != null) _SessionNote(text: preamble),
         if (rest.isNotEmpty) bubble,
+        // The agent read it mid-turn, not as the next turn.
+        if (message.queued)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text('Sent while working', style: muted),
+          ),
       ],
     );
   }
@@ -234,9 +244,10 @@ class _UserMessageCard extends StatelessWidget {
 /// What Karmashala told the agent ahead of the person's first words, folded
 /// to one line.
 class _SessionNote extends StatefulWidget {
-  const _SessionNote({required this.text});
+  const _SessionNote({required this.text, this.label = 'Session note'});
 
   final String text;
+  final String label;
 
   @override
   State<_SessionNote> createState() => _SessionNoteState();
@@ -269,7 +280,7 @@ class _SessionNoteState extends State<_SessionNote> {
                     color: muted?.color,
                   ),
                   const SizedBox(width: Insets.xs),
-                  Text('Session note', style: muted),
+                  Text(widget.label, style: muted),
                 ],
               ),
             ),
@@ -381,6 +392,34 @@ class _BackgroundRunNote extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(AppIcons.checkCircle, size: Chrome.iconSmall, color: muted),
+        const SizedBox(width: Insets.sm),
+        Flexible(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the CLI said about the session — a hook's message, say — in a muted
+/// line, since neither the person nor the agent said it.
+class _TranscriptNote extends StatelessWidget {
+  const _TranscriptNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      key: const ValueKey('transcript-notice'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(AppIcons.info, size: Chrome.iconSmall, color: muted),
         const SizedBox(width: Insets.sm),
         Flexible(
           child: Text(
@@ -619,6 +658,8 @@ class _ToolMessageCard extends StatelessWidget {
             )
           else
             Text(message.text, style: MonoStyles.label.copyWith(height: 1.35)),
+          if (message.detail case final folded?)
+            _SessionNote(text: folded, label: 'Summary'),
           ?detail,
         ],
       ),

@@ -12,9 +12,13 @@ List<FileEditRecord> codexFileEdits(Map<String, Object?> json) {
   // A patch that failed left the files alone; reporting it would show the user
   // a change that is not in their tree.
   if (payload['success'] == false) return const [];
-  final changes = payload['changes'];
-  if (changes is! Map) return const [];
+  return codexChangeEdits(payload['changes']);
+}
 
+/// The edits a Codex `changes` map (path to `add`/`delete`/`update`) makes,
+/// as `patch_apply_end` and a completed `FileChange` item both carry it.
+List<FileEditRecord> codexChangeEdits(Object? changes) {
+  if (changes is! Map) return const [];
   final edits = <FileEditRecord>[];
   changes.forEach((path, change) {
     if (path is! String || change is! Map) return;
