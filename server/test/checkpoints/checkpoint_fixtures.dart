@@ -40,15 +40,19 @@ String blobIn(String repo, String tree, String path) =>
         as String;
 
 /// Local git, with every call that looks at the working tree held back by
-/// [delay] while [slow] is true — a loaded machine, made deterministic — and
-/// failing `git add` while [failAdd] is.
+/// [delay] while [slow] is true — a loaded machine, made deterministic —
+/// failing `git add` while [failAdd] is, and every recording held until
+/// [recordGate] completes while it is set.
 class SlowRunners extends CommandRunnerFactory {
   SlowRunners();
 
   var slow = false;
   var failAdd = false;
-  var slowRecord = false;
+  Completer<void>? recordGate;
   Duration delay = const Duration(milliseconds: 600);
+
+  /// How many recordings are waiting at [recordGate].
+  var recordsHeld = 0;
 
   @override
   CommandRunner forEnvironment(ExecutionEnvironment environment) =>
@@ -75,8 +79,11 @@ class _SlowRunner implements CommandRunner {
       await Future<void>.delayed(_owner.delay);
     }
     // `commit-tree` is where a snapshot becomes a recorded checkpoint.
-    if (_owner.slowRecord && request.arguments.contains('commit-tree')) {
-      await Future<void>.delayed(_owner.delay);
+    final gate = _owner.recordGate;
+    if (gate != null && request.arguments.contains('commit-tree')) {
+      _owner.recordsHeld++;
+      await gate.future;
+      _owner.recordsHeld--;
     }
     return _inner.run(request);
   }

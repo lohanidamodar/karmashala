@@ -23,9 +23,34 @@ void main() {
   group('with the default hold', () {
     setUp(() async => w = await CheckpointWorld.create());
 
+    test('another event is answered at once', () async {
+      w.runners
+        ..slow = true
+        ..delay = const Duration(milliseconds: 800);
+      final took = Stopwatch()..start();
+      await w.hook('UserPromptSubmit', {'prompt': 'x'});
+      await w.hook('PostToolUse', {'tool_name': 'Bash'});
+      expect(took.elapsed, lessThan(w.runners.delay));
+      await w.settle();
+    }, skip: hasGit ? false : 'git is not on PATH');
+  });
+
+  // What a tool waits for, never whether the default hold's 1.5 s covers it:
+  // in a full parallel run on Windows one real snapshot took up to 2.1 s and
+  // a hub-and-clone hold 1.66 s, so the hold expired as designed. Each case
+  // slows git past the default hold itself, so none passes by git's speed.
+  group('with a hold no loaded machine outruns', () {
+    setUp(
+      () async =>
+          w = await CheckpointWorld.create(hold: const Duration(seconds: 20)),
+    );
+
     test(
       'the hook holds the tool until the before-turn checkpoint is taken',
       () async {
+        w.runners
+          ..slow = true
+          ..delay = kCheckpointHookHold;
         // No settle between them: the hold is the only thing between the turn
         // starting and the agent's first tool writing to the tree.
         unawaited(w.hook('UserPromptSubmit', {'prompt': 'Change it'}));
@@ -55,44 +80,24 @@ void main() {
 
     test('a tool is held for the snapshots, never for the recording of the '
         'checkpoint before it', () async {
-      // Recording a checkpoint (commit, ref, what changed) longer than the
-      // hold: a tool held for it would be released with its hold expired.
-      w.runners
-        ..slowRecord = true
-        ..delay = const Duration(seconds: 2);
+      // Every recording (commit, ref, what changed) waits at the gate until
+      // the tool has run: a hold that waited for one would never answer.
+      final gate = w.runners.recordGate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
       final file = p.join(w.app, 'main.txt');
       await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
       await w.hook('PreToolUse', w.edit(file));
+      expect(w.log.where((l) => l.contains('released a tool')), isEmpty);
+      expect(w.rows(), isEmpty, reason: 'nothing is recorded yet');
       File(file).writeAsStringSync('one\nTWO\nthree\n');
-      w.runners.slowRecord = false;
+      gate.complete();
       await w.untilCheckpoints(w.app, 1);
       final nested = w.ofRepo(w.app);
       expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
       expect(nested.first.label, isNull, reason: 'the hold was met');
-      expect(w.log.where((l) => l.contains('released a tool')), isEmpty);
     }, skip: hasGit ? false : 'git is not on PATH');
-
-    test('another event is answered at once', () async {
-      w.runners
-        ..slow = true
-        ..delay = const Duration(milliseconds: 800);
-      final took = Stopwatch()..start();
-      await w.hook('UserPromptSubmit', {'prompt': 'x'});
-      await w.hook('PostToolUse', {'tool_name': 'Bash'});
-      expect(took.elapsed, lessThan(w.runners.delay));
-      await w.settle();
-    }, skip: hasGit ? false : 'git is not on PATH');
-  });
-
-  // Which snapshots a tool waits for, not whether the default hold's 1.5 s
-  // covers them: under a full parallel suite ten git spawns can outrun it,
-  // the hold expires as designed, and the clone's tree is taken after the
-  // edit (see 'with a hold shorter than the capture').
-  group('with a hold no loaded machine outruns', () {
-    setUp(
-      () async =>
-          w = await CheckpointWorld.create(hold: const Duration(seconds: 20)),
-    );
 
     test(
       'a tool naming a nested clone waits for that clone\'s snapshot',
@@ -218,7 +223,7 @@ void main() {
     late List<AgentHookEvent> relayed;
 
     setUp(() async {
-      w = await CheckpointWorld.create();
+      w = await CheckpointWorld.create(hold: const Duration(seconds: 20));
       relayed = [];
       endpoint = await HookServer.bind(
         // The server's hook path: the recorder first, then the relay; the
@@ -270,7 +275,7 @@ void main() {
       () async {
         w.runners
           ..slow = true
-          ..delay = const Duration(milliseconds: 500);
+          ..delay = kCheckpointHookHold;
         final prompt = post('UserPromptSubmit', {'prompt': 'Change it'});
         final (promptStatus, promptTook) = await prompt;
         expect(promptStatus, HttpStatus.ok);
@@ -286,7 +291,11 @@ void main() {
           greaterThanOrEqualTo(w.runners.delay),
           reason: 'held while its snapshot ran `git add`',
         );
-        expect(took, lessThan(kCheckpointHookHold));
+        expect(
+          w.log.where((l) => l.contains('released a tool')),
+          isEmpty,
+          reason: 'answered by the capture, not by the hold giving up',
+        );
         await w.settle();
         expect(w.reasons(), [
           'turnStart',
