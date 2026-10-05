@@ -137,6 +137,7 @@ class _ChatMessageTile extends StatelessWidget {
             detail: detail,
           ),
           kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
+          kTranscriptNoticeRole => _TranscriptNote(text: message.text),
           'error' => _ErrorMessageCard(message: message),
           _ => _ToolMessageCard(
             message: message,
@@ -381,6 +382,34 @@ class _BackgroundRunNote extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(AppIcons.checkCircle, size: Chrome.iconSmall, color: muted),
+        const SizedBox(width: Insets.sm),
+        Flexible(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the CLI said about the session — a hook's message, say — in a muted
+/// line, since neither the person nor the agent said it.
+class _TranscriptNote extends StatelessWidget {
+  const _TranscriptNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      key: const ValueKey('transcript-notice'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(AppIcons.info, size: Chrome.iconSmall, color: muted),
         const SizedBox(width: Insets.sm),
         Flexible(
           child: Text(

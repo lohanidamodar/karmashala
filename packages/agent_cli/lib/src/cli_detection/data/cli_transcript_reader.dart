@@ -67,6 +67,10 @@ class CompactionBoundary {
 /// [TranscriptMessage.agentInstallationId] the agent taking over.
 const String kAgentSwitchRole = 'agentSwitch';
 
+/// The role of a row the CLI wrote about the session rather than a turn in
+/// it: what a hook said, an error, a compaction. Drawn as a small note.
+const String kTranscriptNoticeRole = 'notice';
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -432,6 +436,10 @@ class _TranscriptParse {
     if (thinking == null) return;
     pendingThinking = null;
     final row = messages[index];
+    if (row.role == kTranscriptNoticeRole) {
+      pendingThinking = thinking;
+      return;
+    }
     if (row.role == 'user' || row.thinking != null) return;
     messages[index] = row.withThinking(boundedText(thinking).$1);
   }
@@ -837,12 +845,19 @@ void _parseClaudeLine(
         background.clear();
         acrossBoundary.clear();
         runs.killAgents(at);
+      case 'stop_hook_summary':
+        _add(out, kTranscriptNoticeRole, _stopHookNote(json), at);
     }
     return;
   }
   if (type == 'attachment') {
     final attachment = json['attachment'];
     if (attachment is! Map) return;
+    final hookNote = _hookNote(attachment);
+    if (hookNote != null) {
+      _add(out, kTranscriptNoticeRole, hookNote, at);
+      return;
+    }
     // An envelope that arrived mid-turn is queued, not a user turn.
     if (attachment['type'] == 'queued_command') {
       _retireReportedAgents(attachment['prompt'], background, acrossBoundary);
@@ -936,6 +951,64 @@ void _parseClaudeLine(
       }
     }
   }
+}
+
+/// What a hook attachment says, as Claude Code itself prints it, or null for
+/// one it keeps quiet: a success, context for the model, and a Stop hook's
+/// own rows (its summary speaks for them).
+String? _hookNote(Map<dynamic, dynamic> attachment) {
+  final name = attachment['hookName'];
+  final event = attachment['hookEvent'];
+  if (name is! String) return null;
+  if (event == 'Stop' || event == 'SubagentStop') return null;
+  String? said(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+  switch (attachment['type']) {
+    case 'hook_system_message':
+      final content = said(attachment['content']);
+      return content == null ? null : '$name hook: $content';
+    case 'hook_blocking_error':
+      final error = attachment['blockingError'];
+      final reason = said(error is Map ? error['blockingError'] : error);
+      return '$name hook blocked it${reason == null ? '' : ': $reason'}';
+    case 'hook_non_blocking_error':
+      final output =
+          said(attachment['stderr']) ??
+          said(attachment['stdout']) ??
+          'exit ${attachment['exitCode']}';
+      return '$name hook failed: $output';
+    case 'hook_error_during_execution':
+      final content = said(attachment['content']);
+      return '$name hook failed${content == null ? '' : ': $content'}';
+    case 'hook_stopped_continuation':
+      final message = said(attachment['message']);
+      return '$name hook stopped the agent'
+          '${message == null ? '' : ': $message'}';
+    case 'hook_cancelled' when attachment['timedOut'] == true:
+      return '$name hook timed out';
+  }
+  return null;
+}
+
+/// A Stop hook run's summary, in the CLI's words, or null when it had
+/// nothing to say.
+String? _stopHookNote(Map<String, dynamic> json) {
+  List<String> strings(Object? list) => [
+    if (list is List)
+      for (final item in list)
+        if (item is String && item.trim().isNotEmpty) item.trim(),
+  ];
+  final reason = json['stopReason'];
+  final lines = [
+    if (json['preventedContinuation'] == true &&
+        reason is String &&
+        reason.trim().isNotEmpty)
+      reason.trim(),
+    for (final error in strings(json['hookErrors'])) 'Stop hook error: $error',
+    for (final feedback in strings(json['hookAdditionalContext']))
+      'Stop hook feedback: $feedback',
+  ];
+  return lines.isEmpty ? null : lines.join('\n');
 }
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
