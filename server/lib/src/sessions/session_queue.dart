@@ -423,8 +423,16 @@ class SessionQueue implements ResumeQueue {
   }
 
   /// Whether a person's send to [sessionId] goes into its running terminal
-  /// turn now: its agent takes typed input there, nothing waits ahead of it
-  /// or holds the queue, and nothing on screen would swallow the keys.
+  /// turn now: its agent takes typed input there, none of a person's
+  /// messages waits ahead of it (a server notice or a delegated result does
+  /// not hold it back), nothing holds the queue, and nothing on screen would
+  /// swallow the keys.
+  static const _personOrigins = {
+    QueuedMessageOrigin.app,
+    QueuedMessageOrigin.device,
+    QueuedMessageOrigin.companion,
+  };
+
   bool _takesTypedNow(String sessionId, String? requestId) {
     if (!(takesInputMidTurn?.call(sessionId) ?? false)) return false;
     if (requestId != null &&
@@ -441,7 +449,7 @@ class SessionQueue implements ResumeQueue {
     if (!turns.running(sessionId) && !_awaitingTurn.containsKey(sessionId)) {
       return false;
     }
-    if (dao.hasWaiting(sessionId) ||
+    if (dao.hasWaitingFrom(sessionId, _personOrigins) ||
         _holdOf(sessionId) != null ||
         _holdsNewMessages(sessionId)) {
       return false;

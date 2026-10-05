@@ -44,6 +44,34 @@ void main() {
     expect(dao.sessionsWithQueued(), ['s1']);
   });
 
+  test('waiting from some origins counts only theirs, and any on its way',
+      () {
+    const person = {QueuedMessageOrigin.app, QueuedMessageOrigin.device};
+    add('q1', 'from an agent');
+    expect(dao.hasWaitingFrom('s1', person), isFalse);
+    dao.transition(
+      'q1',
+      from: QueuedMessageState.queued,
+      to: QueuedMessageState.delivering,
+      now: t0,
+    );
+    expect(dao.hasWaitingFrom('s1', person), isTrue);
+    dao.transition(
+      'q1',
+      from: QueuedMessageState.delivering,
+      to: QueuedMessageState.delivered,
+      now: t0,
+    );
+    dao.enqueue(
+      id: 'q2',
+      sessionId: 's1',
+      text: 'from the phone',
+      origin: QueuedMessageOrigin.device,
+      now: t0,
+    );
+    expect(dao.hasWaitingFrom('s1', person), isTrue);
+  });
+
   test('a cancel records who cancelled it', () {
     add('q1', 'one');
     expect(

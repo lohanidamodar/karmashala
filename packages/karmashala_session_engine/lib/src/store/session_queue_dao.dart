@@ -98,6 +98,18 @@ class SessionQueueDao {
     [sessionId],
   ).isNotEmpty;
 
+  /// Whether [sessionId] has a message on its way, or one from [origins]
+  /// still queued.
+  bool hasWaitingFrom(String sessionId, Set<QueuedMessageOrigin> origins) {
+    final names = [for (final origin in origins) origin.name];
+    return _db.query(
+      'SELECT 1 FROM session_queued_messages WHERE session_id = ? '
+      "AND (state = 'delivering' OR (state = 'queued' AND origin IN "
+      '(${List.filled(names.length, '?').join(', ')}))) LIMIT 1;',
+      [sessionId, ...names],
+    ).isNotEmpty;
+  }
+
   /// The next message to deliver for [sessionId], or null.
   QueuedMessage? head(String sessionId) {
     final rows = _db.query(

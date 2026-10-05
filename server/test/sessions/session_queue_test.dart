@@ -288,6 +288,32 @@ void main() {
         expect(typed('while paused'), isA<AdmitQueued>());
       });
 
+      test('a person\'s message goes ahead of a server notice waiting in '
+          'the queue, and still behind their own', () async {
+        await overAgent(takesInputMidTurn: true);
+        dao.enqueue(
+          id: 'notice',
+          sessionId: 's1',
+          text: 'a notice',
+          origin: QueuedMessageOrigin.automation,
+          now: t0,
+        );
+        dao.enqueue(
+          id: 'result',
+          sessionId: 's1',
+          text: 'a delegated result',
+          origin: QueuedMessageOrigin.delegation,
+          now: t0,
+        );
+        final admission = typed('from the phone');
+        expect(admission, isA<AdmitNow>());
+        expect((admission as AdmitNow).midTurn, isTrue);
+        queue.afterImmediate('s1', delivered: true, midTurn: true);
+
+        expect(send('queued by the person'), isA<AdmitQueued>());
+        expect(typed('behind their own'), isA<AdmitQueued>());
+      });
+
       test('an ordinary send is not typed in mid-turn', () async {
         await overAgent(takesInputMidTurn: true);
         expect(send('from an agent'), isA<AdmitQueued>());
