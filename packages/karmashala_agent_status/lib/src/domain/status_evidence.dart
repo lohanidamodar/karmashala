@@ -12,6 +12,7 @@ bool sameStatusEvidence(AgentStatusReport a, AgentStatusReport b) =>
     a.agentId == b.agentId &&
     a.sessionId == b.sessionId &&
     a.waitingSince == b.waitingSince &&
+    a.backgroundOnly == b.backgroundOnly &&
     (a.toolAsk == null
         ? b.toolAsk == null
         : a.toolAsk!.sameCallAs(b.toolAsk)) &&

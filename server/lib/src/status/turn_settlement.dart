@@ -12,10 +12,11 @@ import 'daemon_agent_status.dart';
 const Duration kTurnQuietPeriod = Duration(seconds: 8);
 
 /// **The one decision whether a session's turn is still running.** A turn
-/// settles on idle or failed, on an ACP turn's end, or — for a session seen
-/// working whose reader has since lost it (`unknown`) — on a screen that has
-/// shown nothing new for [quietPeriod]. Asked on demand ([running]), and told
-/// as it happens ([settled]) to the queue and the open-turn record.
+/// settles on idle or failed (background runs alone are no turn:
+/// `AgentStatusReport.turnStatus`), on an ACP turn's end, or — for a session
+/// seen working whose reader has since lost it (`unknown`) — on a screen that
+/// has shown nothing new for [quietPeriod]. Asked on demand ([running]), and
+/// told as it happens ([settled]) to the queue and the open-turn record.
 class TurnSettlement {
   TurnSettlement({
     required this.status,
@@ -64,7 +65,7 @@ class TurnSettlement {
       if (_midTurn.contains(sessionId)) _settle(sessionId);
       return false;
     }
-    final kind = status.statusOf(sessionId)?.report.status;
+    final kind = status.statusOf(sessionId)?.report.turnStatus;
     if (_working(kind)) return true;
     if (!_unread(kind) || !_midTurn.contains(sessionId)) return false;
     return !quiet(sessionId);
@@ -96,7 +97,7 @@ class TurnSettlement {
 
   void _onStatus(HostedAgentStatus change) {
     final sessionId = change.sessionId;
-    final kind = change.report.status;
+    final kind = change.report.turnStatus;
     if (_working(kind)) {
       _midTurn.add(sessionId);
       _watched.remove(sessionId);

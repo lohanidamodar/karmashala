@@ -91,6 +91,9 @@ void main() {
     Duration grace = const Duration(seconds: 30),
     bool Function(String)? resumesOnSend,
     Duration quiet = const Duration(seconds: 30),
+    Duration staleSweep = const Duration(seconds: 30),
+    DateTime Function()? now,
+    void Function(String message)? log,
   }) {
     var n = 0;
     final queue = SessionQueue(
@@ -101,8 +104,10 @@ void main() {
       turnStartGrace: grace,
       quietPeriod: quiet,
       quietPoll: const Duration(milliseconds: 10),
+      staleSweep: staleSweep,
+      log: log,
       newId: () => 'q${++n}',
-      now: () => t0,
+      now: now ?? () => t0,
     );
     addTearDown(queue.close);
     return queue;
@@ -134,14 +139,26 @@ void main() {
       status.tick();
     }
 
-    void hook(String event) => status.hook(
-      AgentHookEvent(
-        agent: AgentIds.claudeCode,
-        event: event,
-        sessionHeader: 's1',
-        receivedAt: DateTime.now().toUtc(),
-        body: {'session_id': 'conv-1', 'hook_event_name': event},
-      ),
+    void hook(String event, {Map<String, Object?> extra = const {}}) =>
+        status.hook(
+          AgentHookEvent(
+            agent: AgentIds.claudeCode,
+            event: event,
+            sessionHeader: 's1',
+            receivedAt: DateTime.now().toUtc(),
+            body: {'session_id': 'conv-1', 'hook_event_name': event, ...extra},
+          ),
+        );
+
+    /// A `Stop` listing a watcher that is still running, as Claude Code
+    /// sends it when its turn ends with background work going.
+    void stopOverBackground() => hook(
+      'Stop',
+      extra: {
+        'background_tasks': [
+          {'type': 'shell', 'description': 'watch the build'},
+        ],
+      },
     );
 
     QueueAdmission send(String text, {String? requestId}) => queue.admit(
@@ -211,6 +228,74 @@ void main() {
       await pumpEventQueue();
       expect(delivered, ['a', 'b']);
       expect(announced.last, isEmpty);
+    });
+
+    test('a turn that ends with background work running still delivers '
+        'what waits, one per turn', () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      final queued = [
+        for (final text in ['one', 'two', 'three']) send(text) as AdmitQueued,
+      ];
+      expect(queued.map((q) => q.position), [1, 2, 3]);
+
+      stopOverBackground();
+      await pumpEventQueue();
+      expect(
+        status.statusOf('s1')!.report.status,
+        AgentActivityStatus.working,
+        reason: 'the session still reads working for its background run',
+      );
+      expect(delivered, ['one']);
+
+      hook('UserPromptSubmit');
+      expect(queue.busy('s1'), isTrue);
+      stopOverBackground();
+      await pumpEventQueue();
+      expect(delivered, ['one', 'two']);
+
+      hook('UserPromptSubmit');
+      stopOverBackground();
+      // Claude Code's idle nudge, while the run is still listed.
+      hook('Notification', extra: {'notification_type': 'idle_prompt'});
+      await pumpEventQueue();
+      expect(delivered, ['one', 'two', 'three']);
+      expect(announced.last, isEmpty);
+    });
+
+    test('a message left waiting behind a session at its prompt is logged '
+        'and delivered', () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      hook('Stop');
+      await queue.close();
+      final lines = <String>[];
+      var clock = t0;
+      queue = queueOver(
+        staleSweep: const Duration(milliseconds: 20),
+        now: () => clock,
+        log: lines.add,
+      )..deliver = ((_, text) async => delivered.add(text));
+      queue.start();
+      // Queued with no turn's end to come: nothing else would wake it.
+      dao.enqueue(
+        id: 'lost',
+        sessionId: 's1',
+        text: 'from the phone',
+        origin: QueuedMessageOrigin.device,
+        now: t0,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(delivered, isEmpty, reason: 'not yet stale');
+
+      clock = t0.add(const Duration(minutes: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await pumpEventQueue();
+      expect(delivered, ['from the phone']);
+      expect(
+        lines.where((l) => l.contains('lost') && l.contains('waited')),
+        hasLength(1),
+      );
     });
 
     test('a turn never seen to start lets the next go after the grace', () {

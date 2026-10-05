@@ -437,6 +437,28 @@ void main() {
       expect(report.inFlight, ['Run echo subagent-ran command']);
     });
 
+    // A phone's messages sat queued for hours behind a session whose
+    // watchers always ran: the agent's own turn had ended each time.
+    test('it says the turn itself ended; a new turn over the same work '
+        'does not', () {
+      final stopped = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+      expect(stopped.backgroundOnly, isTrue);
+      expect(stopped.turnStatus, AgentActivityStatus.idle);
+
+      final tool = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: body('s1'),
+      );
+      expect(tool.status, AgentActivityStatus.working);
+      expect(tool.backgroundOnly, isFalse);
+      expect(tool.turnStatus, AgentActivityStatus.working);
+    });
+
     // The owner's report: subagents still working, the session filed under
     // Ready with a tick. Claude Code's 60-second "waiting for your input"
     // nudge checks only the main thread, so it fires mid-subagent.

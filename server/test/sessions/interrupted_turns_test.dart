@@ -140,6 +140,42 @@ void main() {
       await lifecycle.close();
     });
 
+    test('a turn that ended over background work closes; nothing is left '
+        'to continue', () async {
+      final open = turns();
+      final statuses = StreamController<HostedAgentStatus>.broadcast(
+        sync: true,
+      );
+      final follow = followOpenTurns(
+        open,
+        statuses: statuses.stream,
+        lifecycle: const Stream.empty(),
+        runsHere: (_) => true,
+        clock: () => t0,
+      );
+      HostedAgentStatus working({required bool backgroundOnly}) =>
+          HostedAgentStatus(
+            sessionId: 's1',
+            report: AgentStatusReport(
+              agentId: 'claude-code',
+              sessionId: 's1',
+              status: AgentActivityStatus.working,
+              source: AgentStatusSource.hook,
+              observedAt: t0,
+              inFlight: const ['watch the build'],
+              backgroundOnly: backgroundOnly,
+            ),
+          );
+      statuses.add(working(backgroundOnly: false));
+      expect(open.open.keys, {'s1'});
+      statuses.add(working(backgroundOnly: true));
+      expect(open.open, isEmpty);
+      for (final subscription in follow) {
+        await subscription.cancel();
+      }
+      await statuses.close();
+    });
+
     test('an unreadable record reads as no open turns', () {
       stored = 'not json';
       expect(turns().open, isEmpty);

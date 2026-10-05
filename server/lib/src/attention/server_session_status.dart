@@ -454,6 +454,7 @@ class ServerSessionStatus {
         toolAsk: said?.toolAsk,
         waitingSince: said?.waitingSince,
         inFlight: said?.inFlight ?? const [],
+        backgroundOnly: said?.backgroundOnly ?? false,
       ),
       now,
     );

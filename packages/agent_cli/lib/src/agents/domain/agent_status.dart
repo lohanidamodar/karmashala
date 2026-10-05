@@ -102,6 +102,7 @@ class AgentStatusReport {
     this.toolAsk,
     this.waitingSince,
     this.inFlight = const [],
+    this.backgroundOnly = false,
   });
 
   /// This report with the ask it is about and when the wait began — both
@@ -122,6 +123,7 @@ class AgentStatusReport {
         toolAsk: toolAsk,
         waitingSince: waitingSince,
         inFlight: inFlight,
+        backgroundOnly: backgroundOnly,
       );
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -204,6 +206,16 @@ class AgentStatusReport {
   /// or shell — named in the agent's own words. Non-empty only while the agent
   /// said so; a session holding any is working, however long it stays quiet.
   final List<String> inFlight;
+
+  /// **Whether the agent's own turn has ended** and [status] reads working
+  /// only for the work in [inFlight]: the agent is at its prompt and takes
+  /// input. Background runs are not a turn.
+  final bool backgroundOnly;
+
+  /// [status] as far as the agent's own turn goes: idle while it reads
+  /// working only for its background work.
+  AgentActivityStatus get turnStatus =>
+      backgroundOnly ? AgentActivityStatus.idle : status;
 
   /// **Whether a prompt with options is on this session's screen right now.**
   ///

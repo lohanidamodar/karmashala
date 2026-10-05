@@ -114,8 +114,9 @@ class AgentHookReceiver {
     final inFlight = reports.inFlight(id, sessionId);
     // Its idle nudge looks only at the main thread, so while work is listed an
     // idle word means the session handed off, not that it finished.
-    final status =
-        inFlight.isNotEmpty && declaredStatus == AgentActivityStatus.idle
+    final backgroundOnly =
+        inFlight.isNotEmpty && declaredStatus == AgentActivityStatus.idle;
+    final status = backgroundOnly
         ? AgentActivityStatus.working
         : declaredStatus;
 
@@ -148,6 +149,7 @@ class AgentHookReceiver {
       ending: ending,
       failureReason: _failureReason(spec, status, payload),
       inFlight: inFlight,
+      backgroundOnly: backgroundOnly,
       // Only a session that stopped *for the user* is asked: otherwise an agent
       // writing "it needs your permission" would claim an open prompt.
       waiting: status != AgentActivityStatus.awaitingApproval

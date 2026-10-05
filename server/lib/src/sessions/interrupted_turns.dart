@@ -200,7 +200,7 @@ List<StreamSubscription<Object?>> followOpenTurns(
 }) => [
   statuses.listen((status) {
     if (!runsHere(status.sessionId)) return;
-    turns.statusMoved(status.sessionId, status.report.status, clock());
+    turns.statusMoved(status.sessionId, status.report.turnStatus, clock());
   }),
   lifecycle.listen((event) {
     if (event.kind == LifecycleEventKind.started) return;

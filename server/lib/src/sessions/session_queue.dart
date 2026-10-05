@@ -69,6 +69,8 @@ class SessionQueue implements ResumeQueue {
     this.announce,
     this.log,
     this.turnStartGrace = const Duration(seconds: 10),
+    this.staleAfter = const Duration(minutes: 3),
+    this.staleSweep = const Duration(seconds: 30),
     Duration quietPeriod = kTurnQuietPeriod,
     Duration quietPoll = const Duration(seconds: 1),
     DateTime Function()? now,
@@ -129,6 +131,12 @@ class SessionQueue implements ResumeQueue {
   /// so the next message would otherwise be typed into the same turn.
   final Duration turnStartGrace;
 
+  /// How long a head may wait behind a session ready to take it before a
+  /// sweep, every [staleSweep], logs it and delivers it: a turn's end that
+  /// never woke the queue must not leave a message sitting.
+  final Duration staleAfter;
+  final Duration staleSweep;
+
   /// Delivers [text] as an immediate send would — set by `SessionInput`.
   /// Throws [DataRefused] when it cannot.
   Future<void> Function(String sessionId, String text)? deliver;
@@ -178,6 +186,10 @@ class SessionQueue implements ResumeQueue {
   /// agent's terminal queries must not starve the queue.
   static const typingHoldLimit = Duration(seconds: 30);
   final _subscriptions = <StreamSubscription<Object?>>[];
+  Timer? _sweep;
+
+  /// Heads already logged as stale, so a sweep says so once.
+  final _staleLogged = <String>{};
   var _closed = false;
 
   static const interruptedError =
@@ -207,10 +219,32 @@ class SessionQueue implements ResumeQueue {
           if (_withQueued.contains(sessionId)) _kick(sessionId);
         }),
       );
+    _sweep = Timer.periodic(staleSweep, (_) => _sweepStale());
+  }
+
+  void _sweepStale() {
+    if (_closed || deliver == null) return;
+    final now = _now();
+    for (final sessionId in dao.sessionsWithQueued()) {
+      final head = dao.head(sessionId);
+      if (head == null || head.state != QueuedMessageState.queued) continue;
+      final waited = now.difference(head.createdAt);
+      if (waited < staleAfter) continue;
+      if (_holdOf(sessionId) != null || !_ready(sessionId)) continue;
+      _withQueued.add(sessionId);
+      if (_staleLogged.add(head.id)) {
+        log?.call(
+          'queue $sessionId: ${head.id} waited ${waited.inMinutes} min '
+          'behind a session at its prompt; delivering it now',
+        );
+      }
+      _kick(sessionId);
+    }
   }
 
   Future<void> close() async {
     _closed = true;
+    _sweep?.cancel();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
@@ -415,7 +449,7 @@ class SessionQueue implements ResumeQueue {
 
   void _onStatus(HostedAgentStatus change) {
     final sessionId = change.sessionId;
-    final kind = change.report.status;
+    final kind = change.report.turnStatus;
     if (_working(kind)) {
       if (_inFlight.contains(sessionId)) _sawWorking.add(sessionId);
       _awaitingTurn.remove(sessionId)?.cancel();
@@ -449,9 +483,10 @@ class SessionQueue implements ResumeQueue {
     if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
       return false;
     }
-    // Only a real end of turn: idle or failed, or a reader that cannot tell
-    // over a screen that has stopped moving.
-    return switch (report?.status) {
+    // Only a real end of turn: idle or failed — background runs still going
+    // are no turn — or a reader that cannot tell over a screen that has
+    // stopped moving.
+    return switch (report?.turnStatus) {
       AgentActivityStatus.idle || AgentActivityStatus.failed => true,
       AgentActivityStatus.working ||
       AgentActivityStatus.awaitingApproval => false,

@@ -64,6 +64,7 @@ Map<String, Object?> reportToJson(AgentStatusReport report) => {
   if (report.waitingSince case final since?)
     'waitingSince': since.toUtc().toIso8601String(),
   if (report.inFlight.isNotEmpty) 'inFlight': report.inFlight,
+  if (report.backgroundOnly) 'backgroundOnly': true,
 };
 
 AgentStatusReport? reportFromJson(Object? json) {
@@ -99,6 +100,7 @@ AgentStatusReport? reportFromJson(Object? json) {
     toolAsk: AgentToolAsk.fromJson(json['toolAsk']),
     waitingSince: _time(json['waitingSince']),
     inFlight: inFlight is List ? inFlight.whereType<String>().toList() : [],
+    backgroundOnly: json['backgroundOnly'] == true,
   );
 }
 
