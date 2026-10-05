@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,6 +18,13 @@ import '../../features/onboarding/presentation/quick_start_card.dart';
 import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
+
+/// What the list keeps above the quick start, its header included: room for
+/// three rows and the start of a fourth, which reads as a list that scrolls.
+const double _listRoom = 280;
+
+/// The least the quick start takes: its header, to unfold it from.
+const double _quickStartFloor = 48;
 
 /// **The sidebar** (spec §4): the list for the area the strip picked, on the
 /// sidebar's own tone. Every area draws the same [SidebarAreaHeader] and the
@@ -74,8 +83,13 @@ class ShellSidebar extends ConsumerWidget {
                 children: [
                   Expanded(child: list),
                   // Beside the list, above the dock: never over the terminal,
-                  // and never more than half the sidebar.
-                  QuickStartCard(maxHeight: constraints.maxHeight * 0.5),
+                  // never more than half the sidebar, and never the list's room.
+                  QuickStartCard(
+                    maxHeight: (constraints.maxHeight - _listRoom).clamp(
+                      _quickStartFloor,
+                      math.max(_quickStartFloor, constraints.maxHeight * 0.5),
+                    ),
+                  ),
                   if (devicesArea) const ShellDevicesDock(),
                 ],
               ),

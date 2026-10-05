@@ -272,63 +272,57 @@ class _SessionStatusLine extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) => Row(
         children: [
-          // One line, whatever the branch is called: the facts slide under the
-          // controls rather than wrapping the bar to a second row. The resume
-          // chip rides with them: it is nothing, and no width, until armed.
-          // The agent leads, outside the scroll, so it never slides away.
+          // One line, whatever the branch is called: what does not fit is left
+          // out whole, last first, and the stage's word ends, rather than any
+          // of it running under the controls. The resume chip rides with the
+          // facts: it is nothing, and no width, until armed. The agent leads.
           SessionAgentMark(key: SessionAgentMark.barKey, sessionId: sessionId),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  DeliveryStateLine(sessionId: sessionId),
-                  ScheduledResumeChip(sessionId: sessionId),
-                  QueuedCountChip(sessionId: sessionId),
-                ],
-              ),
+            child: YieldingRow(
+              yieldFromStart: false,
+              children: [
+                DeliveryStateLine(sessionId: sessionId, singleLine: true),
+                ScheduledResumeChip(sessionId: sessionId),
+                QueuedCountChip(sessionId: sessionId),
+              ],
             ),
           ),
+          const SizedBox(width: Insets.sm),
           // The controls at their own width while it fits beside the facts'
-          // floor; past it they scroll rather than overflow, as the narrow
-          // row's do — anchored at the end, so the next step, Ship ▾ and the
-          // view toggle stay in view and the chips before them slide under.
+          // floor; past it the first of them are left out whole, so the next
+          // step, Ship ▾ and the view toggle stay.
           ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: math.max(
                 0,
-                constraints.maxWidth - _sessionStatusFactsFloor,
+                constraints.maxWidth - _sessionStatusFactsFloor - Insets.sm,
               ),
             ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: Row(
-                children: [
-                  SessionStatsButton(sessionId: sessionId),
+            child: YieldingRow(
+              children: [
+                SessionStatsButton(sessionId: sessionId),
+                const SizedBox(width: Insets.sm),
+                PermissionModeChip(sessionId: sessionId),
+                SessionModePicker(sessionId: sessionId),
+                const SizedBox(width: Insets.xs),
+                OperatorChip(sessionId: sessionId),
+                const SizedBox(width: Insets.xs),
+                SessionModelChip(
+                  sessionId: sessionId,
+                  maxLabelWidth: _sessionModelLabelWidth,
+                ),
+                const SizedBox(width: Insets.sm),
+                DeliveryStrip(
+                  sessionId: sessionId,
+                  hostedOnTerminal: true,
+                  folded: true,
+                ),
+                SessionMoreButton(sessionId: sessionId),
+                if (toggle != null) ...[
                   const SizedBox(width: Insets.sm),
-                  PermissionModeChip(sessionId: sessionId),
-                  SessionModePicker(sessionId: sessionId),
-                  const SizedBox(width: Insets.xs),
-                  OperatorChip(sessionId: sessionId),
-                  const SizedBox(width: Insets.xs),
-                  SessionModelChip(
-                    sessionId: sessionId,
-                    maxLabelWidth: _sessionModelLabelWidth,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  DeliveryStrip(
-                    sessionId: sessionId,
-                    hostedOnTerminal: true,
-                    folded: true,
-                  ),
-                  SessionMoreButton(sessionId: sessionId),
-                  if (toggle != null) ...[
-                    const SizedBox(width: Insets.sm),
-                    toggle,
-                  ],
+                  toggle,
                 ],
-              ),
+              ],
             ),
           ),
         ],

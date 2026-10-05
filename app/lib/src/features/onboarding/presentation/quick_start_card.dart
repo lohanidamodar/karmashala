@@ -48,7 +48,9 @@ class QuickStartCard extends ConsumerWidget {
     final folded = ref.watch(quickStartFoldedProvider);
     final tones = SurfaceTones.of(context);
     return Container(
-      margin: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.sm, Insets.sm),
+      // Off the list above it, so a row the list cuts reads as scrolled, not
+      // as covered by the card.
+      margin: const EdgeInsets.all(Insets.sm),
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
         color: tones.raised,

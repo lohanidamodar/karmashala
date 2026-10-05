@@ -854,10 +854,10 @@ void main() {
         );
       }
       // Facts on the left, controls on the right: never interleaved. The facts
-      // slide inside their own viewport, which ends before the controls do.
+      // keep to their own line, which ends before the controls begin.
       final factsView = find.ancestor(
         of: find.text('Working'),
-        matching: find.byType(SingleChildScrollView),
+        matching: find.byType(DeliveryStateLine),
       );
       expect(
         tester.getTopRight(factsView.first).dx,

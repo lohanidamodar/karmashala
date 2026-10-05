@@ -1,4 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
+import '../../../app/widgets/yielding_row.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -572,19 +573,16 @@ class DeliveryStateLine extends ConsumerWidget {
       withModel: hasModel,
     );
     if (singleLine) {
-      // A fact that would wrap lands a whole line below, outside the clip.
+      // The stage, first, ends with an ellipsis once it is all that fits.
       return SizedBox(
         height: _lineHeight,
-        child: Wrap(
-          spacing: Insets.sm,
-          runSpacing: _lineHeight,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          clipBehavior: Clip.hardEdge,
+        child: YieldingRow(
+          yieldFromStart: false,
           children: [
-            for (final fact in facts)
-              SizedBox(
-                height: _lineHeight,
-                child: Align(widthFactor: 1, child: fact),
+            for (final (i, fact) in facts.indexed)
+              Padding(
+                padding: EdgeInsets.only(left: i == 0 ? 0 : Insets.sm),
+                child: fact,
               ),
           ],
         ),
@@ -723,12 +721,15 @@ List<Widget> _deliveryFacts(
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: Insets.xs),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 160),
-            child: RemoteLink(
-              text: branch,
-              url: delivery.remote?.branchUrl(branch),
-              style: muted,
+          // Ends in a line narrower than the name, as on one status line.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: RemoteLink(
+                text: branch,
+                url: delivery.remote?.branchUrl(branch),
+                style: muted,
+              ),
             ),
           ),
         ],
