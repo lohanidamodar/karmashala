@@ -150,10 +150,14 @@ class ChatTranscriptView extends StatefulWidget {
     this.onLoadEarlier,
     this.firstOrdinal = 0,
     this.agentId,
+    this.emptyBuilder,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// What to show in place of the standard empty state, which it is handed.
+  final Widget Function(Widget standard)? emptyBuilder;
 
   /// The agent this conversation is with, when known: the empty state wears
   /// its mark rather than a generic glyph.
@@ -326,6 +330,14 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     _visible = visible;
   }
 
+  Widget _emptyState() {
+    final standard = _ChatEmptyState(
+      hint: widget.emptyHint,
+      agentId: widget.agentId,
+    );
+    return widget.emptyBuilder?.call(standard) ?? standard;
+  }
+
   @override
   Widget build(BuildContext context) {
     _touch = UiDensity.of(context).isTouch;
@@ -385,10 +397,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                     Positioned.fill(
                       child: FocusTraversalGroup(
                         child: total == 0
-                            ? _ChatEmptyState(
-                                hint: widget.emptyHint,
-                                agentId: widget.agentId,
-                              )
+                            ? _emptyState()
                             : Align(
                                 alignment: Alignment.topCenter,
                                 child: ConstrainedBox(

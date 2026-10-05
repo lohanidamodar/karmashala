@@ -74,6 +74,7 @@ import 'operator_chip.dart';
 import 'transcript_image_preview.dart';
 import 'stop_children_offer.dart';
 import 'delegation_card.dart';
+import 'session_failed_state.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -699,6 +700,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         // feature exists, so there is nothing left behind to hide.
         onSaveNote: notesEnabled ? _saveNote : null,
         footer: footer,
+        emptyBuilder: (standard) => SessionEmptyOrFailed(
+          sessionId: widget.sessionId,
+          otherwise: standard,
+        ),
         emptyHint: _emptyHint(
           chatAvailable: chatAvailable,
           reading: reading,
