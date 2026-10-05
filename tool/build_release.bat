@@ -153,6 +153,13 @@ if defined WINDOWS_ONLY (
 rem The APK is signed by app\android\key.properties when present, else the
 rem debug key.
 echo === ANDROID APK (the one app) === >> "%LOG%"
+rem Without app\android\key.properties gradle signs with the debug key, and that
+rem APK will not install over a release one: refuse rather than build it.
+if not exist "app\android\key.properties" (
+  echo     app\android\key.properties is missing - a release APK would be signed with the debug key
+  echo app\android\key.properties is missing - refusing to sign the release APK with the debug key >> "%LOG%"
+  goto :fail
+)
 pushd app
 call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
