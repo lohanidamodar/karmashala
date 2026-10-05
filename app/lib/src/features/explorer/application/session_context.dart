@@ -25,11 +25,24 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   return sessionInTab(ref.watch(paneSessionsProvider), tab);
 });
 
+/// The session **on screen**: one selected with no pane of ours is shown in
+/// place of the active tab (as its chat, on a phone), and choosing a tab lets
+/// that selection go; otherwise the active tab's.
+final onScreenSessionIdProvider = Provider<String?>((ref) {
+  final selected = ref.watch(selectedSessionIdProvider);
+  if (selected != null &&
+      ref.watch(paneSessionsProvider.select((p) => p.paneOf(selected))) ==
+          null) {
+    return selected;
+  }
+  return ref.watch(activePaneSessionIdProvider);
+});
+
 /// The session a context-panel surface describes: the one **on screen**, and
 /// the one last clicked in the Explorer only when no pane holds one.
 final panelSessionIdProvider = Provider<String?>(
   (ref) =>
-      ref.watch(activePaneSessionIdProvider) ??
+      ref.watch(onScreenSessionIdProvider) ??
       ref.watch(selectedSessionIdProvider),
 );
 
