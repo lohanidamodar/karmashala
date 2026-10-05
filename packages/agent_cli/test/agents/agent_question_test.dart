@@ -13,6 +13,34 @@ void main() {
   final claude = AgentRegistry.builtIn.byId('claudeCode')!;
   final support = claude.questions!;
 
+  test('a question set previews as each question and its options', () {
+    const colour = AgentQuestion(
+      question: 'Which colour do you like?',
+      options: [
+        AgentQuestionOption(label: 'Red', description: 'Red'),
+        AgentQuestionOption(label: 'Green', description: 'Green'),
+        AgentQuestionOption(label: 'Blue', description: 'Blue'),
+      ],
+    );
+    expect(
+      const AgentQuestionSet(toolUseId: 't', questions: [colour]).preview,
+      'Which colour do you like? Red / Green / Blue',
+    );
+    expect(
+      const AgentQuestionSet(
+        toolUseId: 't',
+        questions: [
+          colour,
+          AgentQuestion(
+            question: 'And size?',
+            options: [AgentQuestionOption(label: 'S')],
+          ),
+        ],
+      ).preview,
+      'Which colour do you like? Red / Green / Blue · And size? S',
+    );
+  });
+
   AgentQuestionSet set(List<Map<String, Object?>> questions) =>
       AgentQuestionSet.fromToolInput('toolu_1', {'questions': questions})!;
 

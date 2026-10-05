@@ -475,6 +475,26 @@ class AttentionInbox {
     ]);
   }
 
+  /// Item [id] saying [detail]; this inbox when it is not listed.
+  AttentionInbox describe(String id, String detail) {
+    final listed = _byId[id];
+    if (listed == null || listed.detail == detail) return this;
+    return _index([
+      for (final item in items)
+        if (item.id == id)
+          InboxItem(
+            session: item.session,
+            kind: item.kind,
+            at: item.at,
+            seen: item.seen,
+            detail: detail,
+            id: item.id,
+          )
+        else
+          item,
+    ]);
+  }
+
   AttentionInbox dismiss(String id) {
     if (!_byId.containsKey(id)) return this;
     return _index([

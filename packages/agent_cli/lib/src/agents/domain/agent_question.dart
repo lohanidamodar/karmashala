@@ -49,6 +49,16 @@ class AgentQuestionSet {
 
   final List<AgentQuestion> questions;
 
+  /// One line for a list or a notice: each question with its options'
+  /// labels, "Which colour? Red / Green / Blue".
+  String get preview => [
+    for (final question in questions)
+      [
+        question.question.trim(),
+        question.options.map((option) => option.label).join(' / '),
+      ].where((part) => part.isNotEmpty).join(' '),
+  ].join(' · ');
+
   /// The questions in a tool call's `input`, or null for a shape this build
   /// cannot read — which is no question, never a guessed one.
   static AgentQuestionSet? fromToolInput(String toolUseId, Object? input) {

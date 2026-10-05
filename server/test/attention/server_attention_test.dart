@@ -228,6 +228,47 @@ void main() {
     expect(attention.inbox.isEmpty, isTrue, reason: 'the condition cleared');
   });
 
+  test('a question is filed in its own words, not the screen\'s', () async {
+    final asked = <String>[];
+    attention.readQuestion = (openId) async {
+      asked.add(openId);
+      return const AgentQuestionSet(
+        toolUseId: 'toolu_1',
+        questions: [
+          AgentQuestion(
+            question: 'Which colour do you like?',
+            options: [
+              AgentQuestionOption(label: 'Red', description: 'Red'),
+              AgentQuestionOption(label: 'Green', description: 'Green'),
+              AgentQuestionOption(label: 'Blue', description: 'Blue'),
+            ],
+          ),
+        ],
+      );
+    };
+    hook('PreToolUse');
+    await attention.poll();
+    reports.record(
+      AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-1',
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.protocol,
+        observedAt: clock.nowUtc(),
+        waiting: AgentWaitKind.question,
+        evidence: const ['› 1. Red', 'Red', '2. Green', 'Green', '3. Blue'],
+      ),
+    );
+    await attention.poll();
+    await pumpEventQueue();
+    await flush();
+
+    expect(asked, ['row-1']);
+    final item = lastInbox()!.inbox.items.single;
+    expect(item.kind, InboxItemKind.needsApproval);
+    expect(item.detail, 'Which colour do you like? Red / Green / Blue');
+  });
+
   test('an ask on a session that has since ended is not left waiting on a '
       'person', () async {
     hook('PreToolUse');

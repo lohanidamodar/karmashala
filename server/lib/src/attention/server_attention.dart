@@ -89,6 +89,10 @@ class ServerAttention implements AttentionWork {
   /// on a person, and no poll watches them to see it clear.
   final Set<String> Function()? endedSessions;
 
+  /// The question native row [String] has open, read as its card reads it;
+  /// set once the session records are. Null files the status's own words.
+  Future<AgentQuestionSet?> Function(String openId)? readQuestion;
+
   late final List<StreamSubscription<Object?>> _subscriptions;
 
   /// By row and by key: a row is keyed anew once its conversation id is
@@ -101,6 +105,9 @@ class ServerAttention implements AttentionWork {
   final Map<Object, Set<String>> _looking = {};
   final Map<String, NotificationReason?> _delivery = {};
   final List<DataChange> _pending = [];
+
+  /// Question items whose words are being read.
+  final Set<String> _describing = {};
   Timer? _timer;
   var _polling = false;
   var _closed = false;
@@ -246,11 +253,50 @@ class ServerAttention implements AttentionWork {
         ),
       );
     }
-    if (evidenceLine(report.evidence) case final line?) {
+    final line = evidenceLine(report.evidence);
+    final read = readQuestion;
+    if (read != null &&
+        !session.imported &&
+        report.status == AgentActivityStatus.awaitingApproval &&
+        report.waiting == AgentWaitKind.question) {
+      // A screen's evidence is the menu as drawn, options and all.
+      _describeQuestion(
+        session,
+        read,
+        report.source == AgentStatusSource.terminalGrid ? null : line,
+      );
+    } else if (line != null) {
       details[session.key] = line;
     }
     final kind = AttentionKind.forStatus(report.status);
     return kind == null ? null : SessionAttention(session: session, kind: kind);
+  }
+
+  /// Gives [session]'s question item the question in its own words, once:
+  /// read off its record, or [fallback] when none can be read.
+  void _describeQuestion(
+    WatchedSession session,
+    Future<AgentQuestionSet?> Function(String openId) read,
+    String? fallback,
+  ) {
+    final id = InboxItem.idFor(InboxItemKind.needsApproval, session.key);
+    for (final item in _inbox.items) {
+      if (item.id == id && item.detail != null) return;
+    }
+    if (!_describing.add(id)) return;
+    unawaited(() async {
+      AgentQuestionSet? asked;
+      try {
+        asked = await read(session.openId);
+      } on Object {
+        asked = null;
+      } finally {
+        _describing.remove(id);
+      }
+      if (_closed) return;
+      final words = asked == null ? fallback : evidenceLine([asked.preview]);
+      if (words != null) _update(_inbox.describe(id, words));
+    }());
   }
 
   static (String, String) _lastStatusKeys(WatchedSession session) =>
