@@ -11,6 +11,7 @@ import 'package:xterm2/xterm.dart';
 
 import 'terminal_copy_text.dart';
 import 'terminal_key_bar.dart';
+import 'terminal_text_style.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/widgets/adaptive_modal.dart';
@@ -642,7 +643,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         focusNode: widget.instance.focusNode,
         scrollController: widget.instance.scrollController,
         theme: widget.terminalTheme,
-        textStyle: TerminalStyle(fontSize: fontSize, fontFamily: kMonoFamily),
+        textStyle: terminalTextStyle(fontSize),
         autoResize: autoResize,
         keyboardType: touch
             ? TextInputType.visiblePassword

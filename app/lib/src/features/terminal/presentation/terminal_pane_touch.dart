@@ -35,7 +35,7 @@ extension _TouchPane on _TerminalPaneViewState {
     if (cached != null && cached.$1 == fontSize) return cached.$2;
     final painter = TerminalPainter(
       theme: widget.terminalTheme,
-      textStyle: TerminalStyle(fontSize: fontSize, fontFamily: kMonoFamily),
+      textStyle: terminalTextStyle(fontSize),
       textScaler: TextScaler.noScaling,
     );
     final size = painter.cellSize;

@@ -909,6 +909,13 @@ List<String> monoFallbackFor(TargetPlatform platform) => switch (platform) {
 /// named with its package prefix.
 const String kBundledMonoFamily = 'packages/karmashala_ui/JetBrainsMono';
 
+/// Bundled symbol faces (Noto, SIL OFL) for a terminal's marks — ⏵ ⏸ ⏺ ⎿ ✻ ✽
+/// ◐ — which JetBrains Mono lacks; Android has no glyph for ⏵ or ⎿ at all.
+const List<String> kBundledSymbolFamilies = [
+  'packages/karmashala_ui/NotoSansSymbols2',
+  'packages/karmashala_ui/NotoSansSymbols',
+];
+
 /// The bundled UI face, Geist (SIL OFL).
 const String kBundledSansFamily = 'packages/karmashala_ui/Geist';
 

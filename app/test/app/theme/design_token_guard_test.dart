@@ -94,12 +94,10 @@ void main() {
   });
 
   test('every mono family carries the mono fallback', () {
-    // A terminal grid and a rendered cast take a family name only; xterm and
-    // the renderer bring their own fallback lists. The touch pane measures
-    // with the grid's own `TerminalStyle`, so it takes the same.
+    // A terminal grid and a rendered cast take xterm's or the renderer's own
+    // fallback list, the grid's closed by the bundled symbol faces.
     const familyOnly = {
-      'lib/src/features/terminal/presentation/terminal_pane_view.dart',
-      'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
+      'lib/src/features/terminal/presentation/terminal_text_style.dart',
       'lib/src/features/terminal/application/terminal_recording_controller.dart',
     };
     final family = RegExp(r'fontFamily:\s*kMonoFamily');

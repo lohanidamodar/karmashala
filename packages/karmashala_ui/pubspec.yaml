@@ -81,3 +81,13 @@ flutter:
           weight: 600
         - asset: fonts/JetBrainsMono-Bold.ttf
           weight: 700
+    # The terminal's last fallback, for the marks agents draw that JetBrains
+    # Mono lacks and Android has no glyph for (⏵, ⎿). Noto Sans Symbols 2 and
+    # Noto Sans Symbols, SIL OFL 1.1; the second only for ⎿, from its one
+    # (variable) file.
+    - family: NotoSansSymbols2
+      fonts:
+        - asset: fonts/NotoSansSymbols2-Regular.ttf
+    - family: NotoSansSymbols
+      fonts:
+        - asset: fonts/NotoSansSymbols-Variable.ttf
