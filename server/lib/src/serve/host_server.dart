@@ -120,6 +120,47 @@ class HostServer {
   /// Whose grid each session is at, by id: the last holder that sized it.
   final _sizedFor = <String, String>{};
 
+  /// Whose grid each session was at before its sizer took it, and that grid:
+  /// where it goes back to when the sizer lets go.
+  final _sizedBefore = <String, (String?, int, int)>{};
+
+  /// Whom each session's token was last taken from.
+  final _takenFrom = <String, String>{};
+
+  /// Marks [session] as at [clientId]'s grid; call before resizing it.
+  void _sizedBy(HostSession session, String clientId) {
+    final was = _sizedFor[session.id];
+    if (was == clientId) return;
+    _sizedBefore[session.id] = (
+      was ?? _takenFrom[session.id],
+      session.columns,
+      session.rows,
+    );
+    _sizedFor[session.id] = clientId;
+  }
+
+  /// [clientId] let go of [session]: if it was sized for that client, it goes
+  /// back to the grid of the one it was taken from, while that one is here.
+  void _giveBackSize(HostSession session, String clientId) {
+    if (_sizedFor[session.id] != clientId) return;
+    final before = _sizedBefore.remove(session.id);
+    if (before == null) return;
+    final (owner, columns, rows) = before;
+    if (owner == null) return;
+    (int, int)? wanted;
+    var here = false;
+    for (final (client, ref) in _attachments[session.id] ?? const <Never>{}) {
+      if (client._clientId != owner) continue;
+      here = true;
+      wanted ??= client._flows[ref]?.wantedGrid;
+    }
+    if (!here) return;
+    final (c, r) = wanted ?? (columns, rows);
+    if (c != session.columns || r != session.rows) session.resizeAsHost(c, r);
+    _sizedFor[session.id] = owner;
+    _presenceChanged(session);
+  }
+
   void _attached(HostSession session, _ClientSession client, int ref) {
     (_attachments[session.id] ??= {}).add((client, ref));
     _presenceChanged(session);
@@ -130,6 +171,9 @@ class HostServer {
     if (set == null) return;
     set.remove((client, ref));
     if (set.isEmpty) _attachments.remove(session.id);
+    if (!set.any((attachment) => identical(attachment.$1, client))) {
+      _giveBackSize(session, client._clientId);
+    }
     _presenceChanged(session);
   }
 
@@ -180,6 +224,10 @@ class _Flow {
   StreamSubscription<void>? exitWatch;
   var stalled = false;
   var exitPending = false;
+
+  /// Whether this ref claims the session: at attach or by a claim. Only then
+  /// is a resize it sends meanwhile kept for when it takes the input.
+  var claims = false;
 
   /// The grid this client last asked for, kept while it could not apply it:
   /// a claim takes the session there.
@@ -238,6 +286,7 @@ class _ClientSession implements BoxRelayPeer {
     _hungUp = true;
     unawaited(_connection.close());
   }
+
   StreamSubscription<HostMessage>? _lifecycleWatch;
   DataSession? _data;
   DataStreamSession? _streams;
@@ -854,8 +903,8 @@ class _ClientSession implements BoxRelayPeer {
         message.claimWrite &&
         session.token.isHeldBy(_clientId) &&
         (grid.$1 != session.columns || grid.$2 != session.rows)) {
+      _server._sizedBy(session, _clientId);
       session.resize(_clientId, grid.$1, grid.$2, now);
-      _server._sizedFor[session.id] = _clientId;
     }
     final screen = grid == null ? null : session.snapshot();
 
@@ -884,6 +933,7 @@ class _ClientSession implements BoxRelayPeer {
 
     // No wish for an unclaimed pane: its keystroke leaves the grid alone.
     final flow = _Flow(session, from)
+      ..claims = message.claimWrite
       ..wantedGrid = message.claimWrite ? grid : null;
     _flows[ref] = flow;
     _server._attached(session, this, ref);
@@ -1029,27 +1079,31 @@ class _ClientSession implements BoxRelayPeer {
       token.claim(_clientId, now);
     } else {
       token.handOver(from, _clientId, now);
+      _server._takenFrom[session.id] = from;
     }
     final grid = flow.wantedGrid;
+    if (grid != null) _server._sizedBy(session, _clientId);
     if (grid != null &&
         (grid.$1 != session.columns || grid.$2 != session.rows)) {
       session.resize(_clientId, grid.$1, grid.$2, now);
     }
-    if (grid != null) _server._sizedFor[session.id] = _clientId;
     _server._presenceChanged(session);
   }
 
-  /// The holder's grid wins: a viewer's size is kept for when it claims,
-  /// and it renders the holder's meanwhile.
+  /// The holder's grid wins: a claiming viewer's size is kept for when it
+  /// takes the input, and it renders the holder's meanwhile. A ref that only
+  /// looks (a phone) is not resized for at all until it claims.
   void _onResize(ResizeMessage message) {
     if (_relays(message.sessionRef)) return _boxes.resize(message);
     final flow = _flows[message.sessionRef];
     if (flow == null) return _sendUnknownRef(message.sessionRef);
-    flow.wantedGrid = (message.columns, message.rows);
     final session = flow.session;
-    if (!session.token.isHeldBy(_clientId)) return;
+    final holds = session.token.isHeldBy(_clientId);
+    if (!holds && !flow.claims) return;
+    flow.wantedGrid = (message.columns, message.rows);
+    if (!holds) return;
+    _server._sizedBy(session, _clientId);
     session.resize(_clientId, message.columns, message.rows, _server.now());
-    _server._sizedFor[session.id] = _clientId;
     _server._presenceChanged(session);
   }
 
@@ -1059,6 +1113,7 @@ class _ClientSession implements BoxRelayPeer {
     if (flow == null) return _sendUnknownRef(message.sessionRef);
     final token = flow.session.token;
     final now = _server.now();
+    flow.claims = true;
     if (!token.isHeldBy(_clientId)) {
       if (!message.takeOver && token.isHeld) {
         _send(
@@ -1087,6 +1142,7 @@ class _ClientSession implements BoxRelayPeer {
     final flow = _flows[message.sessionRef];
     if (flow == null) return _sendUnknownRef(message.sessionRef);
     final token = flow.session.token;
+    _server._giveBackSize(flow.session, _clientId);
     token.release(_clientId);
     _send(
       ClaimedMessage(

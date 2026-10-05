@@ -356,6 +356,71 @@ void main() {
       expect(told.viewers, ['mac (2)']);
     });
 
+    /// A phone looking at the laptop's session: attached without claiming.
+    Future<(PipeConnection, int)> phoneOn(
+      ({HostServer server, SessionRegistry registry, FakePtyLauncher launcher})
+      env,
+    ) async {
+      final phone = await connect(env.server, 'phone');
+      await phone.send(
+        const AttachMessage(
+          requestId: 2,
+          sessionId: 'a',
+          sinceOffset: 0,
+          claimWrite: false,
+        ),
+      );
+      return (phone, phone.only<AttachedMessage>().sessionRef);
+    }
+
+    test(
+      'a phone that only looks never resizes the session: its resize is '
+      'ignored, and its keystroke takes the input at the session\'s grid',
+      () async {
+        final env = build();
+        final (laptop, _, _, _, pty) = await twoOn(env);
+        final (phone, phoneRef) = await phoneOn(env);
+        await phone.send(ResizeMessage(phoneRef, 40, 60));
+        expect(pty.resizes, isNot(contains((40, 60))));
+
+        now = now.add(const Duration(seconds: 4));
+        await phone.send(
+          InputMessage(phoneRef, Uint8List.fromList('p'.codeUnits)),
+        );
+        expect(laptop.last<PresenceMessage>().holder, 'phone');
+        expect(pty.resizes, isNot(contains((40, 60))));
+        expect(laptop.last<PresenceMessage>().sizedFor, isNot('phone'));
+      },
+    );
+
+    test('a phone that took over and lets go gives the session back at the '
+        'grid of the one it took it from', () async {
+      final env = build();
+      final (laptop, _, _, _, pty) = await twoOn(env);
+      final (phone, phoneRef) = await phoneOn(env);
+      await phone.send(ClaimMessage(3, phoneRef, takeOver: true));
+      await phone.send(ResizeMessage(phoneRef, 40, 60));
+      expect(pty.resizes.last, (40, 60));
+
+      await phone.send(ReleaseMessage(4, phoneRef));
+      expect(pty.resizes.last, (100, 30));
+      final told = laptop.last<PresenceMessage>();
+      expect(told.sizedFor, 'laptop');
+      expect((told.columns, told.rows), (100, 30));
+    });
+
+    test('...and so does one that took over and goes away', () async {
+      final env = build();
+      final (laptop, _, _, _, pty) = await twoOn(env);
+      final (phone, phoneRef) = await phoneOn(env);
+      await phone.send(ClaimMessage(3, phoneRef, takeOver: true));
+      await phone.send(ResizeMessage(phoneRef, 40, 60));
+
+      await phone.send(DetachMessage(phoneRef));
+      expect(pty.resizes.last, (100, 30));
+      expect(laptop.last<PresenceMessage>().sizedFor, 'laptop');
+    });
+
     test('keys the server types are not gated by the token', () async {
       final env = build();
       final (_, _, _, _, pty) = await twoOn(env);

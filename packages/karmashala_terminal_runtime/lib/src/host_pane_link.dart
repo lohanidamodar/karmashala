@@ -72,6 +72,9 @@ class HostPresence {
 
   /// The session is at another client's grid.
   bool get sizedElsewhere => sizedFor != null && sizedFor != me;
+
+  /// No other client has the session open, typing or only looking.
+  bool get alone => !heldElsewhere && viewers.every((viewer) => viewer == me);
 }
 
 /// One pane's attachment on a client's link to its server. Many panes share
@@ -290,6 +293,20 @@ class HostPaneLink {
       );
     } on HostLinkException catch (e) {
       if (!_notices.isClosed) _notices.add(e.message);
+    }
+  }
+
+  /// Lets go of the write token, so the host can give the session back to
+  /// the client it was taken from.
+  Future<void> release() async {
+    if (_closed || _sessionRef == 0) return;
+    try {
+      await _link.request<ClaimedMessage>(
+        (id) => ReleaseMessage(id, _sessionRef),
+        const Duration(seconds: 10),
+      );
+    } on HostLinkException {
+      // A link gone with it has let go already.
     }
   }
 
