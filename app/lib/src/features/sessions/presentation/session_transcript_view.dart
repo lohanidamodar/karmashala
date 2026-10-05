@@ -1226,6 +1226,11 @@ List<ChatMessage> chatMessagesFromTranscript(
     }
   }
 
+  // The summary is the CLI's words, recorded as a user turn: it is folded
+  // under the notice, never drawn as the person's message.
+  String? summaryOf(TranscriptMessage row) =>
+      row.compaction != null && row.role == 'user' ? row.text : null;
+
   final out = <ChatMessage>[];
   if (boundary != null) {
     final trigger = boundary.trigger;
@@ -1243,6 +1248,7 @@ List<ChatMessage> chatMessagesFromTranscript(
             'summary below; the transcript file still holds them, and so does '
             'search.',
         at: messages[from].at,
+        detail: summaryOf(messages[from]),
       ),
     );
   }
@@ -1253,6 +1259,22 @@ List<ChatMessage> chatMessagesFromTranscript(
   String? lastNamed;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
+    if (summaryOf(message) case final summary?) {
+      if (i == from && boundary != null) continue;
+      final trigger = message.compaction!.trigger;
+      out.add(
+        ChatMessage(
+          role: kCompactionNoticeRole,
+          text:
+              'The agent compacted its context'
+              '${trigger == null ? '' : ' ($trigger)'}. What it kept is the '
+              'summary below.',
+          at: message.at,
+          detail: summary,
+        ),
+      );
+      continue;
+    }
     final reference = message.subagent;
     if (reference != null) subagents?[out.length] = reference;
     final installation = message.agentInstallationId;

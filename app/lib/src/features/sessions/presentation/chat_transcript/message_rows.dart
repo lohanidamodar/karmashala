@@ -235,9 +235,10 @@ class _UserMessageCard extends StatelessWidget {
 /// What Karmashala told the agent ahead of the person's first words, folded
 /// to one line.
 class _SessionNote extends StatefulWidget {
-  const _SessionNote({required this.text});
+  const _SessionNote({required this.text, this.label = 'Session note'});
 
   final String text;
+  final String label;
 
   @override
   State<_SessionNote> createState() => _SessionNoteState();
@@ -270,7 +271,7 @@ class _SessionNoteState extends State<_SessionNote> {
                     color: muted?.color,
                   ),
                   const SizedBox(width: Insets.xs),
-                  Text('Session note', style: muted),
+                  Text(widget.label, style: muted),
                 ],
               ),
             ),
@@ -648,6 +649,8 @@ class _ToolMessageCard extends StatelessWidget {
             )
           else
             Text(message.text, style: MonoStyles.label.copyWith(height: 1.35)),
+          if (message.detail case final folded?)
+            _SessionNote(text: folded, label: 'Summary'),
           ?detail,
         ],
       ),

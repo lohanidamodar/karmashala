@@ -1391,10 +1391,16 @@ void _parseCodexLine(
 ) {
   final payload = json['payload'];
   if (payload is! Map) return;
+  // The history Codex replaced with what it kept: the file still holds it.
+  if (json['type'] == 'compacted') {
+    _add(out, kTranscriptNoticeRole, 'Codex compacted its context', at);
+    return;
+  }
+  final event = json['type'] == 'event_msg';
   switch (payload['type']) {
     case 'message':
       _parseCodexMessage(payload, out, at, injected);
-    case 'item_completed' when json['type'] == 'event_msg':
+    case 'item_completed' when event:
       final item = payload['item'];
       if (item is Map) _addCodexItem(item, out, pending, codex, at);
     // Codex's own search, answered within the call: it is never pending.
@@ -1408,9 +1414,23 @@ void _parseCodexLine(
           at: at,
         ),
       );
-    case 'task_started' || 'task_complete' || 'turn_aborted'
-        when json['type'] == 'event_msg':
+    case 'task_started' when event:
       codex.clear();
+    case 'task_complete' when event:
+      codex.clear();
+      final error = payload['error'];
+      if (error is Map) _add(out, 'error', error['message'], at);
+    case 'turn_aborted' when event:
+      codex.clear();
+      final reason = payload['reason'];
+      _add(
+        out,
+        kTranscriptNoticeRole,
+        reason == 'interrupted' || reason == null
+            ? 'Interrupted by you'
+            : 'Turn ended: $reason',
+        at,
+      );
     // Codex names its shell differently depending on the tool surface —
     // `function_call` for the classic `shell`, `custom_tool_call` for the
     // `exec` sandbox — but both carry a name, a `call_id` and an answer.
