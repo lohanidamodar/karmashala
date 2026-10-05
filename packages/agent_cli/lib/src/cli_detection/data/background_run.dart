@@ -156,3 +156,30 @@ bool waitsOnBackground(
   if (lastEnded == null || !idleAt.isBefore(lastEnded)) return false;
   return now.difference(lastEnded) < grace;
 }
+
+/// What a notice that names no outcome is shown as: all that is true of
+/// every one of them.
+const String kTaskNotificationFallback = 'A background task reported back.';
+
+/// **The line a row made only of `<task-notification>` envelopes says** —
+/// each one's `<summary>`, a line apiece — or null when [text] is anything
+/// else. Claude Code writes a background run's completion into the parent
+/// transcript as a user row nobody typed.
+String? taskNotificationLine(String text) {
+  final blocks = _envelope.allMatches(text).toList();
+  if (blocks.isEmpty || text.replaceAll(_envelope, '').trim().isNotEmpty) {
+    return null;
+  }
+  return [
+    for (final block in blocks)
+      switch (_summary.firstMatch(block.group(0)!)?.group(1)?.trim()) {
+        final summary? when summary.isNotEmpty => summary,
+        _ => kTaskNotificationFallback,
+      },
+  ].join('\n');
+}
+
+final RegExp _envelope = RegExp(
+  r'<task-notification>[\s\S]*?</task-notification>',
+);
+final RegExp _summary = RegExp(r'<summary>([\s\S]*?)</summary>');

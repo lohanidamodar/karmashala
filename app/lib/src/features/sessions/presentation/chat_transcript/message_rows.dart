@@ -120,6 +120,9 @@ class _ChatMessageTile extends StatelessWidget {
           // tool's note, not the person's words, so it is no bubble.
           'user' when _interruptionNote.hasMatch(message.text.trim()) =>
             _InterruptionNote(text: message.text.trim()),
+          // A background run reporting back: the harness's row, not theirs.
+          'user' when taskNotificationLine(message.text) != null =>
+            _BackgroundRunNote(text: taskNotificationLine(message.text)!),
           'user' => _UserMessageCard(
             message: message,
             onSaveNote: onSaveNote,
@@ -356,6 +359,32 @@ class _InterruptionNote extends StatelessWidget {
         Flexible(
           child: Text(
             words,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A background run's completion, said quietly under the run's own name.
+class _BackgroundRunNote extends StatelessWidget {
+  const _BackgroundRunNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(AppIcons.checkCircle, size: Chrome.iconSmall, color: muted),
+        const SizedBox(width: Insets.sm),
+        Flexible(
+          child: Text(
+            text,
             style: theme.textTheme.bodySmall?.copyWith(color: muted),
           ),
         ),

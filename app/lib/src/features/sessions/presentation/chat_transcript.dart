@@ -10,6 +10,7 @@ import '../../agents/presentation/agent_logo.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
+import 'package:agent_cli/read.dart' show taskNotificationLine;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart' show splitScratchPreamble;
 import 'package:karmashala_ui/transcript.dart';
