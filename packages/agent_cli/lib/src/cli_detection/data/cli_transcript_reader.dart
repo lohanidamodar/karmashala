@@ -11,6 +11,7 @@ import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
 import '../../agents/claude_code/claude_local_commands.dart';
+import '../../agents/claude_code/claude_result_messages.dart';
 import '../../agents/claude_code/claude_tool_references.dart';
 import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
@@ -966,6 +967,7 @@ void _parseClaudeLine(
             id: id,
             output:
                 claudeWebSearchText(json['toolUseResult']) ??
+                claudeResultMessage(json['toolUseResult']) ??
                 _claudeResultText(part['content']),
             isError: isError,
             edits: written == null ? null : [written],

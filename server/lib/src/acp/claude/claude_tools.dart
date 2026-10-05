@@ -1,5 +1,9 @@
 import 'package:agent_cli/stream.dart'
-    show claudeLoadedToolsText, claudeWebSearchText, spillToolImage;
+    show
+        claudeLoadedToolsText,
+        claudeResultMessage,
+        claudeWebSearchText,
+        spillToolImage;
 import 'package:karmashala_acp/karmashala_acp.dart' show JsonMap;
 import 'package:path/path.dart' as p;
 
@@ -108,7 +112,9 @@ abstract final class ClaudeTools {
   /// [resultText], unless the structured [toolUseResult] says it better: a
   /// WebSearch's text holds its links as raw JSON.
   static String resultTextOf(Object? content, Object? toolUseResult) =>
-      claudeWebSearchText(toolUseResult) ?? resultText(content);
+      claudeWebSearchText(toolUseResult) ??
+      claudeResultMessage(toolUseResult) ??
+      resultText(content);
 
   /// A tool result's images, each written to a file and linked as ACP
   /// `resource_link` content: the bytes are far too large for a row.

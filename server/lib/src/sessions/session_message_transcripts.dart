@@ -14,7 +14,7 @@ import 'package:agent_cli/stream.dart'
         looksLikeImagePath,
         proposedPlanIn,
         spillToolImage,
-        toolSubjectEntryFor;
+        toolSubjectFor;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
 
@@ -131,7 +131,7 @@ class SessionMessageTranscriptSource {
         imagePath: _imageOf(json, kind),
         subject:
             _subjectOf(json['locations']) ??
-            toolSubjectEntryFor(json['rawInput'])?.value ??
+            toolSubjectFor(named ?? '', json['rawInput']) ??
             // Its title says what it acts on when its kind names it.
             (named == null ? null : _string(json['title'])),
         output: output,

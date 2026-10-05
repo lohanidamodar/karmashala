@@ -355,7 +355,7 @@ const Set<String> kToolFileKeys = {'file_path', 'notebook_path', 'path'};
 ToolActivity toolActivityFor(String name, Object? input) {
   final plan = agentPlanForToolCall(name, input);
   final entry = toolSubjectEntryFor(input);
-  final subject = plan?.headline ?? entry?.value;
+  final subject = plan?.headline ?? toolSubjectFor(name, input);
   final isFile =
       plan == null && entry != null && kToolFileKeys.contains(entry.key);
   final (edits, cut) = boundedToolEdits(
@@ -398,3 +398,28 @@ String webSearchResultLines(Object? results) => [
             _ => url,
           }} — $url',
 ].join('\n');
+
+/// The identifying line for a call to [name] with [input]: the tools whose
+/// input has no one key that says it are named here, the rest by
+/// [toolSubjectEntryFor].
+String? toolSubjectFor(String name, Object? input) {
+  String? field(String key) {
+    final value = input is Map ? input[key] : null;
+    return value is String && value.trim().isNotEmpty ? value.trim() : null;
+  }
+
+  switch (name) {
+    // Its `message` is the whole letter; who it went to and what about is
+    // the line.
+    case 'SendMessage':
+      final to = field('to') ?? field('recipient');
+      final about =
+          field('summary') ?? field('message')?.split('\n').first.trim();
+      if (to != null || about != null) {
+        return [?to == null ? null : 'to $to', ?about].join(': ');
+      }
+    case 'TaskStop':
+      return field('task_id') ?? field('shell_id');
+  }
+  return toolSubjectEntryFor(input)?.value;
+}
