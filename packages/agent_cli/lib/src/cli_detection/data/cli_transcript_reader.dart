@@ -924,7 +924,11 @@ void _parseClaudeLine(
     } else if (part is Map) {
       switch (part['type']) {
         case 'text':
-          if (!meta) _add(out, role, said(part['text']), at);
+          if (!meta) {
+            _add(out, role, said(part['text']), at);
+          } else {
+            _foldSkillBody(part['text'], out);
+          }
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -1065,6 +1069,29 @@ bool _addLocalCommand(String text, List<TranscriptMessage> out, DateTime? at) {
   }
   return true;
 }
+
+/// A skill's body, which Claude Code loads as an isMeta turn right after its
+/// Skill call: it becomes that call's output. Other isMeta text stays hidden.
+void _foldSkillBody(Object? text, List<TranscriptMessage> out) {
+  if (text is! String) return;
+  final header = _skillBodyHeader.firstMatch(text);
+  final last = out.lastOrNull;
+  final call = last?.tool;
+  if (header == null || call == null || call.name != 'Skill') return;
+  final (body, cut) = boundedToolOutput(text.substring(header.end).trim());
+  out[out.length - 1] = TranscriptMessage(
+    role: last!.role,
+    text: last.text,
+    tool: call.withResult(output: body, outputTruncated: cut),
+    at: last.at,
+    thinking: last.thinking,
+    compaction: last.compaction,
+  );
+}
+
+final RegExp _skillBodyHeader = RegExp(
+  r'^Base directory for this skill:[^\n]*\n*',
+);
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
 String _withoutPasteTags(String text) => text.replaceAll(_pasteTag, '');

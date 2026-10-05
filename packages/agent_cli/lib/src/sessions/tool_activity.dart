@@ -311,6 +311,7 @@ const List<String> kToolSubjectKeys = [
   'url',
   'query',
   'description',
+  'skill',
 ];
 
 /// The identifying line for a tool call's `input` map, or null when it carries
