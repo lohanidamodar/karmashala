@@ -627,6 +627,38 @@ void main() {
       expect((resized.columns, resized.rows), (60, 30));
       expect(channel.all<ClaimMessage>().single.takeOver, isTrue);
     });
+
+    test('Take over claims before it asks for the phone\'s size: the server '
+        'sizes the session for no one who only looks', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = await phoneOnDesktopSession(access);
+      final channel = access.channels.single..push(heldBy('desktop'));
+      await settle();
+
+      unawaited(pane.takeOver());
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      final sent = channel.received;
+      final claimAt = sent.indexWhere((m) => m is ClaimMessage);
+      final resizeAt = sent.lastIndexWhere(
+        (m) => m is ResizeMessage && (m.columns, m.rows) == (60, 30),
+      );
+      expect(claimAt, isNonNegative);
+      expect(resizeAt, greaterThan(claimAt));
+    });
+
+    test('back at the session\'s size, it lets go, so the server can give '
+        'the session back to the device it was taken from', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = await phoneOnDesktopSession(access);
+      final channel = access.channels.single;
+      unawaited(pane.fitToView());
+      await Future<void>.delayed(kColumnResizeSettle * 2);
+      expect(channel.all<ReleaseMessage>(), isEmpty);
+
+      pane.drawAtSessionGrid();
+      await settle();
+      expect(channel.all<ReleaseMessage>(), hasLength(1));
+    });
   });
 
   test(

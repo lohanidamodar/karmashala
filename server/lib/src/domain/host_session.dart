@@ -274,12 +274,18 @@ class HostSession implements ScreenSession {
   ) {
     final refusal = _requireToken(clientId, now);
     if (refusal != null) return refusal;
+    resizeAsHost(newColumns, newRows);
+    return null;
+  }
+
+  /// The host's own resize, not gated by the token: the size handed back to
+  /// the client a session was taken from once the taker lets go.
+  void resizeAsHost(int newColumns, int newRows) {
     columns = newColumns;
     rows = newRows;
     _pty.resize(newColumns, newRows);
     _screen?.resize(newColumns, newRows);
     recorder?.resized(backlog.totalBytes, newColumns, newRows);
-    return null;
   }
 
   /// The screen as escape bytes and the output offset it stands for, or null

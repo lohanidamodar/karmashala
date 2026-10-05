@@ -24,11 +24,14 @@ class SessionBackgroundRun {
   final DateTime? startedAt;
   final SubagentRef? subagent;
 
-  /// How long it ran, or has run so far at [now]; null without a start.
+  /// How long it ran, or has run so far at [now]; null without a start, or
+  /// for a run that is over with no end recorded.
   Duration? elapsedAt(DateTime now) {
     final start = startedAt;
     if (start == null) return null;
-    final elapsed = (run.endedAt ?? now).difference(start);
+    final end = run.endedAt ?? (run.state.isRunning ? now : null);
+    if (end == null) return null;
+    final elapsed = end.difference(start);
     return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
@@ -90,3 +93,18 @@ final sessionBackgroundRunsProvider = Provider.autoDispose
       if (older != null && older.isNotEmpty) messages = [...older, ...messages];
       return backgroundRunsIn(messages);
     });
+
+/// Whether each session's background runs are folded to their one-line
+/// summary, as the person last left them; absent until they choose.
+class BackgroundRunsFolded extends Notifier<Map<String, bool>> {
+  @override
+  Map<String, bool> build() => const {};
+
+  void set(String sessionId, {required bool folded}) =>
+      state = {...state, sessionId: folded};
+}
+
+final backgroundRunsFoldedProvider =
+    NotifierProvider<BackgroundRunsFolded, Map<String, bool>>(
+      BackgroundRunsFolded.new,
+    );

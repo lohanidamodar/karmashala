@@ -342,8 +342,10 @@ class HostTerminalInstance
     if (!drawsAtSessionGrid) return;
     _atSessionGrid.value = false;
     final grid = viewGrid;
-    if (grid != null) terminal.resize(grid.$1, grid.$2);
     final link = _link;
+    // The claim goes first: the host resizes only for the client holding it.
+    final claimed = link?.takeOver();
+    if (grid != null) terminal.resize(grid.$1, grid.$2);
     if (link == null) return;
     // Said again in case the resize above changed nothing locally, and as
     // asked: a settling terminal may not have landed it yet.
@@ -352,17 +354,20 @@ class HostTerminalInstance
       grid?.$1 ?? terminal.viewWidth,
       grid?.$2 ?? terminal.viewHeight,
     );
-    await link.takeOver();
+    await claimed;
   }
 
-  /// Back to the session's grid after [fitToView]. The session stays at the
-  /// size it was fitted to until whoever drives it next resizes it.
+  /// Back to the session's grid after [fitToView]. The input is let go, so
+  /// the host gives the session back at the grid of the client it was taken
+  /// from.
   void drawAtSessionGrid() {
     if (drawsAtSessionGrid) return;
     _atSessionGrid.value = true;
-    final told = _presence.value;
     final link = _link;
-    if (told == null || link == null) return;
+    if (link == null) return;
+    unawaited(link.release());
+    final told = _presence.value;
+    if (told == null) return;
     _followSessionGrid(link, told.columns, told.rows, holds: told.mine);
   }
 

@@ -302,4 +302,168 @@ void main() {
     );
     expect(back.background, row.background);
   });
+
+  group('a run that ended though nothing reported it finishing', () {
+    // Shapes recorded from Claude Code 2.1.284–2.1.287 on 2026-10-05.
+    Map<String, Object?> taskStopCall(String id, String taskId) => {
+      'type': 'assistant',
+      'timestamp': '2026-10-04T15:10:00.000Z',
+      'message': {
+        'role': 'assistant',
+        'content': [
+          {
+            'type': 'tool_use',
+            'id': id,
+            'name': 'TaskStop',
+            'input': {'task_id': taskId},
+          },
+        ],
+      },
+    };
+
+    Map<String, Object?> taskStopped(String id, String taskId) => {
+      'type': 'user',
+      'timestamp': '2026-10-04T15:10:00.300Z',
+      'message': {
+        'role': 'user',
+        'content': [
+          {
+            'tool_use_id': id,
+            'type': 'tool_result',
+            'content':
+                '{"message":"Successfully stopped task: $taskId (flutter '
+                'test)","task_id":"$taskId","task_type":"local_bash",'
+                '"command":"flutter test"}',
+          },
+        ],
+      },
+      'toolUseResult': {
+        'message': 'Successfully stopped task: $taskId (flutter test)',
+        'task_id': taskId,
+        'task_type': 'local_bash',
+        'command': 'flutter test',
+      },
+    };
+
+    Map<String, Object?> written(Map<String, Object?> line, String version) => {
+      ...line,
+      'version': version,
+    };
+
+    test('a notice that it was stopped ends it', () async {
+      writeParent([
+        bashCall('toolu_3', 'Start the debug probe'),
+        bashLaunched('toolu_3', 'b1'),
+        notified(
+          'b1',
+          '2026-10-04T15:00:00.000Z',
+          status: 'stopped',
+          summary: 'Background command "Start the debug probe" was stopped',
+        ),
+      ]);
+
+      final run = runOf(await read(), 'b1');
+      expect(run.state, BackgroundRunState.killed);
+      expect(run.endedAt, DateTime.utc(2026, 10, 4, 15));
+    });
+
+    test('the agent stopping it with TaskStop ends it, when the stop '
+        'answered', () async {
+      writeParent([
+        bashCall('toolu_3', 'Start the debug probe'),
+        bashLaunched('toolu_3', 'b1'),
+        bashCall('toolu_4', 'Watch the round-4 fix session'),
+        bashLaunched('toolu_4', 'b2'),
+        taskStopCall('toolu_5', 'b1'),
+        taskStopped('toolu_5', 'b1'),
+      ]);
+
+      final messages = await read();
+      final stopped = runOf(messages, 'b1');
+      expect(stopped.state, BackgroundRunState.killed);
+      expect(stopped.endedAt, DateTime.utc(2026, 10, 4, 15, 10, 0, 300));
+      expect(runOf(messages, 'b2').state, BackgroundRunState.running);
+    });
+
+    test('a refused TaskStop leaves it running', () async {
+      final refused = {
+        'type': 'user',
+        'timestamp': '2026-10-04T15:10:00.300Z',
+        'message': {
+          'role': 'user',
+          'content': [
+            {
+              'tool_use_id': 'toolu_5',
+              'type': 'tool_result',
+              'content': 'No task found with ID: b1',
+              'is_error': true,
+            },
+          ],
+        },
+      };
+      writeParent([
+        bashCall('toolu_3', 'Start the debug probe'),
+        bashLaunched('toolu_3', 'b1'),
+        taskStopCall('toolu_5', 'b1'),
+        refused,
+      ]);
+
+      expect(runOf(await read(), 'b1').state, BackgroundRunState.running);
+    });
+
+    test('the notice that tasks did not finish before the previous session '
+        'ended stops every task it names', () async {
+      writeParent([
+        bashCall('toolu_3', 'Start the debug probe'),
+        bashLaunched('toolu_3', 'b1'),
+        bashCall('toolu_4', 'Build and run the app'),
+        bashLaunched('toolu_4', 'b2'),
+        {
+          'type': 'user',
+          'timestamp': '2026-10-05T09:04:54.559Z',
+          'message': {
+            'role': 'user',
+            'content':
+                '<task-notification>\n<task-id>b1</task-id>\n'
+                '<task-id>b2</task-id>\n'
+                '<task-id>__orphan_summary__:shell</task-id>\n'
+                '<status>stopped</status>\n<summary>2 background shell '
+                'command tasks didn\'t finish before the previous session '
+                'ended. Task ids: b1, b2.</summary>\n<note>No completion '
+                'record was found for them in the previous session. They '
+                'have been marked stopped.</note>\n</task-notification>',
+          },
+        },
+      ]);
+
+      final messages = await read();
+      for (final id in ['b1', 'b2']) {
+        final run = runOf(messages, id);
+        expect(run.state, BackgroundRunState.killed, reason: id);
+        expect(run.endedAt, DateTime.utc(2026, 10, 5, 9, 4, 54, 559));
+      }
+    });
+
+    test('one the agent\'s earlier process left running, with nothing said '
+        'of it since that process was replaced, is not recorded, never '
+        'running', () async {
+      writeParent([
+        written(bashCall('toolu_3', 'Start the debug probe'), '2.1.284'),
+        written(bashLaunched('toolu_3', 'b1'), '2.1.284'),
+        written({
+          'type': 'user',
+          'timestamp': '2026-10-05T09:05:16.748Z',
+          'message': {'role': 'user', 'content': 'carry on'},
+        }, '2.1.287'),
+        written(bashCall('toolu_4', 'Build and run the app'), '2.1.287'),
+        written(bashLaunched('toolu_4', 'b2'), '2.1.287'),
+      ]);
+
+      final messages = await read();
+      final lost = runOf(messages, 'b1');
+      expect(lost.state, BackgroundRunState.ended);
+      expect(lost.endedAt, isNull);
+      expect(runOf(messages, 'b2').state, BackgroundRunState.running);
+    });
+  });
 }

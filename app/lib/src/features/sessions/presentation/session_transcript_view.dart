@@ -872,7 +872,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Directly above the box and outside the scroll, so a long queue
           // never hides the running turn or its Stop.
           PinnedPlanStrip(sessionId: widget.sessionId),
-          BackgroundRunsStrip(sessionId: widget.sessionId),
+          // Flexible like the queue: with the keyboard up it gives way, and
+          // the box stays in sight.
+          Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
           ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
