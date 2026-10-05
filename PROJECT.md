@@ -12,7 +12,8 @@ Agent development environment that works with multiple agent cli, claude code, c
 
 Primary targets:
 - Windows / macOS / Linux
-- mobile app will be a remote companion
+- Android (iOS next): the same app, as a client of a desktop or a server.
+  There is no separate phone build; the old companion app is retired.
 
 Primary goals:
 
@@ -1248,7 +1249,7 @@ not the number, not the timestamp — so a located binary whose `--version` fail
 never erases a number we did know.
 
 **Deferred, deliberately.** The pickers (quick open, the new-session dialog,
-Settings → Environments, the companion) and the MCP `list_agents` payload still
+Settings → Environments) and the MCP `list_agents` payload still
 show a bare number; each is choosing *which* agent rather than reading its
 version, and the reading time is on the row for whenever that changes. No
 refresh when the panel opens (§19's Tools precedent would allow it; the launch

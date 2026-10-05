@@ -303,6 +303,10 @@ server's; the desktop's own devices stay its own.
 
 ### Moving a phone from the companion to the app
 
+The old phone companion is retired: it is no longer built or released, and
+the Karmashala app is the phone app. The server still serves a phone that has
+only the companion, so nothing breaks before it is moved.
+
 The Karmashala app on a phone has the companion's app id, so it installs over
 the companion in place. **Only when both are signed with the same key**: over
 a companion signed differently (a sideloaded, debug-signed APK under a Play
@@ -326,8 +330,6 @@ Either one adds the whole phone preset to what the pairing held, so bits the
 companion was paired without (attachments, usage) come with it.
 
 The app picks the grant up within a few seconds, or at once with *Try again*.
-Installing the companion again over the app (the way back, same key) keeps
-the pairing: both read the same records.
 
 ### Devices
 

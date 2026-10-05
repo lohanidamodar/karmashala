@@ -179,7 +179,6 @@ artifacts locally on Windows and macOS.
 | `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, to point a bridge at a particular install. |
 | `KARMASHALA_RELAY_URL` | build-time `--dart-define` | The hosted relay phones meet the desktop at when neither side names its own. Unset in a source build, which then offers no hosted relay. The official build recipes pass it. |
 | `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. |
-| `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the older phone companion from this codebase. |
 | `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests | Where to dial. Unset, those tests skip themselves. |
 
 ## Project layout
