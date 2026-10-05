@@ -3884,6 +3884,8 @@ WorkbenchView
                                                                                                                               SizedBox
                                                                                       PinnedPlanStrip
                                                                                         SizedBox
+                                                                                      BackgroundRunsStrip
+                                                                                        SizedBox
                                                                                       ActivityStrip
                                                                                         SizedBox
                                                                                       ConstrainedBox

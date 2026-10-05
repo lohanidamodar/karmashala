@@ -75,6 +75,7 @@ import 'transcript_image_preview.dart';
 import 'stop_children_offer.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
+import 'background_runs_strip.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -871,6 +872,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Directly above the box and outside the scroll, so a long queue
           // never hides the running turn or its Stop.
           PinnedPlanStrip(sessionId: widget.sessionId),
+          BackgroundRunsStrip(sessionId: widget.sessionId),
           ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
@@ -1272,7 +1274,11 @@ List<ChatMessage> chatMessagesFromTranscript(
         tool: message.tool,
         thinking: message.thinking,
         at: message.at,
-        pending: message.pendingToolUseId != null,
+        // A background call is answered at once; its row runs as long as the
+        // work it started does.
+        pending:
+            message.pendingToolUseId != null ||
+            (message.background?.state.isRunning ?? false),
         pendingToolUseId: message.pendingToolUseId,
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,

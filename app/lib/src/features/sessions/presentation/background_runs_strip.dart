@@ -1,0 +1,188 @@
+import 'dart:async';
+
+import 'package:agent_cli/read.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/rows.dart';
+import 'package:karmashala_ui/tokens.dart';
+
+import '../../../app/widgets/adaptive_modal.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../cli_detection/presentation/subagent_turns_tile.dart';
+import '../application/background_runs_providers.dart';
+
+/// **The background runs a session is waiting on**, above its composer: each
+/// agent or command it left running, how long it has run, and how the ones
+/// that finished since ended. An agent opens to its own turns. Nothing at all
+/// while nothing runs.
+class BackgroundRunsStrip extends ConsumerStatefulWidget {
+  const BackgroundRunsStrip({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  ConsumerState<BackgroundRunsStrip> createState() =>
+      _BackgroundRunsStripState();
+}
+
+class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
+  Timer? _tick;
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    _tick = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final runs = ref.watch(sessionBackgroundRunsProvider(widget.sessionId));
+    if (runs.isEmpty || !Visibility.of(context)) {
+      _tick?.cancel();
+      _tick = null;
+      if (runs.isEmpty) return const SizedBox.shrink();
+    } else {
+      _tick ??= Timer.periodic(kActivityTickInterval, (_) => setState(() {}));
+    }
+    final now = ref.read(clockProvider).nowUtc();
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_heading(runs), style: muted),
+          for (final entry in runs)
+            _RunRow(
+              entry: entry,
+              now: now,
+              sessionId: widget.sessionId,
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _heading(List<SessionBackgroundRun> runs) {
+    var agents = 0;
+    var commands = 0;
+    for (final entry in runs) {
+      if (!entry.run.state.isRunning) continue;
+      if (entry.run.kind == BackgroundRunKind.agent) {
+        agents++;
+      } else {
+        commands++;
+      }
+    }
+    String count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
+    if (commands == 0) {
+      return '${count(agents, 'background agent')} running';
+    }
+    if (agents == 0) {
+      return '${count(commands, 'background command')} running';
+    }
+    return '${count(agents, 'agent')} and ${count(commands, 'command')} '
+        'running in the background';
+  }
+}
+
+class _RunRow extends StatelessWidget {
+  const _RunRow({
+    required this.entry,
+    required this.now,
+    required this.sessionId,
+  });
+
+  final SessionBackgroundRun entry;
+  final DateTime now;
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final semantic = SemanticColors.of(context);
+    final run = entry.run;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final elapsed = entry.elapsedAt(now);
+    final state = switch (run.state) {
+      BackgroundRunState.running => 'running',
+      BackgroundRunState.completed => 'done',
+      BackgroundRunState.failed => 'failed',
+      BackgroundRunState.killed => 'stopped',
+      BackgroundRunState.ended => 'ended',
+    };
+    final trailing = elapsed == null
+        ? state
+        : '$state · ${formatElapsed(elapsed)}';
+    final Widget mark = switch (run.state) {
+      BackgroundRunState.running => WorkingSpinner(
+        size: Chrome.iconSmall,
+        color: semantic.working,
+      ),
+      BackgroundRunState.completed => Icon(
+        AppIcons.check,
+        size: Chrome.iconSmall,
+        color: scheme.onSurfaceVariant,
+      ),
+      _ => Icon(AppIcons.x, size: Chrome.iconSmall, color: scheme.error),
+    };
+    final subagent = entry.subagent;
+    final title =
+        run.description ??
+        (run.kind == BackgroundRunKind.agent ? 'Agent' : 'Command');
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.hair),
+      child: Row(
+        children: [
+          mark,
+          const SizedBox(width: Insets.sm),
+          Icon(
+            run.kind == BackgroundRunKind.agent
+                ? AppIcons.robot
+                : AppIcons.terminal,
+            size: Chrome.iconSmall,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          Text(trailing, maxLines: 1, style: muted),
+        ],
+      ),
+    );
+    final summary = run.summary;
+    final described = summary == null ? row : Tooltip(message: summary, child: row);
+    if (subagent == null) return described;
+    return InkWell(
+      onTap: () => showAdaptiveModal<void>(
+        context: context,
+        title: title,
+        heightFactor: 0.8,
+        builder: (_) => SingleChildScrollView(
+          child: SubagentTurnsTile(
+            reference: subagent,
+            sessionId: sessionId,
+            initiallyExpanded: true,
+          ),
+        ),
+      ),
+      child: described,
+    );
+  }
+}

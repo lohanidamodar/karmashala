@@ -154,7 +154,7 @@ class TranscriptDigest {
   /// The newest row before [end] whose tool published a plan.
   final TranscriptUpdate? plan;
 
-  /// The rows before [end] with a call or a background subagent still open,
+  /// The rows before [end] with a call or a background run still open,
   /// oldest first.
   final List<TranscriptUpdate> pending;
 
@@ -166,7 +166,8 @@ class TranscriptDigest {
       final message = messages[i];
       if (message.tool?.plan != null) plan = TranscriptUpdate(i, message);
       if (message.pendingToolUseId != null ||
-          message.pendingBackgroundAgentId != null) {
+          message.pendingBackgroundAgentId != null ||
+          (message.background?.state.isRunning ?? false)) {
         pending.add(TranscriptUpdate(i, message));
       }
     }
