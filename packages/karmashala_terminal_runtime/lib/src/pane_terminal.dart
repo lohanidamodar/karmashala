@@ -3,6 +3,8 @@ import 'dart:math' show max;
 
 import 'package:xterm2/xterm.dart';
 
+import 'row_fill.dart';
+
 /// How long a pane's size has to hold still before its terminal takes it: a
 /// drag is then two reflows and two SIGWINCHes, not one per column, and a
 /// burst of row changes reaches the agent as its last size.
@@ -100,7 +102,7 @@ class PaneTerminal extends Terminal {
   Duration? _movedAt;
 
   /// A size nobody dragged to — a grid hint — which opens no settling window.
-  void resizeNow(int columns, int rows) => super.resize(columns, rows);
+  void resizeNow(int columns, int rows) => _resizeBuffer(columns, rows);
 
   @override
   void resize(
@@ -125,7 +127,7 @@ class PaneTerminal extends Terminal {
     }
     if (columns == viewWidth && rows == viewHeight) {
       _pending = null;
-      super.resize(columns, rows, pixelWidth, pixelHeight);
+      _resizeBuffer(columns, rows, pixelWidth, pixelHeight);
       return;
     }
 
@@ -133,7 +135,7 @@ class PaneTerminal extends Terminal {
     final quiet = movedAt == null || _now() - movedAt >= settle;
     if (quiet && _settling == null) {
       _movedAt = _now();
-      super.resize(columns, rows, pixelWidth, pixelHeight);
+      _resizeBuffer(columns, rows, pixelWidth, pixelHeight);
       return;
     }
 
@@ -146,6 +148,13 @@ class PaneTerminal extends Terminal {
     _settling = Timer(settle, _land);
   }
 
+  /// Reflowing narrower would wrap a TUI's rules and padding onto rows of
+  /// their own; cut first, as the TUI would redraw them at the new width.
+  void _resizeBuffer(int columns, int rows, [int? pixelW, int? pixelH]) {
+    if (columns < viewWidth) cutFillsPast(mainBuffer, columns);
+    super.resize(columns, rows, pixelW, pixelH);
+  }
+
   void _land() {
     final size = _pending;
     _settling = null;
@@ -154,7 +163,7 @@ class PaneTerminal extends Terminal {
     if (size == null) return;
     if ((size.$1, size.$2) == (viewWidth, viewHeight)) return;
     _movedAt = _now();
-    super.resize(size.$1, size.$2, _pixelWidth, _pixelHeight);
+    _resizeBuffer(size.$1, size.$2, _pixelWidth, _pixelHeight);
     // `resize` tells nobody, being normally called from a layout; this was not.
     notifyListeners();
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:xterm2/xterm.dart';
 
@@ -214,6 +215,65 @@ void main() {
         ...wrapped([text], 50),
         'next',
       ]);
+    });
+
+    group('captured: an answered question above the box, 348 wide', () {
+      // A two-column block: the header padded out to the edge, its first item
+      // a continuation, the second a line of its own.
+      Terminal captured(Terminal terminal) {
+        const header = "● User answered Claude's questions:";
+        const second = '     · Which fruits do you like? → Pear';
+        terminal.write(
+          '$header${' ' * (348 - header.length)}'
+          '  └ · Which color do you pick? → Red\r\n'
+          '$second${' ' * (348 - second.length)}\r\n\r\n'
+          '${rule(348)}❯ \r\n${rule(348)}'
+          '\x1b[38;2;153;153;153m  ⏸ manual mode on · ? for shortcuts\x1b[0m',
+        );
+        return terminal;
+      }
+
+      final at87 = [
+        "● User answered Claude's questions:",
+        '  └ · Which color do you pick? → Red',
+        '     · Which fruits do you like? → Pear',
+        '',
+        '─' * 87,
+        '❯',
+        '─' * 87,
+        '  ⏸ manual mode on · ? for shortcuts',
+      ];
+
+      PaneTerminal pane(int width) =>
+          PaneTerminal(maxLines: 5000, settle: Duration.zero)
+            ..resizeNow(width, 20);
+
+      test('restored into a wider grid and then narrowed', () {
+        final encoded = encodeScrollback(captured(blank(348, height: 20)));
+        final restored = pane(122)..write(encoded);
+        restored.resize(87, 20);
+        expect(rowsOf(restored), at87);
+      });
+
+      test('narrowed live, then saved and restored', () {
+        final live = captured(pane(348))..resize(87, 20);
+        expect(rowsOf(live), at87);
+        final restored = blank(87, height: 20)..write(encodeScrollback(live));
+        expect(rowsOf(restored), at87);
+      });
+
+      test('the leftover of a cut rule saved before is dropped', () {
+        // What an older save holds: rows as wide as the pane they came from,
+        // read back narrower, so each rule's rest ran onto rows of its own.
+        final old = blank(87, height: 20)
+          ..write(
+            '${'─' * 152}\r\n❯ \r\n${'─' * 152}\r\n'
+            '  ⏸ manual mode on · ? for shortcuts',
+          );
+        expect(rowsOf(old), hasLength(6));
+        final restored = blank(87, height: 20)..write(encodeScrollback(old));
+        expect(rowsOf(restored), at87.sublist(4));
+      });
     });
 
     test('a rule after text that fills the row starts a row of its own', () {
