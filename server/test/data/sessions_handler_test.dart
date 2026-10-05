@@ -6,6 +6,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -428,6 +429,79 @@ void main() {
           .handle(FollowUpResolve(raised.id!, FollowUpResolution.sessionGone))
           .value!;
       expect(again.resolution, FollowUpResolution.dismissed);
+    });
+  });
+
+  group('a failed start', () {
+    FollowUp failed(String sessionId) => FollowUp(
+      sessionId: sessionId,
+      reason: FollowUpReason.endedInFailure,
+      ending: SessionEnding.failed,
+      raisedAt: now,
+    );
+
+    FollowUp followUpOf(String sessionId) =>
+        snapshot().followUps.where((f) => f.sessionId == sessionId).single;
+
+    test('is retired as carried forward once another session starts in the '
+        'same place, and said so', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      app.handle(FollowUpRaise(failed('f1')));
+
+      app.handle(SessionCreate(row(id: 's2')));
+
+      expect(followUpOf('f1').resolution, FollowUpResolution.carriedForward);
+      expect(
+        lastTold().whereType<FollowUpChanged>().single.followUp.sessionId,
+        'f1',
+      );
+    });
+
+    test('is retired by a session the server starts itself, when it '
+        'announces the row', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      app.handle(FollowUpRaise(failed('f1')));
+
+      SessionDao(db).insertWithPrimaryRepository(row(id: 's2'));
+      service.announceSessions(['s2']);
+
+      expect(followUpOf('f1').resolution, FollowUpResolution.carriedForward);
+      expect(lastTold().whereType<FollowUpChanged>(), hasLength(1));
+    });
+
+    test('is not retired by a session that was already there before it '
+        'failed', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      SessionDao(db).insertWithPrimaryRepository(
+        row(
+          id: 'old',
+        ).copyWith(createdAt: now.subtract(const Duration(hours: 1))),
+      );
+      app.handle(FollowUpRaise(failed('f1')));
+
+      service.announceSessions(['old']);
+
+      expect(followUpOf('f1').isOpen, isTrue);
+    });
+
+    test('stays while nothing new starts there: a fresh failure is still '
+        'news', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      app.handle(FollowUpRaise(failed('f1')));
+
+      app.handle(SessionCreate(row(id: 's2', repositoryId: 'r3')));
+
+      expect(followUpOf('f1').isOpen, isTrue);
+    });
+
+    test('a session that got as far as a name keeps its follow-up: it may '
+        'have left work behind', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'Refactor the parser')));
+      app.handle(FollowUpRaise(failed('f1')));
+
+      app.handle(SessionCreate(row(id: 's2')));
+
+      expect(followUpOf('f1').isOpen, isTrue);
     });
   });
 

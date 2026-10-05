@@ -106,7 +106,34 @@ class SessionsHandler {
     changes
       ..add(SessionRowChanged(stored))
       ..add(SessionLinksChanged(session.id, _links.linksFor(session.id)));
+    retireFailedStartsBefore(stored.id, changes);
     return stored;
+  }
+
+  /// A failed start — ended in error before the agent ever named it — is
+  /// carried forward once [startedId], a session started since, is in the
+  /// same place: the person tried again, and nothing opens the old one.
+  void retireFailedStartsBefore(String startedId, List<DataChange> changes) {
+    final started = _sessions.getById(startedId);
+    if (started == null) return;
+    for (final followUp in _followUps.open()) {
+      if (followUp.reason != FollowUpReason.endedInFailure) continue;
+      final failed = _sessions.getById(followUp.sessionId);
+      if (failed == null ||
+          failed.id == started.id ||
+          started.createdAt.isBefore(followUp.raisedAt) ||
+          failed.repositoryId != started.repositoryId ||
+          failed.workingDirectory != started.workingDirectory ||
+          !isPlaceholderSessionTitle(failed.title)) {
+        continue;
+      }
+      _followUps.resolve(
+        followUp.id!,
+        resolution: FollowUpResolution.carriedForward,
+        at: _now(),
+      );
+      changes.add(FollowUpChanged(_followUps.getById(followUp.id!)!));
+    }
   }
 
   Session edit(SessionEdit request, List<DataChange> changes) {

@@ -326,8 +326,13 @@ class DataService {
   /// [announce]s sessions [sessionIds] as they now stand — rows the server
   /// wrote itself: a lifecycle status, a session it started, a mode a phone
   /// chose. A row that is gone is told removed.
-  void announceSessions(Iterable<String> sessionIds) =>
-      announce(_sessions.sessionsNow(sessionIds));
+  void announceSessions(Iterable<String> sessionIds) {
+    final changes = _sessions.sessionsNow(sessionIds);
+    for (final id in sessionIds.toSet()) {
+      _sessions.retireFailedStartsBefore(id, changes);
+    }
+    announce(changes);
+  }
 
   /// Records the agent CLIs the server found on this machine ([here]) by
   /// the one reconciliation rule, and tells every client what it wrote.
