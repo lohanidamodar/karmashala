@@ -116,5 +116,10 @@ void main() {
     // taken back off disk when the daemon stops.
     expect(out.text.toString(), contains('agent tools on port '));
     expect(File(p.join(dataDir.path, 'mcp_bridge.json')).existsSync(), isFalse);
+    // What it said is kept beside its data, for when nobody was reading.
+    expect(
+      File(p.join(dataDir.path, 'logs', 'server.log')).readAsStringSync(),
+      contains('store ${p.join(dataDir.path, 'karmashala.sqlite')}'),
+    );
   }, testOn: 'mac-os || linux');
 }

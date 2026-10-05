@@ -1320,6 +1320,14 @@ which the server and every client of the relay read instead of repeating.
 into `.dart_tool/`, and parallel workers collide on the locked library. The live
 harnesses build once per isolate instead.
 
+**The server's log is `<data>/logs/server.log`** — `~/.karmashala/logs/` for
+the owner's server, `<KARMASHALA_DATA_DIR>/logs/` for a probe's. `serve`
+usually runs detached with nobody reading its stdout or stderr, so every line
+it writes there is also filed here (redacted by `LogRedactor`), rotated at
+2 MB with `server.1.log` and `server.2.log` kept (`ServerLogFile`). An attached
+`serve` still prints to its terminal. On an SSH box the deployer's
+`<host dir>/host.log` captures stderr as before.
+
 ## 23. Probe mode — building Karmashala inside Karmashala
 
 Karmashala is developed from sessions running **inside** the installed app. To

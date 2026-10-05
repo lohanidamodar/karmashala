@@ -182,6 +182,7 @@ import 'package:karmashala_host_protocol/host_paths.dart';
 import 'host_server.dart';
 import 'lifecycle_feed.dart';
 import 'session_status_recording.dart';
+import 'server_log_file.dart';
 import 'session_store.dart';
 import 'surviving_sink.dart';
 
@@ -218,10 +219,38 @@ Future<int> runServe(
   Future<void>? until,
   ServerAgents Function(DataService data)? agentsFor,
 }) async {
-  // Nobody may be reading either once the app that started this has quit;
-  // a write that fails must cost the line, never the daemon.
-  final sink = SurvivingSink(out ?? stdout);
-  final errSink = SurvivingSink(err ?? stderr);
+  // Everything it says is kept in `<data>/logs/server.log` too.
+  final log = ServerLogFile();
+  try {
+    return await _serve(
+      args,
+      log: log,
+      environment: environment,
+      agentScanDelay: agentScanDelay,
+      // Nobody may be reading either once the app that started this has
+      // quit; a write that fails must cost the line, never the daemon.
+      sink: FiledSink(SurvivingSink(out ?? stdout), log, channel: 'out'),
+      errSink: FiledSink(SurvivingSink(err ?? stderr), log, channel: 'err'),
+      paths: paths,
+      until: until,
+      agentsFor: agentsFor,
+    );
+  } finally {
+    await log.close();
+  }
+}
+
+Future<int> _serve(
+  List<String> args, {
+  required ServerLogFile log,
+  required Map<String, String>? environment,
+  required Duration agentScanDelay,
+  required IOSink sink,
+  required IOSink errSink,
+  required HostPaths? paths,
+  required Future<void>? until,
+  required ServerAgents Function(DataService data)? agentsFor,
+}) async {
   final named = dataDirectoryOf(args);
   if (named == null && environment == null) {
     throw ArgumentError(
@@ -243,6 +272,7 @@ Future<int> runServe(
     errSink.writeln('karmashala_host: refusing to serve — ${error.message}');
     return 2;
   }
+  log.open(dataDirectory);
   // The config is read, and refused, before anything binds: a server told
   // to bind somewhere it cannot parse must not bind somewhere else.
   final ServerConfigService config;
