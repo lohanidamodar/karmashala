@@ -1,6 +1,9 @@
 /// Who names a session: a person, or — until one does — the machine.
 library;
 
+import 'scratch_preamble.dart';
+import 'session_attribution.dart';
+
 /// The titles Karmashala writes itself. Each means "nobody has named this
 /// yet", so the agent's own name for the conversation may replace it.
 const Set<String> kAppGeneratedSessionTitles = {'New session', 'Session'};
@@ -33,12 +36,18 @@ bool isPlaceholderSessionTitle(String title) {
 
 /// What a session started with [message] is called while nobody has named
 /// it: its first line, without a heading's marks, cut near 60 characters.
+/// Karmashala's own notes — the scratch-folder preamble, the line naming
+/// the session that asked — are never what it is called.
 String sessionTitleFromMessage(String message) {
-  final line = message
+  final lines = splitScratchPreamble(message).rest
       .split('\n')
       .map((l) => l.replaceFirst(RegExp(r'^\s*#+\s*'), '').trim())
-      .firstWhere((l) => l.isNotEmpty, orElse: () => '')
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .where((l) => l.isNotEmpty)
+      .toList();
+  if (lines.isNotEmpty && SessionAttribution.isLine(lines.first)) {
+    lines.removeAt(0);
+  }
+  final line = (lines.firstOrNull ?? '').replaceAll(RegExp(r'\s+'), ' ');
   if (line.isEmpty) return kUnnamedSessionTitle;
   if (line.length <= 60) return line;
   final cut = line.substring(0, 60);

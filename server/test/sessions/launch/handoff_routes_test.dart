@@ -10,6 +10,7 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_session/launch.dart' show SessionSurface;
+import 'package:karmashala_session/session.dart' show SessionAttribution;
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
@@ -91,6 +92,7 @@ void main() {
     String title = 'cart',
     bool windows = true,
     SessionSurface surface = SessionSurface.pane,
+    String? parent,
   }) {
     final rows = CheckoutRows(database);
     return HostedAgentLauncher(
@@ -111,6 +113,7 @@ void main() {
         prompt: prompt,
         systemPrompt: packet,
         surface: surface,
+        parentSessionId: parent,
       ),
     );
   }
@@ -208,6 +211,30 @@ void main() {
         'the message it has', () async {
       final started = await launch('cc', prompt: multiLine, title: '');
       expect(started.session.title, 'Session');
+    });
+
+    const asked = SessionAttribution(sessionId: 'p-1', title: 'Orchestrator');
+
+    test('a spawned session pointed at a file is named from its prompt, not '
+        'from the line naming who asked', () async {
+      final started = await launch(
+        'cx',
+        prompt: asked.render('# Speed up the cart\n\nThe totals are slow.'),
+        title: '',
+        parent: 'p-1',
+      );
+      expect(started.session.title, 'Speed up the cart');
+    });
+
+    test('a spawned session typed into is named from its prompt at once', () async {
+      final started = await launch(
+        'cc',
+        prompt: asked.render('Write the tests\nfor the cart'),
+        title: '',
+        parent: 'p-1',
+      );
+      expect(started.session.title, 'Write the tests');
+      expect(SessionDao(database).getById('s-cc')!.titleByUser, isFalse);
     });
 
     test('a named session keeps its name', () async {

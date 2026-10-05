@@ -229,7 +229,24 @@ void main() {
     expect(named.titleByUser, isTrue);
 
     await tools.call('open_new_session', {'projectId': 'p1'}, 'caller');
-    expect(SessionDao(database).getById('new-2')!.titleByUser, isFalse);
+    final unnamed = SessionDao(database).getById('new-2')!;
+    expect(unnamed.titleByUser, isFalse);
+    expect(isPlaceholderSessionTitle(unnamed.title), isTrue);
+  });
+
+  test('an untitled spawn is named from its prompt, not from the line '
+      'naming its caller', () async {
+    insertCaller('caller');
+    final answer =
+        (await tools.call('open_new_session', {
+              'projectId': 'p1',
+              'prompt': 'Fix the cart totals\n\nThey round wrong.',
+            }, 'caller')!)
+            as Map<String, Object?>;
+    expect(answer['title'], 'Fix the cart totals');
+    final row = SessionDao(database).getById('new-1')!;
+    expect(row.title, 'Fix the cart totals');
+    expect(row.titleByUser, isFalse);
   });
 
   test('refuses past the spawn depth, nothing started', () async {

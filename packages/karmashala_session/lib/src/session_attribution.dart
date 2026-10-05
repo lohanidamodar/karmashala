@@ -12,6 +12,14 @@ class SessionAttribution {
   String get line =>
       '[message from the Karmashala session "$title" ($sessionId)]';
 
+  /// Whether [text] is a whole attribution line, whoever's. For naming only:
+  /// anchored to the line's end, so a `]` inside the title cannot cut it.
+  static bool isLine(String text) => _shape.hasMatch(text.trim());
+
+  static final _shape = RegExp(
+    r'^\[message from the Karmashala session ".*" \([^()\s]+\)\]$',
+  );
+
   /// [line] followed by a blank line, then [message].
   String render(String message) => '$line\n\n$message';
 

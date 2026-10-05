@@ -39,4 +39,27 @@ void main() {
     expect(long, endsWith('…'));
     expect(sessionTitleFromMessage('   '), kUnnamedSessionTitle);
   });
+
+  test('a spawned session is named from what it was asked, never from the '
+      'line naming who asked or the scratch-folder note', () {
+    const attribution = SessionAttribution(
+      sessionId: 'abc-1',
+      title: 'Fix [urgent] crash',
+    );
+    expect(
+      sessionTitleFromMessage(attribution.render('# Speed up the cart\nMore')),
+      'Speed up the cart',
+    );
+    expect(
+      sessionTitleFromMessage(
+        withScratchPreamble('/tmp/s1', attribution.render('Write the tests')),
+      ),
+      'Write the tests',
+    );
+    expect(sessionTitleFromMessage(attribution.line), kUnnamedSessionTitle);
+    expect(
+      sessionTitleFromMessage(withScratchPreamble('/tmp/s1', null)),
+      kUnnamedSessionTitle,
+    );
+  });
 }

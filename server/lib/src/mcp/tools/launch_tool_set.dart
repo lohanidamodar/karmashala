@@ -605,9 +605,8 @@ class LaunchToolSet extends ServerToolSet {
       SessionStartSpec(
         repositoryId: repo.id,
         installationId: install.id,
-        title: (title == null || title.trim().isEmpty)
-            ? 'Agent session'
-            : title.trim(),
+        // Untitled stays blank, so the launch names it from the prompt.
+        title: title?.trim() ?? '',
         // A title the caller named is chosen, as one typed in the dialog is:
         // the agent's own name for the conversation never replaces it.
         titleTyped: title != null && title.trim().isNotEmpty,
