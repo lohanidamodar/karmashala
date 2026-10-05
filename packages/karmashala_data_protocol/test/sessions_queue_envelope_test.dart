@@ -113,6 +113,49 @@ void main() {
     );
   });
 
+  test('sessions.queue.sendNow names the session and the message', () {
+    const request = SessionQueueSendNow(sessionId: 's1', id: 'q1');
+    final read =
+        DataRequest.fromJson(request.kind, wire(request.argumentsToJson()))
+            as SessionQueueSendNow;
+    expect(
+      (read.sessionId, read.id, read.kind),
+      ('s1', 'q1', 'sessions.queue.sendNow'),
+    );
+    expect(
+      request.resultFromJson(roundTrip(request.resultToJson(queued))),
+      queued,
+    );
+  });
+
+  test('sessions.queue.sendAll names the session and reads the messages', () {
+    const request = SessionQueueSendAll('s1');
+    final read =
+        DataRequest.fromJson(request.kind, wire(request.argumentsToJson()))
+            as SessionQueueSendAll;
+    expect((read.sessionId, read.kind), ('s1', 'sessions.queue.sendAll'));
+    expect(request.resultFromJson(roundTrip(request.resultToJson([queued]))), [
+      queued,
+    ]);
+  });
+
+  test('sessions.queue.pause carries whether to pause', () {
+    for (final paused in [true, false]) {
+      final request = SessionQueuePause(sessionId: 's1', paused: paused);
+      final read =
+          DataRequest.fromJson(request.kind, wire(request.argumentsToJson()))
+              as SessionQueuePause;
+      expect(
+        (read.sessionId, read.paused, read.kind),
+        ('s1', paused, 'sessions.queue.pause'),
+      );
+      expect(
+        request.resultFromJson(roundTrip(request.resultToJson([queued]))),
+        [queued],
+      );
+    }
+  });
+
   test('a hold rides on a queued message; one this build does not know, or '
       'none, reads as none', () {
     final held = queued.copyWith(

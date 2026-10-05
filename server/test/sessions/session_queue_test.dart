@@ -298,6 +298,89 @@ void main() {
       );
     });
 
+    test('Send now delivers the one named at once, mid-turn, and the rest '
+        'keep their order', () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      final ids = [
+        for (final text in ['a', 'b', 'c'])
+          (send(text) as AdmitQueued).message.id,
+      ];
+
+      final sent = await queue.sendNow('s1', ids[2]);
+      expect(sent.state, QueuedMessageState.delivered);
+      expect(delivered, ['c']);
+      expect(queue.list('s1').map((m) => m.text), ['a', 'b']);
+
+      hook('UserPromptSubmit');
+      hook('Stop');
+      await pumpEventQueue();
+      expect(delivered, ['c', 'a']);
+    });
+
+    test('Send now refuses a message no longer waiting', () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      final a = send('a') as AdmitQueued;
+      queue.cancel('s1', a.message.id);
+      await expectLater(
+        queue.sendNow('s1', a.message.id),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.code,
+            'code',
+            DataRefusalCode.conflict,
+          ),
+        ),
+      );
+      expect(delivered, isEmpty);
+    });
+
+    test(
+      'Send all now delivers every waiting message together, as one',
+      () async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        final queued = [
+          for (final text in ['a', 'b', 'c']) send(text) as AdmitQueued,
+        ];
+
+        final sent = await queue.sendAll('s1');
+        expect(delivered, ['a\n\nb\n\nc']);
+        expect(
+          sent.map((m) => m.state),
+          everyElement(QueuedMessageState.delivered),
+        );
+        for (final q in queued) {
+          expect(
+            dao.getById(q.message.id)!.state,
+            QueuedMessageState.delivered,
+          );
+        }
+        expect(announced.last, isEmpty);
+      },
+    );
+
+    test(
+      'Pause holds the queue past the turn\'s end; resuming delivers',
+      () async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        send('a');
+
+        final paused = queue.setPaused('s1', paused: true);
+        expect(paused.single.hold?.kind, QueueHoldKind.paused);
+        hook('Stop');
+        await pumpEventQueue();
+        expect(delivered, isEmpty);
+
+        final resumed = queue.setPaused('s1', paused: false);
+        expect(resumed.single.hold, isNull);
+        await pumpEventQueue();
+        expect(delivered, ['a']);
+      },
+    );
+
     test('a turn never seen to start lets the next go after the grace', () {
       return runAgent().then((_) async {
         await queue.close();
@@ -559,6 +642,71 @@ void main() {
       temp = Directory.systemTemp.createTempSync('session_queue_test');
     });
     tearDown(() => temp.deleteSync(recursive: true));
+
+    test('Send now mid-turn is refused in words, and the message goes '
+        'next', () async {
+      final process = FakeAcpProcess(
+        FakeAcpAgent(
+          turns: const [
+            FakeTurn([FakeStep.message('on it'), FakeStep.waitForCancel()]),
+          ],
+        ),
+      );
+      final runtime = registry.openAcp(
+        'karmashala_s2',
+        runtimeOver(
+          process,
+          database: database,
+          workingDirectory: temp.path,
+          sessionId: 's2',
+          host: _DaemonHost(status),
+        ),
+      );
+      await runtime.start();
+      status.tick();
+      final queue = queueOver()..start();
+      final input = SessionInput(
+        prompts: prompts,
+        typist: SessionMessageTypist(
+          readScreen: (_) => null,
+          markersFor: (_) => null,
+          type: (_, _) => false,
+          press: (_, _) => false,
+        ),
+        queue: queue,
+      );
+      await input.handle(
+        const SessionSend(sessionId: 's2', text: 'First'),
+        null,
+      );
+      await pump();
+      await input.handle(
+        const SessionSend(sessionId: 's2', text: 'Second'),
+        null,
+      );
+      final third =
+          await input.handle(
+                const SessionSend(sessionId: 's2', text: 'Third'),
+                null,
+              )
+              as SessionSent;
+
+      await expectLater(
+        input.handle(
+          SessionQueueSendNow(sessionId: 's2', id: third.queuedId!),
+          null,
+        ),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.message,
+            'message',
+            contains('goes next'),
+          ),
+        ),
+      );
+      expect(queue.list('s2').map((m) => m.text), ['Third', 'Second']);
+      expect(process.agent.prompts, hasLength(1));
+    });
 
     test('a send mid-turn is queued and goes as the next prompt when the '
         'turn ends, one per turn', () async {

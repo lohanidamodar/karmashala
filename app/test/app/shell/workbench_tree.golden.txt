@@ -3831,26 +3831,8 @@ WorkbenchView
                                                                                   LayoutBuilder
                                                                                     Column
                                                                                       Flexible
-                                                                                        SingleChildScrollView
-                                                                                          Scrollable
-                                                                                            StretchingOverscrollIndicator
-                                                                                              NotificationListener<ScrollNotification>
-                                                                                                AnimatedBuilder
-                                                                                                  ClipRect
-                                                                                                    StretchEffect
-                                                                                                      Transform
-                                                                                                        NotificationListener<ScrollMetricsNotification>
-                                                                                                          _ScrollSemantics key=[GlobalKey#…]
-                                                                                                            _ScrollableScope
-                                                                                                              Listener
-                                                                                                                RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
-                                                                                                                  _GestureSemantics
-                                                                                                                    Listener
-                                                                                                                      Semantics
-                                                                                                                        IgnorePointer key=[GlobalKey#…]
-                                                                                                                          _SingleChildViewport
-                                                                                                                            QueuedMessagesStrip
-                                                                                                                              SizedBox
+                                                                                        QueuedMessagesStrip
+                                                                                          SizedBox
                                                                                       PinnedPlanStrip
                                                                                         SizedBox
                                                                                       Flexible

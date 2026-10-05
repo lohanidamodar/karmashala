@@ -78,6 +78,28 @@ void main() {
     expect(dao.hasWaiting('s1'), isFalse);
   });
 
+  test('a queued message moves ahead of the rest; one on its way does not', () {
+    add('q1', 'one');
+    add('q2', 'two');
+    add('q3', 'three');
+    expect(dao.moveToFront('q3'), isTrue);
+    expect(dao.open('s1').map((m) => m.id), ['q3', 'q1', 'q2']);
+    expect(dao.head('s1')?.id, 'q3');
+    expect(dao.positionOf('s1', dao.getById('q1')!.seq), 2);
+    // A message added after still goes last.
+    add('q4', 'four');
+    expect(dao.open('s1').map((m) => m.id), ['q3', 'q1', 'q2', 'q4']);
+
+    dao.transition(
+      'q2',
+      from: QueuedMessageState.queued,
+      to: QueuedMessageState.delivering,
+      now: t0,
+    );
+    expect(dao.moveToFront('q2'), isFalse);
+    expect(dao.moveToFront('missing'), isFalse);
+  });
+
   test('text is edited only while queued', () {
     add('q1', 'one');
     expect(dao.editText('q1', 'uno', now: t0), isTrue);

@@ -10,10 +10,13 @@ import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../application/session_queue_providers.dart';
+import 'session_queue_sheet.dart';
 
 /// The messages [sessionId] holds at the server, below the transcript: each
-/// a bubble on the sender's side, marked queued, with Edit and Cancel while
-/// it waits. A delivered one leaves here and shows in the transcript.
+/// a bubble on the sender's side, marked queued and when it will go, with
+/// Edit and Cancel at its top while it waits. A delivered one leaves here and
+/// shows in the transcript. Never taller than a quarter of the view: past
+/// that its bubbles scroll.
 class QueuedMessagesStrip extends ConsumerWidget {
   const QueuedMessagesStrip({
     super.key,
@@ -33,27 +36,44 @@ class QueuedMessagesStrip extends ConsumerWidget {
     if (messages.isEmpty) return const SizedBox.shrink();
     final hold = queueHoldOf(messages);
     var place = 0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.md,
-        vertical: Insets.xs,
+    return ConstrainedBox(
+      key: const ValueKey('queued-strip'),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height / 4,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (hold != null)
-            _HoldLine(sessionId: sessionId, hold: hold, messages: messages),
-          for (final message in messages)
-            _QueuedBubble(
-              key: ValueKey('queued-${message.id}'),
-              message: message,
-              place: message.state == QueuedMessageState.failed
-                  ? null
-                  : ++place,
-              onBackToComposer: onBackToComposer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.xs,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (hold != null)
+              _HoldLine(sessionId: sessionId, hold: hold, messages: messages),
+            Flexible(
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final message in messages)
+                      _QueuedBubble(
+                        key: ValueKey('queued-${message.id}'),
+                        message: message,
+                        place: message.state == QueuedMessageState.failed
+                            ? null
+                            : ++place,
+                        onBackToComposer: onBackToComposer,
+                      ),
+                  ],
+                ),
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -168,9 +188,7 @@ class _HoldLineState extends ConsumerState<_HoldLine> {
     } on Object catch (error) {
       final what = resuming ? 'resume it' : 'send it';
       final why = error is DataRefused ? error.message : '$error';
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Could not $what: $why')),
-      );
+      messenger?.showSnackBar(SnackBar(content: Text('Could not $what: $why')));
     } finally {
       if (mounted) setState(() => _pending = null);
     }
@@ -224,6 +242,11 @@ class _QueuedBubble extends ConsumerWidget {
       _ => place == 1 ? 'Queued · next' : 'Queued · $place',
     };
     final labelColor = failed ? scheme.error : scheme.onSurfaceVariant;
+    final now = ref.watch(clockProvider).nowUtc().toLocal();
+    final compact = TextButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.xs),
       child: LayoutBuilder(
@@ -252,6 +275,8 @@ class _QueuedBubble extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Its actions ride on its first line, so a long text or a
+                    // short strip never takes them out of reach.
                     Row(
                       children: [
                         Icon(
@@ -260,14 +285,41 @@ class _QueuedBubble extends ConsumerWidget {
                           color: labelColor,
                         ),
                         const SizedBox(width: Insets.xs),
-                        Text(
-                          label,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: labelColor,
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: labelColor,
+                            ),
                           ),
                         ),
+                        if (message.editable)
+                          TextButton(
+                            key: ValueKey('queued-edit-${message.id}'),
+                            style: compact,
+                            onPressed: () =>
+                                editQueuedMessage(context, ref, message),
+                            child: const Text('Edit'),
+                          ),
+                        if (message.editable || failed)
+                          TextButton(
+                            key: ValueKey('queued-cancel-${message.id}'),
+                            style: compact,
+                            onPressed: () =>
+                                cancelQueuedMessage(context, ref, message),
+                            child: Text(failed ? 'Dismiss' : 'Cancel'),
+                          ),
                       ],
                     ),
+                    if (message.state == QueuedMessageState.queued)
+                      Text(
+                        queuedWhenWords(message.hold, now),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
                     const SizedBox(height: Insets.xs),
                     _ClampedText(
                       key: ValueKey('queued-text-${message.id}'),
@@ -285,32 +337,16 @@ class _QueuedBubble extends ConsumerWidget {
                           ),
                         ),
                       ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Wrap(
-                        spacing: Insets.xs,
-                        children: [
-                          if (message.editable)
-                            TextButton(
-                              key: ValueKey('queued-edit-${message.id}'),
-                              onPressed: () => _edit(context, ref),
-                              child: const Text('Edit'),
-                            ),
-                          if (failed && onBackToComposer != null)
-                            TextButton(
-                              key: ValueKey('queued-back-${message.id}'),
-                              onPressed: () => _backToComposer(context, ref),
-                              child: const Text('Back to composer'),
-                            ),
-                          if (message.editable || failed)
-                            TextButton(
-                              key: ValueKey('queued-cancel-${message.id}'),
-                              onPressed: () => _cancel(context, ref),
-                              child: Text(failed ? 'Dismiss' : 'Cancel'),
-                            ),
-                        ],
+                    if (failed && onBackToComposer != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          key: ValueKey('queued-back-${message.id}'),
+                          style: compact,
+                          onPressed: () => _backToComposer(context, ref),
+                          child: const Text('Back to composer'),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -321,41 +357,51 @@ class _QueuedBubble extends ConsumerWidget {
     );
   }
 
-  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    try {
-      await ref
-          .read(sessionQueueActionsProvider)
-          .cancel(message.sessionId, message.id);
-    } on DataRefused catch (refusal) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Could not cancel it: ${refusal.message}')),
-      );
-    }
-  }
-
   /// The text goes back to the box, then the failed row is dismissed.
   Future<void> _backToComposer(BuildContext context, WidgetRef ref) async {
     onBackToComposer?.call(message.text);
-    await _cancel(context, ref);
+    await cancelQueuedMessage(context, ref, message);
   }
+}
 
-  Future<void> _edit(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final actions = ref.read(sessionQueueActionsProvider);
-    final text = await showAdaptiveModal<String>(
-      context: context,
-      title: 'Edit queued message',
-      builder: (context) => _EditQueuedBody(initial: message.text),
+/// Cancels queued [message], or dismisses a failed one; a refusal is said.
+Future<void> cancelQueuedMessage(
+  BuildContext context,
+  WidgetRef ref,
+  QueuedMessage message,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    await ref
+        .read(sessionQueueActionsProvider)
+        .cancel(message.sessionId, message.id);
+  } on DataRefused catch (refusal) {
+    messenger?.showSnackBar(
+      SnackBar(content: Text('Could not cancel it: ${refusal.message}')),
     );
-    if (text == null || text == message.text) return;
-    try {
-      await actions.edit(message.sessionId, message.id, text);
-    } on DataRefused catch (refusal) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Could not edit it: ${refusal.message}')),
-      );
-    }
+  }
+}
+
+/// Asks for [message]'s new text and replaces it at the server.
+Future<void> editQueuedMessage(
+  BuildContext context,
+  WidgetRef ref,
+  QueuedMessage message,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final actions = ref.read(sessionQueueActionsProvider);
+  final text = await showAdaptiveModal<String>(
+    context: context,
+    title: 'Edit queued message',
+    builder: (context) => _EditQueuedBody(initial: message.text),
+  );
+  if (text == null || text == message.text) return;
+  try {
+    await actions.edit(message.sessionId, message.id, text);
+  } on DataRefused catch (refusal) {
+    messenger?.showSnackBar(
+      SnackBar(content: Text('Could not edit it: ${refusal.message}')),
+    );
   }
 }
 
@@ -500,9 +546,46 @@ String queueHoldWords(QueueHold hold, DateTime now) {
   };
 }
 
+/// When a queued message held by [hold] will go, in words.
+String queuedWhenWords(QueueHold? hold, DateTime now) {
+  final until = hold?.until;
+  final at = until == null ? null : formatResetClock(until, now);
+  return switch (hold?.kind) {
+    null => 'Sends when the agent finishes its turn',
+    QueueHoldKind.paused => 'Paused: nothing goes until you resume',
+    QueueHoldKind.stopped =>
+      'Waiting: the session is stopped (resumes on send)',
+    QueueHoldKind.limit when at != null => 'Held: usage limit until $at',
+    QueueHoldKind.limit => 'Held: usage limit',
+    QueueHoldKind.scheduled when at != null => 'Held: scheduled resume at $at',
+    QueueHoldKind.scheduled => 'Held: until the scheduled resume',
+  };
+}
+
+/// The heading the composer puts over the paths of a message's images.
+const kAttachedImagesHeading = 'Attached image(s):';
+
+/// [text] without its [kAttachedImagesHeading] block, and that block's
+/// image paths in order; no block leaves the text whole.
+({String text, List<String> images}) splitAttachedImages(String text) {
+  final lines = text.split('\n');
+  final at = lines.indexWhere((l) => l.trim() == kAttachedImagesHeading);
+  if (at < 0) return (text: text, images: const []);
+  var end = at + 1;
+  final images = <String>[];
+  while (end < lines.length && lines[end].trim().isNotEmpty) {
+    images.add(lines[end].trim());
+    end++;
+  }
+  return (
+    text: [...lines.sublist(0, at), ...lines.sublist(end)].join('\n').trim(),
+    images: images,
+  );
+}
+
 /// The session bar's word on what waits — `2 queued`, `Paused · 2` — seen
-/// from the terminal view too, where the strip is not. Nothing, and no width,
-/// while nothing waits.
+/// from the terminal view too, where the strip is not; tapped, it opens the
+/// queue. Nothing, and no width, while nothing waits.
 class QueuedCountChip extends ConsumerWidget {
   const QueuedCountChip({required this.sessionId, super.key});
 
@@ -529,45 +612,51 @@ class QueuedCountChip extends ConsumerWidget {
     };
     final tooltip = [
       waiting == 1 ? '1 message waits' : '$waiting messages wait',
-      if (hold != null) queueHoldWords(hold, now),
+      if (waiting > 0) queuedWhenWords(hold, now),
       if (failed > 0 && waiting > 0) '$failed not sent',
     ].join(' · ');
     final color = waiting == 0 ? scheme.error : scheme.onSurfaceVariant;
+    final corners = BorderRadius.circular(Radii.sm);
     return Padding(
       padding: const EdgeInsets.only(right: Insets.xs),
       child: Tooltip(
         message: tooltip,
         child: Semantics(
           label: tooltip,
+          button: true,
           excludeSemantics: true,
-          child: Container(
+          child: InkWell(
             key: const ValueKey('queued-count'),
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: 3,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(Radii.sm),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  hold?.kind == QueueHoldKind.paused
-                      ? AppIcons.pause
-                      : AppIcons.stack,
-                  size: Chrome.iconSmall,
-                  color: color,
-                ),
-                const SizedBox(width: Insets.xs),
-                Text(
-                  label,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: theme.textTheme.labelSmall?.copyWith(color: color),
-                ),
-              ],
+            borderRadius: corners,
+            onTap: () => showSessionQueue(context, sessionId),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: corners,
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hold?.kind == QueueHoldKind.paused
+                        ? AppIcons.pause
+                        : AppIcons.stack,
+                    size: Chrome.iconSmall,
+                    color: color,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: theme.textTheme.labelSmall?.copyWith(color: color),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

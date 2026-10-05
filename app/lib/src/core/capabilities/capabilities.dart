@@ -297,6 +297,11 @@ final class Capabilities {
   bool get sessionQueueControl =>
       sessionQueue && serverOffers('sessions.queue.control');
 
+  /// One queued message or all of them sent now, and the queue paused at a
+  /// person's word.
+  bool get sessionQueueManage =>
+      sessionQueueControl && serverOffers('sessions.queue.manage');
+
   /// A session's agent can be switched in place, the same row and chat, and
   /// its transcript names the agent of each turn.
   bool get switchAgent => serverOffers('sessions.switchAgent');

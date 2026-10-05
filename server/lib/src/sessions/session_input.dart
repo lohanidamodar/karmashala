@@ -132,6 +132,15 @@ class SessionInput {
         SessionQueueEdit(:final sessionId, :final id, :final text) =>
           Future<QueuedMessage>.sync(() => _queue().edit(sessionId, id, text)),
         SessionQueueSendNext(:final sessionId) => _queue().sendNext(sessionId),
+        SessionQueueSendNow(:final sessionId, :final id) => _queue().sendNow(
+          sessionId,
+          id,
+        ),
+        SessionQueueSendAll(:final sessionId) => _queue().sendAll(sessionId),
+        SessionQueuePause(:final sessionId, :final paused) =>
+          Future<List<QueuedMessage>>.sync(
+            () => _queue().setPaused(sessionId, paused: paused),
+          ),
         SessionQueueCancel(:final sessionId, :final id) =>
           Future<QueuedMessage>.sync(() => _queue().cancel(sessionId, id)),
       };

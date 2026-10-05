@@ -68,6 +68,19 @@ class SessionQueueActions {
   Future<void> sendNext(String sessionId) =>
       _ref.read(dataClientProvider).send(SessionQueueSendNext(sessionId));
 
+  /// Delivers message [id] now, ahead of the rest.
+  Future<void> sendNow(String sessionId, String id) => _ref
+      .read(dataClientProvider)
+      .send(SessionQueueSendNow(sessionId: sessionId, id: id));
+
+  /// Delivers every waiting message now, together as one.
+  Future<void> sendAll(String sessionId) =>
+      _ref.read(dataClientProvider).send(SessionQueueSendAll(sessionId));
+
+  Future<void> setPaused(String sessionId, {required bool paused}) => _ref
+      .read(dataClientProvider)
+      .send(SessionQueuePause(sessionId: sessionId, paused: paused));
+
   /// Cancels every message still waiting, the first refusal thrown after
   /// the rest were tried.
   Future<void> cancelAll(String sessionId, List<QueuedMessage> messages) async {

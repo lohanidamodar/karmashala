@@ -1,5 +1,10 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/read.dart' show TranscriptMessage;
+import 'package:agent_cli/read.dart'
+    show
+        BackgroundRun,
+        BackgroundRunKind,
+        BackgroundRunState,
+        TranscriptMessage;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,12 +12,14 @@ import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
+import 'package:karmashala/src/features/sessions/application/background_runs_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/presentation/queued_messages_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -80,6 +87,7 @@ void main() {
     bool queues = true,
     SessionActivity? activity,
     bool withBar = false,
+    int backgroundRuns = 0,
   }) async {
     ticking = activity != null;
     tester.view.physicalSize = size;
@@ -101,6 +109,7 @@ void main() {
               'sessions.send.resumes',
               if (queues) 'sessions.queue',
               if (queues) 'sessions.queue.control',
+              if (queues) 'sessions.queue.manage',
             },
           ),
         ),
@@ -116,6 +125,21 @@ void main() {
         ),
         if (activity != null)
           sessionOutstandingCallsProvider.overrideWith((ref, _) => activity),
+        if (backgroundRuns > 0)
+          sessionBackgroundRunsProvider.overrideWith(
+            (ref, _) => [
+              for (var i = 0; i < backgroundRuns; i++)
+                SessionBackgroundRun(
+                  run: BackgroundRun(
+                    id: 'run-$i',
+                    kind: BackgroundRunKind.command,
+                    state: BackgroundRunState.running,
+                    description: 'watch number $i',
+                  ),
+                  startedAt: testTime,
+                ),
+            ],
+          ),
       ],
     );
     addTearDown(container.dispose);
@@ -205,12 +229,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Paused'), findsOneWidget);
+      final holdLine = find.descendant(
+        of: find.byKey(const ValueKey('queue-hold')),
+        matching: find.textContaining('Paused'),
+      );
+      expect(holdLine, findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('queue-send-next')));
       await tester.pumpAndSettle();
       expect(server.sessionWork.sent.map((s) => s.text), ['first']);
       expect(find.text('second'), findsOneWidget);
-      expect(find.textContaining('Paused'), findsOneWidget);
+      expect(holdLine, findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('queue-cancel-all')));
       await tester.pumpAndSettle();
@@ -380,6 +408,169 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  /// Three queued messages of a few lines each, the composer's words.
+  Future<void> queueThree(WidgetTester tester) async {
+    for (final name in ['first', 'second', 'third']) {
+      await send(
+        tester,
+        [for (var i = 0; i < 6; i++) '$name message, line $i'].join('\n'),
+      );
+    }
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, with three queued and many background runs the '
+        'strip is bounded, scrolls, and every card keeps Edit and Cancel in '
+        'reach', (tester) async {
+      await pump(tester, size: size, backgroundRuns: 12);
+      await queueThree(tester);
+
+      final strip = tester.getRect(find.byKey(const ValueKey('queued-strip')));
+      expect(strip.height, lessThanOrEqualTo(size.height / 4 + 1));
+      expect(
+        find.text('Sends when the agent finishes its turn'),
+        findsNWidgets(3),
+      );
+      final composerTop = tester.getRect(find.byType(TextField).last).top;
+      for (final id in ['q1', 'q2', 'q3']) {
+        for (final what in ['edit', 'cancel']) {
+          final button = find.byKey(ValueKey('queued-$what-$id'));
+          await tester.ensureVisible(button);
+          await tester.pumpAndSettle();
+          final rect = tester.getRect(button);
+          expect(rect.top, greaterThanOrEqualTo(strip.top - 1), reason: id);
+          expect(rect.bottom, lessThanOrEqualTo(strip.bottom + 1), reason: id);
+          expect(rect.bottom, lessThanOrEqualTo(composerTop), reason: id);
+          expect(button.hitTestable(), findsOneWidget, reason: '$what $id');
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('on a $name, the queued chip opens the queue: every message '
+        'in order, each with View, Edit, Remove and Send now', (tester) async {
+      await pump(tester, size: size, withBar: true, backgroundRuns: 12);
+      await queueThree(tester);
+      expect(
+        find.byTooltip(
+          RegExp('^3 messages wait · Sends when the agent finishes its turn'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('queued-count')));
+      await tester.pumpAndSettle();
+      final rows = [
+        for (final id in ['q1', 'q2', 'q3'])
+          find.byKey(ValueKey('queue-row-$id')),
+      ];
+      for (final row in rows) {
+        expect(row, findsOneWidget);
+      }
+      expect(
+        tester.getRect(rows[0]).top,
+        lessThan(tester.getRect(rows[1]).top),
+      );
+      expect(
+        tester.getRect(rows[1]).top,
+        lessThan(tester.getRect(rows[2]).top),
+      );
+      for (final id in ['q1', 'q2', 'q3']) {
+        for (final what in ['view', 'edit', 'remove', 'send-now']) {
+          expect(find.byKey(ValueKey('queue-$what-$id')), findsOneWidget);
+        }
+      }
+      expect(find.byKey(const ValueKey('queue-send-all')), findsOneWidget);
+      expect(find.byKey(const ValueKey('queue-pause')), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('queue-send-now-q3')),
+      );
+      await tester.tap(find.byKey(const ValueKey('queue-send-now-q3')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.single.text, startsWith('third message'));
+      expect(find.byKey(const ValueKey('queue-row-q3')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('queue-remove-q1')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.queues['acp-1']!.map((m) => m.id), ['q2']);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('the queue pauses and resumes, and Send all sends them '
+      'together', (tester) async {
+    await pump(tester, size: phone, withBar: true);
+    await send(tester, 'first');
+    await send(tester, 'second');
+
+    await tester.tap(find.byKey(const ValueKey('queued-count')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('queue-pause')));
+    await tester.pumpAndSettle();
+    expect(server.sessionWork.holds['acp-1']?.kind, QueueHoldKind.paused);
+    expect(find.byKey(const ValueKey('queue-resume')), findsOneWidget);
+    expect(find.text('Paused: nothing goes until you resume'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('queue-resume')));
+    await tester.pumpAndSettle();
+    expect(server.sessionWork.holds['acp-1'], isNull);
+
+    await tester.tap(find.byKey(const ValueKey('queue-send-all')));
+    await tester.pumpAndSettle();
+    expect(server.sessionWork.sent.map((s) => s.text), ['first\n\nsecond']);
+    expect(server.sessionWork.queues['acp-1'], isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('View shows the whole text and the images a message carries', (
+    tester,
+  ) async {
+    await pump(tester, size: phone, withBar: true);
+    await send(
+      tester,
+      'look at this\n\nAttached image(s):\nC:\\shots\\screen.png',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('queued-count')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('queue-view-q1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('queue-view-text')), findsOneWidget);
+    expect(find.text('look at this'), findsWidgets);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is TranscriptImagePreview && w.path == r'C:\shots\screen.png',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('each card says when it will go: held on the limit until when, '
+      'or waiting on a stopped session', (tester) async {
+    await pump(tester, size: phone);
+    await send(tester, 'first');
+    final until = testTime.add(const Duration(hours: 2));
+    server.sessionWork.holdQueue(
+      'acp-1',
+      QueueHold(QueueHoldKind.limit, until: until),
+    );
+    await tester.pumpAndSettle();
+    final clock = formatResetClock(until, testTime.toLocal());
+    expect(find.text('Held: usage limit until $clock'), findsOneWidget);
+
+    server.sessionWork.holdQueue(
+      'acp-1',
+      const QueueHold(QueueHoldKind.stopped),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Waiting: the session is stopped (resumes on send)'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('Edit replaces the queued text at the server', (tester) async {
     await pump(tester, size: phone);

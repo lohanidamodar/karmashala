@@ -36,7 +36,6 @@ class FakeSessionWork {
   /// Every `sessions.send` taken, in order.
   final sent = <SessionSend>[];
 
-
   /// A send to a session it does not run resumes it first, as a server that
   /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
   bool resumesOnSend = false;
@@ -133,6 +132,35 @@ class FakeSessionWork {
         sent.add(SessionSend(sessionId: sessionId, text: head.text));
         _tellQueue(sessionId);
         return head.copyWith(state: QueuedMessageState.delivered);
+      case SessionQueueSendNow(:final sessionId, :final id):
+        final at = queue.indexWhere((m) => m.id == id);
+        if (at < 0) throw const DataRefused.notFound('no such message');
+        final message = queue.removeAt(at);
+        sent.add(SessionSend(sessionId: sessionId, text: message.text));
+        _tellQueue(sessionId);
+        return message.copyWith(state: QueuedMessageState.delivered);
+      case SessionQueueSendAll(:final sessionId):
+        if (queue.isEmpty) {
+          throw const DataRefused.notFound('nothing waits in this queue');
+        }
+        final all = [...queue];
+        queue.clear();
+        sent.add(
+          SessionSend(
+            sessionId: sessionId,
+            text: [for (final m in all) m.text].join('\n\n'),
+          ),
+        );
+        _tellQueue(sessionId);
+        return [
+          for (final m in all) m.copyWith(state: QueuedMessageState.delivered),
+        ];
+      case SessionQueuePause(:final sessionId, :final paused):
+        holdQueue(
+          sessionId,
+          paused ? const QueueHold(QueueHoldKind.paused) : null,
+        );
+        return _told(sessionId);
       case SessionSend() || SessionInterrupt():
         return null;
     }
@@ -143,7 +171,10 @@ class FakeSessionWork {
         case SessionQueueList() ||
             SessionQueueEdit() ||
             SessionQueueCancel() ||
-            SessionQueueSendNext()) {
+            SessionQueueSendNext() ||
+            SessionQueueSendNow() ||
+            SessionQueueSendAll() ||
+            SessionQueuePause()) {
       return _queueRequest(request);
     }
     if (request case SessionSend(

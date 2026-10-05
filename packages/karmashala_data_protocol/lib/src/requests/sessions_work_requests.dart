@@ -95,6 +95,15 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     id: args.string('id'),
   ),
   SessionQueueSendNext.name => SessionQueueSendNext(args.string('sessionId')),
+  SessionQueueSendNow.name => SessionQueueSendNow(
+    sessionId: args.string('sessionId'),
+    id: args.string('id'),
+  ),
+  SessionQueueSendAll.name => SessionQueueSendAll(args.string('sessionId')),
+  SessionQueuePause.name => SessionQueuePause(
+    sessionId: args.string('sessionId'),
+    paused: args.boolean('paused'),
+  ),
   SessionSetMode.name => SessionSetMode(
     sessionId: args.string('sessionId'),
     modeId: args.string('modeId'),
@@ -602,6 +611,108 @@ final class SessionQueueSendNext extends SessionInputRequest<QueuedMessage> {
   @override
   QueuedMessage resultFromJson(Object? json) =>
       _decode(kind, () => QueuedMessage.fromJson(_object(json, kind)));
+}
+
+/// Delivers session [sessionId]'s queued message [id] now, ahead of the rest:
+/// past a pause or a hold, and into a terminal session's running turn as
+/// typing would. `sessions.queue.manage` in `welcome.features`. Refused
+/// `conflict` for a message no longer waiting, and while an ACP turn runs —
+/// the message then goes next.
+final class SessionQueueSendNow extends SessionInputRequest<QueuedMessage> {
+  const SessionQueueSendNow({required this.sessionId, required this.id});
+
+  static const String name = 'sessions.queue.sendNow';
+
+  @override
+  final String sessionId;
+  final String id;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId, 'id': id};
+
+  @override
+  Object? resultToJson(QueuedMessage result) => result.toJson();
+
+  @override
+  QueuedMessage resultFromJson(Object? json) =>
+      _decode(kind, () => QueuedMessage.fromJson(_object(json, kind)));
+}
+
+/// Delivers every message session [sessionId] holds waiting now, together as
+/// one message; answers them as they then stand. `sessions.queue.manage`.
+/// Refused as [SessionQueueSendNow] is, and `notFound` when nothing waits.
+final class SessionQueueSendAll
+    extends SessionInputRequest<List<QueuedMessage>> {
+  const SessionQueueSendAll(this.sessionId);
+
+  static const String name = 'sessions.queue.sendAll';
+
+  @override
+  final String sessionId;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(List<QueuedMessage> result) => [
+    for (final message in result) message.toJson(),
+  ];
+
+  @override
+  List<QueuedMessage> resultFromJson(Object? json) => _decode(kind, () {
+    return [
+      for (final row in _objects(json, kind)) QueuedMessage.fromJson(row),
+    ];
+  });
+}
+
+/// Pauses session [sessionId]'s queue — nothing goes until it is resumed —
+/// or, with [paused] false, resumes it; answers the open messages.
+/// `sessions.queue.manage`.
+final class SessionQueuePause extends SessionInputRequest<List<QueuedMessage>> {
+  const SessionQueuePause({required this.sessionId, required this.paused});
+
+  static const String name = 'sessions.queue.pause';
+
+  @override
+  final String sessionId;
+  final bool paused;
+
+  @override
+  String? get requestId => null;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'paused': paused,
+  };
+
+  @override
+  Object? resultToJson(List<QueuedMessage> result) => [
+    for (final message in result) message.toJson(),
+  ];
+
+  @override
+  List<QueuedMessage> resultFromJson(Object? json) => _decode(kind, () {
+    return [
+      for (final row in _objects(json, kind)) QueuedMessage.fromJson(row),
+    ];
+  });
 }
 
 /// Types [text] into session [sessionId]'s composer and presses Return until

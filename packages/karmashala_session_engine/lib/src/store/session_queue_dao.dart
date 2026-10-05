@@ -151,6 +151,19 @@ class SessionQueueDao {
     return _changed();
   }
 
+  /// Puts [id] ahead of every other of its session's messages while it is
+  /// still queued; false otherwise.
+  bool moveToFront(String id) => _db.transaction(() {
+    _db.execute(
+      'UPDATE session_queued_messages SET seq = ('
+      'SELECT MIN(seq) - 1 FROM session_queued_messages AS other '
+      'WHERE other.session_id = session_queued_messages.session_id'
+      ") WHERE id = ? AND state = 'queued';",
+      [id],
+    );
+    return _changed();
+  });
+
   /// Replaces [id]'s text while it is still queued; false otherwise.
   bool editText(String id, String text, {required DateTime now}) {
     _db.execute(

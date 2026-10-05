@@ -741,6 +741,166 @@ class SessionQueue implements ResumeQueue {
     return dao.getById(head.id)!;
   }
 
+  /// Delivers [sessionId]'s queued message [id] now, ahead of the rest: past
+  /// a pause or a hold, resuming a session nothing runs, and into a terminal
+  /// session's running turn as typing would. While the session cannot take
+  /// it — an ACP turn runs, another message is on its way — it is refused
+  /// and goes next. Answers the row as it then stands.
+  Future<QueuedMessage> sendNow(String sessionId, String id) async {
+    final message = _own(sessionId, id);
+    if (message.state != QueuedMessageState.queued || !dao.moveToFront(id)) {
+      throw DataRefused(
+        DataRefusalCode.conflict,
+        'this message is already ${_words(message.state)}, so it can no '
+        'longer be sent now',
+      );
+    }
+    _announce(sessionId);
+    _refuseWhileTaken(sessionId, 'it goes next');
+    if (_stopped(sessionId)) {
+      await _resumeFor(sessionId);
+    } else {
+      _refuseNotRunning(sessionId);
+      final midTurn = turns.running(sessionId);
+      final why = await _deliverHead(sessionId);
+      // Typed into the running turn, it starts none of its own: that turn's
+      // end is the one to wait for.
+      if (midTurn) _awaitingTurn.remove(sessionId)?.cancel();
+      if (why != null && dao.getById(id)?.state == QueuedMessageState.queued) {
+        throw DataRefused(DataRefusalCode.conflict, why);
+      }
+    }
+    return dao.getById(id)!;
+  }
+
+  /// Delivers every message [sessionId] holds waiting now, together as one
+  /// message, as [sendNow] delivers one. Answers them as they then stand.
+  Future<List<QueuedMessage>> sendAll(String sessionId) async {
+    final waiting = [
+      for (final message in dao.open(sessionId))
+        if (message.state == QueuedMessageState.queued) message,
+    ];
+    if (waiting.isEmpty) {
+      throw const DataRefused.notFound('nothing waits in this queue');
+    }
+    _refuseWhileTaken(sessionId, 'they go one per turn as it ends');
+    if (_stopped(sessionId)) {
+      throw const DataRefused(
+        DataRefusalCode.conflict,
+        "this session isn't running: Resume now starts it with the next "
+        'message',
+      );
+    }
+    _refuseNotRunning(sessionId);
+    final deliver =
+        this.deliver ??
+        (throw const DataRefused.unavailable(
+          'this server delivers no messages',
+        ));
+    final claimed = [
+      for (final message in waiting)
+        if (dao.transition(
+          message.id,
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.delivering,
+          now: _now(),
+        ))
+          message,
+    ];
+    if (claimed.isEmpty) {
+      throw const DataRefused(
+        DataRefusalCode.conflict,
+        'the messages are already on their way',
+      );
+    }
+    _inFlight.add(sessionId);
+    _sawWorking.remove(sessionId);
+    _typingHolds.remove(sessionId)?.timer.cancel();
+    _announce(sessionId);
+    var delivered = false;
+    try {
+      await deliver(sessionId, [for (final m in claimed) m.text].join('\n\n'));
+      delivered = true;
+      for (final message in claimed) {
+        _finish(message, QueuedMessageState.delivered);
+      }
+      log?.call('queue $sessionId: ${claimed.length} delivered together');
+    } on DataRefused catch (refusal) {
+      final nothingTyped =
+          refusal.code == DataRefusalCode.notFound ||
+          refusal.code == DataRefusalCode.conflict;
+      for (final message in claimed) {
+        if (nothingTyped) {
+          dao.transition(
+            message.id,
+            from: QueuedMessageState.delivering,
+            to: QueuedMessageState.queued,
+            now: _now(),
+          );
+        } else {
+          _finish(message, QueuedMessageState.failed, error: refusal.message);
+        }
+      }
+      rethrow;
+    } on Object catch (error) {
+      for (final message in claimed) {
+        _finish(message, QueuedMessageState.failed, error: '$error');
+      }
+      rethrow;
+    } finally {
+      _inFlight.remove(sessionId);
+      if (delivered) _awaitTurnStart(sessionId);
+      if (dao.head(sessionId) == null) _withQueued.remove(sessionId);
+      _announce(sessionId);
+    }
+    return [for (final message in claimed) dao.getById(message.id)!];
+  }
+
+  /// Pauses [sessionId]'s queue at a person's word — nothing goes until
+  /// they resume it, send again or send one now — or, with [paused] false,
+  /// resumes it. Answers the open messages.
+  List<QueuedMessage> setPaused(String sessionId, {required bool paused}) {
+    if (paused) {
+      if (!dao.hasWaiting(sessionId)) {
+        throw const DataRefused.notFound('nothing waits in this queue');
+      }
+      if (_paused.add(sessionId)) {
+        _savePaused();
+        log?.call('queue $sessionId: paused by a person');
+      }
+    } else {
+      _unpause(sessionId);
+      _kick(sessionId);
+    }
+    _announce(sessionId);
+    return list(sessionId);
+  }
+
+  /// Refuses while [sessionId] cannot take a message whatever its queue
+  /// says: one is on its way, a switch holds it, or an ACP turn runs.
+  void _refuseWhileTaken(String sessionId, String meanwhile) {
+    final why = _inFlight.contains(sessionId)
+        ? 'a message is already on its way'
+        : _held.contains(sessionId)
+        ? "the session's agent is being switched"
+        : (status.acpRuntimeOf(sessionId)?.inTurn ?? false)
+        ? 'the agent takes one message per turn and its turn is running'
+        : null;
+    if (why != null) {
+      throw DataRefused(DataRefusalCode.conflict, '$why; $meanwhile');
+    }
+  }
+
+  void _refuseNotRunning(String sessionId) {
+    if (status.acpRuntimeOf(sessionId) == null &&
+        !(resumesOnSend?.call(sessionId) ?? false) &&
+        !status.holds(sessionId)) {
+      throw const DataRefused.notFound(
+        "this session isn't running, and this server cannot resume it",
+      );
+    }
+  }
+
   /// [hostSessionId]'s agent started, by whatever path — Resume now, an
   /// opened session, an automatic continue, a limit's resume. Its start-up
   /// counts as a turn ([TurnSettlement.started]), whose end delivers what

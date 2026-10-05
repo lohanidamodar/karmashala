@@ -858,15 +858,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // What was sent while the turn ran, waiting at the server below
-          // the transcript it will join: it scrolls in whatever the
+          // the transcript it will join: bounded, it scrolls within what the
           // composer leaves, and may not push the box away.
           Flexible(
-            child: SingleChildScrollView(
-              primary: false,
-              child: QueuedMessagesStrip(
-                sessionId: widget.sessionId,
-                onBackToComposer: _backToComposer,
-              ),
+            child: QueuedMessagesStrip(
+              sessionId: widget.sessionId,
+              onBackToComposer: _backToComposer,
             ),
           ),
           // Directly above the box and outside the scroll, so a long queue
