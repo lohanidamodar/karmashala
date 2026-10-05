@@ -624,7 +624,7 @@ class ProjectDetailLine extends StatelessWidget {
               : separator + measure('$changed changed');
           final pathMin = where.isEmpty ? 0.0 : measure(where.last, whereStyle);
 
-          // A pixel kept back: tabular figures are not what was measured.
+          // A pixel kept back against sub-pixel rounding in the row.
           final room = constraints.maxWidth - lead - stateCompact - 1;
           var showPath = where.isNotEmpty;
           var environmentName = 0.0;
@@ -873,7 +873,10 @@ class ProjectStateBadge extends StatelessWidget {
           _gapBefore +
           density.iconSmall +
           ProjectRunningMark.gap +
-          measure(inWords ? summary.runningLabel! : '${summary.active}');
+          measure(
+            inWords ? summary.runningLabel! : '${summary.active}',
+            _figures,
+          );
     }
     if (summary.needsAttention > 0) {
       width +=
@@ -882,11 +885,16 @@ class ProjectStateBadge extends StatelessWidget {
           Insets.hair +
           measure(
             inWords ? summary.attentionLabel! : '${summary.needsAttention}',
-            const TextStyle(fontWeight: FontWeight.w600),
+            _figures.copyWith(fontWeight: FontWeight.w600),
           );
     }
     return width;
   }
+
+  /// Counts are drawn in tabular figures, wider than plain ones in most fonts.
+  static const _figures = TextStyle(
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -899,7 +907,7 @@ class ProjectStateBadge extends StatelessWidget {
         ?.copyWith(
           color: color,
           fontWeight: running ? null : FontWeight.w600,
-          fontFeatures: const [FontFeature.tabularFigures()],
+          fontFeatures: _figures.fontFeatures,
         );
     return Tooltip(
       message: tooltip,
