@@ -10,6 +10,7 @@ import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
+import '../../agents/claude_code/claude_local_commands.dart';
 import '../../agents/claude_code/claude_tool_references.dart';
 import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
@@ -74,6 +75,10 @@ const String kAgentSwitchRole = 'agentSwitch';
 /// The role of a row the CLI wrote about the session rather than a turn in
 /// it: what a hook said, an error, a compaction. Drawn as a small note.
 const String kTranscriptNoticeRole = 'notice';
+
+/// The role of a command the person ran in the CLI itself — a slash command,
+/// a `!` shell line — with what it printed as its tool's output.
+const String kTranscriptCommandRole = 'command';
 
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
@@ -853,6 +858,10 @@ void _parseClaudeLine(
         runs.killAgents(at);
       case 'stop_hook_summary':
         _add(out, kTranscriptNoticeRole, _stopHookNote(json), at);
+      case 'local_command':
+        if (json['content'] case final String text) {
+          _addLocalCommand(text, out, at);
+        }
     }
     return;
   }
@@ -899,7 +908,8 @@ void _parseClaudeLine(
   // note — is marked isMeta: nobody typed it.
   final meta = role == 'user' && json['isMeta'] == true;
   if (content is String) {
-    if (!meta) _add(out, role, said(content), at);
+    if (meta || (role == 'user' && _addLocalCommand(content, out, at))) return;
+    _add(out, role, said(content), at);
     return;
   }
   if (content is! List) return;
@@ -1018,6 +1028,37 @@ String? _stopHookNote(Map<String, dynamic> json) {
       'Stop hook feedback: $feedback',
   ];
   return lines.isEmpty ? null : lines.join('\n');
+}
+
+/// Adds the row for [text] when it records a command the person ran in the
+/// CLI, or hangs what one printed on the command above it; false for any
+/// other text.
+bool _addLocalCommand(String text, List<TranscriptMessage> out, DateTime? at) {
+  if (claudeLocalCommand(text) case (:final tool, text: final said)) {
+    out.add(
+      TranscriptMessage(
+        role: kTranscriptCommandRole,
+        text: said,
+        tool: tool,
+        at: at,
+      ),
+    );
+    return true;
+  }
+  final printed = claudeLocalCommandOutput(text);
+  if (printed == null) return false;
+  final last = out.lastOrNull;
+  final command = last?.role == kTranscriptCommandRole ? last!.tool : null;
+  if (command != null && command.output == null && printed.isNotEmpty) {
+    final (bounded, cut) = boundedToolOutput(printed);
+    out[out.length - 1] = TranscriptMessage(
+      role: last!.role,
+      text: last.text,
+      tool: command.withResult(output: bounded, outputTruncated: cut),
+      at: last.at,
+    );
+  }
+  return true;
 }
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
