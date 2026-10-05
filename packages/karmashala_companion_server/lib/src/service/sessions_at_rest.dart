@@ -171,7 +171,12 @@ class SessionsAtRest {
             messages: reading.messages,
             cursor: reading.messages.length,
           ),
-          activity: _activity(sessionId, row, reading.calls),
+          activity: _activity(
+            sessionId,
+            row,
+            reading.calls,
+            reading.background,
+          ),
         );
       }
     }
@@ -191,12 +196,14 @@ class SessionsAtRest {
 
   /// What [row]'s agent has in flight: the record's outstanding [calls], only
   /// while the agent is working in a session that has not ended; nothing
-  /// otherwise — an answer, not an absence of one.
+  /// otherwise — an answer, not an absence of one. Its [background] runs
+  /// whatever the turn is doing: they outlive the turn that started them.
   RemoteSessionActivity _activity(
     String sessionId,
     Session? row,
-    List<RemoteActivityCall> calls,
-  ) {
+    List<RemoteActivityCall> calls, [
+    List<RemoteBackgroundRun> background = const [],
+  ]) {
     final working =
         row != null &&
         agentIsWorking(row.status, agentStatusOf?.call(sessionId)?.status);
@@ -204,6 +211,7 @@ class SessionsAtRest {
       sessionId: sessionId,
       observedAt: _now().toUtc(),
       calls: working ? calls : const [],
+      background: background,
     );
   }
 
@@ -239,7 +247,12 @@ class SessionsAtRest {
         revision: since.revision,
         activity: calls == null
             ? null
-            : _activity(sessionId, sessions.getById(sessionId), calls),
+            : _activity(
+                sessionId,
+                sessions.getById(sessionId),
+                calls,
+                since.background ?? const [],
+              ),
       );
     }
     final offset = screens.outputOffset(_hostIdOf(sessionId));

@@ -224,6 +224,7 @@ class RemoteSessionActivity {
     required this.observedAt,
     this.calls = const [],
     this.absence,
+    this.background = const [],
   });
 
   final String sessionId;
@@ -238,17 +239,24 @@ class RemoteSessionActivity {
   /// there was nothing — which is a different sentence.
   final RemoteActivityAbsence? absence;
 
+  /// The background runs the session is waiting on, whatever its turn is
+  /// doing, with those that finished alongside them. Oldest first.
+  final List<RemoteBackgroundRun> background;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'observedAt': observedAt.toUtc().toIso8601String(),
     'calls': [for (final call in calls) call.toJson()],
     if (absence != null) 'absence': absence!.wire,
+    if (background.isNotEmpty)
+      'background': [for (final run in background) run.toJson()],
   };
 
   static RemoteSessionActivity fromJson(Map<String, Object?> json) {
     final sessionId = json['sessionId'];
     final observedAt = json['observedAt'];
     final calls = json['calls'];
+    final background = json['background'];
     if (sessionId is! String || observedAt is! String) {
       throw const ProtocolException('bad session activity');
     }
@@ -262,6 +270,83 @@ class RemoteSessionActivity {
           if (call is Map<String, Object?>) RemoteActivityCall.fromJson(call),
       ],
       absence: RemoteActivityAbsence.parse(json['absence']),
+      background: [
+        for (final run in background is List ? background : const [])
+          if (run is Map<String, Object?>) ?RemoteBackgroundRun.fromJson(run),
+      ],
     );
   }
+}
+
+/// One background run — an agent or a shell command the session left running
+/// — as `session.activity` carries it.
+class RemoteBackgroundRun {
+  const RemoteBackgroundRun({
+    required this.id,
+    required this.agent,
+    required this.state,
+    this.description,
+    this.startedAt,
+    this.endedAt,
+  });
+
+  final String id;
+
+  /// An agent, rather than a shell command.
+  final bool agent;
+
+  /// `running`, `completed`, `failed`, `killed` or `ended`; a word this build
+  /// does not know is shown as it came.
+  final String state;
+  final String? description;
+
+  /// On the **host's** clock, paired with [RemoteSessionActivity.observedAt].
+  final DateTime? startedAt;
+  final DateTime? endedAt;
+
+  bool get isRunning => state == 'running';
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    if (agent) 'agent': true,
+    'state': state,
+    'description': ?description,
+    'startedAt': ?startedAt?.toUtc().toIso8601String(),
+    'endedAt': ?endedAt?.toUtc().toIso8601String(),
+  };
+
+  /// Reads [toJson]'s form; null for one with no id or state.
+  static RemoteBackgroundRun? fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final state = json['state'];
+    if (id is! String || state is! String) return null;
+    DateTime? instant(String key) {
+      final value = json[key];
+      return value is String ? DateTime.tryParse(value)?.toUtc() : null;
+    }
+
+    final description = json['description'];
+    return RemoteBackgroundRun(
+      id: id,
+      agent: json['agent'] == true,
+      state: state,
+      description: description is String ? description : null,
+      startedAt: instant('startedAt'),
+      endedAt: instant('endedAt'),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteBackgroundRun &&
+      other.id == id &&
+      other.agent == agent &&
+      other.state == state &&
+      other.description == description &&
+      other.startedAt == startedAt &&
+      other.endedAt == endedAt;
+
+  @override
+  int get hashCode =>
+      Object.hash(id, agent, state, description, startedAt, endedAt);
 }

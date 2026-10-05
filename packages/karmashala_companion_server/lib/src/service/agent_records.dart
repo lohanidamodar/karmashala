@@ -50,7 +50,8 @@ class AgentRecords {
       return null;
     }
     final calls = outstandingCallsIn(turns);
-    _remember(sessionId, _Memo(at.path, revision, calls));
+    final background = backgroundRunsIn(turns);
+    _remember(sessionId, _Memo(at.path, revision, calls, background));
     return (
       messages: [
         for (final turn in turns)
@@ -63,6 +64,7 @@ class AgentRecords {
             ),
       ],
       calls: calls,
+      background: background,
       revision: revision,
     );
   }
@@ -71,7 +73,14 @@ class AgentRecords {
   /// when it was never read from a record; else its file's revision now (null
   /// when the file is gone) and, only when that has not moved, the calls the
   /// last read found still running. Moved, the caller reads again.
-  Future<({String? revision, List<RemoteActivityCall>? calls})?> since(
+  Future<
+    ({
+      String? revision,
+      List<RemoteActivityCall>? calls,
+      List<RemoteBackgroundRun>? background,
+    })?
+  >
+  since(
     String sessionId,
   ) async {
     final memo = _memos[sessionId];
@@ -80,6 +89,7 @@ class AgentRecords {
     return (
       revision: revision,
       calls: revision == memo.revision ? memo.calls : null,
+      background: revision == memo.revision ? memo.background : null,
     );
   }
 
@@ -108,6 +118,7 @@ class AgentRecords {
 typedef AgentRecordReading = ({
   List<RemoteTranscriptMessage> messages,
   List<RemoteActivityCall> calls,
+  List<RemoteBackgroundRun> background,
   String revision,
 });
 
@@ -129,6 +140,24 @@ List<RemoteActivityCall> outstandingCallsIn(List<TranscriptMessage> turns) => [
           ),
 ];
 
+/// **The background runs in [turns] worth listing** — by the app's own rule,
+/// so phone and desktop list the same ones.
+List<RemoteBackgroundRun> backgroundRunsIn(List<TranscriptMessage> turns) => [
+  for (final turn in listedBackgroundRuns(
+    turns,
+    runOf: (turn) => turn.background,
+    startOf: (turn) => turn.at,
+  ))
+    RemoteBackgroundRun(
+      id: turn.background!.id,
+      agent: turn.background!.kind == BackgroundRunKind.agent,
+      state: turn.background!.state.name,
+      description: turn.background!.description,
+      startedAt: turn.at,
+      endedAt: turn.background!.endedAt,
+    ),
+];
+
 /// Whether a session in [rowStatus] whose agent reads [status] is doing
 /// anything a phone should be shown as running: only a working agent in a
 /// session that has not ended.
@@ -136,8 +165,9 @@ bool agentIsWorking(SessionStatus rowStatus, AgentActivityStatus? status) =>
     rowStatus.claimsLive && status == AgentActivityStatus.working;
 
 class _Memo {
-  const _Memo(this.path, this.revision, this.calls);
+  const _Memo(this.path, this.revision, this.calls, this.background);
   final String path;
   final String revision;
   final List<RemoteActivityCall> calls;
+  final List<RemoteBackgroundRun> background;
 }

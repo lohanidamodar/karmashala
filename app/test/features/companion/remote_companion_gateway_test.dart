@@ -633,6 +633,51 @@ void main() {
     },
   );
 
+  test('background agents cross with the turn over, each with how long it '
+      'has run or ran', () async {
+    final observed = DateTime.utc(2026, 10, 5, 6, 5);
+    fake.activities['s1'] = RemoteSessionActivity(
+      sessionId: 's1',
+      observedAt: observed,
+      background: [
+        RemoteBackgroundRun(
+          id: 'a1',
+          agent: true,
+          state: 'running',
+          description: 'Strip idle detection',
+          startedAt: observed.subtract(const Duration(minutes: 5, seconds: 19)),
+        ),
+        RemoteBackgroundRun(
+          id: 'a2',
+          agent: true,
+          state: 'completed',
+          description: 'Unify tasks and work items',
+          startedAt: observed.subtract(const Duration(minutes: 3)),
+          endedAt: observed.subtract(const Duration(minutes: 1)),
+        ),
+      ],
+    );
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final activity = await gateway
+        .activity('s1')
+        .firstWhere((reading) => reading.known);
+
+    expect(activity.calls, isEmpty);
+    expect(activity.background.map((r) => r.description), [
+      'Strip idle detection',
+      'Unify tasks and work items',
+    ]);
+    expect(
+      activity.background.first.elapsed,
+      const Duration(minutes: 5, seconds: 19),
+    );
+    expect(activity.background.last.elapsed, const Duration(minutes: 2));
+    expect(activity.background.last.isRunning, isFalse);
+  });
+
   test('a pairing without view_activity is told so, not left empty', () async {
     fake.activities['s1'] = RemoteSessionActivity(
       sessionId: 's1',

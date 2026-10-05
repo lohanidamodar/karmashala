@@ -12,6 +12,7 @@ import 'package:karmashala_session/delivery.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_activity_strip.dart';
+import 'companion_background_runs.dart';
 import 'companion_approval_card.dart';
 import 'companion_menu_card.dart';
 import 'companion_question_card.dart';
@@ -486,6 +487,7 @@ class SessionFooter extends StatelessWidget {
             onAnswerMenu: onAnswerMenu,
             onChooseOption: onChooseOption,
           ),
+        if (showActivity) CompanionBackgroundRuns(sessionId: sessionId),
         if (showActivity) CompanionActivityStrip(sessionId: sessionId),
         ?resume,
       ],

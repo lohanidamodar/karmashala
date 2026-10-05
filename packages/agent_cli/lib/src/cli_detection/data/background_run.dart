@@ -101,3 +101,33 @@ class BackgroundRun {
   int get hashCode =>
       Object.hash(id, kind, state, description, endedAt, summary);
 }
+
+/// The [rows] worth listing: none while nothing runs, else the
+/// running ones and those that finished while they ran, but not one that
+/// ended before any of them began. [startOf] and [runOf] read a row.
+List<T> listedBackgroundRuns<T>(
+  List<T> rows, {
+  required BackgroundRun? Function(T row) runOf,
+  required DateTime? Function(T row) startOf,
+}) {
+  DateTime? since;
+  var anyRunning = false;
+  for (final row in rows) {
+    final run = runOf(row);
+    if (run == null || !run.state.isRunning) continue;
+    anyRunning = true;
+    final start = startOf(row);
+    if (start != null && (since == null || start.isBefore(since))) {
+      since = start;
+    }
+  }
+  if (!anyRunning) return const [];
+  return [
+    for (final row in rows)
+      if (runOf(row) case final run?)
+        if (run.state.isRunning ||
+            since == null ||
+            (run.endedAt?.isAfter(since) ?? false))
+          row,
+  ];
+}

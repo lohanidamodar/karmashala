@@ -202,6 +202,20 @@ extension _GatewaySessions on RemoteCompanionGateway {
             ),
           ),
       ],
+      background: [
+        for (final run in activity.background)
+          CompanionBackgroundRun(
+            agent: run.agent,
+            state: run.state,
+            description: run.description,
+            elapsed: switch (run.startedAt) {
+              final start? => _nonNegative(
+                (run.endedAt ?? activity.observedAt).difference(start),
+              ),
+              null => null,
+            },
+          ),
+      ],
     );
   }
 

@@ -56,21 +56,13 @@ List<SessionBackgroundRun> backgroundRunsIn(List<TranscriptMessage> messages) {
           subagent: message.subagent,
         ),
   ];
-  final running = all.where((entry) => entry.run.state.isRunning);
-  if (running.isEmpty) return const [];
-  DateTime? since;
-  for (final entry in running) {
-    final start = entry.startedAt;
-    if (start == null) continue;
-    if (since == null || start.isBefore(since)) since = start;
-  }
-  return List.unmodifiable([
-    for (final entry in all)
-      if (entry.run.state.isRunning ||
-          since == null ||
-          (entry.run.endedAt?.isAfter(since) ?? false))
-        entry,
-  ]);
+  return List.unmodifiable(
+    listedBackgroundRuns(
+      all,
+      runOf: (entry) => entry.run,
+      startOf: (entry) => entry.startedAt,
+    ),
+  );
 }
 
 /// **The background runs session [sessionId] is waiting on**, read from the

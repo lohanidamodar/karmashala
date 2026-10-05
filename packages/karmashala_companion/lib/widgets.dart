@@ -4,6 +4,7 @@
 library;
 
 export 'src/presentation/companion_activity_strip.dart';
+export 'src/presentation/companion_background_runs.dart';
 export 'src/presentation/environment_index.dart';
 export 'src/presentation/companion_approval_card.dart';
 export 'src/presentation/companion_menu_card.dart';

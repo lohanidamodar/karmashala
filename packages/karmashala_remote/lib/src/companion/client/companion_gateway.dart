@@ -488,6 +488,40 @@ class CompanionActivityCall {
   int get hashCode => Object.hash(summary, subagent, elapsed);
 }
 
+/// One background run a session left going — an agent or a shell command —
+/// as the phone shows it.
+class CompanionBackgroundRun {
+  const CompanionBackgroundRun({
+    required this.agent,
+    required this.state,
+    this.description,
+    this.elapsed,
+  });
+
+  final bool agent;
+
+  /// The host's word: `running`, `completed`, `failed`, `killed`, `ended`.
+  final String state;
+  final String? description;
+
+  /// How long it had run when the host looked, or how long it ran once over;
+  /// null when the host knew no start. A duration, so no two clocks meet.
+  final Duration? elapsed;
+
+  bool get isRunning => state == 'running';
+
+  @override
+  bool operator ==(Object other) =>
+      other is CompanionBackgroundRun &&
+      other.agent == agent &&
+      other.state == state &&
+      other.description == description &&
+      other.elapsed == elapsed;
+
+  @override
+  int get hashCode => Object.hash(agent, state, description, elapsed);
+}
+
 /// **What one session is doing right now**, as the phone last heard it.
 class CompanionActivity {
   const CompanionActivity({
@@ -495,6 +529,7 @@ class CompanionActivity {
     this.calls = const [],
     this.absence,
     this.refused,
+    this.background = const [],
   });
 
   /// Nothing has been heard yet — not "nothing is running".
@@ -516,6 +551,10 @@ class CompanionActivity {
   /// into an empty list.
   final String? refused;
 
+  /// The background runs the session is waiting on, whatever its turn is
+  /// doing, with those that finished alongside them.
+  final List<CompanionBackgroundRun> background;
+
   /// Whether this is a reading at all, as opposed to the seed before one.
   bool get known => at.millisecondsSinceEpoch != 0;
 
@@ -525,15 +564,19 @@ class CompanionActivity {
       other.at == at &&
       other.absence == absence &&
       other.refused == refused &&
-      _sameCalls(other.calls, calls);
+      _sameCalls(other.calls, calls) &&
+      _sameCalls(other.background, background);
 
   @override
-  int get hashCode => Object.hash(at, absence, refused, Object.hashAll(calls));
+  int get hashCode => Object.hash(
+    at,
+    absence,
+    refused,
+    Object.hashAll(calls),
+    Object.hashAll(background),
+  );
 
-  static bool _sameCalls(
-    List<CompanionActivityCall> a,
-    List<CompanionActivityCall> b,
-  ) {
+  static bool _sameCalls(List<Object> a, List<Object> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
