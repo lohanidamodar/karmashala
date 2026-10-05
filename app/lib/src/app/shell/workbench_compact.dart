@@ -117,6 +117,10 @@ class _CompactSessionBar extends StatelessWidget {
                         ),
                         child: ScheduledResumeChip(sessionId: sessionId),
                       ),
+                      // The phone's only way into the messages waiting for
+                      // this session, chat or terminal: nothing, and no
+                      // width, while none wait.
+                      QueuedCountChip(sessionId: sessionId),
                       SessionSubagentsBadge(sessionId: sessionId),
                       const SizedBox(width: Insets.xs),
                       _SessionSheetButton(sessionId: sessionId),
