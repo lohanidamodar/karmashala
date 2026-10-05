@@ -722,6 +722,7 @@ bool sameTranscriptMessage(TranscriptMessage a, TranscriptMessage b) =>
         a.at == b.at &&
         a.pendingToolUseId == b.pendingToolUseId &&
         a.pendingBackgroundAgentId == b.pendingBackgroundAgentId &&
+        a.background == b.background &&
         a.agentInstallationId == b.agentInstallationId &&
         _sameCompaction(a.compaction, b.compaction) &&
         _sameSubagent(a.subagent, b.subagent) &&

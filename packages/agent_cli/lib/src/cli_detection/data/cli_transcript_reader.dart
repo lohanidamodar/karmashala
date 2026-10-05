@@ -17,6 +17,9 @@ import '../../sessions/session_event_types.dart';
 import '../../sessions/tool_activity.dart';
 import './transcript_dialect.dart';
 import './subagent_transcript.dart';
+import './background_run.dart';
+
+export './background_run.dart';
 
 part 'cli_transcript_tail.dart';
 part 'cli_transcript_turns.dart';
@@ -75,6 +78,7 @@ class TranscriptMessage {
     this.at,
     this.pendingToolUseId,
     this.pendingBackgroundAgentId,
+    this.background,
     this.thinking,
     this.compaction,
     this.agentInstallationId,
@@ -136,6 +140,11 @@ class TranscriptMessage {
   /// cannot name is one we could never retire.
   final String? pendingBackgroundAgentId;
 
+  /// The background run the call on this row started — an agent or a shell
+  /// command — and how it ended, kept after it finished. Null on every other
+  /// row.
+  final BackgroundRun? background;
+
   /// Set on the **first row after a compaction boundary** — which is the
   /// summary the CLI wrote of everything before it. Null everywhere else. See
   /// [CompactionBoundary].
@@ -154,6 +163,7 @@ class TranscriptMessage {
     at: at,
     pendingToolUseId: pendingToolUseId,
     pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: installationId,
@@ -171,6 +181,7 @@ class TranscriptMessage {
     'at': ?at?.toUtc().toIso8601String(),
     'pendingToolUseId': ?pendingToolUseId,
     'pendingBackgroundAgentId': ?pendingBackgroundAgentId,
+    'background': ?background?.toJson(),
     'compaction': ?compaction?.toJson(),
     'agentInstallationId': ?agentInstallationId,
   };
@@ -188,6 +199,7 @@ class TranscriptMessage {
     final subagent = json['subagent'];
     final at = json['at'];
     final compaction = json['compaction'];
+    final background = json['background'];
     String? string(String key) {
       final value = json[key];
       return value is String ? value : null;
@@ -206,6 +218,9 @@ class TranscriptMessage {
       at: at is String ? DateTime.tryParse(at)?.toUtc() : null,
       pendingToolUseId: string('pendingToolUseId'),
       pendingBackgroundAgentId: string('pendingBackgroundAgentId'),
+      background: background is Map
+          ? BackgroundRun.fromJson(background.cast<String, Object?>())
+          : null,
       compaction: compaction is Map
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
@@ -354,6 +369,8 @@ class _TranscriptParse {
   // [TranscriptMessage.pendingBackgroundAgentId].
   final Map<String, int> background = {};
   final Map<String, int> acrossBoundary = {};
+  // Every background run, finished ones too: what the chat lists.
+  _BackgroundRuns runs = _BackgroundRuns();
   // The boundary whose summary has not been reached yet. Held here rather than
   // returned from `_parseClaudeLine`, because the record that announces a
   // compaction produces no row of its own — the row it belongs to is the next
@@ -367,6 +384,7 @@ class _TranscriptParse {
     ..tasks.addAll(tasks)
     ..background.addAll(background)
     ..acrossBoundary.addAll(acrossBoundary)
+    ..runs = runs.copy()
     ..pendingCompaction = pendingCompaction;
 
   void add(String line) {
@@ -397,6 +415,7 @@ class _TranscriptParse {
         tasks,
         background,
         acrossBoundary,
+        runs,
         at,
       );
       final boundary = pendingCompaction;
@@ -419,6 +438,7 @@ Future<void> _finish(
   await _attachSubagents(out, parse.tasks, filePath, subagentsDirectory);
   // After the join, because that one rebuilds the very rows this stamps.
   _stampBackgroundAgents(out, parse.background);
+  parse.runs.stamp(out);
 }
 
 /// The compaction [json] announces, or null for every other line.
@@ -723,6 +743,7 @@ void _parseClaudeLine(
   Map<String, int> tasks,
   Map<String, int> background,
   Map<String, int> acrossBoundary,
+  _BackgroundRuns runs,
   DateTime? at,
 ) {
   final type = json['type'];
@@ -734,10 +755,12 @@ void _parseClaudeLine(
       case 'compact_boundary':
         acrossBoundary.addAll(background);
         background.clear();
+        runs.boundary();
       // The kill-all gesture: nothing survives it, named or not.
       case 'agents_killed':
         background.clear();
         acrossBoundary.clear();
+        runs.killAgents(at);
     }
     return;
   }
@@ -747,6 +770,7 @@ void _parseClaudeLine(
     // An envelope that arrived mid-turn is queued, not a user turn.
     if (attachment['type'] == 'queued_command') {
       _retireReportedAgents(attachment['prompt'], background, acrossBoundary);
+      runs.notified(attachment['prompt'], at);
       return;
     }
     if (attachment['type'] != 'task_status') return;
@@ -757,6 +781,7 @@ void _parseClaudeLine(
     if (id is String) {
       final row = acrossBoundary.remove(id);
       if (row != null) background[id] = row;
+      runs.restated(id);
     }
     return;
   }
@@ -768,6 +793,7 @@ void _parseClaudeLine(
   if (role == 'user' && (background.isNotEmpty || acrossBoundary.isNotEmpty)) {
     _retireReportedAgents(content, background, acrossBoundary);
   }
+  if (role == 'user' && runs.anyRunning) runs.notified(content, at);
 
   // A paste is recorded inside tags; the person's message is what they hold.
   Object? said(Object? text) =>
@@ -795,6 +821,7 @@ void _parseClaudeLine(
             if (id is String) {
               pending[id] = out.length;
               if (isSubagentToolName(name)) tasks[id] = out.length;
+              runs.called(id, part['input']);
             }
             out.add(
               TranscriptMessage(
@@ -828,6 +855,7 @@ void _parseClaudeLine(
           );
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
+          if (row != null) runs.launched(id, json['toolUseResult'], row);
       }
     }
   }
@@ -872,11 +900,176 @@ void _retireReportedAgents(
       continue;
     }
     if (!text.contains(_taskNotificationMarker)) continue;
-    for (final match in _taskIdPattern.allMatches(text)) {
-      final id = match.group(1);
-      background.remove(id);
-      acrossBoundary.remove(id);
+    for (final notice in _taskNotices(text)) {
+      // The agent stopped with work of its own still running: it notifies
+      // again when that ends.
+      if (notice.interim) continue;
+      background.remove(notice.id);
+      acrossBoundary.remove(notice.id);
     }
+  }
+}
+
+/// One `<task-notification>`: the task it names, its `<status>` and
+/// `<summary>`, and whether it says the result may be interim.
+typedef _TaskNotice = ({
+  String id,
+  String? status,
+  String? summary,
+  bool interim,
+});
+
+Iterable<_TaskNotice> _taskNotices(String text) sync* {
+  for (final block in _taskNotificationPattern.allMatches(text)) {
+    final body = block.group(1)!;
+    final id = _taskIdPattern.firstMatch(body)?.group(1);
+    if (id == null) continue;
+    yield (
+      id: id,
+      status: _taskStatusPattern.firstMatch(body)?.group(1)?.trim(),
+      summary: _taskSummaryPattern.firstMatch(body)?.group(1)?.trim(),
+      interim: body.contains('may be interim'),
+    );
+  }
+}
+
+final RegExp _taskNotificationPattern = RegExp(
+  r'<task-notification>([\s\S]*?)</task-notification>',
+);
+final RegExp _taskStatusPattern = RegExp(r'<status>([^<]*)</status>');
+final RegExp _taskSummaryPattern = RegExp(r'<summary>([^<]*)</summary>');
+
+/// Every background run a Claude transcript started — agents launched with
+/// `run_in_background` and background shell commands — and what became of
+/// each, finished ones kept. Stamped onto the launching rows at the end.
+class _BackgroundRuns {
+  final Map<String, BackgroundRun> _runs = {};
+  final Map<String, int> _rows = {};
+
+  /// Running at a compaction and not yet named again by a `task_status`.
+  final Set<String> _aside = {};
+
+  /// What each call asked to run in the background said it was for, by call
+  /// id: the result of a command names nothing.
+  final Map<String, String> _described = {};
+
+  bool get anyRunning => _runs.values.any((run) => run.state.isRunning);
+
+  _BackgroundRuns copy() => _BackgroundRuns()
+    .._runs.addAll(_runs)
+    .._rows.addAll(_rows)
+    .._aside.addAll(_aside)
+    .._described.addAll(_described);
+
+  /// A `tool_use` [input]: kept only when it asks for the background.
+  void called(Object? callId, Object? input) {
+    if (callId is! String || input is! Map) return;
+    if (input['run_in_background'] != true) return;
+    final description = input['description'];
+    if (description is String && description.isNotEmpty) {
+      _described[callId] = description;
+    }
+  }
+
+  /// A `tool_result` whose structured result says its call went to the
+  /// background: an async agent, or a command with a background task id.
+  void launched(Object? callId, Object? result, int row) {
+    final described = _described.remove(callId);
+    if (result is! Map) return;
+    final BackgroundRunKind kind;
+    final Object? id;
+    if (result['isAsync'] == true) {
+      kind = BackgroundRunKind.agent;
+      id = result['agentId'];
+    } else {
+      kind = BackgroundRunKind.command;
+      id = result['backgroundTaskId'];
+    }
+    if (id is! String || id.isEmpty) return;
+    final named = result['description'];
+    _runs[id] = BackgroundRun(
+      id: id,
+      kind: kind,
+      state: BackgroundRunState.running,
+      description: named is String && named.isNotEmpty ? named : described,
+    );
+    _rows[id] = row;
+  }
+
+  /// The final notices in [content] end their runs; an interim one only
+  /// updates what the run says of itself.
+  void notified(Object? content, DateTime? at) {
+    for (final block in content is List ? content : [content]) {
+      final String text;
+      if (block is String) {
+        text = block;
+      } else if (block is Map && block['text'] is String) {
+        text = block['text'] as String;
+      } else {
+        continue;
+      }
+      if (!text.contains(_taskNotificationMarker)) continue;
+      for (final notice in _taskNotices(text)) {
+        final run = _runs[notice.id];
+        if (run == null) continue;
+        _aside.remove(notice.id);
+        _runs[notice.id] = notice.interim
+            ? run.copyWith(summary: notice.summary)
+            : run.copyWith(
+                state: BackgroundRunState.ofStatus(notice.status),
+                endedAt: at,
+                summary: notice.summary,
+              );
+      }
+    }
+  }
+
+  /// A compaction: what is still running must be named again to stay so.
+  void boundary() {
+    for (final MapEntry(:key, :value) in _runs.entries) {
+      if (value.state.isRunning) _aside.add(key);
+    }
+  }
+
+  void restated(String id) => _aside.remove(id);
+
+  /// The kill-all gesture ends every agent; commands are not agents.
+  void killAgents(DateTime? at) {
+    for (final MapEntry(:key, :value) in [..._runs.entries]) {
+      if (value.kind != BackgroundRunKind.agent || !value.state.isRunning) {
+        continue;
+      }
+      _runs[key] = value.copyWith(
+        state: BackgroundRunState.killed,
+        endedAt: at,
+      );
+      _aside.remove(key);
+    }
+  }
+
+  void stamp(List<TranscriptMessage> messages) {
+    _rows.forEach((id, index) {
+      if (index >= messages.length) return;
+      var run = _runs[id]!;
+      // Dropped at a compaction and never named again: over, unreported.
+      if (_aside.contains(id)) {
+        run = run.copyWith(state: BackgroundRunState.ended);
+      }
+      final row = messages[index];
+      messages[index] = TranscriptMessage(
+        role: row.role,
+        text: row.text,
+        tool: row.tool,
+        subagent: row.subagent,
+        at: row.at,
+        pendingToolUseId: row.pendingToolUseId,
+        pendingBackgroundAgentId: row.pendingBackgroundAgentId,
+        background: run,
+        thinking: row.thinking,
+        compaction: row.compaction,
+        agentInstallationId: row.agentInstallationId,
+      );
+    });
   }
 }
 
