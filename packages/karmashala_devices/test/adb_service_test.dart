@@ -626,6 +626,45 @@ void main() {
       ]);
     });
 
+    test('a hardware serial is ro.serialno, else ro.boot.serialno', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) => CommandResult(
+          exitCode: 0,
+          stdout: switch (request.arguments.last) {
+            'ro.boot.serialno' => 'QX7TESTSERIAL01\n',
+            _ => '\n',
+          },
+          stderr: '',
+        ),
+      );
+      final adb = AdbService(runner: runner, sdk: _sdk());
+      expect(await adb.hardwareSerial('192.168.1.20:5555'), 'QX7TESTSERIAL01');
+      expect(_argv(runner, 0), [
+        '-s',
+        '192.168.1.20:5555',
+        'shell',
+        'getprop',
+        'ro.serialno',
+      ]);
+    });
+
+    test('an answer that is not one token is no hardware serial', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 0,
+          stdout: '/system/bin/sh: getprop: inaccessible or not found\n',
+          stderr: '',
+        ),
+      );
+      expect(
+        await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).hardwareSerial('192.168.1.20:5555'),
+        isNull,
+      );
+    });
+
     test('a device that answers adb but has not booted is not ready', () async {
       final runner = FakeCommandRunner(
         responder: (_) =>

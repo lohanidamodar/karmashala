@@ -250,6 +250,54 @@ class AdbService {
     return null;
   }
 
+  /// [listDevices] with each phone listed once ([mergeDeviceTransports]).
+  /// When a wireless transport is listed beside another physical one, each
+  /// ready physical one is asked its hardware serial, so two wireless
+  /// transports of one phone join with no cable to name it.
+  Future<List<AndroidDevice>> listDevicesOnce() async {
+    final devices = await listDevices();
+    final physical = [
+      for (final d in devices)
+        if (!d.isEmulator) d,
+    ];
+    if (physical.length < 2 || !physical.any((d) => d.isWireless)) {
+      return mergeDeviceTransports(devices);
+    }
+    final ready = [
+      for (final d in physical)
+        if (d.isReady) d.serial,
+    ];
+    final serials = await Future.wait(ready.map(hardwareSerial));
+    return mergeDeviceTransports(
+      devices,
+      hardwareSerials: {
+        for (var i = 0; i < ready.length; i++)
+          if (serials[i] case final serial?) ready[i]: serial,
+      },
+    );
+  }
+
+  /// The device's own serial behind the transport [serial] — `ro.serialno`,
+  /// else `ro.boot.serialno` — or null when it gives neither.
+  Future<String?> hardwareSerial(String serial) async {
+    for (final property in const ['ro.serialno', 'ro.boot.serialno']) {
+      try {
+        final result = await runner.run(
+          CommandRequest(
+            executable: sdk.adb.path,
+            arguments: ['-s', serial, 'shell', 'getprop', property],
+            timeout: const Duration(seconds: 5),
+          ),
+        );
+        final value = result.stdout.trim();
+        if (result.ok && _serialShape.hasMatch(value)) return value;
+      } on CommandException {
+        return null;
+      }
+    }
+    return null;
+  }
+
   /// Whether Android has finished booting on [serial]. A device answers adb well
   /// before `sys.boot_completed`, and half-booted calls fail like our own bugs.
   Future<bool> isBootCompleted(String serial) async {
@@ -1540,3 +1588,6 @@ List<RemovableVolume> parseStorageVolumeIds(String output) => [
     if (_volumeId.hasMatch(name))
       RemovableVolume(path: '/storage/$name', kind: 'Removable storage'),
 ];
+
+/// A hardware serial: one token. Anything else is not an answer to trust.
+final RegExp _serialShape = RegExp(r'^[A-Za-z0-9._-]+$');

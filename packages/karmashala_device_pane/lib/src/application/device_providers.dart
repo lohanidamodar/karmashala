@@ -41,7 +41,7 @@ final adbServiceProvider = Provider<AdbService?>((ref) {
 final devicesProvider = FutureProvider<List<AndroidDevice>>((ref) async {
   final adb = ref.watch(adbServiceProvider);
   if (adb == null) return const [];
-  return mergeDeviceTransports(await adb.listDevices());
+  return adb.listDevicesOnce();
 });
 
 /// AVDs known to the SDK, with any running one marked.

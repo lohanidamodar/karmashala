@@ -63,4 +63,46 @@ void main() {
     ];
     expect(mergeDeviceTransports(devices), devices);
   });
+
+  group('with no cable, two wireless transports of one phone', () {
+    const ip = '192.168.1.20:38637';
+    const mdns = 'adb-QX7TESTSERIAL01-ab12Cd._adb-tls-connect._tcp';
+
+    test('join when adb gives both the same hardware serial', () {
+      final merged = mergeDeviceTransports(
+        [_device(ip), _device(mdns)],
+        hardwareSerials: {ip: 'QX7TESTSERIAL01', mdns: 'QX7TESTSERIAL01'},
+      );
+      expect(merged, hasLength(1));
+      expect(merged.single.serial, ip, reason: 'the direct address answers');
+      expect(merged.single.otherSerials, [mdns]);
+      expect(merged.single.answersTo(mdns), isTrue);
+    });
+
+    test('join on the serial the mDNS name carries when only the ip:port one '
+        'was asked', () {
+      final merged = mergeDeviceTransports(
+        [_device(mdns), _device(ip)],
+        hardwareSerials: {ip: 'QX7TESTSERIAL01'},
+      );
+      expect([for (final d in merged) d.serial], [ip]);
+      expect(merged.single.otherSerials, [mdns]);
+    });
+
+    test('stay apart when their hardware serials differ', () {
+      final devices = [_device(ip), _device(mdns)];
+      expect(
+        mergeDeviceTransports(
+          devices,
+          hardwareSerials: {ip: 'OTHERPHONE0002', mdns: 'QX7TESTSERIAL01'},
+        ),
+        devices,
+      );
+    });
+
+    test('are not joined on their model alone', () {
+      final devices = [_device(ip), _device(mdns)];
+      expect(mergeDeviceTransports(devices), devices);
+    });
+  });
 }

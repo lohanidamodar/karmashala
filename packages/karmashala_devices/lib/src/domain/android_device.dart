@@ -55,6 +55,9 @@ class AndroidDevice {
   /// Emulator serials are always `emulator-<port>`; everything else is physical.
   bool get isEmulator => serial.startsWith('emulator-');
 
+  /// Whether this transport is wireless adb: an mDNS name or an `ip:port`.
+  bool get isWireless => _isWireless(serial);
+
   /// Whether the device can accept commands right now.
   bool get isReady => state == DeviceConnectionState.device;
 
@@ -116,62 +119,81 @@ bool _isWireless(String serial) =>
     _mdnsSerial.hasMatch(serial) || _hostPort.hasMatch(serial);
 
 /// **[devices] with each phone listed once**, whichever transports reach it.
-/// A wireless transport joins the cabled device whose serial its mDNS name
-/// carries, or — naming none — the one cabled device of its model on the same
-/// adb server. Two candidates are never guessed between. The ready transport
-/// answers; the cable when both are.
-List<AndroidDevice> mergeDeviceTransports(List<AndroidDevice> devices) {
-  final cabled = [
-    for (final device in devices)
-      if (!device.isEmulator && !_isWireless(device.serial)) device,
-  ];
-  AndroidDevice? cableFor(AndroidDevice wireless) {
-    final named = _mdnsSerial.firstMatch(wireless.serial)?.group(1);
-    if (named != null) {
-      for (final cable in cabled) {
-        if (cable.serial == named &&
-            cable.environmentId == wireless.environmentId) {
-          return cable;
-        }
-      }
-    }
-    final model = wireless.model;
-    if (model == null) return null;
-    final sameModel = [
-      for (final cable in cabled)
-        if (cable.model == model &&
-            cable.environmentId == wireless.environmentId)
-          cable,
-    ];
-    final wirelessOfModel = devices.where(
-      (d) =>
-          _isWireless(d.serial) &&
-          d.model == model &&
-          d.environmentId == wireless.environmentId,
-    );
-    return sameModel.length == 1 && wirelessOfModel.length == 1
-        ? sameModel.single
-        : null;
+/// Transports are one phone when they share a hardware serial: the one adb
+/// reported in [hardwareSerials] (transport serial → `ro.serialno`), else the
+/// one an mDNS name carries, else a cable's own. An `ip:port` transport nobody
+/// asked joins the one cabled device of its model on the same adb server; two
+/// candidates are never guessed between, and model alone never joins two
+/// wireless transports. The ready transport answers: a cable, then an
+/// `ip:port`, then an mDNS name.
+List<AndroidDevice> mergeDeviceTransports(
+  List<AndroidDevice> devices, {
+  Map<String, String> hardwareSerials = const {},
+}) {
+  String? identityOf(AndroidDevice device) {
+    if (device.isEmulator) return null;
+    final asked = hardwareSerials[device.serial];
+    if (asked != null && asked.isNotEmpty) return asked;
+    final named = _mdnsSerial.firstMatch(device.serial)?.group(1);
+    if (named != null) return named;
+    return _hostPort.hasMatch(device.serial) ? null : device.serial;
   }
 
-  final joined = <AndroidDevice, AndroidDevice>{};
+  final identities = {for (final d in devices) d: identityOf(d)};
   for (final device in devices) {
-    if (!_isWireless(device.serial)) continue;
-    final cable = cableFor(device);
-    if (cable == null || joined.containsKey(cable)) continue;
-    joined[cable] = device;
+    final model = device.model;
+    if (identities[device] != null || device.isEmulator || model == null) {
+      continue;
+    }
+    bool sameServer(AndroidDevice d) =>
+        d.model == model && d.environmentId == device.environmentId;
+    final cables = devices.where(
+      (d) => !d.isEmulator && !_isWireless(d.serial) && sameServer(d),
+    );
+    final wireless = devices.where(
+      (d) => _isWireless(d.serial) && sameServer(d),
+    );
+    if (cables.length == 1 && wireless.length == 1) {
+      identities[device] = identities[cables.single];
+    }
   }
-  if (joined.isEmpty) return devices;
-  final absorbed = joined.values.toSet();
+
+  final groups = <String, List<AndroidDevice>>{};
+  for (final device in devices) {
+    final identity = identities[device];
+    if (identity == null) continue;
+    groups
+        .putIfAbsent('${device.environmentId}\u0000$identity', () => [])
+        .add(device);
+  }
+  if (groups.values.every((g) => g.length == 1)) return devices;
+
+  int rank(AndroidDevice d) =>
+      (d.isReady ? 0 : 3) +
+      (_hostPort.hasMatch(d.serial)
+          ? 1
+          : _mdnsSerial.hasMatch(d.serial)
+          ? 2
+          : 0);
+  // Each phone's row stands where its first transport was listed.
+  final rows = <AndroidDevice, AndroidDevice>{};
+  final absorbed = <AndroidDevice>{};
+  for (final group in groups.values) {
+    if (group.length == 1) continue;
+    var answering = group.first;
+    for (final d in group) {
+      if (rank(d) < rank(answering)) answering = d;
+    }
+    var row = answering;
+    for (final d in group) {
+      if (!identical(d, answering)) row = row._alsoOver(d);
+    }
+    rows[group.first] = row;
+    absorbed.addAll(group.skip(1));
+  }
   return [
     for (final device in devices)
-      if (!absorbed.contains(device))
-        if (joined[device] case final wireless?)
-          device.isReady || !wireless.isReady
-              ? device._alsoOver(wireless)
-              : wireless._alsoOver(device)
-        else
-          device,
+      if (!absorbed.contains(device)) rows[device] ?? device,
   ];
 }
 

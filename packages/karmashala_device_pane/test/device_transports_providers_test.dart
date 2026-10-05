@@ -57,4 +57,37 @@ void main() {
     c.read(selectedDeviceSerialProvider.notifier).select(_wireless);
     expect(c.read(selectedDeviceProvider)?.serial, _usb);
   });
+
+  test('a phone on two wireless transports and no cable is one device, '
+      'joined on the hardware serial adb reports for each', () async {
+    const ip = '192.168.1.20:38637';
+    const mdns = 'adb-QX7TESTSERIAL01-ab12Cd._adb-tls-connect._tcp';
+    final runner = FakeCommandRunner(
+      responder: (request) => CommandResult(
+        exitCode: 0,
+        stdout: request.arguments.contains('ro.serialno')
+            ? 'QX7TESTSERIAL01\n'
+            : 'List of devices attached\n'
+                  '$ip\tdevice product:CPH1989 model:CPH1989 '
+                  'device:OP4B80L1 transport_id:5\n'
+                  '$mdns\tdevice product:CPH1989 model:CPH1989 '
+                  'device:OP4B80L1 transport_id:6\n',
+        stderr: '',
+      ),
+    );
+    final c = ProviderContainer(
+      overrides: [
+        androidSdkProvider.overrideWith((ref) async => _sdk),
+        adbServiceProvider.overrideWithValue(
+          AdbService(runner: runner, sdk: _sdk),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+
+    final devices = await c.read(devicesProvider.future);
+    expect(devices, hasLength(1));
+    expect(devices.single.serial, ip);
+    expect(devices.single.otherSerials, [mdns]);
+  });
 }
