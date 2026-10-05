@@ -877,6 +877,10 @@ void _parseClaudeLine(
         runs.killAgents(at);
       case 'stop_hook_summary':
         _add(out, kTranscriptNoticeRole, _stopHookNote(json), at);
+      case 'away_summary':
+        if (json['content'] case final String recap when recap.trim() != '') {
+          _add(out, kTranscriptNoticeRole, 'While you were away: $recap', at);
+        }
       case 'local_command':
         if (json['content'] case final String text) {
           _addLocalCommand(text, out, at);
