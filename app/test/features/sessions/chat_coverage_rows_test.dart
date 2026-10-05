@@ -1,9 +1,11 @@
 import 'package:agent_cli/read.dart'
-    show kTranscriptCommandRole, kTranscriptNoticeRole;
+    show TranscriptMessage, kTranscriptCommandRole, kTranscriptNoticeRole;
 import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart'
+    show chatMessagesFromTranscript;
 
 /// Rows the agents write besides turns and calls, as the chat draws them.
 void main() {
@@ -68,5 +70,24 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('<command-name>'), findsNothing);
+  });
+
+  testWidgets('a prompt sent while the agent worked is marked so', (
+    tester,
+  ) async {
+    final chat = chatMessagesFromTranscript(const [
+      TranscriptMessage(role: 'user', text: 'Run the tests'),
+      TranscriptMessage(role: 'user', text: 'Also, what is 2+2?', queued: true),
+    ]);
+    expect(chat.map((m) => m.queued), [false, true]);
+
+    await tester.pumpWidget(view(chat));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sent while working'), findsOneWidget);
+    expect(
+      find.textContaining('Also, what is 2+2?', findRichText: true),
+      findsOneWidget,
+    );
   });
 }

@@ -50,6 +50,7 @@ class ChatMessage {
     this.agentName,
     this.agentId,
     this.detail,
+    this.queued = false,
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -81,6 +82,9 @@ class ChatMessage {
   /// Text folded under a notice until it is opened: what a compaction kept.
   final String? detail;
 
+  /// A `user` row the person sent while the agent was still working.
+  final bool queued;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -95,6 +99,7 @@ class ChatMessage {
           other.agentId == agentId &&
           other.thinking == thinking &&
           other.detail == detail &&
+          other.queued == queued &&
           _sameTool(other.tool, tool) &&
           other.text == text;
 

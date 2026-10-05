@@ -1303,6 +1303,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         pendingToolUseId: message.pendingToolUseId,
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,
+        queued: message.queued,
       ),
     );
   }

@@ -221,12 +221,21 @@ class _UserMessageCard extends StatelessWidget {
         ),
       ),
     );
-    if (preamble == null) return bubble;
+    if (preamble == null && !message.queued) return bubble;
+    final muted = Theme.of(
+      context,
+    ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        _SessionNote(text: preamble),
+        if (preamble != null) _SessionNote(text: preamble),
         if (rest.isNotEmpty) bubble,
+        // The agent read it mid-turn, not as the next turn.
+        if (message.queued)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text('Sent while working', style: muted),
+          ),
       ],
     );
   }

@@ -96,6 +96,7 @@ class TranscriptMessage {
     this.thinking,
     this.compaction,
     this.agentInstallationId,
+    this.queued = false,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -168,6 +169,10 @@ class TranscriptMessage {
   /// agent; null everywhere else, including every row a file reader returns.
   final String? agentInstallationId;
 
+  /// A `user` row the person sent while the agent was still working, which
+  /// the CLI queued rather than recorded as a turn.
+  final bool queued;
+
   /// This row with [thinking] set.
   TranscriptMessage withThinking(String? value) => TranscriptMessage(
     role: role,
@@ -181,6 +186,7 @@ class TranscriptMessage {
     thinking: value,
     compaction: compaction,
     agentInstallationId: agentInstallationId,
+    queued: queued,
   );
 
   /// This row with [agentInstallationId] set.
@@ -196,6 +202,7 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: installationId,
+    queued: queued,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -213,6 +220,7 @@ class TranscriptMessage {
     'background': ?background?.toJson(),
     'compaction': ?compaction?.toJson(),
     'agentInstallationId': ?agentInstallationId,
+    if (queued) 'queued': true,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -254,6 +262,7 @@ class TranscriptMessage {
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
       agentInstallationId: string('agentInstallationId'),
+      queued: json['queued'] == true,
     );
   }
 }
@@ -874,10 +883,12 @@ void _parseClaudeLine(
       _add(out, kTranscriptNoticeRole, hookNote, at);
       return;
     }
-    // An envelope that arrived mid-turn is queued, not a user turn.
+    // What arrived mid-turn is queued: a background run's notice, or a
+    // prompt the person sent while the agent worked.
     if (attachment['type'] == 'queued_command') {
       _retireReportedAgents(attachment['prompt'], background, acrossBoundary);
       runs.notified(attachment['prompt'], at);
+      _addQueuedPrompt(attachment, out, at);
       return;
     }
     if (attachment['type'] != 'task_status') return;
@@ -1094,6 +1105,34 @@ void _foldSkillBody(Object? text, List<TranscriptMessage> out) {
 final RegExp _skillBodyHeader = RegExp(
   r'^Base directory for this skill:[^\n]*\n*',
 );
+
+/// A prompt the person sent while the agent worked, which the CLI keeps only
+/// as a `queued_command` attachment: their message, marked [queued]. A
+/// background run's notice arrives the same way and is not theirs.
+void _addQueuedPrompt(
+  Map<dynamic, dynamic> attachment,
+  List<TranscriptMessage> out,
+  DateTime? at,
+) {
+  if (attachment['commandMode'] == 'task-notification') return;
+  final prompt = attachment['prompt'];
+  final text = prompt is List
+      ? [
+          for (final block in prompt)
+            if (block is Map && block['text'] is String) block['text'],
+        ].join('\n')
+      : prompt;
+  if (text is! String || text.trim().isEmpty) return;
+  if (text.contains(_taskNotificationMarker)) return;
+  out.add(
+    TranscriptMessage(
+      role: 'user',
+      text: boundedText(_withoutPasteTags(text).trim()).$1,
+      at: at,
+      queued: true,
+    ),
+  );
+}
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.
 String _withoutPasteTags(String text) => text.replaceAll(_pasteTag, '');
