@@ -494,6 +494,11 @@ class ServerSessionStatus {
   /// `working` with that work in flight. An idle not yet checked waits for
   /// the read, so no finish is told that the read would take back.
   void _publish(_Tracked tracked, AgentStatusReport raw, DateTime now) {
+    // When it went idle, not when a source last said so: a screen re-read
+    // restamps the same idle every tick.
+    tracked.idleSince = raw.status == AgentActivityStatus.idle
+        ? tracked.idleSince ?? raw.observedAt
+        : null;
     tracked.raw = raw;
     final session = tracked.session;
     final checks =
@@ -513,7 +518,7 @@ class ServerSessionStatus {
       _readBackground(tracked);
       return;
     }
-    final held = _held(raw, reading.runs, now);
+    final held = _held(raw, reading.runs, now, tracked.idleSince);
     tracked.publish(held, now);
     if (!identical(held, raw) && now.difference(reading.at) >= interval) {
       _readBackground(tracked);
@@ -525,8 +530,10 @@ class ServerSessionStatus {
     AgentStatusReport raw,
     List<BackgroundRun> runs,
     DateTime now,
+    DateTime? idleSince,
   ) {
-    if (!waitsOnBackground(runs, idleAt: raw.observedAt, now: now)) return raw;
+    final idleAt = idleSince ?? raw.observedAt;
+    if (!waitsOnBackground(runs, idleAt: idleAt, now: now)) return raw;
     return AgentStatusReport(
       agentId: raw.agentId,
       sessionId: raw.sessionId,
@@ -571,7 +578,7 @@ class ServerSessionStatus {
       final now = clock.nowUtc();
       tracked.background = (runs: runs, at: now);
       final before = tracked.report;
-      tracked.publish(_held(raw, runs, now), now);
+      tracked.publish(_held(raw, runs, now, tracked.idleSince), now);
       if (sameStatusEvidence(before, tracked.report)) return;
       if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
     }());
@@ -729,6 +736,7 @@ class _Tracked {
 
   /// The last report its sources gave, before any background hold.
   AgentStatusReport? raw;
+  DateTime? idleSince;
   ({List<BackgroundRun> runs, DateTime at})? background;
   var backgroundGeneration = 0;
   var readingBackground = false;

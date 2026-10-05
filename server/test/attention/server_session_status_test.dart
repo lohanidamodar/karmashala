@@ -569,6 +569,34 @@ void main() {
       await status.close();
     });
 
+    test('the same idle said again is not the turn after the run', () async {
+      watched.add(row);
+      var runs = [run(BackgroundRunState.running)];
+      final status = build(backgroundRunsOf: (_) async => runs);
+      say(AgentActivityStatus.working, Duration.zero);
+      status.hostStatusMoved('row-1');
+      say(AgentActivityStatus.idle, const Duration(seconds: 3));
+      status.hostStatusMoved('row-1');
+      await pumpEventQueue();
+
+      runs = [
+        run(
+          BackgroundRunState.completed,
+          endedAt: _start.add(const Duration(seconds: 90)),
+        ),
+      ];
+      // A screen read restamps the idle it already showed.
+      say(AgentActivityStatus.idle, const Duration(seconds: 91));
+      clock.now = _start.add(const Duration(seconds: 93));
+      await status.cycle();
+      await pumpEventQueue();
+      expect(
+        status.reportForOpenId('row-1')!.status,
+        AgentActivityStatus.working,
+      );
+      await status.close();
+    });
+
     test('an idle with nothing in the background is told as it is', () async {
       watched.add(row);
       final status = build(backgroundRunsOf: (_) async => const []);
