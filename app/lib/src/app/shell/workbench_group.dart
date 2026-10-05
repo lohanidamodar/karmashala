@@ -235,6 +235,16 @@ _WorkbenchSession? _groupSessionOf(WidgetRef ref, String? groupId) {
   );
 }
 
+/// The session the focused group shows without a tab of its own, with its
+/// title, or null when it shows its active tab. A header naming the session
+/// on screen names this first: the active tab is behind it.
+({String id, String title})? workbenchHostedSession(WidgetRef ref) {
+  final group = ref.watch(focusedWorkspaceGroupProvider);
+  if (_hostedSelection(ref, group) == null) return null;
+  final session = _groupSessionOf(ref, group);
+  return session == null ? null : (id: session.id, title: session.title);
+}
+
 /// The session group [groupId] was asked to show that has no tab to show it in.
 /// Null once that selection has a pane of ours — a session with a pane *is* a tab.
 ({String id, bool native})? _hostedSelection(WidgetRef ref, String? groupId) {

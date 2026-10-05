@@ -4,11 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 
 import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'tab_picker.dart';
-import 'workbench.dart' show terminalTabEntries;
+import 'workbench.dart' show terminalTabEntries, workbenchHostedSession;
 
 /// The session switcher field's height and corner (board N4).
 const double _switcherHeight = 32;
@@ -25,7 +26,11 @@ class ShellTabSwitcher extends ConsumerWidget {
     final tabId = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.activeTab?.id),
     );
-    final title = tabId == null
+    // A session shown without a tab of its own is the one on screen.
+    final hosted = workbenchHostedSession(ref);
+    final String title = hosted != null
+        ? hosted.title
+        : tabId == null
         ? 'No tab'
         : ref.watch(terminalTabTitleProvider(tabId));
     final theme = Theme.of(context);
@@ -76,12 +81,16 @@ class ShellActiveTabGlyph extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Joined, so the selection compares by value: the tab's pane list is a
-    // new list on every change to the controller's state.
-    final panes = ref.watch(
-      terminalSessionsControllerProvider.select(
-        (s) => s.activeTab?.layout.panes.join('\n'),
-      ),
-    );
+    // new list on every change to the controller's state. A session shown
+    // without a tab is read through its chat pane's id.
+    final hosted = workbenchHostedSession(ref);
+    final panes = hosted != null
+        ? chatPaneId(hosted.id)
+        : ref.watch(
+            terminalSessionsControllerProvider.select(
+              (s) => s.activeTab?.layout.panes.join('\n'),
+            ),
+          );
     if (panes == null || panes.isEmpty) return const SizedBox.shrink();
     final status = mostUrgentAgentActivity([
       for (final paneId in panes.split('\n'))
