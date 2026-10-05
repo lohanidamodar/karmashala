@@ -10,6 +10,7 @@ import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
+import '../../agents/claude_code/claude_tool_references.dart';
 import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
 import '../../agents/codex/codex_rollout_items.dart';
@@ -1324,7 +1325,7 @@ String? _codexResultImage(Object? output) {
 String _claudeResultText(Object? content) {
   if (content is String) return content;
   if (content is! List) return '';
-  final parts = <String>[];
+  final parts = [?claudeLoadedToolsText(content)];
   for (final block in content) {
     if (block is Map && block['type'] == 'text' && block['text'] is String) {
       parts.add(block['text'] as String);

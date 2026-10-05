@@ -1,4 +1,5 @@
-import 'package:agent_cli/stream.dart' show claudeWebSearchText, spillToolImage;
+import 'package:agent_cli/stream.dart'
+    show claudeLoadedToolsText, claudeWebSearchText, spillToolImage;
 import 'package:karmashala_acp/karmashala_acp.dart' show JsonMap;
 import 'package:path/path.dart' as p;
 
@@ -88,16 +89,16 @@ abstract final class ClaudeTools {
     };
   }
 
-  /// A tool result's `content` as text: a string, or its blocks' words. An
-  /// image is no words: see [images].
+  /// A tool result's `content` as text: a string, or its blocks' words, the
+  /// tools it loaded named on one line. An image is no words: see [images].
   static String resultText(Object? content) => switch (content) {
     final String text => text,
     final List<Object?> blocks => [
+      ?claudeLoadedToolsText(blocks),
       for (final block in jsonObjects(blocks))
-        if (block['type'] != 'image')
+        if (block['type'] != 'image' && block['type'] != 'tool_reference')
           switch (block['type']) {
             'text' => '${block['text'] ?? ''}',
-            'tool_reference' => '${block['tool_name'] ?? ''}',
             final other => '[$other]',
           },
     ].join('\n'),
