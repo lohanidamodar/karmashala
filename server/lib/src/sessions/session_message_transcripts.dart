@@ -260,14 +260,24 @@ class SessionMessageTranscriptSource {
 
   static String? _text(Object? value) => value is String ? value : null;
 
-  /// What the call's embedded terminals have printed so far, or null.
+  /// What a running call has printed so far — its embedded terminals, or the
+  /// text it streams as content (Codex's commands) — or null. Never a diff.
   static String? _terminalOutputOf(Map<String, Object?> json) {
     final content = json['content'];
     if (content is! List) return null;
     final printed = [
       for (final block in content)
-        if (block is Map && block['type'] == 'terminal')
-          if (block['output'] case final String text when text.isNotEmpty) text,
+        if (block is Map)
+          if (switch (block['type']) {
+                'terminal' => block['output'],
+                'content' => switch (block['content']) {
+                  {'type': 'text', 'text': final Object? text} => text,
+                  _ => null,
+                },
+                _ => null,
+              }
+              case final String text when text.isNotEmpty)
+            text,
     ];
     return printed.isEmpty ? null : printed.join('\n');
   }
