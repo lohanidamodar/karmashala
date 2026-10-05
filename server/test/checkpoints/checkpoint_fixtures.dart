@@ -302,11 +302,22 @@ class CheckpointWorld {
       if (c.repository.path == path) c,
   ];
 
-  /// Waits (a hang guard, not a bound) until [count] checkpoints of [path].
-  Future<void> untilCheckpoints(String path, int count) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 2));
+  /// Waits (a hang guard, not a bound) until [count] checkpoints of [path],
+  /// and fails with the server's log if they have not come [within]: a row
+  /// that is not coming is a finding, not a test timeout.
+  Future<void> untilCheckpoints(
+    String path,
+    int count, {
+    Duration within = const Duration(minutes: 2),
+  }) async {
+    final deadline = DateTime.now().add(within);
     while (ofRepo(path).length < count) {
-      if (DateTime.now().isAfter(deadline)) return;
+      if (DateTime.now().isAfter(deadline)) {
+        fail(
+          '${ofRepo(path).length} of $count checkpoints of $path; '
+          'the server said:\n${log.join('\n')}',
+        );
+      }
       await settle();
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }

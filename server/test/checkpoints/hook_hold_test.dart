@@ -53,28 +53,6 @@ void main() {
       skip: hasGit ? false : 'git is not on PATH',
     );
 
-    test(
-      'a tool naming a nested clone waits for that clone\'s snapshot',
-      () async {
-        final file = p.join(w.app, 'main.txt');
-        await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
-        await w.hook('PreToolUse', w.edit(file));
-        // The tool runs only once the hook has answered — by then the clone's
-        // tree is written, whenever its row lands.
-        File(file).writeAsStringSync('one\nTWO\nthree\n');
-        await w.hook('Stop');
-        await w.untilCheckpoints(w.app, 2);
-        final nested = w.ofRepo(w.app);
-        expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
-        expect(nested.first.label, isNull);
-        expect(
-          [for (final c in nested) c.reason],
-          [CheckpointReason.turnStart, CheckpointReason.turn],
-        );
-      },
-      skip: hasGit ? false : 'git is not on PATH',
-    );
-
     test('a tool is held for the snapshots, never for the recording of the '
         'checkpoint before it', () async {
       // Recording a checkpoint (commit, ref, what changed) longer than the
@@ -103,6 +81,63 @@ void main() {
       await w.hook('PostToolUse', {'tool_name': 'Bash'});
       expect(took.elapsed, lessThan(w.runners.delay));
       await w.settle();
+    }, skip: hasGit ? false : 'git is not on PATH');
+  });
+
+  // Which snapshots a tool waits for, not whether the default hold's 1.5 s
+  // covers them: under a full parallel suite ten git spawns can outrun it,
+  // the hold expires as designed, and the clone's tree is taken after the
+  // edit (see 'with a hold shorter than the capture').
+  group('with a hold no loaded machine outruns', () {
+    setUp(
+      () async =>
+          w = await CheckpointWorld.create(hold: const Duration(seconds: 20)),
+    );
+
+    test(
+      'a tool naming a nested clone waits for that clone\'s snapshot',
+      () async {
+        final file = p.join(w.app, 'main.txt');
+        await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
+        await w.hook('PreToolUse', w.edit(file));
+        expect(
+          w.log.where((l) => l.contains('released a tool')),
+          isEmpty,
+          reason: 'the hold was met',
+        );
+        // The tool runs only once the hook has answered — by then the clone's
+        // tree is written, whenever its row lands.
+        File(file).writeAsStringSync('one\nTWO\nthree\n');
+        await w.hook('Stop');
+        await w.untilCheckpoints(w.app, 2, within: const Duration(seconds: 20));
+        final nested = w.ofRepo(w.app);
+        expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
+        expect(nested.first.label, isNull);
+        expect(
+          [for (final c in nested) c.reason],
+          [CheckpointReason.turnStart, CheckpointReason.turn],
+        );
+      },
+      skip: hasGit ? false : 'git is not on PATH',
+    );
+
+    test('a tool held for a nested clone the machine is slow to snapshot '
+        'still waits for it', () async {
+      // A loaded machine, made deterministic: each tree read takes longer
+      // than the default hold does in all.
+      w.runners
+        ..slow = true
+        ..delay = const Duration(seconds: 1);
+      final file = p.join(w.app, 'main.txt');
+      await w.hook('UserPromptSubmit', {'prompt': 'Change the app'});
+      await w.hook('PreToolUse', w.edit(file));
+      w.runners.slow = false;
+      File(file).writeAsStringSync('one\nTWO\nthree\n');
+      await w.hook('Stop');
+      await w.untilCheckpoints(w.app, 2, within: const Duration(seconds: 20));
+      final nested = w.ofRepo(w.app);
+      expect(blobIn(w.app, nested.first.treeSha, 'main.txt'), 'one\ntwo\n');
+      expect(nested.first.label, isNull, reason: 'the hold was met');
     }, skip: hasGit ? false : 'git is not on PATH');
   });
 
