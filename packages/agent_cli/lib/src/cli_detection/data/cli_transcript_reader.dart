@@ -154,6 +154,21 @@ class TranscriptMessage {
   /// agent; null everywhere else, including every row a file reader returns.
   final String? agentInstallationId;
 
+  /// This row with [thinking] set.
+  TranscriptMessage withThinking(String? value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: value,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+  );
+
   /// This row with [agentInstallationId] set.
   TranscriptMessage withAgent(String? installationId) => TranscriptMessage(
     role: role,
@@ -376,6 +391,9 @@ class _TranscriptParse {
   // compaction produces no row of its own — the row it belongs to is the next
   // one the file yields, and only this loop can see that happen.
   CompactionBoundary? pendingCompaction;
+  // Reasoning the model wrote before its next row, which is written on a
+  // line of its own: spent on that row.
+  String? pendingThinking;
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
@@ -385,7 +403,8 @@ class _TranscriptParse {
     ..background.addAll(background)
     ..acrossBoundary.addAll(acrossBoundary)
     ..runs = runs.copy()
-    ..pendingCompaction = pendingCompaction;
+    ..pendingCompaction = pendingCompaction
+    ..pendingThinking = pendingThinking;
 
   void add(String line) {
     if (line.isEmpty) return;
@@ -396,6 +415,28 @@ class _TranscriptParse {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    final thought = _reasoningOf(decoded, dialect);
+    if (thought != null) {
+      final held = pendingThinking;
+      pendingThinking = held == null ? thought : '$held\n\n$thought';
+    }
+    final first = messages.length;
+    _parse(decoded);
+    if (messages.length > first) _spendThinking(first);
+  }
+
+  /// Hangs held reasoning on the row at [index], unless that row is the
+  /// person's: reasoning nobody answered is dropped there.
+  void _spendThinking(int index) {
+    final thinking = pendingThinking;
+    if (thinking == null) return;
+    pendingThinking = null;
+    final row = messages[index];
+    if (row.role == 'user' || row.thinking != null) return;
+    messages[index] = row.withThinking(boundedText(thinking).$1);
+  }
+
+  void _parse(Map<String, dynamic> decoded) {
     // Read once per line and handed down: both CLIs carry it in the same
     // place, and every message the line produces was written at that instant.
     final at = _lineTimestamp(decoded);
@@ -453,6 +494,39 @@ CompactionBoundary? _compactionBoundaryOf(Map<String, dynamic> json) {
   if (metadata is! Map) return null;
   final trigger = metadata['trigger'];
   return CompactionBoundary(trigger: trigger is String ? trigger : null);
+}
+
+/// The reasoning [json] records, or null when it records none: Claude's
+/// `thinking` blocks (most are empty, kept only for their signature) and
+/// Codex's `reasoning` summary (whose body is encrypted).
+String? _reasoningOf(Map<String, dynamic> json, TranscriptDialect dialect) {
+  final List<String> parts;
+  if (dialect == TranscriptDialect.codexRollout) {
+    final payload = json['payload'];
+    if (payload is! Map || payload['type'] != 'reasoning') return null;
+    final summary = payload['summary'];
+    parts = [
+      if (summary is List)
+        for (final part in summary)
+          if (part is Map && part['text'] is String) part['text'] as String,
+    ];
+  } else if (dialect == TranscriptDialect.claudeJsonl) {
+    if (json['type'] != 'assistant') return null;
+    final message = json['message'];
+    final content = message is Map ? message['content'] : null;
+    parts = [
+      if (content is List)
+        for (final block in content)
+          if (block is Map &&
+              block['type'] == 'thinking' &&
+              block['thinking'] is String)
+            block['thinking'] as String,
+    ];
+  } else {
+    return null;
+  }
+  final text = parts.map((part) => part.trim()).where((p) => p.isNotEmpty);
+  return text.isEmpty ? null : text.join('\n\n');
 }
 
 /// [row] again, carrying the boundary it follows. One row per compaction.
@@ -524,6 +598,7 @@ Future<void> _attachSubagents(
       subagent: reference,
       at: row.at,
       pendingToolUseId: row.pendingToolUseId,
+      thinking: row.thinking,
       compaction: row.compaction,
     );
   });
@@ -1319,6 +1394,7 @@ void _attachResult(
     // dropping the id here is what keeps the call from looking in-flight
     // forever.
     at: row.at,
+    thinking: row.thinking,
     compaction: row.compaction,
   );
 }
