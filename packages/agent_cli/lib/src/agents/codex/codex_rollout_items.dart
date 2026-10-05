@@ -140,6 +140,11 @@ ToolActivity _mcpCall(Map<dynamic, dynamic> item) {
   );
 }
 
+/// A `web_search_call` response item, or any Codex web search: what it
+/// searched or opened, and the results when it kept them.
+ToolActivity codexWebSearchActivity(Map<dynamic, dynamic> item) =>
+    _webSearch(item);
+
 ToolActivity _webSearch(Map<dynamic, dynamic> item) {
   final action = item['action'];
   final queries = action is Map ? action['queries'] : null;
@@ -149,17 +154,10 @@ ToolActivity _webSearch(Map<dynamic, dynamic> item) {
       (queries is List && queries.isNotEmpty
           ? _text('${queries.first}')
           : null);
-  final results = item['results'];
-  final lines = [
-    if (results is List)
-      for (final result in results)
-        if (result is Map && _text(result['url']) != null)
-          '${_text(result['title']) ?? result['url']} — ${result['url']}',
-  ];
   return _activity(
     name: 'web_search',
     subject: query,
-    output: lines.join('\n'),
+    output: webSearchResultLines(item['results']),
   );
 }
 

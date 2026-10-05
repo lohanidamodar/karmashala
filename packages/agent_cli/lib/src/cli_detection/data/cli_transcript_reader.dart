@@ -10,6 +10,7 @@ import '../../util/bounded_text.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
+import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
 import '../../agents/codex/codex_rollout_items.dart';
 import '../../agents/domain/agent_registry.dart';
@@ -943,7 +944,9 @@ void _parseClaudeLine(
             out,
             pending,
             id: id,
-            output: _claudeResultText(part['content']),
+            output:
+                claudeWebSearchText(json['toolUseResult']) ??
+                _claudeResultText(part['content']),
             isError: isError,
             edits: written == null ? null : [written],
             answers: answersIn(json['toolUseResult']),
@@ -1393,6 +1396,17 @@ void _parseCodexLine(
     case 'item_completed' when json['type'] == 'event_msg':
       final item = payload['item'];
       if (item is Map) _addCodexItem(item, out, pending, codex, at);
+    // Codex's own search, answered within the call: it is never pending.
+    case 'web_search_call':
+      final search = codexWebSearchActivity(payload);
+      out.add(
+        TranscriptMessage(
+          role: 'tool',
+          text: search.summary,
+          tool: search,
+          at: at,
+        ),
+      );
     case 'task_started' || 'task_complete' || 'turn_aborted'
         when json['type'] == 'event_msg':
       codex.clear();

@@ -384,3 +384,16 @@ String? proposedPlanIn(Object? input) => switch (input) {
 /// path shares.
 (String, bool) boundedToolOutput(String text) =>
     boundedText(text, maxBytes: kMaxToolOutputBytes);
+
+/// Web search [results] — maps with a `url` and a `title` — one
+/// `title — url` line each.
+String webSearchResultLines(Object? results) => [
+  if (results is List)
+    for (final result in results)
+      if (result is Map && result['url'] is String)
+        if ((result['url'] as String).trim() case final url when url.isNotEmpty)
+          '${switch (result['title']) {
+            final String title when title.trim().isNotEmpty => title.trim(),
+            _ => url,
+          }} — $url',
+].join('\n');

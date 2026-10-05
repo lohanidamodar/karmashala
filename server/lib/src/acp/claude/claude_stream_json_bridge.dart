@@ -817,7 +817,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       }
       final tool = _tools[id];
       if (tool == null) continue;
-      final text = ClaudeTools.resultText(block['content']);
+      final text = ClaudeTools.resultTextOf(
+        block['content'],
+        message['tool_use_result'],
+      );
       if (tool.background && !isError) {
         tool.notes.add(text);
         continue;
