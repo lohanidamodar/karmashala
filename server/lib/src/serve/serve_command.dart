@@ -95,7 +95,8 @@ import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
 import '../automations/server_resume_runner.dart';
-import 'package:karmashala_session/session.dart' show QueuedMessageOrigin;
+import 'package:karmashala_session/session.dart'
+    show QueuedMessageOrigin, SessionStatus;
 import 'package:karmashala_session/events.dart'
     show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
@@ -1157,6 +1158,9 @@ Future<int> runServe(
           agent.terminal.takesInputMidTurn &&
           typist.markersFor(sessionId) != null;
     },
+    // A row closed on purpose: what still waits for it is cancelled at start.
+    endedDeliberately: (sessionId) =>
+        sessionRows.getById(sessionId)?.status == SessionStatus.cancelled,
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
@@ -1180,8 +1184,13 @@ Future<int> runServe(
   automations
     ?..resumeQueue = sessionQueue
     ..resumesMoved = sessionQueue.refreshAll;
-  // A person's End pauses what waits, so nothing resumes what they ended.
-  sessionWork.ending = sessionQueue.pause;
+  // A person's End cancels what waits, so nothing resumes what they ended.
+  sessionWork.ending = (sessionId) => sessionQueue.ended(
+    sessionId,
+    reason:
+        'The session was ended before it could take this message, so it was '
+        'not sent.',
+  );
   final sessionInput = SessionInput(
     prompts: prompts,
     typist: typist,

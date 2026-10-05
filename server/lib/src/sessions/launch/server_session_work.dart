@@ -14,7 +14,7 @@ class ServerSessionWork implements SessionWork {
   final ServerSessionLauncher launches;
   final SessionContinuations continuations;
 
-  /// Told before a person's End stops row [String]: its queue pauses.
+  /// Told before a person's End stops row [String]: what waits is cancelled.
   void Function(String sessionId)? ending;
 
   @override

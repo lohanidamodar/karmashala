@@ -366,8 +366,8 @@ void main() {
       );
     });
 
-    test('a session ended with messages waiting is not resumed for '
-        'them', () async {
+    test('a session ended with messages waiting cancels them with the '
+        'reason, and nothing resumes it for them', () async {
       final resumed = <String>[];
       await queue.close();
       queue = SessionQueue(
@@ -385,11 +385,77 @@ void main() {
         origin: QueuedMessageOrigin.app,
         now: t0,
       );
-      queue.pause('s1');
+      final settled = queue.settled('w');
+      queue.ended('s1', reason: 'the session was ended');
       queue.refreshAll();
       await pumpEventQueue();
       expect(resumed, isEmpty);
-      expect(announced.last.single.hold?.kind, QueueHoldKind.paused);
+      expect(announced.last, isEmpty);
+      final row = await settled;
+      expect(row.state, QueuedMessageState.cancelled);
+      expect(row.cancelledBy, kCancelledBySessionEnd);
+      expect(row.error, 'the session was ended');
+    });
+
+    test('an agent that sent a message an ending cancelled is told, unless '
+        'it ended the session itself', () async {
+      await queue.close();
+      queue = SessionQueue(
+        dao: dao,
+        status: status,
+        announce: (_, open) => announced.add(open),
+        newId: () => 'notice',
+        now: () => t0,
+      )..start();
+      for (final (id, sender) in [('m1', 'agent-a'), ('m2', 'agent-b')]) {
+        dao.enqueue(
+          id: id,
+          sessionId: 's1',
+          text: 'from $sender',
+          origin: QueuedMessageOrigin.mcp,
+          originId: sender,
+          now: t0,
+        );
+      }
+      queue.ended('s1', reason: 'the session was ended', by: 'agent-b');
+      await pumpEventQueue();
+      expect(dao.open('agent-a').single.text, contains('s1'));
+      expect(dao.open('agent-a').single.text, contains('not delivered'));
+      expect(dao.open('agent-b'), isEmpty);
+    });
+
+    test('a server starting with messages queued for a session already '
+        'ended cancels them', () async {
+      await queue.close();
+      dao.enqueue(
+        id: 'old',
+        sessionId: 's1',
+        text: 'from before the end',
+        origin: QueuedMessageOrigin.app,
+        now: t0,
+      );
+      String? pausedStore = '["s1"]';
+      final resumed = <String>[];
+      queue = SessionQueue(
+        dao: dao,
+        status: status,
+        resumeStopped: (sessionId, _) async => resumed.add(sessionId),
+        takesOpeningMessage: (_) => true,
+        endedDeliberately: (sessionId) => sessionId == 's1',
+        readPaused: () => pausedStore,
+        writePaused: (value) => pausedStore = value,
+        announce: (_, open) => announced.add(open),
+        now: () => t0,
+      )..start();
+      await pumpEventQueue();
+      final row = dao.getById('old')!;
+      expect(row.state, QueuedMessageState.cancelled);
+      expect(row.cancelledBy, kCancelledBySessionEnd);
+      expect(row.error, isNotNull);
+      expect(pausedStore, anyOf(isNull, '[]'));
+      queue.refreshAll();
+      await pumpEventQueue();
+      expect(resumed, isEmpty);
     });
   });
 

@@ -107,6 +107,9 @@ class QueueHold {
   String toString() => 'QueueHold(${kind.name}, until: $until)';
 }
 
+/// [QueuedMessage.cancelledBy] for a message its session's ending cancelled.
+const String kCancelledBySessionEnd = 'session-ended';
+
 /// A message sent while its session's turn ran, kept at the server and
 /// delivered one per turn in [seq] order.
 class QueuedMessage {
@@ -164,8 +167,9 @@ class QueuedMessage {
   /// Why a [QueuedMessageState.failed] row failed, in words.
   final String? error;
 
-  /// Who cancelled a [QueuedMessageState.cancelled] row: `device:<id>` or
-  /// `app`. Null on a row cancelled before it was recorded.
+  /// Who cancelled a [QueuedMessageState.cancelled] row: `device:<id>`,
+  /// `app`, or [kCancelledBySessionEnd] ([error] then says why). Null on a
+  /// row cancelled before it was recorded.
   final String? cancelledBy;
 
   /// What keeps a queued message waiting past the running turn: never

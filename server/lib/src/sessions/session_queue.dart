@@ -52,7 +52,8 @@ final class AdmitQueued extends QueueAdmission {
 /// stopped PTY session is resumed ([resumeStopped]) when a message is queued
 /// behind others, so nothing waits for a session nobody runs: with the head
 /// as its opening prompt where the agent takes one, else bare and given the
-/// head once idle.
+/// head once idle. A session ended on purpose is never resumed for what was
+/// queued before its end: that is cancelled ([ended]).
 ///
 /// A queue can be held past the turn's end ([QueueHold]): on a usage limit
 /// ([limitHold]), whose resume then delivers the head in its message's place
@@ -67,6 +68,7 @@ class SessionQueue implements ResumeQueue {
     this.takesOpeningMessage,
     this.takesInputMidTurn,
     this.limitHold,
+    this.endedDeliberately,
     this.personTypedAt,
     this.typingGrace = const Duration(seconds: 5),
     this.readPaused,
@@ -119,6 +121,10 @@ class SessionQueue implements ResumeQueue {
   /// What holds row [String]'s queue on its usage limit or a scheduled
   /// resume, or null.
   final QueueHold? Function(String sessionId)? limitHold;
+
+  /// Whether row [String] was ended on purpose (closed, `session_end`): what
+  /// still waits for it at start is cancelled ([ended]).
+  final bool Function(String sessionId)? endedDeliberately;
 
   /// When a person last typed into row [String]'s terminal, or null: a
   /// message typed then would land in their draft.
@@ -186,7 +192,7 @@ class SessionQueue implements ResumeQueue {
   /// The hold each session's clients were last told.
   final _toldHold = <String, QueueHold?>{};
 
-  /// Sessions whose person stopped or ended them with messages waiting.
+  /// Sessions whose person stopped them or paused their queue.
   final _paused = <String>{};
 
   /// PTY sessions whose delivery waits on a person typing, since when.
@@ -206,6 +212,10 @@ class SessionQueue implements ResumeQueue {
       'The server stopped while this message was being delivered, so it was '
       'not sent again: the agent may already have it.';
 
+  static const endedBeforeStartReason =
+      'The session had been ended before it could take this message, so it '
+      'was not sent.';
+
   /// Fails what a stopped server left `delivering`, and starts following
   /// every status the server keeps.
   void start() {
@@ -215,6 +225,11 @@ class SessionQueue implements ResumeQueue {
     )) {
       log?.call('queue $sessionId: a delivery a stop interrupted is failed');
       _announce(sessionId);
+    }
+    for (final sessionId in dao.sessionsWithQueued()) {
+      if (endedDeliberately?.call(sessionId) ?? false) {
+        ended(sessionId, reason: endedBeforeStartReason);
+      }
     }
     _withQueued.addAll(dao.sessionsWithQueued());
     _loadPaused();
@@ -364,16 +379,32 @@ class SessionQueue implements ResumeQueue {
       _announce(sessionId);
       return dao.getById(replacing)!;
     }
+    return _post(
+      sessionId,
+      text,
+      origin: QueuedMessageOrigin.delegation,
+      originId: originId,
+    );
+  }
+
+  /// Queues [text] from the server itself, waking [sessionId] when idle but
+  /// never lifting a pause nor resuming it.
+  QueuedMessage _post(
+    String sessionId,
+    String text, {
+    required QueuedMessageOrigin origin,
+    String? originId,
+  }) {
     final message = dao.enqueue(
       id: _newId(),
       sessionId: sessionId,
       text: text,
-      origin: QueuedMessageOrigin.delegation,
+      origin: origin,
       originId: originId,
       now: _now(),
     );
     _withQueued.add(sessionId);
-    log?.call('queue $sessionId: ${message.id} holds delegated results');
+    log?.call('queue $sessionId: ${message.id} posted by the server');
     _announce(sessionId);
     _kick(sessionId);
     return message;
@@ -464,7 +495,9 @@ class SessionQueue implements ResumeQueue {
       );
     }
     final cancelled = dao.getById(id)!;
-    log?.call('queue $sessionId: $id cancelled by ${by ?? 'an unnamed caller'}');
+    log?.call(
+      'queue $sessionId: $id cancelled by ${by ?? 'an unnamed caller'}',
+    );
     _settle(cancelled);
     _announce(sessionId);
     _kick(sessionId);
@@ -758,12 +791,58 @@ class SessionQueue implements ResumeQueue {
     }
   }
 
-  /// Holds [sessionId]'s waiting messages after the person stopped or ended
-  /// it, until they send again or ask for the next one ([sendNext]).
+  /// Holds [sessionId]'s waiting messages after the person stopped it,
+  /// until they send again or ask for the next one ([sendNext]). An end
+  /// cancels them instead ([ended]).
   void pause(String sessionId) {
     if (!dao.hasWaiting(sessionId) || !_paused.add(sessionId)) return;
     _savePaused();
     log?.call('queue $sessionId: paused, as the session was stopped');
+    _announce(sessionId);
+  }
+
+  /// Cancels what still waits for [sessionId], which was ended on purpose,
+  /// saying [reason] on each row, so nothing queued before the end resumes
+  /// it. An agent that sent one is told, unless it is the one that ended it
+  /// ([by]); a sender waiting on the row hears it settle.
+  void ended(String sessionId, {required String reason, String? by}) {
+    _unpause(sessionId);
+    final cancelled = [
+      for (final message in dao.open(sessionId))
+        if (message.state == QueuedMessageState.queued &&
+            dao.transition(
+              message.id,
+              from: QueuedMessageState.queued,
+              to: QueuedMessageState.cancelled,
+              now: _now(),
+              error: reason,
+              cancelledBy: kCancelledBySessionEnd,
+            ))
+          dao.getById(message.id)!,
+    ];
+    if (dao.head(sessionId) == null) _withQueued.remove(sessionId);
+    if (cancelled.isEmpty) return;
+    log?.call(
+      'queue $sessionId: ended; ${cancelled.length} waiting message(s) '
+      'cancelled',
+    );
+    for (final message in cancelled) {
+      final sender = message.originId;
+      final waited = _waiters.containsKey(message.id);
+      _settle(message);
+      if (message.origin != QueuedMessageOrigin.mcp ||
+          sender == null ||
+          sender == sessionId ||
+          sender == by ||
+          waited) {
+        continue;
+      }
+      _post(
+        sender,
+        'Your message to session $sessionId was not delivered: $reason',
+        origin: QueuedMessageOrigin.automation,
+      );
+    }
     _announce(sessionId);
   }
 

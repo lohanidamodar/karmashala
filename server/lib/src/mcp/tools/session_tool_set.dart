@@ -177,7 +177,7 @@ class SessionToolSet extends ServerToolSet {
             throw StateError(_onBoxRefusal('end it'));
           }
           endedBy?.call(callerSessionId, sessionId);
-          return _end(sessionId, held: runsHere);
+          return _end(sessionId, held: runsHere, by: callerSessionId);
         });
     }
     return null;
@@ -622,7 +622,11 @@ class SessionToolSet extends ServerToolSet {
   /// Ends the agent process behind a session this server runs; the row and
   /// its transcript survive, and the ending is recorded as the server's.
   /// Nothing running is reported as already stopped, never as a success.
-  Future<Object?> _end(String sessionId, {required bool held}) async {
+  Future<Object?> _end(
+    String sessionId, {
+    required bool held,
+    String? by,
+  }) async {
     final session = _session(sessionId);
     if (!held) {
       throw StateError(
@@ -630,8 +634,14 @@ class SessionToolSet extends ServerToolSet {
         'host is not running it, so there is nothing to end.',
       );
     }
-    // What waits for it is paused, so the queue never resumes it.
-    queue?.pause(sessionId);
+    // What waits for it is cancelled, so the queue never resumes it.
+    queue?.ended(
+      sessionId,
+      reason:
+          'The session was ended by an agent (session_end) before it could '
+          'take this message, so it was not sent.',
+      by: by,
+    );
     try {
       await registry.close(hostSessionIdOf(sessionId));
     } on UnknownSession {

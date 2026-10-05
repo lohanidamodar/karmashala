@@ -420,6 +420,35 @@ void main() {
       expect(SessionDao(database).getById('s1'), isNotNull);
     });
 
+    test('cancels what waits for it, naming the ending', () async {
+      final queue = SessionQueue(
+        dao: SessionQueueDao(database),
+        status: status,
+      );
+      addTearDown(queue.close);
+      queue.start();
+      final ending = SessionToolSet(
+        context,
+        prompts: prompts,
+        registry: registry,
+        queue: queue,
+        typist: SessionToolSet.typistOver(prompts),
+      );
+      await runAgent('claude-code-tui');
+      SessionQueueDao(database).enqueue(
+        id: 'w',
+        sessionId: 's1',
+        text: 'waiting',
+        origin: QueuedMessageOrigin.app,
+        now: t0,
+      );
+      await ending.call('session_end', {'sessionId': 's1'}, 'caller')!;
+      final row = SessionQueueDao(database).getById('w')!;
+      expect(row.state, QueuedMessageState.cancelled);
+      expect(row.cancelledBy, kCancelledBySessionEnd);
+      expect(row.error, contains('session_end'));
+    });
+
     test('with no app, nothing running is said, never a success', () async {
       await expectLater(
         tools.call('session_end', {'sessionId': 's1'}, null),
