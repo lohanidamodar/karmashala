@@ -19,3 +19,4 @@ export 'src/agents/adapter/agent_chat_protocol.dart';
 export 'src/sessions/delegation_calls.dart';
 export 'src/sessions/session_event_types.dart';
 export 'src/sessions/tool_activity.dart';
+export 'src/sessions/tool_images.dart';

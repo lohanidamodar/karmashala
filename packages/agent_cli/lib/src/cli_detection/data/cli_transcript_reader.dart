@@ -16,6 +16,7 @@ import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
 import '../../sessions/tool_activity.dart';
+import '../../sessions/tool_images.dart';
 import './transcript_dialect.dart';
 import './subagent_transcript.dart';
 import './background_run.dart';
@@ -946,6 +947,7 @@ void _parseClaudeLine(
             isError: isError,
             edits: written == null ? null : [written],
             answers: answersIn(json['toolUseResult']),
+            image: () => _claudeResultImage(part['content']),
           );
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
@@ -1285,12 +1287,37 @@ const String _taskNotificationMarker = '<task-notification>';
 /// Compiled once for the process: this runs on every user turn of every parse.
 final RegExp _taskIdPattern = RegExp(r'<task-id>([^<]*)</task-id>');
 
-/// The text of a Claude `tool_result`'s content.
-///
-/// `image` blocks are read for their existence and then dropped: their `data`
-/// is a base64 copy of the file, one real transcript carried 96 of them, and
-/// the picture is drawn from the path on disk instead
-/// (`TranscriptImagePreview`).
+/// The first image a Claude `tool_result` carried, written to a file; null
+/// without one.
+String? _claudeResultImage(Object? content) {
+  if (content is! List) return null;
+  for (final block in content) {
+    if (block is! Map || block['type'] != 'image') continue;
+    final source = block['source'];
+    if (source is! Map || source['data'] is! String) continue;
+    final media = source['media_type'];
+    return spillToolImage(
+      source['data'] as String,
+      mimeType: media is String ? media : null,
+    );
+  }
+  return null;
+}
+
+/// The first image a Codex call's output carried, written to a file; null
+/// without one.
+String? _codexResultImage(Object? output) {
+  if (output is! List) return null;
+  for (final block in output) {
+    if (block is Map && block['type'] == 'input_image') {
+      return spillToolImageUrl(block['image_url']);
+    }
+  }
+  return null;
+}
+
+/// The text of a Claude `tool_result`'s content. Its `image` blocks are
+/// drawn from a file instead: see [_claudeResultImage].
 String _claudeResultText(Object? content) {
   if (content is String) return content;
   if (content is! List) return '';
@@ -1428,6 +1455,7 @@ void _parseCodexLine(
         id: payload['call_id'],
         output: _codexResultText(payload['output']),
         isError: false,
+        image: () => _codexResultImage(payload['output']),
       );
   }
 }
@@ -1509,12 +1537,15 @@ void _attachResult(
   required bool isError,
   List<FileEditRecord>? edits,
   Map<String, String>? answers,
+  String? Function()? image,
 }) {
   if (id is! String) return;
   final index = pending.remove(id);
   if (index == null || index >= out.length) return;
   final call = out[index].tool;
   if (call == null) return;
+  // Written to disk only for a call that names no image of its own.
+  final imagePath = call.imagePath == null ? image?.call() : null;
   // Only a call that was itself a write takes the result's edits.
   if (call.edits.isEmpty) edits = null;
   final trimmed = output.trimRight();
@@ -1529,6 +1560,7 @@ void _attachResult(
       isError: isError,
       edits: edits,
       answers: answers,
+      imagePath: imagePath,
     ),
     subagent: row.subagent,
     // Answered, so it is no longer outstanding — and this is the only place

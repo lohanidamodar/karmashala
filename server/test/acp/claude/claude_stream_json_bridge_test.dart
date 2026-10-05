@@ -192,6 +192,47 @@ void main() {
       await rt.stop();
     });
 
+    test(
+      'an image a tool answered with is linked as a file, not "[image]"',
+      () async {
+        final png = base64Encode([137, 80, 78, 71, 5, 6]);
+        final machine = FakeClaudeMachine(
+          turns: [
+            (c, user) async {
+              c.toolUse('t1', 'mcp__device__screenshot', {});
+              c.toolResult('t1', [
+                {'type': 'text', 'text': 'Screenshot taken.'},
+                {
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': 'image/png',
+                    'data': png,
+                  },
+                },
+              ]);
+              c.result();
+            },
+          ],
+        );
+        final rt = runtime(machine);
+        await rt.start();
+        await rt.send('Look');
+        await rt.awaitTurn();
+
+        final call = tools().single;
+        expect(jsonEncode(call), isNot(contains('[image]')));
+        final row = rows().singleWhere((r) => r.toolJson != null);
+        final shown = SessionMessageTranscriptSource.project(row);
+        expect(shown.tool!.output, 'Screenshot taken.');
+        expect(
+          File(shown.tool!.imagePath!).readAsBytesSync(),
+          base64Decode(png),
+        );
+        await rt.stop();
+      },
+    );
+
     test('a person not logged in is asked to log in, in words', () async {
       final rt = runtime(FakeClaudeMachine(loggedIn: false));
       await expectLater(rt.start(), throwsA(isA<AcpLoginRequired>()));

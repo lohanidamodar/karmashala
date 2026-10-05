@@ -830,6 +830,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           ...tool.diffs,
           if (text.isNotEmpty && (tool.diffs.isEmpty || isError))
             ClaudeTools.text(text),
+          ...ClaudeTools.images(block['content']),
         ],
         'rawOutput': text,
       });

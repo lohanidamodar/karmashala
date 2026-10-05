@@ -172,13 +172,15 @@ class ToolActivity {
 
   /// This call with the answer it eventually got. [edits] replaces the call's
   /// own when the result recorded better ones; null keeps them. [answers]
-  /// (question text to answer) answer [questions].
+  /// (question text to answer) answer [questions]. [imagePath], the image
+  /// the result carried, is kept only when the call named none itself.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
     bool isError = false,
     List<FileEditRecord>? edits,
     Map<String, String>? answers,
+    String? imagePath,
   }) {
     final (kept, cut) = edits == null
         ? (this.edits, editsTruncated)
@@ -186,7 +188,7 @@ class ToolActivity {
     return ToolActivity(
       name: name,
       subject: subject,
-      imagePath: imagePath,
+      imagePath: this.imagePath ?? imagePath,
       output: output,
       outputTruncated: outputTruncated,
       isError: isError,

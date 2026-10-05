@@ -4,6 +4,7 @@
 library;
 
 import '../../sessions/tool_activity.dart';
+import '../../sessions/tool_images.dart';
 import 'codex_file_edits.dart';
 
 /// The custom tools that run a script of other tool calls.
@@ -115,6 +116,12 @@ ToolActivity _mcpCall(Map<dynamic, dynamic> item) {
         if (block is Map && block['text'] is String) block['text'] as String,
   ].join('\n');
   final error = item['error'];
+  final image = [
+    if (content is List)
+      for (final block in content)
+        if (block is Map && block['type'] == 'image' && block['data'] is String)
+          block,
+  ].firstOrNull;
   return _activity(
     name: 'mcp__${item['server']}__${item['tool']}',
     subject: toolSubjectEntryFor(item['arguments'])?.value,
@@ -122,6 +129,14 @@ ToolActivity _mcpCall(Map<dynamic, dynamic> item) {
     isError:
         item['status'] == 'failed' ||
         (result is Map && result['isError'] == true),
+    imagePath: image == null
+        ? null
+        : spillToolImage(
+            image['data'] as String,
+            mimeType: image['mimeType'] is String
+                ? image['mimeType'] as String
+                : null,
+          ),
   );
 }
 
@@ -153,11 +168,13 @@ ToolActivity _activity({
   String? subject,
   required String output,
   bool isError = false,
+  String? imagePath,
 }) {
   final (bounded, cut) = boundedToolOutput(output.trimRight());
   return ToolActivity(
     name: name,
     subject: subject,
+    imagePath: imagePath,
     output: bounded.isEmpty ? null : bounded,
     outputTruncated: cut,
     isError: isError,

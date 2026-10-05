@@ -11,7 +11,9 @@ import 'package:agent_cli/stream.dart'
         boundedToolEdits,
         askedQuestionsIn,
         boundedToolOutput,
+        looksLikeImagePath,
         proposedPlanIn,
+        spillToolImage,
         toolSubjectEntryFor;
 import 'package:karmashala_session_engine/store.dart'
     show SessionMessage, SessionMessageDao;
@@ -126,6 +128,7 @@ class SessionMessageTranscriptSource {
     return (
       activity: ToolActivity(
         name: named ?? _string(json['title']) ?? kind ?? 'tool',
+        imagePath: _imageOf(json, kind),
         subject:
             _subjectOf(json['locations']) ??
             toolSubjectEntryFor(json['rawInput'])?.value ??
@@ -173,6 +176,40 @@ class SessionMessageTranscriptSource {
     'in_progress',
     'running',
   };
+
+  /// The image a call answered with — a link to an image file, or inline
+  /// image content, written to one — else the image file it looked at.
+  static String? _imageOf(Map<String, Object?> json, String? kind) {
+    final content = json['content'];
+    if (content is List) {
+      for (final block in content) {
+        final inner = block is Map ? block['content'] : null;
+        if (inner is! Map) continue;
+        final mime = _string(inner['mimeType']);
+        switch (inner['type']) {
+          case 'resource_link' || 'image' when _string(inner['uri']) != null:
+            final uri = Uri.tryParse(inner['uri'] as String);
+            if (uri == null || uri.scheme != 'file') continue;
+            final path = uri.toFilePath();
+            if (looksLikeImagePath(path)) return path;
+          case 'image':
+            final data = _string(inner['data']);
+            if (data == null) continue;
+            if (spillToolImage(data, mimeType: mime) case final path?) {
+              return path;
+            }
+        }
+      }
+    }
+    if (kind == 'edit' || kind == 'delete' || kind == 'move') return null;
+    final locations = json['locations'];
+    if (locations is! List) return null;
+    for (final location in locations) {
+      final path = location is Map ? _string(location['path']) : null;
+      if (path != null) return looksLikeImagePath(path) ? path : null;
+    }
+    return null;
+  }
 
   /// The first location's path, as the identifying line of the call.
   static String? _subjectOf(Object? locations) {

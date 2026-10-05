@@ -1,4 +1,6 @@
+import 'package:agent_cli/stream.dart' show spillToolImage;
 import 'package:karmashala_acp/karmashala_acp.dart' show JsonMap;
+import 'package:path/path.dart' as p;
 
 /// [value] as a JSON object, or null.
 JsonMap? jsonObject(Object? value) =>
@@ -86,20 +88,41 @@ abstract final class ClaudeTools {
     };
   }
 
-  /// A tool result's `content` as text: a string, or its blocks' words.
+  /// A tool result's `content` as text: a string, or its blocks' words. An
+  /// image is no words: see [images].
   static String resultText(Object? content) => switch (content) {
     final String text => text,
     final List<Object?> blocks => [
       for (final block in jsonObjects(blocks))
-        switch (block['type']) {
-          'text' => '${block['text'] ?? ''}',
-          'image' => '[image]',
-          'tool_reference' => '${block['tool_name'] ?? ''}',
-          final other => '[$other]',
-        },
+        if (block['type'] != 'image')
+          switch (block['type']) {
+            'text' => '${block['text'] ?? ''}',
+            'tool_reference' => '${block['tool_name'] ?? ''}',
+            final other => '[$other]',
+          },
     ].join('\n'),
     _ => '',
   };
+
+  /// A tool result's images, each written to a file and linked as ACP
+  /// `resource_link` content: the bytes are far too large for a row.
+  static List<JsonMap> images(Object? content) => [
+    for (final block in jsonObjects(content))
+      if (block['type'] == 'image')
+        if (jsonObject(block['source']) case final source?)
+          if (source['data'] case final String data)
+            if (spillToolImage(data, mimeType: '${source['media_type']}')
+                case final path?)
+              {
+                'type': 'content',
+                'content': {
+                  'type': 'resource_link',
+                  'uri': Uri.file(path).toString(),
+                  'name': p.basename(path),
+                  'mimeType': ?source['media_type'],
+                },
+              },
+  ];
 
   /// ACP text content.
   static JsonMap text(String text) => {
