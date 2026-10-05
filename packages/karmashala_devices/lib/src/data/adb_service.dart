@@ -271,8 +271,7 @@ class AdbService {
     return mergeDeviceTransports(
       devices,
       hardwareSerials: {
-        for (var i = 0; i < ready.length; i++)
-          if (serials[i] case final serial?) ready[i]: serial,
+        for (var i = 0; i < ready.length; i++) ready[i]: ?serials[i],
       },
     );
   }
