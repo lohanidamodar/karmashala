@@ -92,6 +92,7 @@ class DaemonAttention {
       onNewItems: onNewItems,
       onApprovalRequested: onApprovalRequested,
       onStatusMoved: onStatusMoved,
+      endedSessions: watched.ended,
     );
     _agentStatuses = agentStatus.changes.listen(_hostStatusMoved);
     data.addChangeListener(_rowsMoved);

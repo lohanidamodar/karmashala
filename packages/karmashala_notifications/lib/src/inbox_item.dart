@@ -462,6 +462,19 @@ class AttentionInbox {
       if (listed.id != item.id) listed,
   ]);
 
+  /// Retires the asks of native sessions [openIds] that have ended: an agent
+  /// that is gone waits on nobody, and no poll watches it to see that clear.
+  AttentionInbox retireAsksOf(Set<String> openIds) {
+    if (openIds.isEmpty) return this;
+    return _maybe([
+      for (final item in items)
+        if (item.kind != InboxItemKind.needsApproval ||
+            item.session.imported ||
+            !openIds.contains(item.session.openId))
+          item,
+    ]);
+  }
+
   AttentionInbox dismiss(String id) {
     if (!_byId.containsKey(id)) return this;
     return _index([

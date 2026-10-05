@@ -105,6 +105,12 @@ class WatchedSessions {
     _rowsReadAt = now;
   }
 
+  /// The native rows [load] leaves out because their session has ended.
+  Set<String> ended() => {
+    for (final session in _sessions ?? const <Session>[])
+      if (_isOver(session.status) && !_runningOnHost(session.id)) session.id,
+  };
+
   List<WatchedSession> load() {
     final now = clock.nowUtc();
     _readRows(now);

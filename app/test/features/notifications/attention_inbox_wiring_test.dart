@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -159,6 +160,23 @@ void main() {
 
     expect(container.read(attentionInboxProvider).items, isEmpty);
     expect(container.read(attentionCountProvider), 0);
+  });
+
+  test('going to the session\'s chat tab is looking at it too', () async {
+    // A session that never started has no terminal, only its chat tab.
+    container.listen(attentionInboxProvider, (_, _) {});
+    finished();
+    waiting();
+    expect(container.read(attentionCountProvider), 2);
+
+    container.read(_foregroundProvider.notifier).show([chatPaneId('s1')]);
+    await pumpEventQueue();
+
+    expect(container.read(attentionCountProvider), 0);
+    expect(
+      container.read(attentionInboxProvider).items.single.kind,
+      InboxItemKind.needsApproval,
+    );
   });
 
   test('a tab on screen behind another window is not being looked at', () {

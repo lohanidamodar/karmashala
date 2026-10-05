@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneSessionId;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
@@ -149,7 +150,9 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     if (panes.isNotEmpty) {
       final sessions = ref.read(paneSessionsProvider);
       for (final paneId in panes) {
-        if (sessions.sessionOf(paneId) case final sessionId?) {
+        // A chat tab is the only tab a session that never started has.
+        if (chatPaneSessionId(paneId) ?? sessions.sessionOf(paneId)
+            case final sessionId?) {
           looking.add(sessionId);
         }
       }

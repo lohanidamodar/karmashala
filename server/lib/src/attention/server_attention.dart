@@ -41,6 +41,7 @@ class ServerAttention implements AttentionWork {
     this.onNewItems,
     this.onApprovalRequested,
     this.onStatusMoved,
+    this.endedSessions,
   }) {
     _subscriptions = [
       status.hookChanges.listen(_applyHookChange),
@@ -83,6 +84,10 @@ class ServerAttention implements AttentionWork {
 
   /// Some status moved: live phones read their lists again.
   final void Function()? onStatusMoved;
+
+  /// The native rows whose session has ended: nothing they asked still waits
+  /// on a person, and no poll watches them to see it clear.
+  final Set<String> Function()? endedSessions;
 
   late final List<StreamSubscription<Object?>> _subscriptions;
 
@@ -175,6 +180,9 @@ class ServerAttention implements AttentionWork {
           details: details,
         ),
       );
+      if (endedSessions?.call() case final ended? when ended.isNotEmpty) {
+        _update(_inbox.retireAsksOf(ended));
+      }
     } finally {
       _polling = false;
     }

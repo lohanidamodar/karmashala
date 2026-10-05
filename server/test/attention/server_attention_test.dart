@@ -35,6 +35,7 @@ void main() {
   late int windows;
   late ServerSessionStatus status;
   late ServerAttention attention;
+  late Set<String> ended;
 
   const key = AgentSessionKey(AgentIds.claudeCode, 'cli-1');
   const session = WatchedSession(
@@ -59,6 +60,7 @@ void main() {
     pushed = [];
     approvals = [];
     windows = 1;
+    ended = {};
     status = ServerSessionStatus(
       statusService: AgentStatusService(
         registry: AgentRegistry.builtIn,
@@ -79,6 +81,7 @@ void main() {
       windows: () => windows,
       onNewItems: pushed.add,
       onApprovalRequested: approvals.add,
+      endedSessions: () => ended,
     );
   });
 
@@ -155,6 +158,33 @@ void main() {
     await flush();
     expect(attention.waiting, isEmpty);
     expect(attention.inbox.isEmpty, isTrue, reason: 'the condition cleared');
+  });
+
+  test('an ask on a session that has since ended is not left waiting on a '
+      'person', () async {
+    hook('PreToolUse');
+    await attention.poll();
+    hook('Notification');
+    await attention.poll();
+    expect(attention.inbox.items.single.kind, InboxItemKind.needsApproval);
+
+    // The row ended, so it left the watch set: no poll sees the ask clear.
+    watched = [];
+    ended = {'row-1'};
+    await attention.poll();
+    await flush();
+    expect(attention.inbox.isEmpty, isTrue);
+    expect(lastInbox()!.inbox.isEmpty, isTrue);
+  });
+
+  test('an ask we merely lost sight of still stands', () async {
+    hook('PreToolUse');
+    await attention.poll();
+    hook('Notification');
+    await attention.poll();
+    watched = [];
+    await attention.poll();
+    expect(attention.inbox.items.single.kind, InboxItemKind.needsApproval);
   });
 
   test('a hook is judged as it lands, without waiting for a pass', () async {
