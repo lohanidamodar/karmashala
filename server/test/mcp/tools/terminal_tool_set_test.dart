@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
@@ -7,6 +8,7 @@ import 'package:karmashala_host/src/mcp/tools/terminal_tool_schemas.dart';
 import 'package:karmashala_host/src/mcp/tools/terminal_tool_set.dart';
 import 'package:karmashala_host/src/pty/fake_pty.dart';
 import 'package:karmashala_host/src/terminals/server_terminals.dart';
+import 'package:karmashala_host/src/serve/session_store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -166,6 +168,78 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test(
+    'terminal_list leaves out an ended terminal a restarted server only '
+    'restored from its store: no record, no title, nothing to show',
+    () async {
+      final root = Directory.systemTemp.createTempSync('karmashala-r19');
+      addTearDown(() {
+        try {
+          root.deleteSync(recursive: true);
+        } on FileSystemException {
+          // A handle can still be held on Windows; nothing here depends on it.
+        }
+      });
+      SessionStore store() => SessionStore(
+        Directory('${root.path}/sessions'),
+        owner: '/data/this-server',
+      )..ensureDirectory();
+
+      final before = SessionRegistry(
+        launcher: launcher,
+        store: store(),
+        hostname: 'this-mac',
+      );
+      final beforeTerminals = ServerTerminals(
+        registry: before,
+        environments: () => const [],
+        tell: (_) {},
+        hostEnvironment: const {'SHELL': '/bin/zsh'},
+        installedShells: () => const ['/bin/bash', '/bin/zsh'],
+        windows: false,
+        settle: Duration.zero,
+      );
+      final beforeTools = TerminalToolSet(
+        terminals: beforeTerminals,
+        registry: before,
+        data: data,
+        newPaneId: () => 'stub',
+      );
+      await beforeTools.call('terminal_open', const {}, null);
+      launcher.handles.single.finish(0);
+      await pumpEventQueue();
+      await beforeTerminals.dispose();
+
+      // The server restarts: the registry reads the ended shell back.
+      final after = SessionRegistry(
+        launcher: FakePtyLauncher(),
+        store: store(),
+        hostname: 'this-mac',
+      );
+      expect(after.find('karmashala_local_stub'), isNotNull);
+      final afterTools = TerminalToolSet(
+        terminals: ServerTerminals(
+          registry: after,
+          environments: () => const [],
+          tell: (_) {},
+          hostEnvironment: const {'SHELL': '/bin/zsh'},
+          installedShells: () => const ['/bin/bash', '/bin/zsh'],
+          windows: false,
+          settle: Duration.zero,
+        ),
+        registry: after,
+        data: data,
+        newPaneId: () => 'fresh',
+      );
+
+      final listed =
+          (await afterTools.call('terminal_list', const {}, null))!
+              as Map<String, Object?>;
+      final tabs = (listed['tabs']! as List).cast<Map<String, Object?>>();
+      expect(tabs.map((t) => t['id']), isNot(contains('stub')));
+    },
+  );
 
   group('terminal_close', () {
     test('a shell with history is detached: its tab closes, and it keeps '

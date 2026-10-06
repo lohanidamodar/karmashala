@@ -108,6 +108,10 @@ class TerminalToolSet extends ServerToolSet {
       if (named.contains(session.id)) continue;
       const local = 'karmashala_local_';
       if (!session.id.startsWith(local)) continue;
+      // What a restart read back from the store: ended, with no record and no
+      // title, it is kept only so a late pane can read its exit.
+      final title = session.facts?.title?.trim() ?? '';
+      if (session.lifecycle.hasEnded && title.isEmpty) continue;
       found.add(
         _Terminal(
           paneId: session.id.substring(local.length),
