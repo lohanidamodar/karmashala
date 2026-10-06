@@ -938,3 +938,44 @@ void _migrateToV79(Database db) {
     );
   ''');
 }
+
+/// Webhooks: an automation started by a call to its URL — its hook id, the
+/// signature rule, the model, the worktree choice and the hourly limit — and
+/// the log of every call, kept as a hash of the body, never the body. The
+/// signing secrets are not here; they live in the server's vault.
+void _migrateToV80(Database db) {
+  db.execute('ALTER TABLE automations ADD COLUMN webhook_id TEXT;');
+  db.execute('ALTER TABLE automations ADD COLUMN webhook_signature INTEGER;');
+  db.execute('ALTER TABLE automations ADD COLUMN webhook_model TEXT;');
+  db.execute('ALTER TABLE automations ADD COLUMN webhook_worktree INTEGER;');
+  db.execute('ALTER TABLE automations ADD COLUMN webhook_per_hour INTEGER;');
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_automations_webhook '
+    'ON automations (webhook_id) WHERE webhook_id IS NOT NULL;',
+  );
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS webhook_calls (
+      id            TEXT PRIMARY KEY,
+      automation_id TEXT REFERENCES automations (id) ON DELETE CASCADE,
+      hook_id       TEXT NOT NULL,
+      received_at   TEXT NOT NULL,
+      ip            TEXT NOT NULL,
+      status        INTEGER NOT NULL,
+      outcome       TEXT NOT NULL,
+      reason        TEXT,
+      delivery_id   TEXT,
+      body_sha256   TEXT NOT NULL,
+      body_bytes    INTEGER NOT NULL,
+      session_id    TEXT,
+      run_id        TEXT
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_webhook_calls_hook '
+    'ON webhook_calls (hook_id, received_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_webhook_calls_automation '
+    'ON webhook_calls (automation_id, received_at);',
+  );
+}

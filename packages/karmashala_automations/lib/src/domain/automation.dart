@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
 import 'automation_trigger.dart';
+import 'automation_webhook.dart';
 
 /// The shortest interval an automation may repeat at.
 ///
@@ -155,6 +156,7 @@ class Automation {
     this.disabledReason,
     this.maxRuntime,
     this.trigger,
+    this.webhook,
   });
 
   final String id;
@@ -206,7 +208,16 @@ class Automation {
   /// [schedule] is inert: the scheduler never fires an event rule on a clock.
   final AutomationEventTrigger? trigger;
 
+  /// What makes this a webhook, or null. A webhook fires on a call to its URL,
+  /// never on a clock or an event.
+  final AutomationWebhook? webhook;
+
   bool get isEventDriven => trigger != null;
+
+  bool get isWebhook => webhook != null;
+
+  /// Whether the scheduler fires this on its [schedule].
+  bool get isScheduled => trigger == null && webhook == null;
 
   /// Whether a run needs an agent of its own. A message goes into a session
   /// that already has one, so that rule names none.
@@ -233,6 +244,8 @@ class Automation {
     Duration? maxRuntime,
     bool clearMaxRuntime = false,
     AutomationEventTrigger? trigger,
+    AutomationWebhook? webhook,
+    bool clearWebhook = false,
   }) => Automation(
     id: id,
     repositoryId: repositoryId,
@@ -251,9 +264,10 @@ class Automation {
         : disabledReason ?? this.disabledReason,
     maxRuntime: clearMaxRuntime ? null : maxRuntime ?? this.maxRuntime,
     trigger: trigger ?? this.trigger,
+    webhook: clearWebhook ? null : webhook ?? this.webhook,
   );
 
   @override
   String toString() =>
-      'Automation($id, $name, ${trigger ?? schedule}, enabled: $enabled)';
+      'Automation($id, $name, ${webhook ?? trigger ?? schedule}, enabled: $enabled)';
 }

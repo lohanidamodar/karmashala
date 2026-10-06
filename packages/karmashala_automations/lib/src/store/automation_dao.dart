@@ -10,6 +10,7 @@ import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_trigger.dart';
+import '../domain/automation_webhook.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
 class AutomationDao implements AutomationRecords {
@@ -24,8 +25,11 @@ class AutomationDao implements AutomationRecords {
     '(id, repository_id, name, cron, fires_at, every_seconds, '
     'agent_installation_id, prompt, permission_mode, enabled, armed_at, '
     'late_policy, stop_after_failures, consecutive_failures, '
-    'disabled_reason, max_runtime_seconds, trigger_event, event_action) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
+    'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
+    'webhook_per_hour) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
+    '?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -43,6 +47,7 @@ class AutomationDao implements AutomationRecords {
       automation.maxRuntime?.inSeconds,
       automation.trigger?.kind.storedName,
       automation.trigger?.action.storedName,
+      ..._webhookColumns(automation),
     ],
   );
 
@@ -53,7 +58,9 @@ class AutomationDao implements AutomationRecords {
     'every_seconds = ?, agent_installation_id = ?, prompt = ?, '
     'permission_mode = ?, enabled = ?, armed_at = ?, late_policy = ?, '
     'stop_after_failures = ?, consecutive_failures = ?, disabled_reason = ?, '
-    'max_runtime_seconds = ?, trigger_event = ?, event_action = ? '
+    'max_runtime_seconds = ?, trigger_event = ?, event_action = ?, '
+    'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
+    'webhook_worktree = ?, webhook_per_hour = ? '
     'WHERE id = ?;',
     [
       automation.name,
@@ -70,14 +77,27 @@ class AutomationDao implements AutomationRecords {
       automation.maxRuntime?.inSeconds,
       automation.trigger?.kind.storedName,
       automation.trigger?.action.storedName,
+      ..._webhookColumns(automation),
       automation.id,
     ],
   );
 
+  static List<Object?> _webhookColumns(Automation automation) {
+    final webhook = automation.webhook;
+    if (webhook == null) return const [null, null, null, null, null];
+    return [
+      webhook.hookId.isEmpty ? null : webhook.hookId,
+      intFromBool(webhook.requireSignature),
+      webhook.modelId,
+      intFromBool(webhook.worktree),
+      webhook.callsPerHour,
+    ];
+  }
+
   /// cron, fires_at, every_seconds — all null for an event rule, so a build
   /// that predates triggers cannot read one as a schedule and fire it.
   static List<Object?> _scheduleColumns(Automation automation) {
-    if (automation.isEventDriven) return const [null, null, null];
+    if (!automation.isScheduled) return const [null, null, null];
     final schedule = automation.schedule;
     return [
       schedule.cron,
@@ -143,6 +163,23 @@ class AutomationDao implements AutomationRecords {
       .query(
         'SELECT * FROM automations WHERE repository_id = ? ORDER BY name, id;',
         [repositoryId],
+      )
+      .map(_automation)
+      .toList();
+
+  /// The webhook automation whose URL ends in [hookId], enabled or not.
+  Automation? byHookId(String hookId) {
+    final rows = _db.query('SELECT * FROM automations WHERE webhook_id = ?;', [
+      hookId,
+    ]);
+    return rows.isEmpty ? null : _automation(rows.first);
+  }
+
+  /// Every webhook automation, paused ones included.
+  List<Automation> webhooks() => _db
+      .query(
+        'SELECT * FROM automations WHERE webhook_id IS NOT NULL '
+        'ORDER BY name, id;',
       )
       .map(_automation)
       .toList();
@@ -498,6 +535,17 @@ class AutomationDao implements AutomationRecords {
         event: row['trigger_event'] as String?,
         action: row['event_action'] as String?,
       ),
+      webhook: row['webhook_id'] == null
+          ? null
+          : AutomationWebhook(
+              hookId: row['webhook_id']! as String,
+              requireSignature: boolFromInt(row['webhook_signature'] ?? 1),
+              modelId: row['webhook_model'] as String?,
+              worktree: boolFromInt(row['webhook_worktree'] ?? 0),
+              callsPerHour:
+                  row['webhook_per_hour'] as int? ??
+                  kDefaultWebhookCallsPerHour,
+            ),
     );
   }
 
