@@ -86,11 +86,16 @@ class _ConnectedFilterButton extends ConsumerWidget {
         : null;
     final settings = ref.read(settingsControllerProvider.notifier);
     final showingArchived = ref.watch(showArchivedSessionsProvider);
+    final hidingWorking = ref.watch(hideWorkingSessionsProvider);
     return ExplorerFilterButton(
       showingArchived: showingArchived,
       onToggleArchived: () => ref
           .read(sessionListPrefsProvider.notifier)
           .setShowArchived(!showingArchived),
+      hidingWorking: hidingWorking,
+      onToggleHideWorking: () => ref
+          .read(sessionListPrefsProvider.notifier)
+          .setHideWorking(!hidingWorking),
       registry: ref.watch(agentRegistryProvider),
       filter: filter,
       showingViews: showingViews,
@@ -126,6 +131,8 @@ class ExplorerFilterButton extends StatelessWidget {
     this.onToggleActivity,
     this.showingArchived = false,
     this.onToggleArchived,
+    this.hidingWorking = false,
+    this.onToggleHideWorking,
     super.key,
   });
 
@@ -134,6 +141,12 @@ class ExplorerFilterButton extends StatelessWidget {
 
   /// Null leaves "Show archived" off the menu.
   final VoidCallback? onToggleArchived;
+
+  /// Whether "Hide while working" takes busy sessions off the lists.
+  final bool hidingWorking;
+
+  /// Null leaves "Hide while working" off the menu.
+  final VoidCallback? onToggleHideWorking;
 
   final AgentRegistry registry;
   final AgentFilter filter;
@@ -162,6 +175,7 @@ class ExplorerFilterButton extends StatelessWidget {
   static const String _savedViews = 'views:saved';
   static const String _activity = 'lens:activity';
   static const String _archived = 'sessions:archived';
+  static const String _working = 'sessions:working';
   static const String _agentPrefix = 'agent:';
 
   @override
@@ -177,6 +191,8 @@ class ExplorerFilterButton extends StatelessWidget {
           onToggleActivity?.call();
         } else if (value == _archived) {
           onToggleArchived?.call();
+        } else if (value == _working) {
+          onToggleHideWorking?.call();
         } else if (value == _savedViews) {
           onToggleSavedViews();
         } else if (value == _emptySections) {
@@ -213,6 +229,13 @@ class ExplorerFilterButton extends StatelessWidget {
             label: 'Show archived',
             icon: AppIcons.tray,
             selected: showingArchived,
+          ),
+        if (onToggleHideWorking != null)
+          DesktopMenuItem(
+            value: _working,
+            label: 'Hide while working',
+            icon: AppIcons.eyeSlash,
+            selected: hidingWorking,
           ),
         const PopupMenuDivider(),
         DesktopMenuItem(

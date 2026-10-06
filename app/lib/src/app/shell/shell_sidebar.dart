@@ -45,6 +45,7 @@ class ShellSidebar extends ConsumerWidget {
     );
     final mayStart = ref.watch(capabilitiesProvider.select((c) => c.mayStart));
     final showingArchived = ref.watch(showArchivedSessionsProvider);
+    final hidingWorking = ref.watch(hideWorkingSessionsProvider);
     final list = switch (area) {
       ShellArea.sessions => _Area(
         title: 'Sessions',
@@ -66,6 +67,16 @@ class ShellSidebar extends ConsumerWidget {
             onPressed: () => ref
                 .read(sessionListPrefsProvider.notifier)
                 .setShowArchived(!showingArchived),
+          ),
+          IconButton(
+            tooltip: hidingWorking
+                ? 'Show working sessions'
+                : 'Hide while working',
+            isSelected: hidingWorking,
+            icon: const Icon(AppIcons.eyeSlash),
+            onPressed: () => ref
+                .read(sessionListPrefsProvider.notifier)
+                .setHideWorking(!hidingWorking),
           ),
         ],
         child: const AgentsPage(),

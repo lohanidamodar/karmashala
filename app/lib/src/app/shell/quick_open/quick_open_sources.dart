@@ -27,6 +27,7 @@ import '../../../features/git/application/diff_tab_actions.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
+import '../../../features/sessions/application/session_list_prefs.dart';
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -427,6 +428,24 @@ class QuickOpenSources {
         keywords: const ['cli', 'import', 'scan', 'claude', 'codex'],
         onSelect: () => DetectedProjectsView.show(context),
       ),
+      if (ref.read(hideWorkingSessionsProvider))
+        _command(
+          'Show working sessions',
+          subtitle: 'Put busy sessions back in the lists',
+          icon: AppIcons.eye,
+          keywords: const ['hide', 'working', 'busy', 'sessions'],
+          onSelect: () =>
+              ref.read(sessionListPrefsProvider.notifier).setHideWorking(false),
+        )
+      else
+        _command(
+          'Hide sessions while they work',
+          subtitle: 'Until they finish or need you',
+          icon: AppIcons.eyeSlash,
+          keywords: const ['hide', 'working', 'busy', 'sessions'],
+          onSelect: () =>
+              ref.read(sessionListPrefsProvider.notifier).setHideWorking(true),
+        ),
       _command(
         'About Karmashala',
         icon: AppIcons.info,

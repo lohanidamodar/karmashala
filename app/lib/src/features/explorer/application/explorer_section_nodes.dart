@@ -22,7 +22,18 @@ final explorerSectionNodesProvider = Provider.autoDispose<List<ExplorerNode>>((
     }
     final members = ref.watch(explorerSectionMembersProvider(section.id));
     nodes.add(SectionHeaderNode(section: section, count: members.length));
+    final working = ref.watch(explorerSectionHiddenWorkingProvider(section.id));
+    if (working > 0) {
+      nodes.add(
+        HiddenWorkingNode(
+          id: 'section:${section.id}/working',
+          depth: 1,
+          count: working,
+        ),
+      );
+    }
     if (members.isEmpty) {
+      if (working > 0) continue;
       nodes.add(
         HintNode(
           id: 'section:${section.id}/empty',

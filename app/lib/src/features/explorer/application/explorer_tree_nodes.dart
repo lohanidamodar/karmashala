@@ -394,6 +394,27 @@ final class HintNode extends ExplorerNode {
   int get hashCode => Object.hash(id, depth, message);
 }
 
+/// "N working · Show": the sessions "Hide while working" took off a list.
+final class HiddenWorkingNode extends ExplorerNode {
+  HiddenWorkingNode({
+    required super.id,
+    required super.depth,
+    required this.count,
+  });
+
+  final int count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is HiddenWorkingNode &&
+      other.id == id &&
+      other.depth == depth &&
+      other.count == count;
+
+  @override
+  int get hashCode => Object.hash(id, depth, count);
+}
+
 /// "Archived (N)": a project's archived sessions, held back from its rows.
 final class ArchivedNode extends ExplorerNode {
   ArchivedNode({required super.id, required super.depth, required this.count});
