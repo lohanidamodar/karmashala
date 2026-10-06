@@ -66,6 +66,8 @@ Map<String, Object?> fileChangeToJson(FileChange change) => {
   'unstaged': change.unstaged,
   'originalPath': ?change.originalPath,
   'conflict': ?change.conflict?.name,
+  'newFolder': ?change.newFolder,
+  if (change.moreFiles > 0) 'moreFiles': change.moreFiles,
 };
 
 FileChange fileChangeFromJson(Map<String, Object?> json) => FileChange(
@@ -78,6 +80,8 @@ FileChange fileChangeFromJson(Map<String, Object?> json) => FileChange(
     final String name => MergeConflict.values.byName(name),
     _ => null,
   },
+  newFolder: json['newFolder'] as String?,
+  moreFiles: json['moreFiles'] as int? ?? 0,
 );
 
 Map<String, Object?> workingTreeStatusToJson(WorkingTreeStatus status) => {

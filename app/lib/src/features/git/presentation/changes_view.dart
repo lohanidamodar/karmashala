@@ -153,7 +153,9 @@ class _ChangedFileCount extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = ref.watch(
-      repositoryChangesProvider.select((v) => v.asData?.value.length ?? 0),
+      repositoryChangesProvider.select(
+        (v) => changedFileCount(v.asData?.value ?? const []),
+      ),
     );
     if (count == 0) return const SizedBox.shrink();
     return Padding(
@@ -222,9 +224,7 @@ class _AbortMergeButton extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    final restored = await ref
-        .read(gitDataProvider)
-        .abortMerge(checkout);
+    final restored = await ref.read(gitDataProvider).abortMerge(checkout);
     // Only on the half that rewrote files; an abort that found nothing to undo
     // changed no file.
     if (restored) ref.invalidate(repositoryChangesProvider);
@@ -281,11 +281,19 @@ class _SendReviewThreadsButton extends ConsumerWidget {
 
 /// The list of changed files — the only part of the panel that watches the
 /// changes themselves.
-class _ChangedFiles extends ConsumerWidget {
+class _ChangedFiles extends ConsumerStatefulWidget {
   const _ChangedFiles();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ChangedFiles> createState() => _ChangedFilesState();
+}
+
+class _ChangedFilesState extends ConsumerState<_ChangedFiles> {
+  /// New folders folded shut, keyed by section and folder.
+  final _collapsed = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
     return ref
         .watch(repositoryChangesProvider)
         .when(
@@ -351,14 +359,55 @@ class _ChangedFiles extends ConsumerWidget {
       rows.add(
         _SectionHeader(
           title: section.title,
-          count: section.files.length,
+          count: changedFileCount(section.files),
           files: section.files,
           staged: section.staged,
           conflicted: section.conflicted,
         ),
       );
+      // A new folder sits where its first file would, its files under it.
+      final folders = <String, List<FileChange>>{};
       for (final file in section.files) {
-        rows.add(_ChangedFileRow(file: file, inStagedSection: section.staged));
+        if (file.newFolder case final folder?) {
+          (folders[folder] ??= []).add(file);
+        }
+      }
+      for (final file in section.files) {
+        final folder = file.newFolder;
+        if (folder == null) {
+          rows.add(
+            _ChangedFileRow(file: file, inStagedSection: section.staged),
+          );
+          continue;
+        }
+        final inFolder = folders.remove(folder);
+        if (inFolder == null) continue;
+        inFolder.sort((a, b) => a.path.compareTo(b.path));
+        final key = '${section.title}|$folder';
+        final open = !_collapsed.contains(key);
+        rows.add(
+          _NewFolderRow(
+            folder: folder,
+            files: inFolder,
+            open: open,
+            inStagedSection: section.staged,
+            onToggle: () => setState(
+              () => open ? _collapsed.add(key) : _collapsed.remove(key),
+            ),
+          ),
+        );
+        if (!open) continue;
+        for (final child in inFolder) {
+          rows.add(
+            child.moreFiles > 0
+                ? _MoreFilesRow(file: child)
+                : _ChangedFileRow(
+                    file: child,
+                    inStagedSection: section.staged,
+                    nestedIn: folder,
+                  ),
+          );
+        }
       }
     }
     return ListView.builder(
@@ -442,9 +491,17 @@ class _SectionHeader extends ConsumerWidget {
 /// sits in, and how many lines moved. A tap reads it in a tab — the sidebar is
 /// for finding a change, not for reading one through a 300px window.
 class _ChangedFileRow extends ConsumerWidget {
-  const _ChangedFileRow({required this.file, this.inStagedSection = false});
+  const _ChangedFileRow({
+    required this.file,
+    this.inStagedSection = false,
+    this.nestedIn,
+  });
 
   final FileChange file;
+
+  /// The new folder this row is listed under: it is indented, and its folder
+  /// is named from there.
+  final String? nestedIn;
 
   /// Which group this row is drawn in, which is what its verbs act on: the
   /// same path can be listed twice when half of it is staged.
@@ -466,14 +523,22 @@ class _ChangedFileRow extends ConsumerWidget {
     final selected = ref.watch(
       activeDiffFileProvider.select((path) => path == file.path),
     );
-    final folder = p.posix.dirname(file.path);
+    final nestedIn = this.nestedIn;
+    final folder = nestedIn == null
+        ? p.posix.dirname(file.path)
+        : p.posix.relative(p.posix.dirname(file.path), from: nestedIn);
     return Semantics(
       selected: selected,
       child: InkWell(
         onTap: () => ref.read(diffTabActionsProvider).open(file.path),
         child: Container(
           color: selected ? StateLayers.selected(scheme) : null,
-          padding: const EdgeInsets.fromLTRB(Insets.sm, 3, Insets.xs, 3),
+          padding: EdgeInsets.fromLTRB(
+            nestedIn == null ? Insets.sm : _nestedIndent,
+            3,
+            Insets.xs,
+            3,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -530,6 +595,122 @@ class _ChangedFileRow extends ConsumerWidget {
     );
   }
 }
+
+const _nestedIndent = Insets.sm + 18;
+
+/// A folder git has never seen, as one row that opens onto its files — git
+/// itself reports it as a single `? dir/` entry.
+class _NewFolderRow extends ConsumerWidget {
+  const _NewFolderRow({
+    required this.folder,
+    required this.files,
+    required this.open,
+    required this.inStagedSection,
+    required this.onToggle,
+  });
+
+  final String folder;
+  final List<FileChange> files;
+  final bool open;
+  final bool inStagedSection;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = changedFileCount(files);
+    final copy = ref.read(workingCopyControllerProvider.notifier);
+    return InkWell(
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.xs, 3, Insets.xs, 3),
+        child: Row(
+          children: [
+            Icon(
+              open ? AppIcons.caretDown : AppIcons.caretRight,
+              size: Chrome.iconSmall,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              open ? AppIcons.folderOpen : AppIcons.folder,
+              size: Chrome.iconSmall,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Insets.xs),
+            Flexible(
+              child: Text(
+                '$folder/',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: MonoStyles.body,
+              ),
+            ),
+            const SizedBox(width: Insets.sm),
+            Expanded(
+              child: Text(
+                '${groupedCount(count)} new file${count == 1 ? '' : 's'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: MonoStyles.small.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (!inStagedSection)
+              _RowButton(
+                tooltip: 'Discard folder',
+                icon: AppIcons.arrowCounterClockwise,
+                onPressed: () => confirmDiscard(context, ref, files),
+              ),
+            _RowButton(
+              tooltip: inStagedSection ? 'Unstage folder' : 'Stage folder',
+              icon: inStagedSection ? AppIcons.minusCircle : AppIcons.plus,
+              onPressed: () => inStagedSection
+                  ? copy.unstage(['$folder/'])
+                  : copy.stage(['$folder/']),
+            ),
+            const SizedBox(width: Insets.sm),
+            Text(
+              changeLetter(FileChangeType.untracked),
+              style: MonoStyles.body.copyWith(
+                color: _colorFor(FileChangeType.untracked, context),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The files of a new folder past the listing limit, counted rather than
+/// listed. Their folder's own row still stages and discards them.
+class _MoreFilesRow extends StatelessWidget {
+  const _MoreFilesRow({required this.file});
+
+  final FileChange file;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(_nestedIndent, 3, Insets.xs, 3),
+    child: Text(
+      '${groupedCount(file.moreFiles)} more files in ${file.newFolder}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: MonoStyles.small.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontStyle: FontStyle.italic,
+      ),
+    ),
+  );
+}
+
+/// [n] with thousands separated: `1,500`.
+@visibleForTesting
+String groupedCount(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
 /// Stage, unstage and discard for one row. Drawn always rather than on hover:
 /// this panel is often driven by keyboard and read on a laptop trackpad, and a
@@ -614,9 +795,10 @@ Future<void> confirmDiscard(
     for (final file in files)
       if (file.type == FileChangeType.untracked) file,
   ];
-  final what = files.length == 1
+  final count = changedFileCount(files);
+  final what = count == 1
       ? '"${p.posix.basename(files.single.path)}"'
-      : '${files.length} files';
+      : '${groupedCount(count)} files';
   final confirmed = await showConfirmDialog(
     context,
     destructive: true,
@@ -627,7 +809,8 @@ Future<void> confirmDiscard(
         : untracked.length == files.length
         ? 'These files are untracked, so discarding deletes them. Nothing '
               'brings them back — git has never seen them.'
-        : '${untracked.length} of them are untracked and will be deleted; the '
+        : '${groupedCount(changedFileCount(untracked))} of them are untracked '
+              'and will be deleted; the '
               'rest go back to the last commit.',
     confirmLabel: 'Discard',
   );

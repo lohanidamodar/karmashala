@@ -61,8 +61,8 @@ class ArchiveOutcome {
     ArchiveRefusal.stillRunning =>
       'The agent is still running in this worktree. Stop it first.',
     ArchiveRefusal.uncommittedChanges =>
-      '${changes.length} uncommitted '
-          'change${changes.length == 1 ? '' : 's'} would be destroyed.',
+      '${changedFileCount(changes)} uncommitted '
+          'change${changedFileCount(changes) == 1 ? '' : 's'} would be destroyed.',
     ArchiveRefusal.noWorktree =>
       'This session works in the repository itself; there is no worktree to '
           'archive.',
@@ -94,7 +94,7 @@ class SessionArchiveService {
     _log.info(
       'Archive $sessionId: ${_verdictOf(outcome)} '
       'discardUncommitted=$discardUncommitted '
-      'uncommitted=${outcome.changes.length}',
+      'uncommitted=${changedFileCount(outcome.changes)}',
     );
     return outcome;
   }
