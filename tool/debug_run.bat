@@ -32,6 +32,7 @@ if /i "%~1"=="--live" set LIVE=1
 set LOG=%USERPROFILE%\karmashala-debug.log
 set DONE=%USERPROFILE%\karmashala-debug.done
 set FLUTTER=%USERPROFILE%\flutter\bin\flutter.bat
+set DARTEXE=%USERPROFILE%\flutter\bin\cache\dart-sdk\bin\dart.exe
 del /q "%DONE%" 2>nul
 
 set APPVER=
@@ -43,6 +44,22 @@ if not defined LIVE (
   set KARMASHALA_PROBE=1
   if not exist "!KARMASHALA_DATA_DIR!" mkdir "!KARMASHALA_DATA_DIR!"
   echo === PROBE DATA !KARMASHALA_DATA_DIR! === >> "%LOG%"
+
+  rem The probe's server is built from this checkout, every run. A debug
+  rem build compiles only the app, and LocalHostExecutable would otherwise
+  rem start whatever bundle is left in server\build\cli - once a 1.31.1 from
+  rem days before, so every server-side change looked absent in the probe.
+  rem The probe's server outlives its window and holds the exe open: stop it
+  rem (quick open "Stop server") before a run that must carry server changes.
+  rem A build that cannot replace it says so, and the probe then runs the old.
+  echo === SESSION HOST ^(probe, from this checkout^) === >> "%LOG%"
+  pushd ..
+  "%DARTEXE%" build cli -t server\bin\karmashala_host.dart -o server\build\cli\windows_x64 >> "%LOG%" 2>&1
+  if errorlevel 1 (
+    echo     PROBE SERVER NOT REBUILT - is the probe's server still running? See %LOG%
+    echo PROBE SERVER NOT REBUILT - the probe runs the bundle already in server\build\cli >> "%LOG%"
+  )
+  popd
 )
 
 call "%FLUTTER%" run --debug -d windows --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com >> "%LOG%" 2>&1
