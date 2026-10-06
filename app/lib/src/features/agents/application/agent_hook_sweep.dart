@@ -59,6 +59,39 @@ Future<void> sweepHostHooks(ProviderContainer container, {AppLogger? logger}) {
   );
 }
 
+/// Re-runs the last sweep when a local store's endpoint file has gone missing
+/// or changed under the app, and says so: the hook scripts exit silently
+/// without one. True when it had to. Queued behind any sweep; never throws.
+Future<bool> healAgentHookEndpoints(
+  ProviderContainer container, {
+  AppLogger? logger,
+}) {
+  final sweeps = container.read(_agentHookSweepsProvider);
+  final result = sweeps.tail.then((_) async {
+    final endpoint = sweeps.last;
+    if (endpoint == null) return false;
+    try {
+      // Inside the try: a tick in flight at quit reads a disposed container.
+      if (container.read(probeModeProvider).enabled) return false;
+      final stale = await container
+          .read(agentHookInstallationServiceProvider)
+          .staleLocalEndpoints(endpoint);
+      if (stale.isEmpty) return false;
+      logger?.warning(
+        'Agent hooks: the endpoint file for ${stale.join(', ')} was missing '
+        'or changed; rewriting it.',
+      );
+    } on Object catch (error, stack) {
+      logger?.warning('Checking the agent hook endpoints failed.', error, stack);
+      return false;
+    }
+    await _sweep(container, endpoint, logger);
+    return true;
+  });
+  sweeps.tail = result.then((_) {});
+  return result;
+}
+
 Future<AgentHookInstallationReport?> _sweep(
   ProviderContainer container,
   AgentHookEndpoint endpoint,

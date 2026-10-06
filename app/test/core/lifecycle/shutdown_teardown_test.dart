@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -127,6 +128,9 @@ void main() {
         overrides: [
           data,
           chatProtocolResolverProvider.overrideWithValue((_) => adapter),
+          agentHookInstallationServiceProvider.overrideWith(
+            _InertHookService.new,
+          ),
         ],
       );
       final engine = container.read(sessionEngineProvider);
@@ -156,6 +160,15 @@ void main() {
     });
 
   });
+}
+
+/// The real service would retire the endpoints in the agent stores the real
+/// locator finds — the developer's own `~/.claude`, `~/.codex` and `~/.gemini`.
+class _InertHookService extends AgentHookInstallationService {
+  _InertHookService(super.ref);
+
+  @override
+  Future<List<AgentHookInstallation>> retireEndpoints() async => const [];
 }
 
 /// An adapter whose sessions record being stopped, and can be made to take
