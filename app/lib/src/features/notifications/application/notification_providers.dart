@@ -270,6 +270,9 @@ final attentionPresenterProvider = Provider<AttentionPresenter>((ref) {
     isWindowFocused: () => ref.read(windowFocusedProvider),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
     onNotify: (event) => ref.read(notificationDispatcherProvider).add(event),
+    onQuiet: ref.read(capabilitiesProvider).localNotifications
+        ? (event) => ref.read(notificationDispatcherProvider).add(event)
+        : null,
   );
   ref.onDispose(presenter.dispose);
   return presenter;

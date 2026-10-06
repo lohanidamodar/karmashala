@@ -10,10 +10,24 @@ class PendingNotification {
     required this.reason,
     this.evidence = const [],
     this.waiting = AgentWaitKind.unrecorded,
+    this.quiet = false,
   });
 
   final WatchedSession session;
   final NotificationReason reason;
+
+  /// Logged quietly at the person's level: shown, where a client can, without
+  /// a sound or a heads-up.
+  final bool quiet;
+
+  /// This event, to be shown quietly.
+  PendingNotification quietly() => PendingNotification(
+    session: session,
+    reason: reason,
+    evidence: evidence,
+    waiting: waiting,
+    quiet: true,
+  );
 
   /// What the agent is waiting *on*: the reason says the user is held up, this
   /// says whether anything is actually there to confirm.
@@ -42,10 +56,15 @@ class NotificationRequest {
     this.payload,
     this.actions = const [],
     this.asks = false,
+    this.quiet = false,
   });
 
   final String title;
   final String body;
+
+  /// Nothing in it interrupts at the person's level: a phone shows it in its
+  /// quiet channel, with no sound, vibration or heads-up.
+  final bool quiet;
 
   /// One session's open ask ([NotificationReason.needsInput]): what a phone
   /// withdraws once the ask has been answered anywhere.
@@ -125,6 +144,7 @@ class NotificationCoalescer {
             ? kApprovalNotificationActions
             : const [],
         asks: only.reason == NotificationReason.needsInput,
+        quiet: only.quiet,
       );
     }
 
@@ -143,7 +163,11 @@ class NotificationCoalescer {
 
     // A summary covers several sessions, so clicking it opens the app rather
     // than guessing which one was meant.
-    return NotificationRequest(title: title, body: body);
+    return NotificationRequest(
+      title: title,
+      body: body,
+      quiet: unique.every((e) => e.quiet),
+    );
   }
 
   /// The session, and what the agent said about it. No evidence means the label
