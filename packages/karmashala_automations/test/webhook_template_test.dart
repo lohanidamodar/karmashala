@@ -29,6 +29,22 @@ void main() {
     });
   });
 
+  test('a sample body has every field the template reads, and fills it', () {
+    const template =
+        'Triage {{issue.title}} #{{issue.number}} {{commits.0.id}}';
+    final sample = webhookSampleBody(webhookTemplateFields(template));
+    expect(sample, {
+      'issue': {'title': 'example', 'number': 'example'},
+      'commits': [
+        {'id': 'example'},
+      ],
+    });
+    expect(
+      () => fillWebhookTemplate(template, sample, nonce: _nonce),
+      returnsNormally,
+    );
+  });
+
   group('filling', () {
     test('each value is quoted data in a fence, referenced from the text', () {
       final prompt = _fill(

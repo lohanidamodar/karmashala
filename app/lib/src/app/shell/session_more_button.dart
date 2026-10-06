@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../features/automations/presentation/session_origin_label.dart';
 import '../../features/sessions/presentation/session_repositories_bar.dart';
 import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
@@ -120,6 +121,7 @@ class SessionMoreBody extends StatelessWidget {
             StopSessionButton(sessionId: sessionId),
           ],
         ),
+        SessionOriginLabel(sessionId: sessionId),
         const SizedBox(height: Insets.sm),
         Text('REPOSITORIES', style: label),
         const SizedBox(height: Insets.xs),

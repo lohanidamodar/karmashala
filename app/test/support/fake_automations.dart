@@ -234,6 +234,8 @@ class FakeAutomationRows extends AutomationCopyReads {
         _server.resumeRows.rows[resume.id] = resume;
       case ResumeRemoved(:final id):
         _server.resumeRows.rows.remove(id);
+      case WebhookCallRecorded():
+        break;
     }
   }
 

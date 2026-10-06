@@ -289,6 +289,9 @@ class FakeDataServer {
   /// index, watches — over real file spaces a test points at temp folders.
   final filesWork = FakeFilesWork._();
 
+  /// Webhook secrets made and the calls a status read answers.
+  final webhooks = FakeWebhooks();
+
   /// The server's environment vault, write-only, in memory.
   late final envVault = FakeEnvVault._(this);
 
@@ -352,9 +355,7 @@ class FakeDataServer {
   /// server tells a show or a rewrite.
   void showArtifact(Artifact artifact, List<int> bytes) {
     artifacts[artifact.id] = artifact;
-    artifactBytes[(artifact.id, artifact.revision)] = Uint8List.fromList(
-      bytes,
-    );
+    artifactBytes[(artifact.id, artifact.revision)] = Uint8List.fromList(bytes);
     _tell(null, [ArtifactChanged(artifact)]);
   }
 
@@ -747,6 +748,9 @@ class FakeDataServer {
         const [],
       );
     }
+    if (request case final WebhooksWorkRequest<Object?> work) {
+      return DataReply(webhooks._handle(work) as R, revision, const []);
+    }
     if (request case final ChecksRun work) {
       return DataReply(attention._checks(work) as R, revision, const []);
     }
@@ -903,6 +907,7 @@ class FakeDataServer {
       TerminalWorkRequest() ||
       AttentionRequest() ||
       ChecksWorkRequest() ||
+      WebhooksWorkRequest() ||
       SessionWorkRequest() ||
       ClientActive() ||
       EnvVaultRequest() => throw StateError('answered above'),
@@ -1508,4 +1513,31 @@ class FakeDataLink implements DataEndpoint {
     _drop();
     await _changes.close();
   }
+}
+
+/// The server's webhooks as a test sets them: each rotate makes a new secret,
+/// and a status read answers [calls] and [url].
+class FakeWebhooks {
+  final rotated = <String>[];
+  String? url = 'https://relay.example.com/h/0123/abcd';
+  bool listening = true;
+  List<WebhookCall> calls = [];
+
+  Object _handle(WebhooksWorkRequest<Object?> request) => switch (request) {
+    WebhookRotate(:final automationId) => () {
+      rotated.add(automationId);
+      return WebhookIssued(
+        automationId: automationId,
+        hookId: 'hook-$automationId',
+        url: url,
+        secret: 'whsec_test_${rotated.length}',
+      );
+    }(),
+    WebhookStatusRead() => WebhookStatus(
+      url: url,
+      listening: listening,
+      problem: listening ? null : 'This server has no relay to take calls on.',
+      calls: calls,
+    ),
+  };
 }

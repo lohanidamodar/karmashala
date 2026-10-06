@@ -251,7 +251,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               ),
             const SizedBox(height: Insets.sm),
             if (_needsAgent) ...[
-              _AgentField(
+              AutomationAgentField(
                 installations: installations,
                 selectedId: _installationId,
                 displayNameFor: registry.displayNameFor,
@@ -263,7 +263,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               const SizedBox(height: Insets.sm),
             ],
             if (selected != null && _needsAgent)
-              _PermissionModeField(
+              AutomationPermissionModeField(
                 agentName: descriptor?.displayName ?? selected.agentId,
                 support: descriptor?.launch.permission,
                 value: _mode,
@@ -557,12 +557,13 @@ class _ScheduleFields extends StatelessWidget {
 }
 
 /// Which installed agent runs it — or why there is none to pick.
-class _AgentField extends StatelessWidget {
-  const _AgentField({
+class AutomationAgentField extends StatelessWidget {
+  const AutomationAgentField({
     required this.installations,
     required this.selectedId,
     required this.displayNameFor,
     required this.onChanged,
+    super.key,
   });
 
   final List<AgentInstallation> installations;
@@ -599,12 +600,13 @@ class _AgentField extends StatelessWidget {
 
 /// The agent's own modes, flat and safest first. Whole selections rather than
 /// a picker per axis, because the gate reads the whole selection's rung.
-class _PermissionModeField extends StatelessWidget {
-  const _PermissionModeField({
+class AutomationPermissionModeField extends StatelessWidget {
+  const AutomationPermissionModeField({
     required this.agentName,
     required this.support,
     required this.value,
     required this.onChanged,
+    super.key,
   });
 
   final String agentName;

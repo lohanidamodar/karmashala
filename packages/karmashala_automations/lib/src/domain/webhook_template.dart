@@ -101,6 +101,36 @@ WebhookFill fillWebhookTemplate(
   );
 }
 
+/// A body with every one of [fields] set to `"example"` — what a test call
+/// starts from, so a person edits values rather than writes JSON from scratch.
+Map<String, Object?> webhookSampleBody(List<String> fields) {
+  final root = <String, Object?>{};
+  for (final field in fields) {
+    final keys = field.split('.');
+    Object? container = root;
+    for (final (i, key) in keys.indexed) {
+      final last = i == keys.length - 1;
+      final nextIsIndex = !last && int.tryParse(keys[i + 1]) != null;
+      Object? make() => last
+          ? 'example'
+          : nextIsIndex
+          ? <Object?>[]
+          : <String, Object?>{};
+      if (container is Map<String, Object?>) {
+        container = container[key] ??= make();
+      } else if (container is List<Object?>) {
+        final index = int.parse(key);
+        while (container.length <= index) {
+          container.add(null);
+        }
+        container = container[index] ??= make();
+      }
+      if (container is! Map && container is! List) break;
+    }
+  }
+  return root;
+}
+
 Object? _resolve(Object? payload, String field) {
   Object? at = payload;
   for (final key in field.split('.')) {
