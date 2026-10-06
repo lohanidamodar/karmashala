@@ -17,6 +17,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'agent_states.dart';
+import 'hidden_working_sessions.dart';
 import 'workspace_session_entry.dart';
 
 /// The live statuses that decide a group — waiting, working, failed — per
@@ -237,15 +238,34 @@ final quietSessionsProvider = Provider.autoDispose<Set<String>>((ref) {
 
 /// The Agents page: every session by state. Recomputed when a session list
 /// change, a grouping status move or a change in [quietSessionsProvider]
-/// arrives — never on a clock of its own.
-final agentStateGroupsProvider = Provider.autoDispose<List<AgentStateGroup>>(
-  (ref) => groupByAgentState(
-    ref.watch(workspaceSessionsProvider),
+/// arrives — never on a clock of its own. With "Hide while working" on, the
+/// sessions [hiddenWorkingSessionsProvider] holds are left out.
+final agentStateGroupsProvider = Provider.autoDispose<List<AgentStateGroup>>((
+  ref,
+) {
+  final hidden = ref.watch(hiddenWorkingSessionsProvider);
+  final entries = ref.watch(workspaceSessionsProvider);
+  return groupByAgentState(
+    hidden.isEmpty
+        ? entries
+        : [
+            for (final entry in entries)
+              if (!hidden.contains(entry.id)) entry,
+          ],
     needsYou: ref.watch(needsYouProvider),
     live: ref.watch(liveAgentStatusesProvider),
     quiet: ref.watch(quietSessionsProvider),
-  ),
-);
+  );
+});
+
+/// How many sessions the Agents page's "N working" line stands for.
+final agentsHiddenWorkingCountProvider = Provider.autoDispose<int>((ref) {
+  final hidden = ref.watch(hiddenWorkingSessionsProvider);
+  if (hidden.isEmpty) return 0;
+  return hidden.countIn([
+    for (final entry in ref.watch(workspaceSessionsProvider)) entry.id,
+  ]);
+});
 
 /// The name of the project a session (native or imported) belongs to, or
 /// null when it has none we know — for an ask that has to say where it is
