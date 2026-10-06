@@ -10,6 +10,14 @@ import '../../../core/util/clock_provider.dart';
 import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
+import '../../../features/artifacts/data/artifacts_data.dart';
+import '../../../features/explorer/application/session_context.dart'
+    show panelSessionIdProvider;
+import '../../../features/artifacts/presentation/artifact_card.dart'
+    show selectedArtifactProvider;
+import '../../../features/artifacts/presentation/artifact_screen.dart';
+import '../../../features/artifacts/presentation/artifact_viewer.dart'
+    show artifactKindIcon, artifactKindLabel;
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import '../../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
@@ -227,6 +235,7 @@ class QuickOpenSources {
     ..._workspace(),
     ..._sessions(),
     ..._openTabs(),
+    ..._artifacts(),
     ..._files(files, changedPaths),
     ..._repoFacts(),
     ..._agents(),
@@ -1280,6 +1289,43 @@ class QuickOpenSources {
 
   /// The terminal tabs nothing else here can reach: one running a session of
   /// ours is already listed as that session, so it is skipped here.
+  /// What the session on screen's agent showed, each opened where its card's
+  /// Open opens it: the side panel, or full screen on a phone.
+  List<QuickOpenItem> _artifacts() {
+    final sessionId = ref.read(panelSessionIdProvider);
+    if (sessionId == null) return const [];
+    final panel = ref.read(sidePanelProvider.notifier);
+    return [
+      for (final artifact in ref.read(artifactsDataProvider).held(sessionId))
+        QuickOpenItem(
+          id: 'artifact/${artifact.id}',
+          group: QuickOpenGroup.sessions,
+          title: artifact.title,
+          subtitle:
+              'Artifact · ${artifactKindLabel(artifact.kind)} · revision '
+              '${artifact.revision}',
+          icon: artifactKindIcon(artifact.kind),
+          keywords: const ['artifact', 'visualization', 'diagram', 'page'],
+          weight: _tabWeight,
+          onSelect: () => dismiss(() {
+            if (_onPhone || !ref.read(sidePanelRoomProvider)) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ArtifactScreen(
+                    sessionId: sessionId,
+                    artifactId: artifact.id,
+                  ),
+                ),
+              );
+              return;
+            }
+            ref.read(selectedArtifactProvider.notifier).select(artifact.id);
+            panel.show(SidePanelSurface.artifacts);
+          }),
+        ),
+    ];
+  }
+
   List<QuickOpenItem> _openTabs() {
     final terminals = ref.read(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);

@@ -21,6 +21,11 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/installation_labels.dart';
+import '../../artifacts/application/artifact_providers.dart';
+import '../../artifacts/domain/artifact_placement.dart';
+import '../../artifacts/presentation/artifact_card.dart';
+import '../../artifacts/presentation/unplaced_artifacts_strip.dart';
+import 'package:karmashala_artifacts/karmashala_artifacts.dart' show Artifact;
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -141,6 +146,50 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Replaced only when [_subagents] changes: the transcript's rows compare
   /// their callbacks, and a fresh closure on every poll would rebuild them all.
   late MessageDetailBuilder _detailBuilder = _subagentDetailFor(_subagents);
+
+  /// [_detailBuilder] with each artifact's card under the row of its turn,
+  /// rebuilt only when that builder or the placement moves.
+  MessageDetailBuilder? _withArtifacts;
+  MessageDetailBuilder? _artifactsBase;
+  String? _artifactsKey;
+  ArtifactPlacement _placement = ArtifactPlacement.empty;
+
+  MessageDetailBuilder _detailWithArtifacts(
+    List<ChatMessage> messages,
+    List<Artifact> artifacts,
+  ) {
+    final placement = placeArtifacts(messages, artifacts);
+    final key = [
+      for (final entry in placement.byOrdinal.entries)
+        '${entry.key}:${entry.value.map((a) => a.id).join(',')}',
+      'u:${placement.unplaced.map((a) => a.id).join(',')}',
+    ].join(';');
+    if (_withArtifacts != null &&
+        identical(_artifactsBase, _detailBuilder) &&
+        key == _artifactsKey) {
+      return _withArtifacts!;
+    }
+    _artifactsBase = _detailBuilder;
+    _artifactsKey = key;
+    _placement = placement;
+    final base = _detailBuilder;
+    final placed = placement.byOrdinal;
+    return _withArtifacts = placed.isEmpty
+        ? base
+        : (message, ordinal) {
+            final lead = base(message, ordinal);
+            final cards = placed[ordinal];
+            if (cards == null) return lead;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ?lead,
+                for (final artifact in cards) ArtifactCard(artifact: artifact),
+              ],
+            );
+          };
+  }
 
   /// The resolver for [_resolverEnvironment], kept for the same reason.
   String? Function(String)? _resolver;
@@ -671,11 +720,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required ValueChanged<String>? onLinkTap,
     required Widget footer,
   }) {
+    final artifacts =
+        ref.watch(sessionArtifactsProvider(widget.sessionId)).value ??
+        const <Artifact>[];
     return transcript.when(
       loading: () =>
           const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       error: (e, _) => Center(child: Text('$e')),
-      data: (messages) => ChatTranscriptView(
+      data: (messages) {
+        final detail = _detailWithArtifacts(messages, artifacts);
+        final unplaced = _placement.unplaced;
+        return ChatTranscriptView(
         // Per session: this view outlives a switch within its group, and an
         // unkeyed list kept the last session's scroll offset.
         key: ValueKey(widget.sessionId),
@@ -696,11 +751,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         onLinkTap: onLinkTap,
         // What the parent's `Task(…)` row never showed. Collapsed and
         // unread until opened — one session's turns came to 1,485 MiB.
-        detailBuilder: _detailBuilder,
+        detailBuilder: detail,
         // Null when Notes is off: the transcript never learns the
         // feature exists, so there is nothing left behind to hide.
         onSaveNote: notesEnabled ? _saveNote : null,
-        footer: footer,
+        footer: unplaced.isEmpty
+            ? footer
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [UnplacedArtifactsStrip(artifacts: unplaced), footer],
+              ),
         emptyBuilder: (standard) => SessionEmptyOrFailed(
           sessionId: widget.sessionId,
           otherwise: standard,
@@ -713,7 +774,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           active: active,
           hasTerminal: hasTerminal,
         ),
-      ),
+        );
+      },
     );
   }
 

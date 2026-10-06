@@ -20,6 +20,7 @@ import '../../features/detail/presentation/verification_view.dart';
 import 'package:karmashala_device_pane/pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
+import '../../features/artifacts/presentation/artifacts_panel.dart';
 import '../../features/media/presentation/session_media_panel.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/notes/presentation/notes_view.dart';
@@ -76,6 +77,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.browser => AppIcons.globe,
     SidePanelSurface.flutterApp => AppIcons.play,
     SidePanelSurface.media => AppIcons.image,
+    SidePanelSurface.artifacts => AppIcons.fileCode,
     SidePanelSurface.repository => AppIcons.bookBookmark,
     SidePanelSurface.plan => AppIcons.clipboardText,
     SidePanelSurface.checkpoints => AppIcons.clockCounterClockwise,
@@ -412,6 +414,7 @@ class ContextSurfaceBody extends StatelessWidget {
     SidePanelSurface.browser => const BrowserPane(),
     SidePanelSurface.flutterApp => const FlutterAppPane(),
     SidePanelSurface.media => const SessionMediaPanel(),
+    SidePanelSurface.artifacts => const ArtifactsPanel(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
     SidePanelSurface.plan => const AgentPlanPanel(),

@@ -69,6 +69,10 @@ dependencies:
   # tables are the server's (`store.dart`, never imported here).
   karmashala_notes:
     path: ../packages/karmashala_notes
+  # What agents showed in their threads: the values and their wire shape. The
+  # tables are the server's (`store.dart`, never imported here).
+  karmashala_artifacts:
+    path: ../packages/karmashala_artifacts
   # Contexts, projects, checkouts and saved sections: the values and the rules
   # every copy follows. The tables are the server's (`store.dart`, never
   # imported here).
@@ -273,6 +277,10 @@ dependencies:
   # the store's own rating sheet, with the listing as the fallback.
   in_app_review: ^2.0.12
   flutter_svg: ^2.3.0
+  # The sandboxed web view an HTML artifact runs in (Apache-2.0): WebView2 on
+  # Windows, the system web view on Android, iOS and macOS. None on Linux,
+  # where an HTML artifact says so and offers the browser.
+  flutter_inappwebview: ^6.1.5
 
 dependency_overrides:
   # launch_at_startup 0.5.1 is upstream's latest and pins
