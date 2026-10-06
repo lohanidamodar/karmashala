@@ -172,6 +172,61 @@ class AgentHookInstallationService {
         installer.uninstall(descriptor: descriptor, storeHome: home),
   );
 
+  /// The local stores that carry this app's hook entries but whose endpoint
+  /// file is gone or no longer spells [endpoint], as "agent in environment".
+  /// Local only: reading a WSL store on a timer keeps its distribution awake.
+  Future<List<String>> staleLocalEndpoints(AgentHookEndpoint endpoint) async {
+    if (_ref.read(probeModeProvider).enabled) return const [];
+    final environments = [
+      for (final e in _ref.read(environmentsDataProvider).getAll())
+        if (isLocalHost(e.kind) && endpoint.reaches(e.kind)) e,
+    ];
+    if (environments.isEmpty) return const [];
+    final stores = await _ref
+        .read(cliStoreLocatorProvider)
+        .locate(environments);
+    final kinds = {for (final e in environments) e.id: e.kind};
+    final installer = _ref.read(agentHookInstallerProvider);
+    final stale = <String>[];
+    for (final store in stores) {
+      final kind = kinds[store.environmentId];
+      if (kind == null) continue;
+      for (final descriptor in _ref.read(agentRegistryProvider).descriptors) {
+        final home = store.homesByAgentId[descriptor.id];
+        if (descriptor.hooks == null || home == null) continue;
+        try {
+          // A store this app never installed into has nothing to heal.
+          final events = await installer.installedEvents(
+            descriptor: descriptor,
+            storeHome: home,
+            endpoint: endpoint,
+            environment: kind,
+          );
+          if (events.isEmpty) continue;
+          if (await installer.endpointIsCurrent(
+            descriptor: descriptor,
+            storeHome: home,
+            endpoint: endpoint,
+            environment: kind,
+          )) {
+            continue;
+          }
+          stale.add(
+            '${descriptor.id} in ${describeEnvironmentId(store.environmentId)}',
+          );
+        } on Object catch (error, stack) {
+          _log.warning(
+            'Could not check the ${descriptor.id} hook endpoint in '
+            '${describeEnvironmentId(store.environmentId)}.',
+            error,
+            stack,
+          );
+        }
+      }
+    }
+    return stale;
+  }
+
   /// The install/uninstall walk: every located store, every hook-capable agent,
   /// one row each. Written once so both directions visit the same files.
   Future<List<AgentHookInstallation>> _forEachStore({
