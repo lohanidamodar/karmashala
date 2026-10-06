@@ -81,6 +81,47 @@ void main() {
     expect(dao.reported('nobody', state: 'done', via: 'report', at: t0), isFalse);
   });
 
+  test('a report keeps its text and whether it reached the parent', () {
+    dao.put(row('c1'));
+    dao.reported(
+      'c1',
+      state: 'done',
+      via: 'report',
+      at: t0,
+      text: 'All five fixed.',
+      delivered: false,
+    );
+    final read = dao.byChild('c1')!;
+    expect(read.reportText, 'All five fixed.');
+    expect(read.reportDelivered, isFalse);
+  });
+
+  test('the report mode reads back, each_turn when never written, and can '
+      'be changed, reopening a closed delegation', () {
+    dao.put(row('c1'));
+    expect(dao.byChild('c1')!.reportMode, 'each_turn');
+    dao.put(
+      SessionDelegation(
+        childSessionId: 'c2',
+        parentSessionId: 'p',
+        title: 'T',
+        agent: 'A',
+        delegatedAt: t0,
+        turn: 1,
+        reportMode: 'none',
+        closedAt: t0,
+      ),
+    );
+    expect(dao.byChild('c2')!.reportMode, 'none');
+    expect(dao.setReportMode('c2', 'final', at: t0), isTrue);
+    final changed = dao.byChild('c2')!;
+    expect(changed.reportMode, 'final');
+    expect(changed.isOpen, isTrue);
+    expect(dao.setReportMode('c1', 'none', at: t0), isTrue);
+    expect(dao.byChild('c1')!.isOpen, isFalse);
+    expect(dao.setReportMode('nobody', 'final', at: t0), isFalse);
+  });
+
   test('closed, it is kept but no longer followed or awaited', () {
     dao
       ..put(row('c1'))

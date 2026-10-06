@@ -502,6 +502,206 @@ void main() {
     });
   });
 
+  group('report modes', () {
+    DelegatedChild childIn(String id, String mode) => DelegatedChild(
+      childId: id,
+      parentId: 'parent',
+      title: 'Task $id',
+      agent: 'Claude Code',
+      startedAt: t0,
+      reportMode: mode,
+    );
+
+    Future<void> works(String id, String answer) async {
+      hook(id, 'UserPromptSubmit');
+      await pumpEventQueue();
+      clock = clock.add(const Duration(minutes: 1));
+      answers[id] = answer;
+      answeredAt[id] = clock;
+      hook(id, 'Stop');
+      await settle();
+    }
+
+    test('none: nothing comes back, and the child is recorded unfollowed', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeNone));
+      await works('c1', 'Did it.');
+      expect(delivered['parent'], isNull);
+      expect(delegations.watching('parent'), isEmpty);
+      final row = SessionDelegationDao(database).byChild('c1')!;
+      expect(row.reportMode, kReportModeNone);
+      expect(row.isOpen, isFalse);
+      expect(
+        delegations.report(
+          ParentReport(
+            childId: 'c1',
+            parentId: 'parent',
+            title: 'Task c1',
+            agent: 'Claude Code',
+            status: ReportStatus.done,
+            text: 'Done anyway.',
+          ),
+        ),
+        ReportDelivery.notWanted,
+      );
+      await pumpEventQueue();
+      expect(delivered['parent'], isNull);
+      expect(SessionDelegationDao(database).byChild('c1')!.reportText,
+          'Done anyway.');
+    });
+
+    test('final: a turn that just finishes is not pushed; its own report '
+        'and its end are', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeFinal));
+      await works('c1', 'First pass.');
+      await works('c1', 'Second pass.');
+      expect(delivered['parent'], isNull);
+      expect(delegations.viewOf('c1').state, 'idle');
+
+      pty.handles.last.finish(0);
+      await settle();
+      final message = delivered['parent']!.single;
+      expect(message, contains('ended'));
+      expect(message, contains('Second pass.'));
+      expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isFalse);
+    });
+
+    test('final: a child that reported is not pushed again when it ends', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeFinal));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      clock = t0.add(const Duration(minutes: 2));
+      delegations.report(
+        ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.done,
+          text: 'All done.',
+        ),
+      );
+      answers['c1'] = 'All done.';
+      hook('c1', 'Stop');
+      await settle();
+      pty.handles.last.finish(0);
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(delivered['parent']!.single, contains('All done.'));
+    });
+
+    test('final: a child blocked on a person is pushed', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      final text = File(
+        '../app/test/features/agents/fixtures/claude-code-permission-modal.raw',
+      ).readAsStringSync();
+      registry.open(
+        'karmashala_c1',
+        PtySpawnRequest(
+          argv: const ['claude'],
+          workingDirectory: '/src/shop/api',
+          environment: const {},
+          columns: 120,
+          rows: 30,
+        ),
+      );
+      delegations.watch(childIn('c1', kReportModeFinal));
+      pty.handles.last.emit(utf8.encode(text));
+      await pumpEventQueue();
+      status.tick();
+      await settle();
+      expect(delivered['parent']!.single, contains('BLOCKED'));
+    });
+
+    test('the parent can change it later: none to each_turn starts '
+        'following', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeNone));
+      expect(
+        delegations.setMode(childIn('c1', kReportModeEachTurn), 'parent'),
+        isTrue,
+      );
+      await works('c1', 'Now you hear me.');
+      expect(delivered['parent']!.single, contains('Now you hear me.'));
+      expect(
+        delegations.setMode(childIn('c1', kReportModeNone), 'parent'),
+        isTrue,
+      );
+      expect(delegations.watching('parent'), isEmpty);
+      await works('c1', 'Quiet again.');
+      expect(delivered['parent'], hasLength(1));
+      expect(
+        delegations.setMode(childIn('c1', kReportModeFinal), 'someone-else'),
+        isFalse,
+      );
+    });
+
+    test("a parent's turn on a report does not set its child off again", () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeEachTurn));
+      await works('c1', 'Here.');
+      expect(delivered['parent'], hasLength(1));
+      // The report wakes the parent; its turn runs and ends.
+      hook('parent', 'UserPromptSubmit');
+      hook('parent', 'Stop');
+      await settle();
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(delivered['c1'], isNull);
+    });
+  });
+
+  group('a parent that is gone', () {
+    test('is never queued a result or a report; both are kept on the '
+        "child's delegation", () async {
+      await runTerminal('c1');
+      // No process runs the parent.
+      delegations.watch(child('c1'));
+      await pumpEventQueue();
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Finished, nobody listening.';
+      hook('c1', 'Stop');
+      await settle();
+      expect(queue.list('parent'), isEmpty);
+      expect(delivered['parent'], isNull);
+      var row = SessionDelegationDao(database).byChild('c1')!;
+      expect(row.reportDelivered, isFalse);
+      expect(row.reportText, contains('Finished, nobody listening.'));
+
+      expect(
+        delegations.report(
+          ParentReport(
+            childId: 'c1',
+            parentId: 'parent',
+            title: 'Task c1',
+            agent: 'Claude Code',
+            status: ReportStatus.done,
+            text: 'Final word.',
+          ),
+        ),
+        ReportDelivery.parentGone,
+      );
+      expect(queue.list('parent'), isEmpty);
+      row = SessionDelegationDao(database).byChild('c1')!;
+      expect(row.reportText, 'Final word.');
+      expect(row.reportDelivered, isFalse);
+    });
+  });
+
   group('where a child stands', () {
     test('running until its first push, then its last report; ended once '
         'nothing runs it', () async {

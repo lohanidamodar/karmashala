@@ -2,7 +2,12 @@ import 'dart:async';
 
 import 'package:karmashala_session/session.dart' show QueuedMessageState;
 import 'package:karmashala_session_engine/store.dart'
-    show SessionDelegation, SessionDelegationDao;
+    show
+        SessionDelegation,
+        SessionDelegationDao,
+        kReportModeEachTurn,
+        kReportModeFinal,
+        kReportModeNone;
 
 import '../status/child_turn_wait.dart';
 import 'session_queue.dart';
@@ -20,8 +25,7 @@ const Duration kDelegationBound = Duration(hours: 6);
 const String kReportViaChild = 'report';
 const String kReportViaTurn = 'turn';
 
-/// A child started in async mode, whose first turn's result is pushed to its
-/// parent.
+/// A child a session started, and what its parent asked to be told of it.
 class DelegatedChild {
   const DelegatedChild({
     required this.childId,
@@ -31,7 +35,11 @@ class DelegatedChild {
     required this.startedAt,
     this.model,
     this.endOnAnswer = false,
+    this.reportMode = kReportModeEachTurn,
   });
+
+  /// `none`, `final` or `each_turn` (`kReportModes`).
+  final String reportMode;
 
   final String childId;
   final String parentId;
@@ -91,6 +99,19 @@ enum ReportStatus {
     }
     return null;
   }
+}
+
+/// What became of a child's own report.
+enum ReportDelivery {
+  /// Put in its parent's queue.
+  delivered,
+
+  /// Its parent has ended, was archived or deleted, or nothing runs it: kept
+  /// on the child's delegation, never queued.
+  parentGone,
+
+  /// Its parent asked to be told nothing: kept on the child's delegation.
+  notWanted,
 }
 
 /// A child's own report to the session that started it.
@@ -166,6 +187,7 @@ class DelegationResults {
     required this.queue,
     required this.store,
     required this.isLive,
+    bool Function(String parentId)? parentReachable,
     this.isWorking,
     this.isArchived,
     this.restoreGrace = const Duration(minutes: 2),
@@ -173,7 +195,13 @@ class DelegationResults {
     this.batchWindow = const Duration(seconds: 2),
     this.log,
     DateTime Function()? now,
-  }) : _now = now ?? (() => DateTime.now().toUtc());
+  }) : _now = now ?? (() => DateTime.now().toUtc()),
+       parentReachable = parentReachable ?? isLive;
+
+  /// Whether a report may be queued for [String]: it exists, is neither
+  /// ended nor archived, and something runs it. Never true of a parent a
+  /// report would have to resume.
+  final bool Function(String parentId) parentReachable;
 
   /// Settles when [String]'s first turn since [DateTime] does —
   /// `ChildTurnWait.firstTurn` under [kDelegationBound].
@@ -245,11 +273,13 @@ class DelegationResults {
     model: row.model,
     startedAt: row.delegatedAt,
     endOnAnswer: row.endOnAnswer,
+    reportMode: row.reportMode,
   );
 
-  /// Starts watching [child]'s first turn; its result is pushed when it
-  /// settles.
+  /// Records [child] and, unless its parent asked for nothing, watches its
+  /// first turn.
   void watch(DelegatedChild child) {
+    final silent = child.reportMode == kReportModeNone;
     store.put(
       SessionDelegation(
         childSessionId: child.childId,
@@ -260,11 +290,37 @@ class DelegationResults {
         endOnAnswer: child.endOnAnswer,
         delegatedAt: child.startedAt,
         turn: 1,
-        turnStartedAt: child.startedAt,
+        turnStartedAt: silent ? null : child.startedAt,
+        reportMode: child.reportMode,
+        closedAt: silent ? child.startedAt : null,
       ),
     );
+    if (silent) return;
     final follow = _watched[child.childId] = _Follow(child, 1, child.startedAt);
     unawaited(_follow(follow));
+  }
+
+  /// [parentId] changes what it is told of [child] to `child.reportMode`:
+  /// `none` stops following it, anything else follows the turn it works
+  /// next. False when [child] is not [parentId]'s.
+  bool setMode(DelegatedChild child, String parentId) {
+    final id = child.childId;
+    final row = store.byChild(id);
+    if (row == null) {
+      if (child.parentId != parentId) return false;
+      watch(child);
+      return true;
+    }
+    if (row.parentSessionId != parentId) return false;
+    store.setReportMode(id, child.reportMode, at: _now());
+    // A follow already running reads the new mode when its turn settles.
+    if (child.reportMode == kReportModeNone) {
+      _watched.remove(id);
+    } else if (!_watched.containsKey(id) && isLive(id)) {
+      _stand(_childOf(store.byChild(id)!));
+    }
+    log?.call('delegation $id: reports ${child.reportMode}');
+    return true;
   }
 
   /// [callerSessionId] sent [sessionId] a message (`session_send`): from its
@@ -333,18 +389,29 @@ class DelegationResults {
   /// batched, never lifting a pause — and kept as its last. The turn it was
   /// made in is not pushed as well. A child nothing follows is recorded as a
   /// closed delegation, so its parent's list still shows it.
-  void report(ParentReport report) {
+  ReportDelivery report(ParentReport report) {
     final at = _now();
-    queue.postDelegation(
-      report.parentId,
-      parentReportMessage(report),
-      originId: report.childId,
-    );
+    final row = store.byChild(report.childId);
+    final delivery = row?.reportMode == kReportModeNone
+        ? ReportDelivery.notWanted
+        : parentReachable(report.parentId)
+        ? ReportDelivery.delivered
+        : ReportDelivery.parentGone;
+    final text = boundedText(report.text.trim(), kDelegationAnswerMaxChars).$1;
+    if (delivery == ReportDelivery.delivered) {
+      queue.postDelegation(
+        report.parentId,
+        parentReportMessage(report),
+        originId: report.childId,
+      );
+    }
     final recorded = store.reported(
       report.childId,
       state: report.status.wire,
       via: kReportViaChild,
       at: at,
+      text: text,
+      delivered: delivery == ReportDelivery.delivered,
     );
     if (!recorded) {
       store.put(
@@ -359,28 +426,32 @@ class DelegationResults {
           reportVia: kReportViaChild,
           reportedAt: at,
           closedAt: at,
+          reportText: text,
+          reportDelivered: delivery == ReportDelivery.delivered,
         ),
       );
     }
     log?.call(
       'delegation ${report.childId}: reported ${report.status.wire} to '
-      '${report.parentId}',
+      '${report.parentId}: ${delivery.name}',
     );
+    return delivery;
   }
 
   /// Where [childId] stands for its parent: ended when nothing runs it,
-  /// running while it works or before its first push, else its last report.
+  /// running while it works or before its first turn settles, else its last
+  /// report, or idle when it has none.
   DelegationView viewOf(String childId) {
     final row = store.byChild(childId);
     final String state;
     if (!isLive(childId)) {
       state = 'ended';
     } else if ((isWorking?.call(childId) ?? false) ||
-        row?.reportState == null ||
-        (row!.awaiting && row.reportVia != kReportViaChild)) {
+        (row != null && row.awaiting && row.reportVia != kReportViaChild)) {
       state = 'running';
     } else {
-      state = switch (row.reportState!) {
+      state = switch (row?.reportState) {
+        null => 'idle',
         'done' => 'reported done',
         'needs_input' => 'needs input',
         final other => other,
@@ -445,8 +516,27 @@ class DelegationResults {
       log?.call('delegation $id: archived; nothing more is pushed');
       return;
     }
+    final mode = store.byChild(id)?.reportMode ?? child.reportMode;
     if (outcome.idle) {
       _watched.remove(id);
+      final row = store.byChild(id);
+      // Under `final` the child ending is its last word, unless it gave one.
+      if (mode == kReportModeFinal &&
+          row != null &&
+          row.isOpen &&
+          row.reportVia != kReportViaChild) {
+        final last = _Follow(child, row.turn, child.startedAt);
+        _report(
+          last,
+          ChildTurnOutcome(
+            ChildTurnState.ended,
+            exitCode: outcome.exitCode,
+            exitCodeKnown: outcome.exitCodeKnown,
+          ),
+          await _answer(last),
+        );
+        return;
+      }
       log?.call('delegation $id: ended between turns; followed again when '
           'its parent sends to it');
       return;
@@ -484,6 +574,17 @@ class DelegationResults {
         store.turnReported(id, turn: settled.turn);
       }
       log?.call('delegation $id: turn ${settled.turn} reported by the child');
+      return;
+    }
+    // `final` hears of a turn only when the child cannot go on or is done
+    // for good; a turn that merely finished waits for its own report.
+    final wanted =
+        mode != kReportModeFinal ||
+        over ||
+        outcome.state == ChildTurnState.blocked ||
+        outcome.state == ChildTurnState.failed;
+    if (!wanted) {
+      store.turnReported(id, turn: settled.turn);
       return;
     }
     final answer = switch (outcome.state) {
@@ -544,25 +645,36 @@ class DelegationResults {
     _timers.remove(parentId);
     final fresh = _pending.remove(parentId);
     if (_closed || fresh == null || fresh.isEmpty) return;
-    // A batch still waiting in the queue grows; one on its way is closed.
-    final batch = _batches[parentId];
-    final growing =
-        batch != null &&
-        queue.dao.getById(batch.rowId)?.state == QueuedMessageState.queued;
-    final results = [
-      if (growing) ...batch.results,
-      for (final (r, _) in fresh) r,
-    ];
-    final row = queue.postDelegation(
-      parentId,
-      delegationMessage(results),
-      replacing: growing ? batch.rowId : null,
-      originId: fresh.last.$1.child.childId,
-    );
-    _batches[parentId] = (rowId: row.id, results: results);
-    log?.call(
-      'delegation: ${fresh.length} result(s) for $parentId in ${row.id}',
-    );
+    // A parent that is gone is never queued anything, nor resumed by it:
+    // each result stays on its child's delegation instead.
+    final reachable = parentReachable(parentId);
+    if (reachable) {
+      // A batch still waiting in the queue grows; one on its way is closed.
+      final batch = _batches[parentId];
+      final growing =
+          batch != null &&
+          queue.dao.getById(batch.rowId)?.state == QueuedMessageState.queued;
+      final results = [
+        if (growing) ...batch.results,
+        for (final (r, _) in fresh) r,
+      ];
+      final row = queue.postDelegation(
+        parentId,
+        delegationMessage(results),
+        replacing: growing ? batch.rowId : null,
+        originId: fresh.last.$1.child.childId,
+      );
+      _batches[parentId] = (rowId: row.id, results: results);
+      log?.call(
+        'delegation: ${fresh.length} result(s) for $parentId in ${row.id}',
+      );
+    } else {
+      _batches.remove(parentId);
+      log?.call(
+        'delegation: $parentId is gone; ${fresh.length} result(s) kept on '
+        'the children',
+      );
+    }
     // Reported only once it is in the queue, so a restart before then
     // reports it again rather than never.
     for (final (result, follow) in fresh) {
@@ -572,6 +684,11 @@ class DelegationResults {
         state: result.outcome.state.name,
         via: kReportViaTurn,
         at: _now(),
+        text: switch (result.answer) {
+          final answer? => boundedText(answer, kDelegationAnswerMaxChars).$1,
+          null => null,
+        },
+        delivered: reachable,
       );
       final over =
           result.outcome.state == ChildTurnState.ended || result.ended == true;

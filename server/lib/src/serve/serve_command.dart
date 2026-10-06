@@ -1484,6 +1484,13 @@ Future<int> _serve(
     queue: sessionQueue,
     store: SessionDelegationDao(database),
     isLive: prompts.status.holds,
+    parentReachable: (id) {
+      final parent = SessionDao(database).getById(id);
+      return parent != null &&
+          !parent.isOver &&
+          !parent.isArchived &&
+          prompts.status.holds(id);
+    },
     isWorking: sessionQueue.turns.running,
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     endChild: endChild,

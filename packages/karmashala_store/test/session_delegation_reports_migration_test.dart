@@ -24,6 +24,9 @@ void main() {
         'report_via',
         'reported_at',
         'closed_at',
+        'report_mode',
+        'report_text',
+        'report_delivered',
       ]),
     );
   });

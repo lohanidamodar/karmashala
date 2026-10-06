@@ -1,5 +1,16 @@
 import 'package:karmashala_store/database.dart';
 
+/// What a parent asked to be told of a child: nothing, one report when it
+/// is finished, or the end of every turn it works.
+const String kReportModeNone = 'none';
+const String kReportModeFinal = 'final';
+const String kReportModeEachTurn = 'each_turn';
+const List<String> kReportModes = [
+  kReportModeNone,
+  kReportModeFinal,
+  kReportModeEachTurn,
+];
+
 /// A child whose turn results are pushed to its parent: which of its turns
 /// the parent awaits ([turn]), and since when ([turnStartedAt]; null when
 /// none is awaited until the parent sends a follow-up). It keeps the child's
@@ -19,6 +30,9 @@ class SessionDelegation {
     this.reportVia,
     this.reportedAt,
     this.closedAt,
+    this.reportMode = kReportModeEachTurn,
+    this.reportText,
+    this.reportDelivered,
   });
 
   final String childSessionId;
@@ -41,6 +55,15 @@ class SessionDelegation {
   final DateTime? reportedAt;
   final DateTime? closedAt;
 
+  /// What the parent asked to be told: `none`, `final` or `each_turn`.
+  final String reportMode;
+
+  /// The last report's text, kept whether or not it reached the parent.
+  final String? reportText;
+
+  /// Whether the last report reached the parent; null when nothing was.
+  final bool? reportDelivered;
+
   bool get isOpen => closedAt == null;
   bool get awaiting => turnStartedAt != null;
 }
@@ -55,7 +78,8 @@ class SessionDelegationDao {
     'INSERT OR REPLACE INTO session_delegations (child_session_id, '
     'parent_session_id, title, agent, model, end_on_answer, delegated_at, '
     'turn, turn_started_at, report_state, report_via, reported_at, '
-    'closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'closed_at, report_mode, report_text, report_delivered) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       d.childSessionId,
       d.parentSessionId,
@@ -70,6 +94,12 @@ class SessionDelegationDao {
       d.reportVia,
       _iso(d.reportedAt),
       _iso(d.closedAt),
+      d.reportMode,
+      d.reportText,
+      switch (d.reportDelivered) {
+        null => null,
+        final delivered => delivered ? 1 : 0,
+      },
     ],
   );
 
@@ -141,11 +171,37 @@ class SessionDelegationDao {
     required String state,
     required String via,
     required DateTime at,
+    String? text,
+    bool? delivered,
   }) {
     _db.execute(
       'UPDATE session_delegations SET report_state = ?, report_via = ?, '
-      'reported_at = ? WHERE child_session_id = ?;',
-      [state, via, isoFromDate(at), childSessionId],
+      'reported_at = ?, report_text = ?, report_delivered = ? '
+      'WHERE child_session_id = ?;',
+      [
+        state,
+        via,
+        isoFromDate(at),
+        text,
+        delivered == null ? null : (delivered ? 1 : 0),
+        childSessionId,
+      ],
+    );
+    return _changed();
+  }
+
+  /// Sets what [childSessionId]'s parent is told; `none` closes it, anything
+  /// else reopens it. False when it is no delegation.
+  bool setReportMode(
+    String childSessionId,
+    String mode, {
+    required DateTime at,
+  }) {
+    _db.execute(
+      'UPDATE session_delegations SET report_mode = ?, closed_at = '
+      "CASE WHEN ? = 'none' THEN COALESCE(closed_at, ?) ELSE NULL END "
+      'WHERE child_session_id = ?;',
+      [mode, mode, isoFromDate(at), childSessionId],
     );
     return _changed();
   }
@@ -186,5 +242,11 @@ class SessionDelegationDao {
     reportVia: row['report_via'] as String?,
     reportedAt: _date(row['reported_at']),
     closedAt: _date(row['closed_at']),
+    reportMode: row['report_mode'] as String? ?? kReportModeEachTurn,
+    reportText: row['report_text'] as String?,
+    reportDelivered: switch (row['report_delivered']) {
+      null => null,
+      final value => value == 1,
+    },
   );
 }
