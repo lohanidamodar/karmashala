@@ -1,4 +1,5 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/worktrees.dart';
@@ -202,8 +203,23 @@ class WorktreeToolSet extends ServerToolSet {
       ).getByProject(projectId)) {
         if (Checkout(repository.path) == Checkout(path)) return repository.id;
       }
-      return 'not recorded — the worktree is on disk, but the scan of this '
-          'project did not find it. Try project_rescan.';
+      // The worktree lands beside its checkout, in a dot-folder a rescan
+      // skips and often outside the project's root. Its path and project are
+      // both known, so the row is written rather than hoped for, as
+      // session_checkout_attach does.
+      final written = _context.write(
+        CheckoutsAdd(
+          projectId: projectId,
+          found: [
+            DiscoveredRepository(name: p.basename(path.path), path: path),
+          ],
+          orRoot: false,
+        ),
+      );
+      final recorded = written.firstOrNull;
+      if (recorded != null) return recorded.id;
+      return 'not recorded — the worktree is on disk, but it could not be '
+          'recorded in this project. Try project_rescan.';
     } on Object {
       return 'not recorded — the worktree is on disk, but this project could '
           'not be rescanned. Try project_rescan.';

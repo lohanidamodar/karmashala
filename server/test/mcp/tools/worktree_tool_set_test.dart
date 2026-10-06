@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala_host/src/mcp/tools/session_liveness.dart';
 import 'package:karmashala_host/src/mcp/tools/worktree_tool_set.dart';
+import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/session.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -93,9 +94,14 @@ void main() {
         fixture.git(expected, ['branch', '--show-current']).trim(),
         'feat/mcp',
       );
-      // A scan skips dot-directories, so the new worktree is not recorded;
-      // the answer says so rather than naming an id it does not have.
-      expect(result['repositoryId'], startsWith('not recorded'));
+      // The worktree lands in a dot-folder a rescan skips, outside the
+      // project's root when the root is the clone itself. It is recorded all
+      // the same, so a session can be started in it and shows its branch.
+      final id = result['repositoryId']! as String;
+      expect(id, isNot(startsWith('not recorded')));
+      final row = RepositoryDao(fixture.database).getById(id)!;
+      expect(row.projectId, projectId);
+      expect(row.path.path, expected);
     });
 
     test('a base ref is passed on when one is given', () async {
