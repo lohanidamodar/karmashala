@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/domain/session_registry.dart';
 import 'package:karmashala_host/src/pty/fake_pty.dart';
 import 'package:karmashala_host/src/pty/pty.dart' show PtyException;
+import 'package:karmashala_host/src/terminals/listening_ports.dart';
 import 'package:karmashala_host/src/terminals/server_terminals.dart';
 import 'package:karmashala_launch/karmashala_launch.dart';
 import 'package:test/test.dart';
@@ -338,6 +340,63 @@ void main() {
       ),
       ['p1', 'p2'],
     );
+  });
+
+  test('running lists each pane under its machine, the server by its own '
+      'ports, and stops only what a pane started', () async {
+    final ran = <List<String>>[];
+    var shell = 0;
+    final terminals = ServerTerminals(
+      registry: registry,
+      environments: () => [wsl, box],
+      tell: told.addAll,
+      overlay: () => vault,
+      windows: true,
+      settle: Duration.zero,
+      ports: ListeningPortProbe(
+        windows: true,
+        run: (executable, arguments) async {
+          ran.add([executable, ...arguments]);
+          return ProcessResult(
+            1,
+            0,
+            'P $pid 1 1 dart.exe\n'
+            'P $shell $pid 2 wsl.exe\n'
+            'P 900 $shell 3 node.exe\n'
+            'L 47821 $pid 127.0.0.1\n',
+            '',
+          );
+        },
+      ),
+    )..serverPorts = () => const {47821: 'MCP endpoint'};
+    await terminals.handle(
+      const TerminalOpen(
+        paneId: 'p2',
+        environmentId: 'wsl:Ubuntu',
+        columns: 80,
+        rows: 24,
+      ),
+    );
+    shell = launcher.handles.single.pid;
+
+    final reading =
+        await terminals.handle(const TerminalsRunning()) as RunningReading;
+    expect(reading.serverPid, pid);
+    final server = reading.processes.firstWhere(
+      (p) => p.role == RunningRole.server,
+    );
+    expect(server.ports.single.label, 'MCP endpoint');
+    final root = reading.processes.firstWhere((p) => p.pid == shell);
+    expect(root.environmentId, 'wsl:Ubuntu');
+    expect(root.paneId, 'p2');
+    expect(reading.processes.firstWhere((p) => p.pid == 900).stoppable, isTrue);
+
+    await expectLater(
+      terminals.handle(TerminalStopProcess(shell)),
+      throwsA(isA<DataRefused>()),
+    );
+    await terminals.handle(const TerminalStopProcess(900));
+    expect(ran.last, ['taskkill', '/PID', '900', '/T', '/F']);
   });
 
   test('the work answers through the data port', () async {

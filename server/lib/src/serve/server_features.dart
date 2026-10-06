@@ -93,4 +93,7 @@ const Set<String> kServerFeatures = <String>{
   // `artifacts.*`: what agents showed in their threads, their revisions
   // and content, and the `artifactChanged` change.
   'artifacts',
+  // `terminals.running` and `terminals.stopProcess`: what the server runs,
+  // with its ports, and stopping a process a pane started.
+  'terminals.running',
 };

@@ -936,6 +936,11 @@ Future<int> _serve(
     settings.mcpPort,
     errSink,
   );
+  terminals.serverPorts = () => {
+    ?companion.port: 'Paired devices (LAN)',
+    ?companion.localRelayStatus.boundPort: 'Local relay',
+    if (mcp != null) mcp.endpoint.port: 'MCP endpoint',
+  };
   // Every agent this server starts — a person's, a phone's, an automation's
   // — is one of its own terminals, under the session's own id, so
   // `terminal_list` and the windows see it (slice 5b).

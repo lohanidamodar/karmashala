@@ -19,6 +19,28 @@ typedef PaneRoot = ({
   String? agentSessionId,
 });
 
+/// A pane whose process tree the Running tab lists: [PaneRoot] and where it
+/// runs, with its last command line.
+typedef RunningPaneRoot = ({
+  int pid,
+  String paneId,
+  String terminalSessionId,
+  String title,
+  String? agentSessionId,
+  String? environmentId,
+  String? command,
+});
+
+/// The executables that mirror and forward devices: adb's server holds every
+/// `adb forward` port, and scrcpy streams.
+bool _isDeviceProcess(String name) {
+  final lower = name.toLowerCase();
+  return lower == 'adb' ||
+      lower == 'adb.exe' ||
+      lower == 'scrcpy' ||
+      lower == 'scrcpy.exe';
+}
+
 /// What one combined probe printed: `P <pid> <ppid> <created> <name>` and
 /// `L <port> <pid> <address>` lines, the shape [windowsProbeScript] prints.
 ({List<ProcessRow> processes, List<ListeningSocket> sockets}) parseProbeLines(
@@ -255,6 +277,152 @@ class ListeningPortProbe {
       checkedAt: _now().toUtc(),
       unread: unread,
     );
+  }
+
+  /// Everything under [roots], the server ([serverPid], its ports named by
+  /// [serverPorts]) and device mirroring, read now. [unlisted] are panes on
+  /// machines this one cannot list, kept with [notes] saying so.
+  Future<RunningReading> running(
+    List<RunningPaneRoot> roots, {
+    required int serverPid,
+    Map<int, String> serverPorts = const {},
+    List<RunningProcess> unlisted = const [],
+    List<RunningNote> notes = const [],
+  }) async {
+    final said = [...notes];
+    List<ProcessRow> processes = const [];
+    List<ListeningSocket> sockets = const [];
+    try {
+      (processes, sockets) = await _list();
+    } on Object catch (error) {
+      said.add(
+        RunningNote(
+          'The process and socket lists could not be read '
+          '(${error.runtimeType}).',
+        ),
+      );
+    }
+    final rows = {for (final row in processes) row.pid: row};
+    final portsOf = <int, List<RunningPort>>{};
+    for (final socket in sockets) {
+      final ports = portsOf[socket.pid] ??= [];
+      // One port bound on IPv4 and IPv6 is one listener.
+      if (ports.any((port) => port.port == socket.port)) continue;
+      ports.add(
+        RunningPort(
+          port: socket.port,
+          address: socket.address,
+          label: socket.pid == serverPid ? serverPorts[socket.port] : null,
+        ),
+      );
+    }
+    for (final ports in portsOf.values) {
+      ports.sort((a, b) => a.port.compareTo(b.port));
+    }
+    final listed = <int>{serverPid};
+    final out = <RunningProcess>[
+      RunningProcess(
+        pid: serverPid,
+        parent: rows[serverPid]?.parent ?? 0,
+        name: rows[serverPid]?.name,
+        role: RunningRole.server,
+        ports: portsOf[serverPid] ?? const [],
+      ),
+    ];
+    final owners = descendantsOf([
+      for (final root in roots) root.pid,
+    ], processes);
+    for (final root in roots) {
+      final tree = [
+        root.pid,
+        for (final MapEntry(key: pid, value: owner) in owners.entries)
+          if (owner == root.pid && pid != root.pid) pid,
+      ];
+      for (final pid in tree) {
+        if (!listed.add(pid)) continue;
+        final isRoot = pid == root.pid;
+        out.add(
+          RunningProcess(
+            pid: pid,
+            parent: rows[pid]?.parent ?? 0,
+            name: rows[pid]?.name,
+            role: isRoot ? RunningRole.pane : RunningRole.child,
+            paneId: root.paneId,
+            terminalSessionId: root.terminalSessionId,
+            title: root.title,
+            agentSessionId: root.agentSessionId,
+            environmentId: root.environmentId,
+            command: root.command,
+            stoppable: !isRoot,
+            ports: portsOf[pid] ?? const [],
+          ),
+        );
+      }
+      if (tree.any((pid) => rows[pid]?.name.toLowerCase() == 'wsl.exe')) {
+        said.add(
+          RunningNote(
+            '"${root.title}" runs in WSL; what listens inside it is not '
+            'Windows\' to attribute.',
+            environmentId: root.environmentId,
+          ),
+        );
+      }
+    }
+    for (final row in processes) {
+      if (!_isDeviceProcess(row.name) || !listed.add(row.pid)) continue;
+      out.add(
+        RunningProcess(
+          pid: row.pid,
+          parent: row.parent,
+          name: row.name,
+          role: RunningRole.device,
+          ports: portsOf[row.pid] ?? const [],
+        ),
+      );
+    }
+    return RunningReading(
+      serverPid: serverPid,
+      processes: [...out, ...unlisted],
+      checkedAt: _now().toUtc(),
+      notes: said,
+    );
+  }
+
+  /// Stops [pid] and its children, after checking afresh that it is under one
+  /// of [roots] and is neither a root nor the server. Throws [DataRefused].
+  Future<void> stop(
+    int pid,
+    List<RunningPaneRoot> roots, {
+    required int serverPid,
+  }) async {
+    if (pid <= 0 || pid == serverPid || roots.any((root) => root.pid == pid)) {
+      throw const DataRefused.denied(
+        'only a process a pane started may be stopped here',
+      );
+    }
+    final List<ProcessRow> processes;
+    try {
+      (processes, _) = await _list();
+    } on Object catch (error) {
+      throw DataRefused.unavailable(
+        'the process list could not be read (${error.runtimeType})',
+      );
+    }
+    final owners = descendantsOf([
+      for (final root in roots) root.pid,
+    ], processes);
+    if (!owners.containsKey(pid)) {
+      throw const DataRefused.denied(
+        'that process is not one a pane started, or has already ended',
+      );
+    }
+    if (_windows) {
+      await _run('taskkill', ['/PID', '$pid', '/T', '/F']);
+      return;
+    }
+    // Children first, so none is re-parented and missed.
+    final tree = descendantsOf([pid], processes).keys.toList().reversed;
+    await _run('kill', ['-TERM', for (final each in tree) '$each']);
   }
 
   Future<(List<ProcessRow>, List<ListeningSocket>)> _list() async {

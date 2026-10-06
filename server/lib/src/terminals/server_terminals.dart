@@ -114,6 +114,12 @@ class ServerTerminals implements TerminalWork, PaneSource {
   /// Terminals started to run an agent's session — launched, never adopted.
   final _agentTerminals = <String>{};
 
+  /// The ports this server knows it listens on, by what they are for: set
+  /// once they are bound. Asked on each `terminals.running`.
+  Map<int, String> Function() serverPorts = _noPorts;
+
+  static Map<int, String> _noPorts() => const {};
+
   /// Told whenever a terminal starts, moves (title, folder, a command) or
   /// ends: the panes' facts are worth reading again.
   void Function()? onPanesChanged;
@@ -178,7 +184,87 @@ class ServerTerminals implements TerminalWork, PaneSource {
           title,
         ),
         TerminalsListeningPorts() => await listeningPorts(),
+        TerminalsRunning() => await running(),
+        TerminalStopProcess(:final pid) => await stopProcess(pid),
       };
+
+  /// What this server runs, read now: itself, each local pane's process tree
+  /// and device mirroring. A pane on an SSH box is kept, unread.
+  Future<RunningReading> running() async {
+    final roots = <RunningPaneRoot>[];
+    final unlisted = <RunningProcess>[];
+    final notes = <RunningNote>[];
+    for (final record in _records.values) {
+      final title = _renamed[record.sessionId] ?? record.title;
+      final agentSessionId = _agentSessionOf(record.sessionId);
+      if (parseBoxSessionRef(record.sessionId) case final box?) {
+        if (!record.isLive) continue;
+        final environmentId = record.environmentId ?? 'ssh:${box.hostId}';
+        unlisted.add(
+          RunningProcess(
+            pid: 0,
+            parent: 0,
+            role: RunningRole.pane,
+            paneId: record.paneId,
+            terminalSessionId: record.sessionId,
+            title: title,
+            agentSessionId: agentSessionId,
+            environmentId: environmentId,
+          ),
+        );
+        notes.add(
+          RunningNote(
+            '"$title" runs on an SSH machine; its processes are not read.',
+            environmentId: environmentId,
+          ),
+        );
+        continue;
+      }
+      final session = registry.find(record.sessionId);
+      if (session == null || session.lifecycle.hasEnded || session.pid <= 0) {
+        continue;
+      }
+      roots.add((
+        pid: session.pid,
+        paneId: record.paneId,
+        terminalSessionId: record.sessionId,
+        title: title,
+        agentSessionId: agentSessionId,
+        environmentId:
+            record.environmentId ??
+            (record.profileId.startsWith('wsl:') ? record.profileId : null),
+        command: session.facts?.lastCommand ?? record.lastCommand,
+      ));
+    }
+    return _ports.running(
+      roots,
+      serverPid: pid,
+      serverPorts: serverPorts(),
+      unlisted: unlisted,
+      notes: notes,
+    );
+  }
+
+  /// Stops [processId] and its children when it is, now, under a local pane
+  /// — never a pane's root, never this server. Throws [DataRefused].
+  Future<DataAck> stopProcess(int processId) async {
+    final roots = <RunningPaneRoot>[
+      for (final record in _records.values)
+        if (registry.find(record.sessionId) case final session?
+            when !session.lifecycle.hasEnded && session.pid > 0)
+          (
+            pid: session.pid,
+            paneId: record.paneId,
+            terminalSessionId: record.sessionId,
+            title: record.title,
+            agentSessionId: null,
+            environmentId: null,
+            command: null,
+          ),
+    ];
+    await _ports.stop(processId, roots, serverPid: pid);
+    return const DataAck();
+  }
 
   /// The TCP ports processes under each live local pane listen on, read now.
   /// A pane on an SSH box, or whose root is `wsl.exe`, is named as unread:
