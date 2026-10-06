@@ -19,7 +19,7 @@ import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
 /// A parent's sub-sessions fold beneath it — "3 sub-sessions · 1 running" —
-/// folded by default once the parent has ended, with the live ones still in
+/// always folded by default, with the live ones still in
 /// sight, and the choice kept per device.
 void main() {
   late TestMachine db;
@@ -151,5 +151,81 @@ void main() {
     await tester.tap(find.text('3 sub-sessions · 1 running'));
     await tester.pumpAndSettle();
     expect(find.text('Chat c1'), findsNothing);
+  });
+
+  // The owner's orchestrator: a parent still working, 40 finished children
+  // and one running, which started before most of them.
+  void family() {
+    insert('boss', status: SessionStatus.running, minutes: 10);
+    insert('live', parent: 'boss', minutes: 11, status: SessionStatus.running);
+    for (var i = 1; i <= 40; i++) {
+      insert('e$i', parent: 'boss', minutes: 11 + i);
+    }
+  }
+
+  for (final (name, size) in const [
+    ('desktop', Size(1440, 900)),
+    ('phone 390x844', Size(390, 844)),
+  ]) {
+    testWidgets('$name: a working parent\'s 40 finished sub-sessions start '
+        'folded in the tree, its running one in sight', (tester) async {
+      family();
+      final c = await pump(tester, size, const ExplorerPanel(terminals: false));
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Chat boss'), findsOneWidget);
+      expect(find.text('41 sub-sessions · 1 running'), findsOneWidget);
+      expect(find.text('Chat live'), findsOneWidget, reason: 'running');
+      expect(find.text('Chat e40'), findsNothing);
+      expect(find.text('Chat e1'), findsNothing);
+
+      await tester.tap(find.text('41 sub-sessions · 1 running'));
+      await tester.pumpAndSettle();
+      expect(c.read(sessionListPrefsProvider).folds, {'boss': false});
+      double y(String text) => tester.getTopLeft(find.text(text)).dy;
+      expect(y('Chat live'), lessThan(y('Chat e40')), reason: 'running first');
+      expect(y('Chat e40'), lessThan(y('Chat e39')), reason: 'newest first');
+    });
+
+    testWidgets('$name: the Sessions list folds a working parent\'s 40 '
+        'finished sub-sessions, newest first when opened', (tester) async {
+      family();
+      for (final id in ['boss', 'live']) {
+        server.attention.statusOf(
+          id,
+          AgentActivityStatus.working,
+          sessionId: 'cli-$id',
+          label: id,
+        );
+      }
+      final c = await pump(tester, size, const AgentsPage());
+      expect(find.text('Chat boss'), findsOneWidget);
+      expect(find.text('Chat live'), findsOneWidget, reason: 'working');
+      expect(find.text('41 sub-sessions · 1 running'), findsOneWidget);
+      expect(find.text('Chat e40'), findsNothing);
+
+      await tester.tap(find.text('41 sub-sessions · 1 running'));
+      await tester.pumpAndSettle();
+      expect(c.read(sessionListPrefsProvider).folds, {'boss': false});
+      double y(String text) => tester.getTopLeft(find.text(text)).dy;
+      expect(y('Chat boss'), lessThan(y('Chat e40')));
+      expect(y('Chat e40'), lessThan(y('Chat e39')), reason: 'newest first');
+      await tester.pumpWidget(const SizedBox.shrink());
+      c.dispose();
+    });
+  }
+
+  testWidgets('a remembered open choice wins over the fold', (tester) async {
+    family();
+    final c = await pump(
+      tester,
+      const Size(1440, 900),
+      const ExplorerPanel(terminals: false),
+    );
+    c.read(sessionListPrefsProvider.notifier).setFolded('boss', false);
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat e40'), findsOneWidget);
   });
 }
