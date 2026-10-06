@@ -5,6 +5,7 @@ library;
 
 export 'src/acp_agent_values.dart';
 export 'src/acp_auth_values.dart';
+export 'src/activity_values.dart';
 export 'src/agent_work_values.dart';
 export 'src/attention_values.dart';
 export 'src/automation_values.dart';

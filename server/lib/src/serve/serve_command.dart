@@ -123,6 +123,8 @@ import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
+import '../activity/activity_backfill.dart';
+import '../activity/server_activity.dart';
 import '../attention/daemon_attention.dart';
 import '../attention/delivery_watch.dart';
 import 'package:karmashala_notifications/attention.dart' show InboxItem;
@@ -823,6 +825,14 @@ Future<int> _serve(
   )..start();
   // A box's sessions start and exit as its host says (slice 5d).
   ssh.onBoxLifecycle = recording.applyRemote;
+  // The timeline's history: what the server sees, written off the turn.
+  final activity = ServerActivity.start(
+    data: data,
+    statuses: attention.status.statusChanges,
+    lifecycle: recording.changes,
+    settings: () => database.readMetadata(kLaunchSettingsKey),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   final companionServing = await _startCompanion(
     companion,
     server.lifecycle,
@@ -1010,7 +1020,10 @@ Future<int> _serve(
     ),
     // A usage limit is filed in the server's inbox, and what was done about
     // it told to every window (slice 5c).
-    raise: attention.attention.raise,
+    raise: (item) {
+      attention.attention.raise(item);
+      activity.inboxRaised(item);
+    },
     noticeUsageLimit: (notice) => data.announce([UsageLimitNoticed(notice)]),
     openAgent: openAgent,
     // Automations and resumes fire on an SSH box it reaches (slice 5d).
@@ -1371,6 +1384,7 @@ Future<int> _serve(
   );
   ToolImageLimits toolImageLimits() =>
       ToolImageLimits.fromSettings(database.readMetadata(kLaunchSettingsKey));
+  activity.sweep();
   final toolImageSweep = startToolImageUpkeep(
     dataDirectory,
     limits: toolImageLimits,
@@ -1745,6 +1759,29 @@ Future<int> _serve(
       }
     }),
   );
+  // The activity log's backfill: what the store held before the log, once,
+  // in chunks, resumed after a restart, and never in the first moments.
+  unawaited(
+    Future<void>.delayed(agentScanDelay).then((_) async {
+      if (stopping.isCompleted) return;
+      final backfill = ActivityBackfill(
+        database,
+        log: data.activity,
+        messagesOf: sessionTranscripts.messagesOf,
+        onWritten: activity.nudge,
+      );
+      try {
+        final written = await backfill.run(
+          shouldStop: () => stopping.isCompleted,
+        );
+        if (written > 0) {
+          sink.writeln('activity log: $written entr(ies) backfilled');
+        }
+      } on Object catch (error) {
+        errSink.writeln('karmashala_host: activity backfill stopped ($error)');
+      }
+    }),
+  );
 
   // Asked by platform: SIGINT is the only signal Windows has, and watching
   // SIGTERM there throws errno 50 from `onListen`'s own microtask, where no
@@ -1845,6 +1882,7 @@ Future<int> _serve(
   deviceClaims.close();
   await devices.close();
   await browser.close();
+  await activity.close();
   await recording.close();
   await registry.shutdown();
   await sessionSync.close();

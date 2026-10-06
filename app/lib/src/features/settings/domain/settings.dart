@@ -133,6 +133,7 @@ class Settings {
     this.toolImageMaxAgeDays = defaultToolImageMaxAgeDays,
     this.toolImageMaxMegabytes = defaultToolImageMaxMegabytes,
     this.endedSessionsOlderThanDays = defaultEndedSessionsOlderThanDays,
+    this.activityLogKeepDays = defaultActivityLogKeepDays,
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
@@ -154,6 +155,9 @@ class Settings {
   static const int defaultToolImageMaxAgeDays = 14;
   static const int defaultToolImageMaxMegabytes = 256;
   static const int defaultEndedSessionsOlderThanDays = 30;
+
+  /// Zero keeps the activity log forever.
+  static const int defaultActivityLogKeepDays = 0;
 
   /// Bounds for [uiTextScale] (90%–150%).
   static const double minUiTextScale = 0.9;
@@ -349,6 +353,10 @@ class Settings {
   /// it up. Nothing is deleted without the person pressing Clean up.
   final int endedSessionsOlderThanDays;
 
+  /// How many days of the server's activity log (the timeline) to keep; 0
+  /// keeps all of it. The server reads the key and sweeps daily.
+  final int activityLogKeepDays;
+
   /// Whether Notes is offered at all. Off hides it and deletes nothing.
   final bool notesEnabled;
 
@@ -478,6 +486,7 @@ class Settings {
     int? toolImageMaxAgeDays,
     int? toolImageMaxMegabytes,
     int? endedSessionsOlderThanDays,
+    int? activityLogKeepDays,
     bool? notesEnabled,
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
@@ -567,6 +576,7 @@ class Settings {
     toolImageMaxMegabytes: toolImageMaxMegabytes ?? this.toolImageMaxMegabytes,
     endedSessionsOlderThanDays:
         endedSessionsOlderThanDays ?? this.endedSessionsOlderThanDays,
+    activityLogKeepDays: activityLogKeepDays ?? this.activityLogKeepDays,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
@@ -672,6 +682,7 @@ class Settings {
     'toolImageMaxAgeDays',
     'toolImageMaxMegabytes',
     'endedSessionsOlderThanDays',
+    'activityLogKeepDays',
     'notesEnabled',
     'hideEmptySections',
     'explorerAgentFilter',
@@ -752,6 +763,7 @@ class Settings {
     'toolImageMaxAgeDays': toolImageMaxAgeDays,
     'toolImageMaxMegabytes': toolImageMaxMegabytes,
     'endedSessionsOlderThanDays': endedSessionsOlderThanDays,
+    'activityLogKeepDays': activityLogKeepDays,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'explorerAgentFilter': explorerAgentFilter,
@@ -971,6 +983,10 @@ class Settings {
         json['endedSessionsOlderThanDays'],
         defaultEndedSessionsOlderThanDays,
       ),
+      activityLogKeepDays: switch (json['activityLogKeepDays']) {
+        final int days when days > 0 => days,
+        _ => defaultActivityLogKeepDays,
+      },
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
@@ -1066,6 +1082,7 @@ class Settings {
       other.toolImageMaxAgeDays == toolImageMaxAgeDays &&
       other.toolImageMaxMegabytes == toolImageMaxMegabytes &&
       other.endedSessionsOlderThanDays == endedSessionsOlderThanDays &&
+      other.activityLogKeepDays == activityLogKeepDays &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
@@ -1139,7 +1156,7 @@ class Settings {
           quitKeepsHostSessions,
           toolImageMaxAgeDays,
           toolImageMaxMegabytes,
-          endedSessionsOlderThanDays,
+          Object.hash(endedSessionsOlderThanDays, activityLogKeepDays),
           usageLimitBehavior,
           resumeMessage,
           continueInterruptedTurns,

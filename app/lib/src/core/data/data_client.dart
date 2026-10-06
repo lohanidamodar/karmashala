@@ -491,6 +491,14 @@ class DataClient {
   Stream<AcpInstallProgress> get acpInstallProgress =>
       _acpInstallProgress.stream;
 
+  final _activityAppended = StreamController<List<ActivityEntry>>.broadcast(
+    sync: true,
+  );
+
+  /// Entries the server appended to its activity log. Nothing is kept: the
+  /// timeline asks for a range.
+  Stream<List<ActivityEntry>> get activityAppended => _activityAppended.stream;
+
   /// The Flutter apps the server is attached to, as last told (slice 3d);
   /// null until the server has said.
   FlutterAppRegistry? flutterApps;
@@ -1126,6 +1134,8 @@ class DataClient {
           if (!_acpInstallProgress.isClosed) {
             _acpInstallProgress.add(progress);
           }
+        case ActivityAppended(:final entries):
+          if (!_activityAppended.isClosed) _activityAppended.add(entries);
         case final AttentionChange change:
           _applyAttention(change);
         case final ClientIntent intent:
@@ -1313,6 +1323,7 @@ class DataClient {
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());
     unawaited(_acpInstallProgress.close());
+    unawaited(_activityAppended.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
     unawaited(_intents.close());

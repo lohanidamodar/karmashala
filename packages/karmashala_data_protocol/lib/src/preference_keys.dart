@@ -13,6 +13,8 @@ abstract final class PreferenceKeys {
     'remote.host_device_id',
     'conversation_index_generation',
     'conversation_index_backfilled_at',
+    // Where the activity log's backfill stands: the server's own record.
+    'activity_backfill.v1',
     // Which (agent, environment) pairs the server's detection has searched
     // (slice 2a): the server's own record.
     'agents_probed',

@@ -41,6 +41,7 @@ import 'package:karmashala_verification/verification.dart'
         verificationRunToJson;
 
 import 'acp_agent_values.dart';
+import 'activity_values.dart';
 import 'agent_work_values.dart';
 import 'git_values.dart';
 import 'session_values.dart';
@@ -79,6 +80,7 @@ part 'changes/transcripts_changes.dart';
 part 'changes/quick_access_changes.dart';
 part 'changes/acp_agent_changes.dart';
 part 'changes/sessions_changes.dart';
+part 'changes/activity_changes.dart';
 part 'changes/artifacts_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
@@ -625,6 +627,7 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _transcriptsChangeFromJson(name, json) ??
     _quickAccessChangeFromJson(name, json) ??
     _acpAgentsChangeFromJson(name, json) ??
+    _activityChangeFromJson(name, json) ??
     _sessionsChangeFromJson(name, json) ??
     _artifactsChangeFromJson(name, json);
 

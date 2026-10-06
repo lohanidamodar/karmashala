@@ -533,6 +533,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Days of the activity log to keep, 0 for all; the server sweeps daily.
+  void setActivityLogKeepDays(int days) {
+    state = state.copyWith(activityLogKeepDays: days < 0 ? 0 : days);
+    _save();
+  }
+
   void setQuitAsks(bool value) {
     state = state.copyWith(quitAsks: value);
     _save();
