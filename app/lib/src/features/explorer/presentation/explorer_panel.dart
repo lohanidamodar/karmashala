@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -265,7 +266,7 @@ class ExplorerSearchField extends StatelessWidget {
               ? KeyEventResult.handled
               : KeyEventResult.ignored;
         },
-        child: TextField(
+        child: SearchField(
           focusNode: links?.searchFocus,
           style: theme.textTheme.bodyMedium?.copyWith(
             fontSize: TypeSizes.field,

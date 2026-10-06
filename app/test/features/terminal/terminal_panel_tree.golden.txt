@@ -4131,54 +4131,67 @@ TerminalPaneStack
                                             Focus
                                               _FocusInheritedScope
                                                 Semantics
-                                                  TextField
-                                                    MouseRegion
-                                                      TextFieldTapRegion
-                                                        IgnorePointer
-                                                          AnimatedBuilder
-                                                            Semantics
-                                                              TextSelectionGestureDetector
-                                                                RawGestureDetector
-                                                                  Listener
-                                                                    AnimatedBuilder
-                                                                      InputDecorator
-                                                                        Semantics
-                                                                          _Decorator
-                                                                            RepaintBoundary
-                                                                              UnmanagedRestorationScope
-                                                                                EditableText key=[LabeledGlobalKey<EditableTextState>#…]
-                                                                                  _CompositionCallback
-                                                                                    Actions
-                                                                                      _ActionsScope
-                                                                                        Builder
-                                                                                          TextFieldTapRegion
-                                                                                            MouseRegion
-                                                                                              UndoHistory<TextEditingValue>
-                                                                                                Actions
-                                                                                                  _ActionsScope
-                                                                                                    Focus
-                                                                                                      _FocusInheritedScope
-                                                                                                        NotificationListener<ScrollNotification>
-                                                                                                          Scrollable key=[GlobalKey#…]
-                                                                                                            _ScrollableScope
-                                                                                                              Listener
-                                                                                                                RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
-                                                                                                                  Listener
-                                                                                                                    Semantics
-                                                                                                                      IgnorePointer key=[GlobalKey#…]
-                                                                                                                        CompositedTransformTarget
-                                                                                                                          Semantics
-                                                                                                                            _ScribbleFocusable
-                                                                                                                              SizeChangedLayoutNotifier
-                                                                                                                                _Editable key=[GlobalKey#…]
-                                                                            AnimatedOpacity
-                                                                              FadeTransition
-                                                                                Text text="Find in scrollback"
-                                                                                  RichText
-                                                                            _HelperError
-                                                                              SizedBox
-                                                                            _BorderContainer
-                                                                              CustomPaint
+                                                  SearchField
+                                                    Focus
+                                                      _FocusInheritedScope
+                                                        Semantics
+                                                          TextField
+                                                            MouseRegion
+                                                              TextFieldTapRegion
+                                                                IgnorePointer
+                                                                  AnimatedBuilder
+                                                                    Semantics
+                                                                      TextSelectionGestureDetector
+                                                                        RawGestureDetector
+                                                                          Listener
+                                                                            AnimatedBuilder
+                                                                              InputDecorator
+                                                                                Semantics
+                                                                                  _Decorator
+                                                                                    RepaintBoundary
+                                                                                      UnmanagedRestorationScope
+                                                                                        EditableText key=[LabeledGlobalKey<EditableTextState>#…]
+                                                                                          _CompositionCallback
+                                                                                            Actions
+                                                                                              _ActionsScope
+                                                                                                Builder
+                                                                                                  TextFieldTapRegion
+                                                                                                    MouseRegion
+                                                                                                      UndoHistory<TextEditingValue>
+                                                                                                        Actions
+                                                                                                          _ActionsScope
+                                                                                                            Focus
+                                                                                                              _FocusInheritedScope
+                                                                                                                NotificationListener<ScrollNotification>
+                                                                                                                  Scrollable key=[GlobalKey#…]
+                                                                                                                    _ScrollableScope
+                                                                                                                      Listener
+                                                                                                                        RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
+                                                                                                                          Listener
+                                                                                                                            Semantics
+                                                                                                                              IgnorePointer key=[GlobalKey#…]
+                                                                                                                                CompositedTransformTarget
+                                                                                                                                  Semantics
+                                                                                                                                    _ScribbleFocusable
+                                                                                                                                      SizeChangedLayoutNotifier
+                                                                                                                                        _Editable key=[GlobalKey#…]
+                                                                                    AnimatedOpacity
+                                                                                      FadeTransition
+                                                                                        Text text="Find in scrollback"
+                                                                                          RichText
+                                                                                    Center
+                                                                                      MouseRegion
+                                                                                        ConstrainedBox
+                                                                                          Builder
+                                                                                            IconTheme
+                                                                                              IconButtonTheme
+                                                                                                Semantics
+                                                                                                  ListenableBuilder
+                                                                                                    SizedBox
+                                                                                    _HelperError
+                                                                                      SizedBox
+                                                                                    _BorderContainer
+                                                                                      CustomPaint
                                         Flexible
                                           _CountLabel
                                             SizedBox

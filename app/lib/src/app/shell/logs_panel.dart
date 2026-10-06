@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
@@ -213,7 +214,7 @@ class _Toolbar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
+            child: SearchField(
               controller: search,
               onChanged: onQuery,
               decoration: const InputDecoration(

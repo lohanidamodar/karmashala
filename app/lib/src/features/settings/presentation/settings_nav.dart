@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -102,7 +103,7 @@ class _SettingsNavState extends ConsumerState<SettingsNav> {
             Insets.sm,
             Insets.xs,
           ),
-          child: TextField(
+          child: SearchField(
             controller: _filter,
             onChanged: (_) => setState(() {}),
             style: theme.textTheme.bodySmall?.copyWith(

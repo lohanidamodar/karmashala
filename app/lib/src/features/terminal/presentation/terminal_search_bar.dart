@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -164,8 +165,9 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
         const SingleActivator(LogicalKeyboardKey.enter, control: true):
             _search.revealCurrent,
       },
-      child: TextField(
+      child: SearchField(
         controller: _controller,
+        clearOnEscape: false,
         focusNode: _focusNode,
         autofocus: true,
         decoration: InputDecoration(

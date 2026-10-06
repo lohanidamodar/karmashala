@@ -98,7 +98,7 @@ class _AcpRegistryPickerState extends ConsumerState<AcpRegistryPicker> {
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: SearchField(
                 controller: _filter,
                 autofocus: true,
                 decoration: const InputDecoration(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
@@ -262,8 +263,9 @@ class QuickOpenSearchField extends StatelessWidget {
         vertical: Insets.xs,
       ),
       child: LayoutBuilder(
-        builder: (context, constraints) => TextField(
+        builder: (context, constraints) => SearchField(
           controller: controller,
+          clearOnEscape: false,
           autofocus: true,
           style: theme.textTheme.bodyLarge?.copyWith(fontSize: TypeSizes.input),
           decoration: InputDecoration(

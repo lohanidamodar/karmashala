@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -176,8 +177,9 @@ class _FilterMenuFieldState<T> extends State<FilterMenuField<T>> {
                     Insets.sm,
                     Insets.xs,
                   ),
-                  child: TextField(
+                  child: SearchField(
                     controller: _filter,
+                    clearOnEscape: false,
                     focusNode: _filterFocus,
                     decoration: InputDecoration(
                       isDense: true,
