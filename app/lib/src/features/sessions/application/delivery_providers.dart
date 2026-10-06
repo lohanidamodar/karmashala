@@ -126,7 +126,7 @@ final sessionLocalDeliveryProvider = FutureProvider.autoDispose
       if (repository == null) return SessionDelivery.unknown;
 
       final worktree = session.worktree;
-      if (session.isArchived) {
+      if (session.worktreeRemoved) {
         // The directory is gone: asking git would cost two failed processes per
         // archived row, and might describe one someone else created there.
         return SessionDelivery(hasWorktree: worktree != null, archived: true);
@@ -157,7 +157,7 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
           : ref.read(workspaceDataProvider).repository(session.repositoryId);
       // Nothing to ask `gh` about and nothing to file; the local provider has
       // already made the same three decisions.
-      if (session == null || repository == null || session.isArchived) {
+      if (session == null || repository == null || session.worktreeRemoved) {
         return await local;
       }
       final directory = session.worktree ?? repository.path;

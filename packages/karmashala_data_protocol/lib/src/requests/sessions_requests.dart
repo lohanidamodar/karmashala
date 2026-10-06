@@ -103,6 +103,44 @@ final class SessionsDeleteMany extends _AckRequest {
   };
 }
 
+/// Archives (hides) [ids] and their ended descendants, in one transaction told
+/// as one batch. A live session is left alone and named; nothing touches a
+/// worktree.
+final class SessionsArchive extends _ArchiveRequest {
+  const SessionsArchive(super.ids);
+
+  static const String name = 'sessions.archive';
+
+  @override
+  String get kind => name;
+}
+
+/// Shows [ids] and their archived descendants again, as one batch.
+final class SessionsUnarchive extends _ArchiveRequest {
+  const SessionsUnarchive(super.ids);
+
+  static const String name = 'sessions.unarchive';
+
+  @override
+  String get kind => name;
+}
+
+sealed class _ArchiveRequest extends DataRequest<SessionsArchived> {
+  const _ArchiveRequest(this.ids);
+
+  final List<String> ids;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'ids': ids};
+
+  @override
+  Object? resultToJson(SessionsArchived result) => result.toJson();
+
+  @override
+  SessionsArchived resultFromJson(Object? json) =>
+      _decode(kind, () => SessionsArchived.fromJson(_object(json, kind)));
+}
+
 /// Adds a checkout to a session, beside its primary one. Answers the
 /// session's links. Refused for a checkout of another project.
 final class SessionLinkAdd extends _LinksRequest {

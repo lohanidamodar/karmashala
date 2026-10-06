@@ -98,7 +98,7 @@ class CheckoutDeliveryReader {
   }) async {
     if (repository == null) return SessionDelivery.unknown;
     final worktree = session.worktree;
-    if (session.isArchived) {
+    if (session.worktreeRemoved) {
       // The directory is gone: asking git would describe whatever someone
       // else has since created there.
       return SessionDelivery(hasWorktree: worktree != null, archived: true);

@@ -85,7 +85,7 @@ class DeliveryUpdateService {
 
   Future<UpdateOutcome> updateFromBase(String sessionId) async {
     final session = _ref.read(sessionsDataProvider).getById(sessionId);
-    if (session == null || session.isArchived) {
+    if (session == null || session.worktreeRemoved) {
       return const UpdateOutcome.refused(UpdateRefusal.sessionGone);
     }
     final repository = _ref

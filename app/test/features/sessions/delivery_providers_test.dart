@@ -525,7 +525,7 @@ void main() {
   test('an archived session reports archived, offers no prompts, and asks '
       'git nothing — its directory is gone', () async {
     addSession('s1');
-    db.server.sessionRows.markArchived('s1', testTime);
+    db.server.sessionRows.markWorktreeRemoved('s1', testTime);
 
     final container = harness();
     final delivery = await container.read(sessionDeliveryProvider('s1').future);

@@ -26,6 +26,7 @@ class Session {
     this.permissionMode,
     this.modelId,
     this.archivedAt,
+    this.worktreeRemovedAt,
     this.titleByUser = false,
     this.operatorGranted = false,
   });
@@ -80,9 +81,12 @@ class Session {
   /// follow the default; when that is unset, no model flag is passed at all.
   final String? modelId;
 
-  /// When this session's worktree was archived away, if it was. Archiving
-  /// removes the directory and nothing else — [status] is a separate question.
+  /// When this session was archived — hidden from the lists, nothing else.
   final DateTime? archivedAt;
+
+  /// When its worktree directory was removed ("Archive worktree"), which also
+  /// archives it. Unarchiving never brings the directory back.
+  final DateTime? worktreeRemovedAt;
 
   /// Whether the user typed this title in the app — the only reason the rename
   /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
@@ -115,6 +119,7 @@ class Session {
     'permissionMode': ?permissionMode,
     'modelId': ?modelId,
     if (archivedAt case final at?) 'archivedAt': jsonDate(at),
+    if (worktreeRemovedAt case final at?) 'worktreeRemovedAt': jsonDate(at),
     'titleByUser': titleByUser,
     if (operatorGranted) 'operatorGranted': true,
   };
@@ -148,12 +153,17 @@ class Session {
     permissionMode: jsonOptionalString(json, 'permissionMode'),
     modelId: jsonOptionalString(json, 'modelId'),
     archivedAt: jsonOptionalDateOf(json, 'archivedAt'),
+    worktreeRemovedAt: jsonOptionalDateOf(json, 'worktreeRemovedAt'),
     titleByUser: jsonBool(json, 'titleByUser'),
     // Absent from an older server's rows: not granted.
     operatorGranted: json['operatorGranted'] == true,
   );
 
   bool get isArchived => archivedAt != null;
+
+  /// Whether its worktree directory is gone — never read it, resume in it or
+  /// offer to remove it again.
+  bool get worktreeRemoved => worktreeRemovedAt != null;
 
   /// Whether this session is **over**. [SessionStatus.unknown] is deliberately
   /// not one: resuming makes the row `running` again.
@@ -182,6 +192,7 @@ class Session {
     String? permissionMode,
     String? modelId,
     DateTime? archivedAt,
+    DateTime? worktreeRemovedAt,
     bool? titleByUser,
     bool? operatorGranted,
   }) => Session(
@@ -203,6 +214,7 @@ class Session {
     permissionMode: permissionMode ?? this.permissionMode,
     modelId: modelId ?? this.modelId,
     archivedAt: archivedAt ?? this.archivedAt,
+    worktreeRemovedAt: worktreeRemovedAt ?? this.worktreeRemovedAt,
     titleByUser: titleByUser ?? this.titleByUser,
     operatorGranted: operatorGranted ?? this.operatorGranted,
   );
@@ -228,11 +240,12 @@ class Session {
       other.permissionMode == permissionMode &&
       other.modelId == modelId &&
       other.archivedAt == archivedAt &&
+      other.worktreeRemovedAt == worktreeRemovedAt &&
       other.titleByUser == titleByUser &&
       other.operatorGranted == operatorGranted;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     repositoryId,
     agentInstallationId,
@@ -251,9 +264,10 @@ class Session {
     permissionMode,
     modelId,
     archivedAt,
+    worktreeRemovedAt,
     titleByUser,
     operatorGranted,
-  );
+  ]);
 
   @override
   String toString() => 'Session($id, $title, $status)';

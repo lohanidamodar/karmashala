@@ -260,7 +260,7 @@ void main() {
   });
 
   test('a session that is gone is refused, not crashed into', () async {
-    db.server.sessionRows.markArchived('s1', testTime);
+    db.server.sessionRows.markWorktreeRemoved('s1', testTime);
 
     expect((await update()).refusal, UpdateRefusal.sessionGone);
     expect(mergeCall(), isNull);

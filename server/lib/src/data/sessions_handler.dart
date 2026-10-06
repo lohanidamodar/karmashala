@@ -407,6 +407,43 @@ class SessionsHandler {
     return const DataAck();
   }
 
+  /// Hides [SessionsArchive.ids] and every ended descendant, one transaction.
+  SessionsArchived archive(SessionsArchive request, List<DataChange> changes) =>
+      _apply(request.ids, changes, archive: true);
+
+  /// Shows [SessionsUnarchive.ids] and their archived descendants again.
+  SessionsArchived unarchive(
+    SessionsUnarchive request,
+    List<DataChange> changes,
+  ) => _apply(request.ids, changes, archive: false);
+
+  /// Whether [row] is live — this server runs it, or its row claims an agent
+  /// is running — so may not be archived.
+  bool isLive(Session row) => _runs(row.id) || row.status.claimsLive;
+
+  SessionsArchived _apply(
+    List<String> ids,
+    List<DataChange> changes, {
+    required bool archive,
+  }) {
+    final plan = planArchive(
+      _sessions.getAll(),
+      ids,
+      archive: archive,
+      at: _now(),
+      isLive: isLive,
+    );
+    _db.transaction(() => plan.changed.forEach(_sessions.write));
+    for (final row in plan.changed) {
+      changes.add(SessionRowChanged(_session(row.id)));
+    }
+    return SessionsArchived(
+      changed: [for (final row in plan.changed) row.id],
+      live: [for (final row in plan.live) SessionNamed(row.id, row.title)],
+      missing: plan.missing,
+    );
+  }
+
   // What the server itself wrote, told to every client.
 
   /// The rows of [sessionIds] as they now stand — for a write the server made

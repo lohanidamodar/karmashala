@@ -115,7 +115,7 @@ class SessionArchiveService {
     if (session == null) {
       return const ArchiveOutcome.refused(ArchiveRefusal.sessionGone);
     }
-    if (session.isArchived) {
+    if (session.worktreeRemoved) {
       return const ArchiveOutcome.refused(ArchiveRefusal.alreadyArchived);
     }
     final worktree = session.worktree;
@@ -155,7 +155,7 @@ class SessionArchiveService {
 
     _ref
         .read(sessionsDataProvider)
-        .markArchived(sessionId, _ref.read(clockProvider).nowUtc());
+        .markWorktreeRemoved(sessionId, _ref.read(clockProvider).nowUtc());
     // The row's status moved and the worktree it named is gone — a workspace
     // fact as much as a session one. Its *name* did not change.
     _ref
