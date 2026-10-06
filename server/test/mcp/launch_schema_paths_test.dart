@@ -15,7 +15,6 @@ import 'package:karmashala_host/src/mcp/tools/server_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tools.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:karmashala_mcp/catalogue.dart' show annotatedToolSchemas;
-import 'package:karmashala_mcp/protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

@@ -1473,15 +1473,18 @@ Future<int> _serve(
     if (registry.findProcess(id) != null) await registry.close(id);
   }
 
-  // An async child's result is pushed into its parent's queue when its turn
-  // ends; a person's Stop on the child keeps it theirs.
+  // An async child's result is pushed into its parent's queue when each of
+  // its turns ends; a person's Stop on the child keeps it theirs.
   final delegations = DelegationResults(
     turnOf: (childId, since) =>
         childTurns.firstTurn(childId, bound: kDelegationBound, since: since),
+    nextTurnOf: (childId, since) =>
+        childTurns.nextTurn(childId, since: since),
     answerOf: answerOf,
     queue: sessionQueue,
     store: SessionDelegationDao(database),
     isLive: prompts.status.holds,
+    isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   )..start();

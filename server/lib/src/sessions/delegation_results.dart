@@ -70,30 +70,35 @@ class DelegationResult {
 }
 
 /// One awaited turn of a delegated child: which, and from when its answer
-/// counts.
+/// counts. A [next] follow waits for whatever turn the child works next; its
+/// [turn] is decided when that turn settles.
 final class _Follow {
-  _Follow(this.child, this.turn, this.since);
+  _Follow(this.child, this.turn, this.since, {this.next = false});
 
   final DelegatedChild child;
   final int turn;
   final DateTime since;
+  final bool next;
 }
 
 /// **A delegated child's result, pushed to its parent** — the async mode of
-/// `subagent_run` and `open_new_session`. When a watched child's turn settles
-/// — its first, or one its parent asked for with a follow-up ([sent]) — its
-/// result goes into the parent's [SessionQueue]: delivered at once to an idle
-/// parent, after the running turn to a busy one. Results that land within
-/// [batchWindow] of each other, or while an earlier batch still waits in the
-/// queue, go as one message. Each delegation is kept in [store], so [start]
-/// re-arms what a restart left awaited.
+/// `subagent_run` and `open_new_session`. When a turn of a watched child
+/// settles — its first, and every one it works after, for its parent or
+/// anyone — its result goes into the parent's [SessionQueue]: delivered at
+/// once to an idle parent, after the running turn to a busy one. A child
+/// sitting idle pushes nothing. Results that land within [batchWindow] of
+/// each other, or while an earlier batch still waits in the queue, go as one
+/// message. Each delegation is kept in [store], so [start] re-arms what a
+/// restart left awaited.
 class DelegationResults {
   DelegationResults({
     required this.turnOf,
+    required this.nextTurnOf,
     required this.answerOf,
     required this.queue,
     required this.store,
     required this.isLive,
+    this.isArchived,
     this.restoreGrace = const Duration(minutes: 2),
     this.endChild,
     this.batchWindow = const Duration(seconds: 2),
@@ -105,6 +110,13 @@ class DelegationResults {
   /// `ChildTurnWait.firstTurn` under [kDelegationBound].
   final Future<ChildTurnOutcome> Function(String childId, DateTime since)
   turnOf;
+
+  /// Settles when the next turn [String] works does — `ChildTurnWait.nextTurn`.
+  final Future<ChildTurnOutcome> Function(String childId, DateTime since)
+  nextTurnOf;
+
+  /// Whether row [String] is archived: its delegation then ends unreported.
+  final bool Function(String sessionId)? isArchived;
   final AnswerOf answerOf;
   final SessionQueue queue;
   final SessionDelegationDao store;
@@ -122,10 +134,6 @@ class DelegationResults {
   final DateTime Function() _now;
 
   final _watched = <String, _Follow>{};
-
-  /// Children whose parent sent a follow-up while a turn was awaited: the
-  /// next turn is awaited once that one is reported.
-  final _followUps = <String>{};
   final _pending = <String, List<(DelegationResult, _Follow)>>{};
   final _timers = <String, Timer>{};
 
@@ -139,23 +147,33 @@ class DelegationResults {
       if (follow.child.parentId == parentId) follow.child,
   ];
 
-  /// Re-arms every turn a parent still awaited when the server last stopped.
+  /// Re-arms every turn a parent still awaited when the server last stopped,
+  /// and follows again every other child that comes back running.
   void start() {
-    for (final row in store.awaiting()) {
-      final since = row.turnStartedAt!;
-      final child = DelegatedChild(
-        childId: row.childSessionId,
-        parentId: row.parentSessionId,
-        title: row.title,
-        agent: row.agent,
-        model: row.model,
-        startedAt: row.delegatedAt,
-        endOnAnswer: row.endOnAnswer,
-      );
-      final follow = _watched[child.childId] = _Follow(child, row.turn, since);
-      unawaited(_restore(follow));
+    for (final row in store.all()) {
+      final child = _childOf(row);
+      if (row.turnStartedAt case final since?) {
+        final follow = _watched[child.childId] = _Follow(
+          child,
+          row.turn,
+          since,
+        );
+        unawaited(_restore(follow));
+      } else {
+        unawaited(_standWhenLive(child));
+      }
     }
   }
+
+  static DelegatedChild _childOf(SessionDelegation row) => DelegatedChild(
+    childId: row.childSessionId,
+    parentId: row.parentSessionId,
+    title: row.title,
+    agent: row.agent,
+    model: row.model,
+    startedAt: row.delegatedAt,
+    endOnAnswer: row.endOnAnswer,
+  );
 
   /// Starts watching [child]'s first turn; its result is pushed when it
   /// settles.
@@ -178,37 +196,48 @@ class DelegationResults {
   }
 
   /// [callerSessionId] sent [sessionId] a message (`session_send`): from its
-  /// parent, to a delegation, it arms that turn's push.
+  /// parent, to a delegation nothing follows now — one that ended between
+  /// turns and was resumed by the send — it arms that turn's push.
   void sent(String? callerSessionId, String sessionId, [DateTime? at]) {
     if (callerSessionId == null) return;
     final row = store.byChild(sessionId);
     if (row == null || row.parentSessionId != callerSessionId) return;
-    if (row.awaiting) {
-      // It lands behind the turn awaited now; the next is awaited after.
-      _followUps.add(sessionId);
-      return;
-    }
-    _arm(sessionId, at ?? _now());
-  }
-
-  void _arm(String childId, DateTime since) {
-    final row = store.awaitNextTurn(childId, since: since);
-    if (row == null) return;
-    final follow = _watched[childId] = _Follow(
-      DelegatedChild(
-        childId: row.childSessionId,
-        parentId: row.parentSessionId,
-        title: row.title,
-        agent: row.agent,
-        model: row.model,
-        startedAt: row.delegatedAt,
-        endOnAnswer: row.endOnAnswer,
-      ),
-      row.turn,
+    if (_watched.containsKey(sessionId)) return;
+    final since = at ?? _now();
+    final armed = store.awaitNextTurn(sessionId, since: since);
+    if (armed == null) return;
+    final follow = _watched[sessionId] = _Follow(
+      _childOf(armed),
+      armed.turn,
       since,
     );
-    log?.call('delegation $childId: turn ${row.turn} is awaited');
+    log?.call('delegation $sessionId: turn ${armed.turn} is awaited');
     unawaited(_follow(follow));
+  }
+
+  /// Follows the next turn [child] works, whenever that is.
+  void _stand(DelegatedChild child) {
+    final follow = _watched[child.childId] = _Follow(
+      child,
+      0,
+      _now(),
+      next: true,
+    );
+    unawaited(_follow(follow));
+  }
+
+  /// [_stand] for a child a restart left between turns, once it runs again.
+  Future<void> _standWhenLive(DelegatedChild child) async {
+    final waited = Stopwatch()..start();
+    while (!_closed &&
+        !isLive(child.childId) &&
+        waited.elapsed < restoreGrace) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (_closed || !isLive(child.childId)) return;
+    if (_watched.containsKey(child.childId)) return;
+    if (store.byChild(child.childId) == null) return;
+    _stand(child);
   }
 
   /// [callerSessionId] ended [sessionId] (`session_end`): its parent doing
@@ -222,7 +251,6 @@ class DelegationResults {
   /// [childId] was stopped by a person, or ended by its parent: what it says
   /// next is not pushed.
   void stopped(String childId) {
-    _followUps.remove(childId);
     final had = _watched.remove(childId) != null;
     if (store.byChild(childId) == null && !had) return;
     store.remove(childId);
@@ -262,23 +290,58 @@ class DelegationResults {
 
   Future<void> _follow(_Follow follow) async {
     final child = follow.child;
+    final id = child.childId;
     ChildTurnOutcome outcome;
     try {
-      outcome = await turnOf(child.childId, follow.since);
+      outcome = await (follow.next
+          ? nextTurnOf(id, follow.since)
+          : turnOf(id, follow.since));
     } on Object catch (error) {
-      log?.call('delegation ${child.childId}: the wait failed: $error');
-      outcome = const ChildTurnOutcome(ChildTurnState.ended);
+      log?.call('delegation $id: the wait failed: $error');
+      outcome = ChildTurnOutcome(ChildTurnState.ended, idle: follow.next);
     }
-    if (_closed || !identical(_watched[child.childId], follow)) return;
+    if (_closed || !identical(_watched[id], follow)) return;
+    if (isArchived?.call(id) ?? false) {
+      _watched.remove(id);
+      store.remove(id);
+      log?.call('delegation $id: archived; nothing more is pushed');
+      return;
+    }
+    if (outcome.idle) {
+      _watched.remove(id);
+      log?.call('delegation $id: ended between turns; followed again when '
+          'its parent sends to it');
+      return;
+    }
+    var settled = follow;
+    if (follow.next) {
+      final row = store.awaitNextTurn(id, since: follow.since);
+      if (row == null) {
+        _watched.remove(id);
+        return;
+      }
+      settled = _Follow(child, row.turn, follow.since);
+    }
+    final over =
+        outcome.state == ChildTurnState.ended ||
+        (child.endOnAnswer && outcome.state == ChildTurnState.done);
+    // Followed again before the answer is read, so a turn that starts at
+    // once — a queued follow-up delivered as this one ended — is not missed.
+    if (over) {
+      _watched.remove(id);
+    } else {
+      _stand(child);
+    }
     final answer = switch (outcome.state) {
       ChildTurnState.running || ChildTurnState.blocked => null,
-      _ => await _answer(follow),
+      _ => await _answer(settled),
     };
-    if (_closed || !identical(_watched.remove(child.childId), follow)) return;
+    // Stopped while the answer was read.
+    if (_closed || store.byChild(id) == null) return;
     final ended = child.endOnAnswer && outcome.state == ChildTurnState.done
-        ? await _end(child.childId)
+        ? await _end(id)
         : null;
-    _report(follow, outcome, answer, ended: ended);
+    _report(settled, outcome, answer, ended: ended);
   }
 
   void _report(
@@ -353,12 +416,10 @@ class DelegationResults {
       final over =
           result.outcome.state == ChildTurnState.ended || result.ended == true;
       if (over) {
-        _followUps.remove(childId);
         store.remove(childId);
         continue;
       }
       store.turnReported(childId, turn: follow.turn);
-      if (_followUps.remove(childId)) _arm(childId, _now());
     }
   }
 }
@@ -440,7 +501,7 @@ String _next(DelegationResult result) {
       '$transcript Exit code '
           '${result.outcome.exitCodeKnown ? '${result.outcome.exitCode}' : 'unknown'}.',
     ChildTurnState.running =>
-      'Not pushed again: session_wait on $id for its answer.',
+      'Still working; the end of its turn is pushed when it comes.',
   };
 }
 

@@ -190,7 +190,7 @@ class LaunchToolSet extends ServerToolSet {
   }
 
   static String _asyncNote(String id) =>
-      'End your turn now rather than polling: when the child\'s first turn '
+      'End your turn now rather than polling: when each turn the child works '
       'ends, its result (agent, model, how long, its final answer) arrives '
       'as a message from Karmashala — at once if you are idle, after your '
       'turn if you are working. Child: session $id.';
@@ -888,9 +888,9 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'string',
           'enum': ['detached', 'async'],
           'description':
-              '"async" (the default when you are a session): when the new '
-              'session\'s first turn ends, its result is pushed to you as a '
-              'message — end your turn rather than polling. "detached": '
+              '"async" (the default when you are a session): each time a '
+              'turn the new session works ends, its result is pushed to you '
+              'as a message — end your turn rather than polling. "detached": '
               'nothing comes back unless you ask with session_wait. The '
               'session is never ended for you.',
         },
@@ -996,10 +996,11 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'description':
               '"wait" (default): this call blocks until the child answers. '
               '"async": answers at once with childSessionId; when the child\'s '
-              'first turn ends its result — agent, model, duration and final '
+              'turn ends its result — agent, model, duration and final '
               'answer — is pushed to you as a message, batched with others '
-              'that finish together. Start several, then end your turn; do '
-              'not poll. Recommended for long or parallel work.',
+              'that finish together, and so is every later turn of a child '
+              'kept open. Start several, then end your turn; do not poll. '
+              'Recommended for long or parallel work.',
         },
       },
       'required': <String>['prompt'],

@@ -69,6 +69,12 @@ class SessionDelegationDao {
       .map(_row)
       .toList();
 
+  /// Every delegation, oldest first.
+  List<SessionDelegation> all() => _db
+      .query('SELECT * FROM session_delegations ORDER BY delegated_at;')
+      .map(_row)
+      .toList();
+
   /// Every delegation whose parent awaits a turn, oldest first.
   List<SessionDelegation> awaiting() => _db
       .query(

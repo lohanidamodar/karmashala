@@ -38,6 +38,7 @@ void main() {
   // When each answer was said, for a follow-up that must not read the last.
   late Map<String, DateTime> answeredAt;
   late List<String> ended;
+  late Set<String> archived;
   late DelegationResults delegations;
   late ChildTurnWait turns;
   late Directory temp;
@@ -76,10 +77,12 @@ void main() {
       bound: const Duration(minutes: 5),
       since: since,
     ),
+    nextTurnOf: (childId, since) => turns.nextTurn(childId, since: since),
     answerOf: answerOf,
     queue: queue,
     store: SessionDelegationDao(database),
     isLive: status.holds,
+    isArchived: archived.contains,
     restoreGrace: const Duration(milliseconds: 60),
     endChild: (childId) async => ended.add(childId),
     batchWindow: const Duration(milliseconds: 40),
@@ -123,6 +126,7 @@ void main() {
     answers = {};
     answeredAt = {};
     ended = [];
+    archived = {};
     var n = 0;
     queue =
         SessionQueue(
@@ -254,7 +258,11 @@ void main() {
     expect(message, contains('session_transcript'));
     final row = dao.open('parent');
     expect(row, isEmpty, reason: 'delivered rows are no longer open');
-    expect(delegations.watching('parent'), isEmpty);
+    expect(
+      delegations.watching('parent').single.childId,
+      'c1',
+      reason: 'the turn it works next is followed too',
+    );
   });
 
   test('a busy parent gets the result queued for after its turn, never '
@@ -401,6 +409,13 @@ void main() {
     final message = delivered['parent']!.single;
     expect(message, contains('BLOCKED'));
     expect(message, contains('session_answer'));
+
+    // The same prompt, still open, is not a second turn.
+    for (var i = 0; i < 3; i++) {
+      status.tick();
+      await settle();
+    }
+    expect(delivered['parent'], hasLength(1));
   });
 
   group('across a restart', () {
@@ -485,6 +500,62 @@ void main() {
       expect(delivered['parent']!.last, contains('turn 2'));
     });
 
+    test('every turn the child works is pushed, though the parent armed '
+        'none', () async {
+      await firstTurnReported();
+      clock = t0.add(const Duration(minutes: 10));
+      // A person, or a message queued earlier, starts the child again.
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Second answer.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(2));
+      expect(delivered['parent']!.last, contains('Second answer.'));
+      expect(delivered['parent']!.last, contains('turn 2'));
+
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Third answer.';
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(3));
+      expect(delivered['parent']!.last, contains('turn 3'));
+    });
+
+    test('a child that sits idle pushes nothing, and a turn is pushed only '
+        'once', () async {
+      await firstTurnReported();
+      for (var i = 0; i < 3; i++) {
+        status.tick();
+        hook('c1', 'Stop');
+        await settle();
+      }
+      expect(delivered['parent'], hasLength(1));
+      expect(delegations.watching('parent'), hasLength(1));
+    });
+
+    test('a child that ends while idle pushes nothing', () async {
+      await firstTurnReported();
+      pty.handles.last.finish(0);
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(delegations.watching('parent'), isEmpty);
+    });
+
+    test('an archived child pushes nothing more', () async {
+      await firstTurnReported();
+      archived.add('c1');
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Said after it was archived.';
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(SessionDelegationDao(database).byChild('c1'), isNull);
+    });
+
     test('a message from anyone but the parent arms nothing', () async {
       await firstTurnReported();
       delegations.sent('someone-else', 'c1');
@@ -508,7 +579,7 @@ void main() {
       hook('c1', 'Stop');
       await settle();
       expect(delivered['parent'], hasLength(1));
-      expect(SessionDelegationDao(database).awaiting(), hasLength(1));
+      expect(delegations.watching('parent'), hasLength(1));
 
       hook('parent', 'UserPromptSubmit');
       hook('parent', 'Stop');

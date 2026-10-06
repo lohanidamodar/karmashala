@@ -2758,7 +2758,7 @@
               "detached",
               "async"
             ],
-            "description": "\"async\" (the default when you are a session): when the new session's first turn ends, its result is pushed to you as a message — end your turn rather than polling. \"detached\": nothing comes back unless you ask with session_wait. The session is never ended for you."
+            "description": "\"async\" (the default when you are a session): each time a turn the new session works ends, its result is pushed to you as a message — end your turn rather than polling. \"detached\": nothing comes back unless you ask with session_wait. The session is never ended for you."
           }
         },
         "required": []
@@ -2849,7 +2849,7 @@
               "wait",
               "async"
             ],
-            "description": "\"wait\" (default): this call blocks until the child answers. \"async\": answers at once with childSessionId; when the child's first turn ends its result — agent, model, duration and final answer — is pushed to you as a message, batched with others that finish together. Start several, then end your turn; do not poll. Recommended for long or parallel work."
+            "description": "\"wait\" (default): this call blocks until the child answers. \"async\": answers at once with childSessionId; when the child's turn ends its result — agent, model, duration and final answer — is pushed to you as a message, batched with others that finish together, and so is every later turn of a child kept open. Start several, then end your turn; do not poll. Recommended for long or parallel work."
           }
         },
         "required": [
