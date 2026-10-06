@@ -24,3 +24,7 @@ tags:
   # KARMASHALA_LIVE_CLAUDE_WSL=<distribution>) in WSL, is the same tag:
   #   dart test --tags=live-acp test/live/claude_stream_json_live_test.dart
   live-acp:
+  # Real timers measuring how long a refresh takes (test/stores/
+  # store_refresh_timing_test.dart). Prints, and is excluded from the gate:
+  #   dart test --tags=live-timing
+  live-timing:
