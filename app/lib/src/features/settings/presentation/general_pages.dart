@@ -248,6 +248,14 @@ class StartupSection extends ConsumerWidget {
             NativeSetting.keepAwake,
             enabled: settings.keepAwake,
           ),
+          SettingsSwitchRow(
+            label: 'Bring sessions agents start to the front',
+            help:
+                'Off, a session another session starts opens behind the tab '
+                'you are in, marked new.',
+            value: settings.bringAgentSessionsToFront,
+            onChanged: controller.setBringAgentSessionsToFront,
+          ),
         ],
       ),
     );

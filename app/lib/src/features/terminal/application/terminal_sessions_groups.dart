@@ -281,6 +281,15 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
   WorkspaceLayout _withTabPlaced(WorkspaceLayout? tree, String tabId) {
     if (tree == null) return PaneLayout.single(tabId);
     final group = tree.groupById(_focusedGroupId ?? '') ?? tree.groups.last;
+    if (_behind.remove(tabId) case final behind?) {
+      final after = behind.afterTabId;
+      if (after != null && tree.contains(after)) {
+        return tree.insertBehind(after, tabId);
+      }
+      if (!_isEmptyGroup(group)) {
+        return tree.insertBehind(group.activePaneId, tabId, atEnd: true);
+      }
+    }
     final anchor = group.activePaneId;
     // Its own id, not a fresh one: see [moveTabToGroup].
     return _isEmptyGroup(group)
