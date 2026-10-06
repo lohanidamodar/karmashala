@@ -37,6 +37,9 @@ class SubSessionFold {
     return running == 0 ? what : '$what · $running running';
   }
 
+  /// Whether folding hides anything: the live ones stay in sight either way.
+  bool get expandable => count > running;
+
   /// Whether it is folded on this device: the person's choice, else folded —
   /// the live ones stay in sight beneath the fold line regardless.
   bool foldedIn(SessionListPrefs prefs) => prefs.folds[parentId] ?? true;

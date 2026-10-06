@@ -45,6 +45,7 @@ class NativeSessionRow extends ConsumerWidget {
     this.link,
     this.parentTitle,
     this.lineageBroken = false,
+    this.runningBelow = 0,
     super.key,
   });
 
@@ -55,6 +56,9 @@ class NativeSessionRow extends ConsumerWidget {
   final SessionLink? link;
   final String? parentTitle;
   final bool lineageBroken;
+
+  /// Its sub-sessions still running or waiting.
+  final int runningBelow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -197,6 +201,12 @@ class NativeSessionRow extends ConsumerWidget {
       link: link,
       parentTitle: parentTitle,
       lineageBroken: lineageBroken,
+      runningBelow: runningBelow == 0
+          ? null
+          : RunningBelowBadge(
+              key: ValueKey('running-below:${session.id}'),
+              count: runningBelow,
+            ),
       selecting: selecting,
       ticked: ticked,
       tickEnabled: tickEnabled,

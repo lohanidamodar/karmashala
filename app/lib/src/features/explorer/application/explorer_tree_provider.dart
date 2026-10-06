@@ -412,6 +412,7 @@ List<ExplorerNode> _lineageNodes(
       link: node.link,
       parentTitle: parent?.title,
       lineageBroken: node.lineageBroken,
+      runningBelow: fold?.running ?? 0,
     ),
     if (fold != null)
       SubSessionsNode(
@@ -420,6 +421,7 @@ List<ExplorerNode> _lineageNodes(
         parentId: node.session.id,
         label: fold.label,
         folded: folded,
+        expandable: fold.expandable,
       ),
     if (!folded)
       for (final child in runningFirst(
