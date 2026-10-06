@@ -71,6 +71,7 @@ class TerminalTabChip extends StatelessWidget {
     this.icon,
     this.progress,
     this.mark,
+    this.badge,
     this.tooltip,
     this.unsaved = false,
     this.accented = true,
@@ -104,6 +105,9 @@ class TerminalTabChip extends StatelessWidget {
 
   /// The mark of the agent whose session this tab holds, before its title.
   final Widget? mark;
+
+  /// A count beside the title, as [WorkbenchTabChip.badge].
+  final Widget? badge;
 
   /// What hovering the title says, when it is more than [title] itself.
   final String? tooltip;
@@ -163,6 +167,7 @@ class TerminalTabChip extends StatelessWidget {
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: status),
       mark: mark,
+      badge: badge,
       label: title,
       tooltip: tooltip ?? title,
       trailing: _TabCloseButton(

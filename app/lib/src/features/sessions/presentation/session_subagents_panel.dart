@@ -10,6 +10,8 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../artifacts/presentation/artifact_count_badge.dart'
+    show ChildArtifactsLink;
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../application/session_list_prefs.dart';
@@ -430,6 +432,8 @@ class _EntryRow extends ConsumerWidget {
                       ),
                     ),
                   ),
+                if (entry.childSessionId case final child?)
+                  ChildArtifactsLink(sessionId: child),
               ],
             ),
             Text(

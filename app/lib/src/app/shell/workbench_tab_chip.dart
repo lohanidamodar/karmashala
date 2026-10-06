@@ -13,6 +13,7 @@ class WorkbenchTabChip extends StatelessWidget {
     required this.label,
     this.leading,
     this.mark,
+    this.badge,
     this.trailing,
     this.onSecondaryTapDown,
     this.onClose,
@@ -47,6 +48,10 @@ class WorkbenchTabChip extends StatelessWidget {
   /// The tab's session's agent, between [leading] and the title. Dropped on a
   /// chip narrower than [kMinTabWidth], where the title needs the room more.
   final Widget? mark;
+
+  /// A count beside the title — the artifacts a session showed. Dropped with
+  /// [mark] on a narrow chip.
+  final Widget? badge;
 
   final Widget? trailing;
   final GestureTapDownCallback? onSecondaryTapDown;
@@ -135,6 +140,12 @@ class WorkbenchTabChip extends StatelessWidget {
                                   ),
                             ),
                           ),
+                          if (badge case final badge?
+                              when constraints.maxWidth >= kMinTabWidth)
+                            Padding(
+                              padding: const EdgeInsets.only(left: Insets.xs),
+                              child: badge,
+                            ),
                         ],
                       ),
                     ),
