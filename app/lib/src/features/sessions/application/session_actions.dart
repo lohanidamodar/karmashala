@@ -210,6 +210,9 @@ class SessionActions {
     ];
   }
 
+  /// Closes this window's tabs and panes showing [ids], as one layout change.
+  void closeViewsOf(Iterable<String> ids) => _closeViews(_viewsOf(ids));
+
   /// A deleted session's tabs and panes have nothing left to show.
   void _closeViews(List<String> paneIds) {
     if (paneIds.isEmpty) return;
@@ -463,7 +466,8 @@ class SessionActions {
           .post(
             sessionId,
             const SessionNotice(
-              message: 'This session was archived. Sending to it unarchived it.',
+              message:
+                  'This session was archived. Sending to it unarchived it.',
             ),
           );
     }
@@ -1263,3 +1267,23 @@ class SessionActions {
 final sessionActionsProvider = Provider<SessionActions>(
   (ref) => SessionActions(ref),
 );
+
+/// Closes this window's tabs and panes of every session that becomes archived
+/// — here, on the server or on another client — as one layout change. A row
+/// first seen archived is left: only the move from shown to archived closes.
+/// Watched by the shell.
+final archivedSessionTabsCloserProvider = Provider<void>((ref) {
+  final sessions = ref.watch(sessionsDataProvider);
+  final actions = ref.watch(sessionActionsProvider);
+  var archived = {for (final row in sessions.getAll()) row.id: row.isArchived};
+  final changes = sessions.changes.listen((_) {
+    final now = {for (final row in sessions.getAll()) row.id: row.isArchived};
+    final moved = [
+      for (final MapEntry(key: id, value: isArchived) in now.entries)
+        if (isArchived && archived[id] == false) id,
+    ];
+    archived = now;
+    if (moved.isNotEmpty) actions.closeViewsOf(moved);
+  });
+  ref.onDispose(() => unawaited(changes.cancel()));
+});
