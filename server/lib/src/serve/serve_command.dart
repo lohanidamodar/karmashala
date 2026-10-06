@@ -117,6 +117,7 @@ import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
+import '../activity/activity_backfill.dart';
 import '../activity/server_activity.dart';
 import '../attention/daemon_attention.dart';
 import '../attention/delivery_watch.dart';
@@ -1721,6 +1722,29 @@ Future<int> _serve(
       final indexed = await data.conversations.backfill();
       if (indexed > 0) {
         sink.writeln('conversation index: $indexed conversation(s) read');
+      }
+    }),
+  );
+  // The activity log's backfill: what the store held before the log, once,
+  // in chunks, resumed after a restart, and never in the first moments.
+  unawaited(
+    Future<void>.delayed(agentScanDelay).then((_) async {
+      if (stopping.isCompleted) return;
+      final backfill = ActivityBackfill(
+        database,
+        log: data.activity,
+        messagesOf: sessionTranscripts.messagesOf,
+        onWritten: activity.nudge,
+      );
+      try {
+        final written = await backfill.run(
+          shouldStop: () => stopping.isCompleted,
+        );
+        if (written > 0) {
+          sink.writeln('activity log: $written entr(ies) backfilled');
+        }
+      } on Object catch (error) {
+        errSink.writeln('karmashala_host: activity backfill stopped ($error)');
       }
     }),
   );

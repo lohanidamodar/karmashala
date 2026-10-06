@@ -85,6 +85,9 @@ class ServerActivity {
   /// Completes once what is queued now is written and told.
   Future<void> get flushed => _writer.flushed;
 
+  /// The log was written directly (the backfill): tell clients soon.
+  void nudge() => _writer.nudge();
+
   /// An item filed in the server's inbox: a usage limit pauses its session.
   void inboxRaised(InboxItem item) {
     if (item.kind != InboxItemKind.usageLimit) return;
