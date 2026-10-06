@@ -228,4 +228,25 @@ void main() {
       expect(adapterOf(id).capabilities, isNot(contains(AgentCapability.acp)));
     }
   });
+
+  test('Claude chat asks for hook events only from a version known to '
+      'have the flag', () {
+    final spec = claudeAcpDescriptor.acp!;
+    const flag = '--include-hook-events';
+    expect(
+      spec.argumentsFor(linux: false, version: '2.1.287 (Claude Code)'),
+      contains(flag),
+    );
+    expect(spec.argumentsFor(linux: true, version: '2.2.0'), contains(flag));
+    // Older, or unread: the flag could stop it starting at all.
+    expect(
+      spec.argumentsFor(linux: false, version: '2.0.5'),
+      isNot(contains(flag)),
+    );
+    expect(spec.argumentsFor(linux: false), isNot(contains(flag)));
+    expect(spec.arguments, isNot(contains(flag)));
+    for (final argument in spec.versionedArguments) {
+      expect(argument.evidence, contains(argument.since));
+    }
+  });
 }

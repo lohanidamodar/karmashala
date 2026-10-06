@@ -12,6 +12,8 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         JsonMap,
         JsonRpcErrorCodes;
 
+import 'package:agent_cli/read.dart' show kRedactedThinking;
+
 import '../../domain/uuid.dart';
 import '../acp_extensions.dart';
 import '../acp_transport.dart';
@@ -767,6 +769,11 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           if (parent == null && !streamed) {
             _chunk('agent_thought_chunk', block['thinking'], id);
           }
+        // Never streamed: it has no delta, only encrypted data.
+        case 'redacted_thinking':
+          if (parent == null) {
+            _chunk('agent_thought_chunk', kRedactedThinking, id);
+          }
         case 'tool_use':
           _onToolUse(block, parent);
       }
@@ -830,13 +837,21 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         tool.notes.add(text);
         continue;
       }
+      final diffs =
+          (isError
+              ? null
+              : ClaudeTools.resultDiffs(
+                  tool.name,
+                  message['tool_use_result'],
+                )) ??
+          tool.diffs;
       _update({
         'sessionUpdate': 'tool_call_update',
         'toolCallId': id,
         'status': isError ? 'failed' : 'completed',
         'content': [
-          ...tool.diffs,
-          if (text.isNotEmpty && (tool.diffs.isEmpty || isError))
+          ...diffs,
+          if (text.isNotEmpty && (diffs.isEmpty || isError))
             ClaudeTools.text(text),
           ...ClaudeTools.images(block['content']),
         ],
@@ -919,6 +934,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         }
       case 'compact_boundary':
         _compaction = jsonObject(message['compact_metadata']) ?? const {};
+      case 'hook_response':
+        if (ClaudeTools.hookNote(message) case final note?) {
+          _update({'sessionUpdate': AcpExtensions.notice, 'text': note});
+        }
       case 'task_started' || 'task_progress' || 'task_notification':
         _trackBackground(message);
         _onTask(message);

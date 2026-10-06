@@ -170,6 +170,22 @@ class ToolActivity {
 
   static String? _stringOrNull(Object? value) => value is String ? value : null;
 
+  /// This call carrying [value], the plan its answer left standing.
+  ToolActivity withPlan(AgentPlan value) => ToolActivity(
+    name: name,
+    subject: value.headline,
+    imagePath: imagePath,
+    output: output,
+    outputTruncated: outputTruncated,
+    isError: isError,
+    plan: value,
+    kind: kind,
+    edits: edits,
+    editsTruncated: editsTruncated,
+    proposedPlan: proposedPlan,
+    questions: questions,
+  );
+
   /// This call with the answer it eventually got. [edits] replaces the call's
   /// own when the result recorded better ones; null keeps them. [answers]
   /// (question text to answer) answer [questions]. [imagePath], the image

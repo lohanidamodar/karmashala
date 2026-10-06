@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:karmashala_acp/karmashala_acp.dart';
 
+import '../acp_extensions.dart';
 import '../acp_transport.dart';
 import 'codex_acp_mapping.dart';
 
@@ -503,10 +504,12 @@ final class CodexAppServerBridge implements AcpTransport {
     final error = _map(turn['error']);
     switch (turn['status']) {
       case 'interrupted':
+        _note('Interrupted by you');
         done.complete({'stopReason': 'cancelled', '_meta': meta});
       case 'failed':
         final info = error['codexErrorInfo'];
         final words = '${error['message'] ?? 'the turn failed'}';
+        _note(words, error: true);
         if (info == 'contextWindowExceeded') {
           done.complete({'stopReason': 'max_tokens', '_meta': meta});
         } else if (info == 'cyberPolicy' ||
@@ -667,6 +670,7 @@ final class CodexAppServerBridge implements AcpTransport {
         }
         return;
     }
+    if (_noticeItem(item)) return;
     final call = codexToolCall(item, cwd: _cwd);
     if (call == null) return;
     _outputDue.remove(id);
@@ -695,9 +699,20 @@ final class CodexAppServerBridge implements AcpTransport {
       case 'agentMessage' || 'plan' || 'reasoning':
         _itemCompleted(item);
       default:
+        if (_noticeItem(item)) return;
         final call = codexToolCall(item, cwd: _cwd);
         if (call != null) _update({'sessionUpdate': 'tool_call', ...call});
     }
+  }
+
+  /// Says an item that is a note rather than a call, and what a review it
+  /// ends found; false for any other item.
+  bool _noticeItem(JsonMap item) {
+    final note = codexItemNotice(item);
+    if (note == null) return false;
+    _note(note);
+    _message(codexReviewFindings(item), '${item['id']}');
+    return true;
   }
 
   void _message(Object? text, String itemId) {
@@ -717,6 +732,13 @@ final class CodexAppServerBridge implements AcpTransport {
       'content': {'type': 'text', 'text': text},
     });
   }
+
+  /// A note for the chat, as a terminal session shows the same event.
+  void _note(String text, {bool error = false}) => _update({
+    'sessionUpdate': AcpExtensions.notice,
+    'text': text,
+    if (error) 'role': 'error',
+  });
 
   void _toolUpdate(JsonMap call) {
     if (call.isEmpty) return;

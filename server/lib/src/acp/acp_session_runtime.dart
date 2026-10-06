@@ -859,6 +859,12 @@ class AcpSessionRuntime implements ScreenSession {
       );
       return;
     }
+    if (update is UnknownUpdate && update.kind == AcpExtensions.notice) {
+      if (update.raw['text'] case final String text) {
+        _writer.notice(text, error: update.raw['role'] == 'error');
+      }
+      return;
+    }
     if (update is UnknownUpdate && update.kind == AcpExtensions.compaction) {
       final trigger = update.raw['trigger'];
       final summary = update.raw['summary'];

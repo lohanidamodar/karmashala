@@ -13,6 +13,24 @@ enum AcpNativeBridge {
   claudeStreamJson,
 }
 
+/// Argv an agent accepts from release [since] on, with where that was read.
+class AcpVersionedArgument {
+  const AcpVersionedArgument({
+    required this.since,
+    required this.arguments,
+    required this.evidence,
+  });
+
+  final String since;
+  final List<String> arguments;
+  final String evidence;
+
+  /// Whether the agent at [version] (as `--version` prints it) takes these.
+  bool acceptedBy(String version) =>
+      compareAgentVersions(version, '0.0.0') > 0 &&
+      compareAgentVersions(version, since) >= 0;
+}
+
 /// How an agent is driven over the Agent Client Protocol
 /// (https://agentclientprotocol.com): JSON-RPC over the process's own stdio,
 /// in place of a terminal. Declared on a descriptor; a consumer asks
@@ -26,6 +44,7 @@ class AcpLaunchSpec {
     this.npxPackage,
     this.environment = const {},
     this.linuxArguments = const [],
+    this.versionedArguments = const [],
     this.registryId,
     this.apiKeyVariables = const {},
     this.nativeBridge,
@@ -62,16 +81,24 @@ class AcpLaunchSpec {
   /// not (`--uid=` for Antigravity). See [argumentsFor].
   final List<String> linuxArguments;
 
+  /// Argv a release of the agent is known to accept from a version on. An
+  /// older one may refuse a flag it does not know and never start, so a
+  /// version nobody read gets none of them.
+  final List<AcpVersionedArgument> versionedArguments;
+
   /// The public ACP registry's id for this agent, when it ships there as a
   /// prebuilt archive Karmashala can install into its managed folder
   /// (`~/karmashala/acp/<registryId>/<version>/`) and find there again.
   final String? registryId;
 
   /// The mode argv for one machine: [arguments], then [linuxArguments] when
-  /// [linux].
-  List<String> argumentsFor({required bool linux}) => [
+  /// [linux], then the [versionedArguments] its [version] accepts.
+  List<String> argumentsFor({required bool linux, String? version}) => [
     ...arguments,
     if (linux) ...linuxArguments,
+    if (version != null)
+      for (final argument in versionedArguments)
+        if (argument.acceptedBy(version)) ...argument.arguments,
   ];
 
   /// Whether an agent started in an environment of [kind] runs on Linux: a

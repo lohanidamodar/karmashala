@@ -1306,6 +1306,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,
         queued: message.queued,
+        images: message.images,
       ),
     );
   }

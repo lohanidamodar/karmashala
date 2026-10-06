@@ -19,6 +19,7 @@ import 'chat_cards/plan_update_card.dart';
 import 'tool_activity_row.dart';
 import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
+import 'transcript_image_preview.dart';
 import 'turn_changed_files.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
@@ -51,6 +52,7 @@ class ChatMessage {
     this.agentId,
     this.detail,
     this.queued = false,
+    this.images = const [],
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -85,6 +87,10 @@ class ChatMessage {
   /// A `user` row the person sent while the agent was still working.
   final bool queued;
 
+  /// Images the person pasted into a `user` row, as paths on the session's
+  /// machine.
+  final List<String> images;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -100,11 +106,21 @@ class ChatMessage {
           other.thinking == thinking &&
           other.detail == detail &&
           other.queued == queued &&
+          _samePaths(other.images, images) &&
           _sameTool(other.tool, tool) &&
           other.text == text;
 
   @override
   int get hashCode => Object.hash(role, text, thinking, at, tool?.name);
+}
+
+bool _samePaths(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// [ToolActivity] has no equality of its own; these are every field it draws.

@@ -14,6 +14,8 @@ import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
 import 'package:karmashala_host/src/acp/acp_version_probe.dart';
 import 'package:karmashala_host/src/acp/codex/codex_app_server_bridge.dart';
+import 'package:karmashala_host/src/sessions/session_message_transcripts.dart'
+    show SessionMessageTranscriptSource;
 import 'package:karmashala_host_protocol/protocol.dart' show SessionExited;
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -908,4 +910,121 @@ void main() {
       await runtime.stop();
     },
   );
+
+  group("what is no one's turn is said in the chat, as a terminal session "
+      'says it', () {
+    List<(String, String)> said() => [
+      for (final row in rows())
+        if (SessionMessageTranscriptSource.project(row) case final m
+            when m.role == 'error' || m.role == 'notice')
+          (m.role, m.text),
+    ];
+
+    test('a failed turn is an error row with its words', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end(
+          'failed',
+          error: {
+            'message': 'stream disconnected before completion',
+            'codexErrorInfo': null,
+          },
+        ),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('Go');
+      await runtime.awaitTurn();
+      expect(said(), [('error', 'stream disconnected before completion')]);
+      await runtime.stop();
+    });
+
+    test('a usage limit is an error row too', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end(
+          'failed',
+          error: {
+            'message': "You've hit your usage limit.",
+            'codexErrorInfo': 'usageLimitExceeded',
+          },
+        ),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('More');
+      await runtime.awaitTurn();
+      expect(said(), [('error', "You've hit your usage limit.")]);
+      await runtime.stop();
+    });
+
+    test('an interrupted turn is a note', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async {
+          await turn.interrupted.future;
+          turn.end('interrupted');
+        },
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('Take your time');
+      await pump(40);
+      runtime.cancel();
+      await runtime.awaitTurn();
+      expect(said(), [('notice', 'Interrupted by you')]);
+      await runtime.stop();
+    });
+
+    test('a compaction is a note', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async {
+          turn.started({'type': 'contextCompaction', 'id': 'cmp-1'});
+          turn.completed({'type': 'contextCompaction', 'id': 'cmp-1'});
+          turn.end('completed');
+        },
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/compact');
+      await runtime.awaitTurn();
+      expect(said(), [('notice', 'Codex compacted its context')]);
+      await runtime.stop();
+    });
+
+    test('a review is said as Codex says it, its findings kept', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async {
+          final entered = {
+            'type': 'enteredReviewMode',
+            'id': 'rv-1',
+            'review': 'current changes',
+          };
+          turn.started(entered);
+          turn.completed(entered);
+          final exited = {
+            'type': 'exitedReviewMode',
+            'id': 'rv-2',
+            'review': 'No issues found in the diff.',
+          };
+          turn.started(exited);
+          turn.completed(exited);
+          turn.end('completed');
+        },
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/review');
+      await runtime.awaitTurn();
+      final shown = [
+        for (final row in rows())
+          if (SessionMessageTranscriptSource.project(row) case final m
+              when m.role != 'user')
+            (m.role, m.text),
+      ];
+      expect(shown, [
+        ('notice', 'Code review started: current changes'),
+        ('notice', 'Code review finished'),
+        ('agent', 'No issues found in the diff.'),
+      ]);
+      await runtime.stop();
+    });
+  });
 }

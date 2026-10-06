@@ -9,10 +9,14 @@ library;
 
 import '../domain/file_edit.dart';
 
-/// Claude Code's file-writing tools. `NotebookEdit` is deliberately absent: its
-/// input addresses a cell, not a line range, and rendering it as a text diff
-/// would be a guess.
-const Set<String> kClaudeFileEditTools = {'Edit', 'Write', 'MultiEdit'};
+/// Claude Code's file-writing tools. A `NotebookEdit` is a diff of one cell:
+/// its result carries the cell's `old_source` (2.1.287) beside `new_source`.
+const Set<String> kClaudeFileEditTools = {
+  'Edit',
+  'Write',
+  'MultiEdit',
+  'NotebookEdit',
+};
 
 /// Every file edit on one line of a Claude Code (or Antigravity) transcript.
 List<FileEditRecord> claudeFileEdits(Map<String, Object?> json) {
@@ -45,6 +49,7 @@ List<FileEditRecord> claudeFileEdits(Map<String, Object?> json) {
 /// still be showable.
 List<FileEditRecord> claudeToolInputEdits(String name, Object? input) {
   if (input is! Map) return const [];
+  if (name == 'NotebookEdit') return [?_notebookEdit(input)];
   final path = input['file_path'];
   if (path is! String || path.isEmpty) return const [];
 
@@ -154,6 +159,10 @@ FileEditRecord? claudeResultEdit(Object? toolUseResult) =>
 /// One edit out of a Claude `toolUseResult`, or null when the result is not a
 /// file write (a Bash result, a Read, …).
 FileEditRecord? _claudeResultEdit(Map<Object?, Object?> result) {
+  if (result.containsKey('notebook_path') && result.containsKey('new_source')) {
+    final error = result['error'];
+    return error is String && error.isNotEmpty ? null : _notebookEdit(result);
+  }
   final path = result['filePath'];
   if (path is! String || path.isEmpty) return null;
 
@@ -185,6 +194,24 @@ FileEditRecord? _claudeResultEdit(Map<Object?, Object?> result) {
     toolName: result['content'] != null ? 'Write' : 'Edit',
     oldText: oldText,
     newText: newText,
+  );
+}
+
+/// One notebook cell's change, from a `NotebookEdit` call's input or its
+/// result. Only the result knows a replaced or deleted cell's old source, so
+/// the call's own record is replaced by it once it lands.
+FileEditRecord? _notebookEdit(Map<Object?, Object?> fields) {
+  final path = fields['notebook_path'];
+  if (path is! String || path.isEmpty) return null;
+  final mode = fields['edit_mode'] ?? 'replace';
+  final old = fields['old_source'];
+  final source = fields['new_source'];
+  return FileEditRecord(
+    path: path,
+    kind: FileEditKind.modified,
+    toolName: 'NotebookEdit',
+    oldText: mode == 'insert' ? '' : (old is String ? old : null),
+    newText: mode == 'delete' ? '' : (source is String ? source : null),
   );
 }
 

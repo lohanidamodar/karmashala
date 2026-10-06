@@ -11,6 +11,11 @@ abstract final class AcpExtensions {
   /// turn no prompt asked for, such as a background task's report.
   static const agentTurn = '_karmashala/agent_turn';
 
+  /// A note for the conversation that is no one's turn (`text`), with
+  /// `role: error` when it says something failed: a hook's
+  /// failure or message, a turn that failed or was interrupted.
+  static const notice = '_karmashala/notice';
+
   /// The `messageId` of the row a compaction writes, followed by
   /// `:<trigger>` when there is one.
   static const compactionMessageId = '_karmashala/compaction';

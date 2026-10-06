@@ -415,6 +415,82 @@ void main() {
       },
     );
 
+    test('redacted thinking is only a marker on the reply', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.emit({
+              'type': 'assistant',
+              'message': {
+                'id': 'msg_r',
+                'role': 'assistant',
+                'content': [
+                  {'type': 'redacted_thinking', 'data': 'ZW5jcnlwdGVk'},
+                  {'type': 'text', 'text': 'Done.'},
+                ],
+              },
+              'parent_tool_use_id': null,
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final reply = rows().singleWhere(
+        (r) => r.role == SessionMessageRole.agent && r.text.isNotEmpty,
+      );
+      expect(reply.text, 'Done.');
+      expect(reply.thinking, 'Thinking (redacted)');
+      await rt.stop();
+    });
+
+    test("a NotebookEdit's row is a diff of the cell it changed", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('nb', 'NotebookEdit', {
+              'notebook_path': '/w/explore.ipynb',
+              'cell_id': 'c2',
+              'new_source': 'x = 2',
+              'edit_mode': 'replace',
+            });
+            c.toolResult(
+              'nb',
+              'Updated cell c2 with x = 2',
+              toolUseResult: {
+                'new_source': 'x = 2',
+                'old_source': 'x = 1',
+                'cell_id': 'c2',
+                'cell_type': 'code',
+                'language': 'python',
+                'edit_mode': 'replace',
+                'error': '',
+                'notebook_path': '/w/explore.ipynb',
+              },
+            );
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine, risk: PermissionRisk.bypass);
+      await rt.start();
+      await rt.send('Edit the notebook');
+      await rt.awaitTurn();
+      final call = tools().single;
+      expect(call['content'], [
+        {
+          'type': 'diff',
+          'path': '/w/explore.ipynb',
+          'oldText': 'x = 1',
+          'newText': 'x = 2',
+        },
+      ]);
+      await rt.stop();
+    });
+
     test('TodoWrite, and the TaskCreate/TaskUpdate tools that replaced it, '
         'become the plan rather than tool rows', () async {
       final machine = FakeClaudeMachine(
@@ -687,6 +763,80 @@ void main() {
       expect(boundary.compaction!.trigger, 'manual');
       expect(boundary.text, contains('Summary: bananas.'));
       expect(projected.any((m) => m.text.contains('local-command')), isFalse);
+      await rt.stop();
+    });
+
+    test("a hook's failure, block or message is a note, as a terminal session "
+        'shows it; a quiet success is not', () async {
+      Json hook(String name, Json fields) => {
+        'hook_id': 'h-$name',
+        'hook_name': name,
+        'hook_event': name.split(':').first,
+        'stdout': '',
+        'stderr': '',
+        'output': '',
+        ...fields,
+      };
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.system('hook_started', hook('PreToolUse:Bash', {}));
+            c.system(
+              'hook_response',
+              hook('PreToolUse:Bash', {'exit_code': 0, 'outcome': 'success'}),
+            );
+            c.system(
+              'hook_response',
+              hook('PreToolUse:Edit', {
+                'stderr': 'edits to that path are blocked',
+                'exit_code': 2,
+                'outcome': 'error',
+              }),
+            );
+            c.system(
+              'hook_response',
+              hook('PostToolUse:Bash', {
+                'stderr': 'lint script not found',
+                'exit_code': 1,
+                'outcome': 'error',
+              }),
+            );
+            c.system(
+              'hook_response',
+              hook('SessionStart', {
+                'stdout': '{"systemMessage":"Loaded the project notes"}',
+                'exit_code': 0,
+                'outcome': 'success',
+              }),
+            );
+            c.system(
+              'hook_response',
+              hook('Stop', {
+                'stdout': '{"continue":false,"stopReason":"Tests are red"}',
+                'exit_code': 0,
+                'outcome': 'success',
+              }),
+            );
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final notes = [
+        for (final row in rows())
+          if (SessionMessageTranscriptSource.project(row) case final m
+              when m.role == 'notice')
+            m.text,
+      ];
+      expect(notes, [
+        'PreToolUse:Edit hook blocked it: edits to that path are blocked',
+        'PostToolUse:Bash hook failed: lint script not found',
+        'SessionStart hook: Loaded the project notes',
+        'Stop hook stopped the agent: Tests are red',
+      ]);
       await rt.stop();
     });
 

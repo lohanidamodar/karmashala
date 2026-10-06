@@ -266,4 +266,29 @@ void main() {
     ];
     expect(live, ['a1', 'a3']);
   });
+
+  test('a background launch whose subagent is on disk keeps its run, its '
+      'pending id and its subagent together', () async {
+    writeParent([
+      agentCall('toolu_1', 'Audit the reader'),
+      launched('toolu_1', 'a0123456789abcdef', 'Audit the reader'),
+    ]);
+    final subagents = Directory('${root.path}/s1/subagents')
+      ..createSync(recursive: true);
+    File('${subagents.path}/agent-a0123456789abcdef.meta.json')
+        .writeAsStringSync(
+          '{"toolUseId":"toolu_1","agentType":"general-purpose",'
+          '"description":"Audit the reader","spawnDepth":1}',
+        );
+    File('${subagents.path}/agent-a0123456789abcdef.jsonl').writeAsStringSync(
+      '{"type":"user","message":{"role":"user","content":"Audit it"}}',
+    );
+
+    final row = agentRow(await read());
+
+    expect(row.subagent?.toolUseId, 'toolu_1');
+    expect(row.pendingBackgroundAgentId, 'a0123456789abcdef');
+    expect(row.background?.id, 'a0123456789abcdef');
+    expect(row.background?.state.isRunning, isTrue);
+  });
 }

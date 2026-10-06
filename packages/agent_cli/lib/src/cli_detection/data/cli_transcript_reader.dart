@@ -77,6 +77,10 @@ const String kAgentSwitchRole = 'agentSwitch';
 /// it: what a hook said, an error, a compaction. Drawn as a small note.
 const String kTranscriptNoticeRole = 'notice';
 
+/// The thinking a row carries for reasoning the model sent encrypted
+/// (`redacted_thinking`): there is nothing to read, only that it thought.
+const String kRedactedThinking = 'Thinking (redacted)';
+
 /// The role of a command the person ran in the CLI itself — a slash command,
 /// a `!` shell line — with what it printed as its tool's output.
 const String kTranscriptCommandRole = 'command';
@@ -98,6 +102,7 @@ class TranscriptMessage {
     this.agentInstallationId,
     this.queued = false,
     this.parentToolUseId,
+    this.images = const [],
   });
 
   /// `user`, `agent`, or `tool`.
@@ -178,6 +183,10 @@ class TranscriptMessage {
   /// drawn on that call, not at the top level.
   final String? parentToolUseId;
 
+  /// Images the person pasted into this `user` row, as files in the
+  /// tool-image cache (or wherever the prompt's own were). Empty elsewhere.
+  final List<String> images;
+
   /// This row with [thinking] set.
   TranscriptMessage withThinking(String? value) => TranscriptMessage(
     role: role,
@@ -193,6 +202,25 @@ class TranscriptMessage {
     agentInstallationId: agentInstallationId,
     queued: queued,
     parentToolUseId: parentToolUseId,
+    images: images,
+  );
+
+  /// This row with [tool] replaced, and the text that summarises it.
+  TranscriptMessage withTool(ToolActivity value) => TranscriptMessage(
+    role: role,
+    text: value.summary,
+    tool: value,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+    images: images,
   );
 
   /// This row with [agentInstallationId] set.
@@ -210,6 +238,25 @@ class TranscriptMessage {
     agentInstallationId: installationId,
     queued: queued,
     parentToolUseId: parentToolUseId,
+    images: images,
+  );
+
+  /// This row with [images] set.
+  TranscriptMessage withImages(List<String> value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+    images: value,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -229,6 +276,7 @@ class TranscriptMessage {
     'agentInstallationId': ?agentInstallationId,
     if (queued) 'queued': true,
     'parentToolUseId': ?parentToolUseId,
+    if (images.isNotEmpty) 'images': images,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -272,6 +320,11 @@ class TranscriptMessage {
       agentInstallationId: string('agentInstallationId'),
       queued: json['queued'] == true,
       parentToolUseId: string('parentToolUseId'),
+      images: [
+        if (json['images'] case final List<Object?> list)
+          for (final path in list)
+            if (path is String) path,
+      ],
     );
   }
 }
@@ -427,10 +480,12 @@ class _TranscriptParse {
   // line of its own: spent on that row.
   String? pendingThinking;
   _CodexCalls codex = _CodexCalls();
+  ClaudeCodeTaskLedger taskPlan = ClaudeCodeTaskLedger();
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
     ..codex = codex.copy()
+    ..taskPlan = taskPlan.copy()
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -495,6 +550,7 @@ class _TranscriptParse {
         background,
         acrossBoundary,
         runs,
+        taskPlan,
         at,
       );
       final boundary = pendingCompaction;
@@ -558,7 +614,9 @@ String? _reasoningOf(Map<String, dynamic> json, TranscriptDialect dialect) {
           if (block is Map &&
               block['type'] == 'thinking' &&
               block['thinking'] is String)
-            block['thinking'] as String,
+            block['thinking'] as String
+          else if (block is Map && block['type'] == 'redacted_thinking')
+            kRedactedThinking,
     ];
   } else {
     return null;
@@ -581,6 +639,7 @@ TranscriptMessage _withCompaction(
   pendingBackgroundAgentId: row.pendingBackgroundAgentId,
   thinking: row.thinking,
   compaction: boundary,
+  images: row.images,
 );
 
 /// Marks the calls whose background subagents nothing has reported finished.
@@ -857,6 +916,7 @@ void _parseClaudeLine(
   Map<String, int> background,
   Map<String, int> acrossBoundary,
   _BackgroundRuns runs,
+  ClaudeCodeTaskLedger taskPlan,
   DateTime? at,
 ) {
   final type = json['type'];
@@ -943,6 +1003,8 @@ void _parseClaudeLine(
     return;
   }
   if (content is! List) return;
+  final first = out.length;
+  final pasted = <String>[];
   for (final part in content) {
     if (part is String) {
       if (!meta) _add(out, role, said(part), at);
@@ -954,6 +1016,8 @@ void _parseClaudeLine(
           } else {
             _foldSkillBody(part['text'], out);
           }
+        case 'image' when role == 'user' && !meta:
+          if (_claudeResultImage([part]) case final path?) pasted.add(path);
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -963,6 +1027,7 @@ void _parseClaudeLine(
               pending[id] = out.length;
               if (isSubagentToolName(name)) tasks[id] = out.length;
               runs.called(id, part['input'], name: name);
+              taskPlan.called(id, name, part['input']);
             }
             out.add(
               TranscriptMessage(
@@ -998,12 +1063,37 @@ void _parseClaudeLine(
             answers: answersIn(json['toolUseResult']),
             image: () => _claudeResultImage(part['content']),
           );
+          final plan = taskPlan.answered(
+            id,
+            json['toolUseResult'],
+            isError: isError,
+          );
+          if (plan != null && row != null && row < out.length) {
+            if (out[row].tool case final tool?) {
+              out[row] = out[row].withTool(tool.withPlan(plan));
+            }
+          }
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
           if (row != null) runs.launched(id, json['toolUseResult'], row);
           runs.answered(id, json['toolUseResult'], isError: isError, at: at);
       }
     }
+  }
+  _addPasted(out, first, pasted);
+}
+
+/// Hangs [pasted] on the person's row the line made after [first]. A line of
+/// images alone joins the row just before it when that is theirs: it never
+/// makes a row, so the poll's rows are the same with images or without.
+void _addPasted(List<TranscriptMessage> out, int first, List<String> pasted) {
+  if (pasted.isEmpty) return;
+  final from = first == out.length && first > 0 ? first - 1 : first;
+  for (var i = out.length - 1; i >= from; i--) {
+    final row = out[i];
+    if (row.role != 'user') continue;
+    out[i] = row.withImages([...row.images, ...pasted]);
+    return;
   }
 }
 
@@ -1638,15 +1728,26 @@ void _parseCodexMessage(
     return;
   }
   if (content is! List) return;
+  final first = out.length;
+  final pasted = <String>[];
   for (final block in content) {
     if (block is! Map) continue;
     final t = block['type'];
-    if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
-        !skipped(block['text'])) {
+    if (t == 'input_image' && role == 'user') {
+      if (spillToolImageUrl(block['image_url']) case final path?) {
+        pasted.add(path);
+      }
+    } else if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
+        !skipped(block['text']) &&
+        !(role == 'user' && _codexImageTag.hasMatch('${block['text']}'))) {
       _add(out, role, block['text'], at);
     }
   }
+  _addPasted(out, first, pasted);
 }
+
+/// The tags Codex wraps a pasted image in: `<image name=… path=…>`, `</image>`.
+final RegExp _codexImageTag = RegExp(r'^\s*(<image\b[^>]*>|</image>)\s*$');
 
 /// The identifying line of a Codex call.
 ///

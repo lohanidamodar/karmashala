@@ -100,6 +100,29 @@ void main() {
   );
 
   group('projection', () {
+    test("a prompt's attached images are its row's images, not its words", () {
+      final user = SessionMessageTranscriptSource.project(
+        dao.append(
+          row(
+            'u',
+            role: SessionMessageRole.user,
+            text:
+                'Why is the button cut off?\n\nAttached image(s):\n'
+                '/data/attachments/one.png\n/data/attachments/two.jpg',
+          ),
+        ),
+      );
+      expect(user.text, 'Why is the button cut off?');
+      expect(user.images, [
+        '/data/attachments/one.png',
+        '/data/attachments/two.jpg',
+      ]);
+      final agent = SessionMessageTranscriptSource.project(
+        dao.append(row('a', text: 'Attached image(s):\n/x.png')),
+      );
+      expect(agent.images, isEmpty, reason: 'only the person attaches');
+    });
+
     test('roles, text, thinking and time come through', () {
       final user = SessionMessageTranscriptSource.project(
         dao.append(row('u', role: SessionMessageRole.user, text: 'hi')),

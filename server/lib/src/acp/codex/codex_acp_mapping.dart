@@ -196,6 +196,27 @@ String _embedded(Object? resource) {
   return text is String ? '$uri\n```\n$text\n```' : '$uri';
 }
 
+/// The note a Codex item stands for in the chat, in the words a terminal
+/// session or Codex's own TUI uses, or null for an item that is not one.
+String? codexItemNotice(JsonMap item) => switch (item['type']) {
+  'contextCompaction' => 'Codex compacted its context',
+  'enteredReviewMode' => switch (item['review']) {
+    final String hint when hint.trim().isNotEmpty =>
+      'Code review started: ${hint.trim()}',
+    _ => 'Code review started',
+  },
+  'exitedReviewMode' => 'Code review finished',
+  _ => null,
+};
+
+/// What a review found, which Codex hands over only on the item that ends it.
+String? codexReviewFindings(JsonMap item) => switch (item) {
+  {'type': 'exitedReviewMode', 'review': final String review}
+      when review.trim().isNotEmpty =>
+    review,
+  _ => null,
+};
+
 /// The ACP tool call fields for a Codex item, or null for an item that is
 /// not a tool (messages, reasoning, compaction). Codex's own fields ride in
 /// `_meta.codex`.

@@ -400,4 +400,96 @@ void main() {
     expect(plain.containsKey('edits'), isFalse);
     expect(plain.containsKey('kind'), isFalse);
   });
+
+  group('Claude Code NotebookEdit', () {
+    Map<String, Object?> answered(Map<String, Object?> result) => {
+      'type': 'user',
+      'timestamp': '2026-10-04T10:00:01.000Z',
+      'message': {
+        'role': 'user',
+        'content': [
+          {
+            'type': 'tool_result',
+            'tool_use_id': 'toolu_1',
+            'content': 'Updated cell c2 with x = 2',
+          },
+        ],
+      },
+      'toolUseResult': result,
+    };
+
+    test(
+      'a replaced cell is a diff of the cell, read off the result',
+      () async {
+        final path = await write('notebook.jsonl', [
+          claudeCall('NotebookEdit', {
+            'notebook_path': '/src/explore.ipynb',
+            'cell_id': 'c2',
+            'new_source': 'x = 2\nprint(x)',
+            'edit_mode': 'replace',
+          }),
+          answered({
+            'new_source': 'x = 2\nprint(x)',
+            'old_source': 'x = 1\nprint(x)',
+            'cell_id': 'c2',
+            'cell_type': 'code',
+            'language': 'python',
+            'edit_mode': 'replace',
+            'error': '',
+            'notebook_path': '/src/explore.ipynb',
+            'original_file': '{}',
+            'updated_file': '{}',
+          }),
+        ]);
+
+        final tool = (await readCliTranscript(
+          path,
+          AgentIds.claudeCode,
+        )).single.tool!;
+        final edit = tool.edits.single;
+        expect(edit.path, '/src/explore.ipynb');
+        expect(edit.toolName, 'NotebookEdit');
+        expect(edit.oldText, 'x = 1\nprint(x)');
+        expect(edit.newText, 'x = 2\nprint(x)');
+        expect(edit.isFragment, isTrue, reason: 'a cell, not the whole file');
+      },
+    );
+
+    test('an inserted cell is all new; a deleted one all gone', () async {
+      Future<FileEditRecord> edit(
+        String mode,
+        Map<String, Object?> result,
+      ) async {
+        final path = await write('notebook-$mode.jsonl', [
+          claudeCall('NotebookEdit', {
+            'notebook_path': '/src/explore.ipynb',
+            'new_source': 'y = 3',
+            'edit_mode': mode,
+          }),
+          answered({
+            'notebook_path': '/src/explore.ipynb',
+            'edit_mode': mode,
+            'cell_type': 'code',
+            'language': 'python',
+            'error': '',
+            ...result,
+          }),
+        ]);
+        return (await readCliTranscript(
+          path,
+          AgentIds.claudeCode,
+        )).single.tool!.edits.single;
+      }
+
+      final inserted = await edit('insert', {'new_source': 'y = 3'});
+      expect(inserted.oldText ?? '', isEmpty);
+      expect(inserted.newText, 'y = 3');
+      final deleted = await edit('delete', {
+        'new_source': '',
+        'old_source': 'z = 4',
+      });
+      expect(deleted.oldText, 'z = 4');
+      expect(deleted.newText ?? '', isEmpty);
+    });
+  });
 }

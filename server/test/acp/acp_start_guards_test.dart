@@ -25,13 +25,37 @@ void main() {
   AgentInstallation installation(
     String path, {
     List<String> leading = const [],
+    String? version,
   }) => AgentInstallation(
     id: 'i1',
     agentId: 'gemini-cli',
     executable: EnvironmentPath(environmentId: 'wsl:arch', path: path),
     createdAt: t0,
+    version: version,
     leadingArguments: leading,
   );
+
+  test('an argument declared from a version is passed only to that version '
+      'or later', () {
+    const spec = AcpLaunchSpec(
+      arguments: ['-p'],
+      versionedArguments: [
+        AcpVersionedArgument(
+          since: '2.1.0',
+          arguments: ['--new-flag'],
+          evidence: 'read off --help of 2.1.0',
+        ),
+      ],
+    );
+    List<String> argv(String? version) => acpArgumentsFor(
+      installation('/bin/agent', version: version),
+      spec,
+      linux: false,
+    );
+    expect(argv('2.1.0 (Agent)'), ['-p', '--new-flag']);
+    expect(argv('2.0.9'), ['-p']);
+    expect(argv(null), ['-p']);
+  });
 
   group('acpArgumentsFor', () {
     const spec = AcpLaunchSpec(

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agent_cli/stream.dart'
     show
         claudeLoadedToolsText,
@@ -93,6 +95,26 @@ abstract final class ClaudeTools {
     };
   }
 
+  /// A NotebookEdit's diff of the cell it changed, from its result: only the
+  /// result knows the cell's `old_source`. Null for every other tool.
+  static List<JsonMap>? resultDiffs(String name, Object? toolUseResult) {
+    if (name != 'NotebookEdit') return null;
+    final result = jsonObject(toolUseResult);
+    final path = result?['notebook_path'];
+    if (result == null || path is! String || path.isEmpty) return null;
+    final mode = result['edit_mode'];
+    final old = result['old_source'];
+    final source = result['new_source'];
+    return [
+      {
+        'type': 'diff',
+        'path': path,
+        'oldText': mode == 'insert' ? '' : (old is String ? old : ''),
+        'newText': mode == 'delete' ? '' : (source is String ? source : ''),
+      },
+    ];
+  }
+
   /// A tool result's `content` as text: a string, or its blocks' words, the
   /// tools it loaded named on one line. An image is no words: see [images].
   static String resultText(Object? content) => switch (content) {
@@ -148,6 +170,44 @@ abstract final class ClaudeTools {
     'in_progress' => 'in_progress',
     _ => 'pending',
   };
+
+  /// What a `system/hook_response` says, in the words a terminal session's
+  /// hook note uses, or null for a run with nothing to tell: a success with no
+  /// message, or a cancellation. Exit 2 is Claude Code's blocking exit.
+  static String? hookNote(JsonMap message) {
+    final name = message['hook_name'];
+    if (name is! String || name.isEmpty) return null;
+    String? said(Object? value) =>
+        value is String && value.trim().isNotEmpty ? value.trim() : null;
+    final stdout = said(message['stdout']);
+    final stderr = said(message['stderr']);
+    if (message['outcome'] == 'error') {
+      if (message['exit_code'] == 2) {
+        final reason = stderr ?? stdout;
+        return '$name hook blocked it${reason == null ? '' : ': $reason'}';
+      }
+      return '$name hook failed: '
+          '${stderr ?? stdout ?? 'exit ${message['exit_code']}'}';
+    }
+    if (message['outcome'] != 'success' || stdout == null) return null;
+    final Object? decoded;
+    try {
+      decoded = stdout.startsWith('{') ? jsonDecode(stdout) : null;
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    if (decoded['continue'] == false) {
+      final reason = said(decoded['stopReason']);
+      return '$name hook stopped the agent${reason == null ? '' : ': $reason'}';
+    }
+    if (decoded['decision'] == 'block') {
+      final reason = said(decoded['reason']);
+      return '$name hook blocked it${reason == null ? '' : ': $reason'}';
+    }
+    final shown = said(decoded['systemMessage']);
+    return shown == null ? null : '$name hook: $shown';
+  }
 
   static String? _firstLine(String? text) {
     if (text == null) return null;

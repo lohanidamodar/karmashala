@@ -316,4 +316,130 @@ void main() {
     expect(plan.doneCount, 1);
     expect(plan.isFinished, isFalse);
   });
+
+  group("Claude Code's TaskCreate and TaskUpdate", () {
+    Map<String, Object?> call(
+      String id,
+      String name,
+      Object input,
+      String at,
+    ) => {
+      'type': 'assistant',
+      'timestamp': at,
+      'message': {
+        'content': [
+          {'type': 'tool_use', 'id': id, 'name': name, 'input': input},
+        ],
+      },
+    };
+    Map<String, Object?> answer(
+      String id,
+      String text,
+      Object? result,
+      String at, {
+      bool isError = false,
+    }) => {
+      'type': 'user',
+      'timestamp': at,
+      'message': {
+        'content': [
+          {
+            'type': 'tool_result',
+            'tool_use_id': id,
+            'content': text,
+            if (isError) 'is_error': true,
+          },
+        ],
+      },
+      'toolUseResult': result,
+    };
+    Map<String, Object?> create(String id, String task, String subject) => call(
+      id,
+      'TaskCreate',
+      {'subject': subject, 'description': 'Why $subject'},
+      '2026-10-06T10:00:00.000Z',
+    );
+    Map<String, Object?> created(String id, String task, String subject) =>
+        answer(id, 'Task #$task created successfully: $subject', {
+          'task': {'id': task, 'subject': subject},
+        }, '2026-10-06T10:00:01.000Z');
+    Map<String, Object?> update(String id, String task, String status) => call(
+      id,
+      'TaskUpdate',
+      {'taskId': task, 'status': status},
+      '2026-10-06T10:01:00.000Z',
+    );
+    Map<String, Object?> updated(String id, String task) =>
+        answer(id, 'Updated task #$task status', {
+          'success': true,
+          'taskId': task,
+          'updatedFields': ['status'],
+        }, '2026-10-06T10:01:01.000Z');
+
+    test('the tasks are the plan, each call carrying it as it stood', () async {
+      final path = await write('claude-tasks.jsonl', [
+        create('k1', '1', 'Read the reader'),
+        created('k1', '1', 'Read the reader'),
+        create('k2', '2', 'Fold the tasks'),
+        created('k2', '2', 'Fold the tasks'),
+        update('k3', '1', 'in_progress'),
+        updated('k3', '1'),
+        update('k4', '1', 'completed'),
+        updated('k4', '1'),
+      ]);
+
+      final plans = [
+        for (final m in await readCliTranscript(path, AgentIds.claudeCode))
+          ?m.tool?.plan,
+      ];
+      expect(plans, hasLength(4));
+      expect(plans.first.items.map((i) => i.text), ['Read the reader']);
+      expect(plans[1].items.map((i) => (i.text, i.state)), [
+        ('Read the reader', AgentPlanItemState.pending),
+        ('Fold the tasks', AgentPlanItemState.pending),
+      ]);
+      expect(plans[2].current?.text, 'Read the reader');
+      expect(plans.last.doneCount, 1);
+      expect(plans.last.total, 2);
+    });
+
+    test(
+      'a deleted task leaves the plan; a failed call changes nothing',
+      () async {
+        final path = await write('claude-tasks-deleted.jsonl', [
+          create('k1', '1', 'Keep'),
+          created('k1', '1', 'Keep'),
+          create('k2', '2', 'Drop'),
+          created('k2', '2', 'Drop'),
+          update('k3', '1', 'completed'),
+          answer(
+            'k3',
+            'Task not found',
+            null,
+            '2026-10-06T10:01:01.000Z',
+            isError: true,
+          ),
+          update('k4', '2', 'deleted'),
+          updated('k4', '2'),
+        ]);
+
+        final messages = await readCliTranscript(path, AgentIds.claudeCode);
+        final failed = messages.firstWhere((m) => m.tool?.isError ?? false);
+        expect(failed.tool!.plan, isNull);
+        final last = messages.lastWhere((m) => m.tool?.plan != null);
+        expect(last.tool!.plan!.items.map((i) => (i.text, i.state)), [
+          ('Keep', AgentPlanItemState.pending),
+        ]);
+      },
+    );
+
+    test('a call still waiting on its answer publishes nothing yet', () async {
+      final path = await write('claude-tasks-open.jsonl', [
+        create('k1', '1', 'Pending'),
+      ]);
+      final row = (await readCliTranscript(path, AgentIds.claudeCode)).single;
+      expect(row.tool!.plan, isNull);
+      expect(row.pendingToolUseId, 'k1');
+    });
+  });
 }
