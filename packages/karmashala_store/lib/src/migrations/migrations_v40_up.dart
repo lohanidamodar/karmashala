@@ -943,7 +943,7 @@ void _migrateToV79(Database db) {
 /// signature rule, the model, the worktree choice and the hourly limit — and
 /// the log of every call, kept as a hash of the body, never the body. The
 /// signing secrets are not here; they live in the server's vault.
-void _migrateToV80(Database db) {
+void _migrateToV81(Database db) {
   db.execute('ALTER TABLE automations ADD COLUMN webhook_id TEXT;');
   db.execute('ALTER TABLE automations ADD COLUMN webhook_signature INTEGER;');
   db.execute('ALTER TABLE automations ADD COLUMN webhook_model TEXT;');

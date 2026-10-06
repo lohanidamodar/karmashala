@@ -9,11 +9,11 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 80 and the keys stay contiguous', () {
+  test('the head is 81 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 80);
+    expect(db.schemaVersion, 81);
   });
 
   test('v65 creates session_messages with its revision index', () {
