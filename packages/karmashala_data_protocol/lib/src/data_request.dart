@@ -88,6 +88,7 @@ import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import 'session_work_values.dart';
 import 'subagent_values.dart';
 import 'transcript_values.dart';
+import 'activity_values.dart';
 
 part 'requests/subscription_requests.dart';
 part 'requests/sessions_requests.dart';
@@ -119,6 +120,7 @@ part 'requests/session_subagents_requests.dart';
 part 'requests/intents_requests.dart';
 part 'requests/quick_access_requests.dart';
 part 'requests/acp_agent_requests.dart';
+part 'requests/activity_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -325,6 +327,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _intentsRequestFromJson(kind, args) ??
     _quickAccessRequestFromJson(kind, args) ??
     _acpAgentsRequestFromJson(kind, args) ??
+    _activityRequestFromJson(kind, args) ??
     (throw DataRefused.invalid('no data request is called "$kind"'));
 
 /// The answer to a request that changes something and reports nothing more.

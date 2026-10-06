@@ -15,6 +15,7 @@ import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
 import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
+import '../activity/activity_log.dart';
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
@@ -66,6 +67,7 @@ class DataService {
     AgentRegistry agents = AgentRegistry.builtIn,
   }) : _database = database,
        _now = clock ?? _utcNow {
+    activity = ActivityLog(database, clock: _now);
     final filing = FilingLookup(database);
     _notes = NotesHandler(database, filing, _now);
     _todos = TodosHandler(database, filing, _now);
@@ -105,6 +107,9 @@ class DataService {
   }
 
   static DateTime _utcNow() => DateTime.now().toUtc();
+
+  /// The activity log, the timeline's history.
+  late final ActivityLog activity;
 
   final AppDatabase _database;
   final DateTime Function() _now;
@@ -702,6 +707,7 @@ class DataService {
         final ClaudeAccountDelete r => _hosts.deleteClaudeAccount(r, changes),
         final CodexAccountDelete r => _hosts.deleteCodexAccount(r, changes),
         final UsageHistory r => _hosts.usageHistory(r),
+        final ActivityRange r => activity.range(r),
       };
     } on DataRefused {
       rethrow;

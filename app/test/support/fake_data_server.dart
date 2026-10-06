@@ -148,6 +148,9 @@ class FakeDataServer {
 
   final notes = <String, Note>{};
   final todos = <String, Todo>{};
+
+  /// The activity log a range is read from.
+  final activity = <ActivityEntry>[];
   final preferences = <String, String>{};
 
   /// The folders pinned to every file browser.
@@ -418,7 +421,7 @@ class FakeDataServer {
         case TodoChanged(:final todo):
           todos[todo.id] = todo;
         // Not a row: nothing of it is kept.
-        case AcpInstallProgress():
+        case AcpInstallProgress() || ActivityAppended():
           break;
         case TodoRemoved(:final id):
           todos.remove(id);
@@ -830,6 +833,15 @@ class FakeDataServer {
       CodexAccountDelete() ||
       UsageHistory() => _handleHosts(request, changes),
       final AcpAgentsRequest r => _handleAcpAgents(r, changes),
+      final ActivityRange r => ActivityPage(
+        entries: [
+          for (final entry in activity)
+            if (!entry.at.isBefore(r.from) &&
+                entry.at.isBefore(r.to) &&
+                (r.projectIds?.contains(entry.projectId) ?? true))
+              entry,
+        ],
+      ),
       AgentWorkRequest() ||
       FlutterWorkRequest() ||
       BrowserWorkRequest() ||
