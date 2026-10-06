@@ -202,6 +202,8 @@ class SessionActions {
   /// This window's panes showing [ids] — asked before their rows go, since a
   /// shell pane is matched to its session through the row.
   List<String> _viewsOf(Iterable<String> ids) {
+    // No workbench built, no tab to close: reading it would build one.
+    if (!_ref.exists(terminalSessionsControllerProvider)) return const [];
     final panes = _ref.read(paneSessionsProvider);
     return [
       for (final id in ids) ...{...panes.panesOf(id), chatPaneId(id)},
@@ -209,9 +211,10 @@ class SessionActions {
   }
 
   /// A deleted session's tabs and panes have nothing left to show.
-  void _closeViews(List<String> paneIds) => _ref
-      .read(terminalSessionsControllerProvider.notifier)
-      .closePanes(paneIds);
+  void _closeViews(List<String> paneIds) {
+    if (paneIds.isEmpty) return;
+    _ref.read(terminalSessionsControllerProvider.notifier).closePanes(paneIds);
+  }
 
   void _removeImportedRow(ImportedSession session) {
     _ref.read(importedSessionsProvider).delete(session.id);
