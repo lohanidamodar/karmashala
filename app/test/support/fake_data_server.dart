@@ -452,7 +452,7 @@ class FakeDataServer {
         case GitChange():
           // Nothing kept: it says what to read again.
           break;
-        case FilesChange() || TranscriptChanged():
+        case FilesChange() || TranscriptChanged() || ArtifactChange():
           // A watch's news is one link's.
           break;
         case SessionModesChanged(:final sessionId):
@@ -844,6 +844,9 @@ class FakeDataServer {
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
+      ),
+      ArtifactsRequest() => throw const DataRefused.unavailable(
+        'this fake keeps no artifacts',
       ),
       final SessionInputRequest<Object?> r => sessionWork._input(r),
       SessionSetMode() ||

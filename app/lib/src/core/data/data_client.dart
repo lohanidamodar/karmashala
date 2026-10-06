@@ -273,6 +273,13 @@ class DataClient {
   /// to this client alone; a new link watches nothing until asked again.
   Stream<TranscriptChanged> get transcriptChanges => _transcriptChanges.stream;
 
+  final _artifactChanges = StreamController<ArtifactChange>.broadcast(
+    sync: true,
+  );
+
+  /// An artifact shown, revised or found missing, by any session.
+  Stream<ArtifactChange> get artifactChanges => _artifactChanges.stream;
+
   /// The terminals the server runs (slice 5a), as its screens read them,
   /// by session id — greeted whole on subscribe, then kept by each change.
   final terminals = <String, TerminalRecord>{};
@@ -1059,6 +1066,8 @@ class DataClient {
           if (!_fileChanges.isClosed) _fileChanges.add(change);
         case final TranscriptChanged change:
           if (!_transcriptChanges.isClosed) _transcriptChanges.add(change);
+        case final ArtifactChange change:
+          if (!_artifactChanges.isClosed) _artifactChanges.add(change);
         case final SessionModesChanged change:
           sessionModes[change.sessionId] = change;
           if (!_sessionModeChanges.isClosed) _sessionModeChanges.add(change);
@@ -1309,6 +1318,7 @@ class DataClient {
     unawaited(_intents.close());
     unawaited(_fileChanges.close());
     unawaited(_transcriptChanges.close());
+    unawaited(_artifactChanges.close());
     unawaited(_sessionModeChanges.close());
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());

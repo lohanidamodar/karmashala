@@ -13,6 +13,7 @@ import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoiceDao, ExecutionEnvironmentDao;
 
+import 'package:karmashala_files/karmashala_files.dart' show SftpFileSpace;
 import 'package:karmashala_checkpoints/store.dart'
     show
         CheckpointDao,
@@ -62,6 +63,7 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
+import '../artifacts/server_artifacts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
@@ -480,6 +482,16 @@ Future<int> _serve(
     defaultDirectoryOf: ssh.defaultDirectoryOf,
     uploadsDirectory: p.join(dataDirectory, 'uploads'),
   )..attach();
+  // What agents show in their threads: each revision kept here, each source
+  // watched on its own host, every change told to every client.
+  final artifacts = ServerArtifacts.over(
+    database: database,
+    directory: p.join(dataDirectory, 'artifacts'),
+    spaceFor: files.spaceFor,
+    tell: data.announce,
+    isRemote: (id) => files.spaceFor(id) is SftpFileSpace,
+  )..start();
+  data.artifactsWork = artifacts;
   // The variables every terminal this server starts is given (slice 5a):
   // in its own data folder, write-only to every client.
   final envVault = ServerEnvVault(
@@ -1784,6 +1796,7 @@ Future<int> _serve(
   agentWork.stop();
   delivery.stop();
   await git.stop();
+  artifacts.close();
   await files.close();
   await sessionTranscripts.close();
   await sessionRecordReadings.close();

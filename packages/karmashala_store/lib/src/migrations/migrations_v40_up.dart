@@ -895,3 +895,46 @@ void _migrateToV78(Database db) {
     'NOT NULL DEFAULT 1;',
   );
 }
+
+/// What an agent showed in its thread: a session's artifacts, and a snapshot
+/// of each revision so a client reads what was shown even after the source
+/// moves. The source path is the server's to read; a client never gets it.
+void _migrateToV79(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_artifacts (
+      id                    TEXT PRIMARY KEY,
+      session_id            TEXT NOT NULL,
+      title                 TEXT NOT NULL,
+      kind                  TEXT NOT NULL,
+      mode                  TEXT NOT NULL,
+      origin                TEXT NOT NULL,
+      source_environment_id TEXT,
+      source_path           TEXT,
+      file_name             TEXT NOT NULL,
+      revision              INTEGER NOT NULL,
+      size                  INTEGER NOT NULL,
+      mime_type             TEXT NOT NULL,
+      network_allowed       INTEGER NOT NULL DEFAULT 0,
+      source_state          TEXT NOT NULL DEFAULT 'present',
+      source_problem        TEXT,
+      created_at            TEXT NOT NULL,
+      updated_at            TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_artifacts_session '
+    'ON session_artifacts (session_id, created_at);',
+  );
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_artifact_revisions (
+      artifact_id TEXT NOT NULL
+        REFERENCES session_artifacts (id) ON DELETE CASCADE,
+      revision    INTEGER NOT NULL,
+      size        INTEGER NOT NULL,
+      digest      TEXT NOT NULL,
+      path        TEXT NOT NULL,
+      captured_at TEXT NOT NULL,
+      PRIMARY KEY (artifact_id, revision)
+    );
+  ''');
+}

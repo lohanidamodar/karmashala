@@ -37,6 +37,9 @@ dependencies:
   # adopting a session a person started by hand where the shell said nothing.
   karmashala_agent_reporting:
     path: ../packages/karmashala_agent_reporting
+  # What agents show in their threads: the server keeps and watches them.
+  karmashala_artifacts:
+    path: ../packages/karmashala_artifacts
   # The base checkpoint an automation run is undone to.
   karmashala_checkpoints:
     path: ../packages/karmashala_checkpoints

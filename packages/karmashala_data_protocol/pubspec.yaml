@@ -16,6 +16,9 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  # What an agent showed in its thread: the values the artifact requests carry.
+  karmashala_artifacts:
+    path: ../karmashala_artifacts
   # `Note` and `Todo`, the values the notes and todos requests carry.
   karmashala_notes:
     path: ../karmashala_notes
