@@ -39,6 +39,15 @@ class AutomationRunner implements AutomationFiring {
     DateTime scheduledFor, {
     String note = '',
     AutomationRun? queued,
+  }) => start(automation, scheduledFor, note: note, queued: queued);
+
+  /// [fire], answering the run as it was left: running with its session, or
+  /// failed with the reason. A webhook answers its caller from it.
+  Future<AutomationRun> start(
+    Automation automation,
+    DateTime scheduledFor, {
+    String note = '',
+    AutomationRun? queued,
   }) async {
     final now = _now();
     // The row exists before anything can fail; a drained queue entry *is*
@@ -71,7 +80,7 @@ class AutomationRunner implements AutomationFiring {
     final refusal = _preflight.refusalFor(automation);
     if (refusal != null) {
       settle(AutomationRunState.failed, refusal.reason);
-      return;
+      return run;
     }
 
     final repository = _facts.repository(automation.repositoryId);
@@ -82,7 +91,7 @@ class AutomationRunner implements AutomationFiring {
         AutomationRunState.failed,
         'The checkout or the agent went away between the gate and the launch.',
       );
-      return;
+      return run;
     }
 
     String? baseId;
@@ -98,7 +107,7 @@ class AutomationRunner implements AutomationFiring {
         'The working tree could not be recorded before this run, so there '
         'would be nothing to undo it with: $error',
       );
-      return;
+      return run;
     }
     run = run.copyWith(baseCheckpointId: baseId);
     _dao.updateRun(run);
@@ -118,5 +127,6 @@ class AutomationRunner implements AutomationFiring {
         'The session could not be started: $error',
       );
     }
+    return run;
   }
 }

@@ -13,8 +13,8 @@ final RegExp _path = RegExp(r'^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$');
 /// C0 and C1 controls but newline and tab, DEL, and the bidi overrides that
 /// can make quoted text read as something else.
 final RegExp _stripped = RegExp(
-  '[\u0000-\u0008\u000b-\u001f\u007f-\u009f‎‏‪-‮'
-  '⁦-⁩]',
+  '[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u200e\\u200f'
+  '\\u202a-\\u202e\\u2066-\\u2069]',
 );
 
 /// A template asked for a field the payload does not have, or the payload

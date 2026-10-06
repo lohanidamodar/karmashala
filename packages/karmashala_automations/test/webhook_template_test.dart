@@ -94,7 +94,7 @@ void main() {
 
     test('control and bidi characters are stripped', () {
       final prompt = _fill('{{t}}', {
-        't': 'a\u0000b\u0007c\u001bd‮e⁦f\u007fg\u0085h\rk',
+        't': 'a\u0000b\u0007c\u001bd\u202Ee\u2066f\u007fg\u0085h\rk',
       });
       expect(prompt, contains('t = "abcdefghk"'));
     });

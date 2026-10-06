@@ -30,9 +30,10 @@ const String _github = 'x-hub-signature-256';
 const String _generic = 'x-karmashala-signature';
 const String _timestamp = 'x-karmashala-timestamp';
 
-/// Checks [body] against [secret]: GitHub's `X-Hub-Signature-256:
-/// sha256=<hex>` over the raw body, or `X-Karmashala-Signature: sha256=<hex>`
-/// over `<X-Karmashala-Timestamp>.<raw body>` inside the window. [headers]
+/// Checks [body] against [secret]: GitHub's
+/// `X-Hub-Signature-256: sha256=<hex>` over the raw body, or
+/// `X-Karmashala-Signature: sha256=<hex>` over
+/// `<X-Karmashala-Timestamp>.<raw body>` inside the window. [headers]
 /// are lowercase. An empty secret verifies nothing.
 WebhookSignature verifyWebhookSignature({
   required String secret,
