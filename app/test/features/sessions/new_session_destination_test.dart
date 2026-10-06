@@ -1029,10 +1029,13 @@ void main() {
       LogicalKeyboardKey key, {
       bool control = false,
     }) async {
-      if (control)
+      if (control) {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      }
       await tester.sendKeyEvent(key);
-      if (control) await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      if (control) {
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      }
       await tester.pumpAndSettle();
     }
 
@@ -1116,6 +1119,173 @@ void main() {
       await closeAll(tester);
     });
   });
+
+  group('starting again is quicker', () {
+    late _StartingLauncher launcher;
+
+    Future<ProviderContainer> openStarting(
+      WidgetTester tester, {
+      String? selected = 'r1',
+    }) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'cx1',
+          agentId: AgentIds.codex,
+          path: r'C:\npm\codex.cmd',
+        ),
+      );
+      final container = ProviderContainer(
+        parent: containerFor(selected: selected),
+        overrides: [
+          sessionLauncherProvider.overrideWith(
+            (ref) => launcher = _StartingLauncher(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(sessionLauncherProvider);
+      await open(tester, container);
+      return container;
+    }
+
+    Future<void> start(WidgetTester tester) async {
+      await tester.ensureVisible(startButton());
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> reopen(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await open(tester, container);
+    }
+
+    bool promptFocused(WidgetTester tester) => tester
+        .widget<EditableText>(
+          find.descendant(
+            of: find.widgetWithText(TextField, 'First message (optional)'),
+            matching: find.byType(EditableText),
+          ),
+        )
+        .focusNode
+        .hasPrimaryFocus;
+
+    testWidgets('the first message field has focus on open', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1440, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await openStarting(tester);
+      expect(promptFocused(tester), isTrue);
+      await closeAll(tester);
+    });
+
+    testWidgets('but not when focusing it would scroll the project and the '
+        'agents away; the keys still work', (tester) async {
+      await openStarting(tester);
+      expect(promptFocused(tester), isFalse);
+      expect(find.text('Alpha').hitTestable(), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(launcher.requests.single.installation.id, 'cx1');
+      await closeAll(tester);
+    });
+
+    testWidgets('Start shows its shortcut', (tester) async {
+      await openStarting(tester);
+      expect(
+        find.descendant(of: startButton(), matching: find.text('Ctrl+Enter')),
+        findsOneWidget,
+      );
+      await closeAll(tester);
+    });
+
+    testWidgets('Tab reaches the agent cards, and Space picks one', (
+      tester,
+    ) async {
+      await openStarting(tester);
+      final card = find.byKey(const ValueKey('agent-card:cx1'));
+      bool focusInCard() {
+        final focused = FocusManager.instance.primaryFocus?.context;
+        if (focused == null) return false;
+        var inside = false;
+        focused.visitAncestorElements((e) {
+          inside = e.widget.key == const ValueKey('agent-card:cx1');
+          return !inside;
+        });
+        return inside;
+      }
+
+      for (var i = 0; i < 40 && !focusInCard(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+      }
+      expect(focusInCard(), isTrue, reason: 'Tab never reached $card');
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'cx1');
+      await closeAll(tester);
+    });
+
+    testWidgets('a project opens on the agent and form last started there', (
+      tester,
+    ) async {
+      final container = await openStarting(tester);
+      await tester.tap(find.byKey(const ValueKey('agent-card:cx1')));
+      await tester.pumpAndSettle();
+      await start(tester);
+      expect(launcher.requests.single.installation.id, 'cx1');
+
+      await reopen(tester, container);
+      await start(tester);
+      expect(launcher.requests.last.installation.id, 'cx1');
+
+      // Per project: Beta has started nothing, so it has the default.
+      container.read(selectedRepositoryIdProvider.notifier).select('r2');
+      await reopen(tester, container);
+      await start(tester);
+      expect(launcher.requests.last.installation.id, 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('with nothing selected it opens on the last project started '
+        'in', (tester) async {
+      final container = await openStarting(tester, selected: 'r2');
+      await start(tester);
+      container.read(selectedRepositoryIdProvider.notifier).select(null);
+      container.read(selectedProjectIdProvider.notifier).select(null);
+      await reopen(tester, container);
+      expect(find.text('Beta'), findsOneWidget);
+      expect(find.text('Alpha'), findsNothing);
+      await closeAll(tester);
+    });
+  });
+}
+
+/// A launch that succeeds, so the dialog closes as after a real start.
+class _StartingLauncher extends SessionLauncher {
+  _StartingLauncher(super.ref);
+
+  final requests = <SessionLaunchRequest>[];
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async {
+    requests.add(request);
+    return SessionLaunchResult(
+      session: session(
+        id: 'started-${requests.length}',
+        repositoryId: request.repository.id,
+      ),
+    );
+  }
 }
 
 /// A start the server refused because the agent wants a login first.

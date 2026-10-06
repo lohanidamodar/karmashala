@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
+import 'package:karmashala/src/features/sessions/application/new_session_memory.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -95,6 +96,11 @@ void main() {
       started.single.agentInstallationId,
       'a1',
       reason: 'the default agent for the environment it runs in',
+    );
+    expect(
+      NewSessionMemory(server.store).installationFor('p1'),
+      'a1',
+      reason: 'the next start in Alpha, from anywhere, opens on it',
     );
     expect(
       find.text('Work'),

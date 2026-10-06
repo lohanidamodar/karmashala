@@ -12,6 +12,7 @@ import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/acp_session_providers.dart';
+import '../../sessions/application/new_session_memory.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -357,6 +358,9 @@ class ExplorerActions {
           firstMessage: firstMessage,
         ),
       );
+      _ref
+          .read(newSessionMemoryProvider)
+          .remember(projectId: repository.projectId, installationId: agent.id);
       selectNative(launched.session);
       return const ExplorerResult(ExplorerOutcome.started);
     } catch (error) {

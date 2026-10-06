@@ -12,6 +12,7 @@ import '../../../features/git/application/changes_providers.dart';
 import 'package:karmashala_git/worktrees.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
+import '../../../features/sessions/application/new_session_memory.dart';
 import '../../../features/sessions/application/session_defaults.dart';
 import '../../../features/sessions/application/session_handoff_service.dart';
 import '../../../features/sessions/application/session_launcher.dart';
@@ -122,6 +123,9 @@ class TypedCommandRunner {
           firstMessage: command.firstMessage,
         ),
       );
+      _container
+          .read(newSessionMemoryProvider)
+          .remember(projectId: projectId, installationId: installation.id);
       explorer.selectNative(launched.session);
     } on WorktreeCreationCancelled catch (error) {
       say('Cancelled. ${error.cleanup}');

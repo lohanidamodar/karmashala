@@ -9,6 +9,7 @@ import '../../explorer/application/checkout_picker.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
+import '../application/new_session_memory.dart';
 import 'filter_menu_field.dart';
 
 /// Where a session is about to run. **A project is not the unit a session runs
@@ -39,7 +40,8 @@ class SessionDestination {
 }
 
 /// The destination a dialog opens on: **whatever the app is already pointed
-/// at**, else the first project the Explorer would draw, else no project at
+/// at**, else the project a session was last started in, else the first one
+/// the Explorer would draw, else no project at
 /// all — a workspace with nothing in it can still start a session in a
 /// scratch folder. A Scratch project is never a destination of its own:
 /// pointed at one of its folders, the dialog opens on No project.
@@ -56,7 +58,11 @@ final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
       checkout: selected,
     );
   }
-  final project = projects.where((p) => !p.isScratch).firstOrNull;
+  final candidates = projects.where((p) => !p.isScratch);
+  final last = ref.read(newSessionMemoryProvider).lastProjectId;
+  final project =
+      candidates.where((p) => p.id == last).firstOrNull ??
+      candidates.firstOrNull;
   if (project == null) return const SessionDestination.scratch();
   return SessionDestination(
     projectId: project.id,

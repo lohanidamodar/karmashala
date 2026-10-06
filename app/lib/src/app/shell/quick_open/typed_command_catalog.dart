@@ -17,6 +17,7 @@ import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/environments/application/environment_providers.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
+import '../../../features/sessions/application/new_session_memory.dart';
 import '../../../features/sessions/application/session_defaults.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_launcher.dart';
@@ -45,6 +46,7 @@ CommandCatalog readCommandCatalog(
   final statusOf = read(sessionStatusLookupProvider);
   final launcher = read(sessionLauncherProvider);
   final defaults = read(sessionDefaultsProvider);
+  final memory = read(newSessionMemoryProvider);
   final inbox = read(attentionInboxProvider);
   final profiles = read(terminalProfilesProvider);
   final cache = read(quickOpenCacheProvider.notifier);
@@ -204,10 +206,14 @@ CommandCatalog readCommandCatalog(
             registry.adapterFor(i.agentId) != null)
           CommandInstallation(id: i.id, agentId: i.agentId),
     ];
-    final lastUsed = lastUsedInstallation[project.id];
-    final defaultId = installed.any((i) => i.id == lastUsed)
-        ? lastUsed
-        : defaults.forEnvironment(environmentId).installation?.id;
+    // What the dialog opens on: the agent and form last started here, then
+    // the last session's, then the machine's default.
+    final lastUsed = [
+      memory.installationFor(project.id),
+      lastUsedInstallation[project.id],
+    ].where((id) => installed.any((i) => i.id == id)).firstOrNull;
+    final defaultId =
+        lastUsed ?? defaults.forEnvironment(environmentId).installation?.id;
     final firstRepository = workspace.repositoriesOf(project.id).firstOrNull;
     final branches = firstRepository == null
         ? const <String>[]

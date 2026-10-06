@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/sessions/application/new_session_memory.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -245,6 +247,26 @@ void main() {
       expect(explorer.messages, [null]);
       expect(find.byType(QuickOpen), findsNothing);
       expect(find.byType(NewSessionDialog), findsNothing);
+    });
+
+    testWidgets('the default is the agent and form last started in the '
+        'project, as the dialog opens on', (tester) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'a2',
+          agentId: AgentIds.codex,
+          path: r'C:\npm\codex.cmd',
+        ),
+      );
+      NewSessionMemory(
+        server.store,
+      ).remember(projectId: 'p1', installationId: 'a2');
+      await open(tester);
+
+      await type(tester, 'new karma');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a2')]);
     });
 
     testWidgets('text after a colon is the opening message', (tester) async {

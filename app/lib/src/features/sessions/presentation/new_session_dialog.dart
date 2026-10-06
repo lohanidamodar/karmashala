@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,6 +34,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import '../application/new_session_memory.dart';
 import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -195,11 +197,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   List<FoldedInstallations> _cards = const [];
   AgentInstallation? _shownInstallation;
 
+  final _promptFocus = FocusNode(debugLabel: 'First message');
+
   @override
   void initState() {
     super.initState();
     FocusManager.instance.addListener(_keepFocusInDialog);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _keepFocusInDialog());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _keepFocusInDialog();
+      _focusPromptIfInView();
+    });
     if (widget.firstPrompt case final prompt?) _promptController.text = prompt;
     if (widget.title case final title?) _titleController.text = title;
     // Taken once, never overwriting the picker's own choice — but still
@@ -418,6 +425,25 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
   }
 
+  /// The first message is what the person came to type, so it takes focus —
+  /// but only when it is already on screen: focusing it would scroll the
+  /// project and the agents out of view. Never on a phone, whose keyboard
+  /// would cover them.
+  void _focusPromptIfInView() {
+    if (!mounted || opensFullScreen(context)) return;
+    final box = _promptFocus.context?.findRenderObject();
+    if (box == null || !box.attached) return;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    final position = _promptFocus.context == null
+        ? null
+        : Scrollable.maybeOf(_promptFocus.context!)?.position;
+    final inView =
+        viewport == null ||
+        position == null ||
+        viewport.getOffsetToReveal(box, 1.0).offset <= position.pixels;
+    if (inView) _promptFocus.requestFocus();
+  }
+
   /// Focus that fell back to a scope around the dialog — its route's — comes
   /// to [_keys] instead.
   void _keepFocusInDialog() {
@@ -509,6 +535,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   void dispose() {
     FocusManager.instance.removeListener(_keepFocusInDialog);
     _keys.dispose();
+    _promptFocus.dispose();
     _slowStartTimer?.cancel();
     _titleController.dispose();
     _promptController.dispose();
@@ -517,7 +544,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   }
 
   /// The agent the dialog will start: the one picked, while it is still
-  /// installed where the session runs, else that checkout's default.
+  /// installed where the session runs, else the agent and form last started
+  /// in the project, else that checkout's default.
   AgentInstallation? _agentFor(
     Repository? checkout,
     List<AgentInstallation> installations,
@@ -526,6 +554,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final picked = _installation;
     if (picked != null && installations.contains(picked)) return picked;
     if (_samePickedAgent(installations) case final same?) return same;
+    final last = ref
+        .read(newSessionMemoryProvider)
+        .installationFor(checkout.projectId);
+    if (installations.where((i) => i.id == last).firstOrNull case final i?) {
+      return i;
+    }
     // The one definition of "which agent, here" — shared with the `+` button
     // in the Explorer, which runs it without asking.
     return ref
@@ -695,6 +729,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             ),
             externalTerminal: terminal,
           );
+      ref
+          .read(newSessionMemoryProvider)
+          .remember(projectId: repo.projectId, installationId: installation.id);
       // Now — and only now — the app follows, by the rule the Explorer uses
       // when a row is clicked. Only when the project differs: selecting scans.
       if (ref.read(selectedProjectIdProvider) != repo.projectId) {
@@ -1103,6 +1140,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   const SizedBox(height: Insets.md),
                   TextField(
                     controller: _promptController,
+                    focusNode: _promptFocus,
                     minLines: 2,
                     maxLines: 6,
                     decoration: const InputDecoration(
