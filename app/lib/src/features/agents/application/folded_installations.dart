@@ -93,3 +93,15 @@ AgentInstallation inChosenForm(
           .firstOrNull ??
       installation;
 }
+
+/// The agent a session with no project starts on when nobody picks one: the
+/// first of [installations], in the form chosen for it. Null when there is none.
+AgentInstallation? scratchDefaultInstallation(
+  List<AgentInstallation> installations,
+  AgentRegistry registry,
+  Settings settings,
+) {
+  final first = installations.firstOrNull;
+  if (first == null) return null;
+  return inChosenForm(first, installations, registry, settings);
+}

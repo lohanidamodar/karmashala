@@ -1,4 +1,5 @@
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -423,15 +424,18 @@ class _MessageComposerState extends State<MessageComposer> {
     var matches = const <ComposerCommand>[];
     final offered = widget.commands;
     if (typing && !_commandsDismissed && offered != null) {
-      final query = text.substring(1).toLowerCase();
-      final all = offered();
+      final query = text.substring(1);
+      final found = [
+        for (final c in offered())
+          if (searchMatch(query, c.name) case final match?)
+            (command: c, prefix: match.positions.firstOrNull == 0),
+      ];
+      // Names the query starts first, each half in the offered order.
       matches = [
-        for (final c in all)
-          if (c.name.toLowerCase().startsWith(query)) c,
-        for (final c in all)
-          if (!c.name.toLowerCase().startsWith(query) &&
-              c.name.toLowerCase().contains(query))
-            c,
+        for (final f in found)
+          if (f.prefix) f.command,
+        for (final f in found)
+          if (!f.prefix) f.command,
       ];
     }
     if (!mounted || _sameCommands(matches, _commandMatches)) return;
@@ -2089,7 +2093,9 @@ class _CommandPalette extends StatelessWidget {
                 onTap: () => onPicked(command),
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: i == highlighted ? StateLayers.selected(scheme) : null,
+                    color: i == highlighted
+                        ? StateLayers.selected(scheme)
+                        : null,
                     borderRadius: BorderRadius.circular(Radii.sm),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: Insets.sm),

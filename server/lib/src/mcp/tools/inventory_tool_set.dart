@@ -3,6 +3,7 @@ import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
 import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_environments/store.dart';
@@ -83,7 +84,7 @@ class InventoryToolSet extends ServerToolSet {
   ];
 
   List<Map<String, Object?>> _listSessions({String? query, String? cli}) {
-    final needle = query?.trim().toLowerCase();
+    final needle = query ?? '';
     final wantCli = parseCli(cli);
     final repositories = _repositories.getAll()..sort(compareRepositories);
 
@@ -93,9 +94,7 @@ class InventoryToolSet extends ServerToolSet {
     };
 
     bool wanted(List<String> haystack) =>
-        needle == null ||
-        needle.isEmpty ||
-        haystack.join(' ').toLowerCase().contains(needle);
+        matchesSearch(needle, haystack.join(' '));
 
     final sessions = <Map<String, Object?>>[];
     for (final project in _projects.getAll()..sort(compareProjects)) {

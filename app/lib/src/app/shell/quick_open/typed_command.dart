@@ -4,6 +4,8 @@
 /// provider, so every rule is unit-testable without a widget.
 library;
 
+import 'package:karmashala_core/util.dart';
+
 import 'quick_open_item.dart';
 
 /// The verbs. Matched only when typed in full and followed by a space, so a
@@ -48,6 +50,8 @@ class CommandAgent {
     required this.agentId,
     required this.token,
     required this.displayName,
+    this.familyName,
+    this.formLabel = 'Terminal',
   });
 
   final String agentId;
@@ -55,6 +59,15 @@ class CommandAgent {
   /// What is typed: `claude`, `codex`, `antigravity`.
   final String token;
   final String displayName;
+
+  /// The agent whichever form it runs in — `Codex` for Codex's chat form too;
+  /// null is [displayName].
+  final String? familyName;
+
+  String get family => familyName ?? displayName;
+
+  /// `Terminal` or `Chat`.
+  final String formLabel;
 }
 
 /// One agent installed in one environment.
@@ -202,9 +215,14 @@ class CommandCatalog {
     this.agents = const [],
     this.oldestWaiting,
     this.searchConversations,
+    this.scratchInstallation,
   });
 
   final List<CommandProject> projects;
+
+  /// What a session with no project runs on, as the dialog would pick it;
+  /// null when no agent is installed anywhere.
+  final CommandInstallation? scratchInstallation;
 
   /// Native and imported. `stop`, `fork` and `end` take only native ones.
   final List<CommandSession> sessions;
@@ -239,11 +257,22 @@ class StartCommand extends CommandAction {
     required this.projectId,
     required this.installationId,
     this.worktree = false,
+    this.firstMessage,
   });
 
-  final String projectId;
+  /// Null starts it with no project, in a scratch folder on the agent's machine.
+  final String? projectId;
   final String installationId;
   final bool worktree;
+  final String? firstMessage;
+}
+
+/// The New-session dialog, opened on what was typed instead of starting.
+class OpenNewSessionDialogCommand extends CommandAction {
+  const OpenNewSessionDialogCommand({this.projectId, this.firstMessage});
+
+  final String? projectId;
+  final String? firstMessage;
 }
 
 class ResumeCommand extends CommandAction {
@@ -298,10 +327,14 @@ class CommandPlan {
     required this.canonical,
     this.action,
     this.refusal,
+    this.note,
   });
 
   /// One line, before anything runs: `Start Codex in api · WSL archlinux`.
   final String preview;
+
+  /// The line under [preview] when nothing is refused.
+  final String? note;
 
   /// The fully resolved text, for history — the default agent spelled out.
   final String canonical;
@@ -351,6 +384,7 @@ class TypedCommand {
     this.suggestions = const [],
     this.plan,
     this.error,
+    this.launches = const [],
   });
 
   final CommandVerb verb;
@@ -359,6 +393,10 @@ class TypedCommand {
   final CommandArgKind? pending;
   final List<CommandSuggestion> suggestions;
   final CommandPlan? plan;
+
+  /// `start`'s ready-to-run sessions, each Enter away, best first; the last
+  /// opens the dialog instead.
+  final List<CommandPlan> launches;
 
   /// Something typed and committed that cannot be resolved.
   final String? error;
@@ -369,60 +407,11 @@ const int kCommandSuggestionLimit = 12;
 
 // --- scoring ----------------------------------------------------------------
 
-bool _isBoundary(int code) =>
-    code == 0x20 || // space
-    code == 0x2D || // -
-    code == 0x5F || // _
-    code == 0x2F || // /
-    code == 0x5C || // \
-    code == 0x2E || // .
-    code == 0x3A; // :
-
-bool _startsWordAt(String text, int i) {
-  if (i == 0) return true;
-  final previous = text.codeUnitAt(i - 1);
-  if (_isBoundary(previous)) return true;
-  final current = text.codeUnitAt(i);
-  final upper = current >= 0x41 && current <= 0x5A;
-  final lowerBefore = previous >= 0x61 && previous <= 0x7A;
-  return upper && lowerBefore;
-}
-
-/// Realm's argument scorer: a case-insensitive subsequence, +1 a character, +3
-/// at a word start, +2 for a consecutive character, +3 when [query] is a prefix
-/// of the whole [label]. Null when [label] lacks [query]'s characters in order.
-int? commandMatchScore(String query, String label) {
-  if (query.isEmpty) return 0;
-  final needle = query.toLowerCase();
-  final haystack = label.toLowerCase();
-  var score = 0;
-  var from = 0;
-  var previous = -2;
-  for (var q = 0; q < needle.length; q++) {
-    final target = needle.codeUnitAt(q);
-    var found = -1;
-    // A word start or the next character wins over the first occurrence, so
-    // `aw` lands on `appwrite`'s `w` only when nothing better is there.
-    var fallback = -1;
-    for (var i = from; i < haystack.length; i++) {
-      if (haystack.codeUnitAt(i) != target) continue;
-      if (fallback < 0) fallback = i;
-      if (i == previous + 1 || _startsWordAt(label, i)) {
-        found = i;
-        break;
-      }
-    }
-    if (found < 0) found = fallback;
-    if (found < 0) return null;
-    score += 1;
-    if (_startsWordAt(label, found)) score += 3;
-    if (found == previous + 1) score += 2;
-    previous = found;
-    from = found + 1;
-  }
-  if (haystack.startsWith(needle)) score += 3;
-  return score;
-}
+/// The argument scorer: the shared search rule with scattered initials, so
+/// `appwrite_ai` and `aaw` both find `appwrite-ai-workdir`. Null when [label]
+/// does not match.
+int? commandMatchScore(String query, String label) =>
+    searchMatch(query, label, initials: true)?.score.round();
 
 class _Ranked<T> {
   _Ranked(this.item, this.score, this.index, {required this.exact});
@@ -555,11 +544,19 @@ TypedCommand? parseTypedCommand(
   CommandCatalog catalog, {
   int? cursor,
 }) {
-  final input = cursor == null
+  var input = cursor == null
       ? text
       : text.substring(0, cursor.clamp(0, text.length));
   final verb = typedCommandVerbOf(input);
   if (verb == null) return null;
+  // `new api: fix the login bug` — what follows the colon is said first.
+  String? message;
+  final colon = verb == CommandVerb.start ? input.indexOf(':') : -1;
+  if (colon >= 0) {
+    final said = input.substring(colon + 1).trim();
+    message = said.isEmpty ? null : said;
+    input = input.substring(0, colon);
+  }
   final trimmed = input.trimLeft();
   final words = trimmed.split(RegExp(r'\s+'));
   final trailing =
@@ -576,6 +573,7 @@ TypedCommand? parseTypedCommand(
     verbWord: verbWord,
     committed: committed,
     partial: partial,
+    message: message,
   ).parse();
 }
 
@@ -586,10 +584,14 @@ class _Parser {
     required this.verbWord,
     required this.committed,
     required this.partial,
+    this.message,
   });
 
   final CommandCatalog catalog;
   final CommandVerb verb;
+
+  /// `start`'s opening message, typed after a colon.
+  final String? message;
   final String verbWord;
   final List<String> committed;
   final String partial;
@@ -812,6 +814,16 @@ class _Parser {
       words.removeAt(0);
       _written.add('session');
     }
+    // `new appwrite ai`: words that name no project are one search for it.
+    if (words.isNotEmpty &&
+        !words.first.startsWith('-') &&
+        _projectByToken(words.first) == null) {
+      final query = [...words, if (partial.isNotEmpty) partial].join(' ');
+      if (_asksForNoProject(query) ||
+          catalog.projects.any((p) => matchesSearchAny(query, [p.name]))) {
+        return _projectPending(query);
+      }
+    }
     for (final word in words) {
       if (word.startsWith('-')) {
         if (word.toLowerCase() != '--worktree') {
@@ -860,13 +872,7 @@ class _Parser {
       }
     }
 
-    if (project == null) {
-      return TypedCommand(
-        verb: verb,
-        pending: CommandArgKind.project,
-        suggestions: _projectSuggestions(typed),
-      );
-    }
+    if (project == null) return _projectPending(typed);
 
     final List<CommandSuggestion> suggestions;
     final CommandArgKind? pending;
@@ -903,8 +909,132 @@ class _Parser {
       pending: pending,
       suggestions: suggestions,
       plan: plan,
+      launches: [_dialogLaunch(project)],
     );
   }
+
+  /// No project named yet: the sessions [typed] could start, then the
+  /// projects to complete.
+  TypedCommand _projectPending(String typed) => TypedCommand(
+    verb: verb,
+    pending: CommandArgKind.project,
+    suggestions: _projectSuggestions(typed),
+    launches: _launches(typed),
+  );
+
+  /// Projects given a ready-to-run entry each; the best one also lists its
+  /// other agents.
+  static const _launchProjects = 5;
+
+  static bool _asksForNoProject(String typed) =>
+      matchesSearch(typed, 'no project') || matchesSearch(typed, 'scratch');
+
+  List<CommandPlan> _launches(String typed) {
+    final projects = _rank(
+      typed,
+      catalog.projects,
+      token: (p) => p.token,
+      texts: (p) => [p.name],
+      waiting: (p) => p.waiting,
+      recency: (p) => p.recencyRank,
+      usable: (p) => p.installations.isNotEmpty,
+    ).take(_launchProjects).toList();
+    final scratch = _scratchLaunch();
+    final noProjectAsked = typed.isNotEmpty && _asksForNoProject(typed);
+    final best = projects.firstOrNull;
+    return [
+      if (noProjectAsked) ?scratch,
+      for (final project in projects) _launchIn(project),
+      if (best != null && typed.isNotEmpty)
+        for (final installation in best.installations)
+          if (installation.id != _defaultOf(best)?.id)
+            _launchIn(best, other: installation),
+      if (!noProjectAsked && typed.isEmpty) ?scratch,
+      // With nothing to fill in, the plain "New session…" command below is
+      // the same row.
+      if ((typed.isNotEmpty && best != null) || message != null)
+        _dialogLaunch(typed.isEmpty ? null : best),
+    ];
+  }
+
+  CommandInstallation? _defaultOf(CommandProject project) =>
+      project.installations
+          .where((i) => i.id == project.defaultInstallationId)
+          .firstOrNull ??
+      project.installations.firstOrNull;
+
+  /// What the entry says under its title: what Enter does, and the message.
+  String _launchNote(List<String> about) => [
+    ...about,
+    message == null ? 'add ": message" to say it first' : 'says "$message"',
+  ].join(' · ');
+
+  /// A session in [project] on its default agent, or on [other].
+  CommandPlan _launchIn(CommandProject project, {CommandInstallation? other}) {
+    final installation = other ?? _defaultOf(project);
+    final envLabel = catalog.environmentLabel(project.environmentId);
+    final agent = installation == null
+        ? null
+        : catalog.agent(installation.agentId);
+    final preview = other == null || agent == null
+        ? 'New session in ${project.name}'
+        : 'New ${agent.family} ${agent.formLabel.toLowerCase()} in '
+              '${project.name}';
+    if (installation == null || agent == null) {
+      return CommandPlan(
+        preview: preview,
+        canonical: 'start ${project.token}',
+        refusal: 'No agent is installed in $envLabel.',
+      );
+    }
+    return CommandPlan(
+      preview: preview,
+      canonical: 'start ${project.token} ${agent.token}',
+      note: _launchNote([
+        if (other == null) ...[agent.family, agent.formLabel],
+        envLabel,
+      ]),
+      action: StartCommand(
+        projectId: project.id,
+        installationId: installation.id,
+        firstMessage: message,
+      ),
+    );
+  }
+
+  /// A session with no project, in a scratch folder.
+  CommandPlan? _scratchLaunch() {
+    final installation = catalog.scratchInstallation;
+    if (installation == null) return null;
+    final agent = catalog.agent(installation.agentId);
+    return CommandPlan(
+      preview: 'New session (no project)',
+      canonical: 'new no project',
+      note: _launchNote([
+        if (agent != null) ...[agent.family, agent.formLabel],
+        'a scratch folder',
+      ]),
+      action: StartCommand(
+        projectId: null,
+        installationId: installation.id,
+        firstMessage: message,
+      ),
+    );
+  }
+
+  /// The dialog, opened on [project] and the message, for what an entry
+  /// cannot say: a worktree, a title, an external terminal.
+  CommandPlan _dialogLaunch(CommandProject? project) => CommandPlan(
+    preview: 'New session…',
+    canonical: '',
+    note: project == null
+        ? 'Open the New session dialog'
+        : 'Open the New session dialog on ${project.name}',
+    action: OpenNewSessionDialogCommand(
+      projectId: project?.id,
+      firstMessage: message,
+    ),
+  );
 
   CommandPlan _startPlan(
     CommandProject project,
@@ -952,11 +1082,13 @@ class _Parser {
       preview: preview,
       canonical: canonical,
       refusal: refusal,
+      note: message == null ? null : 'Enter to run · says "$message"',
       action: refusal == null
           ? StartCommand(
               projectId: project.id,
               installationId: installation!.id,
               worktree: worktree,
+              firstMessage: message,
             )
           : null,
     );

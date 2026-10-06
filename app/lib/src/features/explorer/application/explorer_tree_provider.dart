@@ -2,6 +2,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter/foundation.dart' show immutable, listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/session.dart';
 
@@ -80,13 +81,11 @@ final explorerEnvironmentScopeProvider =
 /// Projects matching the search field, in the sidebar's order.
 final explorerFilteredProjectsProvider = Provider<List<Project>>((ref) {
   final all = ref.watch(sortedProjectsProvider);
-  final query = ref.watch(explorerSearchQueryProvider).trim().toLowerCase();
+  final query = ref.watch(explorerSearchQueryProvider).trim();
   if (query.isEmpty) return all;
   return [
     for (final p in all)
-      if (p.name.toLowerCase().contains(query) ||
-          p.root.path.toLowerCase().contains(query))
-        p,
+      if (matchesSearchAny(query, [p.name, p.root.path])) p,
   ];
 });
 

@@ -12,9 +12,12 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../features/agents/application/agent_providers.dart';
+import '../../../features/agents/application/folded_installations.dart';
+import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/environments/application/environment_providers.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
+import '../../../features/sessions/application/new_session_memory.dart';
 import '../../../features/sessions/application/session_defaults.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_launcher.dart';
@@ -43,6 +46,7 @@ CommandCatalog readCommandCatalog(
   final statusOf = read(sessionStatusLookupProvider);
   final launcher = read(sessionLauncherProvider);
   final defaults = read(sessionDefaultsProvider);
+  final memory = read(newSessionMemoryProvider);
   final inbox = read(attentionInboxProvider);
   final profiles = read(terminalProfilesProvider);
   final cache = read(quickOpenCacheProvider.notifier);
@@ -202,10 +206,14 @@ CommandCatalog readCommandCatalog(
             registry.adapterFor(i.agentId) != null)
           CommandInstallation(id: i.id, agentId: i.agentId),
     ];
-    final lastUsed = lastUsedInstallation[project.id];
-    final defaultId = installed.any((i) => i.id == lastUsed)
-        ? lastUsed
-        : defaults.forEnvironment(environmentId).installation?.id;
+    // What the dialog opens on: the agent and form last started here, then
+    // the last session's, then the machine's default.
+    final lastUsed = [
+      memory.installationFor(project.id),
+      lastUsedInstallation[project.id],
+    ].where((id) => installed.any((i) => i.id == id)).firstOrNull;
+    final defaultId =
+        lastUsed ?? defaults.forEnvironment(environmentId).installation?.id;
     final firstRepository = workspace.repositoriesOf(project.id).firstOrNull;
     final branches = firstRepository == null
         ? const <String>[]
@@ -237,7 +245,18 @@ CommandCatalog readCommandCatalog(
   }
 
   final oldest = waiting.firstOrNull;
+  final scratch = scratchDefaultInstallation(
+    [
+      for (final i in installations)
+        if (registry.adapterFor(i.agentId) != null) i,
+    ],
+    registry,
+    read(settingsControllerProvider),
+  );
   return CommandCatalog(
+    scratchInstallation: scratch == null
+        ? null
+        : CommandInstallation(id: scratch.id, agentId: scratch.agentId),
     projects: commandProjects,
     sessions: sessions,
     environments: commandEnvironments,
@@ -314,6 +333,8 @@ List<CommandAgent> _agents(AgentRegistry registry) {
         agentId: n.id,
         token: tokens[n.id]!,
         displayName: registry.displayNameFor(n.id),
+        familyName: registry.formsOf(n.id).displayName,
+        formLabel: registry.formOf(n.id).label,
       ),
   ];
 }

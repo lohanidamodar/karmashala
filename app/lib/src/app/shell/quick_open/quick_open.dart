@@ -9,6 +9,9 @@ import 'package:karmashala_git/git.dart';
 
 import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/sessions/presentation/new_session_dialog.dart';
+import '../../../features/sessions/presentation/session_destination_picker.dart'
+    show SessionDestination;
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart' show SplitAxis;
 import 'package:karmashala_ui/icons.dart';
@@ -416,8 +419,24 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         (id) => _commandItem(
           id,
           title: plan.preview,
-          subtitle: plan.refusal ?? 'Enter to run',
+          subtitle: plan.refusal ?? plan.note ?? 'Enter to run',
           icon: plan.runnable ? AppIcons.playCircle : AppIcons.prohibit,
+        ),
+      );
+    }
+    for (final launch in typed.launches) {
+      add(
+        'command/launch/${launch.preview}',
+        _CommandRow(plan: launch, enabled: launch.runnable),
+        (id) => _commandItem(
+          id,
+          title: launch.preview,
+          subtitle: launch.refusal ?? launch.note,
+          icon: !launch.runnable
+              ? AppIcons.prohibit
+              : launch.action is OpenNewSessionDialogCommand
+              ? AppIcons.chatCircleDots
+              : AppIcons.playCircle,
         ),
       );
     }
@@ -584,11 +603,26 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   void _run(CommandPlan plan) {
     final action = plan.action;
     if (action == null || !plan.runnable) return;
-    _recordHistory(plan.canonical);
+    if (plan.canonical.isNotEmpty) _recordHistory(plan.canonical);
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final host = Navigator.of(context).context;
     final sources = _sources();
     sources.dismiss(() {
+      if (action is OpenNewSessionDialogCommand) {
+        final projectId = action.projectId;
+        NewSessionDialog.show(
+          host,
+          destination: projectId == null
+              ? null
+              : SessionDestination(
+                  projectId: projectId,
+                  checkout: commandDefaultCheckout(container, projectId),
+                ),
+          firstPrompt: action.firstMessage,
+        );
+        return;
+      }
       if (action is ResumeCommand) {
         // The session jump every session row makes.
         sources.focusSession(action.sessionId, imported: action.imported);

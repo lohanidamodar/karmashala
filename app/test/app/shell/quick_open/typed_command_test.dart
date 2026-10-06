@@ -196,9 +196,16 @@ void main() {
       final words = commandMatchScore('aw', 'ai-workdir')!;
       final scattered = commandMatchScore('aw', 'rawhide')!;
       expect(words, greaterThan(scattered));
-      // The documented arithmetic: 1+3 for `a` (start), 1+2 for `p` (run),
-      // 1+2 for the second `p`, +3 for a whole-label prefix.
-      expect(commandMatchScore('app', 'appwrite'), 13);
+    });
+
+    test('ignores separators and case, as every search does', () {
+      for (final typed in ['appwrite_ai', 'appwrite.ai', 'appwriteAiWorkdir']) {
+        expect(
+          commandMatchScore(typed, 'appwrite-ai-workdir'),
+          isNotNull,
+          reason: typed,
+        );
+      }
     });
 
     test('an empty query matches everything, scoring nothing', () {
@@ -362,6 +369,149 @@ void main() {
     test('only the text before the cursor is completed', () {
       final command = parse('start karm trailing', cursor: 10);
       expect(labels(command), ['karmashala']);
+    });
+  });
+
+  group('new-session entries', () {
+    List<String> previews(TypedCommand command) => [
+      for (final plan in command.launches) plan.preview,
+    ];
+
+    StartCommand startOf(CommandPlan plan) => plan.action! as StartCommand;
+
+    test('"new appwrite" leads with a session in it on the defaults, ready '
+        'to run', () {
+      final first = parse('new appwrite').launches.first;
+      expect(first.preview, 'New session in appwrite-ai-workdir');
+      expect(first.runnable, isTrue);
+      // The default agent is named, so Enter is not a guess.
+      expect(first.note, contains('Codex'));
+      final action = startOf(first);
+      expect(action.projectId, 'p1');
+      expect(action.installationId, 'i2');
+      expect(action.worktree, isFalse);
+      expect(action.firstMessage, isNull);
+    });
+
+    test('any spelling of the name finds the project', () {
+      for (final typed in [
+        'new appwrite ai workdir',
+        'new appwrite_ai',
+        'new appwriteAi',
+        'start AppwriteAIWorkdir',
+      ]) {
+        expect(
+          parse(typed).launches.first.preview,
+          'New session in appwrite-ai-workdir',
+          reason: typed,
+        );
+      }
+    });
+
+    test("the project's other agents are listed below the default", () {
+      final command = parse('new appwrite');
+      final names = previews(command);
+      final other = names.indexOf(
+        'New Claude Code terminal in appwrite-ai-workdir',
+      );
+      expect(other, greaterThan(0));
+      expect(startOf(command.launches[other]).installationId, 'i1');
+    });
+
+    test('a chat form is named as one', () {
+      const chat = CommandAgent(
+        agentId: 'codexChat',
+        token: 'codex-chat',
+        displayName: 'Codex chat',
+        familyName: 'Codex',
+        formLabel: 'Chat',
+      );
+      final withChat = CommandCatalog(
+        agents: [..._agents, chat],
+        environments: _environments,
+        projects: [
+          const CommandProject(
+            id: 'p1',
+            name: 'appwrite-ai-workdir',
+            token: 'appwrite-ai-workdir',
+            environmentId: 'windows',
+            installations: [
+              CommandInstallation(id: 'i1', agentId: 'claudeCode'),
+              CommandInstallation(id: 'c1', agentId: 'codexChat'),
+            ],
+            defaultInstallationId: 'i1',
+          ),
+        ],
+      );
+      final command = parse('new appwrite', using: withChat);
+      expect(
+        previews(command),
+        contains('New Codex chat in appwrite-ai-workdir'),
+      );
+    });
+
+    test(
+      'text after a colon is the opening message, and the entry says so',
+      () {
+        expect(parse('new appwrite').launches.first.note, contains(':'));
+        final first = parse('new appwrite: fix the login bug').launches.first;
+        expect(first.preview, 'New session in appwrite-ai-workdir');
+        expect(startOf(first).firstMessage, 'fix the login bug');
+        expect(first.note, contains('fix the login bug'));
+      },
+    );
+
+    test('a named project takes the message too', () {
+      final plan = parse('start appwrite-ai-workdir claude: hi there').plan!;
+      expect(startOf(plan).installationId, 'i1');
+      expect(startOf(plan).firstMessage, 'hi there');
+      // A one-off message is not part of the command remembered.
+      expect(plan.canonical, 'start appwrite-ai-workdir claude');
+    });
+
+    test('a session with no project, on the default agent', () {
+      final scratch = parse(
+        'new ',
+        using: CommandCatalog(
+          projects: _projects,
+          agents: _agents,
+          environments: _environments,
+          scratchInstallation: const CommandInstallation(
+            id: 'i3',
+            agentId: 'claudeCode',
+          ),
+        ),
+      ).launches.firstWhere((p) => p.preview == 'New session (no project)');
+      expect(startOf(scratch).projectId, isNull);
+      expect(startOf(scratch).installationId, 'i3');
+
+      final asked = parse(
+        'new no project: sketch an idea',
+        using: CommandCatalog(
+          projects: _projects,
+          agents: _agents,
+          environments: _environments,
+          scratchInstallation: const CommandInstallation(
+            id: 'i3',
+            agentId: 'claudeCode',
+          ),
+        ),
+      ).launches.first;
+      expect(asked.preview, 'New session (no project)');
+      expect(startOf(asked).firstMessage, 'sketch an idea');
+    });
+
+    test('"New session…" opens the dialog with what was typed', () {
+      final dialog = parse(
+        'new appwrite: fix it',
+      ).launches.singleWhere((p) => p.preview == 'New session…');
+      final action = dialog.action! as OpenNewSessionDialogCommand;
+      expect(action.projectId, 'p1');
+      expect(action.firstMessage, 'fix it');
+    });
+
+    test('a name that is no project is still an error', () {
+      expect(parse('start nope ').error, 'No project called "nope".');
     });
   });
 

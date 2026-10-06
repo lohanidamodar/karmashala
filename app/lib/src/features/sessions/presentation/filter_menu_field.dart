@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 import 'package:karmashala_ui/icons.dart';
@@ -22,11 +23,8 @@ class FilterMenuEntry<T> {
   final String? detail;
   final IconData? icon;
 
-  /// Whether [query] (already lower-cased) is in the label or the detail.
-  bool matches(String query) =>
-      query.isEmpty ||
-      label.toLowerCase().contains(query) ||
-      (detail?.toLowerCase().contains(query) ?? false);
+  /// Whether [query] finds the label or the detail.
+  bool matches(String query) => matchesSearchAny(query, [label, detail]);
 }
 
 /// A form field that opens a menu of [entries] — with a filter field on top
@@ -159,7 +157,7 @@ class _FilterMenuFieldState<T> extends State<FilterMenuField<T>> {
       child: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _filter,
         builder: (context, typed, _) {
-          final query = typed.text.trim().toLowerCase();
+          final query = typed.text.trim();
           final matches = [
             for (final entry in widget.entries)
               if (entry.matches(query)) entry,
