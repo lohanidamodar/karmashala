@@ -785,7 +785,6 @@ Future<int> _serve(
   data.checkpointWork = checkpoints.handle;
   checkpoints.start(status.changes);
   mcpTools.tools.add(CheckpointToolSet(checkpoints));
-  mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
   // Pictures filed against a checkpoint, and two of them compared.
   final screenshotDirectory = p.join(dataDirectory, 'checkpoint-screenshots');
   mcpTools.tools.add(
@@ -797,6 +796,9 @@ Future<int> _serve(
       directory: screenshotDirectory,
     ),
   );
+  // What an agent shows in its thread, after the checkpoint families as
+  // serverToolSchemas lists them.
+  mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
   // Folders of checkpoints dropped without their files, by any path.
   unawaited(
     sweepCheckpointScreenshotFolders(
