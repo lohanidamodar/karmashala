@@ -593,6 +593,21 @@ class QuickOpenSources {
         opensTab: true,
         onSelect: () => openLogsTab(ref),
       ),
+      _command(
+        'Open Overview',
+        subtitle: 'Every project’s sessions at a glance: what needs you',
+        icon: AppIcons.squaresFour,
+        shortcut: shellCommandLabel('overview.open'),
+        keywords: const [
+          'overview',
+          'board',
+          'agents',
+          'dashboard',
+          'timeline',
+        ],
+        opensTab: true,
+        onSelect: () => openOverviewTab(ref),
+      ),
       ..._serverCommands(),
     ];
   }

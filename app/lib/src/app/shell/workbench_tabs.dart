@@ -140,6 +140,19 @@ void openLogsTab(WidgetRef ref, {LogSource? source}) {
   activateTerminalTab(ref, tabId);
 }
 
+/// Opens the Overview tab, or brings it forward. The phone has it under More.
+void openOverviewTab(WidgetRef ref) {
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.overview);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openOverviewTab();
+  activateTerminalTab(ref, tabId);
+}
+
 /// Opens note [noteId] in a tab of its own, or brings its open tab forward.
 void openNoteTab(WidgetRef ref, String noteId) {
   final tabId = ref

@@ -75,6 +75,11 @@ class OpenLogsIntent extends Intent {
   const OpenLogsIntent();
 }
 
+/// Intent: open the Overview tab.
+class OpenOverviewIntent extends Intent {
+  const OpenOverviewIntent();
+}
+
 /// Intent: change the terminal grid's font size — not the UI scale, which is
 /// a considered setting in Settings → Appearance.
 class TerminalFontSizeIntent extends Intent {

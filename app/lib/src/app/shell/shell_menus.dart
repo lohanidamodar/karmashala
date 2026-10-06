@@ -70,6 +70,8 @@ class ShellMenuActions {
 
   void openLogs() => openLogsTab(_ref);
 
+  void openOverview() => openOverviewTab(_ref);
+
   /// Whether there is a terminal for the Terminal verbs to act on.
   bool get hasTerminal =>
       _ref.read(terminalSessionsControllerProvider).tabs.isNotEmpty;
@@ -402,9 +404,8 @@ List<List<ViewMenuEntry>> viewMenuSections(
             label: tab.label,
             icon: SidePanel.tabIcon(tab),
             entries: [
-              for (final surface in tab == ContextTab.more
-                  ? more
-                  : tab.surfaces)
+              for (final surface
+                  in tab == ContextTab.more ? more : tab.surfaces)
                 ViewMenuCommand(
                   label: surface.label,
                   icon: SidePanel.iconFor(surface),
@@ -445,6 +446,12 @@ List<List<ViewMenuEntry>> viewMenuSections(
         icon: AppIcons.article,
         command: 'logs.open',
         onPressed: actions.openLogs,
+      ),
+      ViewMenuCommand(
+        label: 'Overview',
+        icon: AppIcons.squaresFour,
+        command: 'overview.open',
+        onPressed: actions.openOverview,
       ),
     ],
   ];

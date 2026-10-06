@@ -84,6 +84,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isLogsPane(paneId)) {
       return showing ? const LogsTabView() : const SizedBox.shrink();
     }
+    // The same gate: off screen it would keep the whole workspace in view for
+    // nobody.
+    if (isOverviewPane(paneId)) {
+      return showing ? const OverviewTabView() : const SizedBox.shrink();
+    }
     // The same gate: a device pane off screen would keep its live view and its
     // polling of adb going for nobody. A layout restored from a desktop onto a
     // client with no Devices area draws nothing there.
