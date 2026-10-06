@@ -63,6 +63,7 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
+import '../artifacts/artifact_tool_set.dart';
 import '../artifacts/server_artifacts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
@@ -782,6 +783,7 @@ Future<int> _serve(
   data.checkpointWork = checkpoints.handle;
   checkpoints.start(status.changes);
   mcpTools.tools.add(CheckpointToolSet(checkpoints));
+  mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
   // Pictures filed against a checkpoint, and two of them compared.
   final screenshotDirectory = p.join(dataDirectory, 'checkpoint-screenshots');
   mcpTools.tools.add(
