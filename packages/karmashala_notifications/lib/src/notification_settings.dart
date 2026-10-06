@@ -1,75 +1,88 @@
+/// How much an agent may interrupt the person: what "Notify me" is set to.
+/// Whatever a level does not interrupt for is logged quietly — the inbox
+/// still files it.
+enum NotifyLevel {
+  /// Every finished turn, ask, failure and delivery change.
+  everything,
+
+  /// Only what is stopped until the person acts — see
+  /// `NotificationReason.interruptsAt`.
+  whenNeeded,
+
+  /// Never interrupt; the inbox and the tray still show what needs you.
+  nothing,
+}
+
 /// User preferences for agent status notifications. The defaults are restrained
 /// on purpose: on, but only while the window is unfocused.
 class NotificationSettings {
   const NotificationSettings({
-    this.enabled = true,
+    this.level = NotifyLevel.everything,
     this.onlyWhenUnfocused = true,
-    this.notifyWhenFinished = true,
-    this.notifyWhenAttentionNeeded = true,
   });
 
-  /// Master switch. When false nothing is ever delivered, though the tray still
-  /// shows what needs attention — an icon is ambient, a toast is an interrupt.
-  final bool enabled;
+  final NotifyLevel level;
 
   /// Only deliver while the app window does not have OS focus.
   final bool onlyWhenUnfocused;
 
-  /// Notify when an agent stops working (a turn finished).
-  final bool notifyWhenFinished;
+  /// Whether anything may interrupt at all. When false the tray still shows
+  /// what needs attention — an icon is ambient, a toast is an interrupt.
+  bool get enabled => level != NotifyLevel.nothing;
 
-  /// Notify when an agent is waiting for approval or has failed.
-  final bool notifyWhenAttentionNeeded;
+  NotificationSettings copyWith({NotifyLevel? level, bool? onlyWhenUnfocused}) =>
+      NotificationSettings(
+        level: level ?? this.level,
+        onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
+      );
 
-  NotificationSettings copyWith({
-    bool? enabled,
-    bool? onlyWhenUnfocused,
-    bool? notifyWhenFinished,
-    bool? notifyWhenAttentionNeeded,
-  }) => NotificationSettings(
-    enabled: enabled ?? this.enabled,
-    onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
-    notifyWhenFinished: notifyWhenFinished ?? this.notifyWhenFinished,
-    notifyWhenAttentionNeeded:
-        notifyWhenAttentionNeeded ?? this.notifyWhenAttentionNeeded,
-  );
-
+  /// The level, and the three switches it replaced, so an app from before
+  /// levels reading this record behaves as near to it as its switches can.
   Map<String, dynamic> toJson() => {
-    'enabled': enabled,
+    'level': level.name,
     'onlyWhenUnfocused': onlyWhenUnfocused,
-    'notifyWhenFinished': notifyWhenFinished,
-    'notifyWhenAttentionNeeded': notifyWhenAttentionNeeded,
+    'enabled': enabled,
+    'notifyWhenFinished': level == NotifyLevel.everything,
+    'notifyWhenAttentionNeeded': enabled,
   };
 
   /// Reads [json], falling back to the default for any absent or malformed
-  /// field so a hand-edited or older record still loads.
+  /// field so a hand-edited or older record still loads. A record without a
+  /// level — written before levels, or rewritten by an app from then — is
+  /// read from its switches.
   static NotificationSettings fromJson(Map<String, dynamic> json) {
-    bool flag(String key, {required bool orElse}) =>
-        json[key] is bool ? json[key] as bool : orElse;
+    bool flag(String key) => json[key] is bool ? json[key] as bool : true;
+    final named = NotifyLevel.values.where((l) => l.name == json['level']);
     return NotificationSettings(
-      enabled: flag('enabled', orElse: true),
-      onlyWhenUnfocused: flag('onlyWhenUnfocused', orElse: true),
-      notifyWhenFinished: flag('notifyWhenFinished', orElse: true),
-      notifyWhenAttentionNeeded: flag(
-        'notifyWhenAttentionNeeded',
-        orElse: true,
-      ),
+      level: named.isNotEmpty
+          ? named.single
+          : _levelFromSwitches(
+              enabled: flag('enabled'),
+              finished: flag('notifyWhenFinished'),
+              attention: flag('notifyWhenAttentionNeeded'),
+            ),
+      onlyWhenUnfocused: flag('onlyWhenUnfocused'),
     );
+  }
+
+  /// Finished on with attention off has no level of its own; it stays
+  /// Everything, the nearest that still tells of a finished turn.
+  static NotifyLevel _levelFromSwitches({
+    required bool enabled,
+    required bool finished,
+    required bool attention,
+  }) {
+    if (!enabled || (!finished && !attention)) return NotifyLevel.nothing;
+    if (!finished) return NotifyLevel.whenNeeded;
+    return NotifyLevel.everything;
   }
 
   @override
   bool operator ==(Object other) =>
       other is NotificationSettings &&
-      other.enabled == enabled &&
-      other.onlyWhenUnfocused == onlyWhenUnfocused &&
-      other.notifyWhenFinished == notifyWhenFinished &&
-      other.notifyWhenAttentionNeeded == notifyWhenAttentionNeeded;
+      other.level == level &&
+      other.onlyWhenUnfocused == onlyWhenUnfocused;
 
   @override
-  int get hashCode => Object.hash(
-    enabled,
-    onlyWhenUnfocused,
-    notifyWhenFinished,
-    notifyWhenAttentionNeeded,
-  );
+  int get hashCode => Object.hash(level, onlyWhenUnfocused);
 }

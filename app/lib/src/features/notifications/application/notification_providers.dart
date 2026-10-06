@@ -67,16 +67,10 @@ class NotificationSettingsController extends Notifier<NotificationSettings> {
     if (ref.mounted && !_changed) state = kept;
   }
 
-  void setEnabled(bool value) => _update(state.copyWith(enabled: value));
+  void setLevel(NotifyLevel level) => _update(state.copyWith(level: level));
 
   void setOnlyWhenUnfocused(bool value) =>
       _update(state.copyWith(onlyWhenUnfocused: value));
-
-  void setNotifyWhenFinished(bool value) =>
-      _update(state.copyWith(notifyWhenFinished: value));
-
-  void setNotifyWhenAttentionNeeded(bool value) =>
-      _update(state.copyWith(notifyWhenAttentionNeeded: value));
 
   void _update(NotificationSettings next) {
     state = next;

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:riverpod/riverpod.dart';
@@ -39,7 +40,13 @@ class ResumeAnnouncer {
     // A miss or a failure is announced whether or not they ticked the box:
     // the rule is never to run late, or not at all, in silence.
     if (!ended.notify && !failed) return;
-    if (!_ref.read(notificationSettingsControllerProvider).enabled) return;
+    // A resume that went as planned is a turn finishing, and waits in quiet
+    // at "Only when I'm needed"; a miss or a failure is one stopped on you.
+    final level = _ref.read(notificationSettingsControllerProvider).level;
+    final reason = failed
+        ? NotificationReason.failed
+        : NotificationReason.finished;
+    if (!reason.interruptsAt(level)) return;
     unawaited(
       _ref
           .read(notificationPresenterProvider)
