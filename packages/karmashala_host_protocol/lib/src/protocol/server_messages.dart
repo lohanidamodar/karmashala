@@ -35,6 +35,18 @@ abstract final class ServerMethod {
 
   /// `{}` → `{agents: [installation…], summary}`, after probing again.
   static const String agentsRefresh = 'agents.refresh';
+
+  /// `{}` → `{databaseBytes, tables?: [{name, bytes}], toolImages: {files,
+  /// bytes, maxAgeDays, maxMegabytes}}`: what the server keeps on disk.
+  /// `tables` is absent when its SQLite cannot say.
+  static const String storage = 'server.storage';
+
+  /// `{}` → `{removed}`: every cached tool image deleted.
+  static const String toolImagesClear = 'server.toolImages.clear';
+
+  /// `{}` → `{removed}`: the tool-image cache swept by its limits as they are
+  /// set now.
+  static const String toolImagesSweep = 'server.toolImages.sweep';
 }
 
 /// client → host: one administrative question, answered with a

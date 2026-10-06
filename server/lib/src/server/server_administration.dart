@@ -8,6 +8,7 @@ import 'package:karmashala_host_protocol/protocol.dart';
 import 'server_admin.dart';
 import 'server_config.dart';
 import 'server_config_service.dart';
+import 'server_storage.dart';
 
 /// The daemon's answers to `serverCall`: its paired devices and revoking one
 /// (through the companion, so a revoked phone's links drop at once), the
@@ -18,7 +19,12 @@ class ServerAdministration implements ServerAdmin {
     required this.agents,
     required this.config,
     required this.dataDirectory,
+    this.storage,
   });
+
+  /// What Settings → Server → Storage reads and clears; null refuses those
+  /// calls.
+  final ServerStorage? storage;
 
   /// Null when phones cannot be served (the companion did not start).
   final DaemonCompanion? companion;
@@ -99,10 +105,20 @@ class ServerAdministration implements ServerAdmin {
             'server.json could not be written (${error.message})',
           );
         }
+      case ServerMethod.storage:
+        return _storage().read();
+      case ServerMethod.toolImagesClear:
+        return _storage().clearToolImages();
+      case ServerMethod.toolImagesSweep:
+        return _storage().sweepToolImages();
       default:
         throw ServerCallRefused('this server does not answer "$method"');
     }
   }
+
+  ServerStorage _storage() =>
+      storage ??
+      (throw const ServerCallRefused('this server cannot read its storage'));
 
   /// The config's answer, with what the LAN relay it asks for is doing:
   /// the desktop's settings row and its pairing tab read it.
