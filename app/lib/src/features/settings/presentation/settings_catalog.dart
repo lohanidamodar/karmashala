@@ -608,6 +608,12 @@ enum SettingsAnchor {
     'socket',
     'session host',
   ]),
+  serverLog(SettingsSectionId.server, 'Log', [
+    'server log',
+    'server.log',
+    'logs',
+    'log file',
+  ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
     'phone',
@@ -670,6 +676,8 @@ enum SettingsAnchor {
     androidEmulators || iosSimulators => caps.devicesArea,
     // The server-side half: its device list is refused without admin anyway.
     remoteAccess => caps.pairsHere || caps.serverAdmin,
+    // This machine's server log; a phone hosts no server.
+    serverLog => caps.hostsServer,
     _ => true,
   };
 }
@@ -933,6 +941,14 @@ const settingsEntries = <SettingsEntry>[
     description:
         'Terminals and agents in the server go on after the app closes.',
     keywords: ['quit', 'background', 'session host', 'keep running'],
+  ),
+  SettingsEntry(
+    'Server log',
+    anchor: SettingsAnchor.serverLog,
+    description:
+        'Where this machine\'s server writes its log, opened in an app or '
+        'in Logs.',
+    keywords: ['server.log', 'logs', 'troubleshoot', 'report'],
   ),
   SettingsEntry(
     'Worktree setup',

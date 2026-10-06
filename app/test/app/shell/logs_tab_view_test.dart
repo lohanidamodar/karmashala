@@ -353,6 +353,37 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     });
 
+    testWidgets('opens on Server when that is the source asked for', (
+      tester,
+    ) async {
+      AppLogger.named('remote').info('an app line');
+      final server = _FakeServerLogTail([
+        line(0, Level.INFO, 'stdout', 'listening on 7420'),
+      ]);
+      tester.view.physicalSize = const Size(420, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final container = ProviderContainer(
+        overrides: [
+          diagnosticsProvider.overrideWithValue(diagnostics),
+          serverLogTailProvider.overrideWithValue(server),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(logsTabSourceProvider.notifier).show(LogSource.server);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: LogsTabView())),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(LogsTabView.serverPollInterval);
+      expect(find.textContaining('listening on 7420'), findsOneWidget);
+      expect(find.textContaining('an app line'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 200));
+    });
+
     testWidgets('follows the file as the server writes it', (tester) async {
       final server = _FakeServerLogTail([
         line(0, Level.INFO, 'stdout', 'first'),
