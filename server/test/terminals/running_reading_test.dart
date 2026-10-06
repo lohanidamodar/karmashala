@@ -49,42 +49,47 @@ void main() {
   RunningProcess byPid(RunningReading reading, int pid) =>
       reading.processes.singleWhere((p) => p.pid == pid);
 
-  test('the server, a pane, its children and device mirroring, owned', () async {
-    final reading = await probe().running(
-      [_pane],
-      serverPid: 100,
-      serverPorts: const {47821: 'MCP endpoint'},
-    );
-    expect(reading.serverPid, 100);
+  test(
+    'the server, a pane, its children and device mirroring, owned',
+    () async {
+      final reading = await probe().running(
+        [_pane],
+        serverPid: 100,
+        serverPorts: const {47821: 'MCP endpoint'},
+      );
+      expect(reading.serverPid, 100);
 
-    final server = byPid(reading, 100);
-    expect(server.role, RunningRole.server);
-    expect(server.stoppable, isFalse);
-    expect(
-      {for (final port in server.ports) port.port: port.label},
-      {47821: 'MCP endpoint', 47999: null},
-    );
+      final server = byPid(reading, 100);
+      expect(server.role, RunningRole.server);
+      expect(server.stoppable, isFalse);
+      expect(
+        {for (final port in server.ports) port.port: port.label},
+        {47821: 'MCP endpoint', 47999: null},
+      );
 
-    final shell = byPid(reading, 10);
-    expect(shell.role, RunningRole.pane);
-    expect(shell.stoppable, isFalse, reason: 'a root ends with its pane');
-    expect(shell.command, 'npm run dev');
+      final shell = byPid(reading, 10);
+      expect(shell.role, RunningRole.pane);
+      expect(shell.stoppable, isFalse, reason: 'a root ends with its pane');
+      expect(shell.command, 'npm run dev');
 
-    final node = byPid(reading, 11);
-    expect(node.role, RunningRole.child);
-    expect(node.stoppable, isTrue);
-    expect(node.agentSessionId, 's1');
-    expect(node.paneId, 'p1');
-    expect(node.ports.map((p) => p.port), [5173], reason: 'v4 and v6 are one');
-    expect(byPid(reading, 12).role, RunningRole.child);
+      final node = byPid(reading, 11);
+      expect(node.role, RunningRole.child);
+      expect(node.stoppable, isTrue);
+      expect(node.agentSessionId, 's1');
+      expect(node.paneId, 'p1');
+      expect(node.ports.map((p) => p.port), [
+        5173,
+      ], reason: 'v4 and v6 are one');
+      expect(byPid(reading, 12).role, RunningRole.child);
 
-    final adb = byPid(reading, 50);
-    expect(adb.role, RunningRole.device);
-    expect(adb.stoppable, isFalse);
-    expect(adb.ports.single.port, 27183);
+      final adb = byPid(reading, 50);
+      expect(adb.role, RunningRole.device);
+      expect(adb.stoppable, isFalse);
+      expect(adb.ports.single.port, 27183);
 
-    expect(reading.processes.where((p) => p.pid == 70), isEmpty);
-  });
+      expect(reading.processes.where((p) => p.pid == 70), isEmpty);
+    },
+  );
 
   test('panes it cannot list are kept, with a note on their machine', () async {
     final reading = await probe().running(
@@ -99,9 +104,14 @@ void main() {
           environmentId: 'ssh:h1',
         ),
       ],
-      notes: const [RunningNote('"box" runs on an SSH machine.', environmentId: 'ssh:h1')],
+      notes: const [
+        RunningNote('"box" runs on an SSH machine.', environmentId: 'ssh:h1'),
+      ],
     );
-    expect(reading.processes.where((p) => p.environmentId == 'ssh:h1'), hasLength(1));
+    expect(
+      reading.processes.where((p) => p.environmentId == 'ssh:h1'),
+      hasLength(1),
+    );
     expect(reading.notes.single.environmentId, 'ssh:h1');
   });
 

@@ -358,7 +358,7 @@ class _ProcessRow extends ConsumerWidget {
               if (process.stoppable)
                 TextButton.icon(
                   key: ValueKey('running-stop-${process.pid}'),
-                  icon: const Icon(AppIcons.stop, size: 16),
+                  icon: const Icon(AppIcons.stop),
                   label: const Text('Stop'),
                   onPressed: () => _stop(context, ref, name),
                 ),
@@ -427,7 +427,7 @@ class _PortRow extends ConsumerWidget {
       padding: const EdgeInsets.only(left: Insets.lg),
       child: Row(
         children: [
-          const Icon(AppIcons.globe, size: 14),
+          const Icon(AppIcons.globe, size: Chrome.iconSmall),
           const SizedBox(width: Insets.xs),
           Expanded(
             child: Text(
@@ -441,7 +441,7 @@ class _PortRow extends ConsumerWidget {
               tooltip: phone
                   ? 'Show in the desktop\'s Browser'
                   : 'Open in the Browser pane',
-              icon: const Icon(AppIcons.globe, size: 16),
+              icon: const Icon(AppIcons.globe),
               onPressed: () => openPortInBrowserPane(
                 ref,
                 url,
@@ -453,13 +453,13 @@ class _PortRow extends ConsumerWidget {
             IconButton(
               key: ValueKey('running-system-browser-$number'),
               tooltip: 'Open in the system browser',
-              icon: const Icon(AppIcons.arrowSquareOut, size: 16),
+              icon: const Icon(AppIcons.arrowSquareOut),
               onPressed: () => ref.read(openExternalUrlProvider)(url),
             ),
           IconButton(
             key: ValueKey('running-copy-$number'),
             tooltip: 'Copy URL',
-            icon: const Icon(AppIcons.copy, size: 16),
+            icon: const Icon(AppIcons.copy),
             onPressed: () => Clipboard.setData(
               ClipboardData(text: label.isHttp ? url : 'localhost:$number'),
             ),

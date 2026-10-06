@@ -10,7 +10,9 @@ void main() {
       (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>();
 
   R roundTrip<R>(DataRequest<R> request, R result) => DataEnvelope.readAnswer(
-    overTheWire(DataEnvelope.answer(4, request, DataReply(result, 9, const []))),
+    overTheWire(
+      DataEnvelope.answer(4, request, DataReply(result, 9, const [])),
+    ),
     request,
   ).value;
 
@@ -38,7 +40,13 @@ void main() {
           parent: 1,
           name: 'karmashala_host.exe',
           role: RunningRole.server,
-          ports: [RunningPort(port: 47821, address: '127.0.0.1', label: 'MCP endpoint')],
+          ports: [
+            RunningPort(
+              port: 47821,
+              address: '127.0.0.1',
+              label: 'MCP endpoint',
+            ),
+          ],
         ),
         RunningProcess(
           pid: 20,
@@ -74,8 +82,10 @@ void main() {
         ),
       ],
       notes: const [
-        RunningNote('"ubuntu" runs in WSL; its ports are not read.',
-            environmentId: 'wsl:Ubuntu'),
+        RunningNote(
+          '"ubuntu" runs in WSL; its ports are not read.',
+          environmentId: 'wsl:Ubuntu',
+        ),
       ],
     );
     final read = roundTrip(const TerminalsRunning(), reading);
