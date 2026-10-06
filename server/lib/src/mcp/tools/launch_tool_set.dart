@@ -13,7 +13,13 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart' show SessionLink;
 import 'package:karmashala_session/session.dart' show Session;
 
-import 'package:karmashala_session_engine/store.dart' show SessionDao;
+import 'package:karmashala_session_engine/store.dart'
+    show
+        SessionDao,
+        kReportModeEachTurn,
+        kReportModeFinal,
+        kReportModeNone,
+        kReportModes;
 
 import '../../automations/daemon_agents.dart';
 import '../../sessions/delegation_results.dart'
@@ -21,6 +27,7 @@ import '../../sessions/delegation_results.dart'
         DelegatedChild,
         DelegationView,
         ParentReport,
+        ReportDelivery,
         ReportStatus,
         kReportViaChild;
 import '../../sessions/launch/server_session_launcher.dart';
@@ -48,8 +55,11 @@ Duration subagentRunBoundFor(num? seconds) {
 const String kReportBackHint =
     '[Karmashala: the session named above started you and is waiting for '
     'your report. When you are done, blocked, or need its answer, tell it '
-    'with report_to_parent, then end your turn. The end of each turn you '
-    'work is sent to it as well.]';
+    'with report_to_parent, then end your turn.]';
+
+/// Added for a child its parent hears every turn of.
+const String kEachTurnHint =
+    '[The end of each turn you work is sent to it as well.]';
 
 /// What an agent is told when a tool would show something and no Karmashala
 /// window is connected to show it in.
@@ -81,6 +91,8 @@ class LaunchToolSet extends ServerToolSet {
     this.delegate,
     this.reportToParent,
     this.delegationOf,
+    this.setReport,
+    this.defaultReportMode,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -130,7 +142,14 @@ class LaunchToolSet extends ServerToolSet {
 
   /// Delivers a child's own report to its parent
   /// (`DelegationResults.report`); null where this server pushes nothing.
-  final void Function(ParentReport report)? reportToParent;
+  final ReportDelivery Function(ParentReport report)? reportToParent;
+
+  /// Changes what a parent hears of a child (`DelegationResults.setMode`);
+  /// null where this server follows nothing.
+  final bool Function(DelegatedChild child, String parentId)? setReport;
+
+  /// What Settings say a session hears of a child it starts; null unset.
+  final String? Function()? defaultReportMode;
 
   /// Where a child stands (`DelegationResults.viewOf`); null where this
   /// server follows nothing, and each child's state is not recorded.
@@ -154,6 +173,9 @@ class LaunchToolSet extends ServerToolSet {
     if (tool == 'delegations') {
       return runTool(() async => _delegations(callerSessionId));
     }
+    if (tool == 'delegation_set_report') {
+      return runTool(() async => _setReport(arguments, callerSessionId));
+    }
     if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
       tool: tool,
@@ -167,15 +189,57 @@ class LaunchToolSet extends ServerToolSet {
     );
   }
 
-  /// Whether [args] ask for async mode, refused in words when it cannot be.
-  /// `open_new_session` from a session is async unless told otherwise: a
-  /// client may hold a schema older than this default, never older behaviour.
+  /// What [callerSessionId] hears of a session `open_new_session` starts:
+  /// `report` as named, else the old `mode` (detached is none, async is
+  /// each_turn) a client may still send, else Settings' default, else final.
+  /// A call from no session hears nothing.
+  String _openReportMode(Map<String, dynamic> args, String? callerSessionId) {
+    final named = (args['report'] as String?)?.trim() ?? '';
+    final legacy = (args['mode'] as String?)?.trim() ?? '';
+    final String mode;
+    if (named.isNotEmpty) {
+      mode = _checkedReport(named);
+    } else if (legacy.isNotEmpty) {
+      mode = switch (legacy) {
+        'detached' => kReportModeNone,
+        'async' => kReportModeEachTurn,
+        _ => throw ArgumentError(
+          'Unknown mode "$legacy"; pass report: none, final or each_turn.',
+        ),
+      };
+    } else if (callerSessionId == null || delegate == null) {
+      return kReportModeNone;
+    } else {
+      final chosen = defaultReportMode?.call();
+      mode = kReportModes.contains(chosen) ? chosen! : kReportModeFinal;
+    }
+    if (mode != kReportModeNone) _canReportTo(callerSessionId);
+    return mode;
+  }
+
+  static String _checkedReport(String report) => kReportModes.contains(report)
+      ? report
+      : throw ArgumentError(
+          'Unknown report "$report": none, final or each_turn.',
+        );
+
+  void _canReportTo(String? callerSessionId) {
+    if (callerSessionId == null) {
+      throw ArgumentError(
+        'Reporting back goes to the session that called, and this call came '
+        'from no session; pass report: none.',
+      );
+    }
+    if (delegate == null) {
+      throw StateError('This server cannot push results; pass report: none.');
+    }
+  }
+
+  /// Whether [args] ask `subagent_run` not to wait, refused in words when it
+  /// cannot be.
   bool _async(Map<String, dynamic> args, String? callerSessionId, String tool) {
     final mode = (args['mode'] as String?)?.trim() ?? '';
-    final fallback = tool == 'subagent_run' ? 'wait' : 'detached';
-    if (mode.isEmpty && tool == 'open_new_session') {
-      return callerSessionId != null && delegate != null;
-    }
+    const fallback = 'wait';
     if (mode.isEmpty || mode == fallback) return false;
     if (mode != 'async') {
       throw ArgumentError(
@@ -194,37 +258,53 @@ class LaunchToolSet extends ServerToolSet {
     return true;
   }
 
+  /// `open_new_session`: answers once the child is launched, whatever it is
+  /// to report — it never waits on the child.
   Future<Map<String, Object?>> _openTool(
     Map<String, dynamic> args,
     String? callerSessionId,
   ) async {
-    final reportsBack = _async(args, callerSessionId, 'open_new_session');
+    final report = _openReportMode(args, callerSessionId);
     final started = _context.now();
-    final opened = await _open(args, callerSessionId, reportsBack: reportsBack);
-    if (!reportsBack) return {...opened.answer, 'mode': 'detached'};
-    delegate!(
-      DelegatedChild(
-        childId: opened.session.id,
-        parentId: callerSessionId!,
-        title: opened.session.title,
-        agent: agents.nameOf(opened.agentId),
-        model: opened.session.modelId,
-        startedAt: started,
-      ),
-    );
+    final opened = await _open(args, callerSessionId, report: report);
+    // Recorded even when it reports nothing, so the parent can list it and
+    // change its mind with delegation_set_report.
+    if (callerSessionId != null) {
+      delegate?.call(
+        DelegatedChild(
+          childId: opened.session.id,
+          parentId: callerSessionId,
+          title: opened.session.title,
+          agent: agents.nameOf(opened.agentId),
+          model: opened.session.modelId,
+          startedAt: started,
+          reportMode: report,
+        ),
+      );
+    }
     return {
       ...opened.answer,
-      'mode': 'async',
-      'reportsBack': true,
-      'note': _asyncNote(opened.session.id),
+      'report': report,
+      'reportsBack': report != kReportModeNone,
+      'note': _reportNote(report, opened.session.id),
     };
   }
 
-  static String _asyncNote(String id) =>
-      'End your turn now rather than polling: when each turn the child works '
-      'ends, its result (agent, model, how long, its final answer) arrives '
-      'as a message from Karmashala — at once if you are idle, after your '
-      'turn if you are working. Child: session $id.';
+  static String _reportNote(String report, String id) => switch (report) {
+    kReportModeNone =>
+      'Session $id runs on its own and reports nothing. delegation_set_report '
+          'changes that; delegations shows where it stands.',
+    kReportModeFinal =>
+      'End your turn now rather than polling: when session $id reports with '
+          'report_to_parent, stops blocked or failed, or ends, a message from '
+          'Karmashala says so — at once if you are idle, after your turn if '
+          'you are working.',
+    _ =>
+      'End your turn now rather than polling: when each turn session $id '
+          'works ends, its result (agent, model, how long, its final answer) '
+          'arrives as a message from Karmashala — at once if you are idle, '
+          'after your turn if you are working.',
+  };
 
   /// `report_to_parent`: the caller's own report, to the session that started
   /// it. Refused in words for a session no session started.
@@ -268,7 +348,7 @@ class LaunchToolSet extends ServerToolSet {
     final deliver =
         reportToParent ??
         (throw StateError('This server cannot deliver a report.'));
-    deliver(
+    final delivery = deliver(
       ParentReport(
         childId: session.id,
         parentId: parentId,
@@ -279,13 +359,63 @@ class LaunchToolSet extends ServerToolSet {
       ),
     );
     return {
-      'reported': true,
+      'reported': delivery == ReportDelivery.delivered,
       'parentSessionId': parentId,
       'status': status.wire,
-      'note':
+      'note': switch (delivery) {
+        ReportDelivery.delivered =>
           'Delivered to session $parentId: at once if it is idle, after its '
-          'turn if it is working. The end of this turn is not pushed to it '
-          'as well, so end your turn when you have nothing more to do.',
+              'turn if it is working. The end of this turn is not pushed to it '
+              'as well, so end your turn when you have nothing more to do.',
+        ReportDelivery.parentGone =>
+          'Not delivered: your parent session has ended; the report is kept '
+              'on your session, where it can read it if it comes back. '
+              'Nothing will resume it for you.',
+        ReportDelivery.notWanted =>
+          'Not delivered: your parent asked to be told nothing of this '
+              'session; the report is kept on your session.',
+      },
+    };
+  }
+
+  /// `delegation_set_report`: what the caller hears of a session it started.
+  Map<String, Object?> _setReport(
+    Map<String, dynamic> args,
+    String? callerSessionId,
+  ) {
+    final report = _checkedReport((args['report'] as String?)?.trim() ?? '');
+    final childId = (args['sessionId'] as String?)?.trim() ?? '';
+    final child = childId.isEmpty
+        ? null
+        : SessionDao(_context.database).getById(childId);
+    final link = child?.parentLink;
+    if (callerSessionId == null ||
+        child == null ||
+        child.parentSessionId != callerSessionId ||
+        (link != null && link != SessionLink.spawn)) {
+      throw StateError(
+        'Session ${childId.isEmpty ? '(none named)' : childId} is not one '
+        'you started; delegations lists the ones you did.',
+      );
+    }
+    final set =
+        setReport ?? (throw StateError('This server follows no sessions.'));
+    set(
+      DelegatedChild(
+        childId: child.id,
+        parentId: callerSessionId,
+        title: child.title,
+        agent: _agentNameOf(child),
+        model: child.modelId,
+        startedAt: child.createdAt,
+        reportMode: report,
+      ),
+      callerSessionId,
+    );
+    return {
+      'sessionId': child.id,
+      'report': report,
+      'note': _reportNote(report, child.id),
     };
   }
 
@@ -332,6 +462,7 @@ class LaunchToolSet extends ServerToolSet {
       'title': child.title,
       'agent': _agentNameOf(child),
       'state': view?.state ?? 'not recorded',
+      'report': view?.reportMode ?? kReportModeNone,
       'followed': view?.followed ?? false,
       'lastReport': at == null
           ? 'not recorded'
@@ -341,6 +472,12 @@ class LaunchToolSet extends ServerToolSet {
                   ? 'the child, with report_to_parent'
                   : 'the end of its turn',
               'at': at.toIso8601String(),
+              // One you never got — you were gone, or asked for none — is
+              // read here instead.
+              if (view.reportDelivered == false) ...{
+                'delivered': false,
+                'text': view.reportText ?? 'not recorded',
+              },
             },
     };
   }
@@ -424,6 +561,13 @@ class LaunchToolSet extends ServerToolSet {
       throw ArgumentError('prompt is required and cannot be blank.');
     }
     final reportsBack = _async(args, callerSessionId, 'subagent_run');
+    final namedReport = (args['report'] as String?)?.trim() ?? '';
+    // Only an async run reports; one that waits answers in the call.
+    final report = !reportsBack
+        ? kReportModeNone
+        : namedReport.isEmpty
+        ? kReportModeFinal
+        : _checkedReport(namedReport);
     final turns = this.turns;
     if (turns == null && !reportsBack) {
       throw StateError(
@@ -446,7 +590,7 @@ class LaunchToolSet extends ServerToolSet {
       callerSessionId,
       modelId: model == null || model.isEmpty ? null : model,
       inCallerTree: true,
-      reportsBack: reportsBack,
+      report: report,
     );
     final session = opened.session;
     if (reportsBack) {
@@ -459,11 +603,13 @@ class LaunchToolSet extends ServerToolSet {
           model: session.modelId,
           startedAt: started,
           endOnAnswer: args['keepOpen'] != true,
+          reportMode: report,
         ),
       );
       return <String, Object?>{
         'state': 'started',
         'mode': 'async',
+        'report': report,
         'childSessionId': session.id,
         'title': session.title,
         'agent': agents.nameOf(opened.agentId),
@@ -471,7 +617,12 @@ class LaunchToolSet extends ServerToolSet {
         'depth': opened.answer['depth'],
         'permissionMode': opened.answer['permissionMode'],
         'permissionCapped': ?opened.answer['permissionCapped'],
-        'note': _asyncNote(session.id),
+        'note': args['keepOpen'] == true || report == kReportModeNone
+            ? _reportNote(report, session.id)
+            : 'End your turn now rather than polling: when the child answers, '
+                  'its result (agent, model, how long, its final answer) '
+                  'arrives as a message from Karmashala, and it is ended. '
+                  'Child: session ${session.id}.',
       };
     }
     final ChildTurnOutcome outcome;
@@ -657,7 +808,7 @@ class LaunchToolSet extends ServerToolSet {
     String? callerSessionId, {
     String? modelId,
     bool inCallerTree = false,
-    bool reportsBack = false,
+    String report = kReportModeNone,
   }) async {
     final projectId = args['projectId'] as String?;
     final prompt = args['prompt'] as String?;
@@ -769,9 +920,12 @@ class LaunchToolSet extends ServerToolSet {
         // A title the caller named is chosen, as one typed in the dialog is:
         // the agent's own name for the conversation never replaces it.
         titleTyped: title != null && title.trim().isNotEmpty,
-        prompt: prompt == null || !reportsBack
-            ? prompt
-            : '$prompt\n\n$kReportBackHint',
+        prompt: switch (report) {
+          _ when prompt == null => null,
+          kReportModeNone => prompt,
+          kReportModeEachTurn => '$prompt\n\n$kReportBackHint $kEachTurnHint',
+          _ => '$prompt\n\n$kReportBackHint',
+        },
         worktree: newWorktree,
         existingWorktree: existingWorktree,
         workingDirectory: workingDirectory,
@@ -1039,15 +1193,18 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'own mode and "autoRun"; a mode above that is refused, and only '
               'the user can raise it, from the new session\'s permission chip.',
         },
-        'mode': {
+        'report': {
           'type': 'string',
-          'enum': ['detached', 'async'],
+          'enum': kReportModes,
           'description':
-              '"async" (the default when you are a session): each time a '
-              'turn the new session works ends, its result is pushed to you '
-              'as a message — end your turn rather than polling. "detached": '
-              'nothing comes back unless you ask with session_wait. The '
-              'session is never ended for you.',
+              'What you hear of it. This call never waits for it either way. '
+              '"final" (the default unless Settings choose another): one '
+              'message when it reports with report_to_parent, stops blocked '
+              'or failed, or ends. "each_turn": the end of every turn it '
+              'works as well. "none": it runs on its own and nothing comes '
+              'back. End your turn rather than polling; change it later '
+              'with delegation_set_report. The session is never ended for '
+              'you.',
         },
       },
       'required': <String>[],
@@ -1153,9 +1310,16 @@ const List<Map<String, Object?>> launchToolSchemas = [
               '"async": answers at once with childSessionId; when the child\'s '
               'turn ends its result — agent, model, duration and final '
               'answer — is pushed to you as a message, batched with others '
-              'that finish together, and so is every later turn of a child '
-              'kept open. Start several, then end your turn; do not poll. '
-              'Recommended for long or parallel work.',
+              'that finish together. Start several, then end your turn; do '
+              'not poll. Recommended for long or parallel work.',
+        },
+        'report': {
+          'type': 'string',
+          'enum': kReportModes,
+          'description':
+              'With mode "async" and keepOpen, what you hear after its '
+              'answer: "final" (default) when it reports, stops blocked or '
+              'failed, or ends; "each_turn" every turn; "none" nothing.',
         },
       },
       'required': <String>['prompt'],
@@ -1193,14 +1357,35 @@ const List<Map<String, Object?>> launchToolSchemas = [
     'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
   },
   {
+    'name': 'delegation_set_report',
+    'description':
+        'Change what you hear of a session you started: "final", '
+        '"each_turn" or "none" (see open_new_session\'s report). From none '
+        'it is followed again from its next turn; to none nothing more '
+        'comes back.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'The child, from delegations.',
+        },
+        'report': {'type': 'string', 'enum': kReportModes},
+      },
+      'required': <String>['sessionId', 'report'],
+    },
+  },
+  {
     'name': 'report_to_parent',
     'description':
         'Report to the session that started you (open_new_session or '
         'subagent_run): it gets your text at once as a message naming you — '
         'after its turn if it is working. Use it when you are done, blocked, '
         'or need its answer, then end your turn. The end of the turn you '
-        'report in is not pushed to it as well. Refused when no session '
-        'started yours.',
+        'report in is not pushed to it as well. Needs no "Operate '
+        'Karmashala". When your parent has ended, or asked to hear nothing, '
+        'the report is kept on your session instead, and nothing resumes '
+        'it. Refused when no session started yours.',
     'inputSchema': {
       'type': 'object',
       'properties': {

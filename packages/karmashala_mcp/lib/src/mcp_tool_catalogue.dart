@@ -165,6 +165,10 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'delegation_capabilities': McpToolAnnotations.read,
   'delegations': McpToolAnnotations.read,
   'report_to_parent': McpToolAnnotations(movesAttention: false),
+  'delegation_set_report': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
   // Reveals or resumes; for an imported CLI session it opens an external
   // window, one per call — a driver once opened one per `list_sessions` row.
   'open_session': McpToolAnnotations(movesAttention: true),
@@ -629,6 +633,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'delegations': McpToolListing(
     McpToolCategory.sessions,
     'The sessions you started and where each stands, without polling.',
+  ),
+  'delegation_set_report': McpToolListing(
+    McpToolCategory.sessions,
+    'Change what you hear of a session you started: final, each turn, none.',
   ),
   'report_to_parent': McpToolListing(
     McpToolCategory.sessions,

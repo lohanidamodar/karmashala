@@ -143,11 +143,22 @@ class DelegationView {
     this.reportState,
     this.reportVia,
     this.reportedAt,
+    this.reportMode,
+    this.reportText,
+    this.reportDelivered,
   });
 
-  /// `running`, `reported done`, `blocked`, `needs input`, `failed` or
-  /// `ended`.
+  /// `running`, `idle`, `reported done`, `blocked`, `needs input`, `failed`
+  /// or `ended`.
   final String state;
+
+  /// What the parent asked to hear; null for a child never recorded.
+  final String? reportMode;
+
+  /// The last report's text, and whether it reached the parent: one kept
+  /// for a parent that was gone reads false.
+  final String? reportText;
+  final bool? reportDelivered;
 
   /// Whether its turn ends are pushed to its parent.
   final bool followed;
@@ -463,6 +474,9 @@ class DelegationResults {
       reportState: row?.reportState,
       reportVia: row?.reportVia,
       reportedAt: row?.reportedAt,
+      reportMode: row?.reportMode,
+      reportText: row?.reportText,
+      reportDelivered: row?.reportDelivered,
     );
   }
 

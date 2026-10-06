@@ -97,6 +97,7 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'delegation_capabilities',
       'report_to_parent',
       'delegations',
+      'delegation_set_report',
       'open_session',
     ],
     body: '''
@@ -231,19 +232,22 @@ you pass `keepOpen: true`; `childOpen` says which. A child stopped by its
 usage limit stays open, and `resume` names the resume armed for it.
 
 **Children report back to you: end your turn and wait for them, and
-do not poll transcripts or files.** `open_new_session` from a session reports back unless
-you pass `mode: "detached"`; `subagent_run` does with `mode: "async"`. Both
-answer at once. When a child's turn ends — its first and every turn it works
-after, until it ends or is archived — a message tagged `[Karmashala]` arrives
-in your own queue with the child's id, agent, model, how long it took and its
-final answer (cut at 4000 characters; `session_transcript` has the rest) — at
-once if you are idle, after your turn if you are working, several children in
-one message when they finish together. A child sitting idle sends nothing. A
-child can also say it is done, blocked or needs input with `report_to_parent`,
-which reaches you at once. `delegations` lists your children with where each
-stands and its last report, so there is nothing to poll. A child a person
-stops reports nothing. `delegation_capabilities` lists the agents and models
-you can choose from.
+do not poll transcripts or files.** `open_new_session` answers as soon as the
+child is launched, never waiting on it; `report` says what you hear of it.
+`"final"` (the default, unless Settings choose another) is one message when it
+reports with `report_to_parent`, stops blocked on a person or on a failure, or
+ends. `"each_turn"` adds the end of every turn it works. `"none"` is fire and
+forget. `subagent_run` with `mode: "async"` answers at once too and reports its
+answer. Each message is tagged `[Karmashala]` and names the child, agent,
+model, how long it took and its final answer (cut at 4000 characters;
+`session_transcript` has the rest) — at once if you are idle, after your turn
+if you are working. A child sitting idle sends nothing. `delegations` lists
+your children with where each stands and its last report, and
+`delegation_set_report` changes what you hear of one. Nothing is delivered to
+a session that has ended or been archived, and nothing resumes one: a report
+it missed waits on the child's row in `delegations`. A child a person stops
+reports nothing. `delegation_capabilities` lists the agents and models you can
+choose from.
 
 **If a session started you, report to it.** Your opening message names it.
 When you are done, blocked, or need its answer, call `report_to_parent` with

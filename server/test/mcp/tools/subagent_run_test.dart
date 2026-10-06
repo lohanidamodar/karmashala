@@ -14,9 +14,16 @@ import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/mcp/tools/server_tools.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_host/src/sessions/delegation_results.dart'
-    show DelegatedChild, DelegationView, ParentReport, ReportStatus;
+    show
+        DelegatedChild,
+        DelegationView,
+        ParentReport,
+        ReportDelivery,
+        ReportStatus;
+import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/status/child_turn_wait.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
@@ -59,6 +66,9 @@ void main() {
   late List<DelegatedChild> delegated;
   late List<ParentReport> reports;
   late Map<String, DelegationView> views;
+  late List<(DelegatedChild, String)> modeChanges;
+  var delivery = ReportDelivery.delivered;
+  String? defaultReport;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -77,6 +87,9 @@ void main() {
     delegated = [];
     reports = [];
     views = {};
+    modeChanges = [];
+    delivery = ReportDelivery.delivered;
+    defaultReport = null;
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -150,7 +163,15 @@ void main() {
       endChild: (sessionId) async => endedChildren.add(sessionId),
       callHolds: (sessionId, held) => holds.add((sessionId, held)),
       delegate: delegated.add,
-      reportToParent: reports.add,
+      reportToParent: (report) {
+        reports.add(report);
+        return delivery;
+      },
+      setReport: (child, parentId) {
+        modeChanges.add((child, parentId));
+        return true;
+      },
+      defaultReportMode: () => defaultReport,
       delegationOf: (id) =>
           views[id] ?? const DelegationView(state: 'ended', followed: false),
     );
@@ -509,48 +530,89 @@ void main() {
       expect(delegated.single.endOnAnswer, isFalse);
     });
 
-    test('open_new_session reports back in async mode, and never ends the '
-        'session', () async {
+    test('open_new_session: a child of a session reports "final" unless '
+        'told otherwise, and the call never waits for it', () async {
       insertCaller('caller');
       final result =
-          (await tools.call('open_new_session', {
-                'projectId': 'p1',
-                'prompt': 'Write the docs',
-                'mode': 'async',
-              }, 'caller'))!
+          (await tools
+                      .call('open_new_session', {
+                        'projectId': 'p1',
+                        'prompt': 'Write the docs',
+                      }, 'caller')!
+                      .timeout(const Duration(seconds: 5)))!
               as Map<String, Object?>;
+      expect(result['report'], 'final');
       expect(result['reportsBack'], isTrue);
       expect(delegated.single.childId, result['sessionId']);
+      expect(delegated.single.reportMode, 'final');
       expect(delegated.single.endOnAnswer, isFalse);
+
+      for (final mode in ['none', 'each_turn']) {
+        final chosen =
+            (await tools.call('open_new_session', {
+                  'projectId': 'p1',
+                  'prompt': 'x',
+                  'report': mode,
+                }, 'caller'))!
+                as Map<String, Object?>;
+        expect(chosen['report'], mode);
+        expect(delegated.last.reportMode, mode);
+      }
+      expect(delegated.last.reportMode, 'each_turn');
+      expect(
+        (await tools.call('open_new_session', {
+              'projectId': 'p1',
+              'report': 'none',
+            }, 'caller'))!
+            as Map<String, Object?>,
+        containsPair('reportsBack', false),
+      );
     });
 
-    test('open_new_session from a session reports back unless told '
-        'detached', () async {
+    test('an unknown report is refused before anything starts', () async {
       insertCaller('caller');
-      final result =
-          (await tools.call('open_new_session', {
-                'projectId': 'p1',
-                'prompt': 'Write the docs',
-              }, 'caller'))!
-              as Map<String, Object?>;
-      expect(result['reportsBack'], isTrue);
-      expect(result['mode'], 'async');
-      expect(delegated.single.childId, result['sessionId']);
-
-      final detached =
-          (await tools.call('open_new_session', {
-                'projectId': 'p1',
-                'prompt': 'Leave me be',
-                'mode': 'detached',
-              }, 'caller'))!
-              as Map<String, Object?>;
-      expect(detached['reportsBack'], isNull);
-      expect(detached['mode'], 'detached');
-      expect(delegated, hasLength(1));
+      await expectLater(
+        tools.call('open_new_session', {
+          'projectId': 'p1',
+          'report': 'sometimes',
+        }, 'caller'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(pty.started, isEmpty);
     });
 
-    test("a child that reports back is told so in its opening message; a "
-        'detached one is not', () async {
+    test('the old mode argument still reads: detached is none, async is '
+        'each_turn', () async {
+      insertCaller('caller');
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'mode': 'detached',
+      }, 'caller');
+      expect(delegated.last.reportMode, 'none');
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'mode': 'async',
+      }, 'caller');
+      expect(delegated.last.reportMode, 'each_turn');
+    });
+
+    test("Settings' default report mode applies when none is named", () async {
+      insertCaller('caller');
+      defaultReport = 'each_turn';
+      await tools.call('open_new_session', {'projectId': 'p1'}, 'caller');
+      expect(delegated.single.reportMode, 'each_turn');
+      expect(
+        LaunchSettings.parse('{"childReportMode":"none"}').childReportMode,
+        'none',
+      );
+      expect(
+        LaunchSettings.parse('{"childReportMode":"loud"}').childReportMode,
+        isNull,
+      );
+    });
+
+    test("a child is told in its opening message what its parent wants "
+        'to hear', () async {
       insertCaller('caller');
       await tools.call('open_new_session', {
         'projectId': 'p1',
@@ -560,6 +622,14 @@ void main() {
       expect(told, contains('Write the docs'));
       expect(told, contains('report_to_parent'));
       expect(told, contains('"Orchestrator caller" (caller)'));
+      expect(told, isNot(contains('each turn')));
+
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'prompt': 'Chatty',
+        'report': 'each_turn',
+      }, 'caller');
+      expect(pty.started.last.argv.join(' '), contains('each turn'));
 
       await tools.call('subagent_run', {
         'projectId': 'p1',
@@ -571,7 +641,7 @@ void main() {
       await tools.call('open_new_session', {
         'projectId': 'p1',
         'prompt': 'Leave me be',
-        'mode': 'detached',
+        'report': 'none',
       }, 'caller');
       expect(
         pty.started.last.argv.join(' '),
@@ -579,13 +649,46 @@ void main() {
       );
     });
 
-    test('open_new_session from no session, or where nothing can push, is '
-        'detached by default', () async {
+    test('open_new_session from no session reports nothing and records '
+        'nothing', () async {
       final result =
           (await tools.call('open_new_session', {'projectId': 'p1'}, null))!
               as Map<String, Object?>;
-      expect(result['mode'], 'detached');
+      expect(result['report'], 'none');
       expect(delegated, isEmpty);
+    });
+
+    test('delegation_set_report changes what a parent hears of its own '
+        'child, and of no other', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      insertCaller('stranger', parent: 'someone-else');
+      final answer =
+          (await tools.call('delegation_set_report', {
+                'sessionId': 'child',
+                'report': 'each_turn',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(answer['report'], 'each_turn');
+      final (set, parent) = modeChanges.single;
+      expect(set.childId, 'child');
+      expect(set.reportMode, 'each_turn');
+      expect(parent, 'caller');
+      await expectLater(
+        tools.call('delegation_set_report', {
+          'sessionId': 'stranger',
+          'report': 'none',
+        }, 'caller'),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        tools.call('delegation_set_report', {
+          'sessionId': 'child',
+          'report': 'loud',
+        }, 'caller'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(modeChanges, hasLength(1));
     });
 
     test('subagent_run still waits by default', () async {
@@ -648,6 +751,55 @@ void main() {
         'status': 'needs_input',
       }, 'child');
       expect(reports.last.status, ReportStatus.needsInput);
+    });
+
+    test('a parent that is gone, or wants nothing, is said so; the report '
+        'is kept', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      delivery = ReportDelivery.parentGone;
+      final gone =
+          (await tools.call('report_to_parent', {'text': 'Done.'}, 'child'))!
+              as Map<String, Object?>;
+      expect(gone['reported'], isFalse);
+      expect(
+        gone['note'],
+        contains(
+          'your parent session has ended; the report is kept on your session',
+        ),
+      );
+      delivery = ReportDelivery.notWanted;
+      final unwanted =
+          (await tools.call('report_to_parent', {'text': 'Done.'}, 'child'))!
+              as Map<String, Object?>;
+      expect(unwanted['reported'], isFalse);
+      expect(unwanted['note'], contains('kept on your session'));
+    });
+
+    test('works without "Operate Karmashala", which still gates the rest', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      final relay = McpToolRelay(
+        tools: ServerTools([tools]),
+        operatorGranted: (_) => false,
+      );
+      final answer =
+          (await relay.call('report_to_parent', {'text': 'Done.'}, 'child'))!
+              as Map<String, Object?>;
+      expect(answer['reported'], isTrue);
+      expect(reports.single.parentId, 'caller');
+      await expectLater(
+        relay.call('open_new_session', {'projectId': 'p1'}, 'child'),
+        throwsA(isA<McpToolRelayFailure>()),
+      );
+      await expectLater(
+        relay.call('delegation_set_report', {
+          'sessionId': 'x',
+          'report': 'none',
+        }, 'child'),
+        throwsA(isA<McpToolRelayFailure>()),
+      );
+      expect(pty.started, isEmpty);
     });
 
     test('a session nobody started is refused in words', () async {
@@ -738,9 +890,15 @@ void main() {
         reportVia: 'report',
         reportedAt: at,
       );
-      views['gone-child'] = const DelegationView(
+      views['gone-child'] = DelegationView(
         state: 'ended',
         followed: false,
+        reportState: 'done',
+        reportVia: 'report',
+        reportedAt: at,
+        reportMode: 'final',
+        reportText: 'Said while you were gone.',
+        reportDelivered: false,
       );
       final result =
           (await tools.call('delegations', const {}, 'caller'))!
@@ -759,7 +917,12 @@ void main() {
         'at': at.toIso8601String(),
       });
       expect(children.last['state'], 'ended');
-      expect(children.last['lastReport'], 'not recorded');
+      expect(children.last['report'], 'final');
+      expect(children.last['lastReport'], containsPair('delivered', false));
+      expect(
+        children.last['lastReport'],
+        containsPair('text', 'Said while you were gone.'),
+      );
     });
 
     test('needs a calling session', () async {

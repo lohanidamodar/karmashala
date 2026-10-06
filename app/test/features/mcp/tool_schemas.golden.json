@@ -2752,13 +2752,14 @@
             ],
             "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
           },
-          "mode": {
+          "report": {
             "type": "string",
             "enum": [
-              "detached",
-              "async"
+              "none",
+              "final",
+              "each_turn"
             ],
-            "description": "\"async\" (the default when you are a session): each time a turn the new session works ends, its result is pushed to you as a message — end your turn rather than polling. \"detached\": nothing comes back unless you ask with session_wait. The session is never ended for you."
+            "description": "What you hear of it. This call never waits for it either way. \"final\" (the default unless Settings choose another): one message when it reports with report_to_parent, stops blocked or failed, or ends. \"each_turn\": the end of every turn it works as well. \"none\": it runs on its own and nothing comes back. End your turn rather than polling; change it later with delegation_set_report. The session is never ended for you."
           }
         },
         "required": []
@@ -2849,7 +2850,16 @@
               "wait",
               "async"
             ],
-            "description": "\"wait\" (default): this call blocks until the child answers. \"async\": answers at once with childSessionId; when the child's turn ends its result — agent, model, duration and final answer — is pushed to you as a message, batched with others that finish together, and so is every later turn of a child kept open. Start several, then end your turn; do not poll. Recommended for long or parallel work."
+            "description": "\"wait\" (default): this call blocks until the child answers. \"async\": answers at once with childSessionId; when the child's turn ends its result — agent, model, duration and final answer — is pushed to you as a message, batched with others that finish together. Start several, then end your turn; do not poll. Recommended for long or parallel work."
+          },
+          "report": {
+            "type": "string",
+            "enum": [
+              "none",
+              "final",
+              "each_turn"
+            ],
+            "description": "With mode \"async\" and keepOpen, what you hear after its answer: \"final\" (default) when it reports, stops blocked or failed, or ends; \"each_turn\" every turn; \"none\" nothing."
           }
         },
         "required": [
@@ -2901,8 +2911,40 @@
       }
     },
     {
+      "name": "delegation_set_report",
+      "description": "Change what you hear of a session you started: \"final\", \"each_turn\" or \"none\" (see open_new_session's report). From none it is followed again from its next turn; to none nothing more comes back.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "The child, from delegations."
+          },
+          "report": {
+            "type": "string",
+            "enum": [
+              "none",
+              "final",
+              "each_turn"
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "report"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "report_to_parent",
-      "description": "Report to the session that started you (open_new_session or subagent_run): it gets your text at once as a message naming you — after its turn if it is working. Use it when you are done, blocked, or need its answer, then end your turn. The end of the turn you report in is not pushed to it as well. Refused when no session started yours.",
+      "description": "Report to the session that started you (open_new_session or subagent_run): it gets your text at once as a message naming you — after its turn if it is working. Use it when you are done, blocked, or need its answer, then end your turn. The end of the turn you report in is not pushed to it as well. Needs no \"Operate Karmashala\". When your parent has ended, or asked to hear nothing, the report is kept on your session instead, and nothing resumes it. Refused when no session started yours.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -5713,6 +5755,10 @@
     "delegations": {
       "category": "sessions",
       "summary": "The sessions you started and where each stands, without polling."
+    },
+    "delegation_set_report": {
+      "category": "sessions",
+      "summary": "Change what you hear of a session you started: final, each turn, none."
     },
     "report_to_parent": {
       "category": "sessions",

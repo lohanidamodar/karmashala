@@ -22,6 +22,9 @@ void main() {
     expect(sessions, contains('every turn'));
     expect(sessions, contains('report_to_parent'));
     expect(sessions, contains('`delegations`'));
-    expect(sessions, contains('"detached"'));
+    expect(sessions, contains('`delegation_set_report`'));
+    expect(sessions, contains('"none"'));
+    expect(sessions, contains('never waiting on it'));
+    expect(sessions, contains('nothing resumes one'));
   });
 }

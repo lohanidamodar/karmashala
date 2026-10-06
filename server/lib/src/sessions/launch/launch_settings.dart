@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:karmashala_session_engine/store.dart' show kReportModes;
 
 /// The preference a person's Settings are kept under (`settings.v1`).
 const String kLaunchSettingsKey = 'settings.v1';
@@ -20,7 +21,12 @@ class LaunchSettings {
     this.defaultModels = const {},
     this.letAgentsUpdateThemselves,
     this.agentRunForms = const {},
+    this.childReportMode,
   });
+
+  /// What a session hears of a session it starts unless it says: `none`,
+  /// `final` or `each_turn`; null when Settings never chose.
+  final String? childReportMode;
 
   /// Nothing set: every agent at its own defaults.
   static const LaunchSettings none = LaunchSettings();
@@ -125,6 +131,9 @@ class LaunchSettings {
         defaultModels: models,
         letAgentsUpdateThemselves: update is bool ? update : null,
         agentRunForms: forms,
+        childReportMode: kReportModes.contains(json['childReportMode'])
+            ? json['childReportMode'] as String
+            : null,
       );
     } on FormatException {
       return none;

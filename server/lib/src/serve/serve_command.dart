@@ -1550,6 +1550,8 @@ Future<int> _serve(
         delegate: delegations.watch,
         reportToParent: delegations.report,
         delegationOf: delegations.viewOf,
+        setReport: delegations.setMode,
+        defaultReportMode: () => launchSettings().childReportMode,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).
