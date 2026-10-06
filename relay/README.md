@@ -61,10 +61,13 @@ a TLS terminator if the token itself has to stay private.
 | `GET /v1/<32 hex>` | WebSocket. First socket waits, second pairs, a third gets `409`. |
 | `POST /v1/push/register` | `{tag, token, platform}` → `204`. Stores a push token under an opaque, client-derived 32-hex tag — never a device id or a rendezvous. In memory only. |
 | `POST /v1/push` | `{tag, payload}` → `202`. Forwards the opaque base64url ciphertext to FCM for the registered token. `404` unknown tag, `410` token gone (registration dropped), `413` over 4 KiB, `503` when push delivery is not configured. |
-| `GET /healthz` | `{"status":"ok","rendezvous":N,"sockets":M,"push_tokens":P,"push_delivery":…,"uptime_s":S}` |
+| `GET /v1/hooks/<64 hex>` | WebSocket: a server's webhook listener, presenting its secret listen key. The relay derives the public listen id from it (first 16 bytes of SHA-256 over `karmashala-hooks-listen:<key>`), says `{"type":"ready","listen":…}`, and forwards calls to it. A newer listener for the same id replaces the older (`4410`). |
+| `POST /h/<listen id>/<hook id>` | A webhook call, from anywhere. Forwarded as one `call` frame (method, a fixed set of headers, the caller's IP, the raw body in base64) and answered with the server's `answer` frame's status and small JSON body. `405` any other method, `404` a malformed path, `413` over 256 KiB, `429` over 60 calls a minute per listen id, `503` no listener, `504` no answer within 10 s, `502` an answer that breaks the contract. Bodies are held only while in flight. |
+| `GET /healthz` | `{"status":"ok","rendezvous":N,"sockets":M,"push_tokens":P,"push_delivery":…,"hook_listeners":L,"uptime_s":S}` |
 
 Close codes: `1000` the peer left, `4001` the peer's socket failed, `4408` no
-peer arrived in time, `4409` rendezvous busy, `4413` a frame above the size cap,
+peer arrived in time, `4409` rendezvous busy, `4410` a hooks listener was
+replaced by a newer one, `4413` a frame above the size cap,
 `4429` a lone socket sent more than 8 frames before pairing. (WebSocket only
 lets an application send 1000 or 3000-4999, so every refusal is in the 4000s.)
 

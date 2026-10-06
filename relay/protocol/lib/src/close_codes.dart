@@ -21,3 +21,6 @@ const int kCloseFrameTooLarge = 4413;
 
 /// A lone socket sent more frames than the relay holds before pairing.
 const int kCloseImpatient = 4429;
+
+/// A newer listener for the same hooks listen id took its place.
+const int kCloseReplaced = 4410;
