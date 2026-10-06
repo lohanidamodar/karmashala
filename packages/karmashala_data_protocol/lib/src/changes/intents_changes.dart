@@ -16,6 +16,9 @@ DataChange? _intentsChangeFromJson(String name, Map<String, Object?> json) =>
             : agentLaunchFromWire(
                 (json['launch']! as Map).cast<String, Object?>(),
               ),
+        reveal: json['reveal'] == 'background'
+            ? TabReveal.background
+            : TabReveal.front,
       ),
       'openTerminalTab' => OpenTerminalTab(
         paneId: json['paneId']! as String,
@@ -43,6 +46,16 @@ sealed class ClientIntent extends DataChange {
   const ClientIntent();
 }
 
+/// How a window shows a tab it is asked to open.
+enum TabReveal {
+  /// Brought forward and focused: a person asked for it.
+  front,
+
+  /// Added behind the tab in front, which keeps the keyboard: another session
+  /// started it.
+  background,
+}
+
 /// Show session [sessionId] in a tab: attach a pane to the terminal the
 /// server runs it in, or bring forward the pane already showing it. [launch]
 /// is what the pane stores; a launch with an SSH host is one the client runs
@@ -52,11 +65,16 @@ final class OpenSessionTab extends ClientIntent {
     required this.sessionId,
     required this.title,
     this.launch,
+    this.reveal = TabReveal.front,
   });
 
   final String sessionId;
   final String title;
   final AgentPaneLaunch? launch;
+
+  /// On the wire only when [TabReveal.background], so a client that does not
+  /// know the key shows the tab in front, as it always did.
+  final TabReveal reveal;
 
   @override
   Map<String, Object?> toJson() => {
@@ -64,6 +82,7 @@ final class OpenSessionTab extends ClientIntent {
     'sessionId': sessionId,
     'title': title,
     if (launch != null) 'launch': agentLaunchToWire(launch!),
+    if (reveal == TabReveal.background) 'reveal': 'background',
   };
 }
 
