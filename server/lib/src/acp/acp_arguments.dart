@@ -19,7 +19,7 @@ List<String> acpArgumentsFor(
 }) {
   final leading = installation.leadingArguments;
   final package = spec.npxPackage;
-  final mode = spec.argumentsFor(linux: linux);
+  final mode = spec.argumentsFor(linux: linux, version: installation.version);
   if (!isNpxExecutable(installation.executable.path)) {
     return [...leading, ...mode];
   }

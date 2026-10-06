@@ -10,6 +10,7 @@ import './agent_screen_menu.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
 import './agent_status.dart';
+import './agent_version_reading.dart';
 
 part 'agent_descriptor/acp_launch_spec.dart';
 part 'agent_descriptor/agent_launch_spec.dart';

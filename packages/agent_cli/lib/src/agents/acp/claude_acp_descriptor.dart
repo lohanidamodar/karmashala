@@ -61,6 +61,18 @@ const claudeAcpDescriptor = AgentDescriptor(
       'stdio',
       '--allow-dangerously-skip-permissions',
     ],
+    // Hook runs, so a hook's failure or message reaches the chat as a note.
+    versionedArguments: [
+      AcpVersionedArgument(
+        since: '2.1.287',
+        arguments: ['--include-hook-events'],
+        evidence:
+            'claude --help of 2.1.287, read 2026-10-06: "--include-hook-events '
+            'Include all hook lifecycle events in the output stream (only '
+            'works with --output-format=stream-json)"; the stream then carries '
+            'system hook_started/hook_progress/hook_response',
+      ),
+    ],
     // The adapter's plan-exit ids (0.85.1, PERMISSION_OPTION_ID). The
     // clear-context ones are left out: they also drop the conversation. The
     // stream-json bridge's ids are its mode ids, so it needs none.

@@ -71,6 +71,14 @@ class AcpConversationWriter {
     _render('[compacted${trigger == null ? '' : ' ($trigger)'}]');
   }
 
+  /// A note that is no one's turn, on a row of its own.
+  void notice(String text) {
+    if (_closed || text.trim().isEmpty) return;
+    _closeAgentRow();
+    _append(SessionMessageRole.notice, text: text.trim());
+    _render('[note] ${text.trim()}');
+  }
+
   /// One update from the agent. Kinds this writer does not store are ignored.
   void update(SessionUpdate update) {
     if (_closed) return;

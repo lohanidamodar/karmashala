@@ -919,6 +919,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         }
       case 'compact_boundary':
         _compaction = jsonObject(message['compact_metadata']) ?? const {};
+      case 'hook_response':
+        if (ClaudeTools.hookNote(message) case final note?) {
+          _update({'sessionUpdate': AcpExtensions.notice, 'text': note});
+        }
       case 'task_started' || 'task_progress' || 'task_notification':
         _trackBackground(message);
         _onTask(message);
