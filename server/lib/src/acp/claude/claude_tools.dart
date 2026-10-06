@@ -95,6 +95,26 @@ abstract final class ClaudeTools {
     };
   }
 
+  /// A NotebookEdit's diff of the cell it changed, from its result: only the
+  /// result knows the cell's `old_source`. Null for every other tool.
+  static List<JsonMap>? resultDiffs(String name, Object? toolUseResult) {
+    if (name != 'NotebookEdit') return null;
+    final result = jsonObject(toolUseResult);
+    final path = result?['notebook_path'];
+    if (result == null || path is! String || path.isEmpty) return null;
+    final mode = result['edit_mode'];
+    final old = result['old_source'];
+    final source = result['new_source'];
+    return [
+      {
+        'type': 'diff',
+        'path': path,
+        'oldText': mode == 'insert' ? '' : (old is String ? old : ''),
+        'newText': mode == 'delete' ? '' : (source is String ? source : ''),
+      },
+    ];
+  }
+
   /// A tool result's `content` as text: a string, or its blocks' words, the
   /// tools it loaded named on one line. An image is no words: see [images].
   static String resultText(Object? content) => switch (content) {

@@ -415,6 +415,50 @@ void main() {
       },
     );
 
+    test("a NotebookEdit's row is a diff of the cell it changed", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('nb', 'NotebookEdit', {
+              'notebook_path': '/w/explore.ipynb',
+              'cell_id': 'c2',
+              'new_source': 'x = 2',
+              'edit_mode': 'replace',
+            });
+            c.toolResult(
+              'nb',
+              'Updated cell c2 with x = 2',
+              toolUseResult: {
+                'new_source': 'x = 2',
+                'old_source': 'x = 1',
+                'cell_id': 'c2',
+                'cell_type': 'code',
+                'language': 'python',
+                'edit_mode': 'replace',
+                'error': '',
+                'notebook_path': '/w/explore.ipynb',
+              },
+            );
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine, risk: PermissionRisk.bypass);
+      await rt.start();
+      await rt.send('Edit the notebook');
+      await rt.awaitTurn();
+      final call = tools().single;
+      expect(call['content'], [
+        {
+          'type': 'diff',
+          'path': '/w/explore.ipynb',
+          'oldText': 'x = 1',
+          'newText': 'x = 2',
+        },
+      ]);
+      await rt.stop();
+    });
+
     test('TodoWrite, and the TaskCreate/TaskUpdate tools that replaced it, '
         'become the plan rather than tool rows', () async {
       final machine = FakeClaudeMachine(

@@ -830,13 +830,21 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         tool.notes.add(text);
         continue;
       }
+      final diffs =
+          (isError
+              ? null
+              : ClaudeTools.resultDiffs(
+                  tool.name,
+                  message['tool_use_result'],
+                )) ??
+          tool.diffs;
       _update({
         'sessionUpdate': 'tool_call_update',
         'toolCallId': id,
         'status': isError ? 'failed' : 'completed',
         'content': [
-          ...tool.diffs,
-          if (text.isNotEmpty && (tool.diffs.isEmpty || isError))
+          ...diffs,
+          if (text.isNotEmpty && (diffs.isEmpty || isError))
             ClaudeTools.text(text),
           ...ClaudeTools.images(block['content']),
         ],
