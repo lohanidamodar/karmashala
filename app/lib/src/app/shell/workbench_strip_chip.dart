@@ -47,6 +47,7 @@ class _TabChip extends ConsumerWidget {
         agentId == null
             ? null
             : ref.watch(agentRegistryProvider).displayNameFor(agentId),
+        where: _location(ref)?.name,
       ),
       unsaved: _hasUnsaved(ref),
       selected: selected,
@@ -212,6 +213,16 @@ class _TabChip extends ConsumerWidget {
     for (final paneId in [tab.focusedPaneId, ...tab.layout.panes]) {
       if (ref.watch(paneAgentIdProvider(paneId)) case final agentId?) {
         return agentId;
+      }
+    }
+    return null;
+  }
+
+  /// Where the session in this tab runs, read off the pane [_agentId] reads.
+  SessionLocation? _location(WidgetRef ref) {
+    for (final paneId in [tab.focusedPaneId, ...tab.layout.panes]) {
+      if (ref.watch(paneLocationProvider(paneId)) case final location?) {
+        return location;
       }
     }
     return null;

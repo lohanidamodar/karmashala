@@ -15,6 +15,8 @@ import '../../explorer/application/environment_terminals_providers.dart';
 import '../../explorer/application/project_head.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/data/git_data.dart';
+import '../../remote/application/machines_providers.dart';
+import '../../sessions/application/session_location_providers.dart';
 import 'terminal_profiles.dart';
 
 /// The profile pane [profileId] was launched from, or null when it is no
@@ -36,13 +38,16 @@ final shellEnvironmentIdProvider = Provider.autoDispose.family<String?, String>(
   ),
 );
 
-/// How the machine [environmentId] is called, or null when no environment row
-/// names it. Not `environmentLabelForIdProvider`, which falls back to the raw
-/// id: a database key on the status line would be a label made up.
-final shellEnvironmentLabelProvider = Provider.autoDispose
-    .family<String?, String>((ref, environmentId) {
+/// The machine [environmentId] is, named as a session's is, or null when no
+/// environment row names it. Not `environmentLabelForIdProvider`, which falls
+/// back to the raw id: a database key on the status line would be a label made
+/// up.
+final shellLocationProvider = Provider.autoDispose
+    .family<SessionLocation?, String>((ref, environmentId) {
       for (final env in ref.watch(environmentsControllerProvider)) {
-        if (env.id == environmentId) return environmentLabel(env) ?? env.name;
+        if (env.id == environmentId) {
+          return locationOf(env, machine: ref.watch(activeMachineProvider));
+        }
       }
       return null;
     });

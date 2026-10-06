@@ -365,23 +365,43 @@ WorkbenchView
                                                                             _SingleChildViewport
                                                                               ConstrainedBox
                                                                                 Row
-                                                                                  _Facts
-                                                                                    Row
-                                                                                      Row
-                                                                                        StatusDot
-                                                                                          Semantics
-                                                                                            Container
-                                                                                              ConstrainedBox
-                                                                                                DecoratedBox
-                                                                                                  Padding
-                                                                                        SizedBox
-                                                                                        Text text="PowerShell"
-                                                                                          RichText
-                                                                                  Padding
+                                                                                  Row
+                                                                                    EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                      Padding
+                                                                                        Tooltip tooltip="Windows"
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Semantics
+                                                                                                            Row
+                                                                                                              Icon
+                                                                                                                Semantics
+                                                                                                                  ExcludeSemantics
+                                                                                                                    SizedBox
+                                                                                                                      Center
+                                                                                                                        RichText
+                                                                                                              SizedBox
+                                                                                                              EnvironmentMarkLabel
+                                                                                                                ConstrainedBox
+                                                                                                                  Text text="Windows"
+                                                                                                                    RichText
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="Windows"
-                                                                                          RichText
+                                                                                        Row
+                                                                                          StatusDot
+                                                                                            Semantics
+                                                                                              Container
+                                                                                                ConstrainedBox
+                                                                                                  DecoratedBox
+                                                                                                    Padding
+                                                                                          SizedBox
+                                                                                          Text text="PowerShell"
+                                                                                            RichText
 
 == 02 two tabs, the second active ==
 WorkbenchView
@@ -944,23 +964,43 @@ WorkbenchView
                                                                             _SingleChildViewport
                                                                               ConstrainedBox
                                                                                 Row
-                                                                                  _Facts
-                                                                                    Row
-                                                                                      Row
-                                                                                        StatusDot
-                                                                                          Semantics
-                                                                                            Container
-                                                                                              ConstrainedBox
-                                                                                                DecoratedBox
-                                                                                                  Padding
-                                                                                        SizedBox
-                                                                                        Text text="Command Prompt"
-                                                                                          RichText
-                                                                                  Padding
+                                                                                  Row
+                                                                                    EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                      Padding
+                                                                                        Tooltip tooltip="Windows"
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Semantics
+                                                                                                            Row
+                                                                                                              Icon
+                                                                                                                Semantics
+                                                                                                                  ExcludeSemantics
+                                                                                                                    SizedBox
+                                                                                                                      Center
+                                                                                                                        RichText
+                                                                                                              SizedBox
+                                                                                                              EnvironmentMarkLabel
+                                                                                                                ConstrainedBox
+                                                                                                                  Text text="Windows"
+                                                                                                                    RichText
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="Windows"
-                                                                                          RichText
+                                                                                        Row
+                                                                                          StatusDot
+                                                                                            Semantics
+                                                                                              Container
+                                                                                                ConstrainedBox
+                                                                                                  DecoratedBox
+                                                                                                    Padding
+                                                                                          SizedBox
+                                                                                          Text text="Command Prompt"
+                                                                                            RichText
 
 == 03 a workspace split in two groups ==
 WorkbenchView
@@ -1327,23 +1367,43 @@ WorkbenchView
                                                                                 _SingleChildViewport
                                                                                   ConstrainedBox
                                                                                     Row
-                                                                                      _Facts
-                                                                                        Row
-                                                                                          Row
-                                                                                            StatusDot
-                                                                                              Semantics
-                                                                                                Container
-                                                                                                  ConstrainedBox
-                                                                                                    DecoratedBox
-                                                                                                      Padding
-                                                                                            SizedBox
-                                                                                            Text text="Command Prompt"
-                                                                                              RichText
-                                                                                      Padding
+                                                                                      Row
+                                                                                        EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                          Padding
+                                                                                            Tooltip tooltip="Windows"
+                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                OverlayPortal
+                                                                                                  _OverlayPortal
+                                                                                                    Semantics
+                                                                                                      _ExclusiveMouseRegion
+                                                                                                        Listener
+                                                                                                          Semantics
+                                                                                                            MouseRegion
+                                                                                                              Semantics
+                                                                                                                Row
+                                                                                                                  Icon
+                                                                                                                    Semantics
+                                                                                                                      ExcludeSemantics
+                                                                                                                        SizedBox
+                                                                                                                          Center
+                                                                                                                            RichText
+                                                                                                                  SizedBox
+                                                                                                                  EnvironmentMarkLabel
+                                                                                                                    ConstrainedBox
+                                                                                                                      Text text="Windows"
+                                                                                                                        RichText
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="Windows"
-                                                                                              RichText
+                                                                                            Row
+                                                                                              StatusDot
+                                                                                                Semantics
+                                                                                                  Container
+                                                                                                    ConstrainedBox
+                                                                                                      DecoratedBox
+                                                                                                        Padding
+                                                                                              SizedBox
+                                                                                              Text text="Command Prompt"
+                                                                                                RichText
       PaneDivider
         MouseRegion
           GestureDetector
@@ -1718,23 +1778,43 @@ WorkbenchView
                                                                                 _SingleChildViewport
                                                                                   ConstrainedBox
                                                                                     Row
-                                                                                      _Facts
-                                                                                        Row
-                                                                                          Row
-                                                                                            StatusDot
-                                                                                              Semantics
-                                                                                                Container
-                                                                                                  ConstrainedBox
-                                                                                                    DecoratedBox
-                                                                                                      Padding
-                                                                                            SizedBox
-                                                                                            Text text="PowerShell"
-                                                                                              RichText
-                                                                                      Padding
+                                                                                      Row
+                                                                                        EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                          Padding
+                                                                                            Tooltip tooltip="Windows"
+                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                OverlayPortal
+                                                                                                  _OverlayPortal
+                                                                                                    Semantics
+                                                                                                      _ExclusiveMouseRegion
+                                                                                                        Listener
+                                                                                                          Semantics
+                                                                                                            MouseRegion
+                                                                                                              Semantics
+                                                                                                                Row
+                                                                                                                  Icon
+                                                                                                                    Semantics
+                                                                                                                      ExcludeSemantics
+                                                                                                                        SizedBox
+                                                                                                                          Center
+                                                                                                                            RichText
+                                                                                                                  SizedBox
+                                                                                                                  EnvironmentMarkLabel
+                                                                                                                    ConstrainedBox
+                                                                                                                      Text text="Windows"
+                                                                                                                        RichText
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="Windows"
-                                                                                              RichText
+                                                                                            Row
+                                                                                              StatusDot
+                                                                                                Semantics
+                                                                                                  Container
+                                                                                                    ConstrainedBox
+                                                                                                      DecoratedBox
+                                                                                                        Padding
+                                                                                              SizedBox
+                                                                                              Text text="PowerShell"
+                                                                                                RichText
 
 == 04 an empty group ==
 WorkbenchView
@@ -2101,23 +2181,43 @@ WorkbenchView
                                                                                 _SingleChildViewport
                                                                                   ConstrainedBox
                                                                                     Row
-                                                                                      _Facts
-                                                                                        Row
-                                                                                          Row
-                                                                                            StatusDot
-                                                                                              Semantics
-                                                                                                Container
-                                                                                                  ConstrainedBox
-                                                                                                    DecoratedBox
-                                                                                                      Padding
-                                                                                            SizedBox
-                                                                                            Text text="PowerShell"
-                                                                                              RichText
-                                                                                      Padding
+                                                                                      Row
+                                                                                        EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                          Padding
+                                                                                            Tooltip tooltip="Windows"
+                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                OverlayPortal
+                                                                                                  _OverlayPortal
+                                                                                                    Semantics
+                                                                                                      _ExclusiveMouseRegion
+                                                                                                        Listener
+                                                                                                          Semantics
+                                                                                                            MouseRegion
+                                                                                                              Semantics
+                                                                                                                Row
+                                                                                                                  Icon
+                                                                                                                    Semantics
+                                                                                                                      ExcludeSemantics
+                                                                                                                        SizedBox
+                                                                                                                          Center
+                                                                                                                            RichText
+                                                                                                                  SizedBox
+                                                                                                                  EnvironmentMarkLabel
+                                                                                                                    ConstrainedBox
+                                                                                                                      Text text="Windows"
+                                                                                                                        RichText
                                                                                         _Facts
                                                                                           Row
-                                                                                            Text text="Windows"
-                                                                                              RichText
+                                                                                            Row
+                                                                                              StatusDot
+                                                                                                Semantics
+                                                                                                  Container
+                                                                                                    ConstrainedBox
+                                                                                                      DecoratedBox
+                                                                                                        Padding
+                                                                                              SizedBox
+                                                                                              Text text="PowerShell"
+                                                                                                RichText
       PaneDivider
         MouseRegion
           GestureDetector
@@ -2583,7 +2683,7 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code"
+                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
                                                                                                                                                                             RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                                                                               OverlayPortal
                                                                                                                                                                                 _OverlayPortal
@@ -2866,84 +2966,128 @@ WorkbenchView
                                                                         AgentLogo
                                                                           Image
                                                                             RawImage
+                                                SessionEnvironmentMark key=[<'session-bar-environment'>]
+                                                  EnvironmentMark
+                                                    Padding
+                                                      Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                          OverlayPortal
+                                                            _OverlayPortal
+                                                              Semantics
+                                                                _ExclusiveMouseRegion
+                                                                  Listener
+                                                                    Semantics
+                                                                      MouseRegion
+                                                                        Semantics
+                                                                          Row
+                                                                            Icon
+                                                                              Semantics
+                                                                                ExcludeSemantics
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      RichText
                                                 Expanded
                                                   YieldingRow
                                                     _YieldingRowLayout
-                                                      ExcludeFocus
+                                                      ExcludeFocus key=[ValueKey<String>#…]
                                                         Focus
                                                           _FocusInheritedScope
-                                                            DeliveryStateLine
-                                                              SizedBox
-                                                                YieldingRow
-                                                                  _YieldingRowLayout
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            _StageMark
-                                                                              Row key=[<'delivery-stage'>]
-                                                                                Icon
-                                                                                  Semantics
-                                                                                    ExcludeSemantics
-                                                                                      SizedBox
-                                                                                        Center
-                                                                                          RichText
-                                                                                SizedBox
-                                                                                Flexible
-                                                                                  Text text="No changes yet"
-                                                                                    RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            SessionVerdictMark
-                                                                              Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
-                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                  OverlayPortal
-                                                                                    _OverlayPortal
-                                                                                      Semantics
-                                                                                        _ExclusiveMouseRegion
-                                                                                          Listener
-                                                                                            Semantics
-                                                                                              MouseRegion
-                                                                                                Row
-                                                                                                  Icon
-                                                                                                    Semantics
-                                                                                                      ExcludeSemantics
-                                                                                                        SizedBox
-                                                                                                          Center
-                                                                                                            RichText
-                                                                                                  SizedBox
-                                                                                                  Flexible
-                                                                                                    Text text="Not checked"
-                                                                                                      RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            Row
-                                                                              Icon
-                                                                                Semantics
+                                                            SessionEnvironmentLabel key=[<'session-bar-environment-label'>]
+                                                              Padding
+                                                                Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                                  RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                    OverlayPortal
+                                                                      _OverlayPortal
+                                                                        Semantics
+                                                                          _ExclusiveMouseRegion
+                                                                            Listener
+                                                                              Semantics
+                                                                                MouseRegion
                                                                                   ExcludeSemantics
-                                                                                    SizedBox
-                                                                                      Center
-                                                                                        RichText
-                                                                              SizedBox
-                                                                              Flexible
-                                                                                ConstrainedBox
-                                                                                  RemoteLink
-                                                                                    Text text="work"
-                                                                                      RichText
+                                                                                    EnvironmentMarkLabel
+                                                                                      ConstrainedBox
+                                                                                        Text text="Windows"
+                                                                                          RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
-                                                            ScheduledResumeChip
-                                                              SizedBox
-                                                      ExcludeFocus
-                                                        Focus
-                                                          _FocusInheritedScope
-                                                            QueuedCountChip
-                                                              SizedBox
+                                                            YieldingRow
+                                                              _YieldingRowLayout
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      DeliveryStateLine
+                                                                        SizedBox
+                                                                          YieldingRow
+                                                                            _YieldingRowLayout
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      _StageMark
+                                                                                        Row key=[<'delivery-stage'>]
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="No changes yet"
+                                                                                              RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      SessionVerdictMark
+                                                                                        Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Row
+                                                                                                            Icon
+                                                                                                              Semantics
+                                                                                                                ExcludeSemantics
+                                                                                                                  SizedBox
+                                                                                                                    Center
+                                                                                                                      RichText
+                                                                                                            SizedBox
+                                                                                                            Flexible
+                                                                                                              Text text="Not checked"
+                                                                                                                RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      Row
+                                                                                        Icon
+                                                                                          Semantics
+                                                                                            ExcludeSemantics
+                                                                                              SizedBox
+                                                                                                Center
+                                                                                                  RichText
+                                                                                        SizedBox
+                                                                                        Flexible
+                                                                                          ConstrainedBox
+                                                                                            RemoteLink
+                                                                                              Text text="work"
+                                                                                                RichText
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      ScheduledResumeChip
+                                                                        SizedBox
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      QueuedCountChip
+                                                                        SizedBox
                                                 SizedBox
                                                 ConstrainedBox
                                                   YieldingRow
@@ -3562,7 +3706,7 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code"
+                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
                                                                                                                                                                             RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                                                                               OverlayPortal
                                                                                                                                                                                 _OverlayPortal
@@ -4201,84 +4345,128 @@ WorkbenchView
                                                                         AgentLogo
                                                                           Image
                                                                             RawImage
+                                                SessionEnvironmentMark key=[<'session-bar-environment'>]
+                                                  EnvironmentMark
+                                                    Padding
+                                                      Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                          OverlayPortal
+                                                            _OverlayPortal
+                                                              Semantics
+                                                                _ExclusiveMouseRegion
+                                                                  Listener
+                                                                    Semantics
+                                                                      MouseRegion
+                                                                        Semantics
+                                                                          Row
+                                                                            Icon
+                                                                              Semantics
+                                                                                ExcludeSemantics
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      RichText
                                                 Expanded
                                                   YieldingRow
                                                     _YieldingRowLayout
-                                                      ExcludeFocus
+                                                      ExcludeFocus key=[ValueKey<String>#…]
                                                         Focus
                                                           _FocusInheritedScope
-                                                            DeliveryStateLine
-                                                              SizedBox
-                                                                YieldingRow
-                                                                  _YieldingRowLayout
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            _StageMark
-                                                                              Row key=[<'delivery-stage'>]
-                                                                                Icon
-                                                                                  Semantics
-                                                                                    ExcludeSemantics
-                                                                                      SizedBox
-                                                                                        Center
-                                                                                          RichText
-                                                                                SizedBox
-                                                                                Flexible
-                                                                                  Text text="No changes yet"
-                                                                                    RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            SessionVerdictMark
-                                                                              Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
-                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                  OverlayPortal
-                                                                                    _OverlayPortal
-                                                                                      Semantics
-                                                                                        _ExclusiveMouseRegion
-                                                                                          Listener
-                                                                                            Semantics
-                                                                                              MouseRegion
-                                                                                                Row
-                                                                                                  Icon
-                                                                                                    Semantics
-                                                                                                      ExcludeSemantics
-                                                                                                        SizedBox
-                                                                                                          Center
-                                                                                                            RichText
-                                                                                                  SizedBox
-                                                                                                  Flexible
-                                                                                                    Text text="Not checked"
-                                                                                                      RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            Row
-                                                                              Icon
-                                                                                Semantics
+                                                            SessionEnvironmentLabel key=[<'session-bar-environment-label'>]
+                                                              Padding
+                                                                Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                                  RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                    OverlayPortal
+                                                                      _OverlayPortal
+                                                                        Semantics
+                                                                          _ExclusiveMouseRegion
+                                                                            Listener
+                                                                              Semantics
+                                                                                MouseRegion
                                                                                   ExcludeSemantics
-                                                                                    SizedBox
-                                                                                      Center
-                                                                                        RichText
-                                                                              SizedBox
-                                                                              Flexible
-                                                                                ConstrainedBox
-                                                                                  RemoteLink
-                                                                                    Text text="work"
-                                                                                      RichText
+                                                                                    EnvironmentMarkLabel
+                                                                                      ConstrainedBox
+                                                                                        Text text="Windows"
+                                                                                          RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
-                                                            ScheduledResumeChip
-                                                              SizedBox
-                                                      ExcludeFocus
-                                                        Focus
-                                                          _FocusInheritedScope
-                                                            QueuedCountChip
-                                                              SizedBox
+                                                            YieldingRow
+                                                              _YieldingRowLayout
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      DeliveryStateLine
+                                                                        SizedBox
+                                                                          YieldingRow
+                                                                            _YieldingRowLayout
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      _StageMark
+                                                                                        Row key=[<'delivery-stage'>]
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="No changes yet"
+                                                                                              RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      SessionVerdictMark
+                                                                                        Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Row
+                                                                                                            Icon
+                                                                                                              Semantics
+                                                                                                                ExcludeSemantics
+                                                                                                                  SizedBox
+                                                                                                                    Center
+                                                                                                                      RichText
+                                                                                                            SizedBox
+                                                                                                            Flexible
+                                                                                                              Text text="Not checked"
+                                                                                                                RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      Row
+                                                                                        Icon
+                                                                                          Semantics
+                                                                                            ExcludeSemantics
+                                                                                              SizedBox
+                                                                                                Center
+                                                                                                  RichText
+                                                                                        SizedBox
+                                                                                        Flexible
+                                                                                          ConstrainedBox
+                                                                                            RemoteLink
+                                                                                              Text text="work"
+                                                                                                RichText
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      ScheduledResumeChip
+                                                                        SizedBox
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      QueuedCountChip
+                                                                        SizedBox
                                                 SizedBox
                                                 ConstrainedBox
                                                   YieldingRow
@@ -5132,84 +5320,128 @@ WorkbenchView
                                                                         AgentLogo
                                                                           Image
                                                                             RawImage
+                                                SessionEnvironmentMark key=[<'session-bar-environment'>]
+                                                  EnvironmentMark
+                                                    Padding
+                                                      Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                          OverlayPortal
+                                                            _OverlayPortal
+                                                              Semantics
+                                                                _ExclusiveMouseRegion
+                                                                  Listener
+                                                                    Semantics
+                                                                      MouseRegion
+                                                                        Semantics
+                                                                          Row
+                                                                            Icon
+                                                                              Semantics
+                                                                                ExcludeSemantics
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      RichText
                                                 Expanded
                                                   YieldingRow
                                                     _YieldingRowLayout
-                                                      ExcludeFocus
+                                                      ExcludeFocus key=[ValueKey<String>#…]
                                                         Focus
                                                           _FocusInheritedScope
-                                                            DeliveryStateLine
-                                                              SizedBox
-                                                                YieldingRow
-                                                                  _YieldingRowLayout
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            _StageMark
-                                                                              Row key=[<'delivery-stage'>]
-                                                                                Icon
-                                                                                  Semantics
-                                                                                    ExcludeSemantics
-                                                                                      SizedBox
-                                                                                        Center
-                                                                                          RichText
-                                                                                SizedBox
-                                                                                Flexible
-                                                                                  Text text="Not running"
-                                                                                    RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            SessionVerdictMark
-                                                                              Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
-                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                  OverlayPortal
-                                                                                    _OverlayPortal
-                                                                                      Semantics
-                                                                                        _ExclusiveMouseRegion
-                                                                                          Listener
-                                                                                            Semantics
-                                                                                              MouseRegion
-                                                                                                Row
-                                                                                                  Icon
-                                                                                                    Semantics
-                                                                                                      ExcludeSemantics
-                                                                                                        SizedBox
-                                                                                                          Center
-                                                                                                            RichText
-                                                                                                  SizedBox
-                                                                                                  Flexible
-                                                                                                    Text text="Not checked"
-                                                                                                      RichText
-                                                                    ExcludeFocus
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          Padding
-                                                                            Row
-                                                                              Icon
-                                                                                Semantics
+                                                            SessionEnvironmentLabel key=[<'session-bar-environment-label'>]
+                                                              Padding
+                                                                Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                                  RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                    OverlayPortal
+                                                                      _OverlayPortal
+                                                                        Semantics
+                                                                          _ExclusiveMouseRegion
+                                                                            Listener
+                                                                              Semantics
+                                                                                MouseRegion
                                                                                   ExcludeSemantics
-                                                                                    SizedBox
-                                                                                      Center
-                                                                                        RichText
-                                                                              SizedBox
-                                                                              Flexible
-                                                                                ConstrainedBox
-                                                                                  RemoteLink
-                                                                                    Text text="work"
-                                                                                      RichText
+                                                                                    EnvironmentMarkLabel
+                                                                                      ConstrainedBox
+                                                                                        Text text="Windows"
+                                                                                          RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
-                                                            ScheduledResumeChip
-                                                              SizedBox
-                                                      ExcludeFocus
-                                                        Focus
-                                                          _FocusInheritedScope
-                                                            QueuedCountChip
-                                                              SizedBox
+                                                            YieldingRow
+                                                              _YieldingRowLayout
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      DeliveryStateLine
+                                                                        SizedBox
+                                                                          YieldingRow
+                                                                            _YieldingRowLayout
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      _StageMark
+                                                                                        Row key=[<'delivery-stage'>]
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="Not running"
+                                                                                              RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      SessionVerdictMark
+                                                                                        Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Row
+                                                                                                            Icon
+                                                                                                              Semantics
+                                                                                                                ExcludeSemantics
+                                                                                                                  SizedBox
+                                                                                                                    Center
+                                                                                                                      RichText
+                                                                                                            SizedBox
+                                                                                                            Flexible
+                                                                                                              Text text="Not checked"
+                                                                                                                RichText
+                                                                              ExcludeFocus
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Padding
+                                                                                      Row
+                                                                                        Icon
+                                                                                          Semantics
+                                                                                            ExcludeSemantics
+                                                                                              SizedBox
+                                                                                                Center
+                                                                                                  RichText
+                                                                                        SizedBox
+                                                                                        Flexible
+                                                                                          ConstrainedBox
+                                                                                            RemoteLink
+                                                                                              Text text="work"
+                                                                                                RichText
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      ScheduledResumeChip
+                                                                        SizedBox
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      QueuedCountChip
+                                                                        SizedBox
                                                 SizedBox
                                                 ConstrainedBox
                                                   YieldingRow
@@ -5828,7 +6060,7 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code"
+                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
                                                                                                                                                                             RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                                                                               OverlayPortal
                                                                                                                                                                                 _OverlayPortal
@@ -6114,6 +6346,31 @@ WorkbenchView
                                                                       AgentLogo
                                                                         Image
                                                                           RawImage
+                                              SessionEnvironmentMark key=[<'session-bar-environment'>]
+                                                EnvironmentMark
+                                                  Padding
+                                                    Tooltip tooltip="Windows\nC:\\src\\demo\\app"
+                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                        OverlayPortal
+                                                          _OverlayPortal
+                                                            Semantics
+                                                              _ExclusiveMouseRegion
+                                                                Listener
+                                                                  Semantics
+                                                                    MouseRegion
+                                                                      Semantics
+                                                                        Row
+                                                                          Icon
+                                                                            Semantics
+                                                                              ExcludeSemantics
+                                                                                SizedBox
+                                                                                  Center
+                                                                                    RichText
+                                                                          SizedBox
+                                                                          EnvironmentMarkLabel
+                                                                            ConstrainedBox
+                                                                              Text text="Windows"
+                                                                                RichText
                                               Expanded
                                                 LayoutBuilder
                                                   DeliveryStateLine
@@ -8500,23 +8757,43 @@ WorkbenchView
                                                                             _SingleChildViewport
                                                                               ConstrainedBox
                                                                                 Row
-                                                                                  _Facts
-                                                                                    Row
-                                                                                      Row
-                                                                                        StatusDot
-                                                                                          Semantics
-                                                                                            Container
-                                                                                              ConstrainedBox
-                                                                                                DecoratedBox
-                                                                                                  Padding
-                                                                                        SizedBox
-                                                                                        Text text="PowerShell"
-                                                                                          RichText
-                                                                                  Padding
+                                                                                  Row
+                                                                                    EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                      Padding
+                                                                                        Tooltip tooltip="Windows"
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Semantics
+                                                                                                            Row
+                                                                                                              Icon
+                                                                                                                Semantics
+                                                                                                                  ExcludeSemantics
+                                                                                                                    SizedBox
+                                                                                                                      Center
+                                                                                                                        RichText
+                                                                                                              SizedBox
+                                                                                                              EnvironmentMarkLabel
+                                                                                                                ConstrainedBox
+                                                                                                                  Text text="Windows"
+                                                                                                                    RichText
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="Windows"
-                                                                                          RichText
+                                                                                        Row
+                                                                                          StatusDot
+                                                                                            Semantics
+                                                                                              Container
+                                                                                                ConstrainedBox
+                                                                                                  DecoratedBox
+                                                                                                    Padding
+                                                                                          SizedBox
+                                                                                          Text text="PowerShell"
+                                                                                            RichText
 
 == 10 a tab dragged over its neighbour ==
 WorkbenchView
@@ -9088,23 +9365,43 @@ WorkbenchView
                                                                             _SingleChildViewport
                                                                               ConstrainedBox
                                                                                 Row
-                                                                                  _Facts
-                                                                                    Row
-                                                                                      Row
-                                                                                        StatusDot
-                                                                                          Semantics
-                                                                                            Container
-                                                                                              ConstrainedBox
-                                                                                                DecoratedBox
-                                                                                                  Padding
-                                                                                        SizedBox
-                                                                                        Text text="Command Prompt"
-                                                                                          RichText
-                                                                                  Padding
+                                                                                  Row
+                                                                                    EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                      Padding
+                                                                                        Tooltip tooltip="Windows"
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Semantics
+                                                                                                            Row
+                                                                                                              Icon
+                                                                                                                Semantics
+                                                                                                                  ExcludeSemantics
+                                                                                                                    SizedBox
+                                                                                                                      Center
+                                                                                                                        RichText
+                                                                                                              SizedBox
+                                                                                                              EnvironmentMarkLabel
+                                                                                                                ConstrainedBox
+                                                                                                                  Text text="Windows"
+                                                                                                                    RichText
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="Windows"
-                                                                                          RichText
+                                                                                        Row
+                                                                                          StatusDot
+                                                                                            Semantics
+                                                                                              Container
+                                                                                                ConstrainedBox
+                                                                                                  DecoratedBox
+                                                                                                    Padding
+                                                                                          SizedBox
+                                                                                          Text text="Command Prompt"
+                                                                                            RichText
 
 == 11 a settings tab in the strip ==
 WorkbenchView
@@ -9610,20 +9907,40 @@ WorkbenchView
                                                                             _SingleChildViewport
                                                                               ConstrainedBox
                                                                                 Row
-                                                                                  _Facts
-                                                                                    Row
-                                                                                      Row
-                                                                                        StatusDot
-                                                                                          Semantics
-                                                                                            Container
-                                                                                              ConstrainedBox
-                                                                                                DecoratedBox
-                                                                                                  Padding
-                                                                                        SizedBox
-                                                                                        Text text="PowerShell"
-                                                                                          RichText
-                                                                                  Padding
+                                                                                  Row
+                                                                                    EnvironmentMark key=[<'session-bar-environment'>]
+                                                                                      Padding
+                                                                                        Tooltip tooltip="Windows"
+                                                                                          RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                            OverlayPortal
+                                                                                              _OverlayPortal
+                                                                                                Semantics
+                                                                                                  _ExclusiveMouseRegion
+                                                                                                    Listener
+                                                                                                      Semantics
+                                                                                                        MouseRegion
+                                                                                                          Semantics
+                                                                                                            Row
+                                                                                                              Icon
+                                                                                                                Semantics
+                                                                                                                  ExcludeSemantics
+                                                                                                                    SizedBox
+                                                                                                                      Center
+                                                                                                                        RichText
+                                                                                                              SizedBox
+                                                                                                              EnvironmentMarkLabel
+                                                                                                                ConstrainedBox
+                                                                                                                  Text text="Windows"
+                                                                                                                    RichText
                                                                                     _Facts
                                                                                       Row
-                                                                                        Text text="Windows"
-                                                                                          RichText
+                                                                                        Row
+                                                                                          StatusDot
+                                                                                            Semantics
+                                                                                              Container
+                                                                                                ConstrainedBox
+                                                                                                  DecoratedBox
+                                                                                                    Padding
+                                                                                          SizedBox
+                                                                                          Text text="PowerShell"
+                                                                                            RichText

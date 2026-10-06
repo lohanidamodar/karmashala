@@ -140,21 +140,22 @@ void main() {
     matching: find.text(title),
   );
 
-  testWidgets("a session tab's tooltip is its full title and its agent", (
-    tester,
-  ) async {
-    seedChatSession();
-    container.read(selectedSessionIdProvider.notifier).select('acp-1');
-    await pump(tester);
-    final agent = container
-        .read(agentRegistryProvider)
-        .displayNameFor(AgentIds.claudeAcp);
+  testWidgets(
+    "a session tab's tooltip is its full title, its agent and where it runs",
+    (tester) async {
+      seedChatSession();
+      container.read(selectedSessionIdProvider.notifier).select('acp-1');
+      await pump(tester);
+      final agent = container
+          .read(agentRegistryProvider)
+          .displayNameFor(AgentIds.claudeAcp);
 
-    expect(drawn('$longTitle · $agent'), 0);
-    await hover(tester, tester.getCenter(chipTitle(longTitle)));
+      expect(drawn('$longTitle · $agent · Windows'), 0);
+      await hover(tester, tester.getCenter(chipTitle(longTitle)));
 
-    expect(drawn('$longTitle · $agent'), 1);
-  });
+      expect(drawn('$longTitle · $agent · Windows'), 1);
+    },
+  );
 
   testWidgets("a plain shell tab's tooltip is its title", (tester) async {
     container

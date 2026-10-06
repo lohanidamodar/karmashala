@@ -158,6 +158,6 @@ class WorkbenchTabChip extends StatelessWidget {
 }
 
 /// What hovering a tab's title says: the title in full, which the chip cuts to
-/// fit, and the agent when the tab holds a session.
-String tabTitleTooltip(String title, String? agentName) =>
-    agentName == null ? title : '$title · $agentName';
+/// fit, and the agent and where it runs when the tab holds a session.
+String tabTitleTooltip(String title, String? agentName, {String? where}) =>
+    [title, ?agentName, ?where].join(' · ');

@@ -9,10 +9,14 @@ import 'package:karmashala_ui/rows.dart' show abbreviatePath;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/shell_status.dart';
+import '../../environments/presentation/environment_mark.dart';
 import '../application/terminal_sessions_controller.dart';
 
 /// The gap between two facts on the line (board A2: `gap: 14`).
 const double _factGap = Insets.md;
+
+/// Below this the machine is its glyph alone, as on a narrow session bar.
+const double _machineLabelFloor = 560;
 
 /// The pane group [groupId]'s shell status line describes: the focused pane of
 /// its active tab, when that pane is a **plain shell** of ours. Null for a
@@ -121,7 +125,7 @@ class _ShellStatusLineState extends ConsumerState<ShellStatusLine> {
     );
     final machine = environmentId == null
         ? null
-        : ref.watch(shellEnvironmentLabelProvider(environmentId));
+        : ref.watch(shellLocationProvider(environmentId));
     final directory = path == null || path.isEmpty || environmentId == null
         ? null
         : EnvironmentPath(environmentId: environmentId, path: path);
@@ -189,7 +193,6 @@ class _ShellStatusLineState extends ConsumerState<ShellStatusLine> {
           'last exit $exitCode',
           style: failed ? label?.copyWith(color: semantic.failure) : muted,
         ),
-      if (machine != null) Text(machine, style: muted),
     ];
 
     // Spread across the bar at width, scrolled as one run when narrower than
@@ -206,7 +209,22 @@ class _ShellStatusLineState extends ConsumerState<ShellStatusLine> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Facts(children: left),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The machine leads, as on a session's bar.
+                  if (machine != null)
+                    EnvironmentMark(
+                      key: EnvironmentMark.barKey,
+                      kind: machine.kind,
+                      label: machine.label,
+                      name: machine.name,
+                      folder: path == null || path.isEmpty ? null : path,
+                      labelled: constraints.maxWidth >= _machineLabelFloor,
+                    ),
+                  _Facts(children: left),
+                ],
+              ),
               if (right.isNotEmpty)
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: _factGap),

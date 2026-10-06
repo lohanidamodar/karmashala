@@ -12,6 +12,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_agent_providers.dart';
+import '../../sessions/application/session_location_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -266,6 +267,7 @@ class PaneTabChip extends ConsumerWidget {
         agentId == null
             ? null
             : ref.watch(agentRegistryProvider).displayNameFor(agentId),
+        where: ref.watch(paneLocationProvider(paneId))?.name,
       ),
       trailing: DenseIconButton(
         tooltip: liveness.isLive

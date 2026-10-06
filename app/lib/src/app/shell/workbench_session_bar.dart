@@ -160,7 +160,13 @@ class _SessionBar extends ConsumerWidget {
                       builder: (context, constraints) =>
                           constraints.maxWidth >= thirdControl
                           ? const SizedBox.shrink()
-                          : _SessionFactsRow(sessionId: sessionId),
+                          : _SessionFactsRow(
+                              sessionId: sessionId,
+                              // The action row's glyphs-only width drops the
+                              // machine's name too, and keeps its glyph.
+                              environmentLabelled:
+                                  constraints.maxWidth >= narrowBelow,
+                            ),
                     ),
                   ],
                   LayoutBuilder(
@@ -275,15 +281,30 @@ class _SessionStatusLine extends StatelessWidget {
           // One line, whatever the branch is called: what does not fit is left
           // out whole, last first, and the stage's word ends, rather than any
           // of it running under the controls. The resume chip rides with the
-          // facts: it is nothing, and no width, until armed. The agent leads.
+          // facts: it is nothing, and no width, until armed. The agent leads,
+          // then where it runs: its glyph stays, and its name is the first
+          // thing to go when the facts need the width.
           SessionAgentMark(key: SessionAgentMark.barKey, sessionId: sessionId),
+          SessionEnvironmentMark(
+            key: SessionEnvironmentMark.barKey,
+            sessionId: sessionId,
+            labelled: false,
+          ),
           Expanded(
             child: YieldingRow(
-              yieldFromStart: false,
               children: [
-                DeliveryStateLine(sessionId: sessionId, singleLine: true),
-                ScheduledResumeChip(sessionId: sessionId),
-                QueuedCountChip(sessionId: sessionId),
+                SessionEnvironmentLabel(
+                  key: SessionEnvironmentLabel.barKey,
+                  sessionId: sessionId,
+                ),
+                YieldingRow(
+                  yieldFromStart: false,
+                  children: [
+                    DeliveryStateLine(sessionId: sessionId, singleLine: true),
+                    ScheduledResumeChip(sessionId: sessionId),
+                    QueuedCountChip(sessionId: sessionId),
+                  ],
+                ),
               ],
             ),
           ),
@@ -334,14 +355,23 @@ class _SessionStatusLine extends StatelessWidget {
 /// The caption over the action row, below the status line's width: the
 /// delivery state. Usage is per account, so it is in the toolbar.
 class _SessionFactsRow extends StatelessWidget {
-  const _SessionFactsRow({required this.sessionId});
+  const _SessionFactsRow({
+    required this.sessionId,
+    required this.environmentLabelled,
+  });
 
   final String sessionId;
+  final bool environmentLabelled;
 
   @override
   Widget build(BuildContext context) => Row(
     children: [
       SessionAgentMark(key: SessionAgentMark.barKey, sessionId: sessionId),
+      SessionEnvironmentMark(
+        key: SessionEnvironmentMark.barKey,
+        sessionId: sessionId,
+        labelled: environmentLabelled,
+      ),
       Expanded(
         // Scrolled rather than squeezed: under the floor, sharing the pixels
         // out leaves none of them legible.

@@ -102,6 +102,12 @@ class _CompactSessionBar extends StatelessWidget {
                         key: SessionAgentMark.barKey,
                         sessionId: sessionId,
                       ),
+                      // The glyph alone: the delivery line needs the words.
+                      SessionEnvironmentMark(
+                        key: SessionEnvironmentMark.barKey,
+                        sessionId: sessionId,
+                        labelled: false,
+                      ),
                       Expanded(
                         child: DeliveryStateLine(
                           sessionId: sessionId,
