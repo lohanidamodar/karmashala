@@ -3,11 +3,12 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/explorer/application/picked_checkouts.dart';
+import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
+import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -253,9 +254,14 @@ void main() {
       expect(find.text('agent-2'), findsOneWidget);
     });
 
-    testWidgets('clicking a worktree reads it and moves nothing else', (
+    testWidgets('clicking a worktree selects it: Changes and Files follow', (
       tester,
     ) async {
+      // One selection: a worktree read only by Changes left Files and the
+      // rest of this pane on the checkout.
+      server.repositoryRows.insert(
+        repository(id: 'r2', name: 'agent-2', path: r'C:\src\demo\wt\agent-2'),
+      );
       final scope = await pump(tester);
       await tester.tap(find.text('WORKTREES'));
       await tester.pumpAndSettle();
@@ -263,23 +269,18 @@ void main() {
       await tester.tap(find.text('agent-2'));
       await tester.pumpAndSettle();
 
+      expect(scope.read(selectedRepositoryIdProvider), 'r2');
       expect(
         scope.read(viewedCheckoutProvider)?.path,
         r'C:\src\demo\wt\agent-2',
       );
-      // Said out loud, and still said with the list shut.
-      expect(find.text('viewing agent-2'), findsOneWidget);
-      await tester.tap(find.text('WORKTREES'));
-      await tester.pumpAndSettle();
-      expect(find.text('viewing agent-2'), findsOneWidget);
-      expect(find.text('agent-2'), findsOneWidget);
-
-      // Neither of the two things that decide where an agent runs moved.
-      expect(scope.read(selectedRepositoryIdProvider), 'r1');
-      expect(scope.read(pickedCheckoutsProvider), isEmpty);
+      expect(scope.read(fileTreeRootProvider)?.path, r'C:\src\demo\wt\agent-2');
     });
 
     testWidgets('the checkout row is the way back', (tester) async {
+      server.repositoryRows.insert(
+        repository(id: 'r2', name: 'agent-2', path: r'C:\src\demo\wt\agent-2'),
+      );
       final scope = await pump(tester);
       await tester.tap(find.text('WORKTREES'));
       await tester.pumpAndSettle();
@@ -291,44 +292,45 @@ void main() {
       await tester.tap(find.text('main').last);
       await tester.pumpAndSettle();
 
-      expect(scope.read(worktreeBrowsingProvider), isNull);
+      expect(scope.read(selectedRepositoryIdProvider), 'r1');
       expect(scope.read(viewedCheckoutProvider)?.path, homePath);
-      expect(find.textContaining('viewing'), findsNothing);
+      expect(scope.read(fileTreeRootProvider)?.path, homePath);
     });
 
-    testWidgets('the row menu offers the switch, and that one does move it', (
+    testWidgets('a worktree not recorded yet is recorded by a rescan', (
       tester,
     ) async {
-      // The explicit verb: `CheckoutPicker`, the same call behind the panel's
-      // picker and the `select_checkout` tool.
-      server.repositoryRows.insert(
-        repository(id: 'r2', name: 'agent-2', path: r'C:\src\demo\wt\agent-2'),
+      final scope = await pump(tester);
+      server.gitWork.found = [
+        DiscoveredRepository(
+          name: 'agent-2',
+          path: at(r'C:\src\demo\wt\agent-2'),
+        ),
+      ];
+      await tester.tap(find.text('WORKTREES'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('agent-2'));
+      await tester.pumpAndSettle();
+
+      expect(
+        scope.read(selectedCheckoutProvider)?.path.path,
+        r'C:\src\demo\wt\agent-2',
       );
-      final scope = await pump(tester);
-      await tester.tap(find.text('WORKTREES'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('agent-2'), buttons: kSecondaryMouseButton);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text("Select as the session's checkout"));
-      await tester.pumpAndSettle();
-
-      expect(scope.read(selectedRepositoryIdProvider), 'r2');
+      expect(scope.read(fileTreeRootProvider)?.path, r'C:\src\demo\wt\agent-2');
     });
 
-    testWidgets('a worktree the workspace never recorded says so', (
+    testWidgets('one a rescan cannot record says so, and nothing moves', (
       tester,
     ) async {
       final scope = await pump(tester);
       await tester.tap(find.text('WORKTREES'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('agent-2'), buttons: kSecondaryMouseButton);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text("Select as the session's checkout"));
+      await tester.tap(find.text('agent-2'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('rescan the project'), findsOneWidget);
+      expect(find.textContaining('rescan did not record'), findsOneWidget);
       expect(scope.read(selectedRepositoryIdProvider), 'r1');
     });
 

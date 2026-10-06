@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/project_head.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
+import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -358,6 +359,51 @@ void main() {
       container.read(sessionContextProvider).follow('s-hub');
       expect(container.read(selectedRepositoryIdProvider), 'hub');
     });
+  });
+
+  testWidgets('a session switch moves every surface to its worktree, and a '
+      'switcher pick holds until then', (tester) async {
+    insertAllCheckouts();
+    for (final (id, repositoryId) in [('s-hub', 'hub'), ('s-relay', 'relay')]) {
+      db.server.sessionRows.insert(
+        Session(
+          id: id,
+          repositoryId: repositoryId,
+          agentInstallationId: 'a1',
+          title: id,
+          useWorktree: repositoryId == 'relay',
+          worktree: repositoryId == 'relay' ? at(relayPath) : null,
+          status: SessionStatus.running,
+          createdAt: testTime,
+        ),
+      );
+    }
+    final container = makeContainer(
+      extra: [
+        checkoutHeadBranchProvider.overrideWith(
+          (ref, checkout) async => 'main',
+        ),
+      ],
+    );
+    await pump(tester, container);
+    container.read(sessionContextProvider).follow('s-hub');
+    await tester.pumpAndSettle();
+    container.read(selectedRepositoryIdProvider.notifier).select('app');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('worktree-switcher')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('inbox-bounds'));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'inbox');
+    expect(container.read(viewedCheckoutProvider)?.path, inboxPath);
+    expect(container.read(fileTreeRootProvider)?.path, inboxPath);
+
+    container.read(sessionContextProvider).follow('s-relay');
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'relay');
+    expect(container.read(viewedCheckoutProvider)?.path, relayPath);
+    expect(container.read(fileTreeRootProvider)?.path, relayPath);
   });
 
   testWidgets('a pick made in a session is given back when it returns', (
