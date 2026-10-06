@@ -124,7 +124,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    for (final surface in SidePanelSurface.offered(debugMode: false)) {
+    for (final surface in SidePanelSurface.offered()) {
       if (ContextTab.of(surface) != ContextTab.more) continue;
       expect(
         find.ancestor(

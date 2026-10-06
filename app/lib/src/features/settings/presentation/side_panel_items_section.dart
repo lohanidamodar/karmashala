@@ -28,9 +28,6 @@ class SidePanelItemsSection extends ConsumerWidget {
     final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
     final surfaces = [
       for (final surface in SidePanelSurface.offered(
-        debugMode: ref.watch(
-          settingsControllerProvider.select((s) => s.debugMode),
-        ),
         notesEnabled: ref.watch(notesEnabledProvider),
         readsServerDisk: ref.watch(
           capabilitiesProvider.select((c) => c.readsServerDisk),

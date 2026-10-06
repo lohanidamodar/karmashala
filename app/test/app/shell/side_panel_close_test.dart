@@ -118,7 +118,7 @@ void main() {
     final panel = container.read(sidePanelProvider.notifier);
     // Debug mode off, so this is the rail a user actually sees; the Logs
     // surface is a diagnostic and is not offered.
-    final offered = SidePanelSurface.offered(debugMode: false);
+    final offered = SidePanelSurface.offered();
     // Six: GitHub became a section of the Repository pane, and the Inbox an
     // area of the activity strip.
     expect(offered.where((s) => s.drawsOwnHeader).length, 6);

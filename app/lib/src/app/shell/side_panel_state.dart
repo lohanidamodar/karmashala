@@ -86,10 +86,6 @@ enum SidePanelSurface {
   /// age. Never what a running session bound; the CLI owns that (§19).
   agentContext('Agent context', requiresSameMachine: true),
 
-  /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
-  /// a tool, and an entry nobody needs is in the way of the daily ones.
-  logs('Logs', requiresDebugMode: true),
-
   /// Never offered: an area of the activity strip, kept for its stored id.
   inbox('Inbox', drawsOwnHeader: true);
 
@@ -97,7 +93,6 @@ enum SidePanelSurface {
     this.label, {
     this.drawsOwnHeader = false,
     this.scopedToRepository = false,
-    this.requiresDebugMode = false,
     this.requiresNotes = false,
     this.requiresSameMachine = false,
     this.requiresLocalDevices = false,
@@ -112,9 +107,6 @@ enum SidePanelSurface {
   /// Whether the surface describes **one checkout**. That selection moves on
   /// its own when the active terminal tab changes, so these have to say which.
   final bool scopedToRepository;
-
-  /// Whether the surface only exists while debug mode is on.
-  final bool requiresDebugMode;
 
   /// Whether the surface only exists while the Notes feature is on.
   final bool requiresNotes;
@@ -131,13 +123,11 @@ enum SidePanelSurface {
   /// panel, the menus and [SidePanel]'s own check cannot disagree. The Inbox
   /// is never offered here: it is an area of the activity strip now.
   bool isOffered({
-    required bool debugMode,
     bool notesEnabled = true,
     bool readsServerDisk = true,
     bool devicesArea = true,
   }) =>
       this != SidePanelSurface.inbox &&
-      (debugMode || !requiresDebugMode) &&
       (notesEnabled || !requiresNotes) &&
       (readsServerDisk || !requiresSameMachine) &&
       (devicesArea || !requiresLocalDevices);
@@ -155,14 +145,12 @@ enum SidePanelSurface {
   /// a menu. Taking one out of More is not switching it off: see
   /// [hiddenSidePanelSurfacesProvider].
   static List<SidePanelSurface> offered({
-    required bool debugMode,
     bool notesEnabled = true,
     bool readsServerDisk = true,
     bool devicesArea = true,
   }) => [
     for (final surface in values)
       if (surface.isOffered(
-        debugMode: debugMode,
         notesEnabled: notesEnabled,
         readsServerDisk: readsServerDisk,
         devicesArea: devicesArea,

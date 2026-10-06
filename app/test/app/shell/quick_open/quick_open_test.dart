@@ -126,6 +126,16 @@ void main() {
     expect(find.text('Open Settings'), findsOneWidget);
   });
 
+  testWidgets('the log tail is a command that opens a tab', (tester) async {
+    await open(tester);
+
+    await type(tester, 'logs');
+
+    expect(find.text('Open Logs'), findsOneWidget);
+    // Not a context-panel surface any more: nothing else answers to it.
+    expect(find.text('Logs'), findsNothing);
+  });
+
   testWidgets('New session is offered with nothing selected', (tester) async {
     // It used to be hidden here, because the dialog it opens could only create
     // a session for the selected repository. The dialog picks its own

@@ -107,10 +107,7 @@ void main() {
   }
 
   test('Checkpoints is the context panel\'s History tab', () {
-    expect(
-      SidePanelSurface.offered(debugMode: false),
-      contains(SidePanelSurface.checkpoints),
-    );
+    expect(SidePanelSurface.offered(), contains(SidePanelSurface.checkpoints));
     expect(ContextTab.of(SidePanelSurface.checkpoints), ContextTab.history);
     expect(ContextTab.history.surfaces.first, SidePanelSurface.checkpoints);
     // It describes a *session*'s turns, not the selected checkout, so the

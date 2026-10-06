@@ -1217,13 +1217,13 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Debug mode',
     anchor: SettingsAnchor.debugMode,
-    description: 'Record fine detail and add Logs to the context panel.',
+    description: 'Record fine detail and add Logs to the activity strip.',
     keywords: ['debug', 'verbose', 'logs panel', 'logs'],
   ),
   SettingsEntry(
     'Lines kept in memory',
     anchor: SettingsAnchor.debugMode,
-    description: 'How much Logs in the context panel keeps.',
+    description: 'How many lines the Logs tab keeps.',
     keywords: ['buffer', 'log lines'],
   ),
   SettingsEntry(

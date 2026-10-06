@@ -7,7 +7,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../core/capabilities/capabilities.dart';
 import '../../features/notes/application/notes_providers.dart';
-import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../widgets/adaptive_modal.dart';
 import 'side_panel.dart';
@@ -74,9 +73,6 @@ class ContextSheet extends ConsumerWidget {
     // A surface switched off while it was the sheet's falls back to Changes,
     // as the panel closes one rather than draw a vanished entry.
     final offered = picked.isOffered(
-      debugMode: ref.watch(
-        settingsControllerProvider.select((s) => s.debugMode),
-      ),
       notesEnabled: ref.watch(notesEnabledProvider),
       readsServerDisk: ref.watch(
         capabilitiesProvider.select((c) => c.readsServerDisk),

@@ -124,6 +124,20 @@ void openStoresTab(WidgetRef ref) {
   activateTerminalTab(ref, tabId);
 }
 
+/// Opens the live log tail as a workbench tab, or brings the open one forward.
+void openLogsTab(WidgetRef ref) {
+  // The phone keeps its own Log page under More, built for copying out.
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.log);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openLogsTab();
+  activateTerminalTab(ref, tabId);
+}
+
 /// Opens note [noteId] in a tab of its own, or brings its open tab forward.
 void openNoteTab(WidgetRef ref, String noteId) {
   final tabId = ref

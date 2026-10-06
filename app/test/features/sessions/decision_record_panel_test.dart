@@ -122,10 +122,7 @@ void main() {
   }
 
   test('Decisions is under the context panel\'s History tab', () {
-    expect(
-      SidePanelSurface.offered(debugMode: false),
-      contains(SidePanelSurface.decisions),
-    );
+    expect(SidePanelSurface.offered(), contains(SidePanelSurface.decisions));
     expect(ContextTab.of(SidePanelSurface.decisions), ContextTab.history);
     // It describes a *session*'s record, not the selected checkout, so the
     // repository context line above the scoped surfaces would answer a question

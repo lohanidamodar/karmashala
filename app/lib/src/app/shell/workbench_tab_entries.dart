@@ -103,6 +103,7 @@ IconData? documentIconFor(TerminalTab tab) {
   if (isDevicePreviewPane(paneId)) return AppIcons.deviceMobile;
   if (isUsagePane(paneId)) return AppIcons.chartBar;
   if (isStoresPane(paneId)) return AppIcons.package;
+  if (isLogsPane(paneId)) return AppIcons.article;
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
   if (isNotePane(paneId)) return AppIcons.note;

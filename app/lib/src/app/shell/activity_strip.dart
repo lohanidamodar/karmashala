@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
+import '../../features/settings/application/settings_controller.dart';
 import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
@@ -57,6 +58,11 @@ class ShellActivityStrip extends ConsumerWidget {
       onSettings: () => openSettingsTab(ref),
       onUsage: () => openUsageTab(ref),
       onStores: () => openStoresTab(ref),
+      // A diagnostic, not a daily tool: in the strip only while debug mode is
+      // on. Quick open, Settings and a keymap reach it either way.
+      onLogs: ref.watch(settingsControllerProvider.select((s) => s.debugMode))
+          ? () => openLogsTab(ref)
+          : null,
     );
   }
 }
@@ -77,6 +83,7 @@ class ActivityStrip extends StatelessWidget {
     this.onUsage,
     this.usageHint,
     this.onStores,
+    this.onLogs,
     super.key,
   });
 
@@ -103,6 +110,9 @@ class ActivityStrip extends StatelessWidget {
 
   /// Opens the Stores tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onStores;
+
+  /// Opens the Logs tab. Null leaves its glyph out, as [onUsage] does.
+  final VoidCallback? onLogs;
 
   static IconData iconFor(ShellArea area) => switch (area) {
     ShellArea.sessions => AppIcons.chatCircleDots,
@@ -136,6 +146,13 @@ class ActivityStrip extends StatelessWidget {
           const Spacer(),
           // Above Settings, and like it never marked selected: both open a
           // tab, and the tab strip already says which tab is in front.
+          if (onLogs case final onLogs?)
+            _StripButton(
+              icon: AppIcons.article,
+              label: 'Logs',
+              selected: false,
+              onPressed: onLogs,
+            ),
           if (onStores case final onStores?)
             _StripButton(
               icon: AppIcons.package,

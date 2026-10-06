@@ -80,6 +80,10 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isStoresPane(paneId)) {
       return showing ? const StoresTabView() : const SizedBox.shrink();
     }
+    // The same gate: off screen its timers would repaint for nobody.
+    if (isLogsPane(paneId)) {
+      return showing ? const LogsTabView() : const SizedBox.shrink();
+    }
     // The same gate: a device pane off screen would keep its live view and its
     // polling of adb going for nobody. A layout restored from a desktop onto a
     // client with no Devices area draws nothing there.

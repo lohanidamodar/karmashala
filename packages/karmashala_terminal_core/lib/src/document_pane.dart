@@ -43,6 +43,13 @@ const String kStoresPaneId = '${kDocumentPanePrefix}stores';
 /// Whether [paneId] is the Stores document.
 bool isStoresPane(String paneId) => paneId == kStoresPaneId;
 
+/// The live log tail as a tab: the app's own log, and this machine's server
+/// log. One, like Stores — both are the machine's, not the tab's.
+const String kLogsPaneId = '${kDocumentPanePrefix}logs';
+
+/// Whether [paneId] is the Logs document.
+bool isLogsPane(String paneId) => paneId == kLogsPaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';
