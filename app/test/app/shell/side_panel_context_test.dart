@@ -1,9 +1,7 @@
 import 'package:karmashala/src/app/shell/side_panel_context.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
-import 'package:karmashala_git/git.dart';
+import 'package:karmashala/src/features/explorer/application/project_head.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,20 +80,13 @@ void main() {
     final worktrees = ProviderContainer(
       overrides: [
         data,
-        selectedCheckoutWorktreesProvider.overrideWith(
-          (ref) async => const [
-            GitWorktree(
-              path: EnvironmentPath(
-                environmentId: 'windows',
-                path: r'C:\src\demo\wt\login',
-              ),
-              branch: 'session/fix-the-login-form-validation',
-            ),
-          ],
+        checkoutHeadBranchProvider.overrideWith(
+          (ref, checkout) async => 'session/fix-the-login-form-validation',
         ),
       ],
     );
     addTearDown(worktrees.dispose);
+    worktrees.read(selectedRepositoryIdProvider.notifier).select('nested');
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: worktrees,
@@ -103,7 +94,7 @@ void main() {
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,
-              child: SizedBox(width: 240, child: SidePanelWorktrees()),
+              child: SizedBox(width: 240, child: SidePanelContextLine()),
             ),
           ),
         ),

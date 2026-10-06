@@ -298,8 +298,13 @@ void main() {
       roundTrip(const WorktreesOf(at), [
         worktree,
         const GitWorktree(path: path, isBare: true),
+        const GitWorktree(path: path, branch: 'gone', isPrunable: true),
       ]),
-      [worktree, const GitWorktree(path: path, isBare: true)],
+      [
+        worktree,
+        const GitWorktree(path: path, isBare: true),
+        const GitWorktree(path: path, branch: 'gone', isPrunable: true),
+      ],
     );
     expect(
       roundTrip(const WorktreeLabels(['r1']), {

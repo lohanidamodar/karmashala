@@ -1,4 +1,5 @@
 import '../../workspaces/data/workspace_data.dart';
+import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../git/application/changes_providers.dart';
@@ -165,6 +166,29 @@ class CheckoutPicker {
           .select(repository.projectId);
     }
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
+  }
+
+  /// Selects the worktree at [path] in [projectId], recording it first with a
+  /// rescan when the workspace has no row for it. Null when even that finds
+  /// none; a failed rescan throws.
+  Future<Repository?> selectWorktree(
+    String projectId,
+    EnvironmentPath path,
+  ) async {
+    Repository? rowAt() => _ref
+        .read(workspaceDataProvider)
+        .repositoriesOf(projectId)
+        .where((r) => Checkout(r.path) == Checkout(path))
+        .firstOrNull;
+    var row = rowAt();
+    if (row == null) {
+      await _ref
+          .read(projectsControllerProvider.notifier)
+          .rediscover(projectId);
+      row = rowAt();
+    }
+    if (row != null) select(row);
+    return row;
   }
 }
 
