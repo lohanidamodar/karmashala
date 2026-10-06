@@ -65,7 +65,9 @@ class OffScreenAsk {
 /// approval except the one on screen, whose ask is docked under it.
 final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
   final waiting = ref.watch(needsYouProvider);
-  final onScreen = ref.watch(activePaneSessionIdProvider);
+  // The session shown, not the active tab: one with no pane of ours is shown
+  // in its place, and the tab behind it is the one off screen.
+  final onScreen = ref.watch(onScreenSessionIdProvider);
   final registry = ref.read(sessionStatusRegistryProvider);
   final agents = ref.read(agentRegistryProvider);
   final answerable = ref.read(sessionAnswerableProvider);
