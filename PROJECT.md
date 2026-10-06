@@ -1324,7 +1324,11 @@ harnesses build once per isolate instead.
 the owner's server, `<KARMASHALA_DATA_DIR>/logs/` for a probe's. `serve`
 usually runs detached with nobody reading its stdout or stderr, so every line
 it writes there is also filed here (redacted by `LogRedactor`), rotated at
-2 MB with `server.1.log` and `server.2.log` kept (`ServerLogFile`). An attached
+2 MB with `server.1.log` and `server.2.log` kept (`ServerLogFile`). Its first
+line is `serve <version> started; data <dir>`, flushed at once, and
+`package:logging` records are filed with the rest. A server still running
+from before an upgrade (the installer moves its image aside and the app keeps
+one that holds sessions) logs as its own build did until it is restarted. An attached
 `serve` still prints to its terminal. On an SSH box the deployer's
 `<host dir>/host.log` captures stderr as before.
 

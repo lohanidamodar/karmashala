@@ -422,11 +422,19 @@ List<ExplorerNode> _lineageNodes(
         folded: folded,
       ),
     if (!folded)
-      for (final child in node.children) ...childRows(child)
+      for (final child in runningFirst(
+        node.children,
+        isLive: (n) => subSessionLive(n.session),
+        createdAt: (n) => n.session.createdAt,
+      ))
+        ...childRows(child)
     else
       // Folded: the ones still running or waiting stay in sight.
-      for (final live in node.flattened.skip(1))
-        if (subSessionLive(live.session))
-          ...childRows(SessionNode(session: live.session, link: live.link)),
+      for (final live in runningFirst(
+        node.flattened.skip(1).where((n) => subSessionLive(n.session)),
+        isLive: (_) => true,
+        createdAt: (n) => n.session.createdAt,
+      ))
+        ...childRows(SessionNode(session: live.session, link: live.link)),
   ];
 }

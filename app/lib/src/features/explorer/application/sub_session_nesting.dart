@@ -44,7 +44,7 @@ class SubSessionNesting {
       if (!live(native)) (nested[anchor] ??= []).add(entry);
     }
     for (final children in nested.values) {
-      children.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      children.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
     final hidden = {
       for (final children in nested.values)
@@ -78,7 +78,7 @@ class SubSessionNesting {
   /// The fold line under [entry], or null when nothing came from it.
   SubSessionFold? foldOf(WorkspaceSessionEntry entry) => _folds[entry.id];
 
-  /// The ended sub-sessions kept beneath [parentId], oldest first.
+  /// The ended sub-sessions kept beneath [parentId], newest first.
   List<WorkspaceSessionEntry> nestedUnder(String parentId) =>
       _nested[parentId] ?? const [];
 }

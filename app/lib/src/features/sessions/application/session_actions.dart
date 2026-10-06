@@ -24,6 +24,7 @@ import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
@@ -184,7 +185,9 @@ class SessionActions {
   /// Takes one native row out of the workspace and nothing else. Publishes
   /// nothing — the caller does, so a batch can publish once.
   void _removeNativeRow(Session session, {required bool fromCliStore}) {
+    final views = _viewsOf([session.id]);
     _ref.read(sessionsDataProvider).delete(session.id);
+    _closeViews(views);
     if (_ref.read(selectedSessionIdProvider) == session.id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
@@ -194,6 +197,23 @@ class SessionActions {
       'Deleted session ${session.id} (${session.title}): '
       'fromCliStore=$fromCliStore agent=${session.agentInstallationId}',
     );
+  }
+
+  /// This window's panes showing [ids] — asked before their rows go, since a
+  /// shell pane is matched to its session through the row.
+  List<String> _viewsOf(Iterable<String> ids) {
+    // No workbench built, no tab to close: reading it would build one.
+    if (!_ref.exists(terminalSessionsControllerProvider)) return const [];
+    final panes = _ref.read(paneSessionsProvider);
+    return [
+      for (final id in ids) ...{...panes.panesOf(id), chatPaneId(id)},
+    ];
+  }
+
+  /// A deleted session's tabs and panes have nothing left to show.
+  void _closeViews(List<String> paneIds) {
+    if (paneIds.isEmpty) return;
+    _ref.read(terminalSessionsControllerProvider.notifier).closePanes(paneIds);
   }
 
   void _removeImportedRow(ImportedSession session) {
@@ -210,6 +230,7 @@ class SessionActions {
     List<ImportedSession> imported = const [],
   }) {
     if (natives.isEmpty && imported.isEmpty) return;
+    final views = _viewsOf([for (final session in natives) session.id]);
     // One request for the lot: one per row was N batches on every client.
     _ref
         .read(sessionsDataProvider)
@@ -217,6 +238,7 @@ class SessionActions {
           [for (final session in natives) session.id],
           importedIds: [for (final session in imported) session.id],
         );
+    _closeViews(views);
     final selected = _ref.read(selectedSessionIdProvider);
     if (selected != null && natives.any((s) => s.id == selected)) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);

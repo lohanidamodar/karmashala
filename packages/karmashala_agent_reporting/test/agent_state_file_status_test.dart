@@ -147,6 +147,41 @@ void main() {
     expect(report.detail, 'isApiErrorMessage=true');
   });
 
+  test('a turn that died on an API error stays failed behind the records '
+      'Claude writes after it, and says why', () async {
+    // Claude Code 2.1.287 (2026-10-06): the synthetic error, then the turn's
+    // own `system` bookkeeping, which matches no rule.
+    final path = write('connection-lost.jsonl', [
+      '{"type":"user","message":{"content":"go"}}',
+      '{"type":"assistant","error":"server_error","isApiErrorMessage":true,'
+          '"message":{"model":"<synthetic>","role":"assistant","content":'
+          '[{"type":"text","text":"API Error: Connection lost '
+          'mid-response"}]}}',
+      '{"type":"system","subtype":"turn_duration","durationMs":893907}',
+      '{"type":"system","subtype":"away_summary","content":"I was busy."}',
+    ]);
+
+    final report = (await source.read(claude, path, stale(path)))!;
+
+    expect(report.status, AgentActivityStatus.failed);
+    expect(report.evidence, ['API Error: Connection lost mid-response']);
+  });
+
+  test('only a failure is walked to: a finished turn behind its system '
+      'records stays unknown, never a fresh idle', () async {
+    final path = write('finished.jsonl', [
+      '{"type":"user","message":{"content":"go"}}',
+      '{"type":"assistant","message":{"content":"done"}}',
+      '{"type":"system","subtype":"stop_hook_summary","hookCount":2}',
+      '{"type":"system","subtype":"turn_duration","durationMs":3555}',
+    ]);
+
+    expect(
+      (await source.read(claude, path, stale(path)))!.status,
+      AgentActivityStatus.unknown,
+    );
+  });
+
   test('an OAuth failure is failed however long ago it happened', () async {
     // The other message the owner's store carries, three times, and the one
     // that made this worth fixing first: a session whose credentials expired

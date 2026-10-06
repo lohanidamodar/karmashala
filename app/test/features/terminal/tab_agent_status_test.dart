@@ -218,7 +218,7 @@ void main() {
         (AgentActivityStatus.working, 'Working'),
         (AgentActivityStatus.awaitingApproval, 'Needs you'),
         (AgentActivityStatus.idle, 'Idle'),
-        (AgentActivityStatus.failed, 'Failed'),
+        (AgentActivityStatus.failed, 'Stopped on an error'),
       ]) {
         _say('s1', status);
         await settle(tester);

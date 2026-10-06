@@ -74,9 +74,10 @@ class AgentStateFileStatusSource {
     final record = snapshot.record;
     if (record == null) return null;
 
-    final matched =
-        _classify(rules, record, snapshot.modified, now) ??
-        _classifyEarlier(rules, snapshot, now);
+    final own = _classify(rules, record, snapshot.modified, now);
+    final (matched, said) = own != null
+        ? (own, record)
+        : _classifyEarlier(rules, snapshot, now) ?? (null, null);
     final (status, detail) = matched ?? (AgentActivityStatus.unknown, null);
     return AgentStatusReport(
       agentId: descriptor.id,
@@ -88,24 +89,47 @@ class AgentStateFileStatusSource {
       // for a day must not read as a fresh observation.
       sourceModifiedAt: snapshot.modified,
       detail: detail,
+      // A failure in its own words: what stopped the turn.
+      evidence: status == AgentActivityStatus.failed && said != null
+          ? _textOf(said)
+          : const [],
     );
   }
 
   /// The first of [snapshot]'s earlier records that any rule matches, decoded
   /// here rather than in [probe] so the usual session never pays for it.
-  (AgentActivityStatus, String?)? _classifyEarlier(
+  ((AgentActivityStatus, String?), Map<String, Object?>)? _classifyEarlier(
     AgentStateFileRules rules,
     StateFileSnapshot snapshot,
     DateTime now,
   ) {
-    if (!rules.looksPastUnclassifiedRecords) return null;
+    final any = rules.looksPastUnclassifiedRecords;
+    if (!any && !rules.failureOutlastsUnclassifiedRecords) return null;
     for (final line in snapshot.earlierLines) {
       final record = _decodeObject(line);
       if (record == null) continue;
       final matched = _classify(rules, record, snapshot.modified, now);
-      if (matched != null) return matched;
+      if (matched == null) continue;
+      return any || matched.$1 == AgentActivityStatus.failed
+          ? (matched, record)
+          : null;
     }
     return null;
+  }
+
+  /// The text blocks of a record's `message.content`.
+  static List<String> _textOf(Map<String, Object?> record) {
+    final message = record['message'];
+    final content = message is Map ? message['content'] : null;
+    return [
+      if (content is String && content.trim().isNotEmpty) content.trim(),
+      if (content is List)
+        for (final block in content)
+          if (block is Map && block['text'] is String)
+            if ((block['text'] as String).trim() case final text
+                when text.isNotEmpty)
+              text,
+    ];
   }
 
   Future<String> _readTail(File file, int size) async {

@@ -695,7 +695,10 @@ class DelegationResults {
       final childId = follow.child.childId;
       store.reported(
         childId,
-        state: result.outcome.state.name,
+        // A turn an error ended cannot go on by itself: blocked, to a parent.
+        state: result.outcome.state == ChildTurnState.failed
+            ? ReportStatus.blocked.wire
+            : result.outcome.state.name,
         via: kReportViaTurn,
         at: _now(),
         text: switch (result.answer) {
@@ -798,7 +801,7 @@ String parentReportMessage(ParentReport report) {
 
 String _stateWords(DelegationResult result) => switch (result.outcome.state) {
   ChildTurnState.done => 'done',
-  ChildTurnState.failed => 'failed',
+  ChildTurnState.failed => 'BLOCKED: stopped on an error',
   ChildTurnState.blocked => 'BLOCKED on a person',
   ChildTurnState.ended => 'its process ended',
   ChildTurnState.running => 'still running',
@@ -818,7 +821,9 @@ String _next(DelegationResult result) {
       null => '$transcript It is still open for a follow-up with session_send.',
     },
     ChildTurnState.failed =>
-      '$transcript It stopped on a failure and is still open.',
+      '$transcript An error (an API or connection failure) ended its turn, '
+          'and it cannot go on by itself: resume it with session_send '
+          '(sessionId: $id), e.g. "continue", or ask the user.',
     ChildTurnState.blocked =>
       'It stopped for ${block?.kind ?? 'an approval or a question'}$asked. '
           'Ask the user, or answer an approval with session_answer, then '

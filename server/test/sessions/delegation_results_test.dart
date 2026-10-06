@@ -269,6 +269,38 @@ void main() {
     expect(kept.reportedAt, clock);
   });
 
+  test('a child whose turn an API error ended is reported blocked, stopped '
+      'on an error, with how to resume it', () async {
+    await runTerminal('parent');
+    hook('parent', 'Stop');
+    await runTerminal('c1');
+    delegations.watch(child('c1'));
+    hook('c1', 'UserPromptSubmit');
+    await pumpEventQueue();
+    status.hook(
+      AgentHookEvent(
+        agent: AgentIds.claudeCode,
+        event: 'StopFailure',
+        sessionHeader: 'c1',
+        receivedAt: DateTime.now().toUtc(),
+        body: {
+          'session_id': 'conv-c1',
+          'hook_event_name': 'StopFailure',
+          'error': 'server_error',
+        },
+      ),
+    );
+    await settle();
+
+    final message = delivered['parent']!.single;
+    expect(message, contains('BLOCKED: stopped on an error'));
+    expect(message, contains('session_send'));
+    expect(
+      SessionDelegationDao(database).byChild('c1')!.reportState,
+      'blocked',
+    );
+  });
+
   test('a busy parent gets the result queued for after its turn, never '
       'typed over it', () async {
     await runTerminal('parent');

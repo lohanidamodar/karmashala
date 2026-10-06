@@ -1027,6 +1027,7 @@ void _parseClaudeLine(
               pending[id] = out.length;
               if (isSubagentToolName(name)) tasks[id] = out.length;
               runs.called(id, part['input'], name: name);
+              if (name == 'Read') runs.reading(part['input'], out.length);
               taskPlan.called(id, name, part['input']);
             }
             out.add(
@@ -1339,6 +1340,12 @@ class _BackgroundRuns {
   String? _version;
   final Map<String, String?> _launchedUnder = {};
 
+  /// A command's call id, the exit code its notice named, and the row of the
+  /// agent's last Read of its output file, by task id.
+  final Map<String, String> _callIds = {};
+  final Map<String, int> _exitCodes = {};
+  final Map<String, int> _readRows = {};
+
   bool get anyRunning => _runs.values.any((run) => run.state.isRunning);
 
   _BackgroundRuns copy() => _BackgroundRuns()
@@ -1348,7 +1355,10 @@ class _BackgroundRuns {
     .._described.addAll(_described)
     .._stopping.addAll(_stopping)
     .._version = _version
-    .._launchedUnder.addAll(_launchedUnder);
+    .._launchedUnder.addAll(_launchedUnder)
+    .._callIds.addAll(_callIds)
+    .._exitCodes.addAll(_exitCodes)
+    .._readRows.addAll(_readRows);
 
   /// A record [version] wrote. Another version than a running one was
   /// launched under is another process: the run died with its own, unsaid.
@@ -1404,6 +1414,19 @@ class _BackgroundRuns {
     );
     _rows[id] = row;
     _launchedUnder[id] = _version;
+    if (kind == BackgroundRunKind.command && callId is String) {
+      _callIds[id] = callId;
+    }
+  }
+
+  /// A `Read` at [row]: one of a background command's output file belongs to
+  /// that command's row.
+  void reading(Object? input, int row) {
+    if (input is! Map || input['file_path'] is! String) return;
+    final task = _taskOutputFile
+        .firstMatch(input['file_path'] as String)
+        ?.group(1);
+    if (task != null && _callIds.containsKey(task)) _readRows[task] = row;
   }
 
   /// A `tool_result`: a `TaskStop` that answered without error ended the
@@ -1442,6 +1465,10 @@ class _BackgroundRuns {
         final run = _runs[notice.id];
         if (run == null) continue;
         _aside.remove(notice.id);
+        final code = _exitCodePattern.firstMatch(notice.summary ?? '');
+        if (!notice.interim && code != null) {
+          _exitCodes[notice.id] = int.parse(code.group(1)!);
+        }
         _runs[notice.id] = notice.interim
             ? run.copyWith(summary: notice.summary)
             : run.copyWith(
@@ -1485,10 +1512,38 @@ class _BackgroundRuns {
         run = run.copyWith(state: BackgroundRunState.ended);
       }
       final row = messages[index];
+      final read = _readRows[id];
+      final readRow = read != null && read < messages.length
+          ? messages[read]
+          : null;
+      final tool = run.kind == BackgroundRunKind.command
+          ? row.tool?.withResult(
+              output: _commandOutput(run, _exitCodes[id], readRow?.tool),
+            )
+          : row.tool;
+      if (readRow != null) {
+        final readTool = readRow.tool!;
+        final what = row.tool?.subject ?? run.description ?? 'the command';
+        messages[read!] = TranscriptMessage(
+          role: readRow.role,
+          text: 'Read(the output of $what)',
+          tool: ToolActivity(
+            name: readTool.name,
+            subject: 'the output of $what',
+            output: readTool.output,
+            outputTruncated: readTool.outputTruncated,
+            isError: readTool.isError,
+          ),
+          at: readRow.at,
+          pendingToolUseId: readRow.pendingToolUseId,
+          agentInstallationId: readRow.agentInstallationId,
+          parentToolUseId: _callIds[id],
+        );
+      }
       messages[index] = TranscriptMessage(
         role: row.role,
-        text: row.text,
-        tool: row.tool,
+        text: tool?.summary ?? row.text,
+        tool: tool,
         subagent: row.subagent,
         at: row.at,
         pendingToolUseId: row.pendingToolUseId,
@@ -1501,6 +1556,36 @@ class _BackgroundRuns {
     });
   }
 }
+
+/// A background command's row: never the CLI's launch notice, which names a
+/// temp file. While it runs, that it runs; once over, its exit code and what
+/// the agent read of its output.
+String _commandOutput(BackgroundRun run, int? exitCode, ToolActivity? read) {
+  if (run.state.isRunning) return 'Running in the background';
+  final output = read == null || read.isError
+      ? ''
+      : (read.output ?? '')
+            .split('\n')
+            .map((line) => line.replaceFirst(_readLineNumber, ''))
+            .join('\n')
+            .trimRight();
+  final said = [
+    if (exitCode != null) 'Exit code $exitCode',
+    if (output.isNotEmpty) output,
+  ].join('\n');
+  if (said.isNotEmpty) return said;
+  return run.state == BackgroundRunState.killed
+      ? 'Stopped'
+      : 'Finished in the background';
+}
+
+final RegExp _taskOutputFile = RegExp(
+  r'[\\/]tasks[\\/]([A-Za-z0-9]+)\.output$',
+);
+final RegExp _exitCodePattern = RegExp(r'\(exit code (-?\d+)\)');
+
+/// `Read`'s `cat -n` prefix; a last line left with only its number is one.
+final RegExp _readLineNumber = RegExp(r'^\s*\d+(\t|$)');
 
 /// The wrapper a background task's outcome arrives in, as the parent's own turn.
 const String _taskNotificationMarker = '<task-notification>';

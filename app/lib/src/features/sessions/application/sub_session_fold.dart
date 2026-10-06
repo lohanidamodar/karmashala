@@ -3,17 +3,16 @@ import 'package:karmashala_session/session.dart';
 import 'session_list_prefs.dart';
 
 /// A parent's sub-sessions, folded beneath it in the session lists: how many
-/// there are, how many run, and whether they start folded.
+/// there are and how many run. Folded unless this device opened it.
 class SubSessionFold {
   const SubSessionFold({
     required this.parentId,
     required this.count,
     required this.running,
-    required this.foldedByDefault,
   });
 
   /// [descendants] are every session below [parent]; [isLive] says which of
-  /// them, and whether the parent, still run or wait on a person.
+  /// them still run or wait on a person.
   factory SubSessionFold.of(
     Session parent,
     Iterable<Session> descendants, {
@@ -25,20 +24,12 @@ class SubSessionFold {
       count++;
       if (isLive(session)) running++;
     }
-    return SubSessionFold(
-      parentId: parent.id,
-      count: count,
-      running: running,
-      // Folded once the parent has ended or every child has: nothing there
-      // is moving. A live parent with a live child stays open.
-      foldedByDefault: !isLive(parent) || running == 0,
-    );
+    return SubSessionFold(parentId: parent.id, count: count, running: running);
   }
 
   final String parentId;
   final int count;
   final int running;
-  final bool foldedByDefault;
 
   /// "12 sub-sessions · 2 running".
   String get label {
@@ -46,10 +37,9 @@ class SubSessionFold {
     return running == 0 ? what : '$what · $running running';
   }
 
-  /// Whether it is folded on this device: the person's choice, else the
-  /// default.
-  bool foldedIn(SessionListPrefs prefs) =>
-      prefs.folds[parentId] ?? foldedByDefault;
+  /// Whether it is folded on this device: the person's choice, else folded —
+  /// the live ones stay in sight beneath the fold line regardless.
+  bool foldedIn(SessionListPrefs prefs) => prefs.folds[parentId] ?? true;
 }
 
 /// Whether [session] still runs or waits — kept in sight when its parent's
@@ -57,3 +47,19 @@ class SubSessionFold {
 bool subSessionLive(Session session) =>
     !session.isArchived &&
     (session.status.claimsLive || session.status == SessionStatus.created);
+
+/// [items] with the live ones first, then the rest, newest first in each:
+/// the subagents panel's order.
+List<T> runningFirst<T>(
+  Iterable<T> items, {
+  required bool Function(T item) isLive,
+  required DateTime Function(T item) createdAt,
+}) {
+  final live = <T>[];
+  final rest = <T>[];
+  for (final item in items) {
+    (isLive(item) ? live : rest).add(item);
+  }
+  int newest(T a, T b) => createdAt(b).compareTo(createdAt(a));
+  return [...live..sort(newest), ...rest..sort(newest)];
+}

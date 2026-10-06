@@ -76,7 +76,7 @@ enum InboxItemKind {
 
   String get label => switch (this) {
     InboxItemKind.needsApproval => 'Needs approval',
-    InboxItemKind.failed => 'Failed',
+    InboxItemKind.failed => 'Stopped on an error',
     InboxItemKind.finished => 'Finished',
     InboxItemKind.checksFailed => 'Checks failed',
     InboxItemKind.changesRequested => 'Changes requested',

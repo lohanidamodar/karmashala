@@ -56,6 +56,44 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     persistStructure();
   }
 
+  /// Closes every pane in [paneIds] as one layout change — one publish and
+  /// one save — collapsing splits, and each tab left with nothing goes.
+  void closePanes(Iterable<String> paneIds) {
+    final byTab = <String, List<String>>{};
+    for (final paneId in paneIds) {
+      if (_tabContaining(paneId) case final tab?) {
+        (byTab[tab.id] ??= []).add(paneId);
+      }
+    }
+    if (byTab.isEmpty) return;
+    _userClosedSinceRestore = true;
+    final emptied = <String>[];
+    for (final MapEntry(key: tabId, value: closing) in byTab.entries) {
+      final tab = _tabById(tabId)!;
+      PaneLayout? layout = tab.layout;
+      for (final paneId in closing) {
+        layout = layout?.close(paneId);
+      }
+      if (layout == null || layout.panes.every(_isEmptyRegion)) {
+        emptied.add(tabId);
+        continue;
+      }
+      closing.forEach(_detachOrRelease);
+      _tabs[_tabIndex[tabId]!] = tab.copyWith(
+        layout: layout,
+        focusedPaneId: _refocused(tab, layout),
+      );
+      _tabsMutated();
+    }
+    if (emptied.isNotEmpty) {
+      closeTabs(emptied);
+      return;
+    }
+    _publish();
+    persistStructure();
+    _focusActivePane();
+  }
+
   /// Moves [delta] (a fraction of the split's extent) from child `index + 1` to
   /// child [index] of split [splitId] in tab [tabId].
   void resizePane(String tabId, String splitId, int index, double delta) {
