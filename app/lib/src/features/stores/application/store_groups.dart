@@ -1,5 +1,5 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show StoreAppIcon;
+    show StoreAppIcon, StoreAppRead;
 import 'package:store_console/store_console.dart';
 
 import 'store_attention.dart';
@@ -12,10 +12,15 @@ class StoreEntry {
     this.snapshot, {
     this.icon,
     this.signals = const [],
+    this.read,
   });
 
   final StoreApp app;
   final StoreAppSnapshot? snapshot;
+
+  /// Where the app stands in a read under way, or why its last read failed;
+  /// null when it is as last read.
+  final StoreAppRead? read;
 
   /// Its icon as the server keeps it; null when never looked up.
   final StoreAppIcon? icon;
@@ -148,6 +153,7 @@ List<StoreAppGroup> groupStoreApps(
   Map<String, StoreAppIcon> icons = const {},
   Iterable<StoreAppLink> links = const [],
   Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
+  Map<String, StoreAppRead> reads = const {},
 }) {
   int rank(StoreAppGroup group) => group.needsAttention
       ? 0
@@ -165,6 +171,7 @@ List<StoreAppGroup> groupStoreApps(
               app,
               snapshots[app],
               icon: icons[app.key],
+              read: reads[app.key],
               signals: switch (snapshots[app]) {
                 final snapshot? => storeSignals(
                   snapshot,
@@ -193,6 +200,7 @@ List<StoreAppGroup> groupStoreView(
   Map<String, StoreAppIcon> icons = const {},
   Iterable<StoreAppLink> links = const [],
   Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
+  Map<String, StoreAppRead> reads = const {},
 }) => groupStoreApps(
   [
     for (final reading in stores.values) ...?reading.valueOrNull,
@@ -202,4 +210,5 @@ List<StoreAppGroup> groupStoreView(
   icons: icons,
   links: links,
   storeWide: storeWide,
+  reads: reads,
 );

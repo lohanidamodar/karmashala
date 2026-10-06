@@ -58,6 +58,8 @@ import '../../features/terminal/presentation/pane_layout_view.dart';
 import '../../features/terminal/presentation/shell_status_line.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
+import 'tab_progress_sources.dart';
+import '../../core/util/tab_progress.dart';
 import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
 import 'workbench_conversation.dart';

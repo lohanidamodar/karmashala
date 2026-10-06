@@ -39,6 +39,7 @@ class _TabChip extends ConsumerWidget {
       // A document tab has nothing running in it, so it wears what it is rather
       // than a liveness dot reporting `exited`.
       icon: documentIconFor(tab),
+      progress: _progress(ref),
       mark: agentId == null
           ? null
           : AgentLogo(agentId: agentId, size: Chrome.iconSmall),
@@ -189,6 +190,13 @@ class _TabChip extends ConsumerWidget {
       activate: tab.id,
     );
     editors.release(paths);
+  }
+
+  /// How far a document tab's page has got with its work. Asked only of a
+  /// tab that is one document, so a terminal tab subscribes to nothing.
+  TabProgress? _progress(WidgetRef ref) {
+    if (documentIconFor(tab) == null) return null;
+    return ref.watch(documentTabProgressProvider(tab.layout.panes.single));
   }
 
   /// The strongest liveness among this tab's panes, asked pane by pane: the

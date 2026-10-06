@@ -3,6 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../../core/data/data_providers.dart';
+import '../../../core/util/tab_progress.dart';
 import 'store_attention.dart';
 import 'store_groups.dart';
 
@@ -48,6 +49,7 @@ class StoresState {
     icons: view.icons,
     links: view.links,
     storeWide: storeWideByArea(storeWide),
+    reads: view.reads,
   );
 
   StoresState copyWith({
@@ -157,6 +159,11 @@ class StoresController extends AsyncNotifier<StoresState> {
       _settle(_unexpected(error));
     }
   }
+
+  /// Reads [app] again on its own: the retry on an app whose read failed.
+  /// Answers null when the server read it, else a sentence why not.
+  Future<String?> retry(StoreApp app) =>
+      _write(StoresRefreshApp(store: app.store, id: app.id));
 
   void _settle(String? problem) {
     if (!ref.mounted) return;
@@ -268,3 +275,27 @@ class StoresController extends AsyncNotifier<StoresState> {
 final storesProvider = AsyncNotifierProvider<StoresController, StoresState>(
   StoresController.new,
 );
+
+/// The Stores tab's header: how far a read has got, or how many apps failed
+/// their last read; null when there is nothing to say.
+final storesTabProgressProvider = Provider<TabProgress?>((ref) {
+  final progress = ref.watch(
+    storesProvider.select((async) {
+      final state = async.value;
+      if (state == null) return null;
+      final phases = state.view.reads.values.map((read) => read.phase);
+      return TabProgress(
+        // One app read again on its own is work too.
+        running:
+            state.refreshing ||
+            phases.any((phase) => phase != StoreAppReadPhase.failed),
+        done: state.done,
+        total: state.total,
+        failed: phases
+            .where((phase) => phase == StoreAppReadPhase.failed)
+            .length,
+      );
+    }),
+  );
+  return progress == null || progress.quiet ? null : progress;
+});

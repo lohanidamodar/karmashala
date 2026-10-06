@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show StoreAppRead, StoreAppReadPhase;
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../application/store_attention.dart';
 import '../application/store_groups.dart';
+import '../application/stores_controller.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
 import 'store_installs.dart';
@@ -54,6 +58,10 @@ class StoreGroupCard extends ConsumerWidget {
         readAt != null &&
         newest != null &&
         newest.difference(readAt) > _staleBehind;
+    final moving = group.entries.any(
+      (entry) =>
+          entry.read != null && entry.read!.phase != StoreAppReadPhase.failed,
+    );
     final now = ref.watch(clockProvider).nowUtc();
     return Semantics(
       button: true,
@@ -93,19 +101,23 @@ class StoreGroupCard extends ConsumerWidget {
                       if (i > 0) const SizedBox(height: Insets.sm),
                       StoreEntryRow(entry: entry),
                     ],
-                    if (stale) ...[
+                    // While a store's row is being read, it says so itself.
+                    if (readAt != null && !moving) ...[
                       const SizedBox(height: Insets.sm),
                       Row(
                         children: [
-                          Icon(
-                            AppIcons.clockCounterClockwise,
-                            size: Chrome.iconAction,
-                            color: semantic.neutral,
-                          ),
-                          const SizedBox(width: Insets.xs),
+                          if (stale) ...[
+                            Icon(
+                              AppIcons.clockCounterClockwise,
+                              size: Chrome.iconAction,
+                              color: semantic.neutral,
+                            ),
+                            const SizedBox(width: Insets.xs),
+                          ],
                           Expanded(
                             child: Text(
-                              'As read ${formatDataAge(now.difference(readAt))}',
+                              '${stale ? 'As read' : 'Read'} '
+                              '${formatDataAge(now.difference(readAt))}',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
@@ -191,8 +203,10 @@ class _Heading extends StatelessWidget {
 }
 
 /// One store's line on a card: the store, what is live, its downloads and
-/// rating; and under it what that store has to say.
-class StoreEntryRow extends StatelessWidget {
+/// rating; and under it what that store has to say. While the store is read
+/// for it, a spinner stands in for the numbers; a failed read says why and
+/// offers to read that app again.
+class StoreEntryRow extends ConsumerWidget {
   const StoreEntryRow({required this.entry, super.key});
 
   final StoreEntry entry;
@@ -202,7 +216,7 @@ class StoreEntryRow extends StatelessWidget {
   static const double storeColumn = 26;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.bodySmall?.copyWith(
@@ -212,6 +226,9 @@ class StoreEntryRow extends StatelessWidget {
     final rating = snapshot?.rating.valueOrNull;
     final downloads = snapshot?.downloads.valueOrNull;
     final scaler = MediaQuery.textScalerOf(context);
+    final read = entry.read;
+    final reading = read?.phase == StoreAppReadPhase.reading;
+    final queued = read?.phase == StoreAppReadPhase.queued;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -227,30 +244,79 @@ class StoreEntryRow extends StatelessWidget {
             ),
             Expanded(
               child: snapshot == null
-                  ? Text('Not read yet', style: muted)
+                  ? Text(
+                      reading
+                          ? 'Reading…'
+                          : queued
+                          ? 'Queued'
+                          : 'Not read yet',
+                      style: muted,
+                    )
                   : _LiveVersion(snapshot: snapshot),
             ),
-            if (downloads != null && downloads.days.length > 1) ...[
+            if (reading) ...[
               const SizedBox(width: Insets.sm),
-              _Downloads(series: downloads),
-            ],
-            if (snapshot?.allTimeInstalls case ReadingValue(
-              :final value,
-              :final checkedAt,
-            )) ...[
-              const SizedBox(width: Insets.sm),
-              AllTimeInstallsFigure(
-                total: value,
-                store: entry.app.store,
-                readAt: checkedAt,
-              ),
-            ],
-            if (rating != null) ...[
-              const SizedBox(width: Insets.md),
-              RatingFigure(rating: rating),
+              _ReadingFigures(store: entry.app.store, said: snapshot == null),
+            ] else ...[
+              if (downloads != null && downloads.days.length > 1) ...[
+                const SizedBox(width: Insets.sm),
+                _Downloads(series: downloads),
+              ],
+              if (snapshot?.allTimeInstalls case ReadingValue(
+                :final value,
+                :final checkedAt,
+              )) ...[
+                const SizedBox(width: Insets.sm),
+                AllTimeInstallsFigure(
+                  total: value,
+                  store: entry.app.store,
+                  readAt: checkedAt,
+                ),
+              ],
+              if (rating != null) ...[
+                const SizedBox(width: Insets.md),
+                RatingFigure(rating: rating),
+              ],
+              if (queued && snapshot != null) ...[
+                const SizedBox(width: Insets.sm),
+                Text('Queued', style: muted),
+              ],
             ],
           ],
         ),
+        if (read case StoreAppRead(
+          phase: StoreAppReadPhase.failed,
+          :final message?,
+        ))
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: scaler.scale(storeColumn),
+              top: Insets.xs,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  AppIcons.warning,
+                  size: Chrome.iconAction,
+                  color: SemanticColors.of(context).failure,
+                ),
+                const SizedBox(width: Insets.xs),
+                Expanded(
+                  child: Text(
+                    message,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      ref.read(storesProvider.notifier).retry(entry.app),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
         if (entry.signals.isNotEmpty)
           Padding(
             padding: EdgeInsetsDirectional.only(
@@ -276,6 +342,48 @@ class StoreEntryRow extends StatelessWidget {
                     ),
                 ],
               ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Where a row's numbers go while its store is read: a spinner and a bar
+/// the numbers' shape, so the row does not jump when they land.
+class _ReadingFigures extends StatelessWidget {
+  const _ReadingFigures({required this.store, required this.said});
+
+  final StoreKind store;
+
+  /// Whether the row already says "Reading…" where the version goes.
+  final bool said;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InlineSpinner(semanticsLabel: 'Reading ${store.label}'),
+        const SizedBox(width: Insets.xs),
+        if (said)
+          ExcludeSemantics(
+            child: Container(
+              width: 56,
+              height: 10,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(Radii.sm),
+              ),
+            ),
+          )
+        else
+          Text(
+            'Reading…',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
       ],

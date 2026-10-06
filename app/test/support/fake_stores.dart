@@ -30,6 +30,18 @@ class FakeStores {
   void tellProgress(int done, int total) =>
       _server._tell(null, [StoresProgress(done: done, total: total)]);
 
+  /// One app moved at the server, as a refresh tells each app.
+  void tellApp(StoreAppChanged change) {
+    view = view.withApp(change);
+    _server._tell(null, [change]);
+  }
+
+  /// The apps read again on their own, by their [StoreApp.key].
+  final appRefreshes = <String>[];
+
+  /// Refuses `stores.refresh.app` with this, when set.
+  DataRefused? refuseAppRefresh;
+
   void _changed(StoresView next) {
     view = next;
     // Told to every link, the asker's too, as the server announces it.
@@ -74,6 +86,25 @@ class FakeStores {
             stores: read?.stores ?? view.stores,
             apps: apps,
             refreshedAt: _server._now(),
+          ),
+        );
+        return view;
+      case StoresRefreshApp(:final store, :final id):
+        if (refuseAppRefresh case final refusal?) throw refusal;
+        final key = '${store.name}:$id';
+        appRefreshes.add(key);
+        // Read again and well: whatever failed before is cleared.
+        _changed(
+          StoresView(
+            apple: view.apple,
+            play: view.play,
+            stores: view.stores,
+            apps: view.apps,
+            icons: view.icons,
+            links: view.links,
+            refreshedAt: view.refreshedAt,
+            refreshing: view.refreshing,
+            reads: {...view.reads}..remove(key),
           ),
         );
         return view;

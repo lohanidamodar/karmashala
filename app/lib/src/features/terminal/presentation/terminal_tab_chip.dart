@@ -12,8 +12,10 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
+import '../../../core/util/tab_progress.dart';
 import 'dense_icon_button.dart';
 import 'session_status.dart';
+import 'tab_progress_mark.dart';
 
 /// A bulk close, named the way VS Code names it. Declared in the order the menu
 /// lists them, carrying all three things a row needs, so the two cannot drift.
@@ -66,6 +68,7 @@ class TerminalTabChip extends StatelessWidget {
     this.onSavePreset,
     this.agentStatus,
     this.icon,
+    this.progress,
     this.mark,
     this.tooltip,
     this.unsaved = false,
@@ -90,6 +93,10 @@ class TerminalTabChip extends StatelessWidget {
   /// process: a document has no liveness, and `exited` would read as a session
   /// that died.
   final IconData? icon;
+
+  /// How far the page in a document tab has got with its work; worn in
+  /// [icon]'s place until it has nothing to say.
+  final TabProgress? progress;
 
   /// The mark of the agent whose session this tab holds, before its title.
   final Widget? mark;
@@ -144,7 +151,9 @@ class TerminalTabChip extends StatelessWidget {
       onClose: onClose,
       // One slot, never two glyphs: an agent tab says what the agent is doing,
       // any other says whether anything is running, a document says what it is.
-      leading: icon != null
+      leading: progress != null && !progress!.quiet
+          ? TabProgressMark(progress: progress!)
+          : icon != null
           ? Icon(icon, size: Chrome.iconSmall)
           : status == null
           ? TabLivenessDot(liveness: liveness)

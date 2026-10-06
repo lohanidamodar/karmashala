@@ -190,4 +190,94 @@ void main() {
     expect(problem, contains('imported in Karmashala on the desktop'));
     expect(state(container).connected, {StoreKind.appStore});
   });
+
+  group('one app at a time', () {
+    test('each app told fills in its row, inside the same refresh', () async {
+      server.stores.view = StoresView(apple: apple);
+      final container = await start();
+      server.stores.tell(
+        StoresView(
+          apple: apple,
+          stores: {
+            StoreKind.appStore: ReadingValue([notes], fixtureCheckedAt),
+          },
+          refreshing: true,
+          reads: {notes.key: const StoreAppRead.queued()},
+        ),
+      );
+      server.stores.tellProgress(0, 1);
+      server.stores.tellApp(
+        StoreAppChanged(app: notes, read: const StoreAppRead.reading()),
+      );
+      await pumpEventQueue();
+      expect(
+        state(container).groups.single.entries.single.read?.phase,
+        StoreAppReadPhase.reading,
+      );
+      expect(state(container).groups.single.entries.single.snapshot, isNull);
+
+      server.stores.tellApp(
+        StoreAppChanged(app: notes, snapshot: storeSnapshot(notes)),
+      );
+      await pumpEventQueue();
+      final entry = state(container).groups.single.entries.single;
+      expect(entry.read, isNull);
+      expect(entry.snapshot, isNotNull);
+      // Still the same refresh: its count is not reset by an app landing.
+      expect(state(container).refreshing, isTrue);
+      expect((state(container).done, state(container).total), (0, 1));
+    });
+
+    test('retry reads that one app again', () async {
+      server.stores.view = StoresView(
+        apple: apple,
+        stores: {
+          StoreKind.appStore: ReadingValue([notes], fixtureCheckedAt),
+        },
+        apps: [storeSnapshot(notes)],
+        reads: {notes.key: StoreAppRead.failed('No answer.', now)},
+      );
+      final container = await start();
+
+      expect(await controller(container).retry(notes), isNull);
+
+      expect(server.stores.appRefreshes, [notes.key]);
+      expect(state(container).view.reads, isEmpty);
+
+      server.stores.refuseAppRefresh = const DataRefused.invalid('no such app');
+      expect(await controller(container).retry(notes), 'no such app');
+    });
+
+    test(
+      'the tab\'s progress: a count while reading, a mark for failures',
+      () async {
+        server.stores.view = StoresView(apple: apple);
+        final container = await start();
+        expect(container.read(storesTabProgressProvider), isNull);
+
+        server.stores.tell(StoresView(apple: apple, refreshing: true));
+        server.stores.tellProgress(3, 8);
+        await pumpEventQueue();
+        final reading = container.read(storesTabProgressProvider)!;
+        expect(reading.running, isTrue);
+        expect((reading.done, reading.total), (3, 8));
+
+        server.stores.tell(
+          StoresView(
+            apple: apple,
+            reads: {notes.key: StoreAppRead.failed('No answer.', now)},
+            refreshedAt: now,
+          ),
+        );
+        await pumpEventQueue();
+        final ended = container.read(storesTabProgressProvider)!;
+        expect(ended.running, isFalse);
+        expect(ended.failed, 1);
+
+        server.stores.tell(StoresView(apple: apple, refreshedAt: now));
+        await pumpEventQueue();
+        expect(container.read(storesTabProgressProvider), isNull);
+      },
+    );
+  });
 }

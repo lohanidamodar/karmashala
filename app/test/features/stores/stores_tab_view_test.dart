@@ -29,6 +29,14 @@ class _Stores extends StoresController {
 
   @override
   Future<void> refresh() async => refreshes++;
+
+  final retried = <StoreApp>[];
+
+  @override
+  Future<String?> retry(StoreApp app) async {
+    retried.add(app);
+    return null;
+  }
 }
 
 const _phone = Size(390, 844);
@@ -169,6 +177,84 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+  }
+
+  for (final size in [_phone, _desktop]) {
+    final width = size.width.round();
+
+    testWidgets('each app says where it stands in a read ($width)', (
+      tester,
+    ) async {
+      final maps = storeApp(
+        StoreKind.appStore,
+        'com.example.maps',
+        name: 'Maps',
+      );
+      final held = populated().view;
+      final controller = await pump(
+        tester,
+        size: size,
+        settle: false,
+        state: StoresState(
+          view: StoresView(
+            apple: apple,
+            stores: {
+              StoreKind.appStore: ReadingValue([
+                notes,
+                tasks,
+                maps,
+              ], fixtureCheckedAt),
+            },
+            apps: held.apps,
+            refreshedAt: held.refreshedAt,
+            refreshing: true,
+            reads: {
+              notes.key: const StoreAppRead.reading(),
+              tasks.key: StoreAppRead.failed(
+                'The App Store did not answer.',
+                now,
+              ),
+              maps.key: const StoreAppRead.queued(),
+            },
+          ),
+          total: 3,
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Reading…'), findsOneWidget);
+      // In place of the numbers being read, not beside them.
+      expect(find.text('4.6'), findsNothing);
+      expect(find.text('Queued'), findsOneWidget);
+      expect(find.text('The App Store did not answer.'), findsOneWidget);
+
+      await tester.ensureVisible(find.widgetWithText(TextButton, 'Retry'));
+      await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+      await tester.pump();
+      expect(controller.retried, [tasks]);
+    });
+
+    testWidgets('an app read and settled says how long ago ($width)', (
+      tester,
+    ) async {
+      final held = populated().view;
+      await pump(
+        tester,
+        size: size,
+        state: StoresState(
+          view: StoresView(
+            apple: apple,
+            stores: held.stores,
+            apps: held.apps,
+            refreshedAt: fixtureCheckedAt,
+          ),
+        ),
+      );
+
+      // fixtureCheckedAt is 72 minutes before the test's now.
+      expect(find.text('Read 1 h ago'), findsNWidgets(2));
+      expect(find.textContaining('As read'), findsNothing);
     });
   }
 
