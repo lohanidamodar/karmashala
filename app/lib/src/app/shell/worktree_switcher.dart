@@ -282,7 +282,7 @@ class _WorktreeSwitcherPanelState extends ConsumerState<WorktreeSwitcherPanel> {
                   hintText: total == 1
                       ? 'Search 1 worktree'
                       : 'Search $total worktrees',
-                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
                 ),
                 onChanged: (_) => setState(() => _highlight = 0),
                 onSubmitted: (_) {
@@ -372,7 +372,6 @@ class _ChoiceRow extends StatelessWidget {
     ].join('  ·  ');
     return Tooltip(
       message: choice.path.path,
-      waitDuration: const Duration(milliseconds: 600),
       child: Material(
         color: highlighted
             ? StateLayers.selectedFocused(scheme)
