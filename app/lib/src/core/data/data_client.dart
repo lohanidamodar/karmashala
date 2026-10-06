@@ -1237,6 +1237,15 @@ class DataClient {
     // What the server's connections were doing is no longer known.
     sshConnections.clear();
     sessionQueues.clear();
+    // An ask is answered wherever it is answered: one kept from before the
+    // drop would hold the composer, the card and the queue on a closed ask.
+    // The server's greeting tells what is still open.
+    for (final MapEntry(key: openId, value: entry)
+        in sessionStatuses.entries.toList()) {
+      if (entry.report.hasOpenPrompt || entry.report.hasOpenQuestion) {
+        _applyAttention(SessionStatusRemoved(openId));
+      }
+    }
     _setConnection(
       const DataConnection(
         DataLinkState.connecting,

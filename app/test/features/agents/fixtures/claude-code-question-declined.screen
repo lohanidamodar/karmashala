@@ -1,0 +1,18 @@
+ ▐▛███▛█   Claude Code v2.1.287
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   ~/scratch/question-demo
+
+
+❯ Throwaway UI test. Call no tool except AskUserQuestion, exactly once, with one single-choice question "Pick a colour"
+  (header Colour) with options Red and Blue. After it returns reply only with the word done.
+
+● User declined to answer questions
+  ⎿  · Pick a colour (Red / Blue)
+
+✻ Brewed for 3s · done 10:30 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PE…
+  ⏸ manual mode on · ? for shortcuts

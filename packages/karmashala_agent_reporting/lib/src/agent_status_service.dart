@@ -132,6 +132,14 @@ class AgentStatusService {
           grid?.status == AgentActivityStatus.working) {
         return grid!;
       }
+      // An ask the screen no longer draws: declined with Esc or left to talk
+      // over, it fires no hook, and the agent's own composer is back.
+      if (screenWellAfterHook &&
+          (hook.hasOpenPrompt || hook.hasOpenQuestion) &&
+          (grid?.status == AgentActivityStatus.idle ||
+              grid?.status == AgentActivityStatus.working)) {
+        return grid!;
+      }
       return hook;
     }
     if (grid != null && escalates(grid)) return grid;

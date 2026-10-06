@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/app_preferences.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/features/todos/data/todos_repository.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notes/karmashala_notes.dart';
+import 'package:karmashala_notifications/watched.dart';
 
 import '../../support/fake_data_server.dart';
 
@@ -109,6 +111,68 @@ void main() {
     );
     await pumpEventQueue();
     expect(todos.list(), isEmpty);
+  });
+
+  group('an open question, across a lost link', () {
+    SessionStatusEntry entry(AgentActivityStatus status, AgentWaitKind wait) =>
+        SessionStatusEntry(
+          session: const WatchedSession(
+            key: AgentSessionKey('claudeCode', 'conv-1'),
+            label: 'Webhooks',
+            openId: 'row-1',
+            imported: false,
+          ),
+          report: AgentStatusReport(
+            agentId: 'claudeCode',
+            sessionId: 'conv-1',
+            status: status,
+            source: AgentStatusSource.hook,
+            observedAt: DateTime.utc(2026, 10, 6),
+            waiting: wait,
+          ),
+        );
+
+    final asking = entry(
+      AgentActivityStatus.awaitingApproval,
+      AgentWaitKind.question,
+    );
+
+    // The phone kept the last word it heard while it could hear nothing: a
+    // question answered on the desktop meanwhile held its composer and card.
+    test('is not held while the link is down', () async {
+      final client = await server.connect();
+      final told = <AttentionChange>[];
+      client.attentionChanges.listen(told.add);
+      server.writeAsAnotherClient([SessionStatusChanged(asking)]);
+      expect(client.sessionStatuses['row-1']!.report.hasOpenQuestion, isTrue);
+
+      server.stop();
+      await pumpEventQueue();
+      expect(client.connection.state, DataLinkState.connecting);
+      expect(
+        client.sessionStatuses['row-1']?.report.hasOpenQuestion ?? false,
+        isFalse,
+      );
+      expect(told.whereType<SessionStatusRemoved>().single.openId, 'row-1');
+    });
+
+    test(
+      'a status that asks nothing is kept until the server says again',
+      () async {
+        final client = await server.connect();
+        server.writeAsAnotherClient([
+          SessionStatusChanged(
+            entry(AgentActivityStatus.working, AgentWaitKind.unrecorded),
+          ),
+        ]);
+        server.stop();
+        await pumpEventQueue();
+        expect(
+          client.sessionStatuses['row-1']!.report.status,
+          AgentActivityStatus.working,
+        );
+      },
+    );
   });
 
   test('another client\'s write arrives as a change', () async {
