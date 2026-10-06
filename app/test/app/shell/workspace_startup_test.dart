@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
-import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_agent_chip.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -181,7 +181,8 @@ void main() {
     // is a statement about an empty box. `DeliveryStrip` offers a commit while
     // the tree is dirty, and it is the pill the narrow row keeps.
     expect(find.byType(DeliveryStrip), findsWidgets);
-    expect(find.byType(PermissionModeChip), findsWidgets);
+    // Round 29: the mode and the model are one Agent chip on the bar.
+    expect(find.byType(SessionAgentChip), findsWidgets);
     // An overflow is thrown during layout, so it arrives as an exception rather
     // than as anything a finder could see.
     expect(tester.takeException(), isNull);
@@ -200,6 +201,11 @@ void main() {
 
     // The toggle is the clearest witness: both halves are still there and both
     // are still labelled to a screen reader, but the two words are gone.
+    // Since round 29 a group this narrow keeps it in ⋯.
+    expect(find.text('Terminal'), findsNothing);
+    expect(find.text('Chat'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('session-more')).first);
+    await tester.pumpAndSettle();
     expect(find.text('Terminal'), findsNothing);
     expect(find.text('Chat'), findsNothing);
     expect(find.byTooltip('Terminal view'), findsWidgets);

@@ -80,9 +80,17 @@ Future<bool> setOperatorGrant(
 /// and keeps its own todos, notes and verification records; on, the tools
 /// that act run for it too. Per session, and the person's alone to change.
 class OperatorChip extends ConsumerWidget {
-  const OperatorChip({required this.sessionId, super.key});
+  const OperatorChip({
+    required this.sessionId,
+    this.onlyWhenOn = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// The session bar's badge: nothing while off, the default, which is
+  /// granted from ⋯ instead.
+  final bool onlyWhenOn;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -90,7 +98,9 @@ class OperatorChip extends ConsumerWidget {
     final row = ref.read(sessionsDataProvider).getById(sessionId);
     if (row == null) return const SizedBox.shrink();
     final on = row.operatorGranted;
+    if (onlyWhenOn && !on) return const SizedBox.shrink();
     return Tooltip(
+      key: onlyWhenOn ? const ValueKey('session-operator-badge') : null,
       message: on
           ? 'This agent may operate Karmashala: start, send to and end '
                 'sessions, run terminals, restore checkpoints, drive devices '
@@ -99,12 +109,12 @@ class OperatorChip extends ConsumerWidget {
                 'it operate Karmashala — or start a message with /operator.',
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.sm),
-        onTap: () =>
-            setOperatorGrant(context, ref, sessionId, granted: !on),
+        onTap: () => setOperatorGrant(context, ref, sessionId, granted: !on),
         child: PickerFace(
           icon: on ? AppIcons.robot : AppIcons.shield,
           label: on ? 'Operates' : 'Read-only',
-          qualifiers: const ['Karmashala'],
+          // The badge keeps to its word: the tooltip says what it operates.
+          qualifiers: onlyWhenOn ? const [] : const ['Karmashala'],
         ),
       ),
     );

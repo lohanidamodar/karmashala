@@ -114,20 +114,40 @@ class _CompactSessionBar extends StatelessWidget {
                           singleLine: true,
                         ),
                       ),
-                      // The mode chip is in the sheet: at phone width it
-                      // squeezed the delivery line to a word. A waiting
-                      // resume is not: its countdown and cancel stay in view.
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: _compactResumeChipWidth,
+                      // The badges, each only when it says something (the
+                      // desktop bar's rule): most of the room when they want
+                      // it, scrolled rather than overflowing when several are
+                      // up at once. The mode chip is in the sheet.
+                      Flexible(
+                        flex: 9,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // A waiting resume's countdown and cancel stay
+                              // in view.
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: _compactResumeChipWidth,
+                                ),
+                                child: ScheduledResumeChip(
+                                  sessionId: sessionId,
+                                ),
+                              ),
+                              // The phone's only way into the messages waiting
+                              // for this session, chat or terminal.
+                              QueuedCountChip(sessionId: sessionId),
+                              SessionSubagentsBadge(sessionId: sessionId),
+                              OperatorChip(
+                                sessionId: sessionId,
+                                onlyWhenOn: true,
+                              ),
+                              SessionPortsBadge(sessionId: sessionId),
+                            ],
+                          ),
                         ),
-                        child: ScheduledResumeChip(sessionId: sessionId),
                       ),
-                      // The phone's only way into the messages waiting for
-                      // this session, chat or terminal: nothing, and no
-                      // width, while none wait.
-                      QueuedCountChip(sessionId: sessionId),
-                      SessionSubagentsBadge(sessionId: sessionId),
                       const SizedBox(width: Insets.xs),
                       _SessionSheetButton(sessionId: sessionId),
                     ],
