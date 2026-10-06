@@ -22,6 +22,7 @@ class AcpConversationWriter {
     DateTime Function()? now,
     this.coalesce = const Duration(milliseconds: 100),
     this.tailLines = 400,
+    this.onAgentText,
   }) : _now = now ?? (() => DateTime.now().toUtc());
 
   final String sessionId;
@@ -29,6 +30,11 @@ class AcpConversationWriter {
   final String Function() newId;
   final void Function() onChanged;
   final DateTime Function() _now;
+
+  /// Each agent row's whole text, once, as the row closes; answers what the
+  /// row should read instead, or null.
+  final String? Function(String text)? onAgentText;
+  final _rowText = StringBuffer();
 
   /// How long chunks are gathered before the open agent row is written.
   final Duration coalesce;
@@ -131,12 +137,16 @@ class AcpConversationWriter {
       );
       onChanged();
     }
-    if (text.isNotEmpty) _render('Agent: $text');
+    if (text.isNotEmpty) {
+      _rowText.write(text);
+      _render('Agent: $text');
+    }
   }
 
   /// The turn ended: everything buffered is written and the rows close.
   void turnEnded() {
     flush();
+    _told();
     _openRow = null;
     _openMessageId = null;
     _tools.clear();
@@ -205,8 +215,23 @@ class AcpConversationWriter {
 
   void _closeAgentRow() {
     flush();
+    _told();
     _openRow = null;
     _openMessageId = null;
+  }
+
+  /// Hands the closing agent row's whole text to [onAgentText], once, and
+  /// writes the row as it answers.
+  void _told() {
+    if (_rowText.isEmpty) return;
+    final text = _rowText.toString();
+    _rowText.clear();
+    final shown = onAgentText?.call(text);
+    final row = _openRow;
+    if (shown != null && shown != text && row != null) {
+      messages.patch(row, text: shown);
+      onChanged();
+    }
   }
 
   String _append(

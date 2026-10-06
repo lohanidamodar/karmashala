@@ -61,6 +61,11 @@ abstract class AcpRuntimeHost {
   /// `session_messages` rows of [sessionId] were written.
   void messagesChanged(String sessionId);
 
+  /// One agent message of [sessionId], whole, as its row closed — read for
+  /// what the agent ([agentId]) named in its own text. Answers what the row
+  /// should read instead (a marker taken out), or null to keep it.
+  String? agentMessage(String sessionId, String agentId, String text) => null;
+
   void log(String message);
 }
 

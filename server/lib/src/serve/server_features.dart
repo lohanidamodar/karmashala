@@ -90,4 +90,7 @@ const Set<String> kServerFeatures = <String>{
   // and chat, told as `sessionAgentChanged`; its transcript tags each row's
   // agent and marks each switch with an `agentSwitch` row.
   'sessions.switchAgent',
+  // `artifacts.*`: what agents showed in their threads, their revisions
+  // and content, and the `artifactChanged` change.
+  'artifacts',
 };

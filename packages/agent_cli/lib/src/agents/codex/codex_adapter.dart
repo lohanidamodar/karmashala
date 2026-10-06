@@ -2,7 +2,9 @@ import '../../ask/cli_invocation.dart';
 import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
 import '../adapter/agent_accounts.dart';
+import '../adapter/agent_artifact_markers.dart';
 import '../adapter/agent_adapter.dart';
+import 'codex_visualize_markers.dart';
 import '../adapter/agent_chat_protocol.dart';
 import '../adapter/agent_file_changes.dart';
 import '../adapter/agent_import_audit.dart';
@@ -74,6 +76,9 @@ class CodexAdapter extends AgentAdapter {
 
   @override
   AgentMediaReader get media => const CodexMediaReader();
+
+  @override
+  AgentArtifactMarkers get artifactMarkers => const CodexVisualizeMarkers();
 
   @override
   AgentRewind get rewind => const NoOwnUndo(

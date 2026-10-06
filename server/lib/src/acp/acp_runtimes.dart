@@ -204,6 +204,17 @@ class ServerAcpHost extends AcpRuntimeHost {
   /// Set once the transcripts exist; they are built after the launcher.
   void Function(String sessionId)? transcriptsChanged;
 
+  /// What reads an agent's answer for the artifacts it names, and what the
+  /// answer reads as with them taken out; set by `serve`.
+  void Function(String sessionId, String agentId, String text)? agentSaid;
+  String? Function(String agentId, String text)? displayOf;
+
+  @override
+  String? agentMessage(String sessionId, String agentId, String text) {
+    agentSaid?.call(sessionId, agentId, text);
+    return displayOf?.call(agentId, text);
+  }
+
   @override
   void status(
     String sessionId,

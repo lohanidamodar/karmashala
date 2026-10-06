@@ -109,6 +109,7 @@ class AcpSessionRuntime implements ScreenSession {
       messages: messages,
       newId: newId ?? newUuid,
       onChanged: () => host.messagesChanged(sessionId),
+      onAgentText: (text) => host.agentMessage(sessionId, agentId, text),
       now: _now,
       coalesce: coalesce,
     );

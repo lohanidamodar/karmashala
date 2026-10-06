@@ -22,6 +22,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_artifacts/karmashala_artifacts.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
@@ -78,6 +79,7 @@ part 'changes/transcripts_changes.dart';
 part 'changes/quick_access_changes.dart';
 part 'changes/acp_agent_changes.dart';
 part 'changes/sessions_changes.dart';
+part 'changes/artifacts_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -623,7 +625,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _transcriptsChangeFromJson(name, json) ??
     _quickAccessChangeFromJson(name, json) ??
     _acpAgentsChangeFromJson(name, json) ??
-    _sessionsChangeFromJson(name, json);
+    _sessionsChangeFromJson(name, json) ??
+    _artifactsChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

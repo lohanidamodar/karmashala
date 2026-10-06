@@ -16,6 +16,7 @@ import '../../agents/claude_code/claude_tool_references.dart';
 import '../../agents/claude_code/claude_web_search.dart';
 import '../../agents/codex/codex_patch_edits.dart';
 import '../../agents/codex/codex_rollout_items.dart';
+import '../../agents/codex/codex_visualize_markers.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/session_event_types.dart';
@@ -1825,7 +1826,16 @@ void _parseCodexMessage(
     } else if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
         !skipped(block['text']) &&
         !(role == 'user' && _codexImageTag.hasMatch('${block['text']}'))) {
-      _add(out, role, block['text'], at);
+      final text = block['text'];
+      // Codex's `$visualize` marker is drawn as an artifact's card, not read.
+      _add(
+        out,
+        role,
+        role == 'agent' && text is String
+            ? const CodexVisualizeMarkers().scan(text).text
+            : text,
+        at,
+      );
     }
   }
   _addPasted(out, first, pasted);

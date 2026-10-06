@@ -43,6 +43,7 @@ class _TabChip extends ConsumerWidget {
       mark: agentId == null
           ? null
           : AgentLogo(agentId: agentId, size: Chrome.iconSmall),
+      badge: _artifactBadge(ref),
       tooltip: tabTitleTooltip(
         title,
         agentId == null
@@ -232,6 +233,17 @@ class _TabChip extends ConsumerWidget {
       }
     }
     return null;
+  }
+
+  /// How many artifacts the tab's session has shown; nothing when none. The
+  /// count alone is watched, so a tab with none never redraws for it.
+  Widget? _artifactBadge(WidgetRef ref) {
+    final sessionId = _sessionId(ref);
+    if (sessionId == null) return null;
+    final count = ref.watch(
+      sessionArtifactsProvider(sessionId).select((a) => a.value?.length ?? 0),
+    );
+    return count == 0 ? null : ArtifactCountBadge(count: count);
   }
 
   /// The session in the focused pane, else in the first pane holding one.
