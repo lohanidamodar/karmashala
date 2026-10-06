@@ -1,6 +1,7 @@
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/session_archive_tool_set.dart';
+import 'package:karmashala_host/src/mcp/tools/session_tool_schemas.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -135,5 +136,15 @@ void main() {
     final answer = await call('session_unarchive', 'child', 'lead') as Map;
     expect(answer['unarchived'], ['child', 'grandchild']);
     expect(row('child').isArchived, isFalse);
+  });
+
+  test('session_end says a parent ends its child once the work is merged or '
+      'handed back, then archives it — ending is not archiving', () {
+    final end = sessionControlToolSchemas.firstWhere(
+      (s) => s['name'] == 'session_end',
+    );
+    final description = end['description']! as String;
+    expect(description, contains('merged or handed back'));
+    expect(description, contains('then archives it with session_archive'));
   });
 }
