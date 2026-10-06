@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala_artifacts/karmashala_artifacts.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
@@ -342,6 +343,71 @@ class FakeDataServer {
   /// Every request answered, by kind, in order.
   final requests = <String>[];
 
+  /// What agents showed, by id, and each revision's bytes — seeded through
+  /// [showArtifact], as the server's library would hold them.
+  final artifacts = <String, Artifact>{};
+  final artifactBytes = <(String, int), Uint8List>{};
+
+  /// When set, artifact content is refused with it.
+  DataRefused? artifactContentRefusal;
+
+  /// [artifact] at its revision holding [bytes], told to every client as the
+  /// server tells a show or a rewrite.
+  void showArtifact(Artifact artifact, List<int> bytes) {
+    artifacts[artifact.id] = artifact;
+    artifactBytes[(artifact.id, artifact.revision)] = Uint8List.fromList(
+      bytes,
+    );
+    _tell(null, [ArtifactChanged(artifact)]);
+  }
+
+  Object? _handleArtifacts(ArtifactsRequest<Object?> request) {
+    Artifact known(String id) =>
+        artifacts[id] ?? (throw DataRefused.notFound('no artifact has id $id'));
+    switch (request) {
+      case SessionArtifactsRead(:final sessionId):
+        return [
+          for (final a in artifacts.values)
+            if (a.sessionId == sessionId) a,
+        ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case ArtifactRevisionsRead(:final id):
+        known(id);
+        return [
+          for (final key in artifactBytes.keys)
+            if (key.$1 == id)
+              ArtifactRevisionSummary(
+                revision: key.$2,
+                size: artifactBytes[key]!.length,
+                capturedAt: DateTime.utc(2026, 10, 6),
+              ),
+        ]..sort((a, b) => a.revision.compareTo(b.revision));
+      case ArtifactContentRead(
+        :final id,
+        :final revision,
+        :final offset,
+        :final length,
+      ):
+        final refusal = artifactContentRefusal;
+        if (refusal != null) throw refusal;
+        final artifact = known(id);
+        final bytes =
+            artifactBytes[(id, revision ?? artifact.revision)] ??
+            (throw DataRefused.notFound('revision $revision is not kept'));
+        final start = offset.clamp(0, bytes.length);
+        final end = (start + length).clamp(0, bytes.length);
+        return FileChunk(
+          Uint8List.sublistView(bytes, start, end),
+          fileSize: bytes.length,
+        );
+      case ArtifactSetNetwork(:final id, :final allowed):
+        final next = known(id).copyWith(networkAllowed: allowed);
+        artifacts[id] = next;
+        // The server's library announces it, to the asking client too.
+        _tell(null, [ArtifactChanged(next)]);
+        return next;
+    }
+  }
+
   /// The modes each session's agent last announced (seeded through
   /// [writeAsAnotherClient]); `sessions.setMode` moves `currentModeId`.
   final sessionModes = <String, SessionModesChanged>{};
@@ -455,7 +521,7 @@ class FakeDataServer {
         case GitChange():
           // Nothing kept: it says what to read again.
           break;
-        case FilesChange() || TranscriptChanged():
+        case FilesChange() || TranscriptChanged() || ArtifactChange():
           // A watch's news is one link's.
           break;
         case SessionModesChanged(:final sessionId):
@@ -857,6 +923,7 @@ class FakeDataServer {
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
       ),
+      final ArtifactsRequest<Object?> r => _handleArtifacts(r),
       final SessionInputRequest<Object?> r => sessionWork._input(r),
       SessionSetMode() ||
       SessionSetConfigOption() ||

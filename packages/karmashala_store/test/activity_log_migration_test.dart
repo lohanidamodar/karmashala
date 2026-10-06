@@ -1,7 +1,7 @@
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
-/// v79: `activity_log`, the timeline's own history. No foreign keys, and the
+/// v80: `activity_log`, the timeline's own history. No foreign keys, and the
 /// triggers on `sessions` append what happens to a row instead of joining it.
 void main() {
   late AppDatabase db;
@@ -51,9 +51,9 @@ void main() {
     [?sessionId],
   );
 
-  test('the head is 79', () => expect(db.schemaVersion, 79));
+  test('the head is 80', () => expect(db.schemaVersion, 80));
 
-  test('v79 creates activity_log with its indexes and no foreign keys', () {
+  test('v80 creates activity_log with its indexes and no foreign keys', () {
     final columns = db
         .query('PRAGMA table_info(activity_log);')
         .map((r) => r['name']! as String)

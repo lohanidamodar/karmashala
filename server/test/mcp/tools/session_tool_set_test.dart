@@ -247,13 +247,13 @@ void main() {
 
     test('a session nothing runs is resumed with the message as its opening '
         'prompt, under the sender\'s name', () async {
-      final resumed = <(String, String)>[];
+      final resumed = <(String, String, TabReveal)>[];
       final resuming = SessionToolSet(
         context,
         prompts: prompts,
         registry: registry,
-        resumeWith: (sessionId, prompt) async =>
-            resumed.add((sessionId, prompt)),
+        resumeWith: (sessionId, prompt, reveal) async =>
+            resumed.add((sessionId, prompt, reveal)),
       );
       final answer =
           await resuming.call('session_send', {
@@ -266,6 +266,11 @@ void main() {
       expect(resumed.single.$1, 's1');
       expect(resumed.single.$2, contains('carry on'));
       expect(resumed.single.$2, contains('Orchestrator'));
+      expect(
+        resumed.single.$3,
+        TabReveal.background,
+        reason: 'another session resumed it, so it opens behind',
+      );
     });
 
     test('to a session mid-turn is queued, not typed, and delivered under '

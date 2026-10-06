@@ -20,6 +20,9 @@ const Set<String> kMcpUngatedWrites = {
   'verification_note',
   'verification_finish',
   'snippet_add',
+  // Only the caller's own thread: an artifact belongs to its session.
+  'artifact_show',
+  'artifact_update',
   'session_rename',
   'session_draft',
   // Only the caller's own ended descendants, and undone by unarchive.
@@ -116,6 +119,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   ),
   'checkpoint_screenshots': McpToolAnnotations.read,
   'checkpoint_screenshot_compare': McpToolAnnotations.read,
+  // A card in the caller's own thread: it adds, it never opens a pane.
+  'artifact_show': McpToolAnnotations(movesAttention: false),
+  'artifact_list': McpToolAnnotations.read,
+  'artifact_update': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
   // The only tool here that can throw away work nobody recorded elsewhere.
   'checkpoint_restore': McpToolAnnotations(
     destructive: true,
@@ -548,6 +558,10 @@ enum McpToolCategory {
     'Checkpoints',
     'The per-turn record of the working tree, and putting it back.',
   ),
+  artifacts(
+    'Artifacts',
+    'Pages, diagrams and images an agent shows in its thread.',
+  ),
   records(
     'Notes, todos and the inbox',
     'The written things a person reads, plus the decision record.',
@@ -842,6 +856,20 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'checkpoint_screenshot_compare': McpToolListing(
     McpToolCategory.checkpoints,
     'Two checkpoints\' screenshots compared: changed-pixel percent and a diff.',
+  ),
+
+  // Artifacts.
+  'artifact_show': McpToolListing(
+    McpToolCategory.artifacts,
+    'Show a page, diagram, image or document in your thread, kept by revision.',
+  ),
+  'artifact_list': McpToolListing(
+    McpToolCategory.artifacts,
+    'The artifacts a session has shown: id, title, kind, revision.',
+  ),
+  'artifact_update': McpToolListing(
+    McpToolCategory.artifacts,
+    'Rename, resize or revise an artifact; re-read a file you rewrote.',
   ),
 
   // Notes, todos and the inbox.

@@ -283,6 +283,9 @@ enum SettingsAnchor {
     'tray',
     'sleep',
     'system',
+    'front',
+    'background',
+    'focus',
   ]),
   launcherHotkey(SettingsSectionId.general, 'Launcher hotkey', [
     'hotkey',
@@ -966,7 +969,8 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Database size',
     anchor: SettingsAnchor.serverStorage,
-    description: 'How much the server\'s database holds, and its largest '
+    description:
+        'How much the server\'s database holds, and its largest '
         'tables.',
     keywords: ['database', 'sqlite', 'disk', 'size', 'tables'],
   ),
@@ -981,7 +985,8 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Clean up old ended sessions',
     anchor: SettingsAnchor.serverStorage,
-    description: 'Delete ended sessions older than a number of days, when '
+    description:
+        'Delete ended sessions older than a number of days, when '
         'you ask.',
     keywords: ['old sessions', 'clean up', 'delete', 'purge', 'ended'],
   ),

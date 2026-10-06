@@ -16,7 +16,7 @@ void main() {
   final day = DateTime.utc(2026, 9, 20);
   DateTime h(num hours) => day.add(Duration(minutes: (hours * 60).round()));
 
-  /// A store as it stood before v79: rows, and no log of them.
+  /// A store as it stood before v80: rows, and no log of them.
   void seed() {
     insertSession(db, 's1', at: h(9), status: 'completed');
     insertSession(db, 'child', at: h(10), parent: 's1');
@@ -53,7 +53,7 @@ void main() {
       "'done', ?, ?, '5-hour');",
       [h(11).toIso8601String(), h(10).toIso8601String(), h(11).toIso8601String()],
     );
-    // What a log written live would not have: the store as of before v79.
+    // What a log written live would not have: the store as of before v80.
     db.execute('DELETE FROM activity_log;');
     transcripts = {
       's1': [

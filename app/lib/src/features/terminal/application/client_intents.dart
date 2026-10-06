@@ -14,6 +14,7 @@ import '../../sessions/application/acp_session_providers.dart'
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../snippets/application/snippet_insertion.dart';
 import '../../snippets/application/snippet_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
@@ -41,8 +42,13 @@ class ClientIntents extends Notifier<void> {
   Future<void> _handle(ClientIntent intent) async {
     try {
       switch (intent) {
-        case OpenSessionTab(:final sessionId, :final title, :final launch):
-          await _openSession(sessionId, title, launch);
+        case OpenSessionTab(
+          :final sessionId,
+          :final title,
+          :final launch,
+          :final reveal,
+        ):
+          await _openSession(sessionId, title, launch, _honoured(reveal));
         case OpenTerminalTab(:final paneId, :final title):
           ref
               .read(terminalSessionsControllerProvider.notifier)
@@ -73,19 +79,34 @@ class ClientIntents extends Notifier<void> {
     }
   }
 
+  /// [reveal], unless the person asked for agents' sessions in front.
+  TabReveal _honoured(TabReveal reveal) =>
+      ref.read(settingsControllerProvider).bringAgentSessionsToFront
+      ? TabReveal.front
+      : reveal;
+
   Future<void> _openSession(
     String sessionId,
     String title,
     AgentPaneLaunch? launch,
+    TabReveal showing,
   ) async {
     final launcher = ref.read(sessionLauncherProvider);
-    if (launcher.reveal(sessionId)) return;
+    if (showing == TabReveal.background) {
+      // Already on screen somewhere: nothing to add, and nothing to move.
+      if (launcher.livePaneFor(sessionId) != null) return;
+    } else if (launcher.reveal(sessionId)) {
+      return;
+    }
     final row = ref.read(sessionsDataProvider).getById(sessionId);
     if (row == null) return;
     // The server runs an ACP agent itself: no terminal to attach, so the
     // launcher shows its chat tab, as it does for the New session dialog.
     if (launch == null && installationSpeaksAcp(ref, row.agentInstallationId)) {
-      await launcher.showStarted(SessionStarted(session: row));
+      await launcher.showStarted(
+        SessionStarted(session: row),
+        showing: showing,
+      );
       return;
     }
     final installation = ref
@@ -103,7 +124,10 @@ class ClientIntents extends Notifier<void> {
                 title: title,
               ));
     if (shown == null) return;
-    await launcher.showStarted(SessionStarted(session: row, launch: shown));
+    await launcher.showStarted(
+      SessionStarted(session: row, launch: shown),
+      showing: showing,
+    );
   }
 
   void _closeTab(String paneId) {

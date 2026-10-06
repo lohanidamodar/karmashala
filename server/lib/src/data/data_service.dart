@@ -16,6 +16,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../activity/activity_log.dart';
+import '../artifacts/server_artifacts.dart';
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
@@ -165,6 +166,10 @@ class DataService {
   /// fork, an end), set by `serve`; without it that work is refused
   /// `unavailable`.
   SessionWork? sessionWork;
+
+  /// What agents showed in their threads (`artifacts.*`), set by `serve`;
+  /// without it that work is refused `unavailable`.
+  ArtifactsWork? artifactsWork;
 
   /// Sessions' transcripts read here for any client (`sessions.transcript`),
   /// set by `serve`; without them that work is refused `unavailable`.
@@ -576,6 +581,7 @@ class DataService {
         ChecksWorkRequest() ||
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
+        ArtifactsRequest() ||
         SessionInputRequest() ||
         SessionSetMode() ||
         SessionSetConfigOption() ||
@@ -797,6 +803,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is ChecksWorkRequest ||
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
+      request is ArtifactsRequest ||
       request is SessionInputRequest ||
       request is SessionSetMode ||
       request is SessionSetConfigOption ||
@@ -896,6 +903,21 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     )) {
       await _service.sessionModes.setConfigOption(sessionId, configId, value);
       return DataReply(const DataAck() as R, _service._revision);
+    }
+    if (request case final ArtifactsRequest<Object?> asked) {
+      if (!transcripts) {
+        throw const DataRefused.denied(
+          'this client may not read what agents showed: its pairing does not '
+          'grant transcripts',
+        );
+      }
+      final work =
+          _service.artifactsWork ??
+          (throw const DataRefused.unavailable(
+            'this server keeps no artifacts',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
     }
     if (request case final SessionTranscriptRequest<Object?> asked) {
       if (!transcripts) {

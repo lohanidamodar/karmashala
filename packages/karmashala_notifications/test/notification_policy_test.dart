@@ -262,78 +262,25 @@ void main() {
   });
 
   group('settings', () {
-    test('the master switch silences everything', () {
+    test('Nothing silences everything', () {
       expect(
         _suppression(
           _context(
             from: AgentActivityStatus.working,
             to: AgentActivityStatus.failed,
-            settings: const NotificationSettings(enabled: false),
+            settings: const NotificationSettings(level: NotifyLevel.nothing),
           ),
         ),
         NotificationSuppression.notificationsDisabled,
       );
     });
 
-    test('muting "finished" leaves "needs you" alone', () {
-      const settings = NotificationSettings(notifyWhenFinished: false);
-      expect(
-        _suppression(
-          _context(
-            from: AgentActivityStatus.working,
-            to: AgentActivityStatus.idle,
-            settings: settings,
-          ),
-        ),
-        NotificationSuppression.reasonMuted,
-      );
-      expect(
-        _reason(
-          _context(
-            from: AgentActivityStatus.working,
-            to: AgentActivityStatus.awaitingApproval,
-            settings: settings,
-          ),
-        ),
-        NotificationReason.needsInput,
-      );
-    });
-
-    test('muting "needs you" covers approvals and failures alike', () {
-      const settings = NotificationSettings(notifyWhenAttentionNeeded: false);
-      for (final status in [
-        AgentActivityStatus.awaitingApproval,
-        AgentActivityStatus.failed,
-      ]) {
-        expect(
-          _suppression(
-            _context(
-              from: AgentActivityStatus.working,
-              to: status,
-              settings: settings,
-            ),
-          ),
-          NotificationSuppression.reasonMuted,
-          reason: '$status should be muted',
-        );
-      }
-      expect(
-        _reason(
-          _context(
-            from: AgentActivityStatus.working,
-            to: AgentActivityStatus.idle,
-            settings: settings,
-          ),
-        ),
-        NotificationReason.finished,
-      );
-    });
-
-    // The default field values themselves belong to notification_settings_test.
-    // What each default *does* is already asserted above, through the policy:
-    // 'an agent that finished its turn' and 'an agent waiting for approval'
-    // cover enabled/notifyWhenFinished/notifyWhenAttentionNeeded, and 'by
-    // default a focused window is never interrupted' covers onlyWhenUnfocused.
+    // Each level, reason by reason, is notify_level_test's. The default field
+    // values themselves belong to notification_settings_test. What each
+    // default *does* is already asserted above, through the policy: 'an agent
+    // that finished its turn' and 'an agent waiting for approval' cover the
+    // Everything level, and 'by default a focused window is never interrupted'
+    // covers onlyWhenUnfocused.
   });
 
   group('one table for agent status', () {

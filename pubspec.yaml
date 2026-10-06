@@ -37,6 +37,7 @@ workspace:
   - packages/karmashala_acp
   - packages/karmashala_agent_reporting
   - packages/karmashala_agent_status
+  - packages/karmashala_artifacts
   - packages/karmashala_automations
   - packages/karmashala_browser
   - packages/karmashala_checkpoints

@@ -87,6 +87,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// [TerminalBesidePlacement.openBeside].
   _BesideRequest? _beside;
 
+  /// Tabs opened behind the one in front, waiting for the tree to place them.
+  final Map<String, OpenBehind> _behind = {};
+
+  /// Tabs opened behind and not brought forward since.
+  final Set<String> _unseen = {};
+
   /// The tree the store already holds, so a save that changed no group writes
   /// no row — the same record [_writtenGrid] keeps for the grid hint.
   WorkspaceLayout? _writtenWorkspace;
@@ -108,6 +114,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   Map<String, PaneLiveness>? _livenessView;
   Map<String, String?>? _directoriesView;
   Map<String, String?>? _launchesView;
+  Set<String>? _unseenView;
   Map<String, int>? _tabIndexById;
   Map<String, String>? _tabIdByPane;
 
@@ -271,6 +278,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           for (final paneId in tab.layout.panes)
             paneId: ?chatPaneSessionId(paneId),
       }),
+      unseenTabIds: _unseenView ??= Set.unmodifiable(_unseen),
       titleRevision: _titleRevision,
     );
   }
@@ -282,6 +290,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // calls: a reconciler reachable from a read writes at a moment Riverpod
     // refuses in debug and swallows in release.
     _reconcileWorkspace();
+    _forgetSeenTabs();
     // After the reconcile, which is what puts a just-opened tab in the tree.
     final movedBeside = _placeBesideIfRequested();
     if (movedBeside) {
@@ -294,6 +303,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     state = _snapshot();
     // A new group is structure: written now, not on the next save that happens.
     if (movedBeside) persistStructure();
+  }
+
+  /// Drops the new mark from the tab now in front, and from tabs that went.
+  void _forgetSeenTabs() {
+    if (_unseen.isEmpty) return;
+    final before = _unseen.length;
+    _unseen.removeWhere(
+      (id) => id == _activeTabId || !_tabIndex.containsKey(id),
+    );
+    if (_unseen.length != before) _unseenView = null;
   }
 
   /// Records the tab on screen as the most recent, and forgets tabs that have
@@ -423,6 +442,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabs.clear();
     _detached.clear();
     _activeTabId = null;
+    _behind.clear();
+    _unseen.clear();
+    _unseenView = null;
     _workspace = null;
     _focusedGroupId = null;
     _tabsMutated();

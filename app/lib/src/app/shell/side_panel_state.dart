@@ -80,6 +80,10 @@ enum SidePanelSurface {
   /// Every picture the session on screen has produced or been shown, newest
   /// first — a picture pasted into a terminal is recorded as bytes with no path.
   media('Media'),
+
+  /// **What the session's agent showed** — pages, diagrams, images — each kept
+  /// by revision and opened here in a sandbox.
+  artifacts('Artifacts'),
   browser('Browser'),
 
   /// The Flutter app the developer is running: its debug console, hot reload

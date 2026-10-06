@@ -33,6 +33,16 @@ enum NotificationReason {
   /// Whether something is *stopped* until the user acts, rather than merely
   /// having happened. The one table for that question — three callers share it.
   bool get needsUser => this != finished;
+
+  /// Whether this interrupts — a toast, a sound, a heads-up — at [level];
+  /// otherwise it is logged quietly. The one table for "Notify me", read by
+  /// the desktop, the phone and the inbox's quiet filter alike. Ready to merge
+  /// is good news, not a blocker, so it waits for the person.
+  bool interruptsAt(NotifyLevel level) => switch (level) {
+    NotifyLevel.everything => true,
+    NotifyLevel.whenNeeded => needsUser && this != readyToMerge,
+    NotifyLevel.nothing => false,
+  };
 }
 
 /// Why a status change was *not* delivered. Recorded rather than discarded so
@@ -56,8 +66,9 @@ enum NotificationSuppression {
   /// previous status was unknown or never observed.
   noEvidenceOfChange,
 
-  /// The user turned off this class of notification.
-  reasonMuted,
+  /// The person's level does not interrupt for this: it is logged quietly —
+  /// in the inbox, and on a phone in its quiet channel.
+  loggedQuietly,
 
   /// This is the session on screen right now.
   sessionOnScreen,
@@ -70,13 +81,24 @@ enum NotificationSuppression {
 /// or the reason it was held back.
 class NotificationDecision {
   const NotificationDecision.notify(NotificationReason this.reason)
-    : suppression = null;
+    : suppression = null,
+      quietReason = null;
 
   const NotificationDecision.suppress(NotificationSuppression this.suppression)
-    : reason = null;
+    : reason = null,
+      quietReason = null;
+
+  /// News the person's level logs quietly rather than interrupting for.
+  const NotificationDecision.quiet(NotificationReason this.quietReason)
+    : reason = null,
+      suppression = NotificationSuppression.loggedQuietly;
 
   final NotificationReason? reason;
   final NotificationSuppression? suppression;
+
+  /// What was logged quietly, for a client that shows quiet news without
+  /// interrupting (a phone's low-importance channel); null otherwise.
+  final NotificationReason? quietReason;
 
   bool get shouldNotify => reason != null;
 
@@ -186,12 +208,6 @@ class AgentNotificationPolicy {
     final reason = news.reason;
     if (reason == null) return news;
 
-    if (!_wanted(reason, settings)) {
-      return const NotificationDecision.suppress(
-        NotificationSuppression.reasonMuted,
-      );
-    }
-
     // Being told about what is already on your screen is the fastest way to
     // make someone turn notifications off — and behind another app is not on it.
     if (context.windowFocused &&
@@ -199,6 +215,10 @@ class AgentNotificationPolicy {
       return const NotificationDecision.suppress(
         NotificationSuppression.sessionOnScreen,
       );
+    }
+
+    if (!reason.interruptsAt(settings.level)) {
+      return NotificationDecision.quiet(reason);
     }
 
     if (context.windowFocused && settings.onlyWhenUnfocused) {
@@ -230,11 +250,4 @@ class AgentNotificationPolicy {
       transition.source == AgentStatusSource.protocol ||
       (transition.from != null &&
           transition.from != AgentActivityStatus.unknown);
-
-  /// Delivery news is all "something wants you" — the same switch the user
-  /// already has, rather than a fourth setting nobody would find.
-  bool _wanted(NotificationReason reason, NotificationSettings settings) =>
-      reason.needsUser
-      ? settings.notifyWhenAttentionNeeded
-      : settings.notifyWhenFinished;
 }

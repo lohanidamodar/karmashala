@@ -495,6 +495,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setBringAgentSessionsToFront(bool value) {
+    state = state.copyWith(bringAgentSessionsToFront: value);
+    _save();
+  }
+
   /// The quit question's answers, as it will use them without asking.
   void setQuitAnswers({
     required bool asks,

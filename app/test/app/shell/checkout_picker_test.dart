@@ -6,7 +6,9 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
+import 'package:karmashala/src/features/explorer/application/project_head.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
+import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -117,7 +119,7 @@ void main() {
     git = FakeCommandRunner(responder: respond);
   });
 
-  ProviderContainer makeContainer() {
+  ProviderContainer makeContainer({List<Override> extra = const []}) {
     final container = ProviderContainer(
       overrides: [
         data,
@@ -131,6 +133,7 @@ void main() {
         ),
         // These tests read a delivery future directly rather than through a
         // pump, so the real frame gate has no frame to wait for.
+        ...extra,
       ],
     );
     addTearDown(container.dispose);
@@ -158,7 +161,7 @@ void main() {
   }
 
   Future<void> openPicker(WidgetTester tester) async {
-    await tester.tap(find.byType(SidePanelContextLine));
+    await tester.tap(find.byType(PopupMenuButton<Object>));
     await tester.pumpAndSettle();
   }
 
@@ -358,6 +361,51 @@ void main() {
     });
   });
 
+  testWidgets('a session switch moves every surface to its worktree, and a '
+      'switcher pick holds until then', (tester) async {
+    insertAllCheckouts();
+    for (final (id, repositoryId) in [('s-hub', 'hub'), ('s-relay', 'relay')]) {
+      db.server.sessionRows.insert(
+        Session(
+          id: id,
+          repositoryId: repositoryId,
+          agentInstallationId: 'a1',
+          title: id,
+          useWorktree: repositoryId == 'relay',
+          worktree: repositoryId == 'relay' ? at(relayPath) : null,
+          status: SessionStatus.running,
+          createdAt: testTime,
+        ),
+      );
+    }
+    final container = makeContainer(
+      extra: [
+        checkoutHeadBranchProvider.overrideWith(
+          (ref, checkout) async => 'main',
+        ),
+      ],
+    );
+    await pump(tester, container);
+    container.read(sessionContextProvider).follow('s-hub');
+    await tester.pumpAndSettle();
+    container.read(selectedRepositoryIdProvider.notifier).select('app');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('worktree-switcher')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('inbox-bounds'));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'inbox');
+    expect(container.read(viewedCheckoutProvider)?.path, inboxPath);
+    expect(container.read(fileTreeRootProvider)?.path, inboxPath);
+
+    container.read(sessionContextProvider).follow('s-relay');
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'relay');
+    expect(container.read(viewedCheckoutProvider)?.path, relayPath);
+    expect(container.read(fileTreeRootProvider)?.path, relayPath);
+  });
+
   testWidgets('a pick made in a session is given back when it returns', (
     tester,
   ) async {
@@ -468,11 +516,19 @@ void main() {
     ]);
   });
 
-  testWidgets('a worktree chip selects the checkout it names', (tester) async {
+  testWidgets('the worktree switcher selects the checkout it names', (
+    tester,
+  ) async {
     // The chips listed real worktrees but resolved them in the parents-only
     // list, so every one rendered greyed out and tapping it did nothing.
     insertAllCheckouts();
-    final container = makeContainer();
+    final container = makeContainer(
+      extra: [
+        checkoutHeadBranchProvider.overrideWith(
+          (ref, checkout) async => 'main',
+        ),
+      ],
+    );
     container.read(selectedRepositoryIdProvider.notifier).select('app');
     // The picker classifies checkouts lazily, so the chips only break once
     // something else has loaded the labels — which is the state the app is in.
@@ -482,19 +538,21 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: SidePanelWorktrees())),
+        child: const MaterialApp(home: Scaffold(body: SidePanelContextLine())),
       ),
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('worktree-switcher')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('dual-relay'));
     await tester.pumpAndSettle();
     expect(container.read(selectedCheckoutProvider)?.id, 'relay');
   });
 
   test('the worktree rows the picker filters out stay resolvable', () async {
-    // `SidePanelWorktrees` turns a worktree path back into its row to decide
-    // where its chip points. It looked that up in the parents-only list, so
+    // The worktree list turns a worktree path back into its row to decide
+    // where a pick points. It looked that up in the parents-only list, so
     // every lookup missed and no chip was ever selectable.
     insertAllCheckouts();
     final container = makeContainer();

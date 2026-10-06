@@ -13,6 +13,7 @@ import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoiceDao, ExecutionEnvironmentDao;
 
+import 'package:karmashala_files/karmashala_files.dart' show SftpFileSpace;
 import 'package:karmashala_checkpoints/store.dart'
     show
         CheckpointDao,
@@ -27,8 +28,10 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         OpenSessionTab,
         OpenTerminalTab,
         SessionAgentChanged,
+        SessionNoticed,
         SessionQueueChanged,
         SessionSend,
+        TabReveal,
         TerminalOpen,
         UsageLimitNotice,
         UsageLimitNoticed,
@@ -62,6 +65,9 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
+import '../artifacts/artifact_tool_set.dart';
+import '../artifacts/server_artifact_markers.dart';
+import '../artifacts/server_artifacts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
@@ -482,6 +488,16 @@ Future<int> _serve(
     defaultDirectoryOf: ssh.defaultDirectoryOf,
     uploadsDirectory: p.join(dataDirectory, 'uploads'),
   )..attach();
+  // What agents show in their threads: each revision kept here, each source
+  // watched on its own host, every change told to every client.
+  final artifacts = ServerArtifacts.over(
+    database: database,
+    directory: p.join(dataDirectory, 'artifacts'),
+    spaceFor: files.spaceFor,
+    tell: data.announce,
+    isRemote: (id) => files.spaceFor(id) is SftpFileSpace,
+  )..start();
+  data.artifactsWork = artifacts;
   // The variables every terminal this server starts is given (slice 5a):
   // in its own data folder, write-only to every client.
   final envVault = ServerEnvVault(
@@ -783,6 +799,9 @@ Future<int> _serve(
       directory: screenshotDirectory,
     ),
   );
+  // What an agent shows in its thread, after the checkpoint families as
+  // serverToolSchemas lists them.
+  mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
   // Folders of checkpoints dropped without their files, by any path.
   unawaited(
     sweepCheckpointScreenshotFolders(
@@ -960,6 +979,19 @@ Future<int> _serve(
     titles: AcpTitles(sessionSync.rows),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // What an agent names in its own answer — Codex's `$visualize` marker — is
+  // shown as an artifact of its session; one refused is said in the chat.
+  final artifactMarkers = ServerArtifactMarkers(
+    artifacts,
+    database: database,
+    notice: (sessionId, message) => data.announce([
+      SessionNoticed(sessionId: sessionId, message: message),
+    ]),
+  );
+  acpHost
+    ..agentSaid = ((sessionId, agentId, text) =>
+        unawaited(artifactMarkers.see(sessionId, agentId, text)))
+    ..displayOf = artifactMarkers.displayOf;
   final sessionUsage = SessionUsageDao(database);
   final acpRuntimes = AcpRuntimes(
     messages: sessionMessages,
@@ -1298,6 +1330,8 @@ Future<int> _serve(
               sessionId: started.sessionId,
               title: started.session.title,
               launch: started.launch,
+              // Nobody asked for it in the window, so it takes no one's tab.
+              reveal: TabReveal.background,
             ),
           );
         },
@@ -1515,8 +1549,7 @@ Future<int> _serve(
   final delegations = DelegationResults(
     turnOf: (childId, since) =>
         childTurns.firstTurn(childId, bound: kDelegationBound, since: since),
-    nextTurnOf: (childId, since) =>
-        childTurns.nextTurn(childId, since: since),
+    nextTurnOf: (childId, since) => childTurns.nextTurn(childId, since: since),
     answerOf: answerOf,
     queue: sessionQueue,
     store: SessionDelegationDao(database),
@@ -1558,13 +1591,14 @@ Future<int> _serve(
         answerOf: answerOf,
         sentBy: delegations.sent,
         endedBy: delegations.endedBy,
-        resumeWith: (sessionId, prompt) async {
+        resumeWith: (sessionId, prompt, reveal) async {
           final started = await launches.resume(sessionId, prompt: prompt);
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
               title: started.session.title,
               launch: started.launch,
+              reveal: reveal,
             ),
           );
         },
@@ -1821,6 +1855,7 @@ Future<int> _serve(
   agentWork.stop();
   delivery.stop();
   await git.stop();
+  artifacts.close();
   await files.close();
   await sessionTranscripts.close();
   await sessionRecordReadings.close();

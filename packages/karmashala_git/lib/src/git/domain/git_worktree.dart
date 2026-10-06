@@ -7,6 +7,7 @@ class GitWorktree {
     this.branch,
     this.head,
     this.isBare = false,
+    this.isPrunable = false,
   });
 
   /// Worktree location, bound to the repository's environment.
@@ -21,6 +22,9 @@ class GitWorktree {
   /// Whether this is the bare repository entry.
   final bool isBare;
 
+  /// Whether git would prune it: its directory is gone.
+  final bool isPrunable;
+
   /// The directory's own name — the only short thing a detached worktree can
   /// be listed under.
   String get name => lastPathSegment(path.path);
@@ -34,10 +38,11 @@ class GitWorktree {
       other.path == path &&
       other.branch == branch &&
       other.head == head &&
-      other.isBare == isBare;
+      other.isBare == isBare &&
+      other.isPrunable == isPrunable;
 
   @override
-  int get hashCode => Object.hash(path, branch, head, isBare);
+  int get hashCode => Object.hash(path, branch, head, isBare, isPrunable);
 
   @override
   String toString() => 'GitWorktree(${path.path}, branch: $branch)';

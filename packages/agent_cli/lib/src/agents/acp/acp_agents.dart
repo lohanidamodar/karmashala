@@ -1,5 +1,6 @@
 import '../adapter/agent_presentation.dart';
 import '../adapter/data_only_agent_adapter.dart';
+import '../codex/codex_visualize_markers.dart';
 import 'antigravity_acp_descriptor.dart';
 import 'claude_acp_descriptor.dart';
 import 'codex_acp_descriptor.dart';
@@ -16,6 +17,8 @@ const claudeAcpAdapter = DataOnlyAgentAdapter(
 const codexAcpAdapter = DataOnlyAgentAdapter(
   codexAcpDescriptor,
   presentation: AgentPresentation(shortName: 'Codex', mark: AgentMark.openAi),
+  // The same Codex behind the protocol: its `$visualize` marker comes too.
+  artifactMarkers: CodexVisualizeMarkers(),
 );
 const antigravityAcpAdapter = DataOnlyAgentAdapter(
   antigravityAcpDescriptor,

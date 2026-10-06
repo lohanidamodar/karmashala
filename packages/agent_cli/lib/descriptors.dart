@@ -10,6 +10,7 @@
 library;
 
 export 'src/agents/adapter/agent_accounts.dart';
+export 'src/agents/adapter/agent_artifact_markers.dart';
 export 'src/agents/adapter/agent_adapter.dart';
 export 'src/agents/adapter/agent_capability.dart';
 export 'src/agents/adapter/agent_directory_conversations.dart';
@@ -53,6 +54,7 @@ export 'src/agents/claude_code/claude_rewind.dart';
 export 'src/agents/codex/codex_adapter.dart';
 export 'src/agents/codex/codex_descriptor.dart';
 export 'src/agents/codex/codex_store.dart';
+export 'src/agents/codex/codex_visualize_markers.dart';
 export 'src/agents/codex/codex_models_cache.dart';
 export 'src/agents/domain/agent_descriptor.dart';
 // The other half of the `AgentHookSpec` a descriptor declares: where an agent's

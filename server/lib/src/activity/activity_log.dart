@@ -43,7 +43,7 @@ typedef _Copy = ({
 });
 
 /// The `activity_log` table: append-only, read by range. Never joins to draw:
-/// every row carries its own copy, taken here (or by the v79 triggers).
+/// every row carries its own copy, taken here (or by the v80 triggers).
 class ActivityLog {
   ActivityLog(this._db, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;

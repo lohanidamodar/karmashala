@@ -1,4 +1,3 @@
-import '../../workspaces/data/workspace_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +8,6 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../explorer/application/checkout_picker.dart';
@@ -19,7 +17,6 @@ import '../../github/presentation/github_section.dart';
 import 'package:karmashala_git/git.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../git/presentation/remote_link.dart';
-import '../../git/presentation/worktree_browse.dart';
 import '../../git/presentation/worktree_create_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
 
@@ -286,34 +283,19 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
   @override
   Widget build(BuildContext context) {
     final worktrees = ref.watch(repoWorktreesProvider);
-    final repositoryId = ref.watch(selectedRepositoryIdProvider);
     final home = ref.watch(selectedCheckoutPathProvider);
-    final viewed = ref.watch(viewedCheckoutProvider);
-    final browsed = ref.watch(browsedWorktreeProvider);
 
     final list = worktrees.asData?.value ?? const <GitWorktree>[];
     final open = _open ?? list.length <= _Worktrees.openUpTo;
 
     Widget row(GitWorktree worktree) => _WorktreeRow(
       worktree: worktree,
-      repositoryId: repositoryId,
-      home: home,
-      viewed: viewed != null && Checkout(worktree.path) == Checkout(viewed),
+      selected: home != null && Checkout(worktree.path) == Checkout(home),
     );
 
     final body = switch (worktrees) {
       AsyncData(:final value) when value.isEmpty => const _DimNote('none'),
-      AsyncData(:final value) when !open => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Closed, the list still shows the one being read: that is the fact
-          // that would otherwise be invisible from here.
-          for (final worktree in value)
-            if (browsed != null &&
-                Checkout(worktree.path) == Checkout(browsed.path))
-              row(worktree),
-        ],
-      ),
+      AsyncData() when !open => const SizedBox.shrink(),
       AsyncData(:final value) => ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight:
@@ -342,7 +324,6 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
         _WorktreesHeader(
           count: list.length,
           open: open,
-          viewing: browsed?.label,
           onToggle: list.isEmpty ? null : () => setState(() => _open = !open),
           // A worktree of its own, not only as a side effect of starting a
           // session — the case the tool exists for.
@@ -350,20 +331,18 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
               ? null
               : () => showWorktreeCreateDialog(context, ref, home),
         ),
-        const WorktreeBrowseNotice(),
         body,
       ],
     );
   }
 }
 
-/// `WORKTREES · viewing wt-x · 8` — the label, what is being read, and how many
-/// there are, on the one row that opens the list.
+/// `WORKTREES · 8` — the label and how many there are, on the one row that
+/// opens the list.
 class _WorktreesHeader extends StatelessWidget {
   const _WorktreesHeader({
     required this.count,
     required this.open,
-    required this.viewing,
     required this.onToggle,
     required this.onCreate,
   });
@@ -373,9 +352,6 @@ class _WorktreesHeader extends StatelessWidget {
 
   /// Makes one. Null when there is no checkout to make it beside.
   final VoidCallback? onCreate;
-
-  /// The worktree being read, when it is not the checkout itself.
-  final String? viewing;
 
   final VoidCallback? onToggle;
 
@@ -398,22 +374,7 @@ class _WorktreesHeader extends StatelessWidget {
               ),
               const SizedBox(width: 2),
               const EyebrowLabel('Worktrees'),
-              Expanded(
-                child: viewing == null
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(left: Insets.sm),
-                        child: Text(
-                          'viewing $viewing',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-              ),
+              const Spacer(),
               if (count > 0) ...[
                 const SizedBox(width: Insets.xs),
                 Text('$count', style: MonoStyles.small.copyWith(color: muted)),
@@ -443,116 +404,59 @@ class _WorktreesHeader extends StatelessWidget {
   }
 }
 
-/// One worktree. **Clicking reads it** — no session row, no working directory,
-/// so a browse cannot move where an agent runs. Right-click picks it.
+/// One worktree. Clicking selects it — the same selection the panel's
+/// worktree switcher moves, so Changes and Files follow it here too.
 class _WorktreeRow extends ConsumerWidget {
-  const _WorktreeRow({
-    required this.worktree,
-    required this.repositoryId,
-    required this.home,
-    required this.viewed,
-  });
+  const _WorktreeRow({required this.worktree, required this.selected});
 
   final GitWorktree worktree;
-  final String? repositoryId;
 
-  /// The selected checkout's own directory, when there is one.
-  final EnvironmentPath? home;
+  /// Whether this is the checkout the panel describes.
+  final bool selected;
 
-  /// Whether the change surfaces are reading this tree.
-  final bool viewed;
-
-  void _select(BuildContext context, WidgetRef ref) {
+  Future<void> _select(BuildContext context, WidgetRef ref) async {
     final projectId = ref.read(selectedProjectIdProvider);
-    // Read on demand rather than watched: this pane has no other use for the
-    // workspace's rows, and subscribing to them would repaint it on a rescan.
-    final rows = projectId == null
-        ? const <Repository>[]
-        : ref.read(workspaceDataProvider).repositoriesOf(projectId);
-    final match = rows
-        .where((r) => Checkout(r.path) == Checkout(worktree.path))
-        .firstOrNull;
-    if (match == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'That worktree is not in this workspace yet — rescan the project '
-            'to add it.',
-          ),
-        ),
-      );
-      return;
+    if (projectId == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    String? trouble;
+    try {
+      final row = await ref
+          .read(checkoutPickerProvider)
+          .selectWorktree(projectId, worktree.path);
+      if (row == null) {
+        trouble = 'A rescan did not record ${worktree.label} in this project.';
+      }
+    } catch (error) {
+      trouble = 'Could not rescan for ${worktree.label}: $error';
     }
-    ref.read(checkoutPickerProvider).select(match);
+    if (trouble != null) {
+      messenger.showSnackBar(SnackBar(content: Text(trouble)));
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final id = repositoryId;
-    final root = home;
-    final isHome = root != null && Checkout(worktree.path) == Checkout(root);
-    final accent = viewed ? theme.colorScheme.primary : null;
+    final accent = selected ? Theme.of(context).colorScheme.primary : null;
 
     return Tooltip(
-      message:
-          '${worktree.path.path}\n'
-          "Click to read this worktree's changes\n"
-          "Right-click to select it as the session's checkout",
-      // [RowContextMenu] rather than a bare right-click: the chip is a focus stop
-      // and had no answer for `Shift+F10`, the Menu key or a screen reader.
-      child: RowContextMenu(
-        menuLabel: 'Actions for ${worktree.label}',
-        itemBuilder: () => [
-          DesktopMenuItem<String>(
-            value: 'read',
-            label: 'Read this worktree here',
-            icon: AppIcons.gitDiff,
-            selected: viewed,
-          ),
-          DesktopMenuItem<String>(
-            value: 'select',
-            label: "Select as the session's checkout",
-            icon: AppIcons.bookBookmark,
-          ),
-        ],
-        onSelected: (choice) {
-          if (choice == 'select') {
-            _select(context, ref);
-          } else if (id != null && root != null) {
-            browseWorktree(
-              ref,
-              repositoryId: id,
-              home: root,
-              worktree: worktree,
-            );
-          }
-        },
-        builder: (context) => InkWell(
-          onTap: id == null || root == null
-              ? null
-              : () => browseWorktree(
-                  ref,
-                  repositoryId: id,
-                  home: root,
-                  worktree: worktree,
-                ),
-          child: _ListLine(
+      message: '${worktree.path.path}\nClick to switch to this worktree',
+      child: InkWell(
+        onTap: () => _select(context, ref),
+        child: _ListLine(
+          worktree.label,
+          selected ? 'the selected checkout' : worktree.path.path,
+          // Never colour alone: the selected row swaps its glyph too.
+          icon: selected ? AppIcons.check : AppIcons.gitBranch,
+          iconColor: accent,
+          leadWidget: Text(
             worktree.label,
-            isHome ? 'the selected checkout' : worktree.path.path,
-            // Never colour alone: the row being read swaps its glyph too.
-            icon: viewed ? AppIcons.check : AppIcons.gitBranch,
-            iconColor: accent,
-            leadWidget: Text(
-              worktree.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: MonoStyles.small.copyWith(color: accent),
-            ),
-            // The worktree's own path, environment and all — not the repository's
-            // environment wearing the worktree's text, which is a location nobody promised.
-            action: _RevealButton(dense: true, path: worktree.path),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: MonoStyles.small.copyWith(color: accent),
           ),
+          // The worktree's own path, environment and all — not the repository's
+          // environment wearing the worktree's text, which is a location nobody promised.
+          action: _RevealButton(dense: true, path: worktree.path),
         ),
       ),
     );

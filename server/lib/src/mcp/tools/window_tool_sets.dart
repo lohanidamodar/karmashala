@@ -8,7 +8,7 @@ import 'package:karmashala_snippets/store.dart' show CommandSnippetDao;
 
 import '../../sessions/launch/server_session_launcher.dart';
 import '../../terminals/server_terminals.dart';
-import 'launch_tool_set.dart' show kNoWindowOpen;
+import 'launch_tool_set.dart' show kNoWindowOpen, revealFor;
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
@@ -40,15 +40,19 @@ class OpenSessionToolSet extends ServerToolSet {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) => tool == 'open_session'
-      ? runTool(() => _open(arguments['id'] as String?))
+      ? runTool(() => _open(arguments['id'] as String?, callerSessionId))
       : null;
 
-  Future<Object?> _open(String? id) async {
+  Future<Object?> _open(String? id, String? callerSessionId) async {
     if (id == null) throw ArgumentError('Missing session id.');
     final native = _sessions.getById(id);
     if (native != null) {
+      final reveal = revealFor(
+        callerSessionId: callerSessionId,
+        parentSessionId: native.parentSessionId,
+      );
       if (launches.runsHere(native.id)) {
-        final shown = _show(native.id, native.title, null);
+        final shown = _show(native.id, native.title, null, reveal);
         return {
           'opened': native.title,
           'sessionId': native.id,
@@ -57,7 +61,12 @@ class OpenSessionToolSet extends ServerToolSet {
         };
       }
       final started = await launches.resume(native.id);
-      final shown = _show(started.sessionId, started.session.title, started);
+      final shown = _show(
+        started.sessionId,
+        started.session.title,
+        started,
+        reveal,
+      );
       return {
         'opened': started.session.title,
         'sessionId': started.sessionId,
@@ -72,9 +81,19 @@ class OpenSessionToolSet extends ServerToolSet {
     if (imported == null) throw StateError('Session not found: $id');
     // An imported entry can name a conversation one of ours still runs: show
     // that, rather than putting a second agent on it.
-    for (final row in _sessions.getAllByExternalSessionId(imported.externalId)) {
+    for (final row in _sessions.getAllByExternalSessionId(
+      imported.externalId,
+    )) {
       if (!launches.runsHere(row.id)) continue;
-      final shown = _show(row.id, row.title, null);
+      final shown = _show(
+        row.id,
+        row.title,
+        null,
+        revealFor(
+          callerSessionId: callerSessionId,
+          parentSessionId: row.parentSessionId,
+        ),
+      );
       return {
         'opened': row.title,
         'sessionId': row.id,
@@ -90,7 +109,8 @@ class OpenSessionToolSet extends ServerToolSet {
     return {
       'opened': imported.displayTitle,
       'environmentId': imported.environmentId,
-      'externalTerminal': 'the default terminal of the Karmashala window\'s '
+      'externalTerminal':
+          'the default terminal of the Karmashala window\'s '
           'machine',
       'note':
           'Asked the Karmashala window to open a new external terminal window '
@@ -98,14 +118,19 @@ class OpenSessionToolSet extends ServerToolSet {
     };
   }
 
-  bool _show(String sessionId, String title, SessionStarted? started) =>
-      _context.data.tellIntent(
-        OpenSessionTab(
-          sessionId: sessionId,
-          title: title,
-          launch: started?.launch,
-        ),
-      );
+  bool _show(
+    String sessionId,
+    String title,
+    SessionStarted? started,
+    TabReveal reveal,
+  ) => _context.data.tellIntent(
+    OpenSessionTab(
+      sessionId: sessionId,
+      title: title,
+      launch: started?.launch,
+      reveal: reveal,
+    ),
+  );
 
   static String _where(bool shown) => shown
       ? 'running in the Karmashala server, shown in a tab of the Karmashala '

@@ -16,6 +16,7 @@ class AttentionPresenter {
     required this.isWindowFocused,
     required this.visibleSessionIds,
     required this.onNotify,
+    this.onQuiet,
     this.policy = const AgentNotificationPolicy(),
   });
 
@@ -24,6 +25,10 @@ class AttentionPresenter {
   final bool Function() isWindowFocused;
   final Set<String> Function() visibleSessionIds;
   final void Function(PendingNotification event) onNotify;
+
+  /// News the person's level logs quietly, for a client with somewhere quiet
+  /// to show it (a phone's shade). Null on a desktop: the inbox has it.
+  final void Function(PendingNotification event)? onQuiet;
   final AgentNotificationPolicy policy;
 
   StreamSubscription<AttentionChange>? _subscription;
@@ -35,7 +40,8 @@ class AttentionPresenter {
     });
   }
 
-  /// One piece of news: a toast when the policy says so here.
+  /// One piece of news: a toast when the policy says so here, or a quiet one
+  /// where the person's level logs it quietly.
   void present(AttentionNews news) {
     final decision = policy.decide(
       NotificationContext(
@@ -45,7 +51,8 @@ class AttentionPresenter {
         visibleSessionIds: visibleSessionIds(),
       ),
     );
-    if (decision.shouldNotify) onNotify(news.pending);
+    if (decision.shouldNotify) return onNotify(news.pending);
+    if (decision.quietReason != null) onQuiet?.call(news.pending.quietly());
   }
 
   void dispose() {

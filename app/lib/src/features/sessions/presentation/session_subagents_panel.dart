@@ -12,6 +12,8 @@ import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/shell/side_panel_state.dart';
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../artifacts/presentation/artifact_count_badge.dart'
+    show ChildArtifactsLink;
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/session_context.dart';
@@ -465,6 +467,8 @@ class _EntryRow extends ConsumerWidget {
                       ),
                     ),
                   ),
+                if (entry.childSessionId case final child?)
+                  ChildArtifactsLink(sessionId: child),
               ],
             ),
             Text(

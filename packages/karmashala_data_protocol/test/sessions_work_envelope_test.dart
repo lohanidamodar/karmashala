@@ -175,6 +175,11 @@ void main() {
     final intents = <ClientIntent>[
       const OpenSessionTab(sessionId: 's1', title: 'Cart', launch: launch),
       const OpenSessionTab(sessionId: 's1', title: 'Cart'),
+      const OpenSessionTab(
+        sessionId: 's1',
+        title: 'Cart',
+        reveal: TabReveal.background,
+      ),
       const OpenTerminalTab(paneId: 'p', title: 'run'),
       const CloseTerminalTab('p'),
       const SelectCheckout('r1'),
@@ -190,5 +195,28 @@ void main() {
       expect(back.runtimeType, intent.runtimeType);
       expect(back!.toJson(), intent.toJson());
     }
+  });
+
+  test('a session tab shown in front says nothing of it on the wire, and one '
+      'from an older server, or with a value this build does not know, is '
+      'shown in front', () {
+    const front = OpenSessionTab(sessionId: 's1', title: 'Cart');
+    expect(front.toJson().containsKey('reveal'), isFalse);
+    const background = OpenSessionTab(
+      sessionId: 's1',
+      title: 'Cart',
+      reveal: TabReveal.background,
+    );
+    expect(background.toJson()['reveal'], 'background');
+
+    OpenSessionTab read(Map<String, Object?> json) =>
+        DataChange.fromJson(json)! as OpenSessionTab;
+    final base = {'change': 'openSessionTab', 'sessionId': 's1', 'title': 'C'};
+    expect(read(base).reveal, TabReveal.front);
+    expect(read({...base, 'reveal': 'sideways'}).reveal, TabReveal.front);
+    expect(
+      read({...base, 'reveal': 'background'}).reveal,
+      TabReveal.background,
+    );
   });
 }

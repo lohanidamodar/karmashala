@@ -76,15 +76,18 @@ extension SessionStartVerbs on SessionLauncher {
   }
 
   /// Shows a session the server started on another request of this client's
-  /// (a handoff, a fork).
-  Future<SessionLaunchResult> showStarted(SessionStarted started) =>
-      _show(started);
+  /// (a handoff, a fork), or that the server asked this window to show —
+  /// [TabReveal.background] behind the tab in front, which keeps the keyboard.
+  Future<SessionLaunchResult> showStarted(
+    SessionStarted started, {
+    TabReveal showing = TabReveal.front,
+  }) => _show(started, showing: showing);
 
   /// Opens [sessionId]'s conversation as a tab, or brings its tab forward.
-  String _showChatTab(String sessionId) {
+  String _showChatTab(String sessionId, {OpenBehind? behind}) {
     final tabId = _ref
         .read(terminalSessionsControllerProvider.notifier)
-        .openChatTab(sessionId);
+        .openChatTab(sessionId, behind: behind);
     // Where this session is on screen moved; the workbench follows it.
     _publish(SessionChange.moved(sessionId));
     _log.info('Showing $sessionId as a chat tab: no terminal runs it here.');
@@ -97,8 +100,12 @@ extension SessionStartVerbs on SessionLauncher {
     SessionStarted started, {
     String? targetPaneId,
     SystemTerminal? externalTerminal,
+    TabReveal showing = TabReveal.front,
   }) async {
     final session = started.session;
+    final behind = showing == TabReveal.background
+        ? OpenBehind(afterTabId: _tabOfParent(session))
+        : null;
     _publish(SessionChange.moved(session.id));
     final external = started.external;
     if (external != null) {
@@ -128,6 +135,13 @@ extension SessionStartVerbs on SessionLauncher {
         workingDirectoryNotice: started.workingDirectoryNotice,
       );
     }
+    if (behind != null && livePaneFor(session.id) != null) {
+      return SessionLaunchResult(
+        session: session,
+        paneId: livePaneFor(session.id),
+        workingDirectoryNotice: started.workingDirectoryNotice,
+      );
+    }
     if (reveal(session.id)) {
       return SessionLaunchResult(
         session: session,
@@ -140,7 +154,7 @@ extension SessionStartVerbs on SessionLauncher {
       // No terminal to attach: an agent spoken to over ACP runs inside the
       // server, and its conversation is the tab.
       final tabId = installationSpeaksAcp(_ref, session.agentInstallationId)
-          ? _showChatTab(session.id)
+          ? _showChatTab(session.id, behind: behind)
           : null;
       return SessionLaunchResult(
         session: session,
@@ -167,15 +181,16 @@ extension SessionStartVerbs on SessionLauncher {
     }
     final resumedTab = dormant == null
         ? null
-        : terminals.startAgentInPane(dormant, launch);
+        : terminals.startAgentInPane(dormant, launch, behind: behind);
     final slotted = dormant == null && targetPaneId != null
         ? terminals.openAgentInSlot(targetPaneId, launch)
         : null;
     final opened = resumedTab != null
         ? (tabId: resumedTab, paneId: dormant!)
-        : slotted ?? terminals.openAgentTab(launch);
+        : slotted ?? terminals.openAgentTab(launch, behind: behind);
     _ref.read(sessionsDataProvider).updatePaneId(session.id, opened.paneId);
-    terminals.showTerminalForPane(opened.paneId);
+    // Behind, the group in front keeps the face it shows.
+    if (behind == null) terminals.showTerminalForPane(opened.paneId);
     // After the pane is named on the row: a workbench following the session
     // moves onto it now, not on the next unrelated change.
     _publish(
@@ -204,5 +219,16 @@ extension SessionStartVerbs on SessionLauncher {
       tabId: opened.tabId,
       workingDirectoryNotice: started.workingDirectoryNotice,
     );
+  }
+
+  /// The tab showing [session]'s parent in this window, or null.
+  String? _tabOfParent(Session session) {
+    final parent = session.parentSessionId;
+    if (parent == null) return null;
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    for (final paneId in _ref.read(paneSessionsProvider).panesOf(parent)) {
+      if (terminals.tabIdOfPane(paneId) case final tabId?) return tabId;
+    }
+    return null;
   }
 }

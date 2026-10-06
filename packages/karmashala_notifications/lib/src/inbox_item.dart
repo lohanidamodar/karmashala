@@ -2,6 +2,7 @@ import 'agent_session_key.dart';
 import 'attention_json.dart';
 import 'evidence_line.dart';
 import 'notification_policy.dart';
+import 'notification_settings.dart';
 import 'session_attention.dart';
 import 'watched_session.dart';
 
@@ -73,6 +74,25 @@ enum InboxItemKind {
   /// Whether this kind is a condition still true right now. Load-bearing: a
   /// delivery item marked one would be swept away by a poll that knows no PRs.
   bool get isCondition => retirement == InboxRetirement.agentWatcher;
+
+  /// Whether "Only when I'm needed" logs this quietly rather than
+  /// interrupting — the inbox's quiet filter. Read from the level table; a
+  /// follow-up, a usage-limit pause that resumes on its own and a cut-off
+  /// turn are left to read back.
+  bool get isQuiet => reason?.interruptsAt(NotifyLevel.whenNeeded) != true;
+
+  /// The news reason this kind files, where it has one.
+  NotificationReason? get reason => switch (this) {
+    InboxItemKind.needsApproval => NotificationReason.needsInput,
+    InboxItemKind.failed => NotificationReason.failed,
+    InboxItemKind.finished => NotificationReason.finished,
+    InboxItemKind.checksFailed => NotificationReason.checksFailed,
+    InboxItemKind.changesRequested => NotificationReason.changesRequested,
+    InboxItemKind.readyToMerge => NotificationReason.readyToMerge,
+    InboxItemKind.followUp ||
+    InboxItemKind.usageLimit ||
+    InboxItemKind.turnCutOff => null,
+  };
 
   String get label => switch (this) {
     InboxItemKind.needsApproval => 'Needs approval',

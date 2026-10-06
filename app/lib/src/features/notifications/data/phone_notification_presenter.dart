@@ -29,6 +29,43 @@ class PhoneNotificationPresenter implements NotificationPresenter {
   /// link to the system settings is the way out.
   static const channelId = 'attention';
 
+  /// What "Notify me" logs quietly: in the shade, with no sound, vibration or
+  /// heads-up. A channel of its own because Android fixes importance per
+  /// channel, and its own switch in the system settings follows from that.
+  static const quietChannelId = 'quiet_updates';
+
+  /// How [request] is shown: the attention channel, or the quiet one — on
+  /// iOS the passive interruption level, which needs no entitlement.
+  static NotificationDetails detailsFor(NotificationRequest request) =>
+      request.quiet
+      ? const NotificationDetails(
+          android: AndroidNotificationDetails(
+            quietChannelId,
+            'Quiet updates',
+            channelDescription:
+                'A turn finished or something else to read back later. '
+                'No sound.',
+            importance: Importance.low,
+            priority: Priority.low,
+            playSound: false,
+            enableVibration: false,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentSound: false,
+            interruptionLevel: InterruptionLevel.passive,
+          ),
+        )
+      : const NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            'Attention',
+            channelDescription: 'A session finished, failed, or needs you.',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        );
+
   /// Monochrome: Android draws a full-colour icon as a white square.
   static const _icon = '@drawable/ic_stat_karmashala';
 
@@ -131,16 +168,7 @@ class PhoneNotificationPresenter implements NotificationPresenter {
             : notificationIdFor(payload.openId),
         title: request.title,
         body: request.body,
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            channelId,
-            'Attention',
-            channelDescription: 'A session finished, failed, or needs you.',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
+        notificationDetails: detailsFor(request),
         payload: request.payload,
       );
     } on Object catch (error, stack) {
@@ -157,7 +185,9 @@ class PhoneNotificationPresenter implements NotificationPresenter {
     try {
       await _plugin.cancel(id: notificationIdFor(openId));
     } on Object catch (error) {
-      _logger.warning('Withdrawing the notification for $openId failed: $error');
+      _logger.warning(
+        'Withdrawing the notification for $openId failed: $error',
+      );
     }
   }
 
@@ -214,15 +244,15 @@ class PhoneNotificationPresenter implements NotificationPresenter {
     if (!await initialize()) return;
     try {
       await (_plugin
-                  .resolvePlatformSpecificImplementation<
-                    AndroidFlutterLocalNotificationsPlugin
-                  >()
-                  ?.openAppNotificationSettings() ??
-              _plugin
-                  .resolvePlatformSpecificImplementation<
-                    IOSFlutterLocalNotificationsPlugin
-                  >()
-                  ?.openAppNotificationSettings());
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >()
+              ?.openAppNotificationSettings() ??
+          _plugin
+              .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin
+              >()
+              ?.openAppNotificationSettings());
     } on Object catch (error) {
       _logger.warning('Opening the notification settings failed: $error');
     }

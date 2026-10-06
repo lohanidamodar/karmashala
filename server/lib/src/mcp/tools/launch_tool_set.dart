@@ -66,6 +66,13 @@ const String kEachTurnHint =
 const String kNoWindowOpen =
     'no Karmashala window is open, so nothing was shown';
 
+/// How a window shows a session it is asked to: behind the person's tab when
+/// a session asked for it, or the session has a parent; in front otherwise.
+TabReveal revealFor({String? callerSessionId, String? parentSessionId}) =>
+    callerSessionId != null || parentSessionId != null
+    ? TabReveal.background
+    : TabReveal.front;
+
 /// **Starting a session**, by the server — `open_new_session`, for every
 /// session an agent asks for (slice 5b), through [ServerSessionLauncher], the
 /// path a person's New session takes. The session runs in the server whether
@@ -436,16 +443,14 @@ class LaunchToolSet extends ServerToolSet {
       );
     }
     final children = [
-      for (final child in SessionDao(_context.database).childrenOf(
-        callerSessionId,
-      ))
+      for (final child in SessionDao(
+        _context.database,
+      ).childrenOf(callerSessionId))
         if (child.parentLink == null || child.parentLink == SessionLink.spawn)
           child,
     ];
     return {
-      'children': [
-        for (final child in children) _delegationRow(child),
-      ],
+      'children': [for (final child in children) _delegationRow(child)],
       'note':
           'state is running, reported done, blocked, needs input, failed or '
           'ended. A followed child pushes the end of each turn it works to '
@@ -787,20 +792,20 @@ class LaunchToolSet extends ServerToolSet {
             '(sessionId: $id) for why. It is still open; end it with '
             'session_end when you are done with it.',
     },
-        ChildTurnState.blocked =>
-          'BLOCKED ON A PERSON: the child stopped for an approval or a '
-              'question (blockedOn). Waiting longer will not clear it; ask the '
-              'user, or answer an approval with session_answer, then '
-              'session_wait on $id.',
-        ChildTurnState.ended =>
-          'The child process ended. exitCode is UNKNOWN — not 0 — when '
-              'exitCodeKnown is false.',
-        ChildTurnState.running =>
-          'STILL RUNNING after ${bound.inSeconds}s, which is this call\'s '
-              'bound, not a verdict. Continue with session_wait (sessionId: '
-              '$id) and read its answer with session_transcript. Calling '
-              'subagent_run again starts another agent.',
-      };
+    ChildTurnState.blocked =>
+      'BLOCKED ON A PERSON: the child stopped for an approval or a '
+          'question (blockedOn). Waiting longer will not clear it; ask the '
+          'user, or answer an approval with session_answer, then '
+          'session_wait on $id.',
+    ChildTurnState.ended =>
+      'The child process ended. exitCode is UNKNOWN — not 0 — when '
+          'exitCodeKnown is false.',
+    ChildTurnState.running =>
+      'STILL RUNNING after ${bound.inSeconds}s, which is this call\'s '
+          'bound, not a verdict. Continue with session_wait (sessionId: '
+          '$id) and read its answer with session_transcript. Calling '
+          'subagent_run again starts another agent.',
+  };
 
   Future<({Map<String, Object?> answer, Session session, String agentId})>
   _open(
@@ -940,6 +945,10 @@ class LaunchToolSet extends ServerToolSet {
         sessionId: session.id,
         title: session.title,
         launch: started.launch,
+        reveal: revealFor(
+          callerSessionId: callerSessionId,
+          parentSessionId: session.parentSessionId,
+        ),
       ),
     );
     final answer = <String, Object?>{

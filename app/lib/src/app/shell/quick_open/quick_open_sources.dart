@@ -10,6 +10,14 @@ import '../../../core/util/clock_provider.dart';
 import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
+import '../../../features/artifacts/data/artifacts_data.dart';
+import '../../../features/explorer/application/session_context.dart'
+    show panelSessionIdProvider;
+import '../../../features/artifacts/presentation/artifact_card.dart'
+    show selectedArtifactProvider;
+import '../../../features/artifacts/presentation/artifact_screen.dart';
+import '../../../features/artifacts/presentation/artifact_viewer.dart'
+    show artifactKindIcon, artifactKindLabel;
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import '../../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
@@ -19,12 +27,15 @@ import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/onboarding/presentation/quick_start_card.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
+import '../../../features/notifications/application/focus_mode.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/editor/application/editor_tab_actions.dart';
 import '../../../features/git/application/diff_tab_actions.dart';
+import '../../../features/explorer/application/checkout_picker.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
+import '../../../features/explorer/application/worktree_choices.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_list_prefs.dart';
@@ -228,6 +239,7 @@ class QuickOpenSources {
     ..._workspace(),
     ..._sessions(),
     ..._openTabs(),
+    ..._artifacts(),
     ..._files(files, changedPaths),
     ..._repoFacts(),
     ..._agents(),
@@ -260,6 +272,102 @@ class QuickOpenSources {
     onlyWhenSearched: onlyWhenSearched,
     onSelect: () => dismiss(onSelect),
   );
+
+  /// Lists the selected checkout's worktrees, once git has, as a step in the
+  /// switcher's order and with its search.
+  Future<void> _pushWorktrees() async {
+    final listening = ref.listenManual(worktreeChoicesProvider, (_, _) {});
+    try {
+      await ref.read(repoWorktreesProvider.future);
+      final choices = listening.read();
+      if (choices != null) push(worktreesStep(choices));
+    } on Object {
+      // Not a repository, or git could not say: there is nothing to list.
+    } finally {
+      listening.close();
+    }
+  }
+
+  /// [choices] as a step: the open ones, then the merged ones; a pick moves
+  /// the one selection and closes the palette.
+  QuickOpenStep worktreesStep(WorktreeChoices choices) {
+    String idOf(WorktreeChoice choice) => 'worktree/${choice.path.path}';
+    QuickOpenItem item(WorktreeChoice choice, QuickOpenGroup group) =>
+        QuickOpenItem(
+          id: idOf(choice),
+          group: group,
+          title: choice.label,
+          subtitle: [
+            choice.folder,
+            if (choice.current) 'current',
+            if (choice.sessions == 1) '1 session',
+            if (choice.sessions > 1) '${choice.sessions} sessions',
+          ].join('  ·  '),
+          icon: choice.current ? AppIcons.check : AppIcons.gitBranch,
+          onSelect: () => dismiss(_worktreePick(choice)),
+        );
+    final items = [
+      for (final c in choices.open) item(c, QuickOpenGroup.worktrees),
+      for (final c in choices.merged) item(c, QuickOpenGroup.mergedWorktrees),
+    ];
+    return QuickOpenStep(
+      id: 'worktrees',
+      title: 'Worktrees',
+      hintText: 'Search worktrees by branch or folder',
+      items: () => items,
+      filter: (query, items) {
+        final byId = {for (final i in items) i.id: i};
+        final shown = choices.where(query);
+        QuickOpenSection section(
+          QuickOpenGroup group,
+          List<WorktreeChoice> rows,
+        ) => QuickOpenSection(
+          group: group,
+          results: [
+            for (final c in rows)
+              QuickOpenResult(
+                item: byId[idOf(c)]!,
+                score: 0,
+                titlePositions: const [],
+              ),
+          ],
+        );
+        return [
+          if (shown.open.isNotEmpty)
+            section(QuickOpenGroup.worktrees, shown.open),
+          if (shown.merged.isNotEmpty)
+            section(QuickOpenGroup.mergedWorktrees, shown.merged),
+        ];
+      },
+    );
+  }
+
+  /// What picking [choice] does, resolved now: it runs after the palette, and
+  /// its `ref`, have gone.
+  Future<void> Function() _worktreePick(WorktreeChoice choice) {
+    final picker = ref.read(checkoutPickerProvider);
+    final projectId = ref.read(selectedCheckoutProvider)?.projectId;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return () async {
+      final row = choice.repository;
+      if (row != null) {
+        picker.select(row);
+        return;
+      }
+      if (projectId == null) return;
+      try {
+        if (await picker.selectWorktree(projectId, choice.path) == null) {
+          messenger?.showSnackBar(
+            SnackBar(content: Text('A rescan did not record ${choice.label}.')),
+          );
+        }
+      } on Object catch (error) {
+        messenger?.showSnackBar(
+          SnackBar(content: Text('Could not rescan: $error')),
+        );
+      }
+    };
+  }
 
   /// The session on screen's resume, and the list of all of them — each only
   /// while it has something to act on.
@@ -326,6 +434,18 @@ class QuickOpenSources {
         shortcut: shellCommandLabel('session.new'),
         onSelect: () => NewSessionDialog.show(context),
       ),
+      if (ref.read(selectedRepositoryIdProvider) != null)
+        // A step, not a dismissal: git is asked only once it is picked.
+        QuickOpenItem(
+          id: 'command/Switch worktree…',
+          group: QuickOpenGroup.commands,
+          title: 'Switch worktree…',
+          subtitle: 'Point Changes, Repository and Files at another worktree',
+          icon: AppIcons.gitBranch,
+          keywords: const ['worktree', 'branch', 'checkout'],
+          weight: _commandWeight,
+          onSelect: _pushWorktrees,
+        ),
       if (ref.read(selectedRepositoryIdProvider) != null)
         _command(
           'Fan out prompt…',
@@ -445,6 +565,23 @@ class QuickOpenSources {
           keywords: const ['hide', 'working', 'busy', 'sessions'],
           onSelect: () =>
               ref.read(sessionListPrefsProvider.notifier).setHideWorking(true),
+        ),
+      if (ref.read(focusModeProvider))
+        _command(
+          'Turn off Focus',
+          subtitle: 'Put notifications and the session lists back',
+          icon: AppIcons.target,
+          keywords: const ['focus', 'notify', 'notifications', 'quiet'],
+          onSelect: () => ref.read(focusModeProvider.notifier).set(false),
+        )
+      else
+        _command(
+          'Turn on Focus',
+          subtitle:
+              'Notify only when needed, and hide sessions while they work',
+          icon: AppIcons.target,
+          keywords: const ['focus', 'notify', 'notifications', 'quiet'],
+          onSelect: () => ref.read(focusModeProvider.notifier).set(true),
         ),
       _command(
         'About Karmashala',
@@ -1299,6 +1436,43 @@ class QuickOpenSources {
 
   /// The terminal tabs nothing else here can reach: one running a session of
   /// ours is already listed as that session, so it is skipped here.
+  /// What the session on screen's agent showed, each opened where its card's
+  /// Open opens it: the side panel, or full screen on a phone.
+  List<QuickOpenItem> _artifacts() {
+    final sessionId = ref.read(panelSessionIdProvider);
+    if (sessionId == null) return const [];
+    final panel = ref.read(sidePanelProvider.notifier);
+    return [
+      for (final artifact in ref.read(artifactsDataProvider).held(sessionId))
+        QuickOpenItem(
+          id: 'artifact/${artifact.id}',
+          group: QuickOpenGroup.sessions,
+          title: artifact.title,
+          subtitle:
+              'Artifact · ${artifactKindLabel(artifact.kind)} · revision '
+              '${artifact.revision}',
+          icon: artifactKindIcon(artifact.kind),
+          keywords: const ['artifact', 'visualization', 'diagram', 'page'],
+          weight: _tabWeight,
+          onSelect: () => dismiss(() {
+            if (_onPhone || !ref.read(sidePanelRoomProvider)) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ArtifactScreen(
+                    sessionId: sessionId,
+                    artifactId: artifact.id,
+                  ),
+                ),
+              );
+              return;
+            }
+            ref.read(selectedArtifactProvider.notifier).select(artifact.id);
+            panel.show(SidePanelSurface.artifacts);
+          }),
+        ),
+    ];
+  }
+
   List<QuickOpenItem> _openTabs() {
     final terminals = ref.read(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);

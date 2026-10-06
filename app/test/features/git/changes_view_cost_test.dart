@@ -276,22 +276,17 @@ void main() {
     expect(ChangesView.debugFileRowBuildCount, 0);
   });
 
-  testWidgets('reading another worktree repaints every row exactly once', (
+  testWidgets('switching to another worktree repaints every row exactly once', (
     tester,
   ) async {
-    // The other control. Browsing is a view state, but it is the view state
-    // that decides which tree the rows came from, so it has to reach them.
+    // The other control. The selection decides which tree the rows came
+    // from, so moving it has to reach them.
+    server.repositoryRows.insert(
+      repository(id: 'r2', name: 'agent-a', path: worktreePath),
+    );
     final container = await pump(tester);
 
-    container
-        .read(worktreeBrowsingProvider.notifier)
-        .browse(
-          const WorktreeBrowse(
-            repositoryId: 'r1',
-            path: EnvironmentPath(environmentId: 'windows', path: worktreePath),
-            branch: 'agent-a',
-          ),
-        );
+    container.read(selectedRepositoryIdProvider.notifier).select('r2');
     await tester.pumpAndSettle();
 
     expect(

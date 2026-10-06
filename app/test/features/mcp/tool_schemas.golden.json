@@ -2213,6 +2213,109 @@
       }
     },
     {
+      "name": "artifact_show",
+      "description": "Show the person something you made, as a card in your thread that opens inside Karmashala: an HTML page (charts, reports, interactive demos — sandboxed, with no network unless the person allows it), an SVG, a mermaid diagram, markdown, an image or a PDF. Pass the absolute path of a file you wrote on your own host; rewriting that file later makes a new revision and every open view reloads. Or pass short text as content with its kind. Showing the same path again refreshes that artifact rather than adding another.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute path of the file, as your shell spells it."
+          },
+          "content": {
+            "type": "string",
+            "description": "The text itself, instead of a path: html, svg, mermaid or markdown. Needs kind."
+          },
+          "title": {
+            "type": "string",
+            "description": "What the card is called. Defaults to the file name."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "html",
+              "svg",
+              "mermaid",
+              "markdown",
+              "image",
+              "pdf"
+            ],
+            "description": "Inferred from the file name when a path is given."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "inline",
+              "wide"
+            ],
+            "description": "wide asks for the full width. Defaults to inline."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "artifact_list",
+      "description": "The artifacts a session has shown, oldest first: id, title, kind, mode, revision, and the path it is read from.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Whose artifacts. Defaults to yours."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "artifact_update",
+      "description": "Change one of your artifacts: its title or mode, or — for one shown as content — its text, which is a new revision. One shown from a file is re-read now, so a rewrite is picked up at once.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "inline",
+              "wide"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "checks_run",
       "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in sessions Karmashala owns (watchable from the app) in the directory that session works in, one after another, and WAIT for them. The batch is recorded against the session as ONE verification run whose verdict is the worst of its checks — Karmashala's own reading, never your claim — readable with verification_get. Use it before saying work is done. A check that is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none. A check whose output is analyzer diagnostics or test results (best as `dart analyze --format=machine` or `flutter test --machine`) also reports them as data, and what this session added or broke against a baseline.",
       "inputSchema": {
@@ -5804,6 +5907,18 @@
     "checkpoint_screenshot_compare": {
       "category": "checkpoints",
       "summary": "Two checkpoints' screenshots compared: changed-pixel percent and a diff."
+    },
+    "artifact_show": {
+      "category": "artifacts",
+      "summary": "Show a page, diagram, image or document in your thread, kept by revision."
+    },
+    "artifact_list": {
+      "category": "artifacts",
+      "summary": "The artifacts a session has shown: id, title, kind, revision."
+    },
+    "artifact_update": {
+      "category": "artifacts",
+      "summary": "Rename, resize or revise an artifact; re-read a file you rewrote."
     },
     "checks_run": {
       "category": "verification",

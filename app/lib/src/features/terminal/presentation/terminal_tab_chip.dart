@@ -71,8 +71,10 @@ class TerminalTabChip extends StatelessWidget {
     this.icon,
     this.progress,
     this.mark,
+    this.badge,
     this.tooltip,
     this.unsaved = false,
+    this.isNew = false,
     this.accented = true,
     super.key,
   });
@@ -105,12 +107,19 @@ class TerminalTabChip extends StatelessWidget {
   /// The mark of the agent whose session this tab holds, before its title.
   final Widget? mark;
 
+  /// A count beside the title, as [WorkbenchTabChip.badge].
+  final Widget? badge;
+
   /// What hovering the title says, when it is more than [title] itself.
   final String? tooltip;
 
   /// Whether this tab holds edits that are not on disk. Drawn as a dot in place
   /// of the close glyph — a different mark, not a different colour.
   final bool unsaved;
+
+  /// Whether this tab was opened behind the one in front and has not been
+  /// looked at since: a dot beside its glyph, named for a screen reader.
+  final bool isNew;
 
   final bool selected;
 
@@ -155,14 +164,18 @@ class TerminalTabChip extends StatelessWidget {
       onClose: onClose,
       // One slot, never two glyphs: an agent tab says what the agent is doing,
       // any other says whether anything is running, a document says what it is.
-      leading: progress != null && !progress!.quiet
-          ? TabProgressMark(progress: progress!)
-          : icon != null
-          ? Icon(icon, size: Chrome.iconSmall)
-          : status == null
-          ? TabLivenessDot(liveness: liveness)
-          : TabAgentStatusDot(status: status),
+      leading: _withNewMark(
+        context,
+        progress != null && !progress!.quiet
+            ? TabProgressMark(progress: progress!)
+            : icon != null
+            ? Icon(icon, size: Chrome.iconSmall)
+            : status == null
+            ? TabLivenessDot(liveness: liveness)
+            : TabAgentStatusDot(status: status),
+      ),
       mark: mark,
+      badge: badge,
       label: title,
       tooltip: tooltip ?? title,
       trailing: _TabCloseButton(
@@ -170,6 +183,29 @@ class TerminalTabChip extends StatelessWidget {
         liveness: liveness,
         onClose: onClose,
       ),
+    );
+  }
+
+  Widget _withNewMark(BuildContext context, Widget glyph) {
+    if (!isNew) return glyph;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        glyph,
+        const SizedBox(width: 3),
+        Semantics(
+          label: 'New tab, not opened yet',
+          child: Container(
+            key: const ValueKey('tab-new-mark'),
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

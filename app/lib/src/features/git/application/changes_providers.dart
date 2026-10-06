@@ -32,42 +32,8 @@ final selectedRepositoryProvider = Provider<Repository?>((ref) {
       .firstOrNull;
 });
 
-/// A worktree the user is *reading*, filed against the checkout it was picked
-/// under: browsing writes no session row or working directory, so it can never
-/// move where the next agent launches.
-class WorktreeBrowse {
-  const WorktreeBrowse({
-    required this.repositoryId,
-    required this.path,
-    this.branch,
-  });
-
-  /// The `repositories` row selected when this pick was made.
-  final String repositoryId;
-
-  final EnvironmentPath path;
-
-  /// Null when the worktree is detached; then the folder name is the label.
-  final String? branch;
-
-  String get label => branch ?? lastPathSegment(path.path);
-}
-
-/// Which worktree the change-reading surfaces are pointed at, or null for the
-/// selected checkout's own directory.
-class WorktreeBrowsing extends Notifier<WorktreeBrowse?> {
-  @override
-  WorktreeBrowse? build() => null;
-
-  void browse(WorktreeBrowse pick) => state = pick;
-  void stop() => state = null;
-}
-
-final worktreeBrowsingProvider =
-    NotifierProvider<WorktreeBrowsing, WorktreeBrowse?>(WorktreeBrowsing.new);
-
-/// The selected checkout's own directory — where the panes read when nothing
-/// is being browsed, and the row a picker returns to.
+/// The selected checkout's own directory — where the panes read, and the
+/// row a picker returns to.
 final selectedCheckoutPathProvider = Provider.autoDispose<EnvironmentPath?>((
   ref,
 ) {
@@ -77,7 +43,7 @@ final selectedCheckoutPathProvider = Provider.autoDispose<EnvironmentPath?>((
 });
 
 /// The repository row whose working tree is [checkout], or null when no row
-/// names it — a browsed worktree has none of its own.
+/// names it.
 final repositoryIdForCheckoutProvider = Provider.autoDispose
     .family<String?, EnvironmentPath>(
       (ref, checkout) => ref
@@ -87,26 +53,6 @@ final repositoryIdForCheckoutProvider = Provider.autoDispose
           ?.id,
     );
 
-/// The browse that still applies: null while another checkout is selected, so a
-/// pick made under one never describes another.
-final browsedWorktreeProvider = Provider.autoDispose<WorktreeBrowse?>((ref) {
-  final pick = ref.watch(worktreeBrowsingProvider);
-  if (pick == null) return null;
-  return pick.repositoryId == ref.watch(selectedRepositoryIdProvider)
-      ? pick
-      : null;
-});
-
-/// Whether the browsed worktree has since been removed. False while the listing
-/// is loading or failed: "we have not been told" is not "it is gone".
-final browsedWorktreeMissingProvider = Provider.autoDispose<bool>((ref) {
-  final pick = ref.watch(browsedWorktreeProvider);
-  if (pick == null) return false;
-  final listed = ref.watch(repoWorktreesProvider).asData?.value;
-  if (listed == null) return false;
-  return !listed.any((w) => Checkout(w.path) == Checkout(pick.path));
-});
-
 /// Reads a checkout's changes once, as `git status` has them now — for a
 /// one-off question such as which file a new diff should show, where the
 /// Changes panel's live reading is not wanted.
@@ -115,15 +61,11 @@ final checkoutChangesReaderProvider =
       (ref) => ref.watch(gitDataProvider).changes,
     );
 
-/// The working tree the change-reading providers read: the browsed worktree,
-/// falling back to the selected checkout once that worktree has been removed.
-final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>((ref) {
-  final home = ref.watch(selectedCheckoutPathProvider);
-  if (home == null) return null;
-  final pick = ref.watch(browsedWorktreeProvider);
-  if (pick == null) return home;
-  return ref.watch(browsedWorktreeMissingProvider) ? home : pick.path;
-});
+/// The working tree the change-reading providers read: the selected checkout,
+/// the one selection Changes, Repository and Files all describe.
+final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>(
+  (ref) => ref.watch(selectedCheckoutPathProvider),
+);
 
 /// Whether a checkout is under git, spawning nothing. Keyed by the checkout and
 /// not the repository row: the Repository and Changes panes diverge the moment

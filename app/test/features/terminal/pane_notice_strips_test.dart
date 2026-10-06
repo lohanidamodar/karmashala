@@ -1,10 +1,7 @@
-import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/presentation/worktree_browse.dart';
 import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -94,40 +91,4 @@ void main() {
       }
     });
   }
-
-  testWidgets('a removed worktree with a long name keeps to a strip', (
-    tester,
-  ) async {
-    const checkout = EnvironmentPath(environmentId: 'local', path: r'C:\ws');
-    final errors = await pumpAt(
-      tester,
-      200,
-      const WorktreeBrowseNotice(),
-      overrides: [
-        browsedWorktreeProvider.overrideWithValue(
-          WorktreeBrowse(
-            repositoryId: 'repo',
-            path: const EnvironmentPath(
-              environmentId: 'local',
-              path: r'C:\src\app-wt',
-            ),
-            branch: 'feature/a-branch-name-long-enough-to-wrap-many-times-over',
-          ),
-        ),
-        browsedWorktreeMissingProvider.overrideWithValue(true),
-        selectedCheckoutPathProvider.overrideWithValue(checkout),
-      ],
-    );
-
-    expect(errors, isEmpty);
-    expect(
-      tester.getSize(find.byType(WorktreeBrowseNotice)).height,
-      lessThanOrEqualTo(64),
-      reason: 'two lines and a dismiss, not a column of words',
-    );
-    expect(
-      find.byTooltip('Stop reading the removed worktree').hitTestable(),
-      findsOneWidget,
-    );
-  });
 }

@@ -2,10 +2,11 @@ import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../sessions/launch/session_continuations.dart';
 import 'agent_names.dart';
-import 'launch_tool_set.dart' show kNoWindowOpen;
+import 'launch_tool_set.dart' show kNoWindowOpen, revealFor;
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
@@ -93,7 +94,7 @@ class ContinuationToolSet extends ServerToolSet {
       );
       final started = answer['sessionId'];
       if (started is String) {
-        answer['where'] = _show(started);
+        answer['where'] = _show(started, callerSessionId: callerSessionId);
       }
       return answer;
     }),
@@ -275,13 +276,22 @@ class ContinuationToolSet extends ServerToolSet {
   }
 
   /// Asks the person's window to show [sessionId]; says where it runs.
-  String _show(String sessionId, {SessionStarted? started}) {
-    final row = started?.session;
+  String _show(
+    String sessionId, {
+    SessionStarted? started,
+    String? callerSessionId,
+  }) {
+    final row =
+        started?.session ?? SessionDao(_context.database).getById(sessionId);
     final shown = _context.data.tellIntent(
       OpenSessionTab(
         sessionId: sessionId,
         title: row?.title ?? 'Agent session',
         launch: started?.launch,
+        reveal: revealFor(
+          callerSessionId: callerSessionId,
+          parentSessionId: row?.parentSessionId,
+        ),
       ),
     );
     return shown

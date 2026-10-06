@@ -67,16 +67,21 @@ class NotificationSettingsController extends Notifier<NotificationSettings> {
     if (ref.mounted && !_changed) state = kept;
   }
 
-  void setEnabled(bool value) => _update(state.copyWith(enabled: value));
+  void setLevel(NotifyLevel level) => _update(state.copyWith(level: level));
 
   void setOnlyWhenUnfocused(bool value) =>
       _update(state.copyWith(onlyWhenUnfocused: value));
 
-  void setNotifyWhenFinished(bool value) =>
-      _update(state.copyWith(notifyWhenFinished: value));
+  /// Focus's half here: Only when I'm needed, remembering [before].
+  void startFocus(FocusMemory before) =>
+      _update(state.copyWith(level: NotifyLevel.whenNeeded, focus: before));
 
-  void setNotifyWhenAttentionNeeded(bool value) =>
-      _update(state.copyWith(notifyWhenAttentionNeeded: value));
+  /// Ends Focus, putting back the level it replaced.
+  void endFocus() {
+    final before = state.focus;
+    if (before == null) return;
+    _update(state.copyWith(level: before.level, endFocus: true));
+  }
 
   void _update(NotificationSettings next) {
     state = next;
@@ -276,6 +281,9 @@ final attentionPresenterProvider = Provider<AttentionPresenter>((ref) {
     isWindowFocused: () => ref.read(windowFocusedProvider),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
     onNotify: (event) => ref.read(notificationDispatcherProvider).add(event),
+    onQuiet: ref.read(capabilitiesProvider).localNotifications
+        ? (event) => ref.read(notificationDispatcherProvider).add(event)
+        : null,
   );
   ref.onDispose(presenter.dispose);
   return presenter;

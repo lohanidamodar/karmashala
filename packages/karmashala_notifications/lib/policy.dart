@@ -1,5 +1,5 @@
 /// Whether a change is worth interrupting someone for, why one was not
-/// delivered, and the four switches the user tunes that with.
+/// delivered, and the "Notify me" level the user tunes that with.
 library;
 
 export 'src/notification_policy.dart';

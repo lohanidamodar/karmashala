@@ -146,7 +146,7 @@ class ActivityBackfill {
     parentSessionId: parent,
   );
 
-  /// A row's start, its archive and its parent link — the keys the v79
+  /// A row's start, its archive and its parent link — the keys the v80
   /// triggers use, so a row they already logged is not logged again.
   Future<({List<ActivityDraft> drafts, int? last})> _sessions(int after) async =>
       _page(
