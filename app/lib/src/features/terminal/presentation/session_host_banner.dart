@@ -8,6 +8,8 @@ import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
 
 import '../../../core/server/remote_server_access.dart';
 import '../../../core/server/server_link.dart';
+import '../../remote/application/machines_providers.dart'
+    show machineInUseProvider;
 import '../../remote/presentation/route_switch_sheet.dart'
     show RouteSwitchButton;
 import '../../remote/presentation/use_auto_button.dart';
@@ -184,6 +186,8 @@ class _ResumingStrip extends ConsumerWidget {
       final connection = ref.watch(serverLinkProvider);
       if (connection.state == DataLinkState.unavailable) down = connection;
     }
+    final name =
+        ref.watch(machineInUseProvider)?.displayName ?? access.hostName;
     return ValueListenableBuilder<bool>(
       valueListenable: access.resuming,
       builder: (context, resuming, _) {
@@ -217,8 +221,8 @@ class _ResumingStrip extends ConsumerWidget {
                     children: [
                       Text(
                         resuming
-                            ? 'Reconnecting to ${access.hostName}…'
-                            : 'Not connected to ${access.hostName}',
+                            ? 'Reconnecting to $name…'
+                            : 'Not connected to $name',
                         style: textTheme.labelMedium?.copyWith(color: fore),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

@@ -146,7 +146,9 @@ class DesktopServerDialer {
     void Function(Uri? relay)? onRoute,
   }) async {
     final notes = <String>[];
-    final name = pairing.hostName.isEmpty ? 'the server' : pairing.hostName;
+    final name = pairing.displayName.trim().isEmpty
+        ? 'the server'
+        : pairing.displayName.trim();
     String said() => notes.isEmpty ? '' : ' (${notes.toSet().join('; ')})';
     final scout = this.scout;
     final resume = resumeOffered == null

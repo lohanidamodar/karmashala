@@ -139,7 +139,7 @@ class ServerSession {
           ? null
           : RemoteServerAccess(
               hostId: remote.hostId.value,
-              hostName: remote.hostName,
+              hostName: remote.displayName,
               store: machines.store,
               lanLock: client.multicastLock
                   ? ChannelMulticastLock(onLog: logger.info)

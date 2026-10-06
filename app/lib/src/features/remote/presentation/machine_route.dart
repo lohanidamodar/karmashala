@@ -37,6 +37,13 @@ String relayName(Uri url) {
 String capitalised(String text) =>
     text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';
 
+/// What this client calls [machine]: its label, else its own name, else
+/// [fallback].
+String machineName(CompanionPairing machine, {String fallback = 'Server'}) {
+  final name = machine.displayName.trim();
+  return name.isEmpty ? fallback : name;
+}
+
 /// Whether [machine] can have its route chosen: not one paired at its own
 /// address, which is always dialled first and was chosen at pairing.
 bool routeIsChoosable(CompanionPairing machine) =>
@@ -98,7 +105,7 @@ typedef RouteOption = ({CompanionRoutePin pin, String title, String detail});
 /// relay it knows by host and port, and a pinned relay its server no longer
 /// announces.
 List<RouteOption> routeOptions(CompanionPairing machine) {
-  final name = machine.hostName.isEmpty ? 'the server' : machine.hostName;
+  final name = machineName(machine, fallback: 'the server');
   final current = machine.pin;
   final relays = knownRelays(machine);
   final pinnedGone =
@@ -137,7 +144,7 @@ Future<void> pickMachineRoute(
   WidgetRef ref,
   CompanionPairing machine,
 ) async {
-  final name = machine.hostName.isEmpty ? 'the server' : machine.hostName;
+  final name = machineName(machine, fallback: 'the server');
   final current = machine.pin;
   final chosen = await showAdaptiveModal<CompanionRoutePin>(
     context: context,

@@ -44,7 +44,7 @@ PickServer pickServerOf(
 /// name, or "This computer" for the server run here.
 String serverDisplayName(CompanionPairing? machine) {
   if (machine == null) return 'This computer';
-  final name = machine.hostName.trim();
+  final name = machine.displayName.trim();
   return name.isEmpty ? 'The server' : name;
 }
 
@@ -52,7 +52,7 @@ String serverDisplayName(CompanionPairing? machine) {
 final pickServerProvider = Provider.family<PickServer, String>(
   (ref, environmentId) => pickServerOf(
     ref.watch(filesClientProvider),
-    name: serverDisplayName(ref.watch(activeMachineProvider)),
+    name: serverDisplayName(ref.watch(machineInUseProvider)),
     onThisMachine: ref.watch(capabilitiesProvider).readsServerDisk,
     environmentId: environmentId,
   ),

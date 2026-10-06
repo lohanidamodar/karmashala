@@ -11,6 +11,7 @@ import '../../../core/server/remote_server_access.dart';
 import '../../../core/server/server_link.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../application/machines_providers.dart';
+import 'machine_rename.dart';
 import 'machine_route.dart';
 
 /// The quick route switch for the machine in use, opened from where a person
@@ -18,26 +19,17 @@ import 'machine_route.dart';
 /// and *Route…* on the reconnecting strip. It pins through the same
 /// [applyMachineRoute] as Settings → Machines — "only", never "prefer".
 Future<void> showRouteSwitch(BuildContext context, WidgetRef ref) async {
-  final machine = _machineInUse(ref);
-  if (machine == null) return;
-  final name = machine.hostName.isEmpty ? 'the server' : machine.hostName;
+  if (ref.read(machineInUseProvider) == null) return;
+  // The sheet names the machine itself: a rename there shows at once.
   final chosen = await showAdaptiveModal<CompanionRoutePin>(
     context: context,
-    title: 'How to reach $name',
+    title: 'Route',
     builder: (_) => const _RouteSwitchSheet(),
   );
-  if (chosen == null || chosen == machine.pin || !context.mounted) return;
+  final machine = ref.read(machineInUseProvider);
+  if (chosen == null || machine == null || chosen == machine.pin) return;
+  if (!context.mounted) return;
   await applyMachineRoute(context, ref, machine, chosen);
-}
-
-/// The machine in use as last saved, so a pin chosen a moment ago shows.
-CompanionPairing? _machineInUse(WidgetRef ref) {
-  final active = ref.read(activeMachineProvider);
-  if (active == null) return null;
-  for (final saved in ref.read(pairedMachinesProvider).value ?? const []) {
-    if (saved.hostId == active.hostId) return saved;
-  }
-  return active;
 }
 
 class _RouteSwitchSheet extends ConsumerWidget {
@@ -45,8 +37,7 @@ class _RouteSwitchSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(pairedMachinesProvider);
-    final machine = _machineInUse(ref);
+    final machine = ref.watch(machineInUseProvider);
     final access = ref.watch(serverAccessProvider);
     if (machine == null || access is! RemoteServerAccess) {
       return const SizedBox.shrink();
@@ -68,6 +59,13 @@ class _RouteSwitchSheet extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              ListTile(
+                title: Text(machineName(machine)),
+                subtitle: machine.label != null && machine.hostName.isNotEmpty
+                    ? Text(machine.hostName)
+                    : null,
+                trailing: MachineRenameButton(machine: machine),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Insets.lg,
