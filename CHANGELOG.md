@@ -17,18 +17,59 @@ installs claim the same version name.
 
 ---
 
-## Since 1.32.1, on `feat/acp`
+## 1.33.0 — 2026-10-07 (build 63)
 
-- **A quick route switch.** The phone's top bar shows the route a link is on
-  (this network, or a relay by host), and tapping it pins Automatic, this
-  network only, or one relay, with the same meaning as Settings → Machines.
-  The reconnecting strip offers the same sheet on phone and desktop.
-- **Rename a machine on this client.** A label of your own for a paired
-  machine, shown everywhere that client names it, with the machine's own name
-  kept beneath; an older build ignores it.
-- **Subagents dock on desktop.** The Subagents panel is a surface of the side
-  panel, under History beside Plan, read next to the parent's chat instead of
-  over it. A phone keeps its sheet.
+The overview release: everything going on at a glance, things that open
+without stealing focus, and work started from anywhere.
+
+- **Overview.** A workbench tab (Ctrl+Shift+O) with a **Board** and a
+  **Timeline**.
+  - The Board: lanes by project or machine, and columns Needs you, Working,
+    Ready and Done. Children stack on their parent's card. There is a strip of
+    what needs you and the oldest wait, filters, and a peek with Allow/Deny,
+    Resume, Stop, Open and Archive.
+  - The Timeline draws from a durable activity log (v80) that outlives the
+    sessions it shows. History was backfilled from what already existed, with
+    approximate spans drawn lighter.
+- **Artifacts in the thread.**
+  - `artifact_show` and its siblings, Codex's `visualize` marker, and Mermaid
+    blocks drawn as diagrams; screenshots shown as images.
+  - Cards in the thread and an Artifacts pane with revisions (v79). HTML is
+    drawn natively with no script, and Open in browser runs it sandboxed.
+  - PDFs open in an in-app viewer.
+- **Webhooks.** An automation that a POST to its relay URL starts (v81).
+  - Signed calls, GitHub's included; replay and rate limits.
+  - The payload is fenced as data, a call log keeps hashes only, and secrets
+    are shown once.
+- **Running.** A tab of everything Karmashala runs, grouped by machine. Ports
+  are labelled by what owns them, with Open, Copy and a confirmed Stop.
+- **A quieter session bar.** Model and permission mode are one Agent chip, and
+  badges only show when they have something to say.
+- **Focus.**
+  - "Notify me": Everything, Only when I'm needed, or Nothing. Quiet news is
+    logged to the inbox and, on a phone, a silent channel.
+  - **Hide while working** keeps busy sessions out of the lists until they
+    need you.
+  - Focus turns both on.
+- **Nothing steals the window.** A session an agent starts opens behind your
+  tab, with a "new" dot.
+- **Worktrees.**
+  - One searchable switcher replaces the chip wall.
+  - Every worktree git knows is recorded and switchable, and
+    `worktree_create` records its own.
+- **Remote.**
+  - A quick route switch from the connection chip.
+  - Machines can be renamed on each client.
+- **Subagents** dock in the side panel on desktop.
+- **Fixes.**
+  - A question card always fits and scrolls, and a question answered
+    elsewhere stops holding the session and its queue.
+  - Closing or archiving a session closes its tabs in every window.
+  - The timeline axis fits its labels at any text scale.
+- **Build.**
+  - A probe runs a server built from its own checkout.
+  - An installer ships only its own commit's Linux bundles.
+  - Scratch sessions read their guidance from AGENTS.md.
 
 ## 1.32.1 — 2026-10-06 (build 62)
 
