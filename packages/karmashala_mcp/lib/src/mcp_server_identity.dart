@@ -11,6 +11,7 @@ const String kKarmashalaMcpInstructions =
     'calling them, so omit sessionId to act on yourself. Anything Karmashala '
     'has not measured is reported as "not recorded" rather than guessed. '
     'When you start sessions, end your turn and wait for their reports — '
-    'each turn they work, and what they say with report_to_parent, arrives '
-    'as a message; do not poll transcripts or files. If a session started '
-    'you, report to it with report_to_parent.';
+    'what they say with report_to_parent, and how they end, arrives as a '
+    'message (every turn too, with report "each_turn"); do not poll '
+    'transcripts or files. If a session started you, report to it with '
+    'report_to_parent.';

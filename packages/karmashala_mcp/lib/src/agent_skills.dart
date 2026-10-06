@@ -81,7 +81,8 @@ fail in the same places. Pick one whose `cli` is not the one you are running as.
 
 1. `list_agents`, and choose an installation from another family.
 2. `open_new_session` with that `agentInstallationId`, the same `projectId`,
-   **no worktree**, and a prompt holding the decision, the evidence you already
+   its `report` set to every turn, **no worktree**, and a prompt holding the
+   decision, the evidence you already
    have, and the question. Say you want a critique and no edits — an agent given
    a problem will otherwise solve it.
 3. End your turn and wait. When its turn ends, its answer arrives as a
@@ -137,8 +138,8 @@ prompt rather than assuming you were given a careful reader.
 ## Convening
 
 1. Two `open_new_session` calls with different `cli`s, the same `projectId`,
-   and a worktree each. Separate worktrees are what stops two diagnoses editing
-   one file.
+   each one's `report` set to every turn, and a worktree each. Separate
+   worktrees are what stop two diagnoses editing one file.
 2. Give both the **same prompt**: the symptom, the exact command and its output,
    what you already tried and what it did. Ask for the cause and the evidence
    for it. A committee asked to fix something returns two fixes and no
