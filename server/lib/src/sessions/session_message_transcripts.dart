@@ -225,6 +225,20 @@ class SessionMessageTranscriptSource {
         }
       }
     }
+    // An MCP result kept whole as the raw output: its picture is drawn too.
+    final raw = json['rawOutput'];
+    final rawContent = raw is Map ? raw['content'] : null;
+    if (rawContent is List) {
+      for (final item in rawContent) {
+        if (item is! Map || item['type'] != 'image') continue;
+        final data = _string(item['data']);
+        if (data == null) continue;
+        if (spillToolImage(data, mimeType: _string(item['mimeType']))
+            case final path?) {
+          return path;
+        }
+      }
+    }
     if (kind == 'edit' || kind == 'delete' || kind == 'move') return null;
     final locations = json['locations'];
     if (locations is! List) return null;
@@ -294,6 +308,7 @@ class SessionMessageTranscriptSource {
   static String? _outputOf(Map<String, Object?> json) {
     final content = json['content'];
     final parts = <String>[];
+    var pictured = false;
     if (content is List) {
       for (final block in content) {
         if (block is! Map) continue;
@@ -302,6 +317,7 @@ class SessionMessageTranscriptSource {
             final inner = block['content'];
             final text = inner is Map ? _string(inner['text']) : null;
             if (text != null) parts.add(text);
+            if (inner is Map && inner['type'] == 'image') pictured = true;
           case 'diff':
             final path = _string(block['path']);
             if (path != null) parts.add('edited $path');
@@ -317,10 +333,27 @@ class SessionMessageTranscriptSource {
       }
     }
     if (parts.isNotEmpty) return parts.join('\n');
+    // The picture is the answer, drawn from its file: its bytes are no text.
+    if (pictured) return null;
     final raw = json['rawOutput'];
     if (raw == null) return null;
-    return raw is String ? raw : jsonEncode(raw);
+    return raw is String ? raw : jsonEncode(_withoutImageData(raw));
   }
+
+  /// [value] with each image's base64 replaced by `[image]`: the picture is
+  /// drawn from its file, and its bytes printed are only noise.
+  static Object? _withoutImageData(Object? value) => switch (value) {
+    Map(:final entries) when value['type'] == 'image' => {
+      for (final e in entries)
+        if (e.key != 'data') e.key: e.value,
+      'data': '[image]',
+    },
+    Map(:final entries) => {
+      for (final e in entries) e.key: _withoutImageData(e.value),
+    },
+    List() => [for (final item in value) _withoutImageData(item)],
+    _ => value,
+  };
 
   /// Either the plan's wire form (`items`) or ACP's `plan` update
   /// (`entries` of `content`/`status`). Null when it is neither.
