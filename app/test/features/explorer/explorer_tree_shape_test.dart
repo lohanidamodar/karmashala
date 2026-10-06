@@ -28,6 +28,7 @@ List<String> sketch(List<ExplorerNode> nodes) => [
       ImportedRowNode(:final session) => '~ ${session.id}',
       TerminalRowNode(:final terminal) => '> ${terminal.label}',
       HintNode(:final message) => '# $message',
+      HiddenWorkingNode(:final count) => '@ $count working',
       ArchivedNode(:final count) => '@ Archived ($count)',
       SubSessionsNode(:final label, :final folded) => '${folded ? '+' : '-'} $label',
     }}',
