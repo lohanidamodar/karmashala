@@ -105,6 +105,7 @@ class LogFileSection extends ConsumerWidget {
             ),
           ),
           const _LogFolderRow(),
+          const _ServerLogRow(),
           if (diagnostics.file?.lastError case final error?)
             Padding(
               padding: const EdgeInsets.only(top: Insets.sm),
@@ -243,6 +244,46 @@ class MemoryFootprintSection extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// This machine's server log, which a detached server writes with nobody
+/// reading its output. Nothing on a client that hosts no server.
+class _ServerLogRow extends ConsumerWidget {
+  const _ServerLogRow();
+
+  Future<void> _open(BuildContext context, WidgetRef ref, File log) async {
+    final manager = HostFileManager.forHost();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    void say(String message) =>
+        messenger?.showSnackBar(SnackBar(content: Text(message)));
+    if (manager == null) {
+      return say('This platform has no way for Karmashala to open a file.');
+    }
+    if (!log.existsSync()) {
+      return say('The server has not written its log yet.');
+    }
+    try {
+      await ref
+          .read(hostCommandRunnerProvider)
+          .run(RevealInFileManager.requestFor(manager, log.path));
+    } on CommandException catch (error) {
+      say('Could not open the server log: ${error.message}');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final log = ref.watch(serverLogFileProvider).asData?.value;
+    if (log == null) return const SizedBox.shrink();
+    return SettingsRow(
+      label: 'Server log',
+      help: log.path,
+      control: OutlinedButton(
+        onPressed: () => _open(context, ref, log),
+        child: const Text('Open server log'),
       ),
     );
   }
