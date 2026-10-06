@@ -43,7 +43,7 @@ echo === BUILDING !APPVER! === > "%LOG%"
 echo === WINDOWS RELEASE === >> "%LOG%"
 rem The Flutter client is app\; everything else here runs from the root.
 pushd app
-call "%FLUTTER%" build windows --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
+call "%FLUTTER%" build windows --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail
@@ -161,7 +161,7 @@ if not exist "app\android\key.properties" (
   goto :fail
 )
 pushd app
-call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
+call "%FLUTTER%" build apk --release --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com >> "%LOG%" 2>&1
 set RC=!errorlevel!
 popd
 if not "!RC!"=="0" goto :fail

@@ -26,6 +26,6 @@ set APPVER=
 for /f "tokens=2" %%v in ('findstr /b "version:" pubspec.yaml') do set APPVER=%%v
 echo === PROFILE RUN !APPVER! (probe, data !KARMASHALA_DATA_DIR!) === > "%LOG%"
 
-call "%FLUTTER%" run --profile -d windows --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
+call "%FLUTTER%" run --profile -d windows --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com >> "%LOG%" 2>&1
 echo EXITED > "%DONE%"
 exit /b 0

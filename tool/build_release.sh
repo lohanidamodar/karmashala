@@ -24,7 +24,7 @@ OUT="app/build/macos/karmashala-$APPSHORT.dmg"
 
 if [ "${1:-}" != "--skip-build" ]; then
   echo "=== BUILDING $APPVER ==="
-  (cd app && flutter build macos --release --dart-define=KARMASHALA_VERSION="$APPVER" --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com)
+  (cd app && flutter build macos --release --dart-define=KARMASHALA_VERSION="$APPVER" --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com)
 fi
 [ -d "$APP" ] || { echo "no app at $APP" >&2; exit 1; }
 

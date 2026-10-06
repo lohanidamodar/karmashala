@@ -208,7 +208,7 @@ $appVer = ((Select-String -Path (Join-Path $root 'pubspec.yaml') -Pattern '^vers
 
 if (-not $SkipBuild) {
   Write-Host "Building $appVer debug for windows ..."
-  & $flutter build windows --debug "--dart-define=KARMASHALA_VERSION=$appVer" --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com
+  & $flutter build windows --debug "--dart-define=KARMASHALA_VERSION=$appVer" --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com
   if ($LASTEXITCODE -ne 0) { throw "flutter build windows --debug failed ($LASTEXITCODE)." }
 }
 if (-not (Test-Path $exe)) { throw "No debug binary at $exe. Run without -SkipBuild." }
