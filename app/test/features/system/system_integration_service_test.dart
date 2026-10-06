@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/notifications/application/focus_mode.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/server/application/server_commands.dart';
@@ -687,6 +688,23 @@ void main() {
       );
       expect(checked('Only when I’m needed'), isTrue);
       expect(checked('Everything'), isFalse);
+    });
+
+    test('Focus is a checkbox that turns Focus on and off', () async {
+      await build();
+      await settle();
+      expect(item('Focus').checked, isFalse);
+
+      service.onTrayMenuItemClicked(item('Focus').key!);
+      await pumpEventQueue();
+      expect(container.read(focusModeProvider), isTrue);
+      expect(item('Focus').checked, isTrue);
+      expect(item('Notify me: Only when I’m needed').checked, isTrue);
+
+      service.onTrayMenuItemClicked(item('Focus').key!);
+      await pumpEventQueue();
+      expect(container.read(focusModeProvider), isFalse);
+      expect(item('Notify me: Everything').checked, isTrue);
     });
 
     test('a window using another machine\'s server says so, and offers no '

@@ -13,18 +13,55 @@ enum NotifyLevel {
   nothing,
 }
 
+/// What Focus replaced, to be put back when it ends: the level before it, and
+/// whether sessions were hidden while working.
+class FocusMemory {
+  const FocusMemory({required this.level, required this.hideWorking});
+
+  final NotifyLevel level;
+  final bool hideWorking;
+
+  Map<String, dynamic> toJson() => {
+    'level': level.name,
+    'hideWorking': hideWorking,
+  };
+
+  /// Null for anything but a whole record: a half-read Focus could only
+  /// restore the wrong thing.
+  static FocusMemory? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final named = NotifyLevel.values.where((l) => l.name == json['level']);
+    final hideWorking = json['hideWorking'];
+    if (named.isEmpty || hideWorking is! bool) return null;
+    return FocusMemory(level: named.single, hideWorking: hideWorking);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is FocusMemory &&
+      other.level == level &&
+      other.hideWorking == hideWorking;
+
+  @override
+  int get hashCode => Object.hash(level, hideWorking);
+}
+
 /// User preferences for agent status notifications. The defaults are restrained
 /// on purpose: on, but only while the window is unfocused.
 class NotificationSettings {
   const NotificationSettings({
     this.level = NotifyLevel.everything,
     this.onlyWhenUnfocused = true,
+    this.focus,
   });
 
   final NotifyLevel level;
 
   /// Only deliver while the app window does not have OS focus.
   final bool onlyWhenUnfocused;
+
+  /// While Focus is on, what it replaced; null while it is off.
+  final FocusMemory? focus;
 
   /// Whether anything may interrupt at all. When false the tray still shows
   /// what needs attention — an icon is ambient, a toast is an interrupt.
@@ -33,9 +70,12 @@ class NotificationSettings {
   NotificationSettings copyWith({
     NotifyLevel? level,
     bool? onlyWhenUnfocused,
+    FocusMemory? focus,
+    bool endFocus = false,
   }) => NotificationSettings(
     level: level ?? this.level,
     onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
+    focus: endFocus ? null : focus ?? this.focus,
   );
 
   /// The level, and the three switches it replaced, so an app from before
@@ -46,6 +86,7 @@ class NotificationSettings {
     'enabled': enabled,
     'notifyWhenFinished': level == NotifyLevel.everything,
     'notifyWhenAttentionNeeded': enabled,
+    'focus': focus?.toJson(),
   };
 
   /// Reads [json], falling back to the default for any absent or malformed
@@ -64,6 +105,7 @@ class NotificationSettings {
               attention: flag('notifyWhenAttentionNeeded'),
             ),
       onlyWhenUnfocused: flag('onlyWhenUnfocused'),
+      focus: FocusMemory.fromJson(json['focus']),
     );
   }
 
@@ -83,8 +125,9 @@ class NotificationSettings {
   bool operator ==(Object other) =>
       other is NotificationSettings &&
       other.level == level &&
-      other.onlyWhenUnfocused == onlyWhenUnfocused;
+      other.onlyWhenUnfocused == onlyWhenUnfocused &&
+      other.focus == focus;
 
   @override
-  int get hashCode => Object.hash(level, onlyWhenUnfocused);
+  int get hashCode => Object.hash(level, onlyWhenUnfocused, focus);
 }

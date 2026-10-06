@@ -72,6 +72,17 @@ class NotificationSettingsController extends Notifier<NotificationSettings> {
   void setOnlyWhenUnfocused(bool value) =>
       _update(state.copyWith(onlyWhenUnfocused: value));
 
+  /// Focus's half here: Only when I'm needed, remembering [before].
+  void startFocus(FocusMemory before) =>
+      _update(state.copyWith(level: NotifyLevel.whenNeeded, focus: before));
+
+  /// Ends Focus, putting back the level it replaced.
+  void endFocus() {
+    final before = state.focus;
+    if (before == null) return;
+    _update(state.copyWith(level: before.level, endFocus: true));
+  }
+
   void _update(NotificationSettings next) {
     state = next;
     _changed = true;

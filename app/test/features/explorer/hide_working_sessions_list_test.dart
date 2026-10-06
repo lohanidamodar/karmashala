@@ -13,7 +13,10 @@ import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/notifications/application/focus_mode.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_list_prefs.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -249,5 +252,42 @@ void main() {
     expect(c.read(hideWorkingSessionsProvider), isTrue);
     await run('Show working sessions');
     expect(c.read(hideWorkingSessionsProvider), isFalse);
+  });
+
+  testWidgets('quick open turns Focus on and off', (tester) async {
+    final c = await pump(
+      tester,
+      const Size(1440, 900),
+      body: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => QuickOpen.show(context),
+          child: const Text('open'),
+        ),
+      ),
+      hide: false,
+    );
+    Future<void> run(String title) async {
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'focus');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(title));
+      await tester.pumpAndSettle();
+    }
+
+    await run('Turn on Focus');
+    expect(c.read(focusModeProvider), isTrue);
+    expect(c.read(hideWorkingSessionsProvider), isTrue);
+    expect(
+      c.read(notificationSettingsControllerProvider).level,
+      NotifyLevel.whenNeeded,
+    );
+    await run('Turn off Focus');
+    expect(c.read(focusModeProvider), isFalse);
+    expect(c.read(hideWorkingSessionsProvider), isFalse);
+    expect(
+      c.read(notificationSettingsControllerProvider).level,
+      NotifyLevel.everything,
+    );
   });
 }

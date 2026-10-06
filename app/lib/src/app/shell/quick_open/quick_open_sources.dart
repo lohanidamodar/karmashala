@@ -19,6 +19,7 @@ import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/onboarding/presentation/quick_start_card.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
+import '../../../features/notifications/application/focus_mode.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
@@ -445,6 +446,23 @@ class QuickOpenSources {
           keywords: const ['hide', 'working', 'busy', 'sessions'],
           onSelect: () =>
               ref.read(sessionListPrefsProvider.notifier).setHideWorking(true),
+        ),
+      if (ref.read(focusModeProvider))
+        _command(
+          'Turn off Focus',
+          subtitle: 'Put notifications and the session lists back',
+          icon: AppIcons.target,
+          keywords: const ['focus', 'notify', 'notifications', 'quiet'],
+          onSelect: () => ref.read(focusModeProvider.notifier).set(false),
+        )
+      else
+        _command(
+          'Turn on Focus',
+          subtitle:
+              'Notify only when needed, and hide sessions while they work',
+          icon: AppIcons.target,
+          keywords: const ['focus', 'notify', 'notifications', 'quiet'],
+          onSelect: () => ref.read(focusModeProvider.notifier).set(true),
         ),
       _command(
         'About Karmashala',
