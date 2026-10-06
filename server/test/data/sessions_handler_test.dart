@@ -20,9 +20,11 @@ void main() {
   late DataSession app;
   late List<DataChanges> told;
   late Set<String> running;
-  final now = DateTime.utc(2026, 9, 26, 12);
+  final start = DateTime.utc(2026, 9, 26, 12);
+  var now = start;
 
   setUp(() {
+    now = start;
     db = AppDatabase.memory();
     running = {};
     service = DataService(db, clock: () => now, runsSession: running.contains);
@@ -502,6 +504,61 @@ void main() {
       app.handle(SessionCreate(row(id: 's2')));
 
       expect(followUpOf('f1').isOpen, isTrue);
+    });
+
+    test('is retired by a session started in another folder of the same '
+        'project', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      app.handle(FollowUpRaise(failed('f1')));
+
+      app.handle(SessionCreate(row(id: 's2', repositoryId: 'r2')));
+
+      expect(followUpOf('f1').resolution, FollowUpResolution.carriedForward);
+    });
+
+    test('with no project, is retired by any newer scratch session on the '
+        'same machine, each in its own scratch folder', () {
+      const at = '2026-01-01T00:00:00.000Z';
+      db.execute(
+        'INSERT INTO projects '
+        '(id, name, kind, root_environment_id, root_path, created_at) '
+        "VALUES ('scratch', 'Scratch', 'scratch', 'windows', 'C:\\s', ?);",
+        [at],
+      );
+      for (final id in ['x1', 'x2']) {
+        db.execute(
+          'INSERT INTO repositories '
+          '(id, project_id, name, environment_id, path, created_at) '
+          "VALUES (?, 'scratch', ?, 'windows', ?, ?);",
+          [id, id, 'C:\\s\\$id', at],
+        );
+      }
+      app.handle(
+        SessionCreate(row(id: 'f1', title: 'New session', repositoryId: 'x1')),
+      );
+      app.handle(FollowUpRaise(failed('f1')));
+
+      app.handle(SessionCreate(row(id: 's2', repositoryId: 'x2')));
+
+      expect(followUpOf('f1').resolution, FollowUpResolution.carriedForward);
+    });
+
+    test('is retired after a day even when nothing starts again', () {
+      app.handle(SessionCreate(row(id: 'f1', title: 'New session')));
+      app.handle(SessionCreate(row(id: 'f2', title: 'New session')));
+      app.handle(FollowUpRaise(failed('f1')));
+      now = now.add(const Duration(hours: 2));
+      app.handle(FollowUpRaise(failed('f2')));
+      now = now.add(const Duration(hours: 23));
+
+      service.retireStaleFailedStarts();
+
+      expect(followUpOf('f1').resolution, FollowUpResolution.carriedForward);
+      expect(followUpOf('f2').isOpen, isTrue);
+      expect(
+        lastTold().whereType<FollowUpChanged>().single.followUp.sessionId,
+        'f1',
+      );
     });
   });
 
