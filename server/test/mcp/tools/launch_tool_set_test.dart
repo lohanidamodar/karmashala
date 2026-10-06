@@ -161,6 +161,25 @@ void main() {
     final intent = told.whereType<OpenSessionTab>().single;
     expect(intent.sessionId, 'new-1');
     expect(intent.launch?.sessionId, 'new-1');
+    expect(
+      intent.reveal,
+      TabReveal.front,
+      reason: 'no session asked, so nothing says it is not a person',
+    );
+    window.close();
+  });
+
+  test('a session another session started is shown behind the person\'s '
+      'tab, not in front of it', () async {
+    insertCaller('caller');
+    final told = <DataChange>[];
+    final window = context.data.open((batch) => told.addAll(batch.changes));
+    window.handle(const DataSubscribe());
+    await tools.call('open_new_session', {'projectId': 'p1'}, 'caller');
+    expect(
+      told.whereType<OpenSessionTab>().single.reveal,
+      TabReveal.background,
+    );
     window.close();
   });
 
@@ -347,32 +366,37 @@ void main() {
       expect(launches.installationFor(terminal).id, 'c1');
       // Chosen but not installed here: the agent runs as it can.
       expect(
-        launches
-            .installationFor(
-              launches.installationsIn('wsl1').single,
-            )
-            .id,
+        launches.installationFor(launches.installationsIn('wsl1').single).id,
         'a2',
       );
     });
 
-    test('a form that is not installed there is refused, nothing started', () async {
-      await expectLater(
-        tools.call('open_new_session', {'projectId': 'p1', 'form': 'chat'}, null),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('chat'),
+    test(
+      'a form that is not installed there is refused, nothing started',
+      () async {
+        await expectLater(
+          tools.call('open_new_session', {
+            'projectId': 'p1',
+            'form': 'chat',
+          }, null),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('chat'),
+            ),
           ),
-        ),
-      );
-      expect(pty.started, isEmpty);
-    });
+        );
+        expect(pty.started, isEmpty);
+      },
+    );
 
     test('a form named wrong is refused', () async {
       await expectLater(
-        tools.call('open_new_session', {'projectId': 'p1', 'form': 'tui'}, null),
+        tools.call('open_new_session', {
+          'projectId': 'p1',
+          'form': 'tui',
+        }, null),
         throwsA(isA<ArgumentError>()),
       );
       expect(pty.started, isEmpty);

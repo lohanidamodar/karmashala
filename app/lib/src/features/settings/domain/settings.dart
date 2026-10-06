@@ -120,6 +120,7 @@ class Settings {
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
+    this.bringAgentSessionsToFront = false,
     this.quitAsks = true,
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
@@ -298,6 +299,10 @@ class Settings {
   /// Restore last close's live panes at launch; never an agent pane.
   final bool restoreLivePanes;
 
+  /// Show a session another session started in front, as a person's start is,
+  /// rather than behind the tab being read.
+  final bool bringAgentSessionsToFront;
+
   /// Whether quitting with sessions running asks first. Off, quit uses the
   /// two answers below — and still asks when it would stop a turn midway.
   final bool quitAsks;
@@ -404,9 +409,8 @@ class Settings {
     return name == null ? null : AgentRunForm.parse(name);
   }
 
-  Settings withAgentRunForm(String agentId, AgentRunForm form) => copyWith(
-    agentRunForms: {...agentRunForms, agentId: form.name},
-  );
+  Settings withAgentRunForm(String agentId, AgentRunForm form) =>
+      copyWith(agentRunForms: {...agentRunForms, agentId: form.name});
 
   String? flutterSdkPathFor(String environmentId) =>
       flutterSdkPaths[environmentId];
@@ -459,6 +463,7 @@ class Settings {
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
+    bool? bringAgentSessionsToFront,
     bool? quitAsks,
     bool? quitReopens,
     bool? quitKeepsHostSessions,
@@ -542,6 +547,8 @@ class Settings {
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
+    bringAgentSessionsToFront:
+        bringAgentSessionsToFront ?? this.bringAgentSessionsToFront,
     quitAsks: quitAsks ?? this.quitAsks,
     quitReopens: quitReopens ?? this.quitReopens,
     quitKeepsHostSessions: quitKeepsHostSessions ?? this.quitKeepsHostSessions,
@@ -652,6 +659,7 @@ class Settings {
     'pinnedSessionIds',
     'shellIntegrationEnabled',
     'restoreLivePanes',
+    'bringAgentSessionsToFront',
     'quitAsks',
     'quitReopens',
     'quitKeepsHostSessions',
@@ -729,6 +737,7 @@ class Settings {
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
+    'bringAgentSessionsToFront': bringAgentSessionsToFront,
     'quitAsks': quitAsks,
     'quitReopens': quitReopens,
     'quitKeepsHostSessions': quitKeepsHostSessions,
@@ -918,6 +927,7 @@ class Settings {
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
       // `!= false`: defaults on, so a file written before the key reads as on.
       restoreLivePanes: json['restoreLivePanes'] != false,
+      bringAgentSessionsToFront: json['bringAgentSessionsToFront'] == true,
       // `!= false`: defaults on; a file that chose off keeps it.
       // `!= false`: all three default on, so an older file reads as on.
       quitAsks: json['quitAsks'] != false,
@@ -1043,6 +1053,7 @@ class Settings {
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
+      other.bringAgentSessionsToFront == bringAgentSessionsToFront &&
       other.quitAsks == quitAsks &&
       other.quitReopens == quitReopens &&
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
@@ -1122,6 +1133,7 @@ class Settings {
         editorAutoSaveDelayMs,
         Object.hash(
           quitAsks,
+          bringAgentSessionsToFront,
           childReportMode,
           quitReopens,
           quitKeepsHostSessions,

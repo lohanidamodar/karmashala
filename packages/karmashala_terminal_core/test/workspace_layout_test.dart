@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
 void main() {
+  _insertBehindTests();
+
   group('room to split a group', () {
     test('is asked of the workspace, not of the split the group sits in', () {
       // Half of a quarter-wide group is an eighth of the window, whatever
@@ -38,6 +40,48 @@ void main() {
       final tree = PaneLayout.single('a');
 
       expect(groupHasRoomToSplit(tree, 'nope', SplitAxis.horizontal), isFalse);
+    });
+  });
+}
+
+void _insertBehindTests() {
+  group('a pane put behind', () {
+    PaneLayout strip() => PaneLayout(
+      PaneGroup('g', panes: const ['a', 'b', 'c'], activePaneId: 'c'),
+    );
+
+    test('lands right after the pane it is placed by, and the front stays', () {
+      final tree = strip().insertBehind('a', 'n');
+
+      expect(tree.groupById('g')!.panes, ['a', 'n', 'b', 'c']);
+      expect(tree.groupById('g')!.activePaneId, 'c');
+    });
+
+    test('lands at the end of the region when asked to', () {
+      final tree = strip().insertBehind('a', 'n', atEnd: true);
+
+      expect(tree.groupById('g')!.panes, ['a', 'b', 'c', 'n']);
+      expect(tree.groupById('g')!.activePaneId, 'c');
+    });
+
+    test('goes into the anchor\'s own region, leaving the others alone', () {
+      var tree = PaneLayout.single('a');
+      tree = tree.split('a', SplitAxis.horizontal, 'x', 's1');
+      final before = tree.groupOf('x')!;
+
+      tree = tree.insertBehind('a', 'n');
+
+      expect(tree.groupOf('n')!.id, tree.groupOf('a')!.id);
+      expect(tree.groupOf('a')!.activePaneId, 'a');
+      expect(tree.groupOf('x')!.panes, before.panes);
+    });
+
+    test('an anchor the tree does not hold, or a pane it already has, '
+        'changes nothing', () {
+      final tree = strip();
+
+      expect(identical(tree.insertBehind('nope', 'n'), tree), isTrue);
+      expect(identical(tree.insertBehind('a', 'b'), tree), isTrue);
     });
   });
 }

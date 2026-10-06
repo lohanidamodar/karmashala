@@ -51,6 +51,11 @@ class _TabChip extends ConsumerWidget {
         where: _location(ref)?.name,
       ),
       unsaved: _hasUnsaved(ref),
+      isNew: ref.watch(
+        terminalSessionsControllerProvider.select(
+          (state) => state.unseenTabIds.contains(tab.id),
+        ),
+      ),
       selected: selected,
       accented: accented,
       index: index,

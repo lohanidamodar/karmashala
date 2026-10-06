@@ -118,7 +118,11 @@ extension TerminalSessionLifetime on TerminalSessionsController {
 
   /// Runs [launch] in the pane [paneId] already has, keeping its buffer; null
   /// if none or one is running. The command is the caller's, not the pane's.
-  String? startAgentInPane(String paneId, AgentPaneLaunch launch) {
+  String? startAgentInPane(
+    String paneId,
+    AgentPaneLaunch launch, {
+    OpenBehind? behind,
+  }) {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return null;
 
@@ -146,7 +150,7 @@ extension TerminalSessionLifetime on TerminalSessionsController {
       ),
     );
     _seedEncoding(paneId, carried);
-    final tabId = _showPane(paneId);
+    final tabId = _showPane(paneId, behind: behind);
     _publish();
     persistStructure();
     return tabId;

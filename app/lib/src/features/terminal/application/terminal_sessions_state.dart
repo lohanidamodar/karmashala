@@ -51,6 +51,7 @@ class TerminalSessionsState {
     this.liveness = const {},
     this.workingDirectories = const {},
     this.launchedSessions = const {},
+    this.unseenTabIds = const {},
     this.titleRevision = 0,
   });
 
@@ -80,6 +81,10 @@ class TerminalSessionsState {
   /// shell; a chat pane names the session it reads. Moves only when a pane
   /// comes or goes; see [paneSessionsProvider].
   final Map<String, String?> launchedSessions;
+
+  /// Tabs opened behind the one in front that have not been brought forward
+  /// since: what the strip marks as new.
+  final Set<String> unseenTabIds;
 
   /// Incremented on every publish so title and metadata watchers can detect
   /// mutations even when tab layout is structurally identical.
@@ -117,6 +122,7 @@ class TerminalSessionsState {
           identical(other.liveness, liveness) &&
           identical(other.workingDirectories, workingDirectories) &&
           identical(other.launchedSessions, launchedSessions) &&
+          identical(other.unseenTabIds, unseenTabIds) &&
           other.titleRevision == titleRevision;
 
   @override
@@ -129,6 +135,7 @@ class TerminalSessionsState {
     identityHashCode(liveness),
     identityHashCode(workingDirectories),
     identityHashCode(launchedSessions),
+    identityHashCode(unseenTabIds),
     titleRevision,
   );
 }

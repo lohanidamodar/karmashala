@@ -198,7 +198,7 @@ void main() {
     ),
     prompts: prompts,
     registry: registry,
-    resumeWith: (sessionId, prompt) async {
+    resumeWith: (sessionId, prompt, _) async {
       await launches.resume(sessionId, prompt: prompt);
     },
   );

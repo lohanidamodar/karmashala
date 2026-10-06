@@ -4,6 +4,15 @@ part of 'terminal_sessions_controller.dart';
 // splitting that subclass's own body inside its own library.
 // ignore_for_file: invalid_use_of_protected_member
 
+/// A tab opened **behind** the one in front: not activated, not focused, and
+/// marked new until it is. It goes right after [afterTabId] when that tab is
+/// open, otherwise last in the focused group's strip.
+class OpenBehind {
+  const OpenBehind({this.afterTabId});
+
+  final String? afterTabId;
+}
+
 /// Opening, activating, re-ordering and closing **tabs**. See
 /// `terminal_sessions_groups.dart` for the tree these tabs hang in.
 extension TerminalTabVerbs on TerminalSessionsController {
@@ -54,10 +63,10 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   /// Opens document pane [paneId] in a tab, or brings the open one forward:
   /// one tab per document, or two views would disagree about the same thing.
-  String openDocumentTab(String paneId) {
+  String openDocumentTab(String paneId, {OpenBehind? behind}) {
     final open = _tabContaining(paneId);
     if (open != null) {
-      activateTab(open.id);
+      if (behind == null) activateTab(open.id);
       return open.id;
     }
     final tabId = _newId();
@@ -69,7 +78,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
       ),
     );
     _tabsMutated();
-    _activeTabId = tabId;
+    _placeOpened(tabId, behind);
     _publish();
     persistStructure();
     return tabId;
@@ -109,8 +118,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// Opens the conversation of [sessionId] as a tab of its own — a chat pane,
   /// with no terminal behind it — or brings the open one forward. For a
   /// session the server runs itself; closing the tab leaves it running there.
-  String openChatTab(String sessionId) =>
-      openDocumentTab(chatPaneId(sessionId));
+  String openChatTab(String sessionId, {OpenBehind? behind}) =>
+      openDocumentTab(chatPaneId(sessionId), behind: behind);
 
   /// Settings is one document over one store, so a second tab would be the
   /// same page disagreeing with itself.
@@ -137,8 +146,13 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// A live pane already running [launch]'s session on the same agent is
   /// brought forward instead: two openers of one session (a switch followed
   /// here, the server's intent, Quick open) must not stack terminals on it.
-  ({String tabId, String paneId}) openAgentTab(AgentPaneLaunch launch) {
-    if (_livePaneRunning(launch) case final existing?) return existing;
+  ({String tabId, String paneId}) openAgentTab(
+    AgentPaneLaunch launch, {
+    OpenBehind? behind,
+  }) {
+    if (_livePaneRunning(launch, focus: behind == null) case final existing?) {
+      return existing;
+    }
     final tabId = _newId();
     final paneId = _createAgentPane(launch);
     _tabs.add(
@@ -149,11 +163,26 @@ extension TerminalTabVerbs on TerminalSessionsController {
       ),
     );
     _tabsMutated();
-    _activeTabId = tabId;
+    _placeOpened(tabId, behind);
     _publish();
     persistStructure();
-    _focusActivePane();
+    if (behind == null) _focusActivePane();
     return (tabId: tabId, paneId: paneId);
+  }
+
+  /// The tab holding [paneId], or null.
+  String? tabIdOfPane(String paneId) => _tabContaining(paneId)?.id;
+
+  /// Makes a just-added [tabId] active, or — [behind] — leaves the tab in
+  /// front where it is and marks this one new.
+  void _placeOpened(String tabId, OpenBehind? behind) {
+    if (behind == null) {
+      _activeTabId = tabId;
+      return;
+    }
+    _behind[tabId] = behind;
+    _unseen.add(tabId);
+    _unseenView = null;
   }
 
   /// Opens an agent session in an empty split region without creating a tab;
@@ -181,7 +210,10 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   /// The live pane already running [launch]'s session on its agent, focused,
   /// or null.
-  ({String tabId, String paneId})? _livePaneRunning(AgentPaneLaunch launch) {
+  ({String tabId, String paneId})? _livePaneRunning(
+    AgentPaneLaunch launch, {
+    bool focus = true,
+  }) {
     final sessionId = launch.sessionId;
     if (sessionId == null) return null;
     for (final MapEntry(key: paneId, value: instance) in _instances.entries) {
@@ -193,8 +225,10 @@ extension TerminalTabVerbs on TerminalSessionsController {
       }
       final tab = _tabContaining(paneId);
       if (tab == null) continue;
-      focusPane(paneId);
-      _publish();
+      if (focus) {
+        focusPane(paneId);
+        _publish();
+      }
       return (tabId: tab.id, paneId: paneId);
     }
     return null;
@@ -316,22 +350,23 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   /// Puts [paneId] on screen wherever it lives: focused in its own tab, or
   /// — for one with no tab — in a tab of its own.
-  String _showPane(String paneId) {
+  String _showPane(String paneId, {OpenBehind? behind}) {
     final tab = _tabContaining(paneId);
     if (tab != null) {
-      focusPane(paneId);
+      if (behind == null) focusPane(paneId);
       return tab.id;
     }
     _detached.removeWhere((s) => s.paneId == paneId);
     _detachedMutated();
-    final tabId = _newTabFor(paneId);
+    final tabId = _newTabFor(paneId, behind: behind);
     _publish();
-    _focusActivePane();
+    if (behind == null) _focusActivePane();
     return tabId;
   }
 
-  /// Adds a tab holding [paneId] on its own and makes it the active one.
-  String _newTabFor(String paneId) {
+  /// Adds a tab holding [paneId] on its own and makes it the active one, or
+  /// puts it [behind].
+  String _newTabFor(String paneId, {OpenBehind? behind}) {
     final tabId = _newId();
     _tabs.add(
       TerminalTab(
@@ -341,7 +376,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
       ),
     );
     _tabsMutated();
-    _activeTabId = tabId;
+    _placeOpened(tabId, behind);
     return tabId;
   }
 
