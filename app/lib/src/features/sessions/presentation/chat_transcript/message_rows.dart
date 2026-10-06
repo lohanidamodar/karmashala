@@ -128,6 +128,7 @@ class _ChatMessageTile extends StatelessWidget {
             onSaveNote: onSaveNote,
             onPathTap: onPathTap,
             onLinkTap: onLinkTap,
+            resolveHostPath: resolveHostPath,
           ),
           'agent' => _AgentMessageBlock(
             message: message,
@@ -158,12 +159,14 @@ class _UserMessageCard extends StatelessWidget {
     required this.onSaveNote,
     required this.onPathTap,
     required this.onLinkTap,
+    required this.resolveHostPath,
   });
 
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final PathLinkCallback? onPathTap;
   final ValueChanged<String>? onLinkTap;
+  final String? Function(String path)? resolveHostPath;
 
   /// The accent's share of the bubble's fill. Board N2 draws `#1c2230` on the
   /// `#0c0c0e` terminal tone with a `#7aa2f7` accent: 15% of the accent, in
@@ -210,11 +213,27 @@ class _UserMessageCard extends StatelessWidget {
                 horizontal: Radii.lg,
                 vertical: Radii.md,
               ),
-              child: MarkdownMessage(
-                rest,
-                onPathTap: onPathTap,
-                onLinkTap: onLinkTap,
-                selectable: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // What they pasted, drawn rather than left as "[Image #1]".
+                  for (final path in message.images)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: Insets.xs),
+                      child: TranscriptImagePreview(
+                        path: path,
+                        resolveHostPath: resolveHostPath,
+                      ),
+                    ),
+                  if (rest.isNotEmpty)
+                    MarkdownMessage(
+                      rest,
+                      onPathTap: onPathTap,
+                      onLinkTap: onLinkTap,
+                      selectable: false,
+                    ),
+                ],
               ),
             ),
           ),
@@ -229,7 +248,7 @@ class _UserMessageCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         if (preamble != null) _SessionNote(text: preamble),
-        if (rest.isNotEmpty) bubble,
+        if (rest.isNotEmpty || message.images.isNotEmpty) bubble,
         // The agent read it mid-turn, not as the next turn.
         if (message.queued)
           Padding(

@@ -151,7 +151,12 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                 key: ValueKey(widget.sessionId),
                 messages: [
                   for (final m in messages)
-                    ChatMessage(role: m.role, text: m.text, tool: m.tool),
+                    ChatMessage(
+                      role: m.role,
+                      text: m.text,
+                      tool: m.tool,
+                      images: m.images,
+                    ),
                 ],
                 earlier: earlier,
                 onLoadEarlier: earlier > 0

@@ -98,6 +98,7 @@ class TranscriptMessage {
     this.agentInstallationId,
     this.queued = false,
     this.parentToolUseId,
+    this.images = const [],
   });
 
   /// `user`, `agent`, or `tool`.
@@ -178,6 +179,10 @@ class TranscriptMessage {
   /// drawn on that call, not at the top level.
   final String? parentToolUseId;
 
+  /// Images the person pasted into this `user` row, as files in the
+  /// tool-image cache (or wherever the prompt's own were). Empty elsewhere.
+  final List<String> images;
+
   /// This row with [thinking] set.
   TranscriptMessage withThinking(String? value) => TranscriptMessage(
     role: role,
@@ -193,6 +198,7 @@ class TranscriptMessage {
     agentInstallationId: agentInstallationId,
     queued: queued,
     parentToolUseId: parentToolUseId,
+    images: images,
   );
 
   /// This row with [tool] replaced, and the text that summarises it.
@@ -210,6 +216,7 @@ class TranscriptMessage {
     agentInstallationId: agentInstallationId,
     queued: queued,
     parentToolUseId: parentToolUseId,
+    images: images,
   );
 
   /// This row with [agentInstallationId] set.
@@ -227,6 +234,7 @@ class TranscriptMessage {
     agentInstallationId: installationId,
     queued: queued,
     parentToolUseId: parentToolUseId,
+    images: images,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -246,6 +254,7 @@ class TranscriptMessage {
     'agentInstallationId': ?agentInstallationId,
     if (queued) 'queued': true,
     'parentToolUseId': ?parentToolUseId,
+    if (images.isNotEmpty) 'images': images,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -289,6 +298,11 @@ class TranscriptMessage {
       agentInstallationId: string('agentInstallationId'),
       queued: json['queued'] == true,
       parentToolUseId: string('parentToolUseId'),
+      images: [
+        if (json['images'] case final List<Object?> list)
+          for (final path in list)
+            if (path is String) path,
+      ],
     );
   }
 }
@@ -601,6 +615,7 @@ TranscriptMessage _withCompaction(
   pendingBackgroundAgentId: row.pendingBackgroundAgentId,
   thinking: row.thinking,
   compaction: boundary,
+  images: row.images,
 );
 
 /// Marks the calls whose background subagents nothing has reported finished.
@@ -964,6 +979,8 @@ void _parseClaudeLine(
     return;
   }
   if (content is! List) return;
+  final first = out.length;
+  final pasted = <String>[];
   for (final part in content) {
     if (part is String) {
       if (!meta) _add(out, role, said(part), at);
@@ -975,6 +992,8 @@ void _parseClaudeLine(
           } else {
             _foldSkillBody(part['text'], out);
           }
+        case 'image' when role == 'user' && !meta:
+          if (_claudeResultImage([part]) case final path?) pasted.add(path);
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -1037,6 +1056,31 @@ void _parseClaudeLine(
       }
     }
   }
+  _addPasted(out, first, pasted, at);
+}
+
+/// Hangs [pasted] on the person's row the line made after [first], or on a
+/// row of their own when the line said nothing else.
+void _addPasted(
+  List<TranscriptMessage> out,
+  int first,
+  List<String> pasted,
+  DateTime? at,
+) {
+  if (pasted.isEmpty) return;
+  for (var i = out.length - 1; i >= first; i--) {
+    final row = out[i];
+    if (row.role != 'user') continue;
+    out[i] = TranscriptMessage(
+      role: row.role,
+      text: row.text,
+      at: row.at,
+      queued: row.queued,
+      images: [...row.images, ...pasted],
+    );
+    return;
+  }
+  out.add(TranscriptMessage(role: 'user', text: '', at: at, images: pasted));
 }
 
 /// What a hook attachment says, as Claude Code itself prints it, or null for
@@ -1670,15 +1714,26 @@ void _parseCodexMessage(
     return;
   }
   if (content is! List) return;
+  final first = out.length;
+  final pasted = <String>[];
   for (final block in content) {
     if (block is! Map) continue;
     final t = block['type'];
-    if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
-        !skipped(block['text'])) {
+    if (t == 'input_image' && role == 'user') {
+      if (spillToolImageUrl(block['image_url']) case final path?) {
+        pasted.add(path);
+      }
+    } else if ((t == 'input_text' || t == 'output_text' || t == 'text') &&
+        !skipped(block['text']) &&
+        !(role == 'user' && _codexImageTag.hasMatch('${block['text']}'))) {
       _add(out, role, block['text'], at);
     }
   }
+  _addPasted(out, first, pasted, at);
 }
+
+/// The tags Codex wraps a pasted image in: `<image name=… path=…>`, `</image>`.
+final RegExp _codexImageTag = RegExp(r'^\s*(<image\b[^>]*>|</image>)\s*$');
 
 /// The identifying line of a Codex call.
 ///

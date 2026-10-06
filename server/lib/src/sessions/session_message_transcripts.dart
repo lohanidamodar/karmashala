@@ -16,9 +16,10 @@ import 'package:agent_cli/stream.dart'
         spillToolImage,
         toolSubjectFor;
 import 'package:karmashala_session_engine/store.dart'
-    show SessionMessage, SessionMessageDao;
+    show SessionMessage, SessionMessageDao, SessionMessageRole;
 
 import '../acp/acp_extensions.dart';
+import '../acp/acp_prompt_images.dart' show splitAttachedImages;
 import '../acp/acp_tool_json.dart' show kEditsTruncatedKey;
 
 /// One row of `session_messages` as a transcript row: its [ordinal] is its
@@ -75,15 +76,22 @@ class SessionMessageTranscriptSource {
   /// "running" from "answered with nothing"; a plan rides on the row's tool.
   static TranscriptMessage project(SessionMessage row) {
     final tool = _toolOf(row);
+    // The images a prompt attached are drawn in its bubble, not listed.
+    final attached = row.role == SessionMessageRole.user
+        ? splitAttachedImages(row.text).paths
+        : const <String>[];
     return TranscriptMessage(
       role: row.role.name,
-      text: row.text,
+      text: attached.isEmpty
+          ? row.text
+          : splitAttachedImages(row.text).textWithout(attached.toSet()),
       thinking: row.thinking,
       tool: tool?.activity,
       at: row.createdAt,
       pendingToolUseId: tool?.pendingId,
       compaction: _compactionOf(row.messageId),
       parentToolUseId: _parentIn(row.toolJson),
+      images: attached,
     );
   }
 
