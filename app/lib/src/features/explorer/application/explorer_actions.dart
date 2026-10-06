@@ -327,6 +327,7 @@ class ExplorerActions {
     EnvironmentPath? existingWorktree,
     AgentInstallation? installation,
     String? title,
+    String? firstMessage,
   }) async {
     final launcher = _ref.read(sessionLauncherProvider);
     final environmentId = repository.path.environmentId;
@@ -353,6 +354,7 @@ class ExplorerActions {
           title: title ?? 'New session',
           purpose: SessionPurpose.newSession,
           existingWorktree: existingWorktree,
+          firstMessage: firstMessage,
         ),
       );
       selectNative(launched.session);

@@ -441,10 +441,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final picked = _installation;
     if (picked != null && installations.contains(picked)) return picked;
     if (_samePickedAgent(installations) case final same?) return same;
-    final first = installations.firstOrNull;
-    if (first == null) return null;
-    return inChosenForm(
-      first,
+    return scratchDefaultInstallation(
       installations,
       ref.read(agentRegistryProvider),
       ref.read(settingsControllerProvider),

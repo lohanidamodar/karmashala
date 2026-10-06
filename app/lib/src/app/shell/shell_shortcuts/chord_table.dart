@@ -338,6 +338,16 @@ List<ShellChord> _buildChords() => [
     skipsShell: true,
     shellCost: 'readline next-history (^N) — Down does the same thing',
   ),
+  // Quick open already typing `new `: a project and Enter start a session
+  // with no dialog. Ctrl+Shift+N is New project.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyL, shift: true),
+    intent: OpenQuickOpenIntent(query: 'new '),
+    command: 'session.quickStart',
+    label: _commandLabel('L', shift: true),
+    does: 'Start a session from quick open',
+    skipsShell: true,
+  ),
   // Unshifted but free: there is no `^,` for a shell to lose.
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.comma),

@@ -57,18 +57,21 @@ class TypedCommandRunner {
     StopCommand() => Future.sync(() => _stop(action)),
     ForkCommand() => _fork(action),
     EndCommand() => Future.sync(() => _end(action)),
-    // Resuming is quick open's own session jump, which the palette runs.
-    ResumeCommand() => Future.value(),
+    // Resuming is quick open's own session jump, and the dialog needs a
+    // context; the palette runs both.
+    ResumeCommand() || OpenNewSessionDialogCommand() => Future.value(),
   };
 
   Future<void> _start(StartCommand command) async {
+    final projectId = command.projectId;
+    if (projectId == null) return _startWithoutProject(command);
     Repository repository;
     try {
       repository =
-          commandDefaultCheckout(_container, command.projectId) ??
+          commandDefaultCheckout(_container, projectId) ??
           await _container
               .read(projectsControllerProvider.notifier)
-              .ensureRunLocation(command.projectId);
+              .ensureRunLocation(projectId);
     } on StateError catch (error) {
       say(error.message);
       return;
@@ -82,16 +85,15 @@ class TypedCommandRunner {
       return;
     }
     // The card the session appears on has to be on screen, as the `+` does.
-    if (_container.read(selectedProjectIdProvider) != command.projectId) {
-      _container
-          .read(selectedProjectIdProvider.notifier)
-          .select(command.projectId);
+    if (_container.read(selectedProjectIdProvider) != projectId) {
+      _container.read(selectedProjectIdProvider.notifier).select(projectId);
     }
     final explorer = _container.read(explorerActionsProvider);
     if (!command.worktree) {
       final result = await explorer.startSession(
         repository: repository,
         installation: installation,
+        firstMessage: command.firstMessage,
       );
       if (result.message case final message?) say(message);
       return;
@@ -117,6 +119,7 @@ class TypedCommandRunner {
           title: defaultSessionTitle,
           purpose: SessionPurpose.newSession,
           useWorktree: true,
+          firstMessage: command.firstMessage,
         ),
       );
       explorer.selectNative(launched.session);
@@ -125,6 +128,43 @@ class TypedCommandRunner {
     } catch (error) {
       say(error is StateError ? error.message : 'Could not start: $error');
     }
+  }
+
+  /// The dialog's No project: a scratch folder on the agent's machine, named
+  /// after what it was asked to do.
+  Future<void> _startWithoutProject(StartCommand command) async {
+    final installation = _container
+        .read(agentInstallationsDataProvider)
+        .getById(command.installationId);
+    if (installation == null) {
+      say('That agent is no longer installed.');
+      return;
+    }
+    final Repository repository;
+    try {
+      repository = await _container
+          .read(projectsControllerProvider.notifier)
+          .scratchCheckout(
+            installation.environmentId,
+            hint: command.firstMessage ?? defaultSessionTitle,
+          );
+    } catch (error) {
+      say('Could not make a scratch folder: $error');
+      return;
+    }
+    if (_container.read(selectedProjectIdProvider) != repository.projectId) {
+      _container
+          .read(selectedProjectIdProvider.notifier)
+          .select(repository.projectId);
+    }
+    final result = await _container
+        .read(explorerActionsProvider)
+        .startSession(
+          repository: repository,
+          installation: installation,
+          firstMessage: command.firstMessage,
+        );
+    if (result.message case final message?) say(message);
   }
 
   /// The terminal controller the tab bar and the Explorer's "Open terminal"

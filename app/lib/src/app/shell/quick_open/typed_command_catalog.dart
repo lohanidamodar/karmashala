@@ -12,6 +12,8 @@ import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../features/agents/application/agent_providers.dart';
+import '../../../features/agents/application/folded_installations.dart';
+import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/environments/application/environment_providers.dart';
 import '../../../features/notifications/application/attention_inbox.dart';
 import '../../../features/projects/application/projects_controller.dart';
@@ -237,7 +239,18 @@ CommandCatalog readCommandCatalog(
   }
 
   final oldest = waiting.firstOrNull;
+  final scratch = scratchDefaultInstallation(
+    [
+      for (final i in installations)
+        if (registry.adapterFor(i.agentId) != null) i,
+    ],
+    registry,
+    read(settingsControllerProvider),
+  );
   return CommandCatalog(
+    scratchInstallation: scratch == null
+        ? null
+        : CommandInstallation(id: scratch.id, agentId: scratch.agentId),
     projects: commandProjects,
     sessions: sessions,
     environments: commandEnvironments,
@@ -314,6 +327,8 @@ List<CommandAgent> _agents(AgentRegistry registry) {
         agentId: n.id,
         token: tokens[n.id]!,
         displayName: registry.displayNameFor(n.id),
+        familyName: registry.formsOf(n.id).displayName,
+        formLabel: registry.formOf(n.id).label,
       ),
   ];
 }

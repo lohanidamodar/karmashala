@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/typed_command_history.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala_git/repositories.dart';
 
 import '../../../features/terminal/fake_instance.dart';
@@ -25,14 +27,19 @@ class _RecordingExplorerActions extends ExplorerActions {
 
   final starts = <({String repositoryId, String? installationId})>[];
 
+  /// The opening message each start carried, in [starts]' order.
+  final messages = <String?>[];
+
   @override
   Future<ExplorerResult> startSession({
     required Repository repository,
     EnvironmentPath? existingWorktree,
     AgentInstallation? installation,
     String? title,
+    String? firstMessage,
   }) async {
     starts.add((repositoryId: repository.id, installationId: installation?.id));
+    messages.add(firstMessage);
     return const ExplorerResult(ExplorerOutcome.started);
   }
 }
@@ -221,5 +228,60 @@ void main() {
     await press(tester, LogicalKeyboardKey.enter);
     expect(container.read(selectedSessionIdProvider), 's1');
     expect(explorer.starts, isEmpty);
+  });
+
+  group('starting a session without the dialog', () {
+    testWidgets('"new karma" then Enter starts it on the defaults', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await type(tester, 'new karma');
+      expect(find.text('New session in Karmashala'), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a1')]);
+      expect(explorer.messages, [null]);
+      expect(find.byType(QuickOpen), findsNothing);
+      expect(find.byType(NewSessionDialog), findsNothing);
+    });
+
+    testWidgets('text after a colon is the opening message', (tester) async {
+      await open(tester);
+
+      await type(tester, 'new karma: fix the login bug');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a1')]);
+      expect(explorer.messages, ['fix the login bug']);
+    });
+
+    testWidgets('"New session…" opens the dialog with what was typed', (
+      tester,
+    ) async {
+      await open(tester);
+
+      await type(tester, 'new karma: fix it');
+      await tester.tap(find.text('New session…').first);
+      await tester.pumpAndSettle();
+
+      expect(explorer.starts, isEmpty);
+      expect(find.byType(NewSessionDialog), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(NewSessionDialog),
+          matching: find.text('fix it'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    test('Ctrl+Shift+L opens quick open ready for a new session', () {
+      expect(
+        shellChordLabel<OpenQuickOpenIntent>(where: (i) => i.query == 'new '),
+        'Ctrl+Shift+L',
+      );
+    });
   });
 }
