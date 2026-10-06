@@ -895,3 +895,133 @@ void _migrateToV78(Database db) {
     'NOT NULL DEFAULT 1;',
   );
 }
+
+/// `activity_log`, the timeline's own history: append-only, with no foreign
+/// keys, and each entry carrying its own copy of what is drawn so deleting a
+/// session, checkout or project never blanks it. The triggers log a session
+/// row's own facts from every writer; `INSERT OR IGNORE` with non-null
+/// inputs cannot fail the write it rides on.
+void _migrateToV79(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      at                TEXT NOT NULL,
+      kind              TEXT NOT NULL,
+      session_id        TEXT NOT NULL,
+      title             TEXT,
+      project_id        TEXT,
+      project_name      TEXT,
+      checkout_path     TEXT,
+      agent             TEXT,
+      machine           TEXT,
+      parent_session_id TEXT,
+      detail            TEXT,
+      source            TEXT NOT NULL,
+      source_id         TEXT,
+      backfilled        INTEGER NOT NULL DEFAULT 0,
+      approximate       INTEGER NOT NULL DEFAULT 0,
+      recorded_at       TEXT NOT NULL,
+      UNIQUE (source, source_id)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_at ON activity_log (at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_project_at '
+    'ON activity_log (project_id, at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_session_at '
+    'ON activity_log (session_id, at);',
+  );
+
+  const now = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+  // The row's own copy, read live and, for a row whose repository or
+  // installation is already gone (a cascade), from what was logged last.
+  String copy(String row) {
+    String last(String column) =>
+        '(SELECT $column FROM activity_log WHERE session_id = $row.id '
+        'AND $column IS NOT NULL ORDER BY id DESC LIMIT 1)';
+    return [
+      'COALESCE((SELECT project_id FROM repositories '
+          'WHERE id = $row.repository_id), ${last('project_id')})',
+      'COALESCE((SELECT p.name FROM repositories r JOIN projects p '
+          'ON p.id = r.project_id WHERE r.id = $row.repository_id), '
+          '${last('project_name')})',
+      'COALESCE($row.worktree_path, $row.working_directory_path, '
+          '(SELECT path FROM repositories WHERE id = $row.repository_id), '
+          '${last('checkout_path')})',
+      'COALESCE((SELECT agent_kind FROM agent_installations '
+          'WHERE id = $row.agent_installation_id), ${last('agent')})',
+      'COALESCE((SELECT e.name FROM agent_installations a '
+          'JOIN execution_environments e ON e.id = a.environment_id '
+          'WHERE a.id = $row.agent_installation_id), ${last('machine')})',
+    ].join(',\n        ');
+  }
+
+  String append(
+    String row, {
+    required String kind,
+    required String at,
+    required String title,
+    String detail = 'NULL',
+    String parent = 'NULL',
+    required String source,
+    String sourceId = 'NULL',
+  }) =>
+      '''
+      INSERT OR IGNORE INTO activity_log (at, kind, session_id, title,
+        project_id, project_name, checkout_path, agent, machine,
+        parent_session_id, detail, source, source_id, recorded_at)
+      VALUES ($at, '$kind', $row.id, $title,
+        ${copy(row)},
+        $parent, $detail, '$source', $sourceId, $now);''';
+
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_started
+    AFTER INSERT ON sessions
+    BEGIN
+      ${append('NEW', kind: 'sessionStarted', at: 'NEW.created_at', title: 'NEW.title', parent: 'NEW.parent_session_id', source: 'session', sourceId: "NEW.id || ':started'")}
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_linked
+    AFTER INSERT ON sessions
+    WHEN NEW.parent_session_id IS NOT NULL
+    BEGIN
+      ${append('NEW', kind: 'linked', at: 'NEW.created_at', title: 'NEW.title', parent: 'NEW.parent_session_id', detail: 'NEW.parent_link_kind', source: 'lineage', sourceId: 'NEW.id')}
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_renamed
+    AFTER UPDATE OF title ON sessions
+    WHEN NEW.title IS NOT OLD.title
+    BEGIN
+      ${append('NEW', kind: 'renamed', at: now, title: 'NEW.title', detail: 'NEW.title', source: 'session')}
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_archived
+    AFTER UPDATE OF archived_at ON sessions
+    WHEN NEW.archived_at IS NOT NULL AND OLD.archived_at IS NULL
+    BEGIN
+      ${append('NEW', kind: 'archived', at: 'NEW.archived_at', title: 'NEW.title', source: 'session', sourceId: "NEW.id || ':archived:' || NEW.archived_at")}
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_unarchived
+    AFTER UPDATE OF archived_at ON sessions
+    WHEN NEW.archived_at IS NULL AND OLD.archived_at IS NOT NULL
+    BEGIN
+      ${append('NEW', kind: 'unarchived', at: now, title: 'NEW.title', source: 'session')}
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS activity_session_deleted
+    AFTER DELETE ON sessions
+    BEGIN
+      ${append('OLD', kind: 'deleted', at: now, title: 'OLD.title', parent: 'OLD.parent_session_id', source: 'session')}
+    END;
+  ''');
+}
