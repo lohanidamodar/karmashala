@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -36,13 +37,23 @@ class ArtifactActions {
   /// system's handler. Answers what happened, in words.
   Future<String> openInBrowser(Artifact artifact, int revision) async {
     final bytes = await _data.content(artifact.id, revision);
+    // A page runs in the person's browser inside the same sandbox shell: its
+    // scripts, and no network unless allowed for this artifact.
+    final written = artifact.kind == ArtifactKind.html
+        ? utf8.encode(
+            artifactSandboxShell(
+              utf8.decode(bytes, allowMalformed: true),
+              allowNetwork: artifact.networkAllowed,
+            ),
+          )
+        : bytes;
     final root = await _scratch();
     final folder = Directory(
       p.join(root.path, 'karmashala-artifacts', '${artifact.id}-r$revision'),
     );
     await folder.create(recursive: true);
     final file = File(p.join(folder.path, _safeName(artifact.fileName)));
-    await file.writeAsBytes(bytes, flush: true);
+    await file.writeAsBytes(written, flush: true);
     final opened = await _launch(Uri.file(file.path));
     return opened
         ? 'Opened ${artifact.fileName} outside Karmashala.'

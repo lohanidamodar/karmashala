@@ -43,17 +43,47 @@ void main() {
   );
 
   test('Open in browser writes the revision asked for and opens it', () async {
-    server.showArtifact(sampleArtifact(), utf8.encode('<p>one</p>'));
-    server.showArtifact(sampleArtifact(revision: 2), utf8.encode('<p>two</p>'));
+    const md = ArtifactKind.markdown;
+    server.showArtifact(sampleArtifact(kind: md), utf8.encode('# one'));
+    server.showArtifact(
+      sampleArtifact(kind: md, revision: 2),
+      utf8.encode('# two'),
+    );
     final launched = <Uri>[];
 
     final said = await actions(
       launched: launched,
-    ).openInBrowser(sampleArtifact(revision: 2), 1);
+    ).openInBrowser(sampleArtifact(kind: md, revision: 2), 1);
 
-    expect(File.fromUri(launched.single).readAsStringSync(), '<p>one</p>');
+    expect(File.fromUri(launched.single).readAsStringSync(), '# one');
     expect(p.isWithin(tmp.path, launched.single.toFilePath()), isTrue);
     expect(said, contains('outside Karmashala'));
+  });
+
+  test('a page goes to the browser inside the sandbox, network as allowed',
+      () async {
+    server.showArtifact(sampleArtifact(), utf8.encode('<h1>Report</h1>'));
+    final launched = <Uri>[];
+    await actions(launched: launched).openInBrowser(sampleArtifact(), 1);
+    final opened = File.fromUri(launched.single).readAsStringSync();
+    expect(opened, contains('sandbox="allow-scripts"'));
+    expect(opened, contains("connect-src 'none'"));
+    expect(opened, contains('&lt;h1&gt;Report&lt;/h1&gt;'));
+
+    final allowed = sampleArtifact().copyWith(networkAllowed: true);
+    await actions(launched: launched).openInBrowser(allowed, 1);
+    expect(
+      File.fromUri(launched.last).readAsStringSync(),
+      contains('connect-src https:'),
+    );
+  });
+
+  test('an image goes to the browser as it is', () async {
+    final image = sampleArtifact(kind: ArtifactKind.image);
+    server.showArtifact(image, [137, 80, 78, 71]);
+    final launched = <Uri>[];
+    await actions(launched: launched).openInBrowser(image, 1);
+    expect(File.fromUri(launched.single).readAsBytesSync(), [137, 80, 78, 71]);
   });
 
   test('a file name cannot walk out of its folder', () async {

@@ -57,45 +57,6 @@ void main() {
     expect(artifactSourceNote(artifact()), isNull);
   });
 
-  test('no web view on this platform: says so, offers browser and save', () {
-    final f = artifactRenderFallback(
-      artifact(),
-      webViewProblem: 'Linux has no web view Karmashala can embed',
-    );
-    expect(f!.reason, ArtifactFallbackReason.noWebView);
-    expect(f.message, contains('Linux'));
-    expect(f.offersBrowser, isTrue);
-    expect(f.offersSave, isTrue);
-  });
-
-  test('a PDF has no viewer here: says so, offers browser and save', () {
-    final f = artifactRenderFallback(
-      artifact(kind: ArtifactKind.pdf),
-      webViewProblem: null,
-    );
-    expect(f!.reason, ArtifactFallbackReason.noRenderer);
-    expect(f.message, contains('PDF'));
-    expect(f.offersBrowser, isTrue);
-  });
-
-  test('drawn natively needs no web view', () {
-    for (final kind in [
-      ArtifactKind.svg,
-      ArtifactKind.markdown,
-      ArtifactKind.mermaid,
-      ArtifactKind.image,
-    ]) {
-      expect(
-        artifactRenderFallback(
-          artifact(kind: kind),
-          webViewProblem: 'Linux has no web view',
-        ),
-        isNull,
-        reason: kind.name,
-      );
-    }
-  });
-
   test('content the server could not serve says which refusal', () {
     final unreachable = artifactLoadFallback(
       const DataRefused.unavailable('the server is not running'),

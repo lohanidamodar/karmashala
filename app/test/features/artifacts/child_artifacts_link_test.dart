@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/artifacts/application/artifact_web_view_support.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifact_count_badge.dart';
-import 'package:karmashala/src/features/artifacts/presentation/artifact_web_view.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifacts_panel.dart';
 import 'package:karmashala_ui/theme.dart';
 
@@ -35,10 +33,6 @@ void main() {
         ProviderScope(
           overrides: [
             await server.override(),
-            artifactWebSurfaceProvider.overrideWithValue(
-              (context, document) => const SizedBox(),
-            ),
-            artifactWebViewSupportProvider.overrideWith((ref) async => null),
           ],
           child: MaterialApp(
             theme: AppTheme.dark(),

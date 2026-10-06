@@ -3,7 +3,7 @@ import 'package:karmashala_artifacts/karmashala_artifacts.dart';
 
 /// An HTML artifact is untrusted: it runs in an opaque-origin iframe inside a
 /// fixed shell whose policy refuses the network (until allowed), every file,
-/// every navigation away and every popup — and no bridge is offered to it.
+/// every navigation away and every popup.
 void main() {
   String cspOf(String shell) =>
       RegExp(r'content="([^"]*)"').firstMatch(shell)![1]!;
@@ -61,38 +61,5 @@ void main() {
     expect(RegExp('<script').allMatches(shell), isEmpty);
     expect(shell, contains('&quot;&gt;&lt;/iframe&gt;'));
     expect(shell, contains('&amp;amp;'));
-  });
-
-  test('only the shell itself may load; everything else is refused', () {
-    expect(artifactSandboxAllowsNavigation(Uri.parse('about:blank')), isTrue);
-    expect(artifactSandboxAllowsNavigation(Uri.parse('about:srcdoc')), isTrue);
-    for (final url in [
-      'https://example.com/',
-      'http://localhost:8080/',
-      'file:///C:/Users/x/.ssh/id_rsa',
-      'file:///etc/passwd',
-      'javascript:alert(1)',
-      'karmashala://bridge',
-      'data:text/html,<p>x',
-      'blob:null/abc',
-    ]) {
-      expect(
-        artifactSandboxAllowsNavigation(Uri.parse(url)),
-        isFalse,
-        reason: url,
-      );
-    }
-  });
-
-  test('the web view is offered no bridge, no files and no windows', () {
-    const s = kArtifactSandboxSettings;
-    expect(s.javaScriptHandlers, isEmpty);
-    expect(s.allowFileAccess, isFalse);
-    expect(s.allowFileAccessFromFileUrls, isFalse);
-    expect(s.allowUniversalAccessFromFileUrls, isFalse);
-    expect(s.allowContentAccess, isFalse);
-    expect(s.multipleWindows, isFalse);
-    expect(s.inspectable, isFalse);
-    expect(s.incognito, isTrue);
   });
 }

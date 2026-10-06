@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,12 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/features/artifacts/application/artifact_actions.dart';
 import 'package:karmashala/src/features/artifacts/application/artifact_providers.dart';
-import 'package:karmashala/src/features/artifacts/application/artifact_web_view_support.dart';
 import 'package:karmashala/src/features/artifacts/data/artifacts_data.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifact_card.dart';
+import 'package:karmashala/src/features/artifacts/presentation/artifact_pdf_view.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifact_screen.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifact_viewer.dart';
-import 'package:karmashala/src/features/artifacts/presentation/artifact_web_view.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifacts_panel.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala_artifacts/karmashala_artifacts.dart';
@@ -27,18 +27,17 @@ const _desktop = Size(1440, 900);
 
 void main() {
   late FakeDataServer server;
-  late List<ArtifactWebDocument> pages;
+  late List<Uint8List> pdfs;
 
   setUp(() {
     server = FakeDataServer();
-    pages = [];
+    pdfs = [];
   });
 
   Future<ProviderContainer> pump(
     WidgetTester tester,
     Widget child, {
     Size size = _desktop,
-    String? webViewProblem,
     List<Override> more = const [],
   }) async {
     tester.view.physicalSize = size;
@@ -49,13 +48,11 @@ void main() {
       ProviderScope(
         overrides: [
           data,
-          artifactWebSurfaceProvider.overrideWithValue((context, document) {
-            pages.add(document);
-            return const SizedBox(key: ValueKey('fake-web-view'));
+          // pdfium is a native library the test runner does not load.
+          artifactPdfViewProvider.overrideWithValue((context, bytes) {
+            pdfs.add(bytes);
+            return const SizedBox(key: ValueKey('fake-pdf-view'));
           }),
-          artifactWebViewSupportProvider.overrideWith(
-            (ref) async => webViewProblem,
-          ),
           ...more,
         ],
         child: MaterialApp(
@@ -110,7 +107,7 @@ void main() {
       expect(find.text('HTML · revision 2'), findsOneWidget);
     });
 
-    testWidgets('a small diagram is drawn in the card', (tester) async {
+    testWidgets('a small page is drawn in the card', (tester) async {
       final artifact = sampleArtifact(kind: ArtifactKind.markdown);
       server.showArtifact(artifact, utf8.encode('# Findings\n\nAll green.'));
       await pump(
@@ -118,12 +115,12 @@ void main() {
         ListView(children: [ArtifactCard(artifact: artifact)]),
         size: _phone,
       );
-      expect(find.textContaining('All green.'), findsOneWidget);
+      expect(find.textContaining('All green.', findRichText: true), findsOneWidget);
     });
 
     testWidgets('Open goes full screen on a phone', (tester) async {
       final artifact = sampleArtifact();
-      server.showArtifact(artifact, utf8.encode('<p>x</p>'));
+      server.showArtifact(artifact, utf8.encode('<p>On the phone.</p>'));
       await pump(
         tester,
         ListView(children: [ArtifactCard(artifact: artifact)]),
@@ -132,7 +129,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('artifact-open-a1')));
       await tester.pumpAndSettle();
       expect(find.byType(ArtifactScreen), findsOneWidget);
-      expect(find.byKey(const ValueKey('fake-web-view')), findsOneWidget);
+      expect(find.textContaining('On the phone.', findRichText: true), findsWidgets);
     });
 
     testWidgets('Open shows the side panel on a desktop', (tester) async {
@@ -153,71 +150,94 @@ void main() {
   group('the viewer', () {
     Widget viewer() => const ArtifactViewer(sessionId: 's1', artifactId: 'a1');
 
-    testWidgets('a page is handed to the sandbox, network off', (tester) async {
-      server.showArtifact(sampleArtifact(), utf8.encode('<h1>Report</h1>'));
-      await pump(tester, viewer());
-      final page = pages.last;
-      expect(page.allowNetwork, isFalse);
-      expect(page.shell, contains('sandbox="allow-scripts"'));
-      expect(page.shell, contains('&lt;h1&gt;Report&lt;/h1&gt;'));
-      expect(page.settings.javaScriptHandlers, isEmpty);
-    });
-
-    testWidgets('allowing the network is per artifact and reloads the page', (
+    testWidgets('a page is drawn natively, and its scripts never run', (
       tester,
     ) async {
-      server.showArtifact(sampleArtifact(), utf8.encode('<p>x</p>'));
+      server.showArtifact(
+        sampleArtifact(),
+        utf8.encode(
+          '<h1>Report</h1><p style="color:#c00">All green.</p>'
+          '<script>document.body.innerHTML = "hijacked"</script>',
+        ),
+      );
       await pump(tester, viewer());
+      expect(find.textContaining('Report', findRichText: true), findsWidgets);
+      expect(find.textContaining('All green.', findRichText: true), findsOneWidget);
+      expect(find.textContaining('hijacked', findRichText: true), findsNothing);
+      expect(
+        find.byKey(const ValueKey('artifact-html-scripts')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a page with no script says nothing about scripts', (
+      tester,
+    ) async {
+      server.showArtifact(sampleArtifact(), utf8.encode('<p>Plain.</p>'));
+      await pump(tester, viewer());
+      expect(find.byKey(const ValueKey('artifact-html-scripts')), findsNothing);
+    });
+
+    testWidgets('an image from the web is refused while the network is off, '
+        'and a file never loads', (tester) async {
+      server.showArtifact(
+        sampleArtifact(),
+        utf8.encode(
+          '<img src="https://example.com/chart.png" alt="chart">'
+          '<img src="file:///C:/Users/x/secret.png" alt="secret">',
+        ),
+      );
+      await pump(tester, viewer());
+      expect(
+        find.byKey(const ValueKey('artifact-html-blocked-network')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('artifact-html-blocked-file')),
+        findsOneWidget,
+      );
+
       await tester.tap(find.byKey(const ValueKey('artifact-network')));
       await tester.pumpAndSettle();
       expect(server.artifacts['a1']!.networkAllowed, isTrue);
-      expect(pages.last.allowNetwork, isTrue);
-      expect(pages.last.shell, contains('connect-src https:'));
+      expect(
+        find.byKey(const ValueKey('artifact-html-blocked-network')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('artifact-html-blocked-file')),
+        findsOneWidget,
+        reason: 'a file is refused with the network allowed too',
+      );
     });
 
     testWidgets('a rewrite reloads an open view; an old revision can be '
         'picked', (tester) async {
-      server.showArtifact(sampleArtifact(), utf8.encode('<p>one</p>'));
+      server.showArtifact(sampleArtifact(), utf8.encode('<p>alpha</p>'));
       await pump(tester, viewer());
-      server.showArtifact(sampleArtifact(revision: 2), utf8.encode('<p>two</p>'));
+      server.showArtifact(
+        sampleArtifact(revision: 2),
+        utf8.encode('<p>bravo</p>'),
+      );
       await tester.pumpAndSettle();
-      expect(pages.last.shell, contains('two'));
+      expect(find.textContaining('bravo', findRichText: true), findsWidgets);
 
       await tester.tap(find.byKey(const ValueKey('artifact-revision')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Revision 1').last);
       await tester.pumpAndSettle();
-      expect(pages.last.shell, contains('one'));
+      expect(find.textContaining('alpha', findRichText: true), findsWidgets);
+      expect(find.textContaining('bravo', findRichText: true), findsNothing);
     });
 
-    testWidgets('a platform with no web view says why, and offers the '
-        'browser and Save', (tester) async {
-      server.showArtifact(sampleArtifact(), utf8.encode('<p>x</p>'));
-      await pump(
-        tester,
-        viewer(),
-        webViewProblem: 'Linux has no web view Karmashala can embed',
-      );
-      expect(
-        find.byKey(const ValueKey('artifact-fallback-noWebView')),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Linux has no web view'), findsOneWidget);
-      expect(find.text('Open in browser'), findsOneWidget);
-      expect(find.text('Save'), findsOneWidget);
-      expect(pages, isEmpty);
-    });
-
-    testWidgets('a PDF says there is no viewer here', (tester) async {
+    testWidgets('a PDF opens in the viewer here', (tester) async {
       server.showArtifact(
         sampleArtifact(kind: ArtifactKind.pdf),
         utf8.encode('%PDF-1.7'),
       );
       await pump(tester, viewer());
-      expect(
-        find.byKey(const ValueKey('artifact-fallback-noRenderer')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('fake-pdf-view')), findsOneWidget);
+      expect(utf8.decode(pdfs.last), '%PDF-1.7');
     });
 
     testWidgets('a source gone from its host says so over the kept copy', (
@@ -235,7 +255,7 @@ void main() {
         find.byKey(const ValueKey('artifact-note-sourceMissing')),
         findsOneWidget,
       );
-      expect(pages.last.shell, contains('kept'));
+      expect(find.textContaining('kept', findRichText: true), findsWidgets);
     });
 
     testWidgets('a host out of reach is said as such', (tester) async {
@@ -265,14 +285,14 @@ void main() {
         find.byKey(const ValueKey('artifact-fallback-serverUnreachable')),
         findsOneWidget,
       );
-      expect(find.textContaining('the server is not running'), findsOneWidget);
+      expect(find.textContaining('the server is not running', findRichText: true), findsOneWidget);
     });
 
     testWidgets('Open in browser and Save act on the revision shown', (
       tester,
     ) async {
       final done = <String>[];
-      server.showArtifact(sampleArtifact(), utf8.encode('<p>one</p>'));
+      server.showArtifact(sampleArtifact(), utf8.encode('<p>alpha</p>'));
       server.showArtifact(sampleArtifact(revision: 2), utf8.encode('<p>2</p>'));
       await pump(
         tester,
@@ -334,7 +354,7 @@ void main() {
         const ArtifactsPanel(),
         more: [panelSessionIdProvider.overrideWithValue('s1')],
       );
-      expect(find.textContaining('artifact_show'), findsOneWidget);
+      expect(find.textContaining('artifact_show', findRichText: true), findsOneWidget);
     });
   });
 }

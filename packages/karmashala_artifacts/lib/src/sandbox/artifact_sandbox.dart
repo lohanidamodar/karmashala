@@ -1,11 +1,10 @@
 import 'dart:convert';
 
-/// The page an HTML artifact is shown in. The web view loads this fixed shell,
-/// never the artifact itself: the artifact runs in an `allow-scripts`-only
-/// iframe, so its origin is opaque — no reach into the shell, storage or
-/// cookies, no top navigation, no popups — and inherits the shell's policy,
-/// which loads nothing from the network (https only when [allowNetwork]) and
-/// nothing from a file.
+/// The page an HTML artifact runs in when a person opens it in their browser:
+/// a fixed shell holding the artifact in an `allow-scripts`-only iframe, so
+/// its origin is opaque — no reach into the shell, storage or cookies, no top
+/// navigation, no popups — under the shell's policy, which loads nothing from
+/// the network (https only when [allowNetwork]) and nothing from a file.
 String artifactSandboxShell(String html, {required bool allowNetwork}) {
   final policy = allowNetwork ? _networkPolicy : _offlinePolicy;
   final srcdoc = const HtmlEscape(HtmlEscapeMode.attribute).convert(html);
@@ -46,44 +45,3 @@ const _networkPolicy =
     "form-action 'none'; "
     "base-uri 'none'";
 
-/// Whether the web view may load [uri]: the shell and its srcdoc frame, and
-/// nothing else — a link, a redirect or a script's `location =` is refused,
-/// with the network allowed or not.
-bool artifactSandboxAllowsNavigation(Uri uri) =>
-    uri.scheme == 'about' && (uri.path == 'blank' || uri.path == 'srcdoc');
-
-/// What the web view is set up with. Held as a value so a test can see the
-/// sandbox is offered nothing: no JavaScript handlers (Karmashala's bridge),
-/// no file or content access, no extra windows, no inspector.
-class ArtifactSandboxSettings {
-  const ArtifactSandboxSettings({
-    required this.javaScriptHandlers,
-    required this.allowFileAccess,
-    required this.allowFileAccessFromFileUrls,
-    required this.allowUniversalAccessFromFileUrls,
-    required this.allowContentAccess,
-    required this.multipleWindows,
-    required this.inspectable,
-    required this.incognito,
-  });
-
-  final List<String> javaScriptHandlers;
-  final bool allowFileAccess;
-  final bool allowFileAccessFromFileUrls;
-  final bool allowUniversalAccessFromFileUrls;
-  final bool allowContentAccess;
-  final bool multipleWindows;
-  final bool inspectable;
-  final bool incognito;
-}
-
-const kArtifactSandboxSettings = ArtifactSandboxSettings(
-  javaScriptHandlers: [],
-  allowFileAccess: false,
-  allowFileAccessFromFileUrls: false,
-  allowUniversalAccessFromFileUrls: false,
-  allowContentAccess: false,
-  multipleWindows: false,
-  inspectable: false,
-  incognito: true,
-);

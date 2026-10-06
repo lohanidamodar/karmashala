@@ -69,7 +69,6 @@ class ArtifactCard extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final note = artifactSourceNote(live);
     final inline =
-        live.kind != ArtifactKind.html &&
         live.kind != ArtifactKind.pdf &&
         live.size <= _inlineBytes;
     return Container(

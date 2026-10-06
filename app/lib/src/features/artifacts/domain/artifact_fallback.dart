@@ -7,8 +7,6 @@ enum ArtifactFallbackReason {
   sourceMissing,
   hostUnreachable,
   tooLarge,
-  noWebView,
-  noRenderer,
   serverUnreachable,
   revisionGone,
   notPermitted,
@@ -62,28 +60,6 @@ ArtifactFallback? artifactSourceNote(Artifact artifact) {
     ),
   };
 }
-
-/// Why [artifact] is not drawn on this platform, or null when it is.
-ArtifactFallback? artifactRenderFallback(
-  Artifact artifact, {
-  required String? webViewProblem,
-}) => switch (artifact.kind) {
-  ArtifactKind.html when webViewProblem != null => ArtifactFallback(
-    ArtifactFallbackReason.noWebView,
-    'This page cannot run here: $webViewProblem. Open it in your browser, '
-    'or save it.',
-    offersBrowser: true,
-    offersSave: true,
-  ),
-  ArtifactKind.pdf => const ArtifactFallback(
-    ArtifactFallbackReason.noRenderer,
-    'Karmashala has no PDF viewer of its own yet. Open it in your browser, '
-    'or save it.',
-    offersBrowser: true,
-    offersSave: true,
-  ),
-  _ => null,
-};
 
 /// Why an artifact's content did not arrive from the server.
 ArtifactFallback artifactLoadFallback(Object error) => switch (error) {
