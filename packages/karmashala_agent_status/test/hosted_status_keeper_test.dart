@@ -441,6 +441,91 @@ void main() {
       expect(done.inFlight, isEmpty);
     });
 
+    // Declined with Esc, or left to "Chat about this", a question fires no
+    // hook of its own: the turn is interrupted, so no PostToolUse and no Stop.
+    // The agent's own composer back on screen is then the only word that it
+    // closed — on the owner's phone the question stayed open long after.
+    test('a question the screen no longer draws is closed, though no hook '
+        'said so', () {
+      keeper.track('row-1', agentId: claude.id);
+      final idleScreen = screenOf('claude-code-tui', 0.85, claude);
+      final asked = hook('PreToolUse', {
+        'tool_name': 'AskUserQuestion',
+        'tool_use_id': 'toolu_1',
+        'tool_input': {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        },
+      });
+      expect(asked!.report.hasOpenQuestion, isTrue);
+
+      clock.now = clock.now.add(const Duration(milliseconds: 500));
+      keeper.screen('row-1', idleScreen);
+      expect(
+        keeper.statusOf('row-1')!.report.hasOpenQuestion,
+        isTrue,
+        reason: 'a screen just after the hook may not have redrawn yet',
+      );
+
+      clock.now = clock.now.add(const Duration(seconds: 3));
+      final closed = keeper.screen('row-1', idleScreen);
+      expect(closed!.report.hasOpenQuestion, isFalse);
+      expect(closed.report.status, AgentActivityStatus.idle);
+      expect(closed.question, isNull);
+    });
+
+    test('an approval the screen no longer draws is closed, though no hook '
+        'said so', () {
+      keeper.track('row-1', agentId: claude.id);
+      hook('Notification', {
+        'notification_type': 'permission_prompt',
+        'message': 'Claude needs your permission to use Bash',
+      });
+      expect(keeper.statusOf('row-1')!.report.hasOpenPrompt, isTrue);
+
+      clock.now = clock.now.add(const Duration(seconds: 3));
+      final closed = keeper.screen(
+        'row-1',
+        screenOf('claude-code-tui', 0.85, claude),
+      );
+      expect(closed!.report.hasOpenPrompt, isFalse);
+      expect(closed.report.status, AgentActivityStatus.idle);
+    });
+
+    test('a question still drawn stays open under a fresh hook', () {
+      keeper.track('row-1', agentId: claude.id);
+      hook('PreToolUse', {
+        'tool_name': 'AskUserQuestion',
+        'tool_use_id': 'toolu_1',
+        'tool_input': {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        },
+      });
+      clock.now = clock.now.add(const Duration(seconds: 3));
+      keeper.screen('row-1', const [
+        '',
+        ' Pick a fruit',
+        ' ❯ 1. Apple',
+        '   2. Type something.',
+        '',
+        ' Enter to select · ↑/↓ to navigate · Esc to cancel',
+      ]);
+      expect(keeper.statusOf('row-1')!.report.hasOpenQuestion, isTrue);
+    });
+
     test('a stale hook is still the word when the screen says nothing', () {
       keeper.track('row-1', agentId: claude.id);
       final idle = hook('Stop');

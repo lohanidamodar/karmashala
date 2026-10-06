@@ -55,6 +55,7 @@ void main() {
   );
 
   final inline = find.byKey(const ValueKey('chat-ask:toolu_1'));
+  late ChatCardHarness harness;
 
   Future<List<RemoteQuestionAnswerRequest>> open(
     WidgetTester tester, {
@@ -98,6 +99,7 @@ void main() {
       ],
     );
     addTearDown(h.dispose);
+    harness = h;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: h.container,
@@ -198,4 +200,21 @@ void main() {
       expect(find.text('Edit'), findsNothing);
     });
   }
+
+  testWidgets('a question answered on another client clears on the phone in '
+      'the same update: the card goes, the box takes a message, the queue '
+      'unfolds', (tester) async {
+    await open(tester, size: const Size(390, 844), phone: true);
+    expect(inline, findsOneWidget);
+    expect(find.text('Answer the prompt above first'), findsOneWidget);
+
+    harness.status(ChatCardHarness.statusOf(kind, AgentActivityStatus.working));
+    await tester.pump();
+    await tester.pump();
+
+    expect(inline, findsNothing);
+    expect(find.text('Answer the prompt above first'), findsNothing);
+    expect(find.text('Message the agent…'), findsOneWidget);
+    expect(find.text('queued message 1'), findsOneWidget);
+  });
 }

@@ -194,6 +194,44 @@ void main() {
       expect(delivered, ['second']);
     });
 
+    // Declined with Esc or left to "Chat about this", a question fires no
+    // hook; the screen showing Claude's composer again is what closes it, and
+    // the message queued behind it goes.
+    test('a message queued behind a question goes once the screen no longer '
+        'draws it, though no hook said so', () async {
+      await runAgent();
+      hook('UserPromptSubmit');
+      final queued = send('after the question');
+      expect(queued, isA<AdmitQueued>());
+      hook(
+        'PreToolUse',
+        extra: {
+          'tool_name': 'AskUserQuestion',
+          'tool_use_id': 'toolu_1',
+          'tool_input': {
+            'questions': [
+              {
+                'question': 'Pick a fruit',
+                'options': [
+                  {'label': 'Apple'},
+                ],
+              },
+            ],
+          },
+        },
+      );
+      status.tick();
+      await pumpEventQueue();
+      expect(delivered, isEmpty, reason: 'the screen may not have redrawn yet');
+
+      // Past the agent's redraw lag, the screen read is the word.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+      status.tick();
+      await pumpEventQueue();
+      expect(status.statusOf('s1')!.report.hasOpenQuestion, isFalse);
+      expect(delivered, ['after the question']);
+    });
+
     test('a held session queues every send and delivers once let go', () async {
       await runAgent();
       queue.hold('s1');
