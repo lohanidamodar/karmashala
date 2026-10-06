@@ -201,6 +201,13 @@ class RemoteAccessController {
   Future<void> revoke(PairedDevice device) =>
       _device('revoke', _ref.read(pairedDevicesDataProvider).revoke(device.id));
 
+  /// Moves a device to the default relay: the server offers the move at the
+  /// phone's next link and switches once the phone acknowledges it.
+  Future<void> moveRelay(PairedDevice device) => _device(
+    'relay move',
+    _ref.read(pairedDevicesDataProvider).moveRelay(device.id),
+  );
+
   /// A device write the server may refuse; the list shows what it holds.
   Future<void> _device(String what, Future<PairedDevice> write) async {
     try {

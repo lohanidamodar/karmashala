@@ -57,4 +57,62 @@ void main() {
             as DeviceRemoved;
     expect(removed.id, 'aa11');
   });
+
+  group('relay moves', _relayMoves);
+}
+
+void _relayMoves() {
+  test('a move to the default relay travels', () {
+    final json =
+        jsonDecode(
+              jsonEncode(DataEnvelope.request(1, const DeviceMoveRelay('aa11'))),
+            )
+            as Map<String, Object?>;
+    final read = DataEnvelope.readRequest(json).request!;
+    expect((read as DeviceMoveRelay).id, 'aa11');
+  });
+
+  test('a device mid-move says so: where it is going, where it came from, '
+      'and whether the phone has been heard there', () {
+    final moving = PairedDevice(
+      id: 'aa11',
+      name: 'Pixel',
+      deviceKey: Uint8List(0),
+      capabilities: CapabilitySet.all,
+      generation: 0,
+      createdAt: DateTime.utc(2026, 10, 6),
+      relayUrl: 'wss://new.example',
+      relayMoveTo: 'wss://next.example',
+      relayMovedFrom: 'wss://old.example',
+      relayMoveSettled: false,
+    );
+    final back =
+        DataChange.fromJson(
+              jsonDecode(jsonEncode(DeviceChanged(moving).toJson()))
+                  as Map<String, Object?>,
+            )!
+            as DeviceChanged;
+    expect(back.device.relayMoveTo, 'wss://next.example');
+    expect(back.device.relayMovedFrom, 'wss://old.example');
+    expect(back.device.relayMoveSettled, isFalse);
+    expect(samePairedDevice(back.device, moving), isTrue);
+    expect(
+      samePairedDevice(
+        back.device,
+        pairedDeviceWithoutSecrets(
+          PairedDevice(
+            id: 'aa11',
+            name: 'Pixel',
+            deviceKey: Uint8List(0),
+            capabilities: CapabilitySet.all,
+            generation: 0,
+            createdAt: DateTime.utc(2026, 10, 6),
+            relayUrl: 'wss://new.example',
+          ),
+        ),
+      ),
+      isFalse,
+      reason: 'a move in progress is a change a client must hear',
+    );
+  });
 }

@@ -13,6 +13,9 @@ Map<String, Object?> pairedDeviceToJson(PairedDevice device) => {
   'createdAt': device.createdAt.toUtc().toIso8601String(),
   'lastSeenAt': ?device.lastSeenAt?.toUtc().toIso8601String(),
   'relayUrl': ?device.relayUrl,
+  'relayMoveTo': ?device.relayMoveTo,
+  'relayMovedFrom': ?device.relayMovedFrom,
+  if (!device.relayMoveSettled) 'relayMoveSettled': false,
 };
 
 /// A device as [pairedDeviceToJson] told it. Throws [FormatException] for one
@@ -24,12 +27,16 @@ PairedDevice pairedDeviceFromJson(Map<String, Object?> json) {
   final createdAt = DateTime.tryParse('${json['createdAt']}');
   final lastSeen = json['lastSeenAt'];
   final relay = json['relayUrl'];
+  final moveTo = json['relayMoveTo'];
+  final movedFrom = json['relayMovedFrom'];
   if (id is! String ||
       name is! String ||
       capabilities is! int ||
       createdAt == null ||
       (lastSeen != null && lastSeen is! String) ||
-      (relay != null && relay is! String)) {
+      (relay != null && relay is! String) ||
+      (moveTo != null && moveTo is! String) ||
+      (movedFrom != null && movedFrom is! String)) {
     throw const FormatException('not a paired device');
   }
   return PairedDevice(
@@ -44,6 +51,9 @@ PairedDevice pairedDeviceFromJson(Map<String, Object?> json) {
         ? null
         : DateTime.parse(lastSeen as String).toUtc(),
     relayUrl: relay as String?,
+    relayMoveTo: moveTo as String?,
+    relayMovedFrom: movedFrom as String?,
+    relayMoveSettled: json['relayMoveSettled'] != false,
   );
 }
 
@@ -59,7 +69,10 @@ bool samePairedDevice(PairedDevice a, PairedDevice b) =>
     a.revoked == b.revoked &&
     a.createdAt == b.createdAt &&
     a.lastSeenAt == b.lastSeenAt &&
-    a.relayUrl == b.relayUrl;
+    a.relayUrl == b.relayUrl &&
+    a.relayMoveTo == b.relayMoveTo &&
+    a.relayMovedFrom == b.relayMovedFrom &&
+    a.relayMoveSettled == b.relayMoveSettled;
 
 /// The paired-device list's order: newest first, then by id.
 int comparePairedDevices(PairedDevice a, PairedDevice b) {

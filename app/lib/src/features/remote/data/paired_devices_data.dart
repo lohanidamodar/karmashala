@@ -34,6 +34,11 @@ class PairedDevicesData {
 
   Future<PairedDevice> revoke(String id) =>
       _client.write(DeviceRevoke(id), domain: DataDomain.pairings);
+
+  /// Asks the server to move [id] to its default relay, by the handshake a
+  /// retired relay's pairings move by.
+  Future<PairedDevice> moveRelay(String id) =>
+      _client.write(DeviceMoveRelay(id), domain: DataDomain.pairings);
 }
 
 final pairedDevicesDataProvider = Provider<PairedDevicesData>(

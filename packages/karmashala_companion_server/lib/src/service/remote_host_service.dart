@@ -537,6 +537,9 @@ class RemoteHostService {
       if (row.capabilities.bits != runtime.device.capabilities.bits) {
         await runtime.applyGrant(row);
       }
+      if (row.relayMoveTo != runtime.device.relayMoveTo) {
+        await runtime.applyRelayMove(row);
+      }
     }
     for (final row in rows.values) {
       await _ensureRuntime(row);

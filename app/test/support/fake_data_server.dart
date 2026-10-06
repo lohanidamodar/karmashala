@@ -85,7 +85,11 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show MemoryPairedDeviceStore;
 import 'package:karmashala_remote/remote.dart'
-    show PairedDevice, pairedDeviceNameOf, pairedDeviceWithoutSecrets;
+    show
+        PairedDevice,
+        pairedDeviceNameOf,
+        pairedDeviceWithoutSecrets,
+        sameRelay;
 import 'package:store_console/store_console.dart'
     show Reading, StoreApp, StoreAppSnapshot, StoreKind;
 

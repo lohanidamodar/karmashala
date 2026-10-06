@@ -453,4 +453,85 @@ void main() {
     expect(find.text('Turn on remote access first.'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
   });
+
+  group('the relay each pairing uses', () {
+    const self = 'wss://relay.my-own.net';
+    const hosted = 'wss://kmrelay.example.org';
+
+    /// Remote access on, its hosted relay [hosted]: the default a device can
+    /// be moved to.
+    Future<void> enableWithDefault(WidgetTester tester) async {
+      await enableRemoteAccess(tester);
+      setRemoteAccessNow(
+        ProviderScope.containerOf(
+          tester.element(find.byType(RemoteAccessSection)),
+        ),
+        relayUrl: hosted,
+      );
+      data.deviceRows.defaultRelay = Uri.parse(hosted);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a row names its relay, and one off the default can be '
+        'moved there — at phone width too', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      data.deviceRows.insert(device(relayUrl: self));
+      await tester.pumpWidget(app());
+      await enableWithDefault(tester);
+
+      expect(find.textContaining('Relay relay.my-own.net'), findsOneWidget);
+      await tester.ensureVisible(find.text('Move to the default relay'));
+      await tester.tap(find.text('Move to the default relay'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(data.deviceRows.getById('a' * 32)!.relayMoveTo, hosted);
+      expect(
+        find.textContaining('Moving to kmrelay.example.org'),
+        findsOneWidget,
+      );
+      expect(find.text('Move to the default relay'), findsNothing);
+    });
+
+    testWidgets('a pairing on the retired PopupBits relay says it moves on '
+        'its own, and offers nothing to press', (tester) async {
+      data.deviceRows.insert(device(relayUrl: 'wss://relay.popupbits.com'));
+      await tester.pumpWidget(app());
+      await enableWithDefault(tester);
+
+      expect(
+        find.textContaining('Moving to kmrelay.popupbits.com'),
+        findsOneWidget,
+      );
+      expect(find.text('Move to the default relay'), findsNothing);
+    });
+
+    testWidgets('mid-move, the row waits to hear the phone on the new '
+        'relay', (tester) async {
+      data.deviceRows.insert(device(relayUrl: self));
+      data.deviceRows.moveRelay('a' * 32, hosted);
+      await tester.pumpWidget(app());
+      await enableWithDefault(tester);
+
+      expect(find.textContaining('Relay kmrelay.example.org'), findsOneWidget);
+      expect(
+        find.textContaining('moved from relay.my-own.net'),
+        findsOneWidget,
+      );
+      expect(find.text('Move to the default relay'), findsNothing);
+    });
+
+    testWidgets('a pairing on the local relay, or already on the default, '
+        'offers no move', (tester) async {
+      data.deviceRows
+        ..insert(device(relayUrl: kLocalRelayMarker))
+        ..insert(device(id: 'b', relayUrl: hosted));
+      await tester.pumpWidget(app());
+      await enableWithDefault(tester);
+
+      expect(find.text('Move to the default relay'), findsNothing);
+    });
+  });
 }

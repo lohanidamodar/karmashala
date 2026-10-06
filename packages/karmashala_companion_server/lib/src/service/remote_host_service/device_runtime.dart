@@ -110,6 +110,30 @@ class _DeviceRuntime {
     });
   }
 
+  /// Takes a move asked in Settings: the new relay is listened on at once, and
+  /// a switched link is retired, since the move is offered only at a hello —
+  /// the client links again and is asked.
+  Future<void> applyRelayMove(PairedDevice updated) {
+    device = updated.copyWith(generation: device.generation);
+    final switched = _active;
+    final applied = _chain.then((_) async {
+      await syncRelayListeners();
+      if (_closed || switched == null || !identical(_active, switched)) return;
+      if (switched.host == null || updated.relayMoveTo == null) return;
+      service.onLog?.call(
+        'a device was asked to move relay; its switched link is retired',
+      );
+      await _hostEnded(switched);
+    });
+    _chain = applied.then(
+      (_) {},
+      onError: (Object e) {
+        service.onLog?.call('applying a relay move failed: $e');
+      },
+    );
+    return applied;
+  }
+
   bool _sweeping = false;
 
   /// One transcript sweep for this device, never two at once: a sweep outlasts

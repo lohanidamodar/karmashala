@@ -12,6 +12,7 @@ DataRequest<Object?>? _pairingsRequestFromJson(String kind, _Arguments args) =>
         CapabilitySet(args.integer('capabilities')),
       ),
       DeviceRevoke.name => DeviceRevoke(args.string('id')),
+      DeviceMoveRelay.name => DeviceMoveRelay(args.string('id')),
       _ => null,
     };
 
@@ -97,6 +98,22 @@ final class DeviceRevoke extends _DeviceWrite {
   const DeviceRevoke(super.id);
 
   static const String name = 'devices.revoke';
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'id': id};
+}
+
+/// Moves device [id] to the server's default hosted relay, by the same
+/// handshake a retired relay's pairings move by: asked now, done when the
+/// phone next links and acknowledges. Refused for a pairing on the local
+/// relay, a revoked one, one already there, and a server with no hosted relay.
+final class DeviceMoveRelay extends _DeviceWrite {
+  const DeviceMoveRelay(super.id);
+
+  static const String name = 'devices.moveRelay';
 
   @override
   String get kind => name;

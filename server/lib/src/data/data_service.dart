@@ -379,6 +379,10 @@ class DataService {
   /// client renamed, granted or revoked a device.
   set onDevicesWritten(void Function()? apply) => _pairings.onWritten = apply;
 
+  /// Set by the companion: the hosted relay a device is moved to on request.
+  set defaultRelay(Uri? Function()? resolve) =>
+      _pairings.defaultRelay = resolve;
+
   /// Records how a worktree the server made was set up, and tells every
   /// client.
   void recordWorktreeSetup(WorktreeSetupReport report) {
@@ -539,7 +543,8 @@ class DataService {
         !origin.admin &&
         (request is DeviceRename ||
             request is DeviceGrant ||
-            request is DeviceRevoke)) {
+            request is DeviceRevoke ||
+            request is DeviceMoveRelay)) {
       throw const DataRefused.denied(
         'this client may not change paired devices: its pairing does not '
         'grant administering this server',
@@ -627,6 +632,7 @@ class DataService {
           final DeviceRename r => _pairings.rename(r, changes),
           final DeviceGrant r => _pairings.grant(r, changes),
           final DeviceRevoke r => _pairings.revoke(r, changes),
+          final DeviceMoveRelay r => _pairings.moveRelay(r, changes),
         },
         final NotesList r => _notes.list(r),
         final NoteCapture r => _notes.capture(r, changes),

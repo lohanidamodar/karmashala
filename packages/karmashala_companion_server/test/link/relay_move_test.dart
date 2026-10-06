@@ -300,4 +300,34 @@ void main() {
     expect(dao.getById(_deviceId.value)!.relayUrl, kLocalRelayMarker);
     expect(dao.getById(_deviceId.value)!.relayMovedFrom, isNull);
   });
+
+  test('Move to the default relay, asked in Settings: the live link is '
+      'retired, and the phone\'s next link moves even a self-hosted '
+      'pairing', () async {
+    await pair(otherUri.toString());
+    await start();
+    final store = InMemoryCompanionStore();
+    final first = await dialer(store).dial(await record(otherUri));
+    await echoes(first);
+    expect(dialled, [otherUri], reason: 'nothing asked yet');
+
+    dao.askRelayMove(_deviceId.value, newUri.toString());
+    await service!.reconcileDevices();
+    expect(listening(), contains(newUri.toString()));
+    await links.single.done.timeout(const Duration(seconds: 10));
+
+    final saved = (await CompanionConnections.load(
+      store,
+    )).byHost(_hostId.value)!;
+    final second = await dialer(store).dial(saved);
+    addTearDown(() => second.close());
+    await echoes(second);
+
+    expect(dialled.last, newUri);
+    final row = dao.getById(_deviceId.value)!;
+    expect(row.relayUrl, newUri.toString());
+    expect(row.relayMovedFrom, otherUri.toString());
+    expect(row.relayMoveTo, isNull);
+    expect(row.relayMoveSettled, isTrue);
+  });
 }

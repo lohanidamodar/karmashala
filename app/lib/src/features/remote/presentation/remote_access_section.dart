@@ -166,6 +166,9 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
             const SizedBox(height: Insets.md),
             _PairedDevicesList(
               devices: devices,
+              defaultRelay: access.relayEnabled
+                  ? KnownRelays.popupBits.upgrade(hostedRelayOf(access))
+                  : null,
               relayOf: (device) => _sshRelayOf(device, sshRelays),
               parkedOf: (device) {
                 if (device.pairedViaLocalRelay) return !localLive;
@@ -305,11 +308,15 @@ class _RelaySwitches extends StatelessWidget {
 class _PairedDevicesList extends StatelessWidget {
   const _PairedDevicesList({
     required this.devices,
+    required this.defaultRelay,
     required this.parkedOf,
     required this.relayOf,
   });
 
   final List<PairedDevice> devices;
+
+  /// The hosted relay a device can be moved to, or null when none is served.
+  final Uri? defaultRelay;
 
   /// The box relay [device] was paired through, when it was one.
   final SshRelayEntry? Function(PairedDevice device) relayOf;
@@ -345,6 +352,7 @@ class _PairedDevicesList extends StatelessWidget {
           for (final device in devices)
             _DeviceRow(
               device: device,
+              defaultRelay: defaultRelay,
               parked: parkedOf(device),
               sshRelay: relayOf(device),
             ),
@@ -446,9 +454,17 @@ class _LocalRelayStatusRow extends ConsumerWidget {
 }
 
 class _DeviceRow extends ConsumerWidget {
-  const _DeviceRow({required this.device, this.parked = false, this.sshRelay});
+  const _DeviceRow({
+    required this.device,
+    this.parked = false,
+    this.sshRelay,
+    this.defaultRelay,
+  });
 
   final PairedDevice device;
+
+  /// The hosted relay this device can be moved to, when one is served.
+  final Uri? defaultRelay;
 
   /// The box this phone was paired through, when it was one.
   final SshRelayEntry? sshRelay;
@@ -501,6 +517,47 @@ class _DeviceRow extends ConsumerWidget {
         device.capabilities | GrantPreset.phone.grants,
       );
 
+  /// The relay this pairing uses, as the row names it.
+  String get _relayLabel {
+    if (device.pairedViaLocalRelay) return 'Local relay';
+    final box = sshRelay;
+    if (box != null) return 'Relay on ${box.hostName}';
+    final own = device.hostedRelayUri;
+    return own == null ? 'Hosted relay' : 'Relay ${own.host}';
+  }
+
+  /// Where a move asked for, or the known-relays policy, is taking it.
+  Uri? get _movingTo {
+    if (device.revoked) return null;
+    final asked = Uri.tryParse(device.relayMoveTo ?? '');
+    if (asked != null && asked.host.isNotEmpty) return asked;
+    return KnownRelays.popupBits.moveTargetFor(device.relayUrl);
+  }
+
+  /// What the row says of a move under way, or null when there is none.
+  String? get _moveNote {
+    final to = _movingTo;
+    if (to != null) {
+      return "Moving to ${to.host} at the phone's next connection";
+    }
+    final from = Uri.tryParse(device.relayMovedFrom ?? '');
+    if (device.revoked || device.relayMoveSettled || from == null) return null;
+    return 'Just moved from ${from.host}; waiting to hear the phone on the '
+        'new relay';
+  }
+
+  /// Whether "Move to the default relay" applies: a hosted pairing off the
+  /// default, with no move under way. Never the local relay.
+  bool get _canMove {
+    final target = defaultRelay;
+    if (target == null || device.revoked || device.pairedViaLocalRelay) {
+      return false;
+    }
+    if (_moveNote != null) return false;
+    final own = device.hostedRelayUri;
+    return own == null || !sameRelay(own, target);
+  }
+
   /// How much of what this build can grant the device holds — the row says
   /// where a phone stands without opening the dialog.
   static String _grantSummary(CapabilitySet granted) {
@@ -540,11 +597,7 @@ class _DeviceRow extends ConsumerWidget {
                   device.revoked
                       ? 'Revoked'
                       : [
-                          device.pairedViaLocalRelay
-                              ? 'Local relay'
-                              : sshRelay != null
-                              ? 'Relay on ${sshRelay!.hostName}'
-                              : 'Hosted relay',
+                          _relayLabel,
                           if (parked) 'paused — that relay is off',
                           _grantSummary(device.capabilities),
                           _lastSeen(device.lastSeenAt),
@@ -555,6 +608,23 @@ class _DeviceRow extends ConsumerWidget {
                         : scheme.onSurfaceVariant,
                   ),
                 ),
+                if (_moveNote case final note?)
+                  Text(
+                    note,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (_canMove)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => ref
+                          .read(remoteAccessControllerProvider)
+                          .moveRelay(device),
+                      child: const Text('Move to the default relay'),
+                    ),
+                  ),
                 if (_lacksApp)
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
