@@ -149,6 +149,29 @@ void main() {
     });
   });
 
+  // Moved from Terminal to Settings → Server (round 15b): the key and its
+  // stored value are the quit question's, unchanged.
+  group('keep-sessions-running-when-quitting setting', () {
+    test('a stored off reads back off, under the key it always had', () {
+      final stored = Settings.fromJson(const {'quitKeepsHostSessions': false});
+      expect(stored.quitKeepsHostSessions, isFalse);
+      expect(stored.toJson()['quitKeepsHostSessions'], isFalse);
+      expect(Settings.fromJson(const {}).quitKeepsHostSessions, isTrue);
+    });
+
+    test('the Server page\'s setter persists it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(container.dispose);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setQuitKeepsHostSessions(false);
+
+      expect((await _stored(server)).quitKeepsHostSessions, isFalse);
+    });
+  });
+
   group('resume-running-panes setting', () {
     test('is on by default', () {
       // The owner asked for it: "if there were active panes on last close start

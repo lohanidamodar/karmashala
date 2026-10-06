@@ -117,7 +117,7 @@ void main() {
       const size = Size(1280, 560);
       await pump(tester, const SettingsScreen(), size: size);
 
-      await tester.enterText(find.byType(TextField).first, 'session host');
+      await tester.enterText(find.byType(TextField).first, 'osc 133');
       await tester.pumpAndSettle();
 
       // The rail narrows to the page and lists the setting under it.
@@ -125,7 +125,7 @@ void main() {
       expect(find.text('Appearance'), findsNothing);
       final hit = find.widgetWithText(
         SettingsSearchHitRow,
-        'Run local terminals in the session host',
+        'Shell integration',
       );
       expect(hit, findsOneWidget);
 
@@ -139,6 +139,42 @@ void main() {
         isTrue,
         reason: 'the last section of a long page is scrolled to',
       );
+    });
+
+    testWidgets('"session host" and the quit switch land on Server, which is '
+        'the only page drawing the switch', (tester) async {
+      const label = 'Keep sessions running when Karmashala quits';
+      await pump(tester, const SettingsScreen());
+
+      await tester.enterText(find.byType(TextField).first, 'session host');
+      await tester.pumpAndSettle();
+      expect(find.text('Server'), findsOneWidget);
+      expect(find.text('Terminal'), findsNothing);
+
+      await tester.enterText(find.byType(TextField).first, 'keep sessions');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SettingsSearchHitRow, label));
+      await tester.pumpAndSettle();
+      expect(find.text(SettingsAnchor.serverStatus.heading), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(SettingsPageBody),
+          matching: find.text(label),
+        ),
+        findsOneWidget,
+      );
+
+      for (final page in SettingsSectionId.values) {
+        if (page == SettingsSectionId.server) continue;
+        await tester.pumpWidget(const SizedBox());
+        await pump(tester, SettingsScreen(initialSection: page));
+        await expandAgentCards(tester);
+        expect(
+          find.text(label, skipOffstage: false),
+          findsNothing,
+          reason: '${page.label} draws the moved switch',
+        );
+      }
     });
 
     testWidgets('finds an option by its description', (tester) async {

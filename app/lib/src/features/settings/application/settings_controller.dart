@@ -509,6 +509,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setQuitKeepsHostSessions(bool value) {
+    state = state.copyWith(quitKeepsHostSessions: value);
+    _save();
+  }
+
   void setQuitAsks(bool value) {
     state = state.copyWith(quitAsks: value);
     _save();

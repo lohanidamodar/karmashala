@@ -17,6 +17,7 @@ import '../../git/presentation/worktree_setup_page.dart';
 import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/machines_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
+import '../../server/presentation/server_status_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
@@ -185,6 +186,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.buildTooling => const ToolchainsSection(),
   SettingsAnchor.knownHosts => const KnownHostsSection(),
   SettingsAnchor.machines => const MachinesSection(),
+  SettingsAnchor.serverStatus => const ServerStatusSection(),
   SettingsAnchor.remoteAccess => const RemoteAccessSection(),
   SettingsAnchor.storeCredentials => const StoresSettingsSection(),
   SettingsAnchor.debugMode => const DebugModeSection(),

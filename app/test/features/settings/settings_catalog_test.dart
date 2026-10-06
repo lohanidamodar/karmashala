@@ -67,7 +67,7 @@ void main() {
       expect(labels('system tray'), contains('Close to tray'));
       expect(
         labels('crash or a restart'),
-        contains('Run local terminals in the session host'),
+        contains('Server status'),
       );
     });
 

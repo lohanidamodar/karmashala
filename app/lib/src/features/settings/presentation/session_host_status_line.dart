@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
@@ -68,11 +67,6 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
     HostSupervision? supervision,
     Widget check,
   ) {
-    final restart = TextButton(
-      key: const ValueKey('session-host-restart'),
-      onPressed: () => _restart(reading!),
-      child: Text(sessionHostRestartLabel(reading)),
-    );
     Widget row(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: [...children, check]);
     // Supervision gave up, or is between attempts: the person may start it now.
@@ -93,11 +87,7 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
         ),
       ]);
     }
-    // An earlier Karmashala's host, kept for the sessions it runs: ending
-    // them is the person's call, and the button says so.
-    if (reading?.hostOutdated ?? false) return row([restart]);
-    // Offered whenever a host answers: a current one can need a restart too —
-    // a new build installed beside it, or a host gone wrong.
+    // Restart and Stop are the Server page's controls row, which confirms.
     if (reading?.isReady ?? false) {
       return row([
         TextButton(
@@ -105,19 +95,10 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
           onPressed: () => HostSessionsDialog.showLocal(context),
           child: const Text('Sessions'),
         ),
-        // Stop beside Start, Restart and Check (owner, 2026-09-28).
-        TextButton(
-          key: const ValueKey('session-host-stop'),
-          onPressed: () => _stop(reading!),
-          child: const Text('Stop'),
-        ),
-        restart,
       ]);
     }
-    // One that holds the socket and will not answer is the host gone wrong,
-    // and restarting it is the only way past it.
-    if (reading?.hostUnresponsive ?? false) return row([restart]);
-    if (reading?.status == HostDeploymentStatus.unknown) {
+    if (reading?.status == HostDeploymentStatus.unknown &&
+        !reading!.hostUnresponsive) {
       return row([
         TextButton(
           key: const ValueKey('session-host-start'),
@@ -127,58 +108,6 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
       ]);
     }
     return check;
-  }
-
-  /// Stops the host, asking first when it runs sessions: they end with it.
-  Future<void> _stop(HostDeployment reading) async {
-    final held =
-        reading.liveSessionIds ??
-        await ref.read(localHostSessionAccessProvider)?.liveSessionIds();
-    if (!mounted) return;
-    final holdsSome = held == null || held.isNotEmpty;
-    if (holdsSome) {
-      final confirmed = await showConfirmDialog(
-        context,
-        title: 'Stop the session host?',
-        message: held == null
-            ? 'The running host would not say what it holds. Stopping it ends '
-                  'every session it is running, and nothing starts it again '
-                  'until you press Start.'
-            : 'This ends the ${held.length} session(s) it is running, and '
-                  'nothing starts it again until you press Start.',
-        confirmLabel: 'Stop',
-        destructive: true,
-      );
-      if (!confirmed || !mounted) return;
-    }
-    await ref.read(localHostStatusProvider.notifier).stop(force: holdsSome);
-  }
-
-  /// Ends what the old host holds only when the person says so, by name.
-  Future<void> _restart(HostDeployment reading) async {
-    // A host that will not answer the handshake will not list either, so it
-    // is not asked again.
-    final held = reading.hostUnresponsive
-        ? null
-        : reading.liveSessionIds ??
-              await ref.read(localHostSessionAccessProvider)?.liveSessionIds();
-    if (!mounted) return;
-    final holdsSome = held == null || held.isNotEmpty;
-    if (holdsSome) {
-      final confirmed = await showConfirmDialog(
-        context,
-        title: 'Restart the session host?',
-        message: held == null
-            ? 'The running host would not say what it holds. Restarting it '
-                  'ends every session it is running.'
-            : 'This ends the ${held.length} session(s) it is running. Their '
-                  'panes keep what they showed, but the processes stop.',
-        confirmLabel: 'Restart',
-        destructive: true,
-      );
-      if (!confirmed || !mounted) return;
-    }
-    await ref.read(localHostStatusProvider.notifier).restart(force: holdsSome);
   }
 
   IconData _iconFor(HostDeployment? reading, HostSupervision? supervision) =>

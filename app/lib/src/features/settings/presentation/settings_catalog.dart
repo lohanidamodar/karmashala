@@ -139,6 +139,16 @@ enum SettingsSectionId {
         'their tooling.',
     ['environments', 'environment'],
   ),
+  // This machine's server; other machines' stay on Machines beside the rest
+  // of each machine. Was Terminal › Shell integration & session host.
+  server(
+    'Server',
+    AppIcons.stack,
+    SettingsGroup.connections,
+    'This machine\'s Karmashala server: whether it runs, its log, and what '
+        'it keeps on disk.',
+    ['server', 'host', 'session host', 'karmashala host', 'karmashala_host'],
+  ),
   // Was Remote access.
   remote(
     'Remote and pairing',
@@ -363,11 +373,11 @@ enum SettingsAnchor {
     'chords',
     'keys',
   ]),
-  terminalAdvanced(
-    SettingsSectionId.terminal,
-    'Shell integration & session host',
-    ['integration', 'session host'],
-  ),
+  // The enum name is kept so old links resolve; its session host half moved
+  // to Server.
+  terminalAdvanced(SettingsSectionId.terminal, 'Shell integration', [
+    'integration',
+  ]),
   worktreeSetup(SettingsSectionId.projects, 'Worktree setup', [
     'worktree',
     'worktrees',
@@ -586,6 +596,17 @@ enum SettingsAnchor {
   knownHosts(SettingsSectionId.environments, 'Trusted host keys', [
     'known hosts',
     'keys',
+  ]),
+  serverStatus(SettingsSectionId.server, 'Status and controls', [
+    'status',
+    'restart',
+    'stop',
+    'start',
+    'version',
+    'uptime',
+    'data folder',
+    'socket',
+    'session host',
   ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
@@ -893,10 +914,25 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['osc 133', 'exit codes', 'command blocks'],
   ),
   SettingsEntry(
-    'Run local terminals in the session host',
-    anchor: SettingsAnchor.terminalAdvanced,
-    description: 'Shells that survive a crash or a restart of the app.',
-    keywords: ['session host', 'karmashala_host', 'persistent'],
+    'Server status',
+    anchor: SettingsAnchor.serverStatus,
+    description:
+        'Whether this machine\'s server runs. Its shells survive a crash or a '
+        'restart of the app.',
+    keywords: ['session host', 'karmashala_host', 'persistent', 'uptime'],
+  ),
+  SettingsEntry(
+    'Restart or stop the server',
+    anchor: SettingsAnchor.serverStatus,
+    description: 'Each asks first, naming the sessions it ends.',
+    keywords: ['restart', 'stop', 'session host'],
+  ),
+  SettingsEntry(
+    'Keep sessions running when Karmashala quits',
+    anchor: SettingsAnchor.serverStatus,
+    description:
+        'Terminals and agents in the server go on after the app closes.',
+    keywords: ['quit', 'background', 'session host', 'keep running'],
   ),
   SettingsEntry(
     'Worktree setup',
