@@ -5,6 +5,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../features/agents/application/acp_agent_icon_backfill.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
+import '../../features/agents/application/agent_hook_endpoint_healer.dart';
 import '../../features/agents/application/agent_hook_sweep.dart';
 import '../../features/agents/application/host_hook_endpoint.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
@@ -125,7 +126,17 @@ class AppLifecycle {
   SystemIntegrationService? _systemIntegration;
   MemoryCensusLogger? _memoryCensus;
   Future<void>? _hookInstallation;
+  AgentHookEndpointHealer? _hookHealer;
   Future<void>? _shutdown;
+
+  /// What rewrites a local endpoint file deleted while the app runs; null
+  /// before the hooks are installed, in a probe, and after a quit or switch.
+  AgentHookEndpointHealer? get hookEndpointHealer => _hookHealer;
+
+  void _stopHookHealer() {
+    _hookHealer?.stop();
+    _hookHealer = null;
+  }
 
   /// The steps the last [shutdown] cut off at their own cap, in order. *Which*
   /// step was abandoned is worth asserting on; wall-clock milliseconds are not.
@@ -187,6 +198,9 @@ class AppLifecycle {
     }
     // Skipped when the host's start has already swept the same endpoint.
     _hookInstallation = _sweepAgentHooks(afterFirstFrame, true);
+    // Checks nothing until that sweep has installed an endpoint.
+    _hookHealer ??= AgentHookEndpointHealer(_container, logger: _logger)
+      ..start();
   }
 
   /// Starts, or adopts, this machine's session host now rather than on the
@@ -435,6 +449,7 @@ class AppLifecycle {
     _pathRepair = null;
 
     _abandonSkillSweep(container);
+    _stopHookHealer();
     await _bounded(
       'agent hook installation',
       () => hookInstallation ?? Future<void>.value(),
@@ -504,6 +519,7 @@ class AppLifecycle {
     // 0. Give up on any skill sweep still running. Not a step: it sets a flag and
     //    returns, so it needs no slice of the budget and cannot be abandoned.
     if (container != null) _abandonSkillSweep(container);
+    _stopHookHealer();
 
     // 1. A hook rewrite in flight gets a short grace period; it writes another
     //    application's config file, and half of one is worse than none.

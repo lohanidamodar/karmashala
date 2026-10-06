@@ -8,6 +8,8 @@ import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 
+import 'real_home_guard.dart';
+
 /// Marks the hook entries Karmashala owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
 const String agentHookMarker = 'karmashala-agent-hook';
@@ -128,6 +130,7 @@ class AgentHookInstaller {
     required EnvironmentKind environment,
   }) async {
     final spec = descriptor.hooks;
+    refuseRealHomeUnderTest(storeHome);
     if (spec == null) return false;
     if (!endpoint.reaches(environment)) return false;
 
@@ -222,6 +225,7 @@ class AgentHookInstaller {
     required String storeHome,
   }) async {
     final spec = descriptor.hooks;
+    refuseRealHomeUnderTest(storeHome);
     if (spec == null) return false;
 
     var changed = false;
@@ -254,6 +258,7 @@ class AgentHookInstaller {
     required AgentDescriptor descriptor,
     required String storeHome,
   }) async {
+    refuseRealHomeUnderTest(storeHome);
     if (descriptor.hooks == null) return false;
     var removed = false;
     final file = _endpointFile(descriptor, storeHome);
@@ -378,14 +383,65 @@ class AgentHookInstaller {
       return false;
     }
 
-    switch (transport) {
-      case AgentHookHttpTransport():
+    final contents = _endpointContents(descriptor, endpoint, environment);
+    if (contents == null) return false;
+    if (transport is AgentHookSpoolTransport) {
+      // Made **before** the endpoint file that names it: the script exits
+      // zero on a directory that is not there.
+      final spool = spoolDirectoryFor(descriptor, storeHome);
+      if (spool == null) return false;
+      try {
+        if (!await spool.exists()) await spool.create(recursive: true);
+      } on FileSystemException {
+        return false;
+      }
+    }
+    return _writeIfChanged(
+      endpointFile,
+      storeHome,
+      contents,
+      // The spool form carries no credential, so there is nothing to close.
+      harden: transport is AgentHookHttpTransport
+          ? (staged) => _harden(staged, environment)
+          : null,
+    );
+  }
+
+  /// Whether [storeHome]'s endpoint file holds exactly what [install] writes
+  /// for [endpoint]: false once it is deleted, edited or names another launch.
+  Future<bool> endpointIsCurrent({
+    required AgentDescriptor descriptor,
+    required String storeHome,
+    required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
+  }) async {
+    final file = _endpointFile(descriptor, storeHome);
+    final contents = _endpointContents(descriptor, endpoint, environment);
+    if (file == null || contents == null) return false;
+    try {
+      return await file.readAsString() == contents;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  /// The endpoint file [install] writes, or null where [endpoint] has no
+  /// transport into [environment].
+  String? _endpointContents(
+    AgentDescriptor descriptor,
+    AgentHookEndpoint endpoint,
+    EnvironmentKind environment,
+  ) {
+    switch (endpoint.transportFor(environment)) {
+      case null:
+        return null;
+      case AgentHookHttpTransport(:final token):
         final uri = endpoint.uriFor(
           agentId: descriptor.id,
           event: '',
           environment: environment,
         );
-        if (uri == null) return false;
+        if (uri == null) return null;
         // Built by hand rather than with `Uri.replace`, which would escape the
         // `$event` / `%~1` standing in for the event.
         final base =
@@ -393,36 +449,15 @@ class AgentHookInstaller {
             '?agent=${Uri.encodeQueryComponent(descriptor.id)}'
             '&marker=${Uri.encodeQueryComponent(agentHookMarker)}'
             '&event=';
-        return _writeIfChanged(
-          endpointFile,
-          storeHome,
-          _httpEndpointFileContents(
-            base: base,
-            token: transport.token,
-            newline: environment == EnvironmentKind.windowsNative
-                ? '\r\n'
-                : '\n',
-          ),
-          harden: (staged) => _harden(staged, environment),
+        return _httpEndpointFileContents(
+          base: base,
+          token: token,
+          newline: environment == EnvironmentKind.windowsNative ? '\r\n' : '\n',
         );
       case AgentHookSpoolTransport():
-        // Made **before** the endpoint file that names it: the script exits
-        // zero on a directory that is not there.
-        final spool = spoolDirectoryFor(descriptor, storeHome);
-        if (spool == null) return false;
-        try {
-          if (!await spool.exists()) await spool.create(recursive: true);
-        } on FileSystemException {
-          return false;
-        }
-        // No `harden`: there is no credential in this file.
-        return _writeIfChanged(
-          endpointFile,
-          storeHome,
-          _spoolEndpointFileContents(
-            agentId: descriptor.id,
-            spool: _spoolDirectoryName,
-          ),
+        return _spoolEndpointFileContents(
+          agentId: descriptor.id,
+          spool: _spoolDirectoryName,
         );
     }
   }

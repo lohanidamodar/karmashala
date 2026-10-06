@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala_terminal_runtime/persistence.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
+import 'package:karmashala/src/core/probe/probe_mode.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -547,6 +548,48 @@ void main() {
       expect(sweeps, [1]);
     });
 
+    ProviderContainer hooked({bool probe = false}) => ProviderContainer(
+      overrides: [
+        agentHooksAtHostProvider.overrideWithValue(true),
+        localHostSessionAccessProvider.overrideWithValue(null),
+        agentHookInstallationServiceProvider.overrideWith(
+          (ref) => _RecordingHookService(ref, <int>[]),
+        ),
+        if (probe) probeModeProvider.overrideWithValue(ProbeMode.on),
+      ],
+    );
+
+    test('installing them starts the endpoint healer; a quit stops it', () async {
+      final lifecycle = AppLifecycle(hooked());
+      lifecycle.installAgentHooks();
+      final healer = lifecycle.hookEndpointHealer;
+      expect(healer?.isRunning, isTrue);
+
+      await lifecycle.shutdown();
+
+      expect(healer!.isRunning, isFalse);
+    });
+
+    test('leaving the session stops the healer too', () async {
+      final scoped = hooked();
+      addTearDown(scoped.dispose);
+      final lifecycle = AppLifecycle(scoped);
+      lifecycle.installAgentHooks();
+      final healer = lifecycle.hookEndpointHealer!;
+
+      await lifecycle.leaveSession();
+
+      expect(healer.isRunning, isFalse);
+      expect(lifecycle.hookEndpointHealer, isNull);
+    });
+
+    test('a probe starts no healer: the stores are the real app\'s', () {
+      final scoped = hooked(probe: true);
+      addTearDown(scoped.dispose);
+      final lifecycle = AppLifecycle(scoped);
+      lifecycle.installAgentHooks();
+      expect(lifecycle.hookEndpointHealer, isNull);
+    });
   });
 }
 

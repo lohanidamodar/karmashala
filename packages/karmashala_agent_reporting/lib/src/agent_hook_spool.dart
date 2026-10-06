@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'real_home_guard.dart';
+
 /// One hook payload a spooling agent wrote. [firedAt] is the file's own mtime,
 /// so one written before an unclean exit is drained carrying its real age.
 class AgentHookSpoolEvent {
@@ -42,6 +44,7 @@ class AgentHookSpool {
     Directory directory, {
     int limit = 64,
   }) async {
+    refuseRealHomeUnderTest(directory.path);
     final List<FileSystemEntity> entries;
     try {
       if (!await directory.exists()) return const [];
