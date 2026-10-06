@@ -444,6 +444,81 @@ void main() {
       expect(status.cycles, 0);
       await status.close();
     });
+
+    // Codex 0.160 with no hook delivered: its screen says working while the
+    // status line is drawn, and nothing once the turn ends.
+    test('a reading that knows nothing falls back to the transcript', () async {
+      final keeper = HostedStatusKeeper(agents: AgentRegistry.builtIn)
+        ..track('row-1', agentId: AgentIds.codex, conversationId: 'conv-1');
+      watched.add(
+        const WatchedSession(
+          key: AgentSessionKey(AgentIds.codex, 'conv-1'),
+          label: 'Hosted',
+          openId: 'row-1',
+          imported: false,
+          stateFilePath: 'store/conv-1.jsonl',
+        ),
+      );
+      final status = ServerSessionStatus(
+        statusService: service,
+        agents: AgentRegistry.builtIn,
+        loadSessions: () => watched,
+        clock: clock,
+        stateFileSource: source,
+        heldByHost: (session) => session.openId == 'row-1',
+        hostStatusFor: (session) => keeper.statusOf(session.openId),
+      );
+
+      keeper.screen('row-1', const [
+        '› Fix the build',
+        '',
+        '• Working (6s • esc to interrupt)',
+        '',
+        '› Ask Codex to do anything',
+        '',
+        '  model medium · ~/project',
+        '                                     ⚠ 6 warnings · f2 to view',
+      ]);
+      source.records['store/conv-1.jsonl'] = {
+        'type': 'response_item',
+        'payload': {'type': 'custom_tool_call'},
+      };
+      await status.cycle();
+      expect(
+        status.reportForOpenId('row-1')?.status,
+        AgentActivityStatus.working,
+      );
+
+      keeper.screen('row-1', const [
+        '› Fix the build',
+        '',
+        '  Worked for 12s • 6:38 AM',
+        '',
+        '› Ask Codex to do anything',
+        '',
+        '  model medium · ~/project',
+        '  ? for shortcuts                    ⚠ 6 warnings · f2 to view',
+      ]);
+      expect(
+        keeper.statusOf('row-1')?.report.status,
+        AgentActivityStatus.unknown,
+        reason: 'the idle screen alone says nothing',
+      );
+      source.records['store/conv-1.jsonl'] = {
+        'type': 'event_msg',
+        'payload': {'type': 'task_complete'},
+      };
+      source.modified['store/conv-1.jsonl'] = _start.add(
+        const Duration(seconds: 12),
+      );
+      clock.now = _start.add(const Duration(seconds: 13));
+      await status.cycle();
+      expect(
+        status.reportForOpenId('row-1')?.status,
+        AgentActivityStatus.idle,
+      );
+      await status.close();
+    });
   });
 
   group('a hook does not wait for a cycle', () {

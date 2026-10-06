@@ -428,15 +428,29 @@ class ServerSessionStatus {
   }
 
   /// A session the server runs: its own reading, keyed as this registry keys
-  /// the session.
+  /// the session — or its transcript while that reading knows nothing.
   void _observeHosted(_Tracked tracked, DateTime now) {
     final key = tracked.session.key;
+    tracked.hook = null;
+    final said = hostStatusFor?.call(tracked.session)?.report;
+    // With no hook delivered, an agent whose screen has no idle marker (Codex)
+    // reads `unknown` once its turn ends; its transcript still says so.
+    if ((said == null || said.status == AgentActivityStatus.unknown) &&
+        agents.byId(key.agentId)?.stateFile != null) {
+      tracked
+        ..query = AgentStatusQuery(
+          agentId: key.agentId,
+          sessionId: key.sessionId,
+          stateFilePath: tracked.statePath,
+        )
+        ..wantsProbe = true;
+      _recompose(tracked, now);
+      return;
+    }
     tracked
       ..query = null
-      ..hook = null
       ..snapshot = null
       ..wantsProbe = false;
-    final said = hostStatusFor?.call(tracked.session)?.report;
     _publish(
       tracked,
       AgentStatusReport(
