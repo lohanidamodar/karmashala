@@ -57,23 +57,31 @@ void main() {
 
     Future<Run> timed(String name) async {
       final clock = Stopwatch()..start();
-      final shown = <String>{};
-      Duration? firstApp;
-      late final ServerStoreDesk desk;
-      void see(Iterable<String> keys) {
-        shown.addAll(keys);
-        if (shown.isNotEmpty) firstApp ??= clock.elapsed;
+      final start = DateTime.now().toUtc();
+      final fresh = <String>{};
+      Duration? firstFresh;
+      Duration? allButSlow;
+      final total = appleApps.length + playApps.length;
+      // Only what this run read: a kept snapshot's numbers are not news.
+      void see(Iterable<StoreAppSnapshot> apps) {
+        for (final app in apps) {
+          if (app.releases.checkedAt.isBefore(start)) continue;
+          fresh.add(app.app.key);
+        }
+        if (fresh.isNotEmpty) firstFresh ??= clock.elapsed;
+        if (fresh.length >= total - 1) allButSlow ??= clock.elapsed;
       }
 
+      late final ServerStoreDesk desk;
       desk = ServerStoreDesk(
         dataDirectory: tmp.path,
         tell: (changes) {
           for (final change in changes) {
             switch (change) {
               case StoresChanged(:final view):
-                see(view.apps.map((app) => app.app.key));
+                see(view.apps);
               default:
-                see(appKeysTold(change));
+                see(snapshotsTold(change));
             }
           }
         },
@@ -83,12 +91,20 @@ void main() {
             LatentStoreClient(StoreKind.googlePlay, playApps, scale: scale),
       );
       // What a client opening the tab is answered at once.
-      see(desk.view.apps.map((app) => app.app.key));
+      final held = desk.view.apps.length;
       final opened = clock.elapsed;
       await desk.refresh();
       final loaded = clock.elapsed;
       desk.close();
-      return Run(name, opened, firstApp, loaded, desk.view.apps.length);
+      return Run(
+        name,
+        opened: opened,
+        held: held,
+        firstFresh: firstFresh,
+        allButSlow: allButSlow,
+        loaded: loaded,
+        apps: desk.view.apps.length,
+      );
     }
 
     final cold = await timed('cold (nothing kept)');
@@ -125,16 +141,27 @@ final playApps = [
     ),
 ];
 
-/// The app keys a change other than [StoresChanged] makes visible; none
-/// before the desk tells apps one at a time.
-Iterable<String> appKeysTold(DataChange change) => const [];
+/// The snapshots a change other than [StoresChanged] carries.
+Iterable<StoreAppSnapshot> snapshotsTold(DataChange change) => [
+  if (change case StoreAppChanged(:final snapshot?)) snapshot,
+];
 
 class Run {
-  Run(this.name, this.opened, this.firstApp, this.loaded, this.apps);
+  Run(
+    this.name, {
+    required this.opened,
+    required this.held,
+    required this.firstFresh,
+    required this.allButSlow,
+    required this.loaded,
+    required this.apps,
+  });
 
   final String name;
   final Duration opened;
-  final Duration? firstApp;
+  final int held;
+  final Duration? firstFresh;
+  final Duration? allButSlow;
   final Duration loaded;
   final int apps;
 
@@ -143,8 +170,9 @@ class Run {
 
   @override
   String toString() =>
-      '$name: view answered ${_ms(opened)}, first app shown '
-      '${_ms(firstApp)}, fully loaded ${_ms(loaded)}, $apps apps';
+      '$name: view answered ${_ms(opened)} with $held apps; first fresh app '
+      '${_ms(firstFresh)}; all but the slow one ${_ms(allButSlow)}; '
+      'fully loaded ${_ms(loaded)}; $apps apps';
 }
 
 /// A store whose calls take as long as the real client's requests add up to

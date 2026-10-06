@@ -404,7 +404,215 @@ void main() {
       DataRefusalCode.unavailable,
     );
   });
+
+  group('one app at a time', () {
+    /// What a client holds after every change told so far, folded as the
+    /// app's data client folds them.
+    StoresView seen() {
+      var view = const StoresView();
+      for (final change in told) {
+        switch (change) {
+          case StoresChanged(view: final next):
+            view = next;
+          case final StoreAppChanged change:
+            view = view.withApp(change);
+          default:
+        }
+      }
+      return view;
+    }
+
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    test('each app is told as it is read, not when the slowest is', () async {
+      await connectApple();
+      final slow = appleFake.appGates['2'] = Completer<void>();
+      told.clear();
+      final refresh = desk.refresh();
+      for (var i = 0; i < 5; i++) {
+        await settle();
+      }
+      final midway = seen();
+      expect(midway.refreshing, isTrue);
+      expect(midway.apps.map((a) => a.app.key), contains('appStore:1'));
+      expect(midway.reads.containsKey('appStore:1'), isFalse);
+      expect(midway.reads['appStore:2']!.phase, StoreAppReadPhase.reading);
+      slow.complete();
+      await refresh;
+      final after = seen();
+      expect(after.refreshing, isFalse);
+      expect(after.reads, isEmpty);
+      expect(after.apps, hasLength(2));
+    });
+
+    test('apps past the concurrency wait queued', () async {
+      appleFake.apps = [for (var i = 1; i <= 6; i++) appleApp('$i')];
+      for (var i = 1; i <= 6; i++) {
+        appleFake.appGates['$i'] = Completer<void>();
+      }
+      await connectAppleWithoutWaiting(ask);
+      for (var i = 0; i < 5; i++) {
+        await settle();
+      }
+      final phases = seen().reads.values.map((read) => read.phase).toList();
+      expect(
+        phases.where((phase) => phase == StoreAppReadPhase.reading),
+        hasLength(ServerStoreDesk.concurrency),
+      );
+      expect(
+        phases.where((phase) => phase == StoreAppReadPhase.queued),
+        hasLength(6 - ServerStoreDesk.concurrency),
+      );
+      for (final gate in appleFake.appGates.values) {
+        gate.complete();
+      }
+      await desk.refresh();
+      expect(seen().reads, isEmpty);
+    });
+
+    test('a store\'s apps are read while the other still lists', () async {
+      await connectApple();
+      await connectPlay();
+      final listing = appleFake.gate = Completer<void>();
+      told.clear();
+      final refresh = desk.refresh();
+      for (var i = 0; i < 5; i++) {
+        await settle();
+      }
+      expect(
+        told.whereType<StoreAppChanged>().where(
+          (change) =>
+              change.app.store == StoreKind.googlePlay &&
+              change.snapshot != null,
+        ),
+        isNotEmpty,
+      );
+      listing.complete();
+      await refresh;
+    });
+
+    test(
+      'an app whose every reading fails is failed, and keeps what it had',
+      () async {
+        await connectApple();
+        now = now.add(const Duration(hours: 1));
+        appleFake.appFailures['2'] = const StoreException(
+          StoreFailure.network,
+          'The store could not be reached.',
+        );
+        final view = await desk.refresh();
+        final failed = view.reads['appStore:2']!;
+        expect(failed.phase, StoreAppReadPhase.failed);
+        expect(failed.message, 'The store could not be reached.');
+        expect(failed.at, now);
+        expect(view.reads.containsKey('appStore:1'), isFalse);
+        // The numbers read an hour ago stay on show beside the failure.
+        final kept = view.apps.singleWhere((a) => a.app.key == 'appStore:2');
+        expect(kept.rating.valueOrNull, isNotNull);
+        expect(kept.releases.checkedAt, now.subtract(const Duration(hours: 1)));
+        expect(seen().reads['appStore:2']!.phase, StoreAppReadPhase.failed);
+      },
+    );
+
+    test(
+      'stores.refresh.app reads that app alone and clears its failure',
+      () async {
+        await connectApple();
+        appleFake.appFailures['2'] = const StoreException(
+          StoreFailure.server,
+          'The store answered with an error.',
+        );
+        await desk.refresh();
+        expect(desk.view.reads['appStore:2']!.phase, StoreAppReadPhase.failed);
+        appleFake.appFailures.clear();
+        appleFake.releasesAsked.clear();
+        now = now.add(const Duration(minutes: 1));
+        final view = await ask(
+          const StoresRefreshApp(store: StoreKind.appStore, id: '2'),
+        );
+        expect(appleFake.releasesAsked, ['2']);
+        expect(view.reads, isEmpty);
+        expect(
+          view.apps
+              .singleWhere((a) => a.app.key == 'appStore:2')
+              .releases
+              .checkedAt,
+          now,
+        );
+        expect(seen().reads, isEmpty);
+        expect(
+          (await refusal(
+            const StoresRefreshApp(store: StoreKind.appStore, id: 'nine'),
+          )).code,
+          DataRefusalCode.invalid,
+        );
+      },
+    );
+
+    test('with maxAge, an app read since is not read again', () async {
+      await connectApple();
+      now = now.add(const Duration(hours: 2));
+      await ask(const StoresRefreshApp(store: StoreKind.appStore, id: '1'));
+      appleFake.releasesAsked.clear();
+      now = now.add(const Duration(minutes: 5));
+      await ask(const StoresRefresh(maxAgeSeconds: 3600));
+      expect(appleFake.releasesAsked, ['2']);
+      // Asked by hand, every app is read.
+      appleFake.releasesAsked.clear();
+      await ask(const StoresRefresh());
+      expect(appleFake.releasesAsked.toSet(), {'1', '2'});
+    });
+
+    test('an app\'s icon does not hold its numbers back', () async {
+      final play = FakePlayClient([playApp('one')]);
+      playFake = play;
+      final page = play.listingGate = Completer<void>();
+      await ask(
+        const StorePlaySet(
+          serviceAccountJson: playJson,
+          reportsBucket: 'pubsite_prod_1',
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await settle();
+      }
+      expect(
+        seen().apps.map((a) => a.app.key),
+        contains('googlePlay:com.example.one'),
+      );
+      page.complete();
+      await desk.refresh();
+      expect(seen().icons, contains('googlePlay:com.example.one'));
+    });
+
+    test('the kept snapshot holds no read states', () async {
+      await connectApple();
+      appleFake.appFailures['1'] = const StoreException(
+        StoreFailure.network,
+        'Unreachable.',
+      );
+      await desk.refresh();
+      expect(desk.view.reads, isNotEmpty);
+      expect(
+        ((jsonDecode(snapshotFile().readAsStringSync()) as Map)['view'] as Map)
+            .containsKey('reads'),
+        isFalse,
+      );
+    });
+  });
 }
+
+/// Sets the App Store key and leaves the read it starts running.
+Future<void> connectAppleWithoutWaiting(
+  Future<R> Function<R>(DataRequest<R> request) ask,
+) => ask(
+  const StoreAppleSet(
+    keyId: 'KEY123',
+    issuerId: 'issuer-1',
+    privateKeyPem:
+        '-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----',
+  ),
+);
 
 /// A store that answers from memory.
 class FakeStoreClient implements StoreClient {
@@ -419,6 +627,19 @@ class FakeStoreClient implements StoreClient {
   int listCalls = 0;
   bool closed = false;
 
+  /// By app id: its releases wait for the gate, and every reading the store
+  /// would count as a fault throws the failure.
+  final appGates = <String, Completer<void>>{};
+  final appFailures = <String, StoreException>{};
+
+  /// The ids whose releases were asked for, in order.
+  final releasesAsked = <String>[];
+
+  void _failIfAsked(StoreApp app) {
+    final failure = appFailures[app.id];
+    if (failure != null) throw failure;
+  }
+
   @override
   Future<List<StoreApp>> listApps() async {
     listCalls++;
@@ -430,21 +651,31 @@ class FakeStoreClient implements StoreClient {
   }
 
   @override
-  Future<List<StoreRelease>> releases(StoreApp app) async => [
-    const StoreRelease(
-      track: 'production',
-      version: '1.0.0',
-      state: ReleaseState.live,
-      rawState: 'LIVE',
-    ),
-  ];
+  Future<List<StoreRelease>> releases(StoreApp app) async {
+    releasesAsked.add(app.id);
+    if (appGates[app.id] case final gate?) await gate.future;
+    _failIfAsked(app);
+    return [
+      const StoreRelease(
+        track: 'production',
+        version: '1.0.0',
+        state: ReleaseState.live,
+        rawState: 'LIVE',
+      ),
+    ];
+  }
 
   @override
-  Future<List<StoreReview>> reviews(StoreApp app) async => const [];
+  Future<List<StoreReview>> reviews(StoreApp app) async {
+    _failIfAsked(app);
+    return const [];
+  }
 
   @override
-  Future<RatingSummary> rating(StoreApp app) async =>
-      const RatingSummary(average: 4.5, count: 10);
+  Future<RatingSummary> rating(StoreApp app) async {
+    _failIfAsked(app);
+    return const RatingSummary(average: 4.5, count: 10);
+  }
 
   @override
   Future<VitalsSummary> vitals(StoreApp app) =>
@@ -471,6 +702,7 @@ class FakePlayClient extends FakeStoreClient
   String? band;
   bool public = true;
   int listingCalls = 0;
+  Completer<void>? listingGate;
 
   @override
   Future<InstallTotal> allTimeInstalls(StoreApp app) async {
@@ -487,6 +719,7 @@ class FakePlayClient extends FakeStoreClient
   @override
   Future<StoreListing?> listing(StoreApp app) async {
     listingCalls++;
+    if (listingGate case final gate?) await gate.future;
     return public ? StoreListing(installBand: band) : null;
   }
 }

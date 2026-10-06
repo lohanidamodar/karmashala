@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -108,8 +109,14 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   /// Kept across refreshes: the Apple client caches sales reports.
   StoreConsole? _console;
 
-  /// Consoles replaced while a refresh was using them; closed when it ends.
+  /// Consoles replaced while a read was using them; closed when the last
+  /// read ends.
   final _retired = <StoreConsole>[];
+  int _consoleUsers = 0;
+
+  /// By [StoreApp.key]: each app's place in a read under way, or why its
+  /// last read failed. Not kept with the snapshot.
+  final _reads = <String, StoreAppRead>{};
 
   Future<void> _snapshotWrites = Future<void>.value();
   bool _closed = false;
@@ -159,6 +166,10 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       links: List.unmodifiable(_links),
       refreshedAt: _refreshedAt,
       refreshing: _running != null,
+      reads: {
+        for (final MapEntry(:key, :value) in _reads.entries)
+          if (connected.contains(_storeOfKey(key))) key: value,
+      },
     );
   }
 
@@ -181,13 +192,21 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     if (_connected.isEmpty || _closed) return Future.value(view);
     final done = Completer<StoresView>();
     _running = done.future;
-    // In a guarded zone: Dart's HttpClient raises some failures with no
-    // request to fail — Google answering on an idle pooled connection
-    // ("unsolicited response without request", seen 2026-10-01) — as
-    // uncaught errors, and an uncaught error ends the server. Here one is
-    // logged and the refresh's own calls fail or finish as they would.
+    _guarded(
+      () => _run(maxAge),
+    ).then(done.complete, onError: done.completeError);
+    return done.future;
+  }
+
+  /// Runs [work] in a guarded zone: Dart's HttpClient raises some failures
+  /// with no request to fail — Google answering on an idle pooled connection
+  /// ("unsolicited response without request", seen 2026-10-01) — as uncaught
+  /// errors, and an uncaught error ends the server. Here one is logged and
+  /// the work's own calls fail or finish as they would.
+  Future<T> _guarded<T>(Future<T> Function() work) {
+    final done = Completer<T>();
     runZonedGuarded(
-      () => _run().then(done.complete, onError: done.completeError),
+      () => work().then(done.complete, onError: done.completeError),
       (error, _) => _log(
         'stores: set aside a stray network error (${error.runtimeType})',
       ),
@@ -203,6 +222,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     StoresRefresh(:final maxAgeSeconds) => await refresh(
       maxAge: maxAgeSeconds == null ? null : Duration(seconds: maxAgeSeconds),
     ),
+    final StoresRefreshApp r => await _readOne(r),
     final StoreAppleSet r => await _setApple(r),
     final StorePlaySet r => await _setPlay(r),
     StoreCredentialRemove(:final store) => await _remove(store),
@@ -221,86 +241,210 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _retired.clear();
   }
 
-  Future<StoresView> _run() async {
+  /// Reads each store's apps as that store lists them — one store's apps do
+  /// not wait for the other's list — [concurrency] at a time, telling each
+  /// app as it moves. With [maxAge], an app read since is left as it is.
+  Future<StoresView> _run(Duration? maxAge) async {
     _tell([StoresChanged(view)]);
     // What a store said with a key since replaced is not written back.
     final started = {for (final store in StoreKind.values) store: _gen(store)};
     bool current(StoreKind store) => _gen(store) == started[store];
+    final console = _takeConsole();
+    final mine = <String>{};
     try {
-      final console = _consoleNow();
-      final listed = await console.listApps();
-      final answered = {
-        for (final reading in listed)
-          if (reading.apps is ReadingValue) reading.store,
-      };
-      final apps = [for (final reading in listed) ...?reading.apps.valueOrNull];
-      for (final reading in listed) {
-        if (current(reading.store)) _stores[reading.store] = reading.apps;
-      }
-      // An app a store no longer lists goes; one from a store that did not
-      // answer stays as last read.
-      _apps.removeWhere(
-        (_, kept) =>
-            current(kept.app.store) &&
-            answered.contains(kept.app.store) &&
-            !apps.contains(kept.app),
-      );
-      final listedKeys = {for (final app in apps) app.key};
-      _icons.removeWhere((key, _) {
-        final store = _storeOfKey(key);
-        return store != null &&
-            current(store) &&
-            answered.contains(store) &&
-            !listedKeys.contains(key);
-      });
-
+      final queue = Queue<StoreApp>();
+      var listing = console.clients.length;
+      var arrived = Completer<void>();
+      var answered = 0;
       var done = 0;
-      final queue = apps.iterator;
+      var total = 0;
+
+      void listed(StoreAppsReading reading) {
+        final store = reading.store;
+        if (current(store)) {
+          _stores[store] = reading.apps;
+          // A store that did not answer leaves its apps as last read.
+          if (reading.apps case ReadingValue(value: final apps)) {
+            answered++;
+            _dropUnlisted(store, apps);
+            for (final app in apps) {
+              if (!_due(app, maxAge)) continue;
+              _reads[app.key] = const StoreAppRead.queued();
+              mine.add(app.key);
+              queue.add(app);
+              total++;
+            }
+          }
+          _tell([StoresChanged(view)]);
+        }
+      }
+
+      for (final reading in console.listEach()) {
+        unawaited(
+          reading.then(listed).whenComplete(() {
+            listing--;
+            final wake = arrived;
+            arrived = Completer<void>();
+            wake.complete();
+          }),
+        );
+      }
+
       Future<void> worker() async {
-        while (queue.moveNext()) {
-          final app = queue.current;
-          StoreAppSnapshot? snapshot;
-          try {
-            snapshot = await console.snapshot(app);
-          } on Object {
-            // A console closed under it: the app keeps what it had.
+        while (true) {
+          if (queue.isNotEmpty) {
+            await _readApp(console, queue.removeFirst(), current);
+            done++;
+            _tell([StoresProgress(done: done, total: total)]);
+          } else if (listing == 0) {
+            return;
+          } else {
+            await arrived.future;
           }
-          // In the same guarded zone and the same console as the snapshot,
-          // so it is closed with them; bounded by the workers and a budget.
-          if (current(app.store) && _iconDue(app)) {
-            await _refreshIcon(console, app, current);
-          }
-          if (snapshot != null && current(app.store)) {
-            _apps[app.key] = _withListingInstalls(
-              snapshot.carriedFrom(_apps[app.key]),
-            );
-          }
-          done++;
-          _tell([StoresProgress(done: done, total: apps.length)]);
         }
       }
 
       await Future.wait([for (var i = 0; i < concurrency; i++) worker()]);
-      if (answered.isNotEmpty) _refreshedAt = _now();
+      if (answered > 0) _refreshedAt = _now();
       _log(
-        'stores: read ${apps.length} app(s); '
-        '${answered.length} of ${listed.length} store(s) answered',
+        'stores: read $done app(s); '
+        '$answered of ${console.clients.length} store(s) answered',
       );
     } on Object catch (error) {
       _log('stores: the refresh stopped (${error.runtimeType})');
     } finally {
       _running = null;
-      for (final console in _retired) {
-        console.close();
-      }
-      _retired.clear();
-      // Closed after every refresh, so no idle connection to a store is left
-      // open for minutes for a late answer to land on; the next refresh
-      // builds a new console with the credentials held then.
-      _dropConsole();
+      _reads.removeWhere(
+        (key, read) =>
+            mine.contains(key) && read.phase != StoreAppReadPhase.failed,
+      );
+      _releaseConsole();
       _dropDisconnected();
       await _persist();
       _tell([StoresChanged(view)]);
+    }
+    return view;
+  }
+
+  /// Whether [app] is to be read in a refresh asked with [maxAge]: always
+  /// without one; with one, when never read, read longer ago, or failed.
+  bool _due(StoreApp app, Duration? maxAge) {
+    if (maxAge == null) return true;
+    if (_reads[app.key]?.phase == StoreAppReadPhase.failed) return true;
+    final at = _apps[app.key]?.releases.checkedAt;
+    return at == null || _now().difference(at) >= maxAge;
+  }
+
+  /// Forgets what [store] held of apps it no longer lists.
+  void _dropUnlisted(StoreKind store, List<StoreApp> apps) {
+    final keys = {for (final app in apps) app.key};
+    bool gone(String key) => _storeOfKey(key) == store && !keys.contains(key);
+    _apps.removeWhere((key, _) => gone(key));
+    _icons.removeWhere((key, _) => gone(key));
+    _reads.removeWhere((key, _) => gone(key));
+  }
+
+  /// Reads [app], and its icon beside it, telling each as it lands. Never
+  /// throws. A read that gave nothing at all keeps the app's last numbers
+  /// and marks it failed.
+  Future<void> _readApp(
+    StoreConsole console,
+    StoreApp app,
+    bool Function(StoreKind store) current,
+  ) async {
+    final key = app.key;
+    if (!current(app.store)) return;
+    _reads[key] = const StoreAppRead.reading();
+    _tell([StoreAppChanged(app: app, read: _reads[key])]);
+    // In the same guarded zone and console as the snapshot, so it is closed
+    // with them; bounded by [iconBudget].
+    final icon = _iconDue(app)
+        ? _refreshIcon(console, app, current).then((_) => true)
+        : Future.value(false);
+    StoreAppSnapshot? snapshot;
+    String? failure;
+    try {
+      snapshot = await console.snapshot(app);
+      failure = _failureOf(snapshot);
+    } on Object catch (error) {
+      failure =
+          'The read stopped before the store answered (${error.runtimeType}).';
+    }
+    if (current(app.store)) {
+      final held = _apps[key];
+      if (snapshot != null && (failure == null || held == null)) {
+        _apps[key] = _withListingInstalls(snapshot.carriedFrom(held));
+      }
+      if (failure == null) {
+        _reads.remove(key);
+      } else {
+        _reads[key] = StoreAppRead.failed(failure, _now());
+      }
+      _tell([
+        StoreAppChanged(app: app, read: _reads[key], snapshot: _apps[key]),
+      ]);
+    }
+    if (await icon && current(app.store)) {
+      // The listing's install band may stand in for the reports' count.
+      if (_apps[key] case final kept?) _apps[key] = _withListingInstalls(kept);
+      _tell([
+        StoreAppChanged(
+          app: app,
+          read: _reads[key],
+          snapshot: _apps[key],
+          icon: _icons[key],
+        ),
+      ]);
+    }
+  }
+
+  /// Why [snapshot] holds nothing at all, or null when anything was read or
+  /// every gap is the setup's rather than a fault.
+  static String? _failureOf(StoreAppSnapshot snapshot) {
+    final readings = <Reading<Object?>>[
+      snapshot.releases,
+      snapshot.reviews,
+      snapshot.rating,
+      snapshot.vitals,
+      snapshot.downloads,
+      ?snapshot.errorIssues,
+      ?snapshot.allTimeInstalls,
+    ];
+    if (readings.any((reading) => reading is ReadingValue)) return null;
+    for (final reading in readings) {
+      if (reading case ReadingMissing(expected: false, :final message)) {
+        return message;
+      }
+    }
+    return null;
+  }
+
+  /// Reads one app again now, beside a refresh under way unless that refresh
+  /// is about to read it anyway.
+  Future<StoresView> _readOne(StoresRefreshApp request) async {
+    final app =
+        _held(request.store, request.id.trim()) ??
+        (throw DataRefused.invalid(
+          'no ${request.store.label} app "${request.id}" is among the apps '
+          'read',
+        ));
+    final running = _running;
+    final read = _reads[app.key];
+    if (running != null &&
+        read != null &&
+        read.phase != StoreAppReadPhase.failed) {
+      await running;
+      return view;
+    }
+    if (_closed) return view;
+    final generation = _gen(app.store);
+    bool current(StoreKind store) => _gen(store) == generation;
+    final console = _takeConsole();
+    try {
+      await _guarded(() => _readApp(console, app, current));
+    } finally {
+      _releaseConsole();
+      await _persist();
     }
     return view;
   }
@@ -473,12 +617,32 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     ], now: _now);
   }
 
-  /// Built again on the next refresh, with the credentials held then.
+  /// The console, held for a refresh or one app's read until
+  /// [_releaseConsole].
+  StoreConsole _takeConsole() {
+    _consoleUsers++;
+    return _consoleNow();
+  }
+
+  /// Closed once nothing reads with it, so no idle connection to a store is
+  /// left open for minutes for a late answer to land on; the next read
+  /// builds a new one with the credentials held then.
+  void _releaseConsole() {
+    _consoleUsers--;
+    if (_consoleUsers > 0) return;
+    for (final console in _retired) {
+      console.close();
+    }
+    _retired.clear();
+    _dropConsole();
+  }
+
+  /// Built again on the next read, with the credentials held then.
   void _dropConsole() {
     final old = _console;
     _console = null;
     if (old == null) return;
-    if (_running != null) {
+    if (_consoleUsers > 0) {
       _retired.add(old);
     } else {
       old.close();
@@ -546,6 +710,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       _forgetReports(store);
       _stores.remove(store);
       _apps.removeWhere((_, kept) => kept.app.store == store);
+      _reads.removeWhere((key, _) => _storeOfKey(key) == store);
       await _forgetIcons((kept) => kept == store);
       await _persist();
     }
@@ -584,6 +749,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _forgetReports(store);
     _stores.remove(store);
     _apps.removeWhere((_, kept) => kept.app.store == store);
+    _reads.removeWhere((key, _) => _storeOfKey(key) == store);
     await _forgetIcons((kept) => kept == store);
     _dropConsole();
     await _persist();
@@ -598,6 +764,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _stores.removeWhere((store, _) => !connected.contains(store));
     _apps.removeWhere((_, kept) => !connected.contains(kept.app.store));
     _icons.removeWhere((key, _) => !connected.contains(_storeOfKey(key)));
+    _reads.removeWhere((key, _) => !connected.contains(_storeOfKey(key)));
   }
 
   void _loadSnapshot() {
@@ -648,7 +815,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       ..remove('apple')
       ..remove('play')
       ..remove('links')
-      ..remove('refreshing');
+      ..remove('refreshing')
+      ..remove('reads');
     final done = _snapshotWrites.then(
       (_) => _writeSnapshot({
         'version': _snapshotVersion,

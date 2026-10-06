@@ -185,12 +185,15 @@ class StoreConsole {
   final List<StoreClient> clients;
   final DateTime Function() _now;
 
-  Future<List<StoreAppsReading>> listApps() => Future.wait([
+  Future<List<StoreAppsReading>> listApps() => Future.wait(listEach());
+
+  /// Each store's apps, each future completing as its store answers.
+  List<Future<StoreAppsReading>> listEach() => [
     for (final client in clients)
       _read(
         client.listApps,
       ).then((apps) => StoreAppsReading(client.store, apps)),
-  ]);
+  ];
 
   Future<StoreAppSnapshot> snapshot(StoreApp app) async {
     final client = clients.firstWhere((client) => client.store == app.store);
