@@ -5,6 +5,8 @@ import 'package:markdown/markdown.dart' as md;
 import '../code/code_spans.dart';
 import '../code/code_theme.dart';
 import '../design_tokens.dart';
+import '../diagram/mermaid_fences.dart';
+import '../diagram/mermaid_view.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'transcript_selection.dart';
 
@@ -82,8 +84,8 @@ class MarkdownMessage extends StatelessWidget {
     final highlight = codeHighlightTheme(
       dark ? Brightness.dark : Brightness.light,
     );
-    final body = MarkdownBody(
-      data: data,
+    Widget markdown(String text) => MarkdownBody(
+      data: text,
       selectable: selectable,
       styleSheet: sheet,
       // A thumb gets code wrapped: a sideways-scrolling block at phone width
@@ -108,6 +110,25 @@ class MarkdownMessage extends StatelessWidget {
       },
       syntaxHighlighter: _HighlightAdapter(highlight),
     );
+    // A ```mermaid fence is drawn, so the message is cut around it; one with
+    // none goes through the one body it always did.
+    final runs = splitMermaidFences(data);
+    final body = runs.length == 1 && !runs.single.mermaid
+        ? markdown(data)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final run in runs)
+                run.mermaid
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: Insets.xs,
+                        ),
+                        child: MermaidBlock(run.text),
+                      )
+                    : markdown(run.text),
+            ],
+          );
     return selectable ? body : TranscriptSelectionGroup(child: body);
   }
 }
