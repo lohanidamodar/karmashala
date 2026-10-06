@@ -34,8 +34,11 @@ void main() {
   group('the level table', () {
     test('Everything interrupts for every reason', () {
       for (final reason in NotificationReason.values) {
-        expect(reason.interruptsAt(NotifyLevel.everything), isTrue,
-            reason: reason.name);
+        expect(
+          reason.interruptsAt(NotifyLevel.everything),
+          isTrue,
+          reason: reason.name,
+        );
       }
     });
 
@@ -56,8 +59,11 @@ void main() {
 
     test('Nothing interrupts for nothing', () {
       for (final reason in NotificationReason.values) {
-        expect(reason.interruptsAt(NotifyLevel.nothing), isFalse,
-            reason: reason.name);
+        expect(
+          reason.interruptsAt(NotifyLevel.nothing),
+          isFalse,
+          reason: reason.name,
+        );
       }
     });
 
@@ -198,10 +204,7 @@ void main() {
       // An older app rewrites only its four keys, dropping `level`.
       final json = NotificationSettings(level: NotifyLevel.whenNeeded).toJson()
         ..remove('level');
-      expect(
-        NotificationSettings.fromJson(json).level,
-        NotifyLevel.whenNeeded,
-      );
+      expect(NotificationSettings.fromJson(json).level, NotifyLevel.whenNeeded);
     });
   });
 
@@ -212,14 +215,19 @@ void main() {
         NotificationReason.finished,
       );
       expect(
-        _decide(AgentActivityStatus.awaitingApproval, NotifyLevel.everything)
-            .reason,
+        _decide(
+          AgentActivityStatus.awaitingApproval,
+          NotifyLevel.everything,
+        ).reason,
         NotificationReason.needsInput,
       );
     });
 
     test('Only when needed logs a finished turn quietly', () {
-      final finished = _decide(AgentActivityStatus.idle, NotifyLevel.whenNeeded);
+      final finished = _decide(
+        AgentActivityStatus.idle,
+        NotifyLevel.whenNeeded,
+      );
       expect(finished.shouldNotify, isFalse);
       expect(finished.suppression, NotificationSuppression.loggedQuietly);
       expect(finished.quietReason, NotificationReason.finished);
@@ -227,8 +235,10 @@ void main() {
 
     test('Only when needed still toasts an ask and a failure', () {
       expect(
-        _decide(AgentActivityStatus.awaitingApproval, NotifyLevel.whenNeeded)
-            .reason,
+        _decide(
+          AgentActivityStatus.awaitingApproval,
+          NotifyLevel.whenNeeded,
+        ).reason,
         NotificationReason.needsInput,
       );
       expect(

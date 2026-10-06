@@ -30,11 +30,13 @@ class NotificationSettings {
   /// what needs attention — an icon is ambient, a toast is an interrupt.
   bool get enabled => level != NotifyLevel.nothing;
 
-  NotificationSettings copyWith({NotifyLevel? level, bool? onlyWhenUnfocused}) =>
-      NotificationSettings(
-        level: level ?? this.level,
-        onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
-      );
+  NotificationSettings copyWith({
+    NotifyLevel? level,
+    bool? onlyWhenUnfocused,
+  }) => NotificationSettings(
+    level: level ?? this.level,
+    onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
+  );
 
   /// The level, and the three switches it replaced, so an app from before
   /// levels reading this record behaves as near to it as its switches can.

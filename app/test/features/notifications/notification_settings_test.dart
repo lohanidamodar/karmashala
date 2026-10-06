@@ -99,9 +99,7 @@ void main() {
           'notifyWhenAttentionNeeded': true,
         }),
       );
-      final reading = ProviderContainer(
-        overrides: [await older.override()],
-      );
+      final reading = ProviderContainer(overrides: [await older.override()]);
       addTearDown(reading.dispose);
       expect(
         reading.read(notificationSettingsControllerProvider).level,
@@ -131,7 +129,9 @@ void main() {
 
     setUp(() {
       dir = Directory.systemTemp.createTempSync('ks_notify_device_');
-      file = File('${dir.path}${Platform.pathSeparator}notifications_device.json');
+      file = File(
+        '${dir.path}${Platform.pathSeparator}notifications_device.json',
+      );
       addTearDown(() => dir.deleteSync(recursive: true));
     });
 
