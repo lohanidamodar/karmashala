@@ -93,6 +93,18 @@ void main() {
     expect(find.textContaining('too large'), findsOneWidget);
   });
 
+  testWidgets('a cached tool image that was swept says it is no longer kept', (
+    tester,
+  ) async {
+    await pumpPreview(
+      tester,
+      '${dir.path}/tool-images/cbf29ce484222325-12.png',
+    );
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('That image is no longer kept.'), findsOneWidget);
+  });
+
   testWidgets('a WSL path is translated before dart:io is asked to open it', (
     tester,
   ) async {

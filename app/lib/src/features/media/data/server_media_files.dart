@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/read.dart' show kMaxSessionMediaBytes;
+import 'package:agent_cli/stream.dart' show missingImageNote;
 import 'package:path/path.dart' as p;
 
 import '../../files/data/files_client.dart';
@@ -55,7 +56,7 @@ class ServerMediaFiles {
       if (local != null) return File(local);
       final stat = await _files.stat(path);
       if (!stat.exists) {
-        throw const MediaUnavailable('That image is no longer on disk.');
+        throw MediaUnavailable(missingImageNote(path.path));
       }
       if (stat.isDirectory) {
         throw const MediaUnavailable('That file is not an image.');

@@ -153,7 +153,7 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
       final file = File(translated);
       final stat = file.statSync();
       if (stat.type == FileSystemEntityType.notFound) {
-        _problem = 'That image is no longer on disk.';
+        _problem = missingImageNote(widget.path);
       } else if (stat.size > widget.maxBytes) {
         _problem =
             'That image is too large to preview here '

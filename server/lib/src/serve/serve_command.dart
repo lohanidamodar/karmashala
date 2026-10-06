@@ -183,6 +183,9 @@ import 'host_server.dart';
 import 'lifecycle_feed.dart';
 import 'session_status_recording.dart';
 import 'server_log_file.dart';
+import 'tool_image_upkeep.dart';
+import 'package:agent_cli/stream.dart'
+    show kToolImageFolderName, useToolImageDirectory;
 import 'session_store.dart';
 import 'surviving_sink.dart';
 
@@ -375,6 +378,8 @@ Future<int> _serve(
   // the desktop app's host or another server may have left theirs in it.
   final dataDir = Directory(dataDirectory);
   if (!dataDir.existsSync()) dataDir.createSync(recursive: true);
+  // Before any transcript is read: their images are spilled there.
+  useToolImageDirectory(p.join(dataDirectory, kToolImageFolderName));
   final store = SessionStore(
     Directory(paths.sessionsDirectory),
     owner: storeOwnerOf(dataDirectory),
@@ -1312,6 +1317,7 @@ Future<int> _serve(
     const Duration(hours: 1),
     (_) => handoffs.sweep(live: liveSessions()),
   );
+  final toolImageSweep = startToolImageUpkeep(dataDirectory);
   // A process starting or ending tells what waits for it: a start-up is a
   // turn whose end delivers; an end leaves nothing running it.
   final queueEnds = server.lifecycle.events.listen((event) {
@@ -1737,6 +1743,7 @@ Future<int> _serve(
   await queueEnds.cancel();
   await delegations.close();
   handoffSweep.cancel();
+  toolImageSweep.cancel();
   await handoffDelivery.close();
   await sessionQueue.close();
   await turnSettlement.close();

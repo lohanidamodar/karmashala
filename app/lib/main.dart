@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agent_cli/stream.dart'
+    show kToolImageFolderName, useToolImageDirectory;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
@@ -95,6 +98,16 @@ Future<void> _bootstrap(AppLogger logger) async {
   // Opening the file needs `path_provider`, hundreds of milliseconds in, so it
   // backfills the buffer. Awaited: the directory below asks the same question.
   await attachDefaultLogFile(Diagnostics.instance);
+  // Transcripts read here spill their images where this machine's server
+  // keeps and sweeps them.
+  if (client.hostsServer) {
+    try {
+      final data = await serverDataDirectory();
+      useToolImageDirectory(p.join(data.path, kToolImageFolderName));
+    } catch (error) {
+      logger.info('Tool images stay in the temp folder: $error');
+    }
+  }
   // Which server this window is a client of (slice 5e): this machine's own,
   // or one elsewhere chosen in Settings → Machines, only dialled.
   final support = await appSupportDirectory();
