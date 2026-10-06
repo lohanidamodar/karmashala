@@ -18,6 +18,7 @@ import '../../settings/application/settings_controller.dart';
 import '../../agents/presentation/acp_login_dialog.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused, DataRefusalCode;
+import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_values.dart'
     show EnvironmentPath;
@@ -185,9 +186,20 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// stage's output stays on screen beside the error.
   WorktreeCreationTracker? _creation;
 
+  /// Holds focus whenever no control inside the dialog does — after a click on
+  /// a card or the background — so the dialog's keys keep working.
+  final _keys = FocusNode(debugLabel: 'New session dialog');
+
+  /// The agent cards and the installation picked, as last built: what the
+  /// keys pick among.
+  List<FoldedInstallations> _cards = const [];
+  AgentInstallation? _shownInstallation;
+
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.addListener(_keepFocusInDialog);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _keepFocusInDialog());
     if (widget.firstPrompt case final prompt?) _promptController.text = prompt;
     if (widget.title case final title?) _titleController.text = title;
     // Taken once, never overwriting the picker's own choice — but still
@@ -406,8 +418,97 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
   }
 
+  /// Focus that fell back to a scope around the dialog — its route's — comes
+  /// to [_keys] instead.
+  void _keepFocusInDialog() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (!mounted || primary == null || primary == _keys) return;
+    if (primary is FocusScopeNode && _keys.ancestors.contains(primary)) {
+      _keys.requestFocus();
+    }
+  }
+
+  /// Whether the key would be typed into a text field rather than act.
+  static bool _typingInField() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context != null &&
+        (context.widget is EditableText ||
+            context.findAncestorWidgetOfExactType<EditableText>() != null);
+  }
+
+  static const _digitKeys = [
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
+
+  /// 1–9 and the arrows pick a card, T and C its form — plain keys, so never
+  /// while a field is taking text. The arrows only while nothing else has
+  /// focus: on a control they move focus, as everywhere.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (_busy ||
+        _typingInField() ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final current = _cards.indexWhere((g) => g.contains(_shownInstallation));
+    final bool acted;
+    if (_digitKeys.indexOf(key) case final digit when digit >= 0) {
+      acted = _pickCard(digit);
+    } else if (key == LogicalKeyboardKey.keyT) {
+      acted = _pickForm(current, AgentRunForm.terminal);
+    } else if (key == LogicalKeyboardKey.keyC) {
+      acted = _pickForm(current, AgentRunForm.chat);
+    } else if (_keys.hasPrimaryFocus) {
+      // Two cards to a row.
+      final step = switch (key) {
+        LogicalKeyboardKey.arrowRight => 1,
+        LogicalKeyboardKey.arrowLeft => -1,
+        LogicalKeyboardKey.arrowDown => 2,
+        LogicalKeyboardKey.arrowUp => -2,
+        _ => 0,
+      };
+      acted = step != 0 && _pickCard(current < 0 ? 0 : current + step);
+    } else {
+      acted = false;
+    }
+    return acted ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  bool _pickCard(int index) {
+    if (index < 0 || index >= _cards.length) return false;
+    _pick(pickAgentCard(ref, _cards[index]));
+    return true;
+  }
+
+  bool _pickForm(int card, AgentRunForm form) {
+    if (card < 0 || !_cards[card].offersChoice) return false;
+    _pick(pickAgentCard(ref, _cards[card], form: form));
+    return true;
+  }
+
+  void _pick(AgentInstallation installation) => setState(() {
+    _installation = installation;
+    _pickedAgentId = installation.agentId;
+  });
+
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_keepFocusInDialog);
+    _keys.dispose();
     _slowStartTimer?.cancel();
     _titleController.dispose();
     _promptController.dispose();
@@ -900,6 +1001,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final installation = scratch
         ? _agentForScratch(installations)
         : _agentFor(checkout, installations);
+    _cards = foldInstallations(registry, installations);
+    _shownInstallation = installation;
 
     // A worktree is git's, so it is offered only where there is a repository to
     // take one from. Only a positive [GitPresence.notARepository] withdraws it.
@@ -975,10 +1078,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                       installations: installations,
                       selected: installation,
                       enabled: !_busy,
-                      onSelected: (v) => setState(() {
-                        _installation = v;
-                        _pickedAgentId = v.agentId;
-                      }),
+                      onSelected: _pick,
                     ),
             ),
             if (externalOffered || worktreeOffered)
@@ -1013,6 +1113,17 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                 ],
               ),
             ),
+            if (!fullScreen) ...[
+              const SizedBox(height: Insets.sm),
+              Text(
+                'Ctrl+Enter start · Esc cancel · 1–9 or arrows pick an agent '
+                '· T / C terminal or chat',
+                key: const ValueKey('new-session-key-hints'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             if (_creation != null) ...[
               const SizedBox(height: Insets.md),
               WorktreeCreationLiveView(tracker: _creation!),
@@ -1041,31 +1152,39 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         ),
       ],
     );
-    if (fullScreen) {
-      return FullScreenForm(
-        title: 'New session',
-        body: body,
-        onClose: cancel,
-        primary: FilledButton(
-          onPressed: canStart ? start : null,
-          child: _busy
-              ? const InlineSpinner(size: InlineSpinnerSize.medium)
-              : const Text('Start'),
-        ),
-      );
-    }
-    return CallbackShortcuts(
+    // The keys are the dialog's, not a field's: [_keys] wraps everything and
+    // holds focus when nothing inside does, and these sit above it.
+    Widget owningKeys(Widget dialog) => CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
           if (canStart) start();
         },
+        const SingleActivator(LogicalKeyboardKey.escape): () => cancel?.call(),
       },
+      child: Focus(focusNode: _keys, onKeyEvent: _onKey, child: dialog),
+    );
+    if (fullScreen) {
+      return owningKeys(
+        FullScreenForm(
+          title: 'New session',
+          body: body,
+          onClose: cancel,
+          primary: FilledButton(
+            onPressed: canStart ? start : null,
+            child: _busy
+                ? const InlineSpinner(size: InlineSpinnerSize.medium)
+                : const Text('Start'),
+          ),
+        ),
+      );
+    }
+    return owningKeys(
       // Tab walks the title, then the body, then the actions — three groups
       // in that order, each in reading order inside. One reading order over
       // the whole dialog measured the body as it scrolled under the pinned
       // actions: at the minimum window Tab put the last fields after Start
       // and circled the bottom four stops without returning to the top.
-      child: FocusTraversalGroup(
+      FocusTraversalGroup(
         policy: OrderedTraversalPolicy(),
         child: AlertDialog(
           title: FocusTraversalOrder(

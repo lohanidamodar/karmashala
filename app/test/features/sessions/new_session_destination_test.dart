@@ -985,6 +985,137 @@ void main() {
     expect(find.text('Logged in via Log in with the browser.'), findsOneWidget);
     await closeAll(tester);
   });
+
+  /// The owner's report: the dialog's keys worked only while a field had
+  /// focus. Each test here leaves nothing focused first — the state after a
+  /// click on a card or the dialog's background.
+  group('the shortcuts work with no field focused', () {
+    late _RecordingLauncher launcher;
+
+    Future<void> openUnfocused(WidgetTester tester) async {
+      // Claude Code in both forms, then Codex: two cards.
+      server.installationRows
+        ..insert(
+          agentInstallation(
+            id: 'ca1',
+            agentId: AgentIds.claudeAcp,
+            path: r'C:\npm\claude-agent-acp.cmd',
+          ),
+        )
+        ..insert(
+          agentInstallation(
+            id: 'cx1',
+            agentId: AgentIds.codex,
+            path: r'C:\npm\codex.cmd',
+          ),
+        );
+      final container = ProviderContainer(
+        parent: containerFor(selected: 'r1'),
+        overrides: [
+          sessionLauncherProvider.overrideWith(
+            (ref) => launcher = _RecordingLauncher(ref),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(sessionLauncherProvider);
+      await open(tester, container);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> press(
+      WidgetTester tester,
+      LogicalKeyboardKey key, {
+      bool control = false,
+    }) async {
+      if (control)
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      if (control) await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    Future<String> startedWith(WidgetTester tester) async {
+      await press(tester, LogicalKeyboardKey.enter, control: true);
+      return launcher.requests.single.installation.id;
+    }
+
+    testWidgets('Ctrl+Enter starts', (tester) async {
+      await openUnfocused(tester);
+      expect(await startedWith(tester), 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('Escape cancels', (tester) async {
+      await openUnfocused(tester);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(find.byType(NewSessionDialog), findsNothing);
+      expect(launcher.requests, isEmpty);
+      await closeAll(tester);
+    });
+
+    testWidgets('a digit picks that agent card', (tester) async {
+      await openUnfocused(tester);
+      await press(tester, LogicalKeyboardKey.digit2);
+      expect(await startedWith(tester), 'cx1');
+      await closeAll(tester);
+    });
+
+    testWidgets('the arrows move between the cards', (tester) async {
+      await openUnfocused(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      // Past the last card it stays put rather than wrapping.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(await startedWith(tester), 'cx1');
+      await closeAll(tester);
+    });
+
+    testWidgets('C picks the chat form and T the terminal', (tester) async {
+      await openUnfocused(tester);
+      await press(tester, LogicalKeyboardKey.keyC);
+      await press(tester, LogicalKeyboardKey.keyT);
+      await press(tester, LogicalKeyboardKey.keyC);
+      expect(await startedWith(tester), 'ca1');
+      await closeAll(tester);
+    });
+
+    testWidgets('after a click on a card, the keys still work', (tester) async {
+      await openUnfocused(tester);
+      await tester.tap(find.byKey(const ValueKey('agent-card:cx1')));
+      await tester.pumpAndSettle();
+      await press(tester, LogicalKeyboardKey.digit1);
+      expect(await startedWith(tester), 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('a letter typed in a field is text, not a shortcut', (
+      tester,
+    ) async {
+      await openUnfocused(tester);
+      final prompt = find.widgetWithText(TextField, 'First message (optional)');
+      await tester.ensureVisible(prompt);
+      await tester.tap(prompt);
+      await tester.pumpAndSettle();
+      await press(tester, LogicalKeyboardKey.keyC);
+      await press(tester, LogicalKeyboardKey.digit2);
+      expect(await startedWith(tester), 'a1');
+      await closeAll(tester);
+    });
+
+    testWidgets('the dialog says which keys it takes', (tester) async {
+      await openUnfocused(tester);
+      final hint = find.byKey(const ValueKey('new-session-key-hints'));
+      expect(hint, findsOneWidget);
+      final said = tester.widget<Text>(hint).data!;
+      for (final key in ['Ctrl+Enter', 'Esc', '1–9', 'T', 'C']) {
+        expect(said, contains(key));
+      }
+      await closeAll(tester);
+    });
+  });
 }
 
 /// A start the server refused because the agent wants a login first.

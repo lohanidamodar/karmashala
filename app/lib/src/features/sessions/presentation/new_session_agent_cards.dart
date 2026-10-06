@@ -86,17 +86,30 @@ class NewSessionAgentCards extends ConsumerWidget {
       group: group,
       shown: picked ?? group.preferring(preferred),
       selected: picked != null,
-      onTap: enabled ? () => onSelected(group.preferring(preferred)) : null,
+      onTap: enabled ? () => onSelected(pickAgentCard(ref, group)) : null,
       onForm: enabled
-          ? (form) {
-              ref
-                  .read(settingsControllerProvider.notifier)
-                  .setAgentRunForm(group.forms.agentId, form);
-              onSelected(group.preferring(form));
-            }
+          ? (form) => onSelected(pickAgentCard(ref, group, form: form))
           : null,
     );
   }
+}
+
+/// What picking [group]'s card gives: its installation in the form last chosen
+/// for the agent, or in [form], which is then remembered. The tap and the
+/// dialog's keys both pick through here.
+AgentInstallation pickAgentCard(
+  WidgetRef ref,
+  FoldedInstallations group, {
+  AgentRunForm? form,
+}) {
+  final agentId = group.forms.agentId;
+  if (form == null) {
+    return group.preferring(
+      ref.read(settingsControllerProvider).runFormFor(agentId),
+    );
+  }
+  ref.read(settingsControllerProvider.notifier).setAgentRunForm(agentId, form);
+  return group.preferring(form);
 }
 
 class _AgentCard extends ConsumerWidget {
