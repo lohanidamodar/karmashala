@@ -2360,6 +2360,77 @@
       }
     },
     {
+      "name": "webhook_list",
+      "description": "The webhooks armed on this server: each one an automation that starts a new session when its URL is called. Answers their URLs and settings, never their secrets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "webhook_create",
+      "description": "Arm a webhook: a URL that, when called with a JSON body, starts a new session in a checkout with a prompt filled from the body ({{field}} and {{a.b}} paths; values are inserted as quoted data, never as instructions). Runs read-only unless permissionMode names another mode; never one that bypasses permissions. Answers the URL and the signing secret — the only time the secret is shown.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout to start in (list_checkouts)."
+          },
+          "agentInstallationId": {
+            "type": "string",
+            "description": "The agent to start (list_agents)."
+          },
+          "template": {
+            "type": "string",
+            "description": "The prompt, with {{field}} paths into the body."
+          },
+          "permissionMode": {
+            "type": "string",
+            "description": "A canonical selection such as \"mode=plan\"."
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "boolean",
+            "description": "Start each call in a worktree of its own."
+          },
+          "signatureRequired": {
+            "type": "boolean",
+            "description": "Require an HMAC signature (default true)."
+          },
+          "callsPerHour": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "name",
+          "repositoryId",
+          "agentInstallationId",
+          "template"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "session_send",
       "description": "Send a message to a session, exactly as typing it into that session's message box would. Omit sessionId to send to the session you are running in. A session whose agent has stopped is relaunched and resumed first, so this works whether or not it is live. A message to another session arrives with a line naming yours, so the recipient reads it as a request from a peer rather than as an instruction from the user; the line is built from the session the transport authenticated, so you can neither borrow another name nor drop your own. While the target is working — mid-turn, or stopped at an approval — the message is queued at the server and delivered when its turn ends, one per turn, in order: the result says queued: true with its position, and it must not be sent again. Pass wait: true to block until the session settles afterwards — the common send-then-wait shape; a queued message is waited for until it is delivered, within the same bound. The block is checked BEFORE the send, so a target already waiting on a person is refused with nothing sent.",
       "inputSchema": {
@@ -5927,6 +5998,14 @@
     "checks_results": {
       "category": "verification",
       "summary": "Parsed diagnostics and test results, and what this session broke."
+    },
+    "webhook_list": {
+      "category": "sessions",
+      "summary": "The webhooks armed here: their URLs and settings, never a secret."
+    },
+    "webhook_create": {
+      "category": "sessions",
+      "summary": "Arm a URL that starts a session from a JSON body; secret shown once."
     },
     "session_send": {
       "category": "sessions",

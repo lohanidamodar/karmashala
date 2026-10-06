@@ -231,7 +231,10 @@ class _RehearsalState extends State<_Rehearsal> {
           controller: widget.sample,
           minLines: 3,
           maxLines: 8,
-          style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
+          ),
           onChanged: (_) => setState(() {}),
           decoration: const InputDecoration(
             labelText: 'A sample body',
@@ -255,7 +258,10 @@ class _RehearsalState extends State<_Rehearsal> {
           SelectableText(
             prompt!,
             key: const ValueKey('webhook-preview'),
-            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: kMonoFamily,
+              fontFamilyFallback: kMonoFallback,
+            ),
           ),
         ],
       ],
@@ -333,7 +339,10 @@ class _CopyRow extends StatelessWidget {
         Expanded(
           child: SelectableText(
             value,
-            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: kMonoFamily,
+              fontFamilyFallback: kMonoFallback,
+            ),
           ),
         ),
         IconButton(
