@@ -1,10 +1,9 @@
-import 'package:agent_cli/process.dart' show formatBytes;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../core/data/data_providers.dart';
 import '../../explorer/application/bulk_session_delete.dart';
 import '../../explorer/presentation/bulk_delete_dialog.dart';
 import '../../explorer/presentation/purge_progress_strip.dart';
@@ -12,6 +11,7 @@ import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../application/server_files.dart';
 import '../application/server_storage.dart';
 
 /// Settings → Server → Storage: the database and the tool-image cache as the
@@ -78,9 +78,9 @@ class ServerStorageSection extends ConsumerWidget {
             ? 'Its tables could not be measured.'
             : [
                 for (final table in tables)
-                  '${table.name} ${formatBytes(table.bytes)}',
+                  '${table.name} ${describeBytes(table.bytes)}',
               ].join(' · '),
-        control: SettingsValue(label: formatBytes(reading.databaseBytes)),
+        control: SettingsValue(label: describeBytes(reading.databaseBytes)),
       ),
       SettingsRow(
         label: 'Tool images',
@@ -96,7 +96,7 @@ class ServerStorageSection extends ConsumerWidget {
               label:
                   '${reading.toolImageFiles} '
                   '${reading.toolImageFiles == 1 ? 'file' : 'files'} · '
-                  '${formatBytes(reading.toolImageBytes)}',
+                  '${describeBytes(reading.toolImageBytes)}',
             ),
             OutlinedButton(
               onPressed: reading.toolImageFiles == 0
@@ -166,24 +166,16 @@ class ServerStorageSection extends ConsumerWidget {
     if (context.mounted) ref.invalidate(serverStorageProvider);
   }
 
-  /// Stores the limit, then has the server sweep by it once the setting has
-  /// reached it, rather than at its next daily sweep.
   Future<void> _setLimits(
     BuildContext context,
     WidgetRef ref, {
     int? days,
     int? megabytes,
   }) async {
-    ref
-        .read(settingsControllerProvider.notifier)
-        .setToolImageLimits(maxAgeDays: days, maxMegabytes: megabytes);
-    final client = ref.read(serverStorageClientProvider);
-    await ref.read(dataClientProvider).settled();
-    try {
-      await client.sweepToolImages();
-    } on Object {
-      // The server's own sweep applies the limit at its next start or day.
-    }
+    await ref.read(toolImageLimitsSetterProvider)(
+      days: days,
+      megabytes: megabytes,
+    );
     if (context.mounted) ref.invalidate(serverStorageProvider);
   }
 }

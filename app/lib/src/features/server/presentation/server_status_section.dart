@@ -1,4 +1,3 @@
-import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,9 +5,7 @@ import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../core/capabilities/capabilities.dart';
-import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/application/settings_tab.dart';
@@ -19,6 +16,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../ssh/application/host_install_controller.dart';
 import '../../terminal/application/local_host_providers.dart';
+import '../application/server_files.dart';
 import '../application/server_overview.dart';
 
 /// Settings → Server → Status and controls. A phone sees a read-only summary
@@ -138,19 +136,10 @@ class ServerStatusSection extends ConsumerWidget {
   }
 
   Future<void> _open(BuildContext context, WidgetRef ref, String path) async {
-    final manager = HostFileManager.forHost();
     final messenger = ScaffoldMessenger.maybeOf(context);
-    void say(String message) =>
-        messenger?.showSnackBar(SnackBar(content: Text(message)));
-    if (manager == null) {
-      return say('This platform has no file manager Karmashala can open.');
-    }
-    try {
-      await ref
-          .read(hostCommandRunnerProvider)
-          .run(RevealInFileManager.requestFor(manager, path));
-    } on CommandException catch (error) {
-      say('Could not open the folder: ${error.message}');
+    final failure = await ref.read(serverFilesProvider).revealFolder(path);
+    if (failure != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(failure)));
     }
   }
 

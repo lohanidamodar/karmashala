@@ -3,6 +3,7 @@ import 'package:karmashala_host/lifecycle_client.dart' show ServerMethod;
 import 'package:karmashala_session/session.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../remote/application/host_companion_providers.dart';
 import '../../sessions/application/session_providers.dart';
@@ -90,3 +91,26 @@ final oldEndedSessionsProvider = Provider.autoDispose<List<Session>>((ref) {
       if (session.status.isEnded && session.createdAt.isBefore(cutoff)) session,
   ];
 });
+
+/// Stores a tool-image limit, then has the server sweep by it once the
+/// setting has reached it, rather than at its next daily sweep.
+Future<void> setToolImageLimits(Ref ref, {int? days, int? megabytes}) async {
+  ref
+      .read(settingsControllerProvider.notifier)
+      .setToolImageLimits(maxAgeDays: days, maxMegabytes: megabytes);
+  final client = ref.read(serverStorageClientProvider);
+  await ref.read(dataClientProvider).settled();
+  try {
+    await client.sweepToolImages();
+  } on Object {
+    // The server's own sweep applies the limit at its next start or day.
+  }
+}
+
+/// [setToolImageLimits], for a widget to call.
+final toolImageLimitsSetterProvider =
+    Provider<Future<void> Function({int? days, int? megabytes})>(
+      (ref) =>
+          ({int? days, int? megabytes}) =>
+              setToolImageLimits(ref, days: days, megabytes: megabytes),
+    );
