@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_notifications/policy.dart';
 
+import '../../../app/shell/phone_routes.dart';
+import '../../../app/shell/shell_area.dart';
 import '../../../core/capabilities/capabilities.dart';
+import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/phone_notifications.dart';
 import '../../notifications/presentation/notify_level_text.dart';
@@ -36,6 +39,7 @@ class NotificationsSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const _NotifyMeChoice(),
+          const _QuietItemsLink(),
           // It shapes only what does interrupt; dimmed, not hidden, at
           // Nothing, so choosing a level again shows what it will do.
           Opacity(
@@ -85,6 +89,7 @@ class _PhoneNotificationsSection extends ConsumerWidget {
                 'While Karmashala runs, for any session but the one on '
                 'screen. Kept on this phone; the desktop’s are its own.',
           ),
+          const _QuietItemsLink(),
         ],
       ),
     );
@@ -136,4 +141,24 @@ class _NotifyMeChoice extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The way back to what was logged quietly: the Inbox, its quiet items shown.
+class _QuietItemsLink extends ConsumerWidget {
+  const _QuietItemsLink();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SettingsRow(
+    label: 'Quiet updates',
+    help: 'What was logged without a notification, to read back.',
+    control: TextButton(
+      onPressed: () {
+        ref.read(inboxShowQuietProvider.notifier).set(true);
+        final phone = ref.read(phoneShellRouterProvider).current;
+        if (phone != null) return phone.showInbox();
+        showShellArea(ref, ShellArea.inbox);
+      },
+      child: const Text('Show in the Inbox'),
+    ),
+  );
 }
