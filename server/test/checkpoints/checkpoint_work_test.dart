@@ -63,20 +63,23 @@ void main() {
       expect(await w.ask(const CheckpointCapture('no-such-session')), isNull);
     }, skip: hasGit ? false : 'git is not on PATH');
 
+    // One round on real git, slowed as a loaded machine is: that the second
+    // waits for the first is proven without timing in checkpoint_service_test.
     test('two sessions in one checkout capturing at once both record, never '
         'one locked out of the private index', () async {
       w.addSession('s2', workingDirectory: w.hub);
-      for (var round = 0; round < 8; round++) {
-        writeReadme('hub $round\n');
-        for (var k = 0; k < 20; k++) {
-          File(p.join(w.hub, 'f$k.txt')).writeAsStringSync('$round $k\n');
-        }
-        final both = await Future.wait([
-          w.checkpoints.recorder.captureNow('s1'),
-          w.checkpoints.recorder.captureNow('s2'),
-        ]);
-        expect(both, everyElement(isNotNull), reason: 'round $round');
+      w.runners
+        ..slow = true
+        ..delay = const Duration(seconds: 2);
+      writeReadme('hub 1\n');
+      for (var k = 0; k < 20; k++) {
+        File(p.join(w.hub, 'f$k.txt')).writeAsStringSync('1 $k\n');
       }
+      final both = await Future.wait([
+        w.checkpoints.recorder.captureNow('s1'),
+        w.checkpoints.recorder.captureNow('s2'),
+      ]);
+      expect(both, everyElement(isNotNull));
       expect(w.log.where((line) => line.contains('could not')), isEmpty);
     }, skip: hasGit ? false : 'git is not on PATH');
 

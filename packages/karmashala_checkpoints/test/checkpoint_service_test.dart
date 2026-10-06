@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_checkpoints/store.dart';
@@ -25,6 +27,33 @@ class _Runner implements CommandRunner {
   @override
   Future<ProcessHandle> start(CommandRequest request) =>
       throw UnimplementedError('a checkpoint never streams');
+}
+
+/// [_Runner] whose first `git add` waits for [release], counting how many
+/// adds have started and the most running at once.
+class _HeldRunner extends _Runner {
+  _HeldRunner(super.respond);
+
+  final _gate = Completer<void>();
+  var adds = 0;
+  var _running = 0;
+  var mostAtOnce = 0;
+
+  void release() => _gate.complete();
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async {
+    if (!request.arguments.contains('add')) return super.run(request);
+    adds++;
+    _running++;
+    if (_running > mostAtOnce) mostAtOnce = _running;
+    try {
+      if (adds == 1) await _gate.future;
+      return await super.run(request);
+    } finally {
+      _running--;
+    }
+  }
 }
 
 class _Factory implements CommandRunnerFactory {
@@ -280,6 +309,37 @@ void main() {
         (c) => c.contains('--name-status'),
       );
       expect(nameStatus, containsAllInOrder(['head1', 'tree1']));
+    });
+
+    test('two sessions in one checkout take turns on its private index: the '
+        'second never writes it while the first does', () async {
+      // The first `git add` is held open; everything else answers at once,
+      // so the event queue running dry is the second capture going as far
+      // as it can.
+      final held = _HeldRunner(respond);
+      final shared = CheckpointService(
+        runnerFactory: _Factory(held),
+        environmentOf: (id) => ExecutionEnvironment(
+          id: id,
+          kind: EnvironmentKind.windowsNative,
+          name: 'Windows',
+          createdAt: DateTime.utc(2026),
+        ),
+        records: StoreCheckpointRecords(dao),
+        clock: FixedClock(DateTime.utc(2026, 8, 30, 12)),
+        newId: () => 'ckpt${++ids}',
+        files: files,
+      );
+      final first = shared.capture(_repo, sessionId: 's1');
+      final second = shared.capture(_repo, sessionId: 's2');
+      await pumpEventQueue();
+      expect(held.adds, 1, reason: 'the second waits for the first');
+
+      held.release();
+      expect(await first, isNotNull);
+      expect(await second, isNotNull);
+      expect(held.adds, 2);
+      expect(held.mostAtOnce, 1);
     });
   });
 
