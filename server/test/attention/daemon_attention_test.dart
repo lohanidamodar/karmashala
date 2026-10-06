@@ -8,6 +8,7 @@ import 'package:karmashala_host/data.dart' show DataService, DataSession;
 import 'package:karmashala_host/src/attention/daemon_attention.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
 import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
@@ -230,6 +231,54 @@ void main() {
     app.handle(InboxDismiss(items.single.id));
     expect(FollowUpDao(database).open(), isEmpty);
     expect(app.handle(const InboxList()).value.inbox.isEmpty, isTrue);
+  });
+
+  test('archiving a session retires its inbox items as read; unarchiving '
+      'brings its open follow-up back', () async {
+    row('s5', conversation: 'conv-5', status: SessionStatus.failed);
+    row('s6', conversation: 'conv-6', status: SessionStatus.failed);
+    final app = data.open((_) {});
+    for (final id in ['s5', 's6']) {
+      app.handle(
+        FollowUpRaise(
+          FollowUp(
+            sessionId: id,
+            reason: FollowUpReason.endedInFailure,
+            ending: SessionEnding.failed,
+            raisedAt: t0,
+          ),
+        ),
+      );
+    }
+    app.handle(
+      InboxRaise(
+        InboxItem(
+          session: WatchedSession(
+            key: AgentSessionKey(AgentIds.claudeCode, 'conv-5'),
+            openId: 's5',
+            imported: false,
+            label: 'Session s5',
+          ),
+          kind: InboxItemKind.usageLimit,
+          at: t0,
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    List<String> inboxSessions() => [
+      for (final item in app.handle(const InboxList()).value.inbox.items)
+        item.session.openId,
+    ];
+    expect(inboxSessions(), unorderedEquals(['s5', 's5', 's6']));
+
+    app.handle(const SessionsArchive(['s5']));
+    await Future<void>.delayed(Duration.zero);
+    expect(inboxSessions(), ['s6']);
+    expect(FollowUpDao(database).open(), hasLength(2), reason: 'not resolved');
+
+    app.handle(const SessionsUnarchive(['s5']));
+    await Future<void>.delayed(Duration.zero);
+    expect(inboxSessions(), unorderedEquals(['s5', 's6']));
   });
 
   test('inbox.open is told to every window, the asker too', () async {

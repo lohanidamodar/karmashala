@@ -846,3 +846,19 @@ void _migrateToV75(Database db) {
     'ALTER TABLE session_queued_messages ADD COLUMN cancelled_by TEXT;',
   );
 }
+
+/// When a session's worktree was removed, apart from when the session was
+/// archived (hidden): until now `archived_at` meant both, and only the
+/// worktree action set it.
+void _migrateToV76(Database db) {
+  final columns = {
+    for (final row in db.select('PRAGMA table_info(sessions);'))
+      row['name'] as String,
+  };
+  if (columns.contains('worktree_removed_at')) return;
+  db.execute('ALTER TABLE sessions ADD COLUMN worktree_removed_at TEXT;');
+  db.execute(
+    'UPDATE sessions SET worktree_removed_at = archived_at '
+    'WHERE archived_at IS NOT NULL AND worktree_path IS NOT NULL;',
+  );
+}

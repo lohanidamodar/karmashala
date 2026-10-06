@@ -165,3 +165,15 @@ final sessionChildCountProvider = Provider.autoDispose
       }
       return (count: count, running: running);
     });
+
+/// Every archived session's id, for a view that hides them by default.
+final archivedSessionIdsProvider = Provider.autoDispose<Set<String>>((ref) {
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.status,
+  });
+  return {
+    for (final session in ref.read(sessionsDataProvider).getAll())
+      if (session.isArchived) session.id,
+  };
+});

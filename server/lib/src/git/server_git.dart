@@ -100,7 +100,7 @@ class ServerGit implements GitWork {
           for (final id in sessionIds) {
             try {
               data.applyAsServer(
-                SessionEdit(id, SessionPatch.archive(entry.at)),
+                SessionEdit(id, SessionPatch.removeWorktree(entry.at)),
               );
             } on DataRefused {
               // The row went meanwhile; nothing to mark.

@@ -223,6 +223,8 @@ sealed class DataRequest<R> {
         sessionIds: args.strings('sessionIds', orEmpty: true),
         importedIds: args.strings('importedIds', orEmpty: true),
       ),
+      SessionsArchive.name => SessionsArchive(args.strings('ids')),
+      SessionsUnarchive.name => SessionsUnarchive(args.strings('ids')),
       SessionLinkAdd.name => SessionLinkAdd(
         sessionId: args.string('sessionId'),
         repositoryId: args.string('repositoryId'),

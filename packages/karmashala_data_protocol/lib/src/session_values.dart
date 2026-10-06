@@ -81,6 +81,55 @@ final class RelayPage {
   );
 }
 
+/// A session by id and the title a person knows it by.
+final class SessionNamed {
+  const SessionNamed(this.id, this.title);
+
+  final String id;
+  final String title;
+
+  Map<String, Object?> toJson() => {'id': id, 'title': title};
+
+  static SessionNamed fromJson(Map<String, Object?> json) => SessionNamed(
+    json['id'] is String
+        ? json['id']! as String
+        : throw const FormatException('expected an id'),
+    json['title'] is String ? json['title']! as String : '',
+  );
+}
+
+/// What an archive or unarchive did: the sessions it [changed] (the named
+/// ones first, then their descendants), the [live] ones it left alone, and
+/// the ids it could not find.
+final class SessionsArchived {
+  const SessionsArchived({
+    this.changed = const [],
+    this.live = const [],
+    this.missing = const [],
+  });
+
+  final List<String> changed;
+  final List<SessionNamed> live;
+  final List<String> missing;
+
+  Map<String, Object?> toJson() => {
+    'changed': changed,
+    'live': [for (final s in live) s.toJson()],
+    'missing': missing,
+  };
+
+  static SessionsArchived fromJson(Map<String, Object?> json) =>
+      SessionsArchived(
+        changed: _strings(json['changed']),
+        live: _list(json['live'], SessionNamed.fromJson),
+        missing: _strings(json['missing']),
+      );
+
+  static List<String> _strings(Object? json) => json is List
+      ? [for (final item in json) item as String]
+      : throw const FormatException('expected a list of ids');
+}
+
 Map<String, Object?> importedToJson(ImportedSession row) => {
   'id': row.id,
   'repositoryId': row.repositoryId,

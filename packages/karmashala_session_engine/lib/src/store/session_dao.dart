@@ -20,10 +20,10 @@ class SessionDao implements SessionStatusStore {
       'working_directory_environment_id, working_directory_path, '
       'status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
-      'surface, view, permission_mode, model_id, archived_at, title_by_user, '
-      'operator_granted) '
+      'surface, view, permission_mode, model_id, archived_at, worktree_removed_at, '
+      'title_by_user, operator_granted) '
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-      '?);',
+      '?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -45,6 +45,7 @@ class SessionDao implements SessionStatusStore {
         session.permissionMode,
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
+        _iso(session.worktreeRemovedAt),
         intFromBool(session.titleByUser),
         intFromBool(session.operatorGranted),
       ],
@@ -72,7 +73,7 @@ class SessionDao implements SessionStatusStore {
       'worktree_environment_id = ?, worktree_path = ?, '
       'working_directory_environment_id = ?, working_directory_path = ?, '
       'status = ?, external_session_id = ?, pane_id = ?, view = ?, '
-      'permission_mode = ?, model_id = ?, archived_at = ?, '
+      'permission_mode = ?, model_id = ?, archived_at = ?, worktree_removed_at = ?, '
       'operator_granted = ? WHERE id = ?;',
       [
         session.title,
@@ -89,6 +90,7 @@ class SessionDao implements SessionStatusStore {
         session.permissionMode,
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
+        _iso(session.worktreeRemovedAt),
         intFromBool(session.operatorGranted),
         session.id,
       ],
@@ -153,8 +155,9 @@ class SessionDao implements SessionStatusStore {
     _db.execute('UPDATE sessions SET view = ? WHERE id = ?;', [view.name, id]);
   }
 
-  /// Records that this session's worktree has been archived away. One column,
-  /// and nothing here deletes: the transcript still points at this row.
+  static String? _iso(DateTime? at) => at == null ? null : isoFromDate(at);
+
+  /// Records that this session was archived (hidden). Nothing here deletes.
   void markArchived(String id, DateTime at) {
     _db.execute('UPDATE sessions SET archived_at = ? WHERE id = ?;', [
       isoFromDate(at),
@@ -485,6 +488,9 @@ class SessionDao implements SessionStatusStore {
       archivedAt: row['archived_at'] == null
           ? null
           : dateFromIso(row['archived_at']),
+      worktreeRemovedAt: row['worktree_removed_at'] == null
+          ? null
+          : dateFromIso(row['worktree_removed_at']),
       titleByUser: boolFromInt(row['title_by_user']),
       operatorGranted: ((row['operator_granted'] as int?) ?? 0) != 0,
     );

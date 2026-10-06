@@ -48,6 +48,10 @@ class DaemonAttention {
        _agentStatus = agentStatus,
        _sessions = SessionDao(database),
        _followUps = FollowUpDao(database) {
+    _archived.addAll([
+      for (final row in _sessions.getAll())
+        if (row.isArchived) row.id,
+    ]);
     receiver = AgentHookReceiver(
       registry: agents,
       reports: hookReports,
@@ -93,6 +97,7 @@ class DaemonAttention {
       onApprovalRequested: onApprovalRequested,
       onStatusMoved: onStatusMoved,
       endedSessions: watched.ended,
+      archivedSessions: () => _archived,
     );
     _agentStatuses = agentStatus.changes.listen(_hostStatusMoved);
     data.addChangeListener(_rowsMoved);
@@ -102,6 +107,9 @@ class DaemonAttention {
   final DaemonAgentStatus _agentStatus;
   final SessionDao _sessions;
   final FollowUpDao _followUps;
+
+  /// The archived rows, kept from what the data service tells.
+  final Set<String> _archived = {};
 
   /// The latest hook per agent session, as the server took them.
   final AgentHookReports hookReports = AgentHookReports();
@@ -153,7 +161,16 @@ class DaemonAttention {
       switch (change) {
         case FollowUpChanged():
           followUps = true;
-        case SessionRowChanged() || SessionRowRemoved():
+        case SessionRowChanged(:final session):
+          if (session.isArchived) {
+            _archived.add(session.id);
+          } else {
+            _archived.remove(session.id);
+          }
+          rows = true;
+          followUps = true;
+        case SessionRowRemoved(:final id):
+          _archived.remove(id);
           rows = true;
           followUps = true;
         case ImportedChanged() || ImportedRemoved():
@@ -179,7 +196,11 @@ class DaemonAttention {
     final open = _followUps.open();
     if (open.isEmpty) return const [];
     final agentOf = _agentOf();
-    return [for (final followUp in open) ?_followUpItem(followUp, agentOf)];
+    return [
+      for (final followUp in open)
+        if (!_archived.contains(followUp.sessionId))
+          ?_followUpItem(followUp, agentOf),
+    ];
   }
 
   InboxItem? _followUpItem(FollowUp followUp, Map<String, String> agentOf) {

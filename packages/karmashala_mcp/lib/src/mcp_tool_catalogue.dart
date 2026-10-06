@@ -22,6 +22,9 @@ const Set<String> kMcpUngatedWrites = {
   'snippet_add',
   'session_rename',
   'session_draft',
+  // Only the caller's own ended descendants, and undone by unarchive.
+  'session_archive',
+  'session_unarchive',
 };
 
 /// Whether calling [tool] from a session needs the person's operator grant
@@ -183,6 +186,15 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // The transcript survives; the turn in flight does not. Closing the last
   // pane of a tab hands the active tab and the keyboard to another.
   'session_end': McpToolAnnotations(destructive: true, movesAttention: true),
+  // Hides an ended sub-session from the lists; unarchive undoes it.
+  'session_archive': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
+  'session_unarchive': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
   // Both continue the work in a newly launched, focused tab. `preview:
   // true` is a read on either, and the annotation describes the worst.
   'session_handoff': McpToolAnnotations(movesAttention: true),
@@ -653,6 +665,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'session_end': McpToolListing(
     McpToolCategory.sessions,
     'Stop the agent process behind a session; the turn in flight is lost.',
+  ),
+  'session_archive': McpToolListing(
+    McpToolCategory.sessions,
+    'Hide an ended session you started from the lists; nothing is deleted.',
+  ),
+  'session_unarchive': McpToolListing(
+    McpToolCategory.sessions,
+    'Bring back a session you archived.',
   ),
   'session_handoff': McpToolListing(
     McpToolCategory.sessions,

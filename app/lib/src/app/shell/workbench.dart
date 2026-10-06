@@ -30,6 +30,7 @@ import '../../features/environments/application/environment_location.dart';
 import '../../features/sessions/application/session_location_providers.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
+import '../../features/sessions/presentation/archive_session_action.dart';
 import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart'
     show hostLifecycleSubscriberProvider;

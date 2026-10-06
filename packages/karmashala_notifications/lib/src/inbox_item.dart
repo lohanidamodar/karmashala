@@ -475,6 +475,16 @@ class AttentionInbox {
     ]);
   }
 
+  /// Retires every item of the archived native sessions [openIds], as read.
+  AttentionInbox retireArchived(Set<String> openIds) {
+    if (openIds.isEmpty) return this;
+    return _maybe([
+      for (final item in items)
+        if (item.session.imported || !openIds.contains(item.session.openId))
+          item,
+    ]);
+  }
+
   /// Item [id] saying [detail]; this inbox when it is not listed.
   AttentionInbox describe(String id, String detail) {
     final listed = _byId[id];

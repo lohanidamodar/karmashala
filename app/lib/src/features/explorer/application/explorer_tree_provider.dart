@@ -10,7 +10,9 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../projects/application/projects_controller.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import '../../sessions/application/session_last_active_providers.dart';
+import '../../sessions/application/sub_session_fold.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../workspaces/application/workspaces_controller.dart';
@@ -229,8 +231,19 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
   // sidebar's subject now, not a row here.
   final visible = ref.watch(visibleProjectSessionsProvider(project.id));
   final sessions = visible.sessions;
+  final archived = [
+    if (visible.archived > 0)
+      ArchivedNode(
+        id: 'archived:${project.id}',
+        depth: depth,
+        count: visible.archived,
+      ),
+  ];
   if (sessions.isEmpty) {
+    // Every session it has is archived: that row is all there is to say.
+    if (archived.isNotEmpty && visible.hidden == 0) return archived;
     return [
+      ...archived,
       HintNode(
         id: 'hint-empty:${project.id}',
         depth: depth,
@@ -257,6 +270,7 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
         depth: depth,
         message: '${visible.hidden} more hidden by the agent filter.',
       ),
+    ...archived,
   ];
 }
 
@@ -281,6 +295,7 @@ List<ExplorerNode> _sessionNodes(
       .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
       .toSet();
   final lastActiveOf = ref.read(sessionLastActiveProvider);
+  final folds = ref.watch(sessionListPrefsProvider);
   final forest = buildSessionForest(
     sessions.native,
     isPinned: pinnedIds.contains,
@@ -314,6 +329,7 @@ List<ExplorerNode> _sessionNodes(
                 parent: null,
                 repositoryPaths: repositoryPaths,
                 pinnedIds: pinnedIds,
+                folds: folds,
               ),
             ),
           for (final imported in sessions.imported)
@@ -366,9 +382,24 @@ List<ExplorerNode> _lineageNodes(
   required Session? parent,
   required Map<String, EnvironmentPath> repositoryPaths,
   required Set<String> pinnedIds,
+  required SessionListPrefs folds,
 }) {
   final directory =
       node.session.worktree ?? repositoryPaths[node.session.repositoryId];
+  final below = [for (final n in node.flattened.skip(1)) n.session];
+  final fold = below.isEmpty
+      ? null
+      : SubSessionFold.of(node.session, below, isLive: subSessionLive);
+  final folded = fold?.foldedIn(folds) ?? false;
+  List<ExplorerNode> childRows(SessionNode child) => _lineageNodes(
+    project,
+    child,
+    depth: depth + 1,
+    parent: node.session,
+    repositoryPaths: repositoryPaths,
+    pinnedIds: pinnedIds,
+    folds: folds,
+  );
   return [
     SessionRowNode(
       projectId: project.id,
@@ -382,14 +413,20 @@ List<ExplorerNode> _lineageNodes(
       parentTitle: parent?.title,
       lineageBroken: node.lineageBroken,
     ),
-    for (final child in node.children)
-      ..._lineageNodes(
-        project,
-        child,
+    if (fold != null)
+      SubSessionsNode(
+        id: 'sub-sessions:${node.session.id}',
         depth: depth + 1,
-        parent: node.session,
-        repositoryPaths: repositoryPaths,
-        pinnedIds: pinnedIds,
+        parentId: node.session.id,
+        label: fold.label,
+        folded: folded,
       ),
+    if (!folded)
+      for (final child in node.children) ...childRows(child)
+    else
+      // Folded: the ones still running or waiting stay in sight.
+      for (final live in node.flattened.skip(1))
+        if (subSessionLive(live.session))
+          ...childRows(SessionNode(session: live.session, link: live.link)),
   ];
 }

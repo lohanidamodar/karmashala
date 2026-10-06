@@ -60,6 +60,9 @@ class _TabChip extends ConsumerWidget {
       onEnd: () => _close(context, ref, detach: false),
       onBulkClose: (scope) => _bulkClose(context, ref, scope),
       onSavePreset: () => _savePreset(context, ref),
+      onArchive: _sessionId(ref) == null
+          ? null
+          : () => _archive(context, ref),
     );
 
     // Dropping a tab on a region of a split moves it there. The payload says
@@ -224,6 +227,30 @@ class _TabChip extends ConsumerWidget {
       }
     }
     return null;
+  }
+
+  /// The session in the focused pane, else in the first pane holding one.
+  String? _sessionId(WidgetRef ref) {
+    for (final paneId in [tab.focusedPaneId, ...tab.layout.panes]) {
+      if (ref.watch(sessionOfPaneProvider(paneId)) case final sessionId?) {
+        return sessionId;
+      }
+    }
+    return null;
+  }
+
+  /// Archives this tab's session — refused, with why, while it runs — and
+  /// closes the tab once it is archived.
+  Future<void> _archive(BuildContext context, WidgetRef ref) async {
+    final id = _sessionId(ref);
+    final session = id == null
+        ? null
+        : ref.read(sessionsDataProvider).getById(id);
+    if (session == null) return;
+    await archiveSessionsFromUi(context, ref, [session]);
+    final archived =
+        ref.read(sessionsDataProvider).getById(session.id)?.isArchived ?? false;
+    if (archived && context.mounted) await _close(context, ref);
   }
 
   /// Where the session in this tab runs, read off the pane [_agentId] reads.

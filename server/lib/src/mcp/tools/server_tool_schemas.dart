@@ -18,6 +18,7 @@ import 'launch_tool_set.dart';
 import 'notes_todos_tool_set.dart';
 import 'review_thread_tool_set.dart';
 import 'snippet_tool_set.dart';
+import 'session_archive_tool_set.dart' show sessionArchiveToolSchemas;
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
 import 'store_tool_set.dart' show storeToolSchemas;
@@ -59,6 +60,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...checkpointScreenshotToolSchemas,
   ...checksToolSchemas,
   ...sessionControlToolSchemas,
+  ...sessionArchiveToolSchemas,
   ...launchToolSchemas,
   ...usageToolSchemas,
   ...storeToolSchemas,

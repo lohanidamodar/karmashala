@@ -65,6 +65,8 @@ class FakeSessionRows implements SessionStatusStore {
       _patch(id, SessionPatch.pane(paneId));
   void updateView(String id, SessionView view) =>
       _patch(id, SessionPatch.view(view));
+  void markWorktreeRemoved(String id, DateTime at) =>
+      _patch(id, SessionPatch.worktreeDeleted(at));
   void markArchived(String id, DateTime at) =>
       _patch(id, SessionPatch.archive(at));
   void updatePermissionMode(String id, String? mode) =>
@@ -580,9 +582,34 @@ extension _FakeSessionsHandling on FakeDataServer {
     return sessionLinks.linksFor(row.id);
   }
 
+  SessionsArchived _archiveSessions(
+    List<String> ids,
+    bool archive,
+    List<DataChange> c,
+  ) {
+    final plan = planArchive(
+      sessionRows._rows.values.toList(),
+      ids,
+      archive: archive,
+      at: _now(),
+      isLive: (row) =>
+          runsSessions.contains(row.id) || row.status.claimsLive,
+    );
+    for (final row in plan.changed) {
+      sessionRows._put(row, c);
+    }
+    return SessionsArchived(
+      changed: [for (final row in plan.changed) row.id],
+      live: [for (final row in plan.live) SessionNamed(row.id, row.title)],
+      missing: plan.missing,
+    );
+  }
+
   Object? _handleSessions(DataRequest<Object?> request, List<DataChange> c) =>
       switch (request) {
         SessionsList() => _sessionsSnapshot(),
+        SessionsArchive(:final ids) => _archiveSessions(ids, true, c),
+        SessionsUnarchive(:final ids) => _archiveSessions(ids, false, c),
         final SessionCreate r => _createSession(r, c),
         final SessionEdit r => _editSession(r, c),
         SessionDelete(:final id) => () {

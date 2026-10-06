@@ -288,6 +288,8 @@ void main() {
 
       await tester.tap(find.text('Native 2'), buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
       expect(find.text('Change scheduled resume…'), findsOneWidget);
       expect(find.text('Resume when usage resets…'), findsNothing);
       await tester.tap(find.text('Cancel scheduled resume'));
@@ -300,6 +302,8 @@ void main() {
       expect(card.scheduled, isNull);
 
       await tester.tap(find.text('Native 3'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('More…'));
       await tester.pumpAndSettle();
       expect(find.text('Resume when usage resets…'), findsOneWidget);
     });

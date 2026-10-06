@@ -12,6 +12,7 @@ import '../../notifications/application/session_statuses.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/background_runs_providers.dart';
 import '../../sessions/application/session_last_active_providers.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -150,8 +151,10 @@ final workspaceSessionsProvider =
           repository.id: repository,
       };
       final lastActiveOf = ref.read(sessionLastActiveProvider);
+      final showArchived = ref.watch(showArchivedSessionsProvider);
       final entries = <WorkspaceSessionEntry>[];
       for (final session in ref.read(sessionsDataProvider).getAll()) {
+        if (session.isArchived && !showArchived) continue;
         final repository = repositories[session.repositoryId];
         entries.add(
           WorkspaceSessionEntry(
@@ -187,6 +190,20 @@ final workspaceSessionsProvider =
       }
       return List.unmodifiable(entries);
     });
+
+/// How many sessions are archived, for the "Archived (N)" row the lists end
+/// with while they are hidden.
+final archivedSessionCountProvider = Provider.autoDispose<int>((ref) {
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.status,
+  });
+  var count = 0;
+  for (final session in ref.read(sessionsDataProvider).getAll()) {
+    if (session.isArchived) count++;
+  }
+  return count;
+});
 
 /// Working sessions whose evidence has gone quiet ([quietAt]). Recomputed when
 /// a grouping status move arrives, and at the moment the next working session

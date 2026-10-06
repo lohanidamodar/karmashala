@@ -105,6 +105,10 @@ class SessionsData extends SessionRowsIndex {
   void updatePaneId(String id, String? paneId) =>
       _edit(id, SessionPatch.pane(paneId));
 
+  /// Its worktree deleted; archived or not, it stays as it was.
+  void markWorktreeRemoved(String id, DateTime at) =>
+      _edit(id, SessionPatch.worktreeDeleted(at));
+
   void markArchived(String id, DateTime at) =>
       _edit(id, SessionPatch.archive(at));
 
@@ -154,6 +158,19 @@ class SessionsData extends SessionRowsIndex {
       'the delete of ${sessionIds.length + imported.length} sessions',
     );
   }
+
+  /// Archives [ids] and their ended descendants as one request, answered with
+  /// what the server did — a live session is left and named.
+  Future<SessionsArchived> archive(Iterable<String> ids) => _client.write(
+    SessionsArchive(ids.toList()),
+    domain: DataDomain.sessions,
+  );
+
+  /// Shows [ids] and their archived descendants again, as one request.
+  Future<SessionsArchived> unarchive(Iterable<String> ids) => _client.write(
+    SessionsUnarchive(ids.toList()),
+    domain: DataDomain.sessions,
+  );
 
   /// Adds a checkout to [sessionId]; refused for another project's.
   Future<List<SessionRepositoryLink>> link(

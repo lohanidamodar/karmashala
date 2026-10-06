@@ -252,7 +252,7 @@ class WorktreeCleanupService {
       terminal: _terminalInside(worktree),
       recorded: [
         for (final s in recorded)
-          if (!s.isArchived) s,
+          if (!s.worktreeRemoved) s,
       ],
     );
   }

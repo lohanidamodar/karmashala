@@ -65,10 +65,10 @@ class ArchiveOutcome {
           'change${changedFileCount(changes) == 1 ? '' : 's'} would be destroyed.',
     ArchiveRefusal.noWorktree =>
       'This session works in the repository itself; there is no worktree to '
-          'archive.',
-    ArchiveRefusal.alreadyArchived => 'This worktree is already archived.',
+          'delete.',
+    ArchiveRefusal.alreadyArchived => 'This worktree is already deleted.',
     ArchiveRefusal.sessionGone => 'This session no longer exists.',
-    null => error == null ? 'Worktree archived.' : '$error',
+    null => error == null ? 'Worktree deleted.' : '$error',
   };
 }
 
@@ -115,7 +115,7 @@ class SessionArchiveService {
     if (session == null) {
       return const ArchiveOutcome.refused(ArchiveRefusal.sessionGone);
     }
-    if (session.isArchived) {
+    if (session.worktreeRemoved) {
       return const ArchiveOutcome.refused(ArchiveRefusal.alreadyArchived);
     }
     final worktree = session.worktree;
@@ -155,7 +155,7 @@ class SessionArchiveService {
 
     _ref
         .read(sessionsDataProvider)
-        .markArchived(sessionId, _ref.read(clockProvider).nowUtc());
+        .markWorktreeRemoved(sessionId, _ref.read(clockProvider).nowUtc());
     // The row's status moved and the worktree it named is gone — a workspace
     // fact as much as a session one. Its *name* did not change.
     _ref

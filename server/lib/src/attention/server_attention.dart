@@ -42,6 +42,7 @@ class ServerAttention implements AttentionWork {
     this.onApprovalRequested,
     this.onStatusMoved,
     this.endedSessions,
+    this.archivedSessions,
   }) {
     _subscriptions = [
       status.hookChanges.listen(_applyHookChange),
@@ -88,6 +89,9 @@ class ServerAttention implements AttentionWork {
   /// The native rows whose session has ended: nothing they asked still waits
   /// on a person, and no poll watches them to see it clear.
   final Set<String> Function()? endedSessions;
+
+  /// The archived native rows: nothing of theirs is filed in the inbox.
+  final Set<String> Function()? archivedSessions;
 
   /// The question native row [String] has open, read as its card reads it;
   /// set once the session records are. Null files the status's own words.
@@ -150,7 +154,6 @@ class ServerAttention implements AttentionWork {
     if (_closed) return;
     _update(_inbox.syncFollowUps(followUps()));
   }
-
   /// One pass over the whole watch set: every session judged, conditions that
   /// cleared retired, sessions that left forgotten.
   Future<void> poll() async {
@@ -333,7 +336,9 @@ class ServerAttention implements AttentionWork {
   /// [next] with what every window is looking at marked seen, told when it
   /// differs from what clients were last told.
   void _update(AttentionInbox next, {bool force = false}) {
-    final looked = next.viewed(lookingAt);
+    final looked = next
+        .retireArchived(archivedSessions?.call() ?? const {})
+        .viewed(lookingAt);
     if (identical(looked, _inbox) && !force) return;
     final before = {for (final item in _inbox.items) item.id};
     _inbox = looked;

@@ -31,10 +31,25 @@ final class SessionPatch {
 
   SessionPatch.view(SessionView view) : this._({_view: view.name});
 
-  /// Its worktree archived away at [at]. Nothing else: the transcript still
-  /// points at this row.
+  /// Archived (hidden) at [at]. Its worktree, transcript and files stay.
   SessionPatch.archive(DateTime at)
     : this._({_archivedAt: at.toUtc().toIso8601String()});
+
+  /// Shown again. A removed worktree stays removed.
+  const SessionPatch.unarchive() : this._(const {_archivedAt: null});
+
+  /// Its worktree removed at [at], which archives it too — what the worktree
+  /// cleanup records.
+  SessionPatch.removeWorktree(DateTime at)
+    : this._({
+        _archivedAt: at.toUtc().toIso8601String(),
+        _worktreeRemovedAt: at.toUtc().toIso8601String(),
+      });
+
+  /// Its worktree deleted at [at] by a person ("Delete worktree"); whether
+  /// it is archived is left as it is.
+  SessionPatch.worktreeDeleted(DateTime at)
+    : this._({_worktreeRemovedAt: at.toUtc().toIso8601String()});
 
   /// The permission mode chosen for it, verbatim, or null to follow the
   /// agent's default live.
@@ -71,6 +86,7 @@ final class SessionPatch {
   static const _paneId = 'paneId';
   static const _view = 'view';
   static const _archivedAt = 'archivedAt';
+  static const _worktreeRemovedAt = 'worktreeRemovedAt';
   static const _permissionMode = 'permissionMode';
   static const _modelId = 'modelId';
   static const _workingDirectory = 'workingDirectory';
@@ -86,6 +102,7 @@ final class SessionPatch {
     _paneId,
     _view,
     _archivedAt,
+    _worktreeRemovedAt,
     _permissionMode,
     _modelId,
     _workingDirectory,
@@ -188,6 +205,9 @@ final class SessionPatch {
       archivedAt: has(_archivedAt)
           ? _dateOf(read<String>(_archivedAt))
           : row.archivedAt,
+      worktreeRemovedAt: has(_worktreeRemovedAt)
+          ? _dateOf(read<String>(_worktreeRemovedAt))
+          : row.worktreeRemovedAt,
       titleByUser: read<bool>(_titleByUser) ?? row.titleByUser,
       operatorGranted:
           read<bool>(_operatorGranted) ?? row.operatorGranted,

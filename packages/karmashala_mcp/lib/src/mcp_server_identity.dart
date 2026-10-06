@@ -9,4 +9,6 @@ const String kKarmashalaMcpInstructions =
     'projects, notes, inbox and delivery state of the app this agent is '
     'running inside. Tools that name a session default to the session '
     'calling them, so omit sessionId to act on yourself. Anything Karmashala '
-    'has not measured is reported as "not recorded" rather than guessed.';
+    'has not measured is reported as "not recorded" rather than guessed. '
+    'Once a session you started has ended and its work is merged or handed '
+    'back, archive it with session_archive.';

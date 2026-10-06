@@ -66,6 +66,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onEnd,
     required this.onBulkClose,
     this.onSavePreset,
+    this.onArchive,
     this.agentStatus,
     this.icon,
     this.progress,
@@ -80,6 +81,9 @@ class TerminalTabChip extends StatelessWidget {
   /// chip it is about, not the strip.
   @visibleForTesting
   static int debugBuildCount = 0;
+
+  /// Archives the session this tab holds; null for a tab holding none.
+  final VoidCallback? onArchive;
 
   final String title;
   final PaneLiveness liveness;
@@ -205,6 +209,12 @@ class TerminalTabChip extends StatelessWidget {
           ),
         ],
         const DesktopMenuDivider(),
+        if (onArchive != null)
+          DesktopMenuItem(
+            value: 'archive',
+            label: 'Archive session',
+            icon: AppIcons.tray,
+          ),
         DesktopMenuItem(
           value: 'end',
           label: 'End session',
@@ -219,6 +229,8 @@ class TerminalTabChip extends StatelessWidget {
         onClose();
       case 'end':
         onEnd();
+      case 'archive':
+        onArchive?.call();
       case 'save-preset':
         onSavePreset?.call();
       default:

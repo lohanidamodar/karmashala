@@ -795,10 +795,10 @@ void main() {
 
     testWidgets('asks first, and says what is kept', (tester) async {
       await pumpMerged(tester);
-      await tester.tap(find.text('Archive worktree'));
+      await tester.tap(find.text('Delete worktree'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Archive this worktree?'), findsOneWidget);
+      expect(find.text('Delete this worktree?'), findsOneWidget);
       expect(
         find.textContaining(
           'transcript, review notes and checkpoints are kept',
@@ -816,13 +816,13 @@ void main() {
       tester,
     ) async {
       await pumpMerged(tester);
-      await tester.tap(find.text('Archive worktree'));
+      await tester.tap(find.text('Delete worktree'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Archive'));
+      await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
       expect(recorder.archived, [(sessionId: 's1', discardUncommitted: false)]);
-      expect(find.text('Worktree archived.'), findsOneWidget);
+      expect(find.text('Worktree deleted.'), findsOneWidget);
     });
 
     testWidgets('uncommitted work is a second, separate confirmation', (
@@ -832,14 +832,14 @@ void main() {
         ArchiveRefusal.uncommittedChanges,
       );
       await pumpMerged(tester);
-      await tester.tap(find.text('Archive worktree'));
+      await tester.tap(find.text('Delete worktree'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Archive'));
+      await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
       expect(find.text('Discard uncommitted work?'), findsOneWidget);
       recorder.outcome = const ArchiveOutcome.archived();
-      await tester.tap(find.text('Discard and archive'));
+      await tester.tap(find.text('Discard and delete'));
       await tester.pumpAndSettle();
 
       expect(recorder.archived.last, (
@@ -855,9 +855,9 @@ void main() {
         ArchiveRefusal.uncommittedChanges,
       );
       await pumpMerged(tester);
-      await tester.tap(find.text('Archive worktree'));
+      await tester.tap(find.text('Delete worktree'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Archive'));
+      await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -880,10 +880,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Archived'), findsOneWidget);
+    expect(find.text('Worktree deleted'), findsOneWidget);
     expect(find.text('Commit'), findsNothing);
     expect(find.text('Run tests'), findsNothing);
-    expect(find.text('Archive worktree'), findsNothing);
+    expect(find.text('Delete worktree'), findsNothing);
     expect(find.text('View PR'), findsOneWidget);
   });
 

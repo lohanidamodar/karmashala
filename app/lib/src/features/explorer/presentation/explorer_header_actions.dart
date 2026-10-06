@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/explorer_agent_filter.dart';
 import '../application/explorer_sections.dart';
@@ -84,7 +85,12 @@ class _ConnectedFilterButton extends ConsumerWidget {
         ? ref.watch(explorerSectionLayoutProvider)
         : null;
     final settings = ref.read(settingsControllerProvider.notifier);
+    final showingArchived = ref.watch(showArchivedSessionsProvider);
     return ExplorerFilterButton(
+      showingArchived: showingArchived,
+      onToggleArchived: () => ref
+          .read(sessionListPrefsProvider.notifier)
+          .setShowArchived(!showingArchived),
       registry: ref.watch(agentRegistryProvider),
       filter: filter,
       showingViews: showingViews,
@@ -118,8 +124,16 @@ class ExplorerFilterButton extends StatelessWidget {
     required this.onAgentFilter,
     this.showingActivity = false,
     this.onToggleActivity,
+    this.showingArchived = false,
+    this.onToggleArchived,
     super.key,
   });
+
+  /// Whether archived sessions are listed, on this device.
+  final bool showingArchived;
+
+  /// Null leaves "Show archived" off the menu.
+  final VoidCallback? onToggleArchived;
 
   final AgentRegistry registry;
   final AgentFilter filter;
@@ -147,6 +161,7 @@ class ExplorerFilterButton extends StatelessWidget {
   static const String _emptySections = 'sections:empty';
   static const String _savedViews = 'views:saved';
   static const String _activity = 'lens:activity';
+  static const String _archived = 'sessions:archived';
   static const String _agentPrefix = 'agent:';
 
   @override
@@ -160,6 +175,8 @@ class ExplorerFilterButton extends StatelessWidget {
       onSelected: (value) {
         if (value == _activity) {
           onToggleActivity?.call();
+        } else if (value == _archived) {
+          onToggleArchived?.call();
         } else if (value == _savedViews) {
           onToggleSavedViews();
         } else if (value == _emptySections) {
@@ -189,6 +206,13 @@ class ExplorerFilterButton extends StatelessWidget {
             label: 'Activity by day',
             icon: AppIcons.clock,
             selected: showingActivity,
+          ),
+        if (onToggleArchived != null)
+          DesktopMenuItem(
+            value: _archived,
+            label: 'Show archived',
+            icon: AppIcons.tray,
+            selected: showingArchived,
           ),
         const PopupMenuDivider(),
         DesktopMenuItem(

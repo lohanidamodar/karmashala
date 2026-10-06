@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_session/session.dart';
 
 import '../../automations/presentation/resume_on_reset_dialog.dart';
+import '../../sessions/presentation/archive_session_action.dart';
 import '../../workspaces/data/workspace_data.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -151,6 +153,8 @@ class ExplorerSelectionVerbs {
   static const delete = 'selection:delete';
   static const pin = 'selection:pin';
   static const resumeOnReset = 'selection:resume-on-reset';
+  static const archive = 'selection:archive';
+  static const unarchive = 'selection:unarchive';
   static const selectAll = 'selection:all';
   static const done = 'selection:done';
 
@@ -165,6 +169,31 @@ class ExplorerSelectionVerbs {
         ? settings.pinnedProjectIds
         : settings.pinnedSessionIds;
     return _selection.ids.every(pinned.contains);
+  }
+
+  /// The ticked native rows: an imported conversation has no archive flag.
+  List<Session> get _natives =>
+      sessionsById(ref, _selection.ids).toList(growable: false);
+
+  /// Archive for the ticked rows not yet archived, Unarchive for those that
+  /// are — each offered only when something ticked is in its state.
+  List<PopupMenuEntry<String>> _archiveItems(String? many) {
+    final natives = _natives;
+    final suffix = many == null ? '' : ' $many';
+    return [
+      if (natives.any((s) => !s.isArchived))
+        DesktopMenuItem(
+          value: archive,
+          label: 'Archive$suffix',
+          icon: AppIcons.tray,
+        ),
+      if (natives.any((s) => s.isArchived))
+        DesktopMenuItem(
+          value: unarchive,
+          label: 'Unarchive$suffix',
+          icon: AppIcons.tray,
+        ),
+    ];
   }
 
   PopupMenuEntry<String> _pinItem(String? many) {
@@ -207,6 +236,7 @@ class ExplorerSelectionVerbs {
           label: 'Resume $many when usage resets…',
           icon: AppIcons.clock,
         ),
+        ..._archiveItems(many),
         DesktopMenuItem(
           value: delete,
           label: 'Delete $many…',
@@ -233,6 +263,7 @@ class ExplorerSelectionVerbs {
           label: 'Resume when usage resets…',
           icon: AppIcons.clock,
         ),
+        ..._archiveItems(null),
         DesktopMenuItem(
           value: delete,
           label: 'Delete…',
@@ -294,6 +325,20 @@ class ExplorerSelectionVerbs {
         _file(null, null);
       case delete:
         await _delete();
+      case archive:
+        final targets = [
+          for (final session in _natives)
+            if (!session.isArchived) session,
+        ];
+        ref.read(sessionSelectionProvider.notifier).leave();
+        await archiveSessionsFromUi(context, ref, targets);
+      case unarchive:
+        final ids = [
+          for (final session in _natives)
+            if (session.isArchived) session.id,
+        ];
+        ref.read(sessionSelectionProvider.notifier).leave();
+        await unarchiveSessionsFromUi(context, ref, ids);
       case pin:
         ref
             .read(settingsControllerProvider.notifier)

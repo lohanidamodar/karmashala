@@ -512,7 +512,7 @@ class LaunchToolSet extends ServerToolSet {
               ? null
               : SessionDao(_context.database).getById(callerSessionId))
         : null;
-    final callerWorktree = caller == null || caller.isArchived
+    final callerWorktree = caller == null || caller.worktreeRemoved
         ? null
         : caller.worktree;
     EnvironmentPath? existingWorktree;

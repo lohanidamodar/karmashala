@@ -152,6 +152,8 @@ void main() {
     ),
     const SessionDelete('s1'),
     const SessionsDeleteMany(sessionIds: ['s1', 's2'], importedIds: ['i']),
+    const SessionsArchive(['s1', 's2']),
+    const SessionsUnarchive(['s3']),
     const SessionLinkAdd(sessionId: 's1', repositoryId: 'r2'),
     const SessionLinkRemove(sessionId: 's1', repositoryId: 'r2'),
     const SessionEvents('s1'),
@@ -289,6 +291,18 @@ void main() {
     expect(updated.rebased, [checkout]);
     expect(roundTrip(const CheckoutsRetire(['r']), {'r': 2}).value, {'r': 2});
     expect(roundTrip(const ProjectsUsingEnvironment('e'), ['A']).value, ['A']);
+    final archived = roundTrip(
+      const SessionsArchive(['a']),
+      const SessionsArchived(
+        changed: ['a'],
+        live: [SessionNamed('b', 'Busy')],
+        missing: ['c'],
+      ),
+    ).value;
+    expect(archived.changed, ['a']);
+    expect(archived.live.single.id, 'b');
+    expect(archived.live.single.title, 'Busy');
+    expect(archived.missing, ['c']);
 
     const delete = ProjectDelete('p');
     final reply = DataEnvelope.readAnswer(

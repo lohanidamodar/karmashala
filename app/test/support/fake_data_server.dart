@@ -796,6 +796,8 @@ class FakeDataServer {
       SessionEdit() ||
       SessionDelete() ||
       SessionsDeleteMany() ||
+      SessionsArchive() ||
+      SessionsUnarchive() ||
       SessionLinkAdd() ||
       SessionLinkRemove() ||
       SessionEvents() ||

@@ -994,11 +994,14 @@ class QuickOpenSources {
                 ?note,
                 ?lastActive.label(now),
               ].join(' · '),
-              detail: _statusWord(session.status),
+              detail: session.isArchived
+                  ? 'archived'
+                  : _statusWord(session.status),
               icon: AppIcons.chatCircle,
               keywords: [
                 agent,
                 session.status.name,
+                if (session.isArchived) 'archived',
                 if (session.useWorktree) 'worktree',
                 ?session.worktree?.path,
               ],
@@ -1145,6 +1148,7 @@ class QuickOpenSources {
           // The age of the reading, not of the conversation: the index is only
           // as current as the trigger that last read that transcript (§19).
           detail: [
+            if (native?.isArchived ?? false) 'archived',
             if (matches > 1) '$matches matches',
             agent,
             if (hit.indexedAt != null)

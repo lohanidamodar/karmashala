@@ -140,6 +140,29 @@ void main() {
     expect(find.textContaining('active 3m ago'), findsOneWidget);
   });
 
+  testWidgets('an archived session is still found, badged archived', (
+    tester,
+  ) async {
+    db.server.sessionRows.insert(
+      Session(
+        id: 'old',
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'Retired work',
+        useWorktree: false,
+        status: SessionStatus.completed,
+        createdAt: now,
+        archivedAt: now,
+      ),
+    );
+    await open(tester);
+
+    await type(tester, 'Retired');
+
+    expect(find.text('Retired work'), findsOneWidget);
+    expect(find.text('archived'), findsOneWidget);
+  });
+
   testWidgets('and a day-old reading is worded the same way', (tester) async {
     session('s1', title: 'Rebuild the index');
     active('s1', const Duration(days: 2));

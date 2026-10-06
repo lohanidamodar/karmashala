@@ -5,6 +5,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/session.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import '../../settings/application/settings_controller.dart';
 import '../domain/agent_filter.dart';
 import 'project_tree.dart';
@@ -63,7 +64,11 @@ final explorerAgentFilterProvider = Provider<AgentFilter>((ref) {
 
 /// What one project's row shows, and how much of it the filter is holding back.
 class VisibleSessions {
-  const VisibleSessions({required this.sessions, required this.hidden});
+  const VisibleSessions({
+    required this.sessions,
+    required this.hidden,
+    this.archived = 0,
+  });
 
   final CheckoutSessions sessions;
 
@@ -71,15 +76,32 @@ class VisibleSessions {
   /// Counted here because here it is free: a workspace-wide count in the header
   /// would sweep the session table for every project nobody has opened.
   final int hidden;
+
+  /// How many archived sessions are off the list while they are hidden.
+  final int archived;
 }
 
-/// Every session in a project that the agent filter admits. Costs nothing while
-/// the filter is off: the unfiltered branch hands back [projectSessionsProvider]'s
-/// own list and never mounts [sessionAgentsProvider].
+/// Every session in a project that the agent filter admits, archived ones only
+/// with "Show archived" on. Costs nothing while the agent filter is off: that
+/// branch never mounts [sessionAgentsProvider].
 final visibleProjectSessionsProvider = Provider.autoDispose
     .family<VisibleSessions, String>((ref, projectId) {
-      final all = ref.watch(projectSessionsProvider(projectId));
+      var all = ref.watch(projectSessionsProvider(projectId));
+      var archived = 0;
+      if (!ref.watch(showArchivedSessionsProvider)) {
+        final shown = [
+          for (final session in all.native)
+            if (!session.isArchived) session,
+        ];
+        archived = all.native.length - shown.length;
+        if (archived > 0) {
+          all = CheckoutSessions(native: shown, imported: all.imported);
+        }
+      }
       final filter = ref.watch(explorerAgentFilterProvider);
+      if (filter.isUnfiltered) {
+        return VisibleSessions(sessions: all, hidden: 0, archived: archived);
+      }
       if (filter.isUnfiltered) {
         return VisibleSessions(sessions: all, hidden: 0);
       }
@@ -95,5 +117,6 @@ final visibleProjectSessionsProvider = Provider.autoDispose
       return VisibleSessions(
         sessions: CheckoutSessions(native: native, imported: imported),
         hidden: all.length - native.length - imported.length,
+        archived: archived,
       );
     });

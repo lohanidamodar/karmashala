@@ -12,6 +12,7 @@ import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../explorer/application/explorer_actions.dart';
+import '../application/session_list_prefs.dart';
 import '../application/session_subagents_providers.dart';
 
 /// Opens session [sessionId]'s subagent panel: a side panel at width, a
@@ -137,16 +138,26 @@ class SessionSubagentsPanel extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.sessionId, required this.list});
 
   final String sessionId;
   final SessionSubagentList list;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final note = list.note;
     final entries = list.entries;
+    final archived = ref.watch(archivedSessionIdsProvider);
+    final showArchived = ref.watch(showArchivedSessionsProvider);
+    final lineage = [
+      for (final (entry, depth) in subagentLineage(
+        entries,
+        hiding: showArchived ? const {} : archived,
+      ))
+        (entry, depth),
+    ];
+    final archivedHere = _countArchived(entries, archived);
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: Insets.sm),
       children: [
@@ -155,8 +166,21 @@ class _Body extends StatelessWidget {
             icon: AppIcons.treeStructure,
             text: 'No subagents or child sessions yet.',
           ),
-        for (final (entry, depth) in subagentLineage(entries))
+        for (final (entry, depth) in lineage)
           _EntryRow(parentSessionId: sessionId, entry: entry, depth: depth),
+        if (archivedHere > 0)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              icon: const Icon(AppIcons.tray, size: Chrome.iconSmall),
+              label: Text(
+                showArchived ? 'Hide archived' : 'Archived ($archivedHere)',
+              ),
+              onPressed: () => ref
+                  .read(sessionListPrefsProvider.notifier)
+                  .setShowArchived(!showArchived),
+            ),
+          ),
         if (note != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -202,14 +226,17 @@ class _Message extends StatelessWidget {
 /// [entries] and every child below them, depth first, each with how deep it
 /// sits under the session the panel is for (0 for its own). At every depth
 /// what is still working comes first, then what ended; newest first in each,
-/// so what needs watching is at the top (owner, 2026-10-06).
+/// so what needs watching is at the top (owner, 2026-10-06). A child session
+/// in [hiding] is left out with everything below it.
 Iterable<(SessionSubagent, int)> subagentLineage(
-  List<SessionSubagent> entries, [
+  List<SessionSubagent> entries, {
   int depth = 0,
-]) sync* {
+  Set<String> hiding = const {},
+}) sync* {
   for (final entry in _workingFirst(entries)) {
+    if (hiding.contains(entry.childSessionId)) continue;
     yield (entry, depth);
-    yield* subagentLineage(entry.children, depth + 1);
+    yield* subagentLineage(entry.children, depth: depth + 1, hiding: hiding);
   }
 }
 
@@ -228,6 +255,15 @@ List<SessionSubagent> _workingFirst(List<SessionSubagent> entries) {
     return byStart != 0 ? byStart : b.$1.compareTo(a.$1);
   });
   return [for (final (_, entry) in indexed) entry];
+}
+
+int _countArchived(List<SessionSubagent> entries, Set<String> archived) {
+  var count = 0;
+  for (final entry in entries) {
+    if (archived.contains(entry.childSessionId)) count++;
+    count += _countArchived(entry.children, archived);
+  }
+  return count;
 }
 
 /// How long [entry] ran, or has run so far; null when it never said when it

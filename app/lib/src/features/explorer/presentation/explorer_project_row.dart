@@ -45,6 +45,7 @@ import '../application/session_diff_stat.dart';
 import '../application/session_selection.dart';
 import '../application/where_you_are.dart';
 import 'explorer_selection_actions.dart';
+import 'more_menu.dart';
 import 'session_rows.dart';
 import 'sidebar_chrome.dart';
 
@@ -146,26 +147,32 @@ class ExplorerProjectRow extends ConsumerWidget {
     // Built when the menu opens, so the readings behind it are current.
     List<PopupMenuEntry<String>> menuItems() =>
         selectionRowMenu(ref, context, project.id) ??
-        [
-          ...projectMenuItems(
-            project: project,
-            pinned: pinned,
-            workspaces: ref.read(workspacesControllerProvider),
-            workspaceCounts: ref.read(workspaceProjectCountsProvider),
-            installations: ref
-                .read(agentInstallationsDataProvider)
-                .getByEnvironment(project.root.environmentId),
-            registry: ref.read(agentRegistryProvider),
-            canReveal: ref
-                .read(revealInFileManagerProvider)
-                .canReveal(project.root),
-            checkedSuffix: actions.checkedSuffix(),
-            canOpenExternally: ref.read(capabilitiesProvider).readsServerDisk,
-          ),
-          const DesktopMenuDivider(),
-          selectRowMenuItem(),
-        ];
+        projectMenuItems(
+          project: project,
+          pinned: pinned,
+          checkedSuffix: actions.checkedSuffix(),
+          canOpenExternally: ref.read(capabilitiesProvider).readsServerDisk,
+          select: selectRowMenuItem(),
+        );
+    List<PopupMenuEntry<String>> moreItems() => projectMoreMenuItems(
+      project: project,
+      workspaces: ref.read(workspacesControllerProvider),
+      workspaceCounts: ref.read(workspaceProjectCountsProvider),
+      installations: ref
+          .read(agentInstallationsDataProvider)
+          .getByEnvironment(project.root.environmentId),
+      registry: ref.read(agentRegistryProvider),
+      canReveal: ref.read(revealInFileManagerProvider).canReveal(project.root),
+      checkedSuffix: actions.checkedSuffix(),
+      canOpenExternally: ref.read(capabilitiesProvider).readsServerDisk,
+    );
     Future<void> onMenu(String action) async {
+      if (action == kMoreMenuValue) {
+        final picked = await showMoreMenu(context, moreItems());
+        if (picked == null || !context.mounted) return;
+        action = picked;
+      }
+      if (!context.mounted) return;
       if (runSelectionRowAction(
         ref,
         context,
@@ -431,17 +438,14 @@ List<PopupMenuEntry<String>> newSessionWithItems(
   ];
 }
 
-/// A project row's menu. Pure: every reading arrives as an argument.
+/// A project row's menu: open and new, the project, "More…", and the one
+/// destructive verb last. Pure: every reading arrives as an argument.
 List<PopupMenuEntry<String>> projectMenuItems({
   required Project project,
   required bool pinned,
-  required List<Workspace> workspaces,
-  required Map<String, int> workspaceCounts,
-  required List<AgentInstallation> installations,
-  required AgentRegistry registry,
-  required bool canReveal,
   required String checkedSuffix,
   bool canOpenExternally = true,
+  PopupMenuEntry<String>? select,
 }) => [
   DesktopMenuItem(
     value: 'new-session',
@@ -453,6 +457,58 @@ List<PopupMenuEntry<String>> projectMenuItems({
     label: 'Open terminal',
     icon: AppIcons.terminal,
   ),
+  // An external editor here cannot open a folder on a server elsewhere.
+  if (canOpenExternally)
+    DesktopMenuItem(
+      value: 'open-editor',
+      label: 'Open in editor',
+      icon: AppIcons.code,
+    ),
+  const DesktopMenuDivider(),
+  DesktopMenuItem(
+    value: 'edit',
+    label: 'Edit project…',
+    icon: AppIcons.pencilSimple,
+    shortcut: 'F2',
+  ),
+  DesktopMenuItem(
+    value: 'pin',
+    label: pinned ? 'Unpin' : 'Pin to top',
+    icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+  ),
+  DesktopMenuItem(
+    value: 'copy-path',
+    label: 'Copy path',
+    icon: AppIcons.copySimple,
+  ),
+  // The owner asked for it to stay in this popup, not behind More….
+  DesktopMenuItem(
+    value: 'refresh',
+    label: 'Refresh CLI sessions$checkedSuffix',
+    icon: AppIcons.arrowsClockwise,
+  ),
+  ?select,
+  moreMenuItem(),
+  const DesktopMenuDivider(),
+  DesktopMenuItem(
+    value: 'delete',
+    label: 'Remove from workspace',
+    icon: AppIcons.trash,
+    destructive: true,
+  ),
+];
+
+/// The project menu's "More…": the verbs reached for rarely. Pure.
+List<PopupMenuEntry<String>> projectMoreMenuItems({
+  required Project project,
+  required List<Workspace> workspaces,
+  required Map<String, int> workspaceCounts,
+  required List<AgentInstallation> installations,
+  required AgentRegistry registry,
+  required bool canReveal,
+  required String checkedSuffix,
+  bool canOpenExternally = true,
+}) => [
   // Offered only when there is a choice: with one installation the `+`
   // already uses it.
   ...newSessionWithItems(installations, registry),
@@ -461,21 +517,13 @@ List<PopupMenuEntry<String>> projectMenuItems({
     label: 'Copy new-session command',
     icon: AppIcons.copy,
   ),
-  // An external editor here cannot open a folder on a server elsewhere.
-  if (canOpenExternally) ...[
-    const DesktopMenuDivider(),
-    DesktopMenuItem(
-      value: 'open-editor',
-      label: 'Open in editor',
-      icon: AppIcons.code,
-    ),
+  const DesktopMenuDivider(),
+  if (canOpenExternally)
     DesktopMenuItem(
       value: 'open-editor-subfolder',
       label: 'Open sub-folder in editor…',
       icon: AppIcons.folderOpen,
     ),
-  ],
-  const DesktopMenuDivider(),
   // An SSH-owned row has no local spelling, so the entry would always fail.
   if (canReveal)
     DesktopMenuItem(
@@ -483,11 +531,6 @@ List<PopupMenuEntry<String>> projectMenuItems({
       label: 'Open in File Explorer',
       icon: AppIcons.folderOpen,
     ),
-  DesktopMenuItem(
-    value: 'copy-path',
-    label: 'Copy path',
-    icon: AppIcons.copySimple,
-  ),
   // Which context this project is in, offered as the list it could be in
   // instead — one click to move, and *No context* never leaves the workspace.
   const DesktopMenuDivider(),
@@ -518,32 +561,9 @@ List<PopupMenuEntry<String>> projectMenuItems({
   ),
   const DesktopMenuDivider(),
   DesktopMenuItem(
-    value: 'edit',
-    label: 'Edit project…',
-    icon: AppIcons.pencilSimple,
-    shortcut: 'F2',
-  ),
-  DesktopMenuItem(
-    value: 'pin',
-    label: pinned ? 'Unpin' : 'Pin to top',
-    icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-  ),
-  DesktopMenuItem(
-    value: 'refresh',
-    label: 'Refresh CLI sessions$checkedSuffix',
-    icon: AppIcons.arrowsClockwise,
-  ),
-  DesktopMenuItem(
     value: 'rescan',
     label: 'Rescan for repositories',
     icon: AppIcons.magnifyingGlass,
-  ),
-  const DesktopMenuDivider(),
-  DesktopMenuItem(
-    value: 'delete',
-    label: 'Remove from workspace',
-    icon: AppIcons.trash,
-    destructive: true,
   ),
 ];
 
