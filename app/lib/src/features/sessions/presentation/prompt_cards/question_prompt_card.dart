@@ -57,6 +57,8 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   bool _busy = false;
 
+  final _options = ScrollController();
+
   List<Set<int>> _fresh() => [
     for (final _ in widget.question.questions) <int>{},
   ];
@@ -86,6 +88,7 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
     for (final c in _words) {
       c.dispose();
     }
+    _options.dispose();
     super.dispose();
   }
 
@@ -132,76 +135,127 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
     }
   });
 
+  /// Brings the option at [context] wholly into view once it has redrawn.
+  void _reveal(BuildContext context) =>
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        for (final policy in const [
+          ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        ]) {
+          Scrollable.ensureVisible(context, alignmentPolicy: policy);
+        }
+      });
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
     final questions = widget.question.questions;
-
-    return Column(
+    final options = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.showHeader)
-          Row(
-            children: [
-              Icon(
-                AppIcons.warningCircle,
-                size: density.iconSmall,
-                color: SemanticColors.of(context).attention,
-              ),
-              SizedBox(width: density.glyphGap),
-              Expanded(
-                child: Text(
-                  '${widget.agentName} is asking you'
-                  '${questions.length == 1 ? ' a question' : ' ${questions.length} questions'}',
-                  style: theme.textTheme.labelLarge,
-                ),
-              ),
-            ],
-          ),
         for (var i = 0; i < questions.length; i++) ...[
           SizedBox(height: density.lineGap * 2),
           _question(context, i),
         ],
-        const SizedBox(height: Insets.sm),
-        if (!widget.canAnswer)
-          Text(
-            'This phone was not granted approval rights, so it cannot answer. '
-            'Answer in its terminal.',
-            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
-          )
-        else ...[
-          Wrap(
-            spacing: Insets.sm,
-            runSpacing: Insets.xs,
-            children: [
-              OutlinedButton(
-                onPressed: _busy ? null : () => _send(decline: true),
-                child: const Text('Decline'),
-              ),
-              if (widget.chatLabel case final chat?)
-                OutlinedButton(
-                  onPressed: _busy ? null : () => _send(chat: true),
-                  child: Text(chat),
-                ),
-              FilledButton(
-                onPressed: _busy || !_complete ? null : _send,
-                child: const Text('Send answer'),
-              ),
-            ],
-          ),
-          const SizedBox(height: Insets.xs),
-          Text(
-            "Your choice is typed into the session's terminal.",
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
       ],
     );
+    // Held to a height, the options scroll and the answers stay pinned under
+    // them: a tall question once pushed its answers out of the card.
+    return LayoutBuilder(
+      builder: (context, box) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.showHeader) _header(context),
+          if (box.hasBoundedHeight)
+            Flexible(
+              child: Scrollbar(
+                controller: _options,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  key: const ValueKey('question-options'),
+                  controller: _options,
+                  primary: false,
+                  padding: const EdgeInsetsDirectional.only(end: Insets.md),
+                  child: options,
+                ),
+              ),
+            )
+          else
+            KeyedSubtree(
+              key: const ValueKey('question-options'),
+              child: options,
+            ),
+          ..._actions(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    final density = UiDensity.of(context);
+    final count = widget.question.questions.length;
+    return Row(
+      children: [
+        Icon(
+          AppIcons.warningCircle,
+          size: density.iconSmall,
+          color: SemanticColors.of(context).attention,
+        ),
+        SizedBox(width: density.glyphGap),
+        Expanded(
+          child: Text(
+            '${widget.agentName} is asking you'
+            '${count == 1 ? ' a question' : ' $count questions'}',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _actions(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return [
+      const SizedBox(height: Insets.sm),
+      if (!widget.canAnswer)
+        Text(
+          'This phone was not granted approval rights, so it cannot answer. '
+          'Answer in its terminal.',
+          style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
+        )
+      else ...[
+        Wrap(
+          spacing: Insets.sm,
+          runSpacing: Insets.xs,
+          children: [
+            OutlinedButton(
+              onPressed: _busy ? null : () => _send(decline: true),
+              child: const Text('Decline'),
+            ),
+            if (widget.chatLabel case final chat?)
+              OutlinedButton(
+                onPressed: _busy ? null : () => _send(chat: true),
+                child: Text(chat),
+              ),
+            FilledButton(
+              onPressed: _busy || !_complete ? null : _send,
+              child: const Text('Send answer'),
+            ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        Text(
+          "Your choice is typed into the session's terminal.",
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ];
   }
 
   Widget _question(BuildContext context, int i) {
@@ -228,26 +282,38 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
             ),
           ),
         for (var o = 0; o < item.options.length; o++)
-          CompanionChoice(
-            label: item.options[o].label,
-            description: item.options[o].description,
-            multi: item.multiSelect,
-            selected: !_other[i] && _chosen[i].contains(o),
-            onTap: _busy || !widget.canAnswer ? null : () => _pick(i, o),
+          Builder(
+            builder: (option) => CompanionChoice(
+              label: item.options[o].label,
+              description: item.options[o].description,
+              multi: item.multiSelect,
+              selected: !_other[i] && _chosen[i].contains(o),
+              onTap: _busy || !widget.canAnswer
+                  ? null
+                  : () {
+                      _pick(i, o);
+                      _reveal(option);
+                    },
+            ),
           ),
         // Own words were measured for a single-choice question only.
         if (!item.multiSelect) ...[
-          CompanionChoice(
-            label: 'Other…',
-            description: '',
-            multi: false,
-            selected: _other[i],
-            onTap: _busy || !widget.canAnswer
-                ? null
-                : () => setState(() {
-                    _other[i] = true;
-                    _chosen[i] = {};
-                  }),
+          Builder(
+            builder: (option) => CompanionChoice(
+              label: 'Other…',
+              description: '',
+              multi: false,
+              selected: _other[i],
+              onTap: _busy || !widget.canAnswer
+                  ? null
+                  : () {
+                      setState(() {
+                        _other[i] = true;
+                        _chosen[i] = {};
+                      });
+                      _reveal(option);
+                    },
+            ),
           ),
           if (_other[i])
             Padding(

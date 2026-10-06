@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,7 @@ import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
 import 'chat_cards/chat_tool_ask.dart' show ChatToolAsk, chatInlineAsksProvider;
+import 'chat_transcript.dart' show ChatViewportRoom;
 
 part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
@@ -126,18 +128,24 @@ class ApprovalRequestCard extends ConsumerWidget {
         canAnswer: canAnswer,
         cannot: cannot,
       );
+      // Under its call, never taller than the conversation's own room, so
+      // its answers are in sight with the list at its end; on a phone, never
+      // more of the page than stacked 48dp answers need held sideways.
+      final room = inline ? ChatViewportRoom.of(context) : null;
+      final maxHeight = room != null
+          ? room - 2 * Insets.xl
+          : touch
+          ? MediaQuery.sizeOf(context).height * _touchDockShare
+          : null;
       return _Docked(
         touch: touch,
-        child: !touch
+        child: maxHeight == null
             ? dock
-            // Stacked 48dp answers can outgrow a phone held sideways; the
-            // chat keeps the rest of the page.
             : ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight:
-                      MediaQuery.sizeOf(context).height * _touchDockShare,
+                  maxHeight: math.max(maxHeight, _minBoundedDock),
                 ),
-                child: SingleChildScrollView(primary: false, child: dock),
+                child: dock,
               ),
       );
     }
@@ -391,9 +399,8 @@ class _QuestionOr extends ConsumerWidget {
     final chatRow = agentId == null
         ? null
         : ref.read(agentRegistryProvider).byId(agentId)?.questions?.chatRow;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return _FlexColumn(
+      flexible: 0,
       children: [
         QuestionPromptCard(
           agentName: agentName,
@@ -472,6 +479,37 @@ class _Docked extends InheritedWidget {
 
 /// The most of the page's height the dock takes on a phone before it scrolls.
 const double _touchDockShare = 0.55;
+
+/// Below this a bounded dock would hold its answers and nothing else.
+const double _minBoundedDock = 200;
+
+/// A column whose child at [flexible] takes only the room the rest leave it
+/// when the column is held to a height, and is laid out plainly otherwise.
+class _FlexColumn extends StatelessWidget {
+  const _FlexColumn({
+    required this.children,
+    required this.flexible,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+  });
+
+  final List<Widget> children;
+  final int flexible;
+  final CrossAxisAlignment crossAxisAlignment;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => Column(
+      crossAxisAlignment: crossAxisAlignment,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < children.length; i++)
+          i == flexible && box.hasBoundedHeight
+              ? Flexible(child: children[i])
+              : children[i],
+      ],
+    ),
+  );
+}
 
 /// On the phone, a word that an answer landed — the companion's "Approved." —
 /// because a dock that simply vanishes reads as a dropped tap. Null elsewhere,

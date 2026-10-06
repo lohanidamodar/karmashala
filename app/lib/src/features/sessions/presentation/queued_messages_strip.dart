@@ -23,9 +23,14 @@ class QueuedMessagesStrip extends ConsumerWidget {
     super.key,
     required this.sessionId,
     this.onBackToComposer,
+    this.folded = false,
   });
 
   final String sessionId;
+
+  /// Folded to one line whatever the room: a question open above it needs
+  /// the room more than the messages waiting behind it.
+  final bool folded;
 
   /// Puts a failed message's text back in the composer; null offers only
   /// Dismiss.
@@ -41,7 +46,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
     final quarter = MediaQuery.sizeOf(context).height / 4;
     return LayoutBuilder(
       builder: (context, box) =>
-          box.maxHeight < foldBelow || quarter < foldBelow
+          folded || box.maxHeight < foldBelow || quarter < foldBelow
           ? _FoldedQueueLine(sessionId: sessionId, messages: messages)
           : _strip(messages, quarter),
     );

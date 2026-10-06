@@ -3981,47 +3981,49 @@ WorkbenchView
                                                           LayoutBuilder
                                                             Column
                                                               Expanded
-                                                                Stack
-                                                                  Positioned
-                                                                    FocusTraversalGroup
-                                                                      Focus
-                                                                        _FocusInheritedScope
-                                                                          SessionEmptyOrFailed
-                                                                            _ChatEmptyState
-                                                                              LayoutBuilder
-                                                                                SingleChildScrollView
-                                                                                  PrimaryScrollController
-                                                                                    Scrollable
-                                                                                      StretchingOverscrollIndicator
-                                                                                        NotificationListener<ScrollNotification>
-                                                                                          AnimatedBuilder
-                                                                                            ClipRect
-                                                                                              StretchEffect
-                                                                                                Transform
-                                                                                                  NotificationListener<ScrollMetricsNotification>
-                                                                                                    _ScrollSemantics key=[GlobalKey#…]
-                                                                                                      _ScrollableScope
-                                                                                                        Listener
-                                                                                                          RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
-                                                                                                            _GestureSemantics
-                                                                                                              Listener
-                                                                                                                Semantics
-                                                                                                                  IgnorePointer key=[GlobalKey#…]
-                                                                                                                    _SingleChildViewport
-                                                                                                                      ConstrainedBox
-                                                                                                                        Center
+                                                                LayoutBuilder
+                                                                  ChatViewportRoom
+                                                                    Stack
+                                                                      Positioned
+                                                                        FocusTraversalGroup
+                                                                          Focus
+                                                                            _FocusInheritedScope
+                                                                              SessionEmptyOrFailed
+                                                                                _ChatEmptyState
+                                                                                  LayoutBuilder
+                                                                                    SingleChildScrollView
+                                                                                      PrimaryScrollController
+                                                                                        Scrollable
+                                                                                          StretchingOverscrollIndicator
+                                                                                            NotificationListener<ScrollNotification>
+                                                                                              AnimatedBuilder
+                                                                                                ClipRect
+                                                                                                  StretchEffect
+                                                                                                    Transform
+                                                                                                      NotificationListener<ScrollMetricsNotification>
+                                                                                                        _ScrollSemantics key=[GlobalKey#…]
+                                                                                                          _ScrollableScope
+                                                                                                            Listener
+                                                                                                              RawGestureDetector key=[LabeledGlobalKey<RawGestureDetectorState>#…]
+                                                                                                                _GestureSemantics
+                                                                                                                  Listener
+                                                                                                                    Semantics
+                                                                                                                      IgnorePointer key=[GlobalKey#…]
+                                                                                                                        _SingleChildViewport
                                                                                                                           ConstrainedBox
-                                                                                                                            Padding
-                                                                                                                              Column
-                                                                                                                                Icon
-                                                                                                                                  Semantics
-                                                                                                                                    ExcludeSemantics
-                                                                                                                                      SizedBox
-                                                                                                                                        Center
-                                                                                                                                          RichText
-                                                                                                                                SizedBox
-                                                                                                                                Text text="No chat view for this session. This session has no CLI session id yet, so there is nothing to look for. Its terminal is the session."
-                                                                                                                                  RichText
+                                                                                                                            Center
+                                                                                                                              ConstrainedBox
+                                                                                                                                Padding
+                                                                                                                                  Column
+                                                                                                                                    Icon
+                                                                                                                                      Semantics
+                                                                                                                                        ExcludeSemantics
+                                                                                                                                          SizedBox
+                                                                                                                                            Center
+                                                                                                                                              RichText
+                                                                                                                                    SizedBox
+                                                                                                                                    Text text="No chat view for this session. This session has no CLI session id yet, so there is nothing to look for. Its terminal is the session."
+                                                                                                                                      RichText
                                                               ConstrainedBox
                                                                 Align
                                                                   ConstrainedBox
@@ -4035,8 +4037,9 @@ WorkbenchView
                                                                                   LayoutBuilder
                                                                                     Column
                                                                                       Flexible
-                                                                                        QueuedMessagesStrip
-                                                                                          SizedBox
+                                                                                        Consumer
+                                                                                          QueuedMessagesStrip
+                                                                                            SizedBox
                                                                                       PinnedPlanStrip
                                                                                         SizedBox
                                                                                       Flexible

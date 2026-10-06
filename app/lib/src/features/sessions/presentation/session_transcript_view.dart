@@ -82,6 +82,17 @@ import 'delegation_card.dart';
 import 'session_failed_state.dart';
 import 'background_runs_strip.dart';
 
+/// Whether the agent in [String] session has a prompt or question open.
+final _promptOpenProvider = Provider.autoDispose.family<bool, String>(
+  (ref, sessionId) => ref.watch(
+    agentSessionStatusProvider(sessionId).select(
+      (status) =>
+          status.asData?.value.hasOpenPrompt == true ||
+          status.asData?.value.hasOpenQuestion == true,
+    ),
+  ),
+);
+
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
 class SessionTranscriptView extends ConsumerStatefulWidget {
@@ -731,49 +742,54 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         final detail = _detailWithArtifacts(messages, artifacts);
         final unplaced = _placement.unplaced;
         return ChatTranscriptView(
-        // Per session: this view outlives a switch within its group, and an
-        // unkeyed list kept the last session's scroll offset.
-        key: ValueKey(widget.sessionId),
-        messages: messages,
-        earlier: earlier,
-        onLoadEarlier: earlier > 0
-            ? () => unawaited(
-                ref.read(serverTranscriptsProvider).loadOlder(widget.sessionId),
-              )
-            : null,
-        firstOrdinal: firstOrdinal,
-        agentId: _agentId(),
-        turn: turn,
-        resolveHostPath: resolveHostPath,
-        // Paths in the conversation are clickable, and a click reveals
-        // rather than opens — see [_openPath].
-        onPathTap: _openPath,
-        onLinkTap: onLinkTap,
-        // What the parent's `Task(…)` row never showed. Collapsed and
-        // unread until opened — one session's turns came to 1,485 MiB.
-        detailBuilder: detail,
-        // Null when Notes is off: the transcript never learns the
-        // feature exists, so there is nothing left behind to hide.
-        onSaveNote: notesEnabled ? _saveNote : null,
-        footer: unplaced.isEmpty
-            ? footer
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [UnplacedArtifactsStrip(artifacts: unplaced), footer],
-              ),
-        emptyBuilder: (standard) => SessionEmptyOrFailed(
-          sessionId: widget.sessionId,
-          otherwise: standard,
-        ),
-        emptyHint: _emptyHint(
-          chatAvailable: chatAvailable,
-          reading: reading,
-          fromPty: fromPty,
-          serverTooOld: serverTooOld,
-          active: active,
-          hasTerminal: hasTerminal,
-        ),
+          // Per session: this view outlives a switch within its group, and an
+          // unkeyed list kept the last session's scroll offset.
+          key: ValueKey(widget.sessionId),
+          messages: messages,
+          earlier: earlier,
+          onLoadEarlier: earlier > 0
+              ? () => unawaited(
+                  ref
+                      .read(serverTranscriptsProvider)
+                      .loadOlder(widget.sessionId),
+                )
+              : null,
+          firstOrdinal: firstOrdinal,
+          agentId: _agentId(),
+          turn: turn,
+          resolveHostPath: resolveHostPath,
+          // Paths in the conversation are clickable, and a click reveals
+          // rather than opens — see [_openPath].
+          onPathTap: _openPath,
+          onLinkTap: onLinkTap,
+          // What the parent's `Task(…)` row never showed. Collapsed and
+          // unread until opened — one session's turns came to 1,485 MiB.
+          detailBuilder: detail,
+          // Null when Notes is off: the transcript never learns the
+          // feature exists, so there is nothing left behind to hide.
+          onSaveNote: notesEnabled ? _saveNote : null,
+          footer: unplaced.isEmpty
+              ? footer
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    UnplacedArtifactsStrip(artifacts: unplaced),
+                    footer,
+                  ],
+                ),
+          emptyBuilder: (standard) => SessionEmptyOrFailed(
+            sessionId: widget.sessionId,
+            otherwise: standard,
+          ),
+          emptyHint: _emptyHint(
+            chatAvailable: chatAvailable,
+            reading: reading,
+            fromPty: fromPty,
+            serverTooOld: serverTooOld,
+            active: active,
+            hasTerminal: hasTerminal,
+          ),
         );
       },
     );
@@ -923,9 +939,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // the transcript it will join: bounded, it scrolls within what the
           // composer leaves, and may not push the box away.
           Flexible(
-            child: QueuedMessagesStrip(
-              sessionId: widget.sessionId,
-              onBackToComposer: _backToComposer,
+            child: Consumer(
+              builder: (context, ref, _) => QueuedMessagesStrip(
+                sessionId: widget.sessionId,
+                onBackToComposer: _backToComposer,
+                // One line while the agent asks: its card needs the room.
+                folded: ref.watch(_promptOpenProvider(widget.sessionId)),
+              ),
             ),
           ),
           // Directly above the box and outside the scroll, so a long queue
@@ -946,11 +966,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                     builder: (context, ref, _) => composer(
                       // Watched here and only here: the footer is built once.
                       prompted: ref.watch(
-                        agentSessionStatusProvider(widget.sessionId).select(
-                          (status) =>
-                              status.asData?.value.hasOpenPrompt == true ||
-                              status.asData?.value.hasOpenQuestion == true,
-                        ),
+                        _promptOpenProvider(widget.sessionId),
                       ),
                     ),
                   ),

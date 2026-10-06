@@ -420,105 +420,111 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
               // Its own traversal group so its stops cannot interleave with the
               // footer's: tabbing below the fold scrolls the list under the policy.
               Expanded(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: FocusTraversalGroup(
-                        child: total == 0
-                            ? _emptyState()
-                            : Align(
-                                alignment: Alignment.topCenter,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: Chrome.chatWidth,
-                                  ),
-                                  child: _TranscriptNow(
-                                    now: DateTime.now(),
-                                    // One selection over every built row: a drag runs
-                                    // from one message into the next.
-                                    child: TranscriptSelectionArea(
-                                      child: NotificationListener<ScrollMetricsNotification>(
-                                        onNotification: _onMetrics,
-                                        child: ListView.builder(
-                                          controller: _scroll,
-                                          // The pane's whole width (owner, 2026-09-28),
-                                          // with a gutter so no word touches its edge.
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: gutter,
-                                            vertical: Insets.xl,
+                child: LayoutBuilder(
+                  builder: (context, room) => ChatViewportRoom(
+                    height: room.maxHeight,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: FocusTraversalGroup(
+                            child: total == 0
+                                ? _emptyState()
+                                : Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: Chrome.chatWidth,
+                                      ),
+                                      child: _TranscriptNow(
+                                        now: DateTime.now(),
+                                        // One selection over every built row: a drag runs
+                                        // from one message into the next.
+                                        child: TranscriptSelectionArea(
+                                          child: NotificationListener<ScrollMetricsNotification>(
+                                            onNotification: _onMetrics,
+                                            child: ListView.builder(
+                                              controller: _scroll,
+                                              // The pane's whole width (owner, 2026-09-28),
+                                              // with a gutter so no word touches its edge.
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: gutter,
+                                                vertical: Insets.xl,
+                                              ),
+                                              itemCount: rows.length + lead,
+                                              findChildIndexCallback: (key) =>
+                                                  indexOfKey[key],
+                                              itemBuilder: (context, index) {
+                                                if (lead == 1 && index == 0) {
+                                                  // Held here first; then, from the
+                                                  // server, the ones before those.
+                                                  final more = start > 0
+                                                      ? start
+                                                      : widget.earlier;
+                                                  return SelectionContainer.disabled(
+                                                    child: Center(
+                                                      child: TextButton.icon(
+                                                        onPressed: start > 0
+                                                            ? () => setState(
+                                                                () => _shown =
+                                                                    math.min(
+                                                                      _shown +
+                                                                          _page,
+                                                                      total,
+                                                                    ),
+                                                              )
+                                                            : widget
+                                                                  .onLoadEarlier,
+                                                        icon: const Icon(
+                                                          AppIcons.caretUp,
+                                                        ),
+                                                        label: Text(
+                                                          'Load $more earlier message'
+                                                          '${more == 1 ? '' : 's'}',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                                final row = rows[index - lead];
+                                                if (!row.isBatch) {
+                                                  return rowAt(row.from);
+                                                }
+                                                return _ToolBatchTile(
+                                                  key: keyOf(row),
+                                                  messages: visible,
+                                                  row: row,
+                                                  rowAt: rowAt,
+                                                );
+                                              },
+                                            ),
                                           ),
-                                          itemCount: rows.length + lead,
-                                          findChildIndexCallback: (key) =>
-                                              indexOfKey[key],
-                                          itemBuilder: (context, index) {
-                                            if (lead == 1 && index == 0) {
-                                              // Held here first; then, from the
-                                              // server, the ones before those.
-                                              final more = start > 0
-                                                  ? start
-                                                  : widget.earlier;
-                                              return SelectionContainer.disabled(
-                                                child: Center(
-                                                  child: TextButton.icon(
-                                                    onPressed: start > 0
-                                                        ? () => setState(
-                                                            () => _shown = math
-                                                                .min(
-                                                                  _shown +
-                                                                      _page,
-                                                                  total,
-                                                                ),
-                                                          )
-                                                        : widget.onLoadEarlier,
-                                                    icon: const Icon(
-                                                      AppIcons.caretUp,
-                                                    ),
-                                                    label: Text(
-                                                      'Load $more earlier message'
-                                                      '${more == 1 ? '' : 's'}',
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                            final row = rows[index - lead];
-                                            if (!row.isBatch) {
-                                              return rowAt(row.from);
-                                            }
-                                            return _ToolBatchTile(
-                                              key: keyOf(row),
-                                              messages: visible,
-                                              row: row,
-                                              rowAt: rowAt,
-                                            );
-                                          },
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                      ),
-                    ),
-                    // A round arrow floating at the list's bottom right, the
-                    // way chat apps offer it: a full-width row above the
-                    // footer cost a line of the conversation and moved the
-                    // composer every time it came and went (owner,
-                    // 2026-10-01).
-                    if (_touch && _awayFromLatest && total > 0)
-                      PositionedDirectional(
-                        end: Insets.md,
-                        bottom: Insets.md,
-                        child: FloatingActionButton.small(
-                          // Several transcripts can be mounted at once; a
-                          // shared hero tag would collide between them.
-                          heroTag: null,
-                          tooltip: 'Jump to latest',
-                          onPressed: _toLatest,
-                          child: const Icon(AppIcons.arrowDown),
+                          ),
                         ),
-                      ),
-                  ],
+                        // A round arrow floating at the list's bottom right, the
+                        // way chat apps offer it: a full-width row above the
+                        // footer cost a line of the conversation and moved the
+                        // composer every time it came and went (owner,
+                        // 2026-10-01).
+                        if (_touch && _awayFromLatest && total > 0)
+                          PositionedDirectional(
+                            end: Insets.md,
+                            bottom: Insets.md,
+                            child: FloatingActionButton.small(
+                              // Several transcripts can be mounted at once; a
+                              // shared hero tag would collide between them.
+                              heroTag: null,
+                              tooltip: 'Jump to latest',
+                              onPressed: _toLatest,
+                              child: const Icon(AppIcons.arrowDown),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               if (widget.footer != null)
@@ -548,6 +554,30 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       ),
     );
   }
+}
+
+/// The height the conversation's list is drawn in: the room above the
+/// composer, which a card under a call keeps to so its answers stay in sight.
+class ChatViewportRoom extends InheritedWidget {
+  const ChatViewportRoom({
+    required this.height,
+    required super.child,
+    super.key,
+  });
+
+  final double height;
+
+  /// The room, or null outside a transcript.
+  static double? of(BuildContext context) {
+    final height = context
+        .dependOnInheritedWidgetOfExactType<ChatViewportRoom>()
+        ?.height;
+    return height == null || !height.isFinite ? null : height;
+  }
+
+  @override
+  bool updateShouldNotify(ChatViewportRoom oldWidget) =>
+      height != oldWidget.height;
 }
 
 /// Touch only: which turn's actions a tap has shown. One at a time, so a

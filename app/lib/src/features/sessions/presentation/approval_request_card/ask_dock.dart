@@ -89,8 +89,7 @@ class _AskDock extends ConsumerWidget {
         rules: rules,
         // Only the prompt a call raises — never folder trust or an MCP
         // server's offer, which draw as their own options.
-        dockedAsk: (menu, choose) =>
-            (menus?.cancelDeclinesIn(menu) ?? false)
+        dockedAsk: (menu, choose) => (menus?.cancelDeclinesIn(menu) ?? false)
             ? askAnswers(menu, choose)
             : null,
         orElse: askAnswers(null, null),
@@ -155,9 +154,12 @@ class _AskDock extends ConsumerWidget {
           strokeAlign: BorderSide.strokeAlignInside,
         ),
       ),
-      child: Column(
+      // Held to a height, the header stays and the body takes the rest: a
+      // question scrolls its own options above its pinned answers, anything
+      // else scrolls whole.
+      child: _FlexColumn(
+        flexible: 2,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -203,7 +205,9 @@ class _AskDock extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: _dockGap),
-          body,
+          waiting == AgentWaitKind.question && canAnswer
+              ? body
+              : SingleChildScrollView(primary: false, child: body),
         ],
       ),
     );
