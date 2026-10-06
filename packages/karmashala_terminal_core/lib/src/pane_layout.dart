@@ -180,6 +180,35 @@ class PaneLayout {
   PaneLayout addPane(String targetPaneId, String paneId) =>
       addPanes(targetPaneId, [paneId]);
 
+  /// Puts [paneId] into the region holding [anchorPaneId], right after it or,
+  /// [atEnd], last — and leaves that region's front pane in front.
+  PaneLayout insertBehind(
+    String anchorPaneId,
+    String paneId, {
+    bool atEnd = false,
+  }) {
+    final group = groupOf(anchorPaneId);
+    if (group == null || contains(paneId)) return this;
+    final panes = List.of(group.panes);
+    if (atEnd) {
+      panes.add(paneId);
+    } else {
+      panes.insert(panes.indexOf(anchorPaneId) + 1, paneId);
+    }
+    return PaneLayout(
+      _mapGroups(
+        root,
+        (candidate) => identical(candidate, group)
+            ? PaneGroup(
+                group.id,
+                panes: panes,
+                activePaneId: group.activePaneId,
+              )
+            : candidate,
+      ),
+    );
+  }
+
   /// The region with [groupId], or `null` when this layout has none.
   PaneGroup? groupById(String groupId) {
     for (final group in groups) {
