@@ -25,6 +25,7 @@ import '../../features/notes/application/notes_providers.dart';
 import '../../features/notes/presentation/notes_view.dart';
 import '../../features/sessions/presentation/agent_plan_panel.dart';
 import '../../features/sessions/presentation/decision_record_panel.dart';
+import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/todos/presentation/todos_view.dart';
 import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
@@ -78,6 +79,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.media => AppIcons.image,
     SidePanelSurface.repository => AppIcons.bookBookmark,
     SidePanelSurface.plan => AppIcons.clipboardText,
+    SidePanelSurface.subagents => AppIcons.treeStructure,
     SidePanelSurface.checkpoints => AppIcons.clockCounterClockwise,
     SidePanelSurface.decisions => AppIcons.stack,
     SidePanelSurface.todos => AppIcons.listChecks,
@@ -415,6 +417,7 @@ class ContextSurfaceBody extends StatelessWidget {
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
     SidePanelSurface.plan => const AgentPlanPanel(),
+    SidePanelSurface.subagents => const SessionSubagentsSurface(),
     SidePanelSurface.checkpoints => const CheckpointsView(),
     SidePanelSurface.decisions => const DecisionRecordPanel(),
     SidePanelSurface.todos => const TodosView(),

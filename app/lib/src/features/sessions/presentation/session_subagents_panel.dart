@@ -5,24 +5,59 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_session/lineage.dart' show SessionLink;
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart' show PanePlaceholder;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
+import '../../../app/shell/side_panel_state.dart';
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../explorer/application/explorer_actions.dart';
+import '../../explorer/application/session_context.dart';
 import '../application/session_list_prefs.dart';
 import '../application/session_subagents_providers.dart';
 
-/// Opens session [sessionId]'s subagent panel: a side panel at width, a
-/// bottom sheet on a phone.
-Future<void> showSessionSubagents(BuildContext context, String sessionId) =>
-    showAdaptiveSidePanel<void>(
-      context: context,
-      title: 'Subagents',
-      builder: (_) => SessionSubagentsPanel(sessionId: sessionId),
-    );
+/// Opens session [sessionId]'s subagents. At width, the docked side panel's
+/// Subagents surface, read beside the chat and left open while it works. A
+/// phone gets a bottom sheet. The drawer is kept for what the docked surface
+/// cannot show: a session that is not the one on screen, or a window with no
+/// room for the panel.
+Future<void> showSessionSubagents(BuildContext context, String sessionId) {
+  final compact = WidthClass.of(MediaQuery.sizeOf(context).width).isCompact;
+  final container = ProviderScope.containerOf(context, listen: false);
+  final docked =
+      !compact &&
+      container.read(sidePanelRoomProvider) &&
+      container.read(panelSessionIdProvider) == sessionId;
+  if (docked) {
+    container.read(sidePanelProvider.notifier).show(SidePanelSurface.subagents);
+    return Future.value();
+  }
+  return showAdaptiveSidePanel<void>(
+    context: context,
+    title: 'Subagents',
+    builder: (_) => SessionSubagentsPanel(sessionId: sessionId),
+  );
+}
+
+/// The side panel's Subagents surface: [SessionSubagentsPanel] for the session
+/// on screen, as every other surface follows it.
+class SessionSubagentsSurface extends ConsumerWidget {
+  const SessionSubagentsSurface({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionId = ref.watch(panelSessionIdProvider);
+    if (sessionId == null) {
+      return const PanePlaceholder(
+        message: 'Open a session to see its subagents and child sessions.',
+        icon: AppIcons.treeStructure,
+      );
+    }
+    return SessionSubagentsPanel(sessionId: sessionId);
+  }
+}
 
 /// ⋯'s way into [SessionSubagentsPanel].
 class SessionSubagentsButton extends StatelessWidget {

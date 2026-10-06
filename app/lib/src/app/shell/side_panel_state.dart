@@ -24,6 +24,7 @@ enum ContextTab {
       SidePanelSurface.checkpoints,
       SidePanelSurface.decisions,
       SidePanelSurface.plan,
+      SidePanelSurface.subagents,
     ],
     ContextTab.files => const [SidePanelSurface.files],
     ContextTab.more => const [],
@@ -60,6 +61,11 @@ enum SidePanelSurface {
   /// **The agent's own plan**, read out of the record it writes for itself, and
   /// read-only. Two agents of the three publish one; the third says so.
   plan('Plan'),
+
+  /// **The session's subagents and child sessions**, live: what each was
+  /// asked, how far it got, its answer. Docked, so it is read beside the
+  /// parent's chat rather than over it.
+  subagents('Subagents'),
   files('Files', drawsOwnHeader: true, scopedToRepository: true),
 
   /// The user's own list: a line of text, done or not, filed under a project or
