@@ -50,6 +50,13 @@ const String kLogsPaneId = '${kDocumentPanePrefix}logs';
 /// Whether [paneId] is the Logs document.
 bool isLogsPane(String paneId) => paneId == kLogsPaneId;
 
+/// The Overview as a tab: every project's sessions at a glance, as a Board or
+/// a Timeline. One, like Usage — it is a view of the whole workspace.
+const String kOverviewPaneId = '${kDocumentPanePrefix}overview';
+
+/// Whether [paneId] is the Overview document.
+bool isOverviewPane(String paneId) => paneId == kOverviewPaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';

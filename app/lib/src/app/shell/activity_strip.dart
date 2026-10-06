@@ -57,6 +57,8 @@ class ShellActivityStrip extends ConsumerWidget {
       onSelect: (picked) => toggleShellArea(ref, picked),
       onSettings: () => openSettingsTab(ref),
       onUsage: () => openUsageTab(ref),
+      onOverview: () => openOverviewTab(ref),
+      overviewHint: shellChordLabel<OpenOverviewIntent>(),
       onStores: () => openStoresTab(ref),
       // A diagnostic, not a daily tool: in the strip only while debug mode is
       // on. Quick open, Settings and a keymap reach it either way.
@@ -84,6 +86,8 @@ class ActivityStrip extends StatelessWidget {
     this.usageHint,
     this.onStores,
     this.onLogs,
+    this.onOverview,
+    this.overviewHint,
     super.key,
   });
 
@@ -113,6 +117,10 @@ class ActivityStrip extends StatelessWidget {
 
   /// Opens the Logs tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onLogs;
+
+  /// Opens the Overview tab. Null leaves its glyph out, as [onUsage] does.
+  final VoidCallback? onOverview;
+  final String? overviewHint;
 
   static IconData iconFor(ShellArea area) => switch (area) {
     ShellArea.sessions => AppIcons.chatCircleDots,
@@ -146,6 +154,14 @@ class ActivityStrip extends StatelessWidget {
           const Spacer(),
           // Above Settings, and like it never marked selected: both open a
           // tab, and the tab strip already says which tab is in front.
+          if (onOverview case final onOverview?)
+            _StripButton(
+              icon: AppIcons.squaresFour,
+              label: 'Overview',
+              hint: overviewHint,
+              selected: false,
+              onPressed: onOverview,
+            ),
           if (onLogs case final onLogs?)
             _StripButton(
               icon: AppIcons.article,

@@ -5,7 +5,16 @@ library;
 import 'package:riverpod/riverpod.dart';
 
 /// The More tab's pages, in list order.
-enum PhoneMoreEntry { usage, stores, notes, settings, machines, log, about }
+enum PhoneMoreEntry {
+  overview,
+  usage,
+  stores,
+  notes,
+  settings,
+  machines,
+  log,
+  about,
+}
 
 /// What the phone shell can bring on screen, for an act that started outside
 /// its tabs: quick open's dialog, a keyboard shortcut, a deep link.

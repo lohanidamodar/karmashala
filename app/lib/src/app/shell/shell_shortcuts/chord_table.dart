@@ -367,6 +367,16 @@ List<ShellChord> _buildChords() => [
     does: 'Open Usage',
     skipsShell: true,
   ),
+  // Shifted like Usage's, so a focused pane loses nothing by letting it
+  // through.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyO, shift: true),
+    intent: OpenOverviewIntent(),
+    command: 'overview.open',
+    label: _commandLabel('O', shift: true),
+    does: 'Open Overview',
+    skipsShell: true,
+  ),
   // Tabs, shifted because a shell owns the bare keys — ^W deletes a word, ^T
   // transposes. The bare pair is declared too but left to the shell by default.
   ShellChord(

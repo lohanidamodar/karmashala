@@ -386,6 +386,12 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
               return null;
             },
           ),
+          OpenOverviewIntent: CallbackAction<OpenOverviewIntent>(
+            onInvoke: (intent) {
+              openOverviewTab(ref);
+              return null;
+            },
+          ),
           ShowShellAreaIntent: CallbackAction<ShowShellAreaIntent>(
             onInvoke: (intent) {
               // Ctrl+4 on a client with no Devices area does nothing.

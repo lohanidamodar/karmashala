@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
 import '../../features/notes/presentation/notes_view.dart';
+import '../../features/overview/presentation/overview_tab_view.dart';
 import '../../features/remote/presentation/machines_section.dart';
 import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
@@ -25,6 +26,11 @@ class PhoneMoreList extends StatelessWidget {
 
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
+        PhoneMoreEntry.overview => (
+          'Overview',
+          AppIcons.squaresFour,
+          (_) => const PaneTitleOverride(child: OverviewTabView()),
+        ),
         PhoneMoreEntry.usage => ('Usage', AppIcons.chartBar, _usage),
         PhoneMoreEntry.stores => (
           'Stores',
