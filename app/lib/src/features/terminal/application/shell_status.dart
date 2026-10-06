@@ -16,7 +16,7 @@ import '../../explorer/application/project_head.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/data/git_data.dart';
 import '../../remote/application/machines_providers.dart';
-import '../../sessions/application/session_location_providers.dart';
+import '../../environments/application/environment_location.dart';
 import 'terminal_profiles.dart';
 
 /// The profile pane [profileId] was launched from, or null when it is no
@@ -43,7 +43,7 @@ final shellEnvironmentIdProvider = Provider.autoDispose.family<String?, String>(
 /// back to the raw id: a database key on the status line would be a label made
 /// up.
 final shellLocationProvider = Provider.autoDispose
-    .family<SessionLocation?, String>((ref, environmentId) {
+    .family<EnvironmentLocation?, String>((ref, environmentId) {
       for (final env in ref.watch(environmentsControllerProvider)) {
         if (env.id == environmentId) {
           return locationOf(env, machine: ref.watch(activeMachineProvider));

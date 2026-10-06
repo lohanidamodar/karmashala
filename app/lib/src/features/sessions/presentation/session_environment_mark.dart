@@ -26,13 +26,7 @@ class SessionEnvironmentMark extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(sessionLocationProvider(sessionId));
     if (location == null) return const SizedBox.shrink();
-    return EnvironmentMark(
-      kind: location.kind,
-      label: location.label,
-      name: location.name,
-      folder: location.folder,
-      labelled: labelled,
-    );
+    return EnvironmentMark(location: location, labelled: labelled);
   }
 }
 
@@ -52,7 +46,7 @@ class SessionEnvironmentLabel extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(right: Insets.sm),
       child: Tooltip(
-        message: environmentMarkTooltip(location.name, location.folder),
+        message: environmentMarkTooltip(location),
         // The glyph beside it already names the machine to a screen reader.
         child: ExcludeSemantics(
           child: EnvironmentMarkLabel(label: location.label),

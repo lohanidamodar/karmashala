@@ -26,6 +26,7 @@ import '../../features/agents/application/agent_providers.dart';
 import '../../features/agents/presentation/agent_logo.dart';
 import '../../features/sessions/application/acp_session_providers.dart';
 import '../../features/sessions/application/session_agent_providers.dart';
+import '../../features/environments/application/environment_location.dart';
 import '../../features/sessions/application/session_location_providers.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';

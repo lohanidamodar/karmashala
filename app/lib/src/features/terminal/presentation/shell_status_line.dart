@@ -216,10 +216,9 @@ class _ShellStatusLineState extends ConsumerState<ShellStatusLine> {
                   if (machine != null)
                     EnvironmentMark(
                       key: EnvironmentMark.barKey,
-                      kind: machine.kind,
-                      label: machine.label,
-                      name: machine.name,
-                      folder: path == null || path.isEmpty ? null : path,
+                      location: machine.inFolder(
+                        path == null || path.isEmpty ? null : path,
+                      ),
                       labelled: constraints.maxWidth >= _machineLabelFloor,
                     ),
                   _Facts(children: left),

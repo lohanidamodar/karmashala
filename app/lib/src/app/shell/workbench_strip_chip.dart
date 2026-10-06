@@ -219,7 +219,7 @@ class _TabChip extends ConsumerWidget {
   }
 
   /// Where the session in this tab runs, read off the pane [_agentId] reads.
-  SessionLocation? _location(WidgetRef ref) {
+  EnvironmentLocation? _location(WidgetRef ref) {
     for (final paneId in [tab.focusedPaneId, ...tab.layout.panes]) {
       if (ref.watch(paneLocationProvider(paneId)) case final location?) {
         return location;
