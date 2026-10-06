@@ -39,4 +39,16 @@ abstract interface class PairedDeviceStore {
   });
 
   void delete(String id);
+
+  /// Asks for [id]'s relay to move to [to] at its next link; null withdraws
+  /// the ask.
+  void askRelayMove(String id, String? to);
+
+  /// The phone acknowledged a move to [to]: the row's relay becomes [to], the
+  /// old one is remembered, and the move is unsettled. Nothing when it is
+  /// already on [to].
+  void moveRelay(String id, String to);
+
+  /// The phone was heard on its moved-to relay.
+  void settleRelayMove(String id);
 }

@@ -195,6 +195,8 @@ void main() {
         // The keepalive and the resume of a dropped switched link (Stage 0).
         'link.ping',
         'link.resume',
+        'link.relay.move',
+        'link.relay.moved',
         'host.attach',
         'session.options',
         'session.configure',
@@ -360,10 +362,11 @@ void main() {
         CapabilitySet.all.granted,
         Capability.values.where((c) => !c.privileged).toSet(),
       );
-      expect(
-        Capability.values.where((c) => c.privileged).map((c) => c.bit),
-        [1 << 10, 1 << 11, 1 << 12],
-      );
+      expect(Capability.values.where((c) => c.privileged).map((c) => c.bit), [
+        1 << 10,
+        1 << 11,
+        1 << 12,
+      ]);
     });
 
     test('refuses a bitset that is not a non-negative integer', () {

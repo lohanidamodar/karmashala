@@ -26,6 +26,9 @@ class PairedDevice {
     this.pushPlatform,
     this.presence = CompanionPresence.unknown,
     this.relayUrl,
+    this.relayMoveTo,
+    this.relayMovedFrom,
+    this.relayMoveSettled = true,
   }) : deviceKey = Uint8List.fromList(deviceKey);
 
   /// The companion's [DeviceId], lowercase hex.
@@ -66,6 +69,18 @@ class PairedDevice {
   /// machine's own LAN relay. Null only for a row missed by the v19 backfill.
   final String? relayUrl;
 
+  /// A move to this relay asked for from Settings and not yet acknowledged by
+  /// the phone. A move the known-relays policy asks for is never stored.
+  final String? relayMoveTo;
+
+  /// The relay [relayUrl] replaced at the last acknowledged move. Pushes fall
+  /// back to it while the new relay cannot carry them.
+  final String? relayMovedFrom;
+
+  /// False from an acknowledged move until the phone is heard on [relayUrl]:
+  /// until then the host still listens on [relayMovedFrom] too.
+  final bool relayMoveSettled;
+
   /// Whether this device's frames travel through the machine's LAN relay.
   bool get pairedViaLocalRelay => relayUrl == kLocalRelayMarker;
 
@@ -104,6 +119,9 @@ class PairedDevice {
     pushPlatform: pushPlatform ?? this.pushPlatform,
     presence: presence ?? this.presence,
     relayUrl: relayUrl ?? this.relayUrl,
+    relayMoveTo: relayMoveTo,
+    relayMovedFrom: relayMovedFrom,
+    relayMoveSettled: relayMoveSettled,
   );
 
   @override

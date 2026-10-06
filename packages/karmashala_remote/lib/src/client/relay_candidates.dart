@@ -110,16 +110,36 @@ class RelayCandidate {
   String toString() => 'RelayCandidate($url)';
 }
 
-/// The order a reconnect dials relays in: last known good first, then the saved
-/// set in the order it was learned, then [fallback]. Candidates cooling from a
-/// recent failure are dropped — unless that would leave nothing to try, when
-/// the one that failed longest ago comes back.
+/// The order a reconnect dials relays in: [preferred] (the relay the host moved
+/// this pairing to) first, then last known good, then the saved set in the
+/// order it was learned, then [fallback]. Candidates cooling from a recent
+/// failure are dropped — unless that would leave nothing to try, when the one
+/// that failed longest ago comes back.
 List<Uri> orderRelayCandidates(
   List<RelayCandidate> saved, {
   required Uri fallback,
   required DateTime now,
   Duration cooldown = kRelayCandidateCooldown,
+  Uri? preferred,
 }) {
+  if (preferred != null) {
+    final key = preferred.toString();
+    final rest = orderRelayCandidates(
+      saved,
+      fallback: fallback,
+      now: now,
+      cooldown: cooldown,
+    );
+    final cooling = saved.any(
+      (c) => c.key == key && c.inCooldown(now, cooldown: cooldown),
+    );
+    if (cooling) return rest;
+    return List.unmodifiable([
+      preferred,
+      for (final url in rest)
+        if (url.toString() != key) url,
+    ]);
+  }
   // Sorted with the saved position as the tie-break, so the dial sequence is
   // identical on every reconnect: `List.sort` promises nothing about equal
   // elements, and a wobbling order would make a failure impossible to read.

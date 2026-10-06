@@ -24,6 +24,7 @@ class DesktopServerDialer {
     this.lanTimeout = kDesktopLanAttemptTimeout,
     this.scout,
     this.onLog,
+    this.acceptRelayMove = true,
     DateTime Function()? now,
   }) : _lanDialer = lanDialer ?? _dialLan,
        _relayFactory = relayFactory ?? _dialRelay,
@@ -44,6 +45,10 @@ class DesktopServerDialer {
   final LanPathScout? scout;
 
   final void Function(String message)? onLog;
+
+  /// Whether this end says it knows `link.relay.move` and saves the moves a
+  /// server asks for. False only to stand in for a build that predates it.
+  final bool acceptRelayMove;
 
   final LanDialerFn _lanDialer;
   final RelayTransportFactoryFn _relayFactory;
@@ -186,6 +191,7 @@ class DesktopServerDialer {
         pinnedRelay,
         notes,
         resume: resume,
+        pinned: true,
       );
       if (link != null) return link;
       throw DesktopConnectException(
@@ -244,12 +250,70 @@ class DesktopServerDialer {
       );
     }
 
-    // 5. The relays, last known good first.
-    for (final url in _relayOrder(pairing)) {
-      final link = await _attemptRelay(pairing, url, notes, resume: resume);
-      if (link != null) return link;
+    // 5. The relays: the one the server moved this pairing to, then last known
+    // good first. A move heard on the way is followed at once, unless its
+    // relay already failed this dial — then the link stays where it is.
+    var current = pairing;
+    final queue = _relayOrder(current);
+    final failed = <String>{};
+    for (var hops = 0; queue.isNotEmpty;) {
+      final url = queue.removeAt(0);
+      try {
+        final link = await _attemptRelay(
+          current,
+          url,
+          notes,
+          resume: resume,
+          hopOnMove: (to) =>
+              hops < kMaxRelayMoveHops &&
+              !sameRelay(to, url) &&
+              !failed.contains(to.toString()),
+        );
+        if (link != null) return link;
+        failed.add(url.toString());
+      } on DesktopRelayMoved catch (moved) {
+        hops++;
+        current = await _reload(current);
+        queue
+          ..removeWhere((u) => sameRelay(u, moved.to) || sameRelay(u, url))
+          ..insertAll(0, [moved.to, url]);
+      }
     }
     throw DesktopConnectException('Could not reach $name${said()}.');
+  }
+
+  /// The record as saved now — after a move, its relay and counter moved on.
+  Future<CompanionPairing> _reload(CompanionPairing pairing) async {
+    try {
+      return (await CompanionConnections.load(
+            store,
+          )).byHost(pairing.hostId.value) ??
+          pairing;
+    } on Object {
+      return pairing;
+    }
+  }
+
+  /// Saves the relay the server moved [pairing] to: dialled first from now
+  /// on, the others kept behind it for as long as the server names them.
+  Future<void> _saveRelayMove(CompanionPairing pairing, Uri to) async {
+    await CompanionConnections.mutate(store, (all) {
+      final saved = all.byHost(pairing.hostId.value) ?? pairing;
+      final key = to.toString();
+      all.upsert(
+        saved.copyWith(
+          relay: to,
+          relayHome: to,
+          candidates: [
+            if (!saved.candidates.any((c) => c.key == key))
+              RelayCandidate(url: to),
+            ...saved.candidates,
+          ],
+        ),
+      );
+      return all;
+    });
+    onLog?.call('${pairing.hostName} moved this pairing to ${to.host}');
   }
 
   /// A scout that has only just started has heard nothing yet: give the
@@ -391,6 +455,8 @@ class DesktopServerDialer {
     Uri url,
     List<String> notes, {
     DesktopLinkResume? resume,
+    bool Function(Uri to)? hopOnMove,
+    bool pinned = false,
   }) async {
     final key = SecretKeyData(pairing.deviceKey);
     final link = await _attempt(
@@ -404,6 +470,9 @@ class DesktopServerDialer {
       open: (generation) async =>
           _relayFactory(url, await rendezvousFor(key, generation)),
       resume: resume,
+      hopOnMove: hopOnMove,
+      // A pin is "only": a pairing pinned to a relay is not moved off it.
+      movable: !pinned,
     );
     if (link == null) await _noteRelayFailure(pairing, url);
     return link;
@@ -421,7 +490,12 @@ class DesktopServerDialer {
     required Future<RemoteTransport> Function(int generation) open,
     Uri? relay,
     DesktopLinkResume? resume,
+    bool Function(Uri to)? hopOnMove,
+    bool movable = true,
   }) async {
+    final onRelayMove = acceptRelayMove && movable
+        ? (Uri to) => _saveRelayMove(pairing, to)
+        : null;
     for (var probe = 0; probe < kCompanionProbeWindow; probe++) {
       final generation = pairing.generation + probe;
       onLog?.call('dialling ${pairing.hostName} over $path at $label');
@@ -440,10 +514,16 @@ class DesktopServerDialer {
           onHostStatus: (announced) => status = announced,
           resume: resume,
           relayHost: relay?.host,
+          onRelayMove: onRelayMove,
+          hopOnMove: hopOnMove,
         );
         onLog?.call('connected to ${pairing.hostName} over $path at $label');
         await _settle(pairing, generation, status, relay: relay);
         return link;
+      } on DesktopRelayMoved {
+        // The server spent this generation on the hello and the move.
+        await _settleRefused(pairing, generation, null);
+        rethrow;
       } on DesktopConnectException catch (error) {
         if (error.refused) {
           // The server spent this generation on the hello: a record left
@@ -484,6 +564,7 @@ class DesktopServerDialer {
       pairing.candidates,
       fallback: pairing.relay,
       now: _now(),
+      preferred: pairing.relayHome,
     ))
       if (url.host != 'invalid.local') url,
   ];
@@ -502,10 +583,15 @@ class DesktopServerDialer {
     try {
       await CompanionConnections.mutate(store, (all) {
         final saved = all.byHost(pairing.hostId.value) ?? pairing;
-        var candidates = mergeRelayCandidates(
-          saved.candidates,
-          status?.relays ?? const [],
-        );
+        final announced = status?.relays ?? const <Uri>[];
+        var candidates = mergeRelayCandidates(saved.candidates, announced);
+        final home = saved.relayHome;
+        // A server that no longer names the relay it moved us to has moved
+        // on from it; the health order takes over again.
+        final homeGone =
+            home != null &&
+            announced.isNotEmpty &&
+            !announced.any((url) => sameRelay(url, home));
         if (relay != null) {
           final key = relay.toString();
           candidates = [
@@ -526,6 +612,7 @@ class DesktopServerDialer {
             // A grant added on the server since pairing (a companion's
             // pairing given the app) is the record's from now on.
             capabilities: status?.capabilities,
+            clearRelayHome: homeGone,
           ),
         );
         return all;
@@ -589,6 +676,10 @@ class DesktopServerDialer {
     }
   }
 }
+
+/// How many server-asked relay moves one dial follows before it attaches
+/// wherever it is: a bound on two servers' worth of disagreement.
+const int kMaxRelayMoveHops = 2;
 
 /// The tag a LAN hint is dialled under, so the log tells it from a beacon.
 const String _kLanHintTag = 'hint';

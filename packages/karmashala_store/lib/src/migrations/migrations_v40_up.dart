@@ -883,3 +883,15 @@ void _migrateToV77(Database db) {
     'ALTER TABLE session_delegations ADD COLUMN report_delivered INTEGER;',
   );
 }
+
+/// A pairing's relay can move without a re-pair: the relay a move was asked
+/// for, the one it moved from (still listened on, and still pushed through,
+/// until the phone is heard on the new one), and whether it has been.
+void _migrateToV78(Database db) {
+  db.execute('ALTER TABLE paired_devices ADD COLUMN relay_move_to TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN relay_moved_from TEXT;');
+  db.execute(
+    'ALTER TABLE paired_devices ADD COLUMN relay_move_settled INTEGER '
+    'NOT NULL DEFAULT 1;',
+  );
+}

@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_host_protocol/host_access.dart' show RemoteChannel;
 
+import '../domain/known_relays.dart' show sameRelay;
 import '../domain/remote_payloads.dart' show RemoteHostStatus;
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
@@ -49,6 +50,18 @@ class DesktopConnectException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// The server moved this pairing to [to] and the move was saved and
+/// acknowledged; this socket was let go, unattached, so the dial meets the
+/// server there instead.
+class DesktopRelayMoved implements Exception {
+  const DesktopRelayMoved(this.to);
+
+  final Uri to;
+
+  @override
+  String toString() => 'moved to the relay at ${to.host}';
 }
 
 /// How a switched link comes back after its socket drops (Stage 0 step 17),
@@ -202,6 +215,11 @@ const Duration kDesktopPromotionHoldOffCap = Duration(minutes: 16);
 /// and the server offers `link.promote` (Stage 0 step 18). With
 /// [DesktopLinkResume.keepaliveOffered], an idle link pings, and one silent
 /// past [kLinkDeadAfter] is treated as dropped — a half-open socket.
+///
+/// With [onRelayMove], the hello says this end knows `link.relay.move`: a move
+/// the server asks for is handed to it to save, then acknowledged before the
+/// attach. When [hopOnMove] then answers true the socket is let go and
+/// [DesktopRelayMoved] thrown, so the dial goes to the new relay.
 Future<SealedHostLink> connectDesktopLink({
   required CompanionPairing pairing,
   required RemoteTransport transport,
@@ -210,6 +228,8 @@ Future<SealedHostLink> connectDesktopLink({
   void Function(RemoteHostStatus status)? onHostStatus,
   DesktopLinkResume? resume,
   String? relayHost,
+  Future<void> Function(Uri to)? onRelayMove,
+  bool Function(Uri to)? hopOnMove,
 }) async {
   final key = SecretKeyData(pairing.deviceKey);
   final channel = await SealedChannel.forDevice(
@@ -222,6 +242,8 @@ Future<SealedHostLink> connectDesktopLink({
   final greeted = Completer<void>();
   final attached = Completer<void>();
   final rendezvous = await rendezvousFor(key, generation);
+  // A move saved and acknowledged — its ack sealed ahead of the attach.
+  Future<Uri?>? moving;
   late final _DesktopLinkKeeper keeper;
   keeper = _DesktopLinkKeeper(
     channel: channel,
@@ -231,6 +253,9 @@ Future<SealedHostLink> connectDesktopLink({
     relayHost: relayHost,
     onEnvelope: (envelope, opened) {
       switch (envelope.knownType) {
+        case FrameType.linkRelayMove
+            when !greeted.isCompleted && onRelayMove != null && moving == null:
+          moving = _saveRelayMove(envelope, onRelayMove, channel, transport);
         case FrameType.hostStatus when !greeted.isCompleted:
           try {
             final caps = RemoteHostStatus.fromJson(
@@ -276,8 +301,17 @@ Future<SealedHostLink> connectDesktopLink({
   }
 
   try {
-    transport.send(LinkHello(rendezvous).encode());
+    transport.send(
+      LinkHello(
+        rendezvous,
+        features: onRelayMove == null ? const {} : {kLinkFeatureRelayMove},
+      ).encode(),
+    );
     await greeted.future.timeout(timeout);
+    final moved = await moving?.timeout(timeout);
+    if (moved != null && (hopOnMove?.call(moved) ?? false)) {
+      return await give(DesktopRelayMoved(moved));
+    }
     final envelope = Envelope.of(
       FrameType.hostAttach,
       seq: channel.nextSendSequence,
@@ -302,6 +336,34 @@ Future<SealedHostLink> connectDesktopLink({
   unawaited(opened.done.then((_) => keeper.release()));
   keeper.started();
   return opened;
+}
+
+/// Saves the move a `link.relay.move` asks for, then acknowledges it. Null
+/// when the frame names no usable relay or the save failed: then nothing is
+/// acknowledged and the host keeps the pairing where it was.
+Future<Uri?> _saveRelayMove(
+  Envelope envelope,
+  Future<void> Function(Uri to) save,
+  SealedChannel channel,
+  RemoteTransport transport,
+) async {
+  final text = envelope.payload['to'];
+  final to = text is String ? Uri.tryParse(text) : null;
+  if (to == null || !to.hasScheme || to.host.isEmpty) return null;
+  try {
+    await save(to);
+  } on Object {
+    return null;
+  }
+  // No await between reading the sequence and sealing: the two must agree.
+  final ack = Envelope.of(
+    FrameType.linkRelayMoved,
+    seq: channel.nextSendSequence,
+    id: envelope.id,
+    payload: {'to': text},
+  );
+  transport.send(await channel.seal(ack.toBytes()));
+  return to;
 }
 
 /// A sealed host link as the byte channel a host-protocol link runs over.

@@ -81,6 +81,9 @@ class MemoryPairedDeviceStore implements PairedDeviceStore {
       pushPlatform: d.pushPlatform,
       presence: d.presence,
       relayUrl: d.relayUrl,
+      relayMoveTo: d.relayMoveTo,
+      relayMovedFrom: d.relayMovedFrom,
+      relayMoveSettled: d.relayMoveSettled,
     ),
   );
 
@@ -107,4 +110,58 @@ class MemoryPairedDeviceStore implements PairedDeviceStore {
 
   @override
   void delete(String id) => _rows.remove(id);
+
+  @override
+  void askRelayMove(String id, String? to) => _update(
+    id,
+    (d) => _moved(
+      d,
+      relayUrl: d.relayUrl,
+      moveTo: to,
+      settled: d.relayMoveSettled,
+    ),
+  );
+
+  @override
+  void moveRelay(String id, String to) => _update(
+    id,
+    (d) => d.relayUrl == to
+        ? d
+        : _moved(d, relayUrl: to, movedFrom: d.relayUrl, settled: false),
+  );
+
+  @override
+  void settleRelayMove(String id) => _update(
+    id,
+    (d) => _moved(
+      d,
+      relayUrl: d.relayUrl,
+      moveTo: d.relayMoveTo,
+      movedFrom: d.relayMovedFrom,
+    ),
+  );
+
+  static PairedDevice _moved(
+    PairedDevice d, {
+    required String? relayUrl,
+    String? moveTo,
+    String? movedFrom,
+    bool settled = true,
+  }) => PairedDevice(
+    id: d.id,
+    name: d.name,
+    deviceKey: d.deviceKey,
+    capabilities: d.capabilities,
+    generation: d.generation,
+    createdAt: d.createdAt,
+    revoked: d.revoked,
+    lastSeenAt: d.lastSeenAt,
+    pushToken: d.pushToken,
+    pushPlatform: d.pushPlatform,
+    presence: d.presence,
+    relayUrl: relayUrl,
+    relayMoveTo: moveTo,
+    relayMovedFrom: movedFrom ?? d.relayMovedFrom,
+    relayMoveSettled: settled,
+  );
 }

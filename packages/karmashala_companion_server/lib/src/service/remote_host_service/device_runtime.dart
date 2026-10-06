@@ -382,7 +382,7 @@ class _DeviceRuntime {
         current.host!.close('the client connected again');
         return;
       }
-      await _activate(generation, transport, announce: true);
+      await _activate(generation, transport, announce: true, hello: hello);
       peerLive = true;
       return;
     }
@@ -427,6 +427,7 @@ class _DeviceRuntime {
       return;
     }
     active.liveness?.heard();
+    await _noteHeardOn(transport);
     final host = active.host;
     if (host != null) {
       peerLive = true;
@@ -446,8 +447,77 @@ class _DeviceRuntime {
       await _attachHost(active, envelope, opened.sequence);
       return;
     }
+    if (envelope.type == FrameType.linkRelayMoved.wire) {
+      await _onRelayMoved(active, transport, envelope);
+      return;
+    }
     if (envelope.type == FrameType.linkPing.wire) _armLiveness(active);
     await active.api.handleEnvelope(envelope);
+  }
+
+  /// The relay a hello should be asked to move to, or null. Only a hello that
+  /// knows the frame is asked. Besides a pending move, a phone that comes back
+  /// on the old relay mid-move is asked again for the relay the row is on.
+  Uri? _relayMoveFor(RemoteTransport transport, LinkHello hello) {
+    if (!hello.features.contains(kLinkFeatureRelayMove)) return null;
+    final target = service.relayMoveTargetFor(device);
+    if (target != null) return target;
+    final home = device.hostedRelayUri;
+    final on = _listenerUrlOf(transport);
+    if (device.relayMoveSettled || home == null || on == null) return null;
+    return sameRelay(on, home) ? null : home;
+  }
+
+  /// The phone saved the move it was offered on this link: the row switches,
+  /// keeping the old relay listened on until the phone is heard on the new.
+  Future<void> _onRelayMoved(
+    _ActiveLink active,
+    RemoteTransport transport,
+    Envelope envelope,
+  ) async {
+    final offered = active.offeredMove;
+    final to = envelope.payload['to'];
+    if (offered == null || to is! String || to != offered.toString()) {
+      service.onLog?.call('ignored a relay move nobody offered on this link');
+      return;
+    }
+    active.offeredMove = null;
+    service.devices.moveRelay(device.id, to);
+    _reloadDevice();
+    service.onLog?.call('a device moved to the relay at ${offered.host}');
+    service.onDevicesChanged?.call();
+    await _noteHeardOn(transport);
+    await syncRelayListeners();
+  }
+
+  /// Settles an unsettled move once a sealed frame arrives through the relay
+  /// the row is on, and lets the old relay go.
+  Future<void> _noteHeardOn(RemoteTransport transport) async {
+    if (device.relayMoveSettled) return;
+    final home = device.hostedRelayUri;
+    final on = _listenerUrlOf(transport);
+    if (home == null || on == null || !sameRelay(on, home)) return;
+    service.devices.settleRelayMove(device.id);
+    _reloadDevice();
+    service.onLog?.call('a device was heard on the relay it moved to');
+    service.onDevicesChanged?.call();
+    await syncRelayListeners();
+  }
+
+  void _reloadDevice() {
+    final row = service.devices.getById(device.id);
+    if (row != null) device = row.copyWith(generation: device.generation);
+  }
+
+  /// The relay [transport] is this device's listener on, or null for a LAN
+  /// link.
+  Uri? _listenerUrlOf(RemoteTransport transport) {
+    for (final byUrl in _listeners.values) {
+      for (final entry in byUrl.entries) {
+        if (identical(entry.value, transport)) return Uri.tryParse(entry.key);
+      }
+    }
+    return null;
   }
 
   /// Armed by the phone's first `link.ping`, so only a phone that pings is
@@ -808,6 +878,7 @@ class _DeviceRuntime {
     int generation,
     RemoteTransport transport, {
     required bool announce,
+    LinkHello? hello,
   }) async {
     var active = _active;
     if (active == null || active.generation != generation) {
@@ -860,7 +931,18 @@ class _DeviceRuntime {
       active.transport = transport;
       _watchLiveness(transport);
     }
-    if (announce) await active.api.sendHostStatus();
+    if (announce) {
+      // Ahead of the status: the phone attaches once greeted, and its ack must
+      // be sealed before its `host.attach`.
+      final move = hello == null ? null : _relayMoveFor(transport, hello);
+      active.offeredMove = move;
+      if (move != null) {
+        await _sealAndSend(active, FrameType.linkRelayMove, 'relay-move', {
+          'to': move.toString(),
+        });
+      }
+      await active.api.sendHostStatus();
+    }
     return active;
   }
 
@@ -1006,6 +1088,9 @@ class _ActiveLink {
 
   /// The silence deadline, once the phone has pinged on this link.
   LinkLiveness? liveness;
+
+  /// The relay this link's hello was asked to move to, until acknowledged.
+  Uri? offeredMove;
 
   /// What the phone last said about looking, or null when it never has.
   bool? watchingSaid;
