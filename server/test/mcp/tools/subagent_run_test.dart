@@ -549,6 +549,36 @@ void main() {
       expect(delegated, hasLength(1));
     });
 
+    test("a child that reports back is told so in its opening message; a "
+        'detached one is not', () async {
+      insertCaller('caller');
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'prompt': 'Write the docs',
+      }, 'caller');
+      final told = pty.started.last.argv.join(' ');
+      expect(told, contains('Write the docs'));
+      expect(told, contains('report_to_parent'));
+      expect(told, contains('"Orchestrator caller" (caller)'));
+
+      await tools.call('subagent_run', {
+        'projectId': 'p1',
+        'prompt': 'Audit',
+        'mode': 'async',
+      }, 'caller');
+      expect(pty.started.last.argv.join(' '), contains('report_to_parent'));
+
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'prompt': 'Leave me be',
+        'mode': 'detached',
+      }, 'caller');
+      expect(
+        pty.started.last.argv.join(' '),
+        isNot(contains('report_to_parent')),
+      );
+    });
+
     test('open_new_session from no session, or where nothing can push, is '
         'detached by default', () async {
       final result =

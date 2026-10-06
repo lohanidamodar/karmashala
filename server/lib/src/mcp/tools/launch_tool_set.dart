@@ -43,6 +43,14 @@ Duration subagentRunBoundFor(num? seconds) {
   return asked > kSubagentRunMaxBound ? kSubagentRunMaxBound : asked;
 }
 
+/// Closes the opening message of a child whose results go back to the
+/// session named on its first line.
+const String kReportBackHint =
+    '[Karmashala: the session named above started you and is waiting for '
+    'your report. When you are done, blocked, or need its answer, tell it '
+    'with report_to_parent, then end your turn. The end of each turn you '
+    'work is sent to it as well.]';
+
 /// What an agent is told when a tool would show something and no Karmashala
 /// window is connected to show it in.
 const String kNoWindowOpen =
@@ -192,7 +200,7 @@ class LaunchToolSet extends ServerToolSet {
   ) async {
     final reportsBack = _async(args, callerSessionId, 'open_new_session');
     final started = _context.now();
-    final opened = await _open(args, callerSessionId);
+    final opened = await _open(args, callerSessionId, reportsBack: reportsBack);
     if (!reportsBack) return {...opened.answer, 'mode': 'detached'};
     delegate!(
       DelegatedChild(
@@ -438,6 +446,7 @@ class LaunchToolSet extends ServerToolSet {
       callerSessionId,
       modelId: model == null || model.isEmpty ? null : model,
       inCallerTree: true,
+      reportsBack: reportsBack,
     );
     final session = opened.session;
     if (reportsBack) {
@@ -648,8 +657,10 @@ class LaunchToolSet extends ServerToolSet {
     String? callerSessionId, {
     String? modelId,
     bool inCallerTree = false,
+    bool reportsBack = false,
   }) async {
     final projectId = args['projectId'] as String?;
+    final prompt = args['prompt'] as String?;
     final repositoryId = args['repositoryId'] as String?;
     final title = args['title'] as String?;
     final newWorktree = args['useWorktree'] == true;
@@ -758,7 +769,9 @@ class LaunchToolSet extends ServerToolSet {
         // A title the caller named is chosen, as one typed in the dialog is:
         // the agent's own name for the conversation never replaces it.
         titleTyped: title != null && title.trim().isNotEmpty,
-        prompt: args['prompt'] as String?,
+        prompt: prompt == null || !reportsBack
+            ? prompt
+            : '$prompt\n\n$kReportBackHint',
         worktree: newWorktree,
         existingWorktree: existingWorktree,
         workingDirectory: workingDirectory,

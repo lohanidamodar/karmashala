@@ -230,15 +230,24 @@ waiting longer will not clear it. A child that answers is ended then unless
 you pass `keepOpen: true`; `childOpen` says which. A child stopped by its
 usage limit stays open, and `resume` names the resume armed for it.
 
-**`mode: "async"` pushes the result to you; do not poll.** `subagent_run` and
-`open_new_session` with `mode: "async"` answer at once. When the child's first
-turn ends, a message tagged `[Karmashala]` arrives in your own queue with the
-child's id, agent, model, how long it took and its final answer (cut at 4000
-characters; `session_transcript` has the rest) — at once if you are idle,
-after your turn if you are working, several children in one message when they
-finish together. Start the children, then end your turn. A child a person
+**Children report back to you: end your turn and wait for them, and
+do not poll transcripts or files.** `open_new_session` from a session reports back unless
+you pass `mode: "detached"`; `subagent_run` does with `mode: "async"`. Both
+answer at once. When a child's turn ends — its first and every turn it works
+after, until it ends or is archived — a message tagged `[Karmashala]` arrives
+in your own queue with the child's id, agent, model, how long it took and its
+final answer (cut at 4000 characters; `session_transcript` has the rest) — at
+once if you are idle, after your turn if you are working, several children in
+one message when they finish together. A child sitting idle sends nothing. A
+child can also say it is done, blocked or needs input with `report_to_parent`,
+which reaches you at once. `delegations` lists your children with where each
+stands and its last report, so there is nothing to poll. A child a person
 stops reports nothing. `delegation_capabilities` lists the agents and models
 you can choose from.
+
+**If a session started you, report to it.** Your opening message names it.
+When you are done, blocked, or need its answer, call `report_to_parent` with
+what it needs to know, then end your turn.
 ''',
   ),
   McpGuide(
