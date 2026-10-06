@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -27,8 +28,9 @@ class _StubLocator implements CliStoreLocator {
   final List<CliStore> stores;
 
   @override
-  Future<List<CliStore>> locate(List<ExecutionEnvironment> environments) async =>
-      stores;
+  Future<List<CliStore>> locate(
+    List<ExecutionEnvironment> environments,
+  ) async => stores;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -62,10 +64,7 @@ void main() {
       .firstWhere((e) => isLocalHost(e.kind))
       .id;
 
-  ProviderContainer containerWith({
-    String? environmentId,
-    bool probe = false,
-  }) {
+  ProviderContainer containerWith({String? environmentId, bool probe = false}) {
     final container = ProviderContainer(
       overrides: [
         data,
@@ -134,17 +133,19 @@ void main() {
     expect(endpointFile().lastModifiedSync(), before);
   });
 
-  test('a WSL store is not read on the timer: a touch wakes the distro',
-      () async {
-    final wsl = wslEnv();
-    db.server.environmentRows.upsert(wsl);
-    final container = containerWith(environmentId: wsl.id);
-    await installed(container);
-    endpointFile().deleteSync();
+  test(
+    'a WSL store is not read on the timer: a touch wakes the distro',
+    () async {
+      final wsl = wslEnv();
+      db.server.environmentRows.upsert(wsl);
+      final container = containerWith(environmentId: wsl.id);
+      await installed(container);
+      endpointFile().deleteSync();
 
-    expect(await healAgentHookEndpoints(container), isFalse);
-    expect(endpointFile().existsSync(), isFalse);
-  });
+      expect(await healAgentHookEndpoints(container), isFalse);
+      expect(endpointFile().existsSync(), isFalse);
+    },
+  );
 
   test('a probe heals nothing: the stores are the real app\'s', () async {
     final container = containerWith(probe: true);
@@ -169,15 +170,31 @@ void main() {
 
       endpointFile().deleteSync();
       final deadline = DateTime.now().add(const Duration(seconds: 5));
-      while (!endpointFile().existsSync() && DateTime.now().isBefore(deadline)) {
+      while (!endpointFile().existsSync() &&
+          DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(endpointFile().readAsStringSync(), written);
 
-      healer.stop();
+      await healer.stop();
       endpointFile().deleteSync();
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(endpointFile().existsSync(), isFalse);
+    });
+
+    // A quit stops the healer and then retires the endpoint files: a check
+    // still in flight must not write one back after that.
+    test('stop waits for a check already running', () async {
+      final container = containerWith();
+      await installed(container);
+      final healer = AgentHookEndpointHealer(container);
+      endpointFile().deleteSync();
+
+      var checkDone = false;
+      unawaited(healer.check().whenComplete(() => checkDone = true));
+      await healer.stop();
+
+      expect(checkDone, isTrue);
     });
   });
 }

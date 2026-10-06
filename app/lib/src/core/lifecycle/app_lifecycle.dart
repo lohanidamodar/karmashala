@@ -133,9 +133,12 @@ class AppLifecycle {
   /// before the hooks are installed, in a probe, and after a quit or switch.
   AgentHookEndpointHealer? get hookEndpointHealer => _hookHealer;
 
-  void _stopHookHealer() {
-    _hookHealer?.stop();
+  /// Stops the healer; done when a check it had running is, so the retirement
+  /// step that follows cannot be undone by it.
+  Future<void> _stopHookHealer() {
+    final stopped = _hookHealer?.stop() ?? Future<void>.value();
     _hookHealer = null;
+    return stopped;
   }
 
   /// The steps the last [shutdown] cut off at their own cap, in order. *Which*
@@ -449,10 +452,13 @@ class AppLifecycle {
     _pathRepair = null;
 
     _abandonSkillSweep(container);
-    _stopHookHealer();
+    final healerStopped = _stopHookHealer();
     await _bounded(
       'agent hook installation',
-      () => hookInstallation ?? Future<void>.value(),
+      () => Future.wait([
+        hookInstallation ?? Future<void>.value(),
+        healerStopped,
+      ]),
       _kSwitchHookBudget,
     );
     await _bounded(
@@ -519,14 +525,17 @@ class AppLifecycle {
     // 0. Give up on any skill sweep still running. Not a step: it sets a flag and
     //    returns, so it needs no slice of the budget and cannot be abandoned.
     if (container != null) _abandonSkillSweep(container);
-    _stopHookHealer();
+    final healerStopped = _stopHookHealer();
 
     // 1. A hook rewrite in flight gets a short grace period; it writes another
     //    application's config file, and half of one is worse than none.
     await _step(
       'agent hook installation',
       watch,
-      () => _hookInstallation ?? Future<void>.value(),
+      () => Future.wait([
+        _hookInstallation ?? Future<void>.value(),
+        healerStopped,
+      ]),
       cap: _kHookStepBudget,
     );
 

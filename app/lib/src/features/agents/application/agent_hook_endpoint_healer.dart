@@ -25,7 +25,8 @@ class AgentHookEndpointHealer {
 
   bool get isRunning => _timer != null;
 
-  void start() => _timer ??= Timer.periodic(interval, (_) => unawaited(check()));
+  void start() =>
+      _timer ??= Timer.periodic(interval, (_) => unawaited(check()));
 
   /// One check now; a tick that lands while one runs joins it.
   Future<bool> check() => _checking ??= healAgentHookEndpoints(
@@ -33,8 +34,12 @@ class AgentHookEndpointHealer {
     logger: logger,
   ).whenComplete(() => _checking = null);
 
-  void stop() {
+  /// No more ticks, and done when a check already running is: a quit retires
+  /// the endpoint files next, and a check finishing after that would write
+  /// one back for a receiver that is gone.
+  Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
+    await _checking;
   }
 }
