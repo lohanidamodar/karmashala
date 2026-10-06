@@ -764,6 +764,9 @@ const claudeCodeDescriptor = AgentDescriptor(
     failed: [
       StateRecordMatcher(['isApiErrorMessage'], true),
     ],
+    // The error record is followed by `system` records (`turn_duration`,
+    // `away_summary`) that match nothing.
+    failureOutlastsUnclassifiedRecords: true,
   ),
   // Read off Claude Code v2.1.251's own footer, captured from a real PTY run
   // (`test/features/agents/fixtures/claude-code-*.raw`). Working and idle differ

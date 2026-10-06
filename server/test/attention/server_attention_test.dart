@@ -315,6 +315,28 @@ void main() {
     expect(item.detail, isNull);
   });
 
+  test('a turn an API error ended is filed as stopped, in the error\'s own '
+      'words', () async {
+    hook('PreToolUse');
+    await attention.poll();
+    reports.record(
+      AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-1',
+        status: AgentActivityStatus.failed,
+        source: AgentStatusSource.stateFile,
+        observedAt: clock.nowUtc(),
+        evidence: const ['API Error: Connection lost mid-response'],
+      ),
+    );
+    await attention.poll();
+    await flush();
+
+    final item = lastInbox()!.inbox.items.single;
+    expect(item.kind, InboxItemKind.failed);
+    expect(item.detail, 'Stopped: connection lost mid-response');
+  });
+
   test('an ask on a session that has since ended is not left waiting on a '
       'person', () async {
     hook('PreToolUse');

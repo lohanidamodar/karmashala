@@ -341,6 +341,7 @@ class AgentStateFileRules {
     this.failed = const [],
     this.activityWindow = const Duration(minutes: 2),
     this.looksPastUnclassifiedRecords = false,
+    this.failureOutlastsUnclassifiedRecords = false,
   });
 
   final List<StateRecordMatcher> idle;
@@ -371,6 +372,12 @@ class AgentStateFileRules {
   /// A record that *matches* and is merely stale — a `working` record nothing
   /// has written to since — ends the walk. Aging out is an answer, not a miss.
   final bool looksPastUnclassifiedRecords;
+
+  /// Whether the same walk is taken for a `failed` record alone: the nearest
+  /// record that matches anything is the answer only when it is a failure.
+  /// Claude writes `system` bookkeeping after a turn an API error ended, which
+  /// left that turn `unknown` and its quiet screen read as finished.
+  final bool failureOutlastsUnclassifiedRecords;
 }
 
 /// How one agent writes a hook handler for an event.

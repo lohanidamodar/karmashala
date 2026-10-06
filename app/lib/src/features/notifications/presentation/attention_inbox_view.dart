@@ -15,6 +15,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/ask_resolutions.dart';
 import '../../sessions/application/session_handoff_service.dart';
+import '../../sessions/application/session_input.dart';
 import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart' show AgentWaitKind;
@@ -508,6 +509,9 @@ class _InboxRowContentState extends State<_InboxRowContent> {
                       ),
                     ),
                   ?widget.answers,
+                  if (item.kind == InboxItemKind.failed &&
+                      !item.session.imported)
+                    _ResumeAction(sessionId: item.session.openId),
                 ],
               ),
             ),
@@ -531,6 +535,42 @@ class _InboxRowContentState extends State<_InboxRowContent> {
       ),
     );
   }
+}
+
+/// *Resume* on a turn an error ended: the session is still there, waiting at
+/// its prompt, and "continue" picks the work up where it stopped.
+class _ResumeAction extends ConsumerWidget {
+  const _ResumeAction({required this.sessionId});
+
+  final String sessionId;
+
+  Future<void> _resume(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    String? failure;
+    try {
+      final sent = await ref
+          .read(sessionInputProvider)
+          .send(sessionId, 'continue');
+      if (!sent) failure = 'The session is not running here.';
+    } on SessionPromptRefusal catch (refusal) {
+      failure = refusal.message;
+    }
+    if (failure != null) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not resume: $failure')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: TextButton.icon(
+      onPressed: () => unawaited(_resume(context, ref)),
+      icon: const Icon(AppIcons.play, size: Chrome.iconAction),
+      label: const Text('Resume'),
+    ),
+  );
 }
 
 /// *Allow* and *Deny* on a phone's ask row, for a plain approval only: a

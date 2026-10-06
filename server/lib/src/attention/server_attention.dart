@@ -275,6 +275,11 @@ class ServerAttention implements AttentionWork {
         null => report.source == AgentStatusSource.terminalGrid ? null : line,
       };
       if (words != null) details[session.key] = words;
+    } else if (report.status == AgentActivityStatus.failed) {
+      details[session.key] = stoppedOnErrorLine(
+        report.evidence,
+        reason: report.failureReason,
+      );
     } else if (line != null) {
       details[session.key] = line;
     }

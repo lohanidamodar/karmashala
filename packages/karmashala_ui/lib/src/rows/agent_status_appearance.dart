@@ -26,7 +26,7 @@ agentStatusAppearance(AgentActivityStatus status) => switch (status) {
   ),
   AgentActivityStatus.failed => (
     icon: AppIcons.xCircle,
-    label: 'Failed',
+    label: 'Stopped on an error',
     colour: (semantic) => semantic.failure,
   ),
   AgentActivityStatus.unknown => (

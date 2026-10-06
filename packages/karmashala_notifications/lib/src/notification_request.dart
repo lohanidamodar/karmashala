@@ -164,7 +164,7 @@ class NotificationCoalescer {
           waiting == AgentWaitKind.approval
               ? 'Agent needs your approval'
               : 'Agent is waiting for you',
-        NotificationReason.failed => 'Agent failed',
+        NotificationReason.failed => 'Agent stopped on an error',
         NotificationReason.checksFailed => 'Checks failed',
         NotificationReason.changesRequested => 'Changes requested',
         NotificationReason.readyToMerge => 'Ready to merge',
