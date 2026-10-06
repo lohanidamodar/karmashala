@@ -1,11 +1,10 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_artifacts/karmashala_artifacts.dart';
-import 'package:karmashala_projects/store.dart';
-import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../mcp/tools/server_tool_set.dart';
 import 'server_artifacts.dart';
+import 'session_environment.dart';
 
 /// `artifact_show`, `artifact_list` and `artifact_update`: what an agent made,
 /// shown as a card in its own thread and kept by revision. A path is read on
@@ -13,12 +12,10 @@ import 'server_artifacts.dart';
 /// wrote it.
 class ArtifactToolSet extends ServerToolSet {
   ArtifactToolSet(this._artifacts, {required AppDatabase database})
-    : _sessions = SessionDao(database),
-      _repositories = RepositoryDao(database);
+    : _environments = SessionEnvironments(database);
 
   final ServerArtifacts _artifacts;
-  final SessionDao _sessions;
-  final RepositoryDao _repositories;
+  final SessionEnvironments _environments;
 
   ArtifactLibrary get _library => _artifacts.library;
 
@@ -46,7 +43,7 @@ class ArtifactToolSet extends ServerToolSet {
       source: path == null || path.isEmpty
           ? null
           : EnvironmentPath(
-              environmentId: _environmentOf(sessionId),
+              environmentId: _environments.of(sessionId),
               path: path,
             ),
       content: content,
@@ -112,18 +109,6 @@ class ArtifactToolSet extends ServerToolSet {
       );
     }
     return caller;
-  }
-
-  /// Where [sessionId]'s agent runs: its working directory's environment,
-  /// else its worktree's, else its checkout's.
-  String _environmentOf(String sessionId) {
-    final session =
-        _sessions.getById(sessionId) ??
-        (throw StateError('No session $sessionId.'));
-    return session.workingDirectory?.environmentId ??
-        session.worktree?.environmentId ??
-        _repositories.getById(session.repositoryId)?.path.environmentId ??
-        localHostEnvironmentId;
   }
 
   static ArtifactKind? _kind(Object? value) {

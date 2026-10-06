@@ -1,6 +1,7 @@
 import '../../ask/cli_invocation.dart';
 import '../../process/command_runner_factory.dart';
 import '../domain/agent_descriptor.dart';
+import 'agent_artifact_markers.dart';
 import 'agent_accounts.dart';
 import 'agent_chat_protocol.dart';
 import 'agent_directory_conversations.dart';
@@ -104,6 +105,9 @@ abstract class AgentAdapter {
 
   /// How pictures are found in the agent's transcript, or null.
   AgentMediaReader? get media => null;
+
+  /// How the agent names an artifact inside its own answer, or null.
+  AgentArtifactMarkers? get artifactMarkers => null;
 
   /// What the agent's own undo offers beside Karmashala's checkpoints.
   AgentRewind get rewind => const AgentRewind.unknown();

@@ -28,6 +28,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         OpenSessionTab,
         OpenTerminalTab,
         SessionAgentChanged,
+        SessionNoticed,
         SessionQueueChanged,
         SessionSend,
         TerminalOpen,
@@ -64,6 +65,7 @@ import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../artifacts/artifact_tool_set.dart';
+import '../artifacts/server_artifact_markers.dart';
 import '../artifacts/server_artifacts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
@@ -964,6 +966,19 @@ Future<int> _serve(
     titles: AcpTitles(sessionSync.rows),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // What an agent names in its own answer — Codex's `$visualize` marker — is
+  // shown as an artifact of its session; one refused is said in the chat.
+  final artifactMarkers = ServerArtifactMarkers(
+    artifacts,
+    database: database,
+    notice: (sessionId, message) => data.announce([
+      SessionNoticed(sessionId: sessionId, message: message),
+    ]),
+  );
+  acpHost
+    ..agentSaid = ((sessionId, agentId, text) =>
+        unawaited(artifactMarkers.see(sessionId, agentId, text)))
+    ..displayOf = artifactMarkers.displayOf;
   final sessionUsage = SessionUsageDao(database);
   final acpRuntimes = AcpRuntimes(
     messages: sessionMessages,

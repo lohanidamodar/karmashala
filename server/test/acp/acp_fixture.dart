@@ -24,6 +24,16 @@ class RecordingHost extends AcpRuntimeHost {
   final usage = <SessionUsageChanged>[];
   var messagesChangedCount = 0;
   final logged = <String>[];
+  final agentMessages = <(String, String, String)>[];
+
+  /// What a closed agent row should read instead; null keeps it.
+  String? Function(String text)? display;
+
+  @override
+  String? agentMessage(String sessionId, String agentId, String text) {
+    agentMessages.add((sessionId, agentId, text));
+    return display?.call(text);
+  }
 
   /// What a write waits on; null answers at once.
   Completer<void>? hold;
