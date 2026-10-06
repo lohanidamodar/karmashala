@@ -50,6 +50,13 @@ const String kLogsPaneId = '${kDocumentPanePrefix}logs';
 /// Whether [paneId] is the Logs document.
 bool isLogsPane(String paneId) => paneId == kLogsPaneId;
 
+/// Everything Karmashala runs, with its ports, as a tab. One, like Logs —
+/// it is a view of the server's processes, not the tab's.
+const String kRunningPaneId = '${kDocumentPanePrefix}running';
+
+/// Whether [paneId] is the Running document.
+bool isRunningPane(String paneId) => paneId == kRunningPaneId;
+
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.
 const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';

@@ -58,6 +58,7 @@ class ShellActivityStrip extends ConsumerWidget {
       onSettings: () => openSettingsTab(ref),
       onUsage: () => openUsageTab(ref),
       onStores: () => openStoresTab(ref),
+      onRunning: () => openRunningTab(ref),
       // A diagnostic, not a daily tool: in the strip only while debug mode is
       // on. Quick open, Settings and a keymap reach it either way.
       onLogs: ref.watch(settingsControllerProvider.select((s) => s.debugMode))
@@ -83,6 +84,7 @@ class ActivityStrip extends StatelessWidget {
     this.onUsage,
     this.usageHint,
     this.onStores,
+    this.onRunning,
     this.onLogs,
     super.key,
   });
@@ -110,6 +112,9 @@ class ActivityStrip extends StatelessWidget {
 
   /// Opens the Stores tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onStores;
+
+  /// Opens the Running tab. Null leaves its glyph out, as [onUsage] does.
+  final VoidCallback? onRunning;
 
   /// Opens the Logs tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onLogs;
@@ -152,6 +157,13 @@ class ActivityStrip extends StatelessWidget {
               label: 'Logs',
               selected: false,
               onPressed: onLogs,
+            ),
+          if (onRunning case final onRunning?)
+            _StripButton(
+              icon: AppIcons.listMagnifyingGlass,
+              label: 'Running',
+              selected: false,
+              onPressed: onRunning,
             ),
           if (onStores case final onStores?)
             _StripButton(

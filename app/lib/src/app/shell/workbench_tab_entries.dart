@@ -104,6 +104,7 @@ IconData? documentIconFor(TerminalTab tab) {
   if (isUsagePane(paneId)) return AppIcons.chartBar;
   if (isStoresPane(paneId)) return AppIcons.package;
   if (isLogsPane(paneId)) return AppIcons.article;
+  if (isRunningPane(paneId)) return AppIcons.listMagnifyingGlass;
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
   if (isNotePane(paneId)) return AppIcons.note;

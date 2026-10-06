@@ -15,6 +15,7 @@ import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
 import '../../features/stores/presentation/stores_tab_view.dart';
 import 'phone_log_page.dart';
+import 'running_tab_view.dart';
 import 'phone_routes.dart';
 import 'phone_shell.dart' show PhoneTabsScope;
 
@@ -30,6 +31,11 @@ class PhoneMoreList extends StatelessWidget {
           'Stores',
           AppIcons.package,
           (_) => const PaneTitleOverride(child: StoresTabView()),
+        ),
+        PhoneMoreEntry.running => (
+          'Running',
+          AppIcons.listMagnifyingGlass,
+          (_) => const PaneTitleOverride(child: RunningTabView()),
         ),
         // The page's app bar names it, so its own header drops the name.
         PhoneMoreEntry.notes => (

@@ -4,62 +4,66 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 
+import '../../running/application/running_providers.dart';
+import '../../running/domain/port_label.dart';
+import '../../running/domain/running_groups.dart';
 import '../application/browser_pane_controller.dart';
-import '../application/dev_server_ports.dart';
 
-/// Lists the ports Karmashala's panes have started listening on, read when
-/// the menu opens — nothing polls — and opens one in the browser pane.
-class DevServerMenuButton extends ConsumerStatefulWidget {
+/// The http ports Karmashala's processes listen on — the Running tab's
+/// reading, taken again when the menu opens; nothing polls — and opens one in
+/// the browser pane.
+class DevServerMenuButton extends ConsumerWidget {
   const DevServerMenuButton({this.enabled = true, super.key});
 
   final bool enabled;
 
   @override
-  ConsumerState<DevServerMenuButton> createState() =>
-      _DevServerMenuButtonState();
-}
-
-class _DevServerMenuButtonState extends ConsumerState<DevServerMenuButton> {
-  Future<ListeningPortsReading>? _reading;
-
-  void _read() =>
-      setState(() => _reading = ref.read(listeningPortsReaderProvider)());
-
-  @override
-  Widget build(BuildContext context) => MenuAnchor(
-    onOpen: _read,
+  Widget build(BuildContext context, WidgetRef ref) => MenuAnchor(
+    onOpen: () => ref.read(runningProvider.notifier).refresh(),
     menuChildren: [
-      FutureBuilder<ListeningPortsReading>(
-        future: _reading,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+      Consumer(
+        builder: (context, ref, _) {
+          final snapshot = ref.watch(runningProvider);
+          final reading = snapshot.reading;
+          if (reading == null) {
+            if (snapshot.error case final error? when !snapshot.loading) {
+              return _Note('Could not look: $error');
+            }
             return const Padding(
               padding: EdgeInsets.all(12),
               child: InlineSpinner(semanticsLabel: 'Looking for dev servers'),
             );
           }
-          if (snapshot.error case final error?) {
-            return _Note('Could not look: $error');
-          }
-          final reading = snapshot.data!;
+          final facts = ref.watch(portFactsProvider);
+          final ports = [
+            for (final owned in allPorts(reading))
+              if (owned.process.role != RunningRole.server &&
+                  labelPort(
+                    process: owned.process.name,
+                    port: owned.port.port,
+                    command: owned.process.command,
+                    facts: facts,
+                  ).isHttp)
+                owned,
+          ];
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (reading.ports.isEmpty)
+              if (ports.isEmpty)
                 const _Note('Nothing started in a pane is listening.'),
-              for (final port in reading.ports)
+              for (final (:process, :port) in ports)
                 MenuItemButton(
                   leadingIcon: const Icon(AppIcons.globe),
                   onPressed: () => ref
                       .read(browserPaneControllerProvider.notifier)
-                      .navigate(port.url),
+                      .navigate('http://localhost:${port.port}'),
                   child: Text(
-                    'localhost:${port.port} — ${port.title}'
-                    '${port.process == null ? '' : ' (${port.process})'}',
+                    'localhost:${port.port} — ${process.title ?? ''}'
+                    '${process.name == null ? '' : ' (${process.name})'}',
                   ),
                 ),
-              for (final line in reading.unread) _Note(line),
+              for (final note in reading.notes) _Note(note.text),
             ],
           );
         },
@@ -68,7 +72,7 @@ class _DevServerMenuButtonState extends ConsumerState<DevServerMenuButton> {
     builder: (context, controller, _) => IconButton(
       tooltip: 'Dev servers started in Karmashala\'s panes',
       icon: const Icon(AppIcons.listMagnifyingGlass),
-      onPressed: !widget.enabled
+      onPressed: !enabled
           ? null
           : () => controller.isOpen ? controller.close() : controller.open(),
     ),

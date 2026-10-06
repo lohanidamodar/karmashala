@@ -22,6 +22,7 @@ import '../../settings/presentation/settings_tab_view.dart';
 import '../../agents/presentation/usage_tab/usage_tab_view.dart';
 import '../../stores/presentation/stores_tab_view.dart';
 import '../../../app/shell/logs_tab_view.dart';
+import '../../../app/shell/running_tab_view.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
 import '../../todos/presentation/todo_edit_dialog.dart';

@@ -59,6 +59,7 @@ extension TerminalPaneTitles on TerminalSessionsController {
     if (isUsagePane(paneId)) return 'Usage';
     if (isStoresPane(paneId)) return 'Stores';
     if (isLogsPane(paneId)) return 'Logs';
+    if (isRunningPane(paneId)) return 'Running';
     if (isFilesPane(paneId)) return 'Files';
     if (isBrowserPane(paneId)) return 'Browser';
     // A document id: a host path, which reads `/` and `\` alike, or a POSIX
