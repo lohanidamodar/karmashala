@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/probe/probe_mode.dart';
+import 'package:path/path.dart' as p;
 import 'package:karmashala/src/features/server/application/server_commands.dart';
 import 'package:karmashala/src/features/server/application/server_overview.dart';
 import 'package:karmashala/src/features/server/presentation/server_command_actions.dart';
@@ -18,6 +22,22 @@ import '../terminal/fake_instance.dart';
 /// server's state, the line the tray shows, and the shell running a request
 /// that came from outside the widget tree with the Settings page's confirm.
 void main() {
+  // Every command acts through localHostSessionAccessProvider, built by
+  // localHostSessionAccessFor: a probe's is its own host, never the owner's.
+  group('a probe', () {
+    test('acts on the host in its own data folder', () {
+      final data = p.join(Directory.systemTemp.path, 'ks-probe-commands');
+      final paths = probeHostPaths(
+        ProbeMode(enabled: true, dataDirectory: data),
+      );
+      expect(paths!.directory.path, p.join(p.absolute(data), 'host'));
+    });
+
+    test('with no data folder has no server to act on', () {
+      expect(localHostSessionAccessFor(ProbeMode.on), isNull);
+    });
+  });
+
   ServerOverview overview({
     ServerRunState state = ServerRunState.running,
     int? live = 3,
