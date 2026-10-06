@@ -4,6 +4,7 @@
 library;
 
 export 'src/domain/artifact.dart';
+export 'src/sandbox/artifact_sandbox.dart';
 export 'src/service/artifact_library.dart';
 export 'src/service/artifact_sources.dart';
 export 'src/service/artifact_watcher.dart';
