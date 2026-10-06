@@ -6,7 +6,7 @@ import 'package:karmashala_host_protocol/host_access.dart';
 import 'package:karmashala_host_protocol/protocol.dart' show kProtocolVersion;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_remote/remote.dart'
-    show CapabilitySet, kHostLinkResumeGrace;
+    show CapabilitySet, SealedHostLink, kHostLinkResumeGrace, sameRelay;
 import 'package:karmashala_terminal_runtime/host_link.dart'
     show SharedHostLinks;
 
@@ -130,11 +130,21 @@ class RemoteServerAccess implements HostSessionAccess {
               this,
             )?.welcome.features.contains(kLinkResumeFeature) ??
             false,
-        onHeld: (held) => _resuming.value = held,
+        onHeld: (held) {
+          _resuming.value = held;
+          if (held) _route.value = null;
+        },
+        onRoute: (relay) => _route.value = LiveLinkRoute(relay),
         // Stage 0 step 18: relay→LAN promotion over a resume, and pings on
         // an idle link — each only where the server announced it.
         promoteOffered: () => _offers(kLinkPromoteFeature),
         keepaliveOffered: () => _offers(kLinkKeepaliveFeature),
+      );
+      _live = link;
+      unawaited(
+        link.done.whenComplete(() {
+          if (identical(_live, link)) _route.value = null;
+        }),
       );
       _grants.value = link.capabilities;
       _needsGrant.value = false;
@@ -150,6 +160,31 @@ class RemoteServerAccess implements HostSessionAccess {
       }
       throw HostLinkException(error.message);
     }
+  }
+
+  final ValueNotifier<LiveLinkRoute?> _route = ValueNotifier(null);
+  SealedHostLink? _live;
+
+  /// The route the link is on now — this network, or which relay — as the
+  /// link itself last said; null while there is no live link.
+  ValueListenable<LiveLinkRoute?> get route => _route;
+
+  @visibleForTesting
+  void debugSetRoute(LiveLinkRoute? route) => _route.value = route;
+
+  /// A pin was just chosen: the link is hung up and redialled under it when
+  /// the route it is on now is one [pin] does not allow — a pin is "only".
+  /// True when it redialled; a link already on an allowed route stays.
+  Future<bool> obey(CompanionRoutePin pin) async {
+    final live = _route.value;
+    if (live == null || live.allowedBy(pin)) return false;
+    _log.info(
+      '$hostName: the route chosen does not allow this link; '
+      'redialling under it.',
+    );
+    _route.value = null;
+    await SharedHostLinks.drop(this);
+    return true;
   }
 
   /// Whether this server's welcome, on the shared link, names [feature].
@@ -235,6 +270,30 @@ class RemoteServerAccess implements HostSessionAccess {
     if (resting != null && !resting.isCompleted) resting.complete();
     return _dialer.close();
   }
+}
+
+/// The route a live link is on: one [relay], or none — an address on this
+/// network.
+@immutable
+class LiveLinkRoute {
+  const LiveLinkRoute(this.relay);
+
+  final Uri? relay;
+
+  /// Whether a link here may stay under [pin]: Automatic allows any route,
+  /// LAN only no relay, one relay only that relay.
+  bool allowedBy(CompanionRoutePin pin) => switch (pin.kind) {
+    CompanionRouteKind.auto => true,
+    CompanionRouteKind.lan => relay == null,
+    CompanionRouteKind.relay => relay != null && sameRelay(relay!, pin.relay!),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is LiveLinkRoute && other.relay?.toString() == relay?.toString();
+
+  @override
+  int get hashCode => relay?.toString().hashCode ?? 0;
 }
 
 /// How long a phone in the background keeps its link: the server's resume

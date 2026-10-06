@@ -416,4 +416,9 @@ class CompanionConnections {
   }
 
   static Future<void> _mutations = Future<void>.value();
+
+  /// For tests only. A completed future hands its result on in the zone it
+  /// was made in, so a chain left by one widget test's fake-async zone never
+  /// answers the next test's write; each widget test starts a fresh chain.
+  static void debugResetMutations() => _mutations = Future<void>.value();
 }

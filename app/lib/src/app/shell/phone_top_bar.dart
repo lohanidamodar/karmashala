@@ -17,12 +17,15 @@ import '../../features/remote/presentation/machine_route.dart'
 import '../../features/remote/presentation/machines_section.dart'
     show AddMachineDialog;
 import '../../features/remote/presentation/pair_machine_page.dart';
+import '../../features/remote/presentation/route_switch_sheet.dart'
+    show LinkRouteChip;
 import '../widgets/adaptive_modal.dart';
 import 'phone_shell.dart';
 import 'quick_open/quick_open.dart';
 
-/// The phone's top bar: which server this is (and a switch to another),
-/// search, and how many sessions need you.
+/// The phone's top bar: which server this is (and a switch to another), the
+/// route it is reached by (and a switch to another), search, and how many
+/// sessions need you.
 class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
   const PhoneTopBar({super.key});
 
@@ -34,6 +37,7 @@ class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
     titleSpacing: Insets.xs,
     title: const PhoneHostSwitcher(),
     actions: [
+      const LinkRouteChip(),
       IconButton(
         tooltip: 'Search',
         icon: const Icon(AppIcons.magnifyingGlass),
