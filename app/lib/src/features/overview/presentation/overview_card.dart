@@ -1,9 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_git/github.dart' show ChecksState;
-import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -13,7 +11,6 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_states.dart';
-import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
@@ -64,16 +61,7 @@ class OverviewCardTile extends ConsumerWidget {
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
     final needsYou = card.column == BoardColumn.needsYou;
-    final agentId =
-        entry.imported?.cli ??
-        switch (entry.native) {
-          final native? =>
-            ref
-                .read(agentInstallationsDataProvider)
-                .getById(native.agentInstallationId)
-                ?.agentId,
-          null => null,
-        };
+    final agentId = ref.read(overviewFactsProvider).agentOf(entry);
     final agentName = agentId == null
         ? null
         : ref.watch(agentRegistryProvider).displayNameFor(agentId);
@@ -196,7 +184,9 @@ class _Chips extends ConsumerWidget {
     final machine = directory == null
         ? null
         : ref.watch(environmentLabelForIdProvider(directory.environmentId));
-    final branch = _knownBranch(ref, directory);
+    final branch = directory == null
+        ? null
+        : ref.watch(overviewKnownBranchProvider(directory));
     final pr = directory == null
         ? null
         : ref.watch(overviewPullRequestProvider(directory));
@@ -265,17 +255,6 @@ class _Chip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The branch a reading of [directory] has already named, or null. Borrowed,
-/// never asked for, as the Agents lens's rows do.
-String? _knownBranch(WidgetRef ref, EnvironmentPath? directory) {
-  if (directory == null) return null;
-  final checkout = Checkout(directory);
-  ref.watch(checkoutReadingsProvider.select((r) => r[checkout]));
-  final provider = checkoutDeliveryProvider(checkout);
-  if (!ref.exists(provider)) return null;
-  return ref.read(provider).asData?.value.branch;
 }
 
 /// The state, as the Agents lens draws it: glyph plus label, never colour

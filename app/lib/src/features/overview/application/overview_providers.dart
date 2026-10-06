@@ -4,6 +4,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ForgeReadingChanged;
 import 'package:karmashala_git/github.dart' show PullRequestSnapshot;
+import 'package:karmashala_git/repositories.dart' show Checkout;
 import 'package:karmashala_notifications/attention.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -14,6 +15,7 @@ import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
@@ -205,3 +207,14 @@ final overviewFocusProvider =
     NotifierProvider.autoDispose<OverviewFocusController, OverviewFocus>(
       OverviewFocusController.new,
     );
+
+/// The branch a reading of [EnvironmentPath] checkout has already named, or
+/// null. Borrowed, never asked for, as the Agents lens's rows do.
+final overviewKnownBranchProvider = Provider.autoDispose
+    .family<String?, EnvironmentPath>((ref, directory) {
+      final checkout = Checkout(directory);
+      ref.watch(checkoutReadingsProvider.select((r) => r[checkout]));
+      final delivery = checkoutDeliveryProvider(checkout);
+      if (!ref.exists(delivery)) return null;
+      return ref.read(delivery).asData?.value.branch;
+    });
