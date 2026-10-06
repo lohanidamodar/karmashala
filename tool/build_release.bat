@@ -101,11 +101,16 @@ rem
 rem The version is in the filename because HostDeployer compares it against what
 rem the remote binary reports rather than trusting the name.
 rem
-rem Whatever is already in Release stays and ships: the installer deletes
-rem nothing, so a failed download means an SSH host gets an *older* host, not
-rem none. Say which failure it was - "no bundles on the release" was printed
-rem on a machine that had no gh at all.
+rem Only this commit's bundles ship: the folder is emptied of them first,
+rem since the installer packs whatever is there. Say which failure it was -
+rem "no bundles on the release" was printed on a machine that had no gh at
+rem all.
 echo === SESSION HOST (linux, from the release) === >> "%LOG%"
+rem Start from none. A bundle left by an earlier build - another version, or
+rem this version built from an older commit - would otherwise be shipped: the
+rem installer packs every bundle in Release, and a same-named stale one made
+rem the WSL build below think it had nothing to do.
+del /q "%RELEASE%\karmashala_host-*-linux-*.tar.gz" 2>nul
 rem Windows' gh, or else WSL's: gh signed in inside WSL downloads straight
 rem into the Release folder through its /mnt path.
 set GH=
@@ -116,7 +121,7 @@ if not defined GH (
   if not errorlevel 1 set GH=wsl
 )
 if not defined GH (
-  echo     gh is not installed on Windows or in WSL - linux host bundles NOT fetched; SSH hosts get whatever older bundle is already in %RELEASE%
+  echo     gh is not installed on Windows or in WSL - linux host bundles NOT fetched; building them in WSL instead
   echo gh is not installed on Windows or in WSL - linux host bundles not fetched >> "%LOG%"
 ) else (
   if "!GH!"=="windows" (
@@ -127,7 +132,7 @@ if not defined GH (
     wsl.exe -e gh release download v!APPVERSHORT! -R lohanidamodar/karmashala -p "karmashala_host-*-linux-*" -D "!WSLRELEASE!" >> "%LOG%" 2>&1
   )
   if errorlevel 1 (
-    echo     could not download linux host bundles from release v!APPVERSHORT! - SSH hosts get whatever older bundle is already in %RELEASE%
+    echo     could not download linux host bundles from release v!APPVERSHORT! - building them in WSL instead
     echo could not download linux host bundles from release v!APPVERSHORT! >> "%LOG%"
   )
 )
@@ -135,14 +140,13 @@ if not defined GH (
 rem No release bundles for this version (no gh, no release yet, a failed
 rem download): build them in WSL from the commit being built, by the CI job's
 rem commands, with WSL's own Flutter SDK - tool\build_host_linux.dart says how.
-rem Loud but not fatal: the installer still builds, with whatever older bundle
-rem is already in Release.
+rem Loud but not fatal: the installer still builds, with no linux bundle
 if not exist "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64.tar.gz" (
   echo === SESSION HOST ^(linux, built in WSL^) === >> "%LOG%"
   "%DARTEXE%" tool\build_host_linux.dart --version !APPVERSHORT! --out "%RELEASE%" >> "%LOG%" 2>&1
   if errorlevel 1 (
-    echo     LINUX HOST BUNDLES NOT BUILT in WSL - SSH hosts get whatever older bundle is already in %RELEASE%; see %LOG%
-    echo LINUX HOST BUNDLES NOT BUILT in WSL - SSH hosts get whatever older bundle is already in %RELEASE% >> "%LOG%"
+    echo     LINUX HOST BUNDLES NOT BUILT in WSL - the installer ships NO linux bundle, so SSH hosts cannot be deployed; see %LOG%
+    echo LINUX HOST BUNDLES NOT BUILT in WSL - the installer ships none >> "%LOG%"
   )
 )
 
