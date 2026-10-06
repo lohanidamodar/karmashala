@@ -19,6 +19,8 @@ import '../notifications/application/attention_inbox.dart';
 import '../server/application/server_commands.dart';
 import '../server/application/server_overview.dart';
 import '../notifications/application/notification_providers.dart';
+import '../notifications/application/focus_mode.dart';
+import '../notifications/presentation/notify_level_text.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_terminal_runtime/instances.dart'
@@ -33,7 +35,8 @@ import 'native_status.dart';
 const _kMenuShow = 'show';
 const _kMenuHide = 'hide';
 const _kMenuKeepAwake = 'keep_awake';
-const _kMenuNotifications = 'notifications';
+const _kMenuNotifyPrefix = 'notify_';
+const _kMenuFocus = 'focus';
 const _kMenuOnlyWhenUnfocused = 'notifications_unfocused';
 const _kMenuQuit = 'quit';
 const _kMenuServerSettings = 'server_settings';
@@ -613,10 +616,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
             checked: settings.keepAwake,
           ),
           TrayMenuItem.checkbox(
-            key: _kMenuNotifications,
-            label: 'Notify me about agents',
-            checked: notifications.enabled,
+            key: _kMenuFocus,
+            label: 'Focus',
+            checked: notifications.focus != null,
           ),
+          for (final level in NotifyLevel.values)
+            TrayMenuItem.checkbox(
+              key: '$_kMenuNotifyPrefix${level.name}',
+              label: 'Notify me: ${notifyLevelLabel(level)}',
+              checked: notifications.level == level,
+            ),
           TrayMenuItem.checkbox(
             key: _kMenuOnlyWhenUnfocused,
             label: 'Only when the window is not focused',
@@ -901,13 +910,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
         _serverMenuItem(key);
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
-      case _kMenuNotifications:
-        final notifications = _container.read(
-          notificationSettingsControllerProvider.notifier,
-        );
-        notifications.setEnabled(
-          !_container.read(notificationSettingsControllerProvider).enabled,
-        );
+      case _kMenuFocus:
+        _container.read(focusModeProvider.notifier).toggle();
+      case _ when key.startsWith(_kMenuNotifyPrefix):
+        final name = key.substring(_kMenuNotifyPrefix.length);
+        for (final level in NotifyLevel.values) {
+          if (level.name != name) continue;
+          _container
+              .read(notificationSettingsControllerProvider.notifier)
+              .setLevel(level);
+        }
       case _kMenuOnlyWhenUnfocused:
         final notifications = _container.read(
           notificationSettingsControllerProvider.notifier,

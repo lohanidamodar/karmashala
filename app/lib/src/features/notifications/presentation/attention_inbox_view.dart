@@ -23,7 +23,9 @@ import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../explorer/presentation/sidebar_chrome.dart';
 import '../application/attention_inbox.dart';
-import '../application/notification_providers.dart' show focusWatchedSession;
+import '../application/notification_providers.dart'
+    show focusWatchedSession, notificationSettingsControllerProvider;
+import 'package:karmashala_notifications/policy.dart' show NotifyLevel;
 import 'package:karmashala_notifications/attention.dart';
 
 /// The attention inbox: everything pending, newest first, each item one click
@@ -102,10 +104,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
       );
       if (said == null) return _forget(item.id);
       setState(() => _leaving[item.id] = (item: item, said: said));
-      _timers[item.id] = Timer(
-        kAnsweredElsewhereShown,
-        () => _forget(item.id),
-      );
+      _timers[item.id] = Timer(kAnsweredElsewhereShown, () => _forget(item.id));
     });
   }
 
@@ -133,10 +132,33 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
       for (final gone in _leaving.values)
         if (!asks.any((item) => item.id == gone.item.id)) gone,
     ];
+    // Below Everything, what the level logs quietly is a third group, listed
+    // only on asking: to read back, not mixed into what needs you.
+    final filtering =
+        ref.watch(
+          notificationSettingsControllerProvider.select((s) => s.level),
+        ) !=
+        NotifyLevel.everything;
+    final showQuiet = ref.watch(inboxShowQuietProvider);
     final updates = [
       for (final item in inbox.items)
-        if (item.kind != InboxItemKind.needsApproval) item,
+        if (item.kind != InboxItemKind.needsApproval &&
+            !(filtering && item.kind.isQuiet))
+          item,
     ];
+    final quiet = [
+      if (filtering)
+        for (final item in inbox.items)
+          if (item.kind.isQuiet) item,
+    ];
+    final quietLine = quiet.isEmpty
+        ? null
+        : _QuietLine(
+            count: quiet.length,
+            shown: showQuiet,
+            onTap: () =>
+                ref.read(inboxShowQuietProvider.notifier).set(!showQuiet),
+          );
     final rows = <Widget>[
       if (asks.isNotEmpty)
         SidebarGroupLabel(
@@ -146,7 +168,14 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
         ),
       for (final item in asks) row(item, controller, now, showWorkbench),
       for (final gone in leaving)
-        row(gone.item, controller, now, showWorkbench, left: true, said: gone.said),
+        row(
+          gone.item,
+          controller,
+          now,
+          showWorkbench,
+          left: true,
+          said: gone.said,
+        ),
       if (updates.isNotEmpty)
         SidebarGroupLabel(
           label: 'Updates',
@@ -154,7 +183,22 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
           spaceAbove: asks.isNotEmpty || leaving.isNotEmpty,
         ),
       for (final item in updates) row(item, controller, now, showWorkbench),
+      if (showQuiet && quiet.isNotEmpty) ...[
+        SidebarGroupLabel(
+          label: 'Quiet',
+          count: '${quiet.length}',
+          spaceAbove:
+              asks.isNotEmpty || leaving.isNotEmpty || updates.isNotEmpty,
+        ),
+        for (final item in quiet) row(item, controller, now, showWorkbench),
+      ],
+      ?quietLine,
     ];
+    final empty =
+        asks.isEmpty &&
+        leaving.isEmpty &&
+        updates.isEmpty &&
+        !(showQuiet && quiet.isNotEmpty);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -173,7 +217,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
           ],
         ),
         Expanded(
-          child: inbox.isEmpty && leaving.isEmpty
+          child: empty
               ? PanePlaceholder(
                   message: 'Nothing needs you.',
                   icon: AppIcons.checkCircle,
@@ -183,6 +227,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
                 )
               : ListView(padding: Sidebar.listPadding, children: rows),
         ),
+        if (empty) ?quietLine,
       ],
     );
   }
@@ -215,6 +260,49 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
     },
     onDismiss: () => left ? _forget(item.id) : controller.dismiss(item.id),
   );
+}
+
+/// "N quiet · Show", or "Hide quiet": the inbox's quiet filter, at the end of
+/// the list.
+class _QuietLine extends StatelessWidget {
+  const _QuietLine({
+    required this.count,
+    required this.shown,
+    required this.onTap,
+  });
+
+  final int count;
+  final bool shown;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = shown ? 'Hide quiet' : '$count quiet · Show';
+    return Semantics(
+      button: true,
+      label: shown ? 'Hide quiet updates' : '$count quiet updates. Show',
+      excludeSemantics: true,
+      child: ExplorerRow(
+        kind: ExplorerRowKind.session,
+        minHeight: Sidebar.rowHeight,
+        depth: 0,
+        selected: false,
+        onTap: onTap,
+        builder: (context) => ExplorerRowLine(
+          lead: ExplorerRowLead(
+            glyph: Icon(
+              shown ? AppIcons.eyeSlash : AppIcons.eye,
+              size: ExplorerRow.glyphSize,
+            ),
+          ),
+          title: Text(
+            text,
+            style: UiDensity.of(context).muted(Theme.of(context)),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Somewhere for a follow-up to go without leaving the list. It starts nothing:

@@ -206,3 +206,17 @@ final inboxHasUnseenUpdateProvider = Provider<bool>(
       .pending
       .any((item) => item.kind != InboxItemKind.needsApproval),
 );
+
+/// Whether the inbox lists what "Notify me" logs quietly — finished turns,
+/// ready to merge, follow-ups — below what needs you. Off by default; the
+/// level Everything lists them as it always has, filter or not.
+class InboxShowQuietController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool show) => state = show;
+}
+
+final inboxShowQuietProvider = NotifierProvider<InboxShowQuietController, bool>(
+  InboxShowQuietController.new,
+);

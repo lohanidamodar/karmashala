@@ -50,11 +50,10 @@ class DeviceNotificationStore {
     ).copyWith(onlyWhenUnfocused: false);
   }
 
-  Future<void> saveSettings(NotificationSettings settings) => _update({
-    'enabled': settings.enabled,
-    'notifyWhenFinished': settings.notifyWhenFinished,
-    'notifyWhenAttentionNeeded': settings.notifyWhenAttentionNeeded,
-  });
+  /// The level with the switches it replaced, as the desktop's record keeps
+  /// them; "only while unfocused" is not a phone's.
+  Future<void> saveSettings(NotificationSettings settings) =>
+      _update(settings.toJson()..remove('onlyWhenUnfocused'));
 
   Future<bool> permissionAsked() async =>
       (await _read())['permissionAsked'] == true;

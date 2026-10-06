@@ -1,3 +1,6 @@
+import 'package:karmashala/src/features/notifications/application/focus_mode.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/server/application/server_commands.dart';
 import 'package:karmashala/src/features/server/application/server_overview.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -664,6 +667,45 @@ void main() {
         expect(request!.command, isNull);
       },
     );
+
+    test('Notify me is one level checked, and choosing one sets it', () async {
+      await build();
+      await settle();
+
+      bool checked(String label) => item('Notify me: $label').checked!;
+      expect(checked('Everything'), isTrue);
+      expect(checked('Only when I’m needed'), isFalse);
+      expect(checked('Nothing'), isFalse);
+
+      service.onTrayMenuItemClicked(
+        item('Notify me: Only when I’m needed').key!,
+      );
+      await pumpEventQueue();
+
+      expect(
+        container.read(notificationSettingsControllerProvider).level,
+        NotifyLevel.whenNeeded,
+      );
+      expect(checked('Only when I’m needed'), isTrue);
+      expect(checked('Everything'), isFalse);
+    });
+
+    test('Focus is a checkbox that turns Focus on and off', () async {
+      await build();
+      await settle();
+      expect(item('Focus').checked, isFalse);
+
+      service.onTrayMenuItemClicked(item('Focus').key!);
+      await pumpEventQueue();
+      expect(container.read(focusModeProvider), isTrue);
+      expect(item('Focus').checked, isTrue);
+      expect(item('Notify me: Only when I’m needed').checked, isTrue);
+
+      service.onTrayMenuItemClicked(item('Focus').key!);
+      await pumpEventQueue();
+      expect(container.read(focusModeProvider), isFalse);
+      expect(item('Notify me: Everything').checked, isTrue);
+    });
 
     test('a window using another machine\'s server says so, and offers no '
         'control', () async {
