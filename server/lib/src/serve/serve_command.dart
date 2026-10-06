@@ -23,6 +23,7 @@ import 'package:karmashala_checkpoints/store.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
+        AutomationSave,
         DataRefused,
         DecisionAppend,
         DecisionRecorded,
@@ -125,6 +126,7 @@ import '../hooks/hook_server.dart';
 import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
+import '../mcp/tools/webhook_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../attention/daemon_attention.dart';
 import '../attention/delivery_watch.dart';
@@ -143,7 +145,8 @@ import '../mcp/tools/server_tool_context.dart';
 import '../mcp/tools/server_tools.dart';
 import '../companion/daemon_worktrees.dart';
 import '../automations/daemon_checkout_facts.dart';
-import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_automations/store.dart'
+    show AutomationDao, CheckoutRows;
 import '../domain/uuid.dart';
 import '../mcp/tools/checkout_reach.dart';
 import '../mcp/tools/project_folders.dart';
@@ -1577,6 +1580,25 @@ Future<int> _serve(
   // automations'.
   mcpTools.tools
     ..add(ChecksToolSet(automations?.localTool ?? (_, _, _) => null))
+    // Saved through the same rules a person's save follows.
+    ..add(
+      WebhookToolSet(
+        save: (automation) => data.applyAsServer(AutomationSave(automation)),
+        webhooks: AutomationDao(database).webhooks,
+        work: () => webhooks,
+        permissionsOf: (installationId) {
+          final installation = checkoutRows.installation(installationId);
+          return installation == null
+              ? null
+              : liveAgents
+                    .descriptorOf(installation.agentId)
+                    ?.launch
+                    .permission;
+        },
+        now: () => DateTime.now().toUtc(),
+        newId: newUuid,
+      ),
+    )
     // Every session is operated here: every agent runs in this server.
     ..add(
       SessionToolSet(

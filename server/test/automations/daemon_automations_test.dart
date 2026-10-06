@@ -27,7 +27,6 @@ import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/store.dart';
 import 'package:karmashala_verification/verification.dart';
-import 'package:karmashala_automations/webhooks.dart';
 import 'package:karmashala_host/src/automations/webhooks/webhook_call_handler.dart';
 import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart'
     show HookCall;
