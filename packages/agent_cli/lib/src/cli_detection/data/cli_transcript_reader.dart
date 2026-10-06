@@ -241,6 +241,24 @@ class TranscriptMessage {
     images: images,
   );
 
+  /// This row with [images] set.
+  TranscriptMessage withImages(List<String> value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+    images: value,
+  );
+
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
   /// lossless for every field above: lowerCamel names, a null field left out,
   /// [at] as ISO-8601 UTC. A field added to this class is added here too.
@@ -1062,31 +1080,21 @@ void _parseClaudeLine(
       }
     }
   }
-  _addPasted(out, first, pasted, at);
+  _addPasted(out, first, pasted);
 }
 
-/// Hangs [pasted] on the person's row the line made after [first], or on a
-/// row of their own when the line said nothing else.
-void _addPasted(
-  List<TranscriptMessage> out,
-  int first,
-  List<String> pasted,
-  DateTime? at,
-) {
+/// Hangs [pasted] on the person's row the line made after [first]. A line of
+/// images alone joins the row just before it when that is theirs: it never
+/// makes a row, so the poll's rows are the same with images or without.
+void _addPasted(List<TranscriptMessage> out, int first, List<String> pasted) {
   if (pasted.isEmpty) return;
-  for (var i = out.length - 1; i >= first; i--) {
+  final from = first == out.length && first > 0 ? first - 1 : first;
+  for (var i = out.length - 1; i >= from; i--) {
     final row = out[i];
     if (row.role != 'user') continue;
-    out[i] = TranscriptMessage(
-      role: row.role,
-      text: row.text,
-      at: row.at,
-      queued: row.queued,
-      images: [...row.images, ...pasted],
-    );
+    out[i] = row.withImages([...row.images, ...pasted]);
     return;
   }
-  out.add(TranscriptMessage(role: 'user', text: '', at: at, images: pasted));
 }
 
 /// What a hook attachment says, as Claude Code itself prints it, or null for
@@ -1735,7 +1743,7 @@ void _parseCodexMessage(
       _add(out, role, block['text'], at);
     }
   }
-  _addPasted(out, first, pasted, at);
+  _addPasted(out, first, pasted);
 }
 
 /// The tags Codex wraps a pasted image in: `<image name=… path=…>`, `</image>`.

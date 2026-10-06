@@ -60,8 +60,38 @@ void main() {
     expect(File(row.images.single).readAsBytesSync(), bytes);
   });
 
-  test('an image pasted with no words is still a row of its own', () async {
+  test('a record of images alone joins the person\'s row before it, and '
+      'never makes a row of its own', () async {
     final messages = await read(AgentIds.claudeCode, [
+      {
+        'type': 'user',
+        'message': {'role': 'user', 'content': 'look at this'},
+      },
+      {
+        'type': 'user',
+        'message': {
+          'role': 'user',
+          'content': [
+            {
+              'type': 'image',
+              'source': {
+                'type': 'base64',
+                'media_type': 'image/png',
+                'data': data,
+              },
+            },
+          ],
+        },
+      },
+      {
+        'type': 'assistant',
+        'message': {
+          'role': 'assistant',
+          'content': [
+            {'type': 'text', 'text': 'Seen.'},
+          ],
+        },
+      },
       {
         'type': 'user',
         'message': {
@@ -79,8 +109,10 @@ void main() {
         },
       },
     ]);
-    expect(messages.single.role, 'user');
-    expect(messages.single.images, hasLength(1));
+    expect(messages.map((m) => (m.role, m.text, m.images.length)), [
+      ('user', 'look at this', 1),
+      ('agent', 'Seen.', 0),
+    ]);
   });
 
   test('a Codex prompt with a pasted image carries it, without the tags '
