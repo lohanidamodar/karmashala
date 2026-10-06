@@ -83,6 +83,7 @@ class QuickOpenItem {
     this.keywords = const [],
     this.weight = 0,
     this.opensTab = false,
+    this.onlyWhenSearched = false,
     this.leading,
   });
 
@@ -116,6 +117,11 @@ class QuickOpenItem {
   /// "New session…" is a session row that opens a dialog. False rows treat
   /// Ctrl+Enter as Enter.
   final bool opensTab;
+
+  /// Left off an empty, unrestricted box, as [QuickOpenGroup.onlyWhenSearched]
+  /// leaves a whole group: a row that ranks high once typed for, such as
+  /// "Stop server", must not top the list nobody asked for.
+  final bool onlyWhenSearched;
 
   final VoidCallback onSelect;
 }
@@ -210,7 +216,9 @@ List<QuickOpenSection> rankQuickOpen(
   final byGroup = <QuickOpenGroup, List<QuickOpenResult>>{};
   for (final item in items) {
     if (query.only != null && item.group != query.only) continue;
-    if (query.isEmpty && query.only == null && item.group.onlyWhenSearched) {
+    if (query.isEmpty &&
+        query.only == null &&
+        (item.group.onlyWhenSearched || item.onlyWhenSearched)) {
       continue;
     }
     if (!query.isEmpty &&

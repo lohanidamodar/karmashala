@@ -26,7 +26,9 @@ class ServerStatusSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final desktop = ref.watch(capabilitiesProvider.select((c) => c.hostsServer));
+    final desktop = ref.watch(
+      capabilitiesProvider.select((c) => c.hostsServer),
+    );
     final overview = ref.watch(serverOverviewProvider);
     return SettingsSection(
       title: SettingsAnchor.serverStatus.heading,

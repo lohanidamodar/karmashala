@@ -9,6 +9,7 @@ void main() {
     String? subtitle,
     List<String> keywords = const [],
     double weight = 0,
+    bool onlyWhenSearched = false,
   }) => QuickOpenItem(
     id: '$group/$title',
     group: group,
@@ -16,14 +17,37 @@ void main() {
     subtitle: subtitle,
     keywords: keywords,
     weight: weight,
+    onlyWhenSearched: onlyWhenSearched,
     icon: AppIcons.circle,
     onSelect: () {},
   );
-
   List<String> titles(List<QuickOpenSection> sections) => [
     for (final section in sections)
       for (final result in section.results) result.item.title,
   ];
+
+  test('a search-only item is left off an empty box, and found when typed '
+      'or when its group is listed', () {
+    final items = [
+      item('Open Settings', group: QuickOpenGroup.commands),
+      item(
+        'Stop server',
+        group: QuickOpenGroup.commands,
+        onlyWhenSearched: true,
+      ),
+    ];
+    expect(titles(rankQuickOpen(QuickOpenQuery.parse(''), items)), [
+      'Open Settings',
+    ]);
+    expect(
+      titles(rankQuickOpen(QuickOpenQuery.parse('stop'), items)),
+      contains('Stop server'),
+    );
+    expect(
+      titles(rankQuickOpen(QuickOpenQuery.parse('>'), items)),
+      contains('Stop server'),
+    );
+  });
 
   group('query parsing', () {
     test('a bare query searches everything', () {

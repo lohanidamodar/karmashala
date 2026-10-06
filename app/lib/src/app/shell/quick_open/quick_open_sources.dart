@@ -42,6 +42,12 @@ import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_git/repositories.dart' show Repository;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import '../../../features/files/application/files_tab_actions.dart';
+import '../../../core/logging/diagnostics_providers.dart'
+    show serverLogFileProvider;
+import '../../../features/server/application/server_commands.dart';
+import '../../../features/server/application/server_files.dart';
+import '../../../features/server/application/server_overview.dart';
+import '../../../features/server/presentation/server_command_actions.dart';
 import '../../../features/settings/presentation/settings_catalog.dart'
     show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -239,6 +245,7 @@ class QuickOpenSources {
     String? shortcut,
     List<String> keywords = const [],
     bool opensTab = false,
+    bool onlyWhenSearched = false,
   }) => QuickOpenItem(
     id: 'command/$label',
     group: QuickOpenGroup.commands,
@@ -249,6 +256,7 @@ class QuickOpenSources {
     keywords: keywords,
     weight: _commandWeight,
     opensTab: opensTab,
+    onlyWhenSearched: onlyWhenSearched,
     onSelect: () => dismiss(onSelect),
   );
 
@@ -566,7 +574,65 @@ class QuickOpenSources {
         opensTab: true,
         onSelect: () => openLogsTab(ref),
       ),
+      ..._serverCommands(),
     ];
+  }
+
+  /// This machine's server, by the Server page's own actions: Start, Restart
+  /// or Stop as its state allows (none while this window uses another
+  /// machine's), the page itself and the server's log.
+  List<QuickOpenItem> _serverCommands() {
+    const keywords = ['server', 'host', 'session host', 'karmashala host'];
+    final overview = ref.read(serverOverviewProvider).value;
+    final log = ref.read(serverLogFileProvider).value;
+    final line = describeServerLine(overview);
+    return [
+      for (final command in serverCommandsFor(overview))
+        _command(
+          command.label,
+          subtitle: line,
+          icon: switch (command) {
+            ServerCommand.start => AppIcons.play,
+            ServerCommand.restart => AppIcons.arrowClockwise,
+            ServerCommand.stop => AppIcons.stop,
+          },
+          keywords: keywords,
+          onlyWhenSearched: true,
+          onSelect: () => unawaited(runServerCommand(context, command)),
+        ),
+      _command(
+        'Open Server settings',
+        subtitle:
+            overview?.controlsRefusal ??
+            'Status, restart and stop, log and storage',
+        icon: AppIcons.gearSix,
+        keywords: keywords,
+        onlyWhenSearched: true,
+        opensTab: true,
+        onSelect: () =>
+            openSettingsTab(ref, anchor: SettingsAnchor.serverStatus),
+      ),
+      if (log != null)
+        _command(
+          'Open server log',
+          subtitle: log.path,
+          icon: AppIcons.article,
+          keywords: const [...keywords, 'server.log', 'logs'],
+          onlyWhenSearched: true,
+          onSelect: () => unawaited(_openServerLog(log.path)),
+        ),
+    ];
+  }
+
+  /// As Settings → Server → Log's button does; what it needs is read before
+  /// quick open's route is gone.
+  Future<void> _openServerLog(String path) async {
+    final files = ref.read(serverFilesProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final failure = await files.openLog(path);
+    if (failure != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(failure)));
+    }
   }
 
   /// The keyboard's way to the sessions a restart left dormant; listed only

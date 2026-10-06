@@ -187,7 +187,10 @@ void main() {
           .ask(ServerCommand.stop);
       await tester.pumpAndSettle();
       expect(find.text('Stop the server?'), findsOneWidget);
-      expect(find.textContaining('ends the 2 running sessions'), findsOneWidget);
+      expect(
+        find.textContaining('ends the 2 running sessions'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Stop').last);
       await tester.pumpAndSettle();
