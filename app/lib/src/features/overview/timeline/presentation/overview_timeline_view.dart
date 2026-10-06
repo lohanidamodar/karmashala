@@ -229,7 +229,7 @@ class _Toolbar extends ConsumerWidget {
           ),
           TextButton.icon(
             key: const ValueKey('timeline-range'),
-            icon: const Icon(AppIcons.clock, size: 16),
+            icon: const Icon(AppIcons.clock),
             label: Text(_rangeLabel(range)),
             onPressed: () => _pickRange(context, ref),
           ),
@@ -299,7 +299,7 @@ class _ProjectFilter extends ConsumerWidget {
       ],
       builder: (context, menu, _) => TextButton.icon(
         key: const ValueKey('timeline-projects'),
-        icon: const Icon(AppIcons.funnel, size: 16),
+        icon: const Icon(AppIcons.funnel),
         label: Text(label),
         onPressed: () => menu.isOpen ? menu.close() : menu.open(),
       ),
