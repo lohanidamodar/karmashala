@@ -265,6 +265,13 @@ class ServerAttention implements AttentionWork {
         read,
         report.source == AgentStatusSource.terminalGrid ? null : line,
       );
+    } else if (report.status == AgentActivityStatus.awaitingApproval) {
+      // A screen's evidence is the prompt's box as drawn, rules and all.
+      final words = switch (report.toolAsk) {
+        final ask? => evidenceLine([summarizeToolAsk(ask).preview]),
+        null => report.source == AgentStatusSource.terminalGrid ? null : line,
+      };
+      if (words != null) details[session.key] = words;
     } else if (line != null) {
       details[session.key] = line;
     }

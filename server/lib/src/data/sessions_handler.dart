@@ -112,28 +112,54 @@ class SessionsHandler {
 
   /// A failed start — ended in error before the agent ever named it — is
   /// carried forward once [startedId], a session started since, is in the
-  /// same place: the person tried again, and nothing opens the old one.
+  /// same project: the person tried again, and nothing opens the old one.
+  /// The Scratch project is one per machine, so a scratch session — each in a
+  /// folder of its own — retires the failures of any before it there.
   void retireFailedStartsBefore(String startedId, List<DataChange> changes) {
     final started = _sessions.getById(startedId);
     if (started == null) return;
-    for (final followUp in _followUps.open()) {
-      if (followUp.reason != FollowUpReason.endedInFailure) continue;
-      final failed = _sessions.getById(followUp.sessionId);
-      if (failed == null ||
-          failed.id == started.id ||
+    final project = _projectOf(started.repositoryId);
+    for (final (followUp, failed) in _failedStarts()) {
+      if (failed.id == started.id ||
           started.createdAt.isBefore(followUp.raisedAt) ||
-          failed.repositoryId != started.repositoryId ||
-          failed.workingDirectory != started.workingDirectory ||
-          !isPlaceholderSessionTitle(failed.title)) {
+          (failed.repositoryId != started.repositoryId &&
+              (project == null ||
+                  _projectOf(failed.repositoryId) != project))) {
         continue;
       }
-      _followUps.resolve(
-        followUp.id!,
-        resolution: FollowUpResolution.carriedForward,
-        at: _now(),
-      );
-      changes.add(FollowUpChanged(_followUps.getById(followUp.id!)!));
+      _carryForward(followUp, changes);
     }
+    retireStaleFailedStarts(changes);
+  }
+
+  /// Carries forward every failed start raised more than a day ago, whether or
+  /// not anything started since.
+  void retireStaleFailedStarts(List<DataChange> changes) {
+    final cutoff = _now().subtract(const Duration(days: 1));
+    for (final (followUp, _) in _failedStarts()) {
+      if (followUp.raisedAt.isBefore(cutoff)) _carryForward(followUp, changes);
+    }
+  }
+
+  /// The open follow-ups of sessions that ended in error still unnamed.
+  List<(FollowUp, Session)> _failedStarts() => [
+    for (final followUp in _followUps.open())
+      if (followUp.reason == FollowUpReason.endedInFailure)
+        if (_sessions.getById(followUp.sessionId) case final failed?
+            when isPlaceholderSessionTitle(failed.title))
+          (followUp, failed),
+  ];
+
+  String? _projectOf(String repositoryId) =>
+      _repositories.getById(repositoryId)?.projectId;
+
+  void _carryForward(FollowUp followUp, List<DataChange> changes) {
+    _followUps.resolve(
+      followUp.id!,
+      resolution: FollowUpResolution.carriedForward,
+      at: _now(),
+    );
+    changes.add(FollowUpChanged(_followUps.getById(followUp.id!)!));
   }
 
   Session edit(SessionEdit request, List<DataChange> changes) {

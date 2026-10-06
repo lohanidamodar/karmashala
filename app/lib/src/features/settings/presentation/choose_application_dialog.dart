@@ -53,7 +53,7 @@ class _ChooseApplicationDialogState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            SearchField(
               controller: _query,
               autofocus: true,
               decoration: const InputDecoration(

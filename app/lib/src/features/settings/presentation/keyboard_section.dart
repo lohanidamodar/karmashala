@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/code.dart' show CodeEditorKeys;
 import 'package:karmashala_ui/icons.dart';
@@ -127,7 +128,7 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
                   ),
                 ),
               SettingsRuled(
-                child: TextField(
+                child: SearchField(
                   key: const ValueKey('keymap-filter'),
                   controller: _filter,
                   decoration: const InputDecoration(

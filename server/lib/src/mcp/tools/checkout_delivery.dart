@@ -51,7 +51,7 @@ class CheckoutDeliveryReader {
       hasRemote: origin.hasRemote,
       remote: RemoteRepo.parse(origin.url),
       defaultBranch: origin.defaultBranch,
-      dirtyFiles: status.changes.length,
+      dirtyFiles: changedFileCount(status.changes),
       lines: lines,
       aheadOfBase: aheadBehind?.ahead,
       behindBase: aheadBehind?.behind,

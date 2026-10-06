@@ -1318,6 +1318,12 @@ Future<int> _serve(
     (_) => handoffs.sweep(live: liveSessions()),
   );
   final toolImageSweep = startToolImageUpkeep(dataDirectory);
+  // A failed start nobody retries still leaves the inbox after a day.
+  data.retireStaleFailedStarts();
+  final failedStartSweep = Timer.periodic(
+    const Duration(hours: 1),
+    (_) => data.retireStaleFailedStarts(),
+  );
   // A process starting or ending tells what waits for it: a start-up is a
   // turn whose end delivers; an end leaves nothing running it.
   final queueEnds = server.lifecycle.events.listen((event) {
@@ -1744,6 +1750,7 @@ Future<int> _serve(
   await delegations.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();
+  failedStartSweep.cancel();
   await handoffDelivery.close();
   await sessionQueue.close();
   await turnSettlement.close();

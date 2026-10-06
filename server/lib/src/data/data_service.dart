@@ -334,6 +334,13 @@ class DataService {
     announce(changes);
   }
 
+  /// Retires failed starts more than a day old, and tells it.
+  void retireStaleFailedStarts() {
+    final changes = <DataChange>[];
+    _sessions.retireStaleFailedStarts(changes);
+    if (changes.isNotEmpty) announce(changes);
+  }
+
   /// Records the agent CLIs the server found on this machine ([here]) by
   /// the one reconciliation rule, and tells every client what it wrote.
   /// [forgotten] names the agent kinds the registry no longer knows, whose

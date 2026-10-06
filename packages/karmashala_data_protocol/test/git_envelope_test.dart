@@ -25,7 +25,9 @@ void main() {
       (jsonDecode(jsonEncode(json)) as Map).cast<String, Object?>();
 
   R roundTrip<R>(DataRequest<R> request, R result) => DataEnvelope.readAnswer(
-    overTheWire(DataEnvelope.answer(4, request, DataReply(result, 9, const []))),
+    overTheWire(
+      DataEnvelope.answer(4, request, DataReply(result, 9, const [])),
+    ),
     request,
   ).value;
 
@@ -122,8 +124,10 @@ void main() {
   test('every kind is read back as its own request, not another domain\'s', () {
     for (final request in requests) {
       expect(
-        DataRequest.fromJson(request.kind, request.argumentsToJson())
-            .runtimeType,
+        DataRequest.fromJson(
+          request.kind,
+          request.argumentsToJson(),
+        ).runtimeType,
         request.runtimeType,
         reason: request.kind,
       );
@@ -164,12 +168,33 @@ void main() {
     expect((status.aheadOfUpstream, status.behindUpstream), (2, 0));
     expect(status.changes.single, change);
     expect(roundTrip(const GitChangesOf(at), [change]).single, change);
+    const newFolder = [
+      FileChange(
+        path: 'gen/a.txt',
+        type: FileChangeType.untracked,
+        staged: false,
+        unstaged: true,
+        newFolder: 'gen',
+      ),
+      FileChange(
+        path: 'gen/',
+        type: FileChangeType.untracked,
+        staged: false,
+        unstaged: true,
+        newFolder: 'gen',
+        moreFiles: 4,
+      ),
+    ];
+    expect(roundTrip(const GitChangesOf(at), newFolder), newFolder);
     expect(
       roundTrip(const GitFileDiffStats(at), {
         'a': const FileDiffStat(added: 3, removed: 1),
         'bin': FileDiffStat.binary,
       }),
-      {'a': const FileDiffStat(added: 3, removed: 1), 'bin': FileDiffStat.binary},
+      {
+        'a': const FileDiffStat(added: 3, removed: 1),
+        'bin': FileDiffStat.binary,
+      },
     );
     expect(roundTrip(const GitDiff(at), 'diff --git a b'), 'diff --git a b');
     expect(
@@ -269,10 +294,13 @@ void main() {
       branch: 'session/s1',
       head: 'abc',
     );
-    expect(roundTrip(const WorktreesOf(at), [
-      worktree,
-      const GitWorktree(path: path, isBare: true),
-    ]), [worktree, const GitWorktree(path: path, isBare: true)]);
+    expect(
+      roundTrip(const WorktreesOf(at), [
+        worktree,
+        const GitWorktree(path: path, isBare: true),
+      ]),
+      [worktree, const GitWorktree(path: path, isBare: true)],
+    );
     expect(
       roundTrip(const WorktreeLabels(['r1']), {
         'r1': const CheckoutLabel(
@@ -449,7 +477,10 @@ void main() {
       const ChecksSummary(passed: 3, failed: 1, pending: 1, skipped: 1),
     );
     expect(pr.baseRefName, 'main');
-    expect(reading.strategies, const MergeStrategies(squash: true, rebase: false));
+    expect(
+      reading.strategies,
+      const MergeStrategies(squash: true, rebase: false),
+    );
     expect(reading.protection.status, BranchProtectionRead.read);
     expect(reading.protection.requiredApprovals, 2);
     expect(reading.protection.requiredChecks, ['ci']);
@@ -508,9 +539,12 @@ void main() {
     expect(back.changes, everyElement(isA<GitChange>()));
   });
 
-  test('cleanup\'s log and last sweep are the server\'s; its setting is not', () {
-    expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.log), isTrue);
-    expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.lastSweep), isTrue);
-    expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.settings), isFalse);
-  });
+  test(
+    'cleanup\'s log and last sweep are the server\'s; its setting is not',
+    () {
+      expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.log), isTrue);
+      expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.lastSweep), isTrue);
+      expect(PreferenceKeys.isReserved(WorktreeCleanupKeys.settings), isFalse);
+    },
+  );
 }

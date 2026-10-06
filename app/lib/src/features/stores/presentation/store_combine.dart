@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -317,7 +318,7 @@ class _CombinePickerState extends State<_CombinePicker> {
             Insets.lg,
             Insets.sm,
           ),
-          child: TextField(
+          child: SearchField(
             autofocus: !touch,
             decoration: const InputDecoration(
               prefixIcon: Icon(AppIcons.magnifyingGlass),

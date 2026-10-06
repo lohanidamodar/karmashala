@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_git/git.dart' show FileChange;
+import 'package:karmashala_git/git.dart' show FileChange, changedFileCount;
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
@@ -120,8 +120,11 @@ Future<DiffTarget?> _pickChangedFile(
     say('No changes to diff in ${checkout.path}.');
     return null;
   }
-  final shown = changes.take(_diffChoiceLimit).toList();
-  final hidden = changes.length - shown.length;
+  final shown = changes
+      .where((change) => change.moreFiles == 0)
+      .take(_diffChoiceLimit)
+      .toList();
+  final hidden = changedFileCount(changes) - shown.length;
   final picked = await showDesktopMenuUnder<String>(context, [
     for (final change in shown)
       DesktopMenuItem(

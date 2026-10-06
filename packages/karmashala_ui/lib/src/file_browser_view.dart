@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 
 import 'app_icons.dart';
 import 'design_tokens.dart';
+import 'search_field.dart';
 import 'desktop_dialog.dart';
 import 'desktop_menu.dart';
 import 'file_browser.dart';
@@ -856,7 +857,7 @@ class _FilterField extends StatelessWidget {
   final bool autofocus;
 
   @override
-  Widget build(BuildContext context) => TextField(
+  Widget build(BuildContext context) => SearchField(
     controller: controller,
     autofocus: autofocus,
     decoration: InputDecoration(

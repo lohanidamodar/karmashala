@@ -32,7 +32,12 @@ class GitService {
     this.hostPathOf = sameEnvironmentPath,
     this.networkTimeout = const Duration(minutes: 5),
     this.mutationTimeout = const Duration(minutes: 2),
+    this.untrackedFileLimit = 2000,
   });
+
+  /// How many files of new folders a status lists; the rest of a folder are
+  /// one row counting them, so a build output nobody ignored cannot hang a list.
+  final int untrackedFileLimit;
 
   final CommandRunner runner;
 
@@ -239,7 +244,7 @@ class GitService {
     if (!result.ok) {
       throw GitException('git status failed: ${result.stderr.trim()}');
     }
-    return parseGitStatus(result.stdout);
+    return _withNewFolderFiles(repo, parseGitStatus(result.stdout));
   }
 
   /// The branch, its upstream, their divergence and the changed files, from
@@ -252,7 +257,91 @@ class GitService {
     if (!result.ok) {
       throw GitException('git status failed: ${result.stderr.trim()}');
     }
-    return parseGitStatusV2(result.stdout);
+    final status = parseGitStatusV2(result.stdout);
+    return WorkingTreeStatus(
+      branch: status.branch,
+      upstream: status.upstream,
+      aheadOfUpstream: status.aheadOfUpstream,
+      behindUpstream: status.behindUpstream,
+      changes: await _withNewFolderFiles(repo, status.changes),
+    );
+  }
+
+  /// [changes] with each `dir/` git folded an untracked folder into replaced
+  /// by the folder's files, up to [untrackedFileLimit].
+  ///
+  /// A second, narrow `ls-files` rather than `status -uall`, which would lose
+  /// which folder is new; it runs only when there is one. A folder that cannot
+  /// be listed is kept as git reported it.
+  Future<List<FileChange>> _withNewFolderFiles(
+    EnvironmentPath repo,
+    List<FileChange> changes,
+  ) async {
+    final folders = [
+      for (final c in changes)
+        if (c.type == FileChangeType.untracked && c.path.endsWith('/')) c.path,
+    ];
+    if (folders.isEmpty) return changes;
+    final CommandResult result;
+    try {
+      result = await _git(repo, [
+        'ls-files',
+        '-z',
+        '--others',
+        '--exclude-standard',
+        '--full-name',
+        '--',
+        for (final folder in folders) ':(top,literal)$folder',
+      ]);
+    } on CommandException {
+      return changes;
+    }
+    if (!result.ok) return changes;
+
+    final filesOf = <String, List<String>>{for (final f in folders) f: []};
+    for (final path in result.stdout.split('\x00')) {
+      if (path.isEmpty) continue;
+      final folder = folders.firstWhere(path.startsWith, orElse: () => '');
+      if (folder.isNotEmpty) filesOf[folder]!.add(path);
+    }
+
+    var budget = untrackedFileLimit;
+    final expanded = <FileChange>[];
+    for (final change in changes) {
+      final files = filesOf[change.path];
+      if (files == null || files.isEmpty) {
+        expanded.add(change);
+        continue;
+      }
+      final name = change.path.substring(0, change.path.length - 1);
+      files.sort();
+      final listed = files.take(budget < 0 ? 0 : budget).toList();
+      budget -= listed.length;
+      for (final path in listed) {
+        expanded.add(
+          FileChange(
+            path: path,
+            type: FileChangeType.untracked,
+            staged: false,
+            unstaged: true,
+            newFolder: name,
+          ),
+        );
+      }
+      if (files.length > listed.length) {
+        expanded.add(
+          FileChange(
+            path: change.path,
+            type: FileChangeType.untracked,
+            staged: false,
+            unstaged: true,
+            newFolder: name,
+            moreFiles: files.length - listed.length,
+          ),
+        );
+      }
+    }
+    return expanded;
   }
 
   /// The remote's default branch as this clone recorded it (`origin/main`).

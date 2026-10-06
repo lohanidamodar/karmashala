@@ -194,6 +194,12 @@ class ToolAskSummary {
   /// `[start, end)` spans of [subject] that do the dangerous part, in order
   /// and not overlapping.
   final List<(int, int)> danger;
+
+  /// One line for a list or a notice: "Wants to run: echo hi".
+  String get preview {
+    final verb = isCommand ? 'run' : action;
+    return subject.isEmpty ? 'Wants to $verb' : 'Wants to $verb: $subject';
+  }
 }
 
 /// The dock's reading of [ask]. See [ToolAskSummary].

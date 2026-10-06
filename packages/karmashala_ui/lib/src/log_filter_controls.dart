@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'app_icons.dart';
 import 'design_tokens.dart';
+import 'search_field.dart';
 
 /// A log view's find field: Enter and Shift+Enter step through matches, Esc
 /// hands back to [onEscape]. Stateless — the caller owns text and focus.
@@ -37,8 +38,9 @@ class LogSearchField extends StatelessWidget {
             ?onPrevious,
         const SingleActivator(LogicalKeyboardKey.escape): ?onEscape,
       },
-      child: TextField(
+      child: SearchField(
         controller: controller,
+        clearOnEscape: onEscape == null ? null : false,
         focusNode: focusNode,
         style: theme.textTheme.bodySmall,
         decoration: InputDecoration(
