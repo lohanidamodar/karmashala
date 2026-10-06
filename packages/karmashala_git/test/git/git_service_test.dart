@@ -32,6 +32,21 @@ bare
       expect(list[2].branch, isNull);
     });
 
+    test('a worktree whose directory is gone reads as prunable', () {
+      const out = '''
+worktree /repo
+HEAD aaaa
+branch refs/heads/main
+
+worktree /gone
+HEAD bbbb
+branch refs/heads/old
+prunable gitdir file points to non-existent location
+''';
+      final list = parseWorktreeList(out, 'wsl:Ubuntu');
+      expect([for (final w in list) w.isPrunable], [false, true]);
+    });
+
     test('empty output yields no worktrees', () {
       expect(parseWorktreeList('', 'windows'), isEmpty);
     });
