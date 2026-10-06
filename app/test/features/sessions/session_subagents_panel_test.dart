@@ -63,6 +63,7 @@ void main() {
     WidgetTester tester,
     Size size, {
     SessionSubagentList? shown,
+    Set<String> archived = const {},
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -74,6 +75,7 @@ void main() {
           sessionSubagentsProvider.overrideWith(
             (ref, _) => Stream.value(shown ?? list),
           ),
+          archivedSessionIdsProvider.overrideWithValue(archived),
           clockProvider.overrideWithValue(
             _FixedClock(t0.add(const Duration(minutes: 4))),
           ),
@@ -132,6 +134,18 @@ void main() {
     );
     expect(find.text('handed off'), findsOneWidget);
     expect(find.text('handoff'), findsNothing);
+  });
+
+  testWidgets('an archived child session is hidden until asked for', (
+    tester,
+  ) async {
+    await pump(tester, const Size(1440, 900), archived: {'c2'});
+    expect(find.text('Write the tests'), findsOneWidget);
+    expect(find.text('Carry the refactor'), findsNothing);
+
+    await tester.tap(find.text('Archived (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Carry the refactor'), findsOneWidget);
   });
 
   group('lineage', () {

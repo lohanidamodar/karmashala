@@ -23,6 +23,7 @@ import 'environment_rows.dart';
 import 'explorer_context_actions.dart';
 import 'explorer_keyboard.dart';
 import 'explorer_no_project_row.dart';
+import 'archived_sessions_row.dart';
 import 'explorer_project_row.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
@@ -82,6 +83,10 @@ class ExplorerTreeRow extends StatelessWidget {
       pinned: node.pinned,
     ),
     final TerminalRowNode node => ExplorerTerminalRow(node: node),
+    final ArchivedNode node => ArchivedSessionsRow(
+      count: node.count,
+      depth: node.depth,
+    ),
     final HintNode node => ExplorerTreeHint(
       depth: node.depth,
       message: node.message,

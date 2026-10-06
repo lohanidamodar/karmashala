@@ -81,6 +81,15 @@ class ExplorerActions {
       );
     }
     selectNative(session);
+    // Read, not resumed: a message sent to it is what brings it back.
+    if (session.isArchived) {
+      return const ExplorerResult(
+        ExplorerOutcome.selected,
+        message:
+            'This session is archived. Its transcript is shown; sending it a '
+            'message unarchives it.',
+      );
+    }
 
     final launcher = _ref.read(sessionLauncherProvider);
     // Its pane, or a pane attached to the host's session when none shows it.

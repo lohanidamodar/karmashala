@@ -16,6 +16,7 @@ import '../../github/application/pull_request_context_service.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
+import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/export_session_action.dart';
@@ -100,6 +101,11 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
   // on the row resumes; Delete, under it, is the act that loses something.
   if (sessionRunsNow(ref, session.id))
     DesktopMenuItem(value: 'end', label: 'End session', icon: AppIcons.power),
+  // Offered on a live one too, which says why it cannot be archived yet.
+  if (session.isArchived)
+    DesktopMenuItem(value: 'unarchive', label: 'Unarchive', icon: AppIcons.tray)
+  else
+    DesktopMenuItem(value: 'archive', label: 'Archive', icon: AppIcons.tray),
   DesktopMenuItem(
     value: 'delete',
     label: 'Delete',
@@ -159,6 +165,10 @@ Future<void> runNativeSessionMenuAction(
       unawaited(renameNativeSession(context, ref, session));
     case 'end':
       await endSessionFromRow(context, ref, session.id, title: session.title);
+    case 'archive':
+      await archiveSessionsFromUi(context, ref, [session]);
+    case 'unarchive':
+      await unarchiveSessionsFromUi(context, ref, [session.id]);
     case 'delete':
       unawaited(
         _deleteNative(

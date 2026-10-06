@@ -13,6 +13,7 @@ import '../application/agent_states.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_list_snapshot.dart';
 import '../application/session_selection.dart';
+import 'archived_sessions_row.dart';
 import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
 import 'purge_progress_strip.dart';
@@ -208,6 +209,15 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
           ),
         );
       }
+    }
+    final archived = ref.watch(archivedSessionCountProvider);
+    if (archived > 0) {
+      items.add(
+        ArchivedSessionsRow(
+          key: const ValueKey('agents-archived'),
+          count: archived,
+        ),
+      );
     }
     if (items.isEmpty) {
       return const PanePlaceholder(message: 'No sessions yet.');

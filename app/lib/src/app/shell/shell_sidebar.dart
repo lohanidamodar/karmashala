@@ -11,6 +11,7 @@ import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/explorer_tree_provider.dart';
 import '../../features/explorer/application/session_selection.dart';
 import '../../features/explorer/presentation/agents_lens.dart';
+import '../../features/sessions/application/session_list_prefs.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
@@ -43,6 +44,7 @@ class ShellSidebar extends ConsumerWidget {
       sessionSelectionProvider.select((s) => s.active),
     );
     final mayStart = ref.watch(capabilitiesProvider.select((c) => c.mayStart));
+    final showingArchived = ref.watch(showArchivedSessionsProvider);
     final list = switch (area) {
       ShellArea.sessions => _Area(
         title: 'Sessions',
@@ -56,6 +58,14 @@ class ShellSidebar extends ConsumerWidget {
             icon: const Icon(AppIcons.listChecks),
             onPressed: () =>
                 ref.read(sessionSelectionProvider.notifier).toggleMode(),
+          ),
+          IconButton(
+            tooltip: showingArchived ? 'Hide archived' : 'Show archived',
+            isSelected: showingArchived,
+            icon: const Icon(AppIcons.tray),
+            onPressed: () => ref
+                .read(sessionListPrefsProvider.notifier)
+                .setShowArchived(!showingArchived),
           ),
         ],
         child: const AgentsPage(),

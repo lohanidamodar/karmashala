@@ -51,6 +51,7 @@ void main() {
     String title = 'The worktree loop',
     String conversation = 'conv-1',
     EnvironmentPath? worktree,
+    DateTime? archivedAt,
   }) => server.sessionRows.insert(
     Session(
       id: id,
@@ -62,6 +63,7 @@ void main() {
       status: SessionStatus.running,
       createdAt: testTime,
       externalSessionId: conversation,
+      archivedAt: archivedAt,
     ),
   );
 
@@ -156,6 +158,21 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
+    expect(container.read(selectedSessionIdProvider), 's1');
+  });
+
+  testWidgets('an archived session is still found by what was said, badged '
+      'archived', (tester) async {
+    nativeSession(archivedAt: testTime);
+    said('conv-1', 'the cache key was the culprit');
+    final container = await open(tester);
+
+    await type(tester, 'cache key');
+
+    expect(find.text('The worktree loop'), findsOneWidget);
+    expect(find.textContaining('archived  ·'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
     expect(container.read(selectedSessionIdProvider), 's1');
   });
 

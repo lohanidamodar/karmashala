@@ -29,6 +29,8 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionsArchived;
 import 'acp_session_providers.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
@@ -431,6 +433,18 @@ class SessionActions {
     if (trimmed.isEmpty) return;
 
     final row = _ref.read(sessionsDataProvider).getById(sessionId);
+    // An archived row is passed over by every resume; it is shown again first.
+    if (row != null && row.isArchived) {
+      await unarchiveSessions([sessionId]);
+      _ref
+          .read(sessionNoticesProvider.notifier)
+          .post(
+            sessionId,
+            const SessionNotice(
+              message: 'This session was archived. Sending to it unarchived it.',
+            ),
+          );
+    }
     if (row != null && installationSpeaksAcp(_ref, row.agentInstallationId)) {
       return _continueOverProtocol(row, trimmed, requestId: requestId);
     }
@@ -1184,6 +1198,41 @@ class SessionActions {
 
   /// The coarse word, for paths that genuinely move several things at once.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
+
+  /// Archives [ids] — hides them, with their ended descendants — as one
+  /// request. A live session is left as it is and named in the answer.
+  Future<SessionsArchived> archiveSessions(Iterable<String> ids) async {
+    final list = ids.toList();
+    if (list.isEmpty) return const SessionsArchived();
+    final result = await _ref.read(sessionsDataProvider).archive(list);
+    _log.info(
+      'Archived ${result.changed.length} session(s): '
+      '${result.changed.join(', ')}; left live: '
+      '${[for (final s in result.live) s.id].join(', ')}',
+    );
+    _publishArchive(result);
+    return result;
+  }
+
+  /// Shows [ids] and their archived descendants again, as one request.
+  Future<SessionsArchived> unarchiveSessions(Iterable<String> ids) async {
+    final list = ids.toList();
+    if (list.isEmpty) return const SessionsArchived();
+    final result = await _ref.read(sessionsDataProvider).unarchive(list);
+    _log.info('Unarchived ${result.changed.join(', ')}');
+    _publishArchive(result);
+    return result;
+  }
+
+  void _publishArchive(SessionsArchived result) {
+    if (result.changed.isEmpty) return;
+    // Rows join or leave every list, so membership as well as status.
+    _publish(
+      const SessionChange(
+        kinds: {SessionChangeKind.membership, SessionChangeKind.status},
+      ),
+    );
+  }
 
   void _publish(SessionChange change) =>
       _ref.read(sessionsRevisionProvider.notifier).changed(change);

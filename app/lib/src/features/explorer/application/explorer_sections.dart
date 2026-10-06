@@ -12,6 +12,7 @@ import '../../sessions/application/observed_deliveries.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/application/delivery_providers.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
@@ -221,8 +222,10 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
     for (final repository in ref.read(workspaceDataProvider).repositories)
       repository.id: repository,
   };
+  final showArchived = ref.watch(showArchivedSessionsProvider);
   return List.unmodifiable(<SectionCandidate>[
     for (final session in ref.read(sessionsDataProvider).getAll())
+      if (showArchived || !session.isArchived)
       SectionCandidate(
         id: session.id,
         title: session.title,

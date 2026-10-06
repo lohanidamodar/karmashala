@@ -230,8 +230,19 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
   // sidebar's subject now, not a row here.
   final visible = ref.watch(visibleProjectSessionsProvider(project.id));
   final sessions = visible.sessions;
+  final archived = [
+    if (visible.archived > 0)
+      ArchivedNode(
+        id: 'archived:${project.id}',
+        depth: depth,
+        count: visible.archived,
+      ),
+  ];
   if (sessions.isEmpty) {
+    // Every session it has is archived: that row is all there is to say.
+    if (archived.isNotEmpty && visible.hidden == 0) return archived;
     return [
+      ...archived,
       HintNode(
         id: 'hint-empty:${project.id}',
         depth: depth,
@@ -258,6 +269,7 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
         depth: depth,
         message: '${visible.hidden} more hidden by the agent filter.',
       ),
+    ...archived,
   ];
 }
 

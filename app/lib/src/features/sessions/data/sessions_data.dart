@@ -159,6 +159,19 @@ class SessionsData extends SessionRowsIndex {
     );
   }
 
+  /// Archives [ids] and their ended descendants as one request, answered with
+  /// what the server did — a live session is left and named.
+  Future<SessionsArchived> archive(Iterable<String> ids) => _client.write(
+    SessionsArchive(ids.toList()),
+    domain: DataDomain.sessions,
+  );
+
+  /// Shows [ids] and their archived descendants again, as one request.
+  Future<SessionsArchived> unarchive(Iterable<String> ids) => _client.write(
+    SessionsUnarchive(ids.toList()),
+    domain: DataDomain.sessions,
+  );
+
   /// Adds a checkout to [sessionId]; refused for another project's.
   Future<List<SessionRepositoryLink>> link(
     String sessionId,

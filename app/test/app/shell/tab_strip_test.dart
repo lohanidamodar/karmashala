@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/sessions/application/session_ui_provider
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -71,6 +72,44 @@ void main() {
       lessThan(8),
       reason: 'the X belongs to the tab, and the tab ends where the slot does',
     );
+  });
+
+  testWidgets('a session tab\'s menu offers Archive session; a tab holding '
+      'none does not', (tester) async {
+    var archived = 0;
+    Future<void> pump({VoidCallback? onArchive}) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            child: TerminalTabChip(
+              title: 'Fix the cart',
+              liveness: PaneLiveness.exited,
+              selected: true,
+              index: 0,
+              tabCount: 1,
+              onTap: () {},
+              onClose: () {},
+              onEnd: () {},
+              onBulkClose: (_) {},
+              onArchive: onArchive,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await pump(onArchive: () => archived++);
+    await tester.tap(find.text('Fix the cart'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive session'));
+    await tester.pumpAndSettle();
+    expect(archived, 1);
+
+    await pump();
+    await tester.tap(find.text('Fix the cart'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Archive session'), findsNothing);
   });
 
   group('tabStripMetrics', () {
