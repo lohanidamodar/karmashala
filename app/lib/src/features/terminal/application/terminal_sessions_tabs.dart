@@ -136,6 +136,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   /// The Overview is one view of the whole workspace, so, like Usage, one tab.
   String openOverviewTab() => openDocumentTab(kOverviewPaneId);
+  /// What the server runs is one view, so, like Logs, one tab.
+  String openRunningTab() => openDocumentTab(kRunningPaneId);
 
   /// Opens [hostPath] in an editor tab: one tab per file, or two buffers would
   /// disagree about the same bytes.

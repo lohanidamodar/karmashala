@@ -1,55 +1,65 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../features/sessions/application/session_providers.dart';
+import '../../features/sessions/application/session_signals.dart';
+import '../../features/sessions/presentation/operator_chip.dart';
 import '../../features/sessions/presentation/session_repositories_bar.dart';
+import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 
 /// **⋯ on the pane status line**: the session's rarer verbs, which lived in
 /// the chat view's header until the header went (owner, 2026-09-28: the tab
 /// carries title and state, the status line the rest). On the status line so
-/// terminal and chat view share them — one place per control.
-class SessionMoreButton extends StatefulWidget {
-  const SessionMoreButton({
-    required this.sessionId,
-    this.compact = false,
-    super.key,
-  });
+/// terminal and chat view share them — one place per control. Since round 29
+/// it also holds what the bar draws only when it has something to say: the
+/// stats, the operator grant while off, and the view toggle when the bar is
+/// short of room ([toggle]).
+class SessionMoreButton extends ConsumerStatefulWidget {
+  const SessionMoreButton({required this.sessionId, this.toggle, super.key});
 
   final String sessionId;
 
-  /// Draws the subagent count as numbers only, for a bar short of width.
-  final bool compact;
+  /// The view toggle, when the bar has no room for it.
+  final Widget? toggle;
 
   @override
-  State<SessionMoreButton> createState() => _SessionMoreButtonState();
+  ConsumerState<SessionMoreButton> createState() => _SessionMoreButtonState();
 }
 
-class _SessionMoreButtonState extends State<SessionMoreButton> {
+class _SessionMoreButtonState extends ConsumerState<SessionMoreButton> {
   // Kept across rebuilds: the status line rebuilds as the session works, and
   // a new controller would close the card under the pointer.
   final _controller = MenuController();
 
   static const _width = 300.0;
 
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      // ⋯ holds the way in; the count beside it says there is something
-      // there, at every width the status line has.
-      SessionSubagentsBadge(
-        sessionId: widget.sessionId,
-        compact: widget.compact,
-      ),
-      _menu(context),
-    ],
-  );
+  /// Asked from the button, which outlives the card: the confirm dialog's
+  /// taps land outside the card and close it.
+  void _letOperate() {
+    _controller.close();
+    setOperatorGrant(context, ref, widget.sessionId, granted: true);
+  }
 
-  Widget _menu(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
+    final toggle = widget.toggle;
+    final theme = Theme.of(context);
+    final label = theme.textTheme.labelSmall
+        ?.merge(Chrome.groupLabel)
+        .copyWith(color: theme.colorScheme.onSurfaceVariant);
+    ref.watchSession(widget.sessionId);
+    final operating =
+        ref
+            .read(sessionsDataProvider)
+            .getById(widget.sessionId)
+            ?.operatorGranted ??
+        true;
     return MenuAnchor(
       controller: _controller,
       style: const MenuStyle(
@@ -73,7 +83,39 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(Insets.sm),
-              child: SessionMoreBody(sessionId: widget.sessionId),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (toggle != null) ...[
+                    Text('VIEW', style: label),
+                    const SizedBox(height: Insets.xs),
+                    toggle,
+                    const SizedBox(height: Insets.sm),
+                  ],
+                  Text('AGENT', style: label),
+                  const SizedBox(height: Insets.xs),
+                  Wrap(
+                    spacing: Insets.sm,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SessionStatsButton(sessionId: widget.sessionId),
+                      if (!operating)
+                        TextButton.icon(
+                          key: const ValueKey('session-more-operator'),
+                          onPressed: _letOperate,
+                          icon: const Icon(
+                            AppIcons.shield,
+                            size: Chrome.iconSmall,
+                          ),
+                          label: const Text('Let it operate Karmashala'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: Insets.sm),
+                  SessionMoreBody(sessionId: widget.sessionId),
+                ],
+              ),
             ),
           ),
         ),
@@ -81,7 +123,7 @@ class _SessionMoreButtonState extends State<SessionMoreButton> {
       child: IconButton(
         key: const ValueKey('session-more'),
         tooltip:
-            'More: recap, subagents, open in a system terminal, stop, '
+            'More: stats, recap, subagents, open in a system terminal, stop, '
             'repositories',
         visualDensity: UiDensity.of(context).controlDensity,
         iconSize: Chrome.iconSmall,

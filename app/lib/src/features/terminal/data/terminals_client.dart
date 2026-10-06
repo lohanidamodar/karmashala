@@ -56,6 +56,12 @@ class TerminalsClient {
   Future<ListeningPortsReading> listeningPorts() =>
       _send(const TerminalsListeningPorts());
 
+  /// What the server runs, with its ports, read now (`terminals.running`).
+  Future<RunningReading> running() => _send(const TerminalsRunning());
+
+  /// Stops [pid] and its children; the server refuses one no pane started.
+  Future<void> stopProcess(int pid) => _send(TerminalStopProcess(pid));
+
   /// Ends [sessionId] for good. One the server no longer holds is already
   /// ended.
   Future<void> close(String sessionId) async {

@@ -25,6 +25,15 @@ class FakeTerminalsWork {
   /// Set to refuse the next opens in these words.
   String? refuseWith;
 
+  /// What `terminals.running` answers; nothing but the server by default.
+  RunningReading? running;
+
+  /// How many times `terminals.running` was asked.
+  int runningReads = 0;
+
+  /// Every `terminals.stopProcess` asked, by pid.
+  final stopped = <int>[];
+
   /// Seeds a terminal the server runs, as if started before the test.
   void seed(TerminalRecord record) {
     records[record.sessionId] = record;
@@ -97,6 +106,18 @@ class FakeTerminalsWork {
           ports: const [],
           checkedAt: _server._now(),
         );
+      case TerminalsRunning():
+        runningReads++;
+        return running ??
+            RunningReading(
+              serverPid: 1,
+              processes: const [
+                RunningProcess(pid: 1, parent: 0, role: RunningRole.server),
+              ],
+              checkedAt: _server._now(),
+            );
+      case TerminalStopProcess(:final pid):
+        stopped.add(pid);
     }
     return const DataAck();
   }

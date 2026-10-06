@@ -81,6 +81,12 @@ import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
 import '../../../features/agents/presentation/agent_logo.dart';
 import '../context_sheet.dart';
 import '../karmashala_about_dialog.dart';
+import '../running_tab_view.dart' show openPortInBrowserPane;
+import '../../../features/running/application/running_providers.dart';
+import '../../../features/running/domain/port_label.dart';
+import '../../../features/running/domain/running_groups.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show RunningRole;
 import '../phone_routes.dart';
 import '../shell_area.dart';
 import '../shell_state.dart';
@@ -745,7 +751,55 @@ class QuickOpenSources {
         opensTab: true,
         onSelect: () => openOverviewTab(ref),
       ),
+      ..._runningCommands(),
       ..._serverCommands(),
+    ];
+  }
+
+  /// The Running tab, by either name, and each http port the last reading
+  /// found. Nothing is read for this: a port shows once something has looked.
+  List<QuickOpenItem> _runningCommands() {
+    final reading = ref.read(runningProvider).reading;
+    final facts = ref.read(portFactsProvider);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return [
+      _command(
+        'Open Running',
+        subtitle: 'What Karmashala runs, and the ports it listens on',
+        icon: AppIcons.listMagnifyingGlass,
+        keywords: const ['running', 'processes', 'ports', 'dev server'],
+        opensTab: true,
+        onSelect: () => openRunningTab(ref),
+      ),
+      _command(
+        'Show ports',
+        subtitle: 'Every port Karmashala\'s processes listen on',
+        icon: AppIcons.listMagnifyingGlass,
+        keywords: const ['ports', 'localhost', 'listening'],
+        opensTab: true,
+        onSelect: () => openRunningTab(ref),
+      ),
+      if (reading != null)
+        for (final (:process, :port) in allPorts(reading))
+          if (process.role != RunningRole.server &&
+              labelPort(
+                process: process.name,
+                port: port.port,
+                command: process.command,
+                facts: facts,
+              ).isHttp)
+            _command(
+              'Open localhost:${port.port}',
+              subtitle: process.title ?? process.name,
+              icon: AppIcons.globe,
+              keywords: const ['localhost', 'port', 'dev server', 'browser'],
+              onlyWhenSearched: true,
+              onSelect: () => openPortInBrowserPane(
+                ref,
+                'http://localhost:${port.port}',
+                messenger: messenger,
+              ),
+            ),
     ];
   }
 

@@ -1,7 +1,7 @@
 part of 'workbench.dart';
 
-/// The width, at 1x text, the bar is one status line from: facts, stats,
-/// mode, model, the next step, Ship ▾ and the toggle. Below it the facts
+/// The width, at 1x text, the bar is one status line from: facts and badges,
+/// Agent ▾, the next step, Ship ▾, ⋯ and the toggle. Below it the facts
 /// become a caption over the controls.
 const double _sessionBarThirdControlWidth = 820;
 
@@ -16,8 +16,8 @@ const double _sessionFactsScrollWidth = 240;
 /// before the controls beside them give way.
 const double _sessionStatusFactsFloor = 96;
 
-/// The most a model name may take before it ends.
-const double _sessionModelLabelWidth = 72;
+/// The most the Agent chip's `model · mode` may take before it ends.
+const double _sessionAgentLabelWidth = 160;
 
 /// The chrome under the surface: what belongs to the session on screen. It
 /// speaks for the *focused pane's* session, never the sidebar's selection.
@@ -301,8 +301,12 @@ class _SessionStatusLine extends StatelessWidget {
                   yieldFromStart: false,
                   children: [
                     DeliveryStateLine(sessionId: sessionId, singleLine: true),
+                    // The badges: each nothing, and no width, at its default.
                     ScheduledResumeChip(sessionId: sessionId),
                     QueuedCountChip(sessionId: sessionId),
+                    SessionSubagentsBadge(sessionId: sessionId, compact: true),
+                    OperatorChip(sessionId: sessionId, onlyWhenOn: true),
+                    SessionPortsBadge(sessionId: sessionId),
                   ],
                 ),
               ],
@@ -311,7 +315,7 @@ class _SessionStatusLine extends StatelessWidget {
           const SizedBox(width: Insets.sm),
           // The controls at their own width while it fits beside the facts'
           // floor; past it the first of them are left out whole, so the next
-          // step, Ship ▾ and the view toggle stay.
+          // step, Ship ▾, ⋯ and the view toggle stay.
           ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: math.max(
@@ -321,16 +325,10 @@ class _SessionStatusLine extends StatelessWidget {
             ),
             child: YieldingRow(
               children: [
-                SessionStatsButton(sessionId: sessionId),
-                const SizedBox(width: Insets.sm),
-                PermissionModeChip(sessionId: sessionId),
-                SessionModePicker(sessionId: sessionId),
-                const SizedBox(width: Insets.xs),
-                OperatorChip(sessionId: sessionId),
-                const SizedBox(width: Insets.xs),
-                SessionModelChip(
+                SessionAgentChip(
+                  key: SessionAgentChip.barKey,
                   sessionId: sessionId,
-                  maxLabelWidth: _sessionModelLabelWidth,
+                  maxLabelWidth: _sessionAgentLabelWidth,
                 ),
                 const SizedBox(width: Insets.sm),
                 DeliveryStrip(
@@ -387,15 +385,18 @@ class _SessionFactsRow extends StatelessWidget {
           },
         ),
       ),
-      // Nothing, and no width, until one is armed.
+      // The badges: each nothing, and no width, at its default.
       Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
       QueuedCountChip(sessionId: sessionId),
+      SessionSubagentsBadge(sessionId: sessionId, compact: true),
+      OperatorChip(sessionId: sessionId, onlyWhenOn: true),
+      SessionPortsBadge(sessionId: sessionId),
     ],
   );
 }
 
-/// The session's controls — permission mode, model, delivery — and the view
-/// toggle. [narrow] scrolls the controls in one run instead of wrapping them.
+/// The session's controls — Agent ▾, delivery, ⋯ — and the view toggle.
+/// [narrow] scrolls the controls in one run, and puts the toggle in ⋯.
 class _SessionActionRow extends StatelessWidget {
   const _SessionActionRow({
     required this.sessionId,
@@ -425,10 +426,11 @@ class _SessionActionRow extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        PermissionModeChip(sessionId: sessionId),
-                        SessionModePicker(sessionId: sessionId),
-                        const SizedBox(width: Insets.xs),
-                        OperatorChip(sessionId: sessionId),
+                        SessionAgentChip(
+                          key: SessionAgentChip.barKey,
+                          sessionId: sessionId,
+                          maxLabelWidth: _sessionAgentLabelWidth,
+                        ),
                         const SizedBox(width: Insets.xs),
                         DeliveryStrip(
                           sessionId: sessionId,
@@ -436,12 +438,16 @@ class _SessionActionRow extends StatelessWidget {
                           compact: true,
                           folded: true,
                         ),
-                        SessionMoreButton(sessionId: sessionId, compact: true),
+                        // Short of room, the view toggle is in ⋯.
+                        SessionMoreButton(sessionId: sessionId, toggle: toggle),
                       ],
                     ),
                   ),
           ),
-          if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
+          if (sessionId == null && toggle != null) ...[
+            const SizedBox(width: Insets.sm),
+            toggle,
+          ],
         ],
       );
     }
@@ -451,26 +457,15 @@ class _SessionActionRow extends StatelessWidget {
         if (sessionId == null)
           const Spacer()
         else ...[
-          // The chips slide under the next step, ⋯ and the toggle rather than
-          // pushing them off the edge: ⋯ carries a subagent count, the facts
-          // above a queue and a resume, and together they overflowed a
-          // mid-width window (probe, 2026-10-04).
+          // The chip slides under the next step, ⋯ and the toggle rather than
+          // pushing them off the edge (probe, 2026-10-04).
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  PermissionModeChip(sessionId: sessionId),
-                  SessionModePicker(sessionId: sessionId),
-                  const SizedBox(width: Insets.xs),
-                  OperatorChip(sessionId: sessionId),
-                  const SizedBox(width: Insets.xs),
-                  SessionModelChip(
-                    sessionId: sessionId,
-                    maxLabelWidth: _sessionModelLabelWidth,
-                  ),
-                ],
+              child: SessionAgentChip(
+                key: SessionAgentChip.barKey,
+                sessionId: sessionId,
+                maxLabelWidth: _sessionAgentLabelWidth,
               ),
             ),
           ),
@@ -484,7 +479,7 @@ class _SessionActionRow extends StatelessWidget {
               folded: true,
             ),
           ),
-          SessionMoreButton(sessionId: sessionId, compact: true),
+          SessionMoreButton(sessionId: sessionId),
         ],
         if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
       ],

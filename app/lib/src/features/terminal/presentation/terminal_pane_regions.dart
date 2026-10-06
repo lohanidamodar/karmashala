@@ -89,6 +89,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isOverviewPane(paneId)) {
       return showing ? const OverviewTabView() : const SizedBox.shrink();
     }
+    // The same gate, and it is what stops the reading: off screen nothing
+    // asks the server what runs.
+    if (isRunningPane(paneId)) {
+      return showing ? const RunningTabView() : const SizedBox.shrink();
+    }
     // The same gate: a device pane off screen would keep its live view and its
     // polling of adb going for nobody. A layout restored from a desktop onto a
     // client with no Devices area draws nothing there.

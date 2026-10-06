@@ -39,6 +39,7 @@ import '../../features/sessions/application/host_lifecycle/host_lifecycle_provid
 import '../../features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import '../../features/sessions/presentation/approval_request_card.dart';
+import '../../features/sessions/presentation/session_agent_chip.dart';
 import '../../features/sessions/presentation/session_agent_mark.dart';
 import '../../features/sessions/presentation/session_environment_mark.dart';
 import '../../features/sessions/presentation/session_notice_line.dart';
@@ -83,6 +84,7 @@ export 'workbench_tabs.dart';
 // `part`s rather than libraries of their own because privacy in Dart is per
 // library: every widget below is private and the tree golden records its name.
 import 'session_more_button.dart';
+import 'session_ports_badge.dart';
 import '../widgets/yielding_row.dart';
 
 part 'workbench_compact.dart';

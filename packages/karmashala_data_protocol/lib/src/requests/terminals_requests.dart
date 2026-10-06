@@ -33,6 +33,8 @@ DataRequest<Object?>? _terminalsRequestFromJson(String kind, _Arguments args) =>
         args.string('title'),
       ),
       TerminalsListeningPorts.name => const TerminalsListeningPorts(),
+      TerminalsRunning.name => const TerminalsRunning(),
+      TerminalStopProcess.name => TerminalStopProcess(args.integer('pid')),
       _ => null,
     };
 
@@ -222,4 +224,48 @@ final class TerminalsListeningPorts
   @override
   ListeningPortsReading resultFromJson(Object? json) =>
       _decode(kind, () => ListeningPortsReading.fromJson(_object(json, kind)));
+}
+
+/// Everything the server runs, read now: itself, each local pane's process
+/// tree with its listening ports, and device mirroring. One process listing
+/// and one socket listing; nothing polls. Behind `terminals.running`.
+final class TerminalsRunning extends TerminalWorkRequest<RunningReading> {
+  const TerminalsRunning();
+
+  static const String name = 'terminals.running';
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => const {};
+
+  @override
+  Object? resultToJson(RunningReading result) => result.toJson();
+
+  @override
+  RunningReading resultFromJson(Object? json) =>
+      _decode(kind, () => RunningReading.fromJson(_object(json, kind)));
+}
+
+/// Stops process [pid] and its children. Refused (`denied`) unless it is,
+/// now, under a local pane's root — never a root, never the server.
+final class TerminalStopProcess extends TerminalWorkRequest<DataAck> {
+  const TerminalStopProcess(this.pid);
+
+  static const String name = 'terminals.stopProcess';
+
+  final int pid;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'pid': pid};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
 }

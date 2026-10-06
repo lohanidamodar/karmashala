@@ -10,6 +10,7 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notes/application/notes_providers.dart';
+import '../../features/running/application/running_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/settings/application/settings_tab.dart';
@@ -150,6 +151,21 @@ void openOverviewTab(WidgetRef ref) {
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
       .openOverviewTab();
+  activateTerminalTab(ref, tabId);
+}
+
+/// Opens the Running tab, or brings it forward. [sessionId] shows only that
+/// session's processes; without it, the tab shows everything.
+void openRunningTab(WidgetRef ref, {String? sessionId}) {
+  ref.read(runningFilterProvider.notifier).session(sessionId);
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.running);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openRunningTab();
   activateTerminalTab(ref, tabId);
 }
 

@@ -7,7 +7,13 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show AttentionNews;
+    show AttentionNews, RunningPort, RunningProcess, RunningReading, RunningRole;
+import 'package:karmashala/src/features/running/application/running_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart'
+    show kPermissionCycleSettle;
+import 'package:karmashala/src/features/sessions/presentation/session_stats_dialog.dart'
+    show SessionStatsButton;
+import 'package:karmashala_terminal_core/geometry.dart' show kRunningPaneId;
 import 'package:karmashala/src/features/notifications/application/attention_presenter.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -37,6 +43,7 @@ import 'package:karmashala/src/features/sessions/presentation/approval_request_c
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_agent_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -709,11 +716,12 @@ void main() {
     // invisible on the surface they were watching it on. It then sat in the
     // tab strip — the one session control up there while every other one was
     // below — which is the second half of the report.
+    // Since round 29 the mode is in the Agent chip, beside the model.
     seedSessionInAPane();
     await pump(tester);
 
-    expect(find.byType(PermissionModeChip), findsOneWidget);
-    expectBelowTheTerminal(tester, find.byType(PermissionModeChip));
+    expect(find.byType(SessionAgentChip), findsOneWidget);
+    expectBelowTheTerminal(tester, find.byType(SessionAgentChip));
 
     // A plain shell tab has no agent and no mode, so it draws nothing.
     container
@@ -721,7 +729,7 @@ void main() {
         .openTab(TerminalProfile.powerShell);
     await tester.pumpAndSettle();
 
-    expect(find.byType(PermissionModeChip), findsNothing);
+    expect(find.byType(SessionAgentChip), findsNothing);
   });
 
   testWidgets('both views name the same session, so they cannot disagree', (
@@ -732,7 +740,7 @@ void main() {
     await pump(tester);
 
     String shownSessionId() => tester
-        .widget<PermissionModeChip>(find.byType(PermissionModeChip))
+        .widget<SessionAgentChip>(find.byType(SessionAgentChip))
         .sessionId;
 
     // One chip is showing on either surface, and it is the same session on
@@ -842,8 +850,7 @@ void main() {
       await pump(tester, size: desktopWindow.size);
       final line = tester.getCenter(inTheBar('Commit')).dy;
       for (final control in [
-        find.byType(PermissionModeChip),
-        find.byType(SessionModelChip),
+        find.byType(SessionAgentChip),
         find.byTooltip('Terminal view'),
         find.text('Working'),
       ]) {
@@ -861,22 +868,25 @@ void main() {
       );
       expect(
         tester.getTopRight(factsView.first).dx,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byType(PermissionModeChip)).dx,
-        ),
+        lessThanOrEqualTo(tester.getTopLeft(find.byType(SessionAgentChip)).dx),
       );
     });
 
-    testWidgets('the model sits beside the permission mode', (tester) async {
+    testWidgets('the model and the permission mode are one chip, model first', (
+      tester,
+    ) async {
       seedTheFullestBar();
       await pump(tester, size: desktopWindow.size);
 
-      final chip = find.byType(SessionModelChip);
-      expect(chip, findsOneWidget);
+      // Round 29: one chip names both, and its menu holds both pickers.
+      await tester.tap(find.byType(SessionAgentChip));
+      await tester.pumpAndSettle();
+      final model = find.byType(SessionModelChip);
+      expect(model, findsOneWidget);
       expect(
-        tester.getRect(chip).left,
-        greaterThan(tester.getRect(find.byType(PermissionModeChip)).right - 1),
-        reason: 'beside the permission mode, not before it',
+        tester.getRect(model).top,
+        lessThan(tester.getRect(find.byType(PermissionModeChip)).top),
+        reason: 'the model, then the mode',
       );
     });
 
@@ -911,7 +921,7 @@ void main() {
       await pump(tester);
 
       final scheme = Theme.of(
-        tester.element(find.byType(PermissionModeChip)),
+        tester.element(find.byType(SessionAgentChip)),
       ).colorScheme;
       // Every action is a hairline pill with no fill; the next step is the
       // accent's ink and weight (the mockup's pills, 03b078b67).
@@ -945,7 +955,7 @@ void main() {
       expect(
         lowestFact,
         lessThanOrEqualTo(
-          tester.getTopLeft(find.byType(PermissionModeChip)).dy,
+          tester.getTopLeft(find.byType(SessionAgentChip)).dy,
         ),
         reason: 'the state line is a line, not the first item in the row',
       );
@@ -953,7 +963,7 @@ void main() {
       expect(
         tester.getCenter(find.byTooltip('Terminal view')).dy,
         moreOrLessEquals(
-          tester.getCenter(find.byType(PermissionModeChip)).dy,
+          tester.getCenter(find.byType(SessionAgentChip)).dy,
           epsilon: 0.5,
         ),
       );
@@ -1029,6 +1039,251 @@ void main() {
       expect(find.byType(ScheduledResumeChip), findsOneWidget);
       expect(find.byKey(const ValueKey('session-more')), findsOneWidget);
     }
+  });
+
+  group('a control is drawn only when it has something to say', () {
+    const agentChip = ValueKey('session-agent-chip');
+    const badges = [
+      ValueKey('queued-count'),
+      ValueKey('session-subagents-badge'),
+      ValueKey('session-operator-badge'),
+      ValueKey('session-ports-badge'),
+    ];
+
+    /// A reading that has session s1's pane listening on 5173.
+    RunningReading listening() => RunningReading(
+      serverPid: 1,
+      checkedAt: testTime,
+      processes: const [
+        RunningProcess(
+          pid: 11,
+          parent: 10,
+          name: 'node.exe',
+          role: RunningRole.child,
+          agentSessionId: 's1',
+          ports: [RunningPort(port: 5173, address: '::1')],
+        ),
+      ],
+    );
+
+    /// Every badge at something other than its default.
+    void seedEveryBadge() {
+      final queued = QueuedMessage(
+        id: 'q1',
+        sessionId: 's1',
+        seq: 1,
+        text: 'then run the tests',
+        state: QueuedMessageState.queued,
+        origin: QueuedMessageOrigin.app,
+        createdAt: testTime,
+        updatedAt: testTime,
+      );
+      container = ProviderContainer(
+        overrides: [
+          ...overrides,
+          sessionQueueProvider.overrideWith((ref, _) => [queued]),
+          sessionChildCountProvider.overrideWith(
+            (ref, _) => (count: 2, running: 1),
+          ),
+          sessionResumeBadgeProvider.overrideWith(
+            (ref, _) => const ResumeBadge(
+              resumeId: 'r1',
+              label: 'resumes 14:05',
+              tooltip: 'Resumes at 14:05',
+              queued: true,
+            ),
+          ),
+          runningProvider.overrideWith(
+            () => _KnownRunning(RunningSnapshot(reading: listening())),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      seedSessionInAPane();
+      container.read(sessionsDataProvider).setOperatorGranted('s1', true);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+    }
+
+    testWidgets('each badge is hidden at its default', (tester) async {
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester, size: desktopWindow.size);
+      for (final badge in badges) {
+        expect(find.byKey(badge), findsNothing, reason: '$badge at default');
+      }
+      expect(find.byType(ScheduledResumeChip), findsOneWidget);
+      expect(tester.getSize(find.byType(ScheduledResumeChip)).width, 0);
+    });
+
+    testWidgets('each badge shows once it is not at its default', (
+      tester,
+    ) async {
+      seedEveryBadge();
+      await pump(tester, size: desktopWindow.size);
+      for (final badge in badges) {
+        expect(find.byKey(badge), findsOneWidget, reason: '$badge is set');
+      }
+      expect(find.text('resumes 14:05'), findsOneWidget);
+    });
+
+    testWidgets('the ports badge opens Running on its session', (
+      tester,
+    ) async {
+      container = ProviderContainer(
+        overrides: [
+          ...overrides,
+          runningProvider.overrideWith(
+            () => _KnownRunning(RunningSnapshot(reading: listening())),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester, size: desktopWindow.size);
+      await tester.tap(find.byKey(const ValueKey('session-ports-badge')));
+      await tester.pumpAndSettle();
+      expect(container.read(runningFilterProvider).sessionId, 's1');
+      expect(
+        container.read(terminalSessionsControllerProvider).activeTab!.layout
+            .panes
+            .single,
+        kRunningPaneId,
+      );
+    });
+
+    testWidgets('one Agent chip names the model and the mode, and its menu '
+        'sets both', (tester) async {
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester, size: desktopWindow.size);
+
+      expect(find.byKey(agentChip), findsOneWidget);
+      // Neither picker sits on the bar itself any more.
+      expect(find.byType(PermissionModeChip), findsNothing);
+      expect(find.byType(SessionModelChip), findsNothing);
+
+      await tester.tap(find.byKey(agentChip));
+      await tester.pumpAndSettle();
+      expect(find.byType(PermissionModeChip), findsOneWidget);
+      expect(find.byType(SessionModelChip), findsOneWidget);
+
+      await tester.tap(find.byType(PermissionModeChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Build · Accept edits').last);
+      await tester.pumpAndSettle();
+      await tester.pump(kPermissionCycleSettle * 2);
+      await tester.pumpAndSettle();
+      expect(
+        server.sessionRows.getById('s1')!.permissionMode,
+        'mode=acceptEdits',
+      );
+
+      // The menu stays open over its pickers, so the model is the next pick.
+      await tester.tap(find.byType(ModelChip).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Opus').last);
+      await tester.pumpAndSettle();
+      expect(server.sessionRows.getById('s1')!.modelId, 'opus');
+    });
+
+    testWidgets('at 900, 1200 and 1440 the bar is one line', (tester) async {
+      agentStatus = AgentActivityStatus.working;
+      seedEveryBadge();
+      delivery = const SessionDelivery(
+        branch: 'session/fix-the-login-form-validation',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 2,
+        lines: DiffStat(added: 59, removed: 6, files: 7),
+        aheadOfBase: 3,
+        hasWorktree: true,
+      );
+      continuation = possible;
+      for (final width in <double>[900, 1200, 1440]) {
+        await pump(tester, size: Size(width, 800));
+        expect(tester.takeException(), isNull, reason: 'overflow at $width');
+        final line = tester.getCenter(find.byKey(agentChip)).dy;
+        for (final control in [
+          find.byKey(const ValueKey('session-more')),
+          find.byKey(const ValueKey('queued-count')),
+          find.byKey(const ValueKey('session-ports-badge')),
+          find.byTooltip('Terminal view'),
+          find.text('Working').hitTestable(),
+        ]) {
+          expect(
+            tester.getCenter(control).dy,
+            moreOrLessEquals(line, epsilon: 1),
+            reason: '$control wrapped off the line at ${width}px',
+          );
+        }
+      }
+    });
+
+    testWidgets('what left the bar is reachable from More', (tester) async {
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      // Narrow enough that the view toggle goes into More too.
+      await pump(tester, size: const Size(500, 800));
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Chat view'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('session-more')));
+      await tester.pumpAndSettle();
+      expect(find.byType(SessionStatsButton), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('session-more-operator')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Chat view'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Chat view'));
+      await tester.pumpAndSettle();
+      expect(container.read(terminalVisibleProvider), isFalse);
+    });
+
+    testWidgets('More lets the agent operate Karmashala, after asking', (
+      tester,
+    ) async {
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester, size: desktopWindow.size);
+      await tester.tap(find.byKey(const ValueKey('session-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('session-more-operator')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Let it operate'));
+      await tester.pumpAndSettle();
+      expect(server.sessionRows.getById('s1')!.operatorGranted, isTrue);
+      expect(
+        find.byKey(const ValueKey('session-operator-badge')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the phone\'s row follows the same rule', (tester) async {
+      seedEveryBadge();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: CompactWorkbenchScope(child: WorkbenchView()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final badge in badges) {
+        expect(find.byKey(badge), findsOneWidget, reason: '$badge on a phone');
+      }
+      expect(find.byKey(const ValueKey('session-sheet')), findsOneWidget);
+    });
   });
 
   testWidgets('the bar survives the minimum window and larger text', (
@@ -1112,7 +1367,7 @@ void main() {
     expect(find.byTooltip('Terminal view'), findsOneWidget);
     expect(
       tester.getBottomLeft(card).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byType(PermissionModeChip)).dy),
+      lessThanOrEqualTo(tester.getTopLeft(find.byType(SessionAgentChip)).dy),
     );
   });
 
@@ -1601,4 +1856,15 @@ void main() {
     expect(surfaces(tester).index, 0);
     expect(find.byType(TerminalPaneStack), findsNothing);
   });
+}
+
+/// A Running reading already taken, which the session bar's ports badge
+/// counts without asking again.
+class _KnownRunning extends RunningController {
+  _KnownRunning(this._snapshot);
+
+  final RunningSnapshot _snapshot;
+
+  @override
+  RunningSnapshot build() => _snapshot;
 }
