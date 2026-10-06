@@ -155,14 +155,34 @@ class RemoteHostService {
     // stream, so for news it counts as not hearing it.
     hasLiveLink: isWatching,
     clientFor: _pushClientFor,
+    fallbackClientsFor: _pushFallbacksFor,
     now: _now,
     onLog: onLog,
   );
 
   final Map<String, RelayPushClient> _pushClients = {};
 
-  RelayPushClient? _pushClientFor(PairedDevice device) {
-    final url = relayUrlFor(device);
+  RelayPushClient? _pushClientFor(PairedDevice device) =>
+      _pushClientAt(relayUrlFor(device));
+
+  /// Where a push goes while [device]'s own relay cannot carry one (a 503):
+  /// the relay it moved off, and for a pairing on the current PopupBits relay
+  /// the retired ones, which may still hold an FCM secret. The token and tag
+  /// are the relay's to forward, never to read.
+  List<RelayPushClient> _pushFallbacksFor(PairedDevice device) {
+    if (!_hostedEnabled) return const [];
+    final own = device.hostedRelayUri;
+    return [
+      for (final url in [
+        ?_relayUri(device.relayMovedFrom),
+        if (own != null && sameRelay(own, knownRelays.current))
+          ...knownRelays.retired,
+      ])
+        ?_pushClientAt(url),
+    ];
+  }
+
+  RelayPushClient? _pushClientAt(Uri? url) {
     if (url == null) return null;
     try {
       return _pushClients[url.toString()] ??= RelayPushClient(

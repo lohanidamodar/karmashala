@@ -61,6 +61,16 @@ class RelayPushClient {
     required String tag,
     required String token,
     required String platform,
+  }) async =>
+      await registerOutcome(tag: tag, token: token, platform: platform) ==
+      PushOutcome.accepted;
+
+  /// Registers [token] under [tag]: [PushOutcome.accepted] when stored,
+  /// [PushOutcome.notConfigured] for a 503, [PushOutcome.failed] otherwise.
+  Future<PushOutcome> registerOutcome({
+    required String tag,
+    required String token,
+    required String platform,
   }) async {
     final (:status, body: _) = await _post(
       registerEndpoint,
@@ -68,9 +78,11 @@ class RelayPushClient {
         PushRegistration(tag: tag, token: token, platform: platform).toJson(),
       ),
     );
-    if (status == RelayStatus.pushRegistered) return true;
+    if (status == RelayStatus.pushRegistered) return PushOutcome.accepted;
     onLog?.call('push registration refused: $status');
-    return false;
+    return status == RelayStatus.unavailable
+        ? PushOutcome.notConfigured
+        : PushOutcome.failed;
   }
 
   /// Asks the relay to deliver [payloadB64] to whoever registered [tag].

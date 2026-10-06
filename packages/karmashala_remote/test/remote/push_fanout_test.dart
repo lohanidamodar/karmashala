@@ -245,7 +245,10 @@ void main() {
 
       await notify();
 
-      expect(log, contains('a push was not delivered: notConfigured'));
+      expect(
+        log,
+        contains(startsWith('push unavailable at relay.example.com')),
+      );
     });
 
     test('a poster that throws never crashes the fan-out', () async {
