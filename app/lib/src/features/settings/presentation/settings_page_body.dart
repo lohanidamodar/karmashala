@@ -19,6 +19,7 @@ import '../../remote/presentation/machines_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
 import '../../server/presentation/server_log_section.dart';
 import '../../server/presentation/server_status_section.dart';
+import '../../server/presentation/server_storage_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
@@ -189,6 +190,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.machines => const MachinesSection(),
   SettingsAnchor.serverStatus => const ServerStatusSection(),
   SettingsAnchor.serverLog => const ServerLogSection(),
+  SettingsAnchor.serverStorage => const ServerStorageSection(),
   SettingsAnchor.remoteAccess => const RemoteAccessSection(),
   SettingsAnchor.storeCredentials => const StoresSettingsSection(),
   SettingsAnchor.debugMode => const DebugModeSection(),

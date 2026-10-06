@@ -614,6 +614,16 @@ enum SettingsAnchor {
     'logs',
     'log file',
   ]),
+  serverStorage(SettingsSectionId.server, 'Storage', [
+    'storage',
+    'disk',
+    'database',
+    'size',
+    'tool images',
+    'cache',
+    'clean up',
+    'old sessions',
+  ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
     'phone',
@@ -678,6 +688,8 @@ enum SettingsAnchor {
     remoteAccess => caps.pairsHere || caps.serverAdmin,
     // This machine's server log; a phone hosts no server.
     serverLog => caps.hostsServer,
+    // Read from and cleared at this machine's server, by this machine's app.
+    serverStorage => caps.hostsServer && caps.serverSettings,
     _ => true,
   };
 }
@@ -949,6 +961,28 @@ const settingsEntries = <SettingsEntry>[
         'Where this machine\'s server writes its log, opened in an app or '
         'in Logs.',
     keywords: ['server.log', 'logs', 'troubleshoot', 'report'],
+  ),
+  SettingsEntry(
+    'Database size',
+    anchor: SettingsAnchor.serverStorage,
+    description: 'How much the server\'s database holds, and its largest '
+        'tables.',
+    keywords: ['database', 'sqlite', 'disk', 'size', 'tables'],
+  ),
+  SettingsEntry(
+    'Tool-image cache',
+    anchor: SettingsAnchor.serverStorage,
+    description:
+        'Pictures agents\' tools answered with: how many, how long they are '
+        'kept, the size cap, and Clear.',
+    keywords: ['tool images', 'screenshots', 'cache', 'clear', 'disk'],
+  ),
+  SettingsEntry(
+    'Clean up old ended sessions',
+    anchor: SettingsAnchor.serverStorage,
+    description: 'Delete ended sessions older than a number of days, when '
+        'you ask.',
+    keywords: ['old sessions', 'clean up', 'delete', 'purge', 'ended'],
   ),
   SettingsEntry(
     'Worktree setup',

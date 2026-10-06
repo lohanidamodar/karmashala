@@ -125,6 +125,9 @@ class Settings {
     this.terminalThemeSource,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
+    this.toolImageMaxAgeDays = defaultToolImageMaxAgeDays,
+    this.toolImageMaxMegabytes = defaultToolImageMaxMegabytes,
+    this.endedSessionsOlderThanDays = defaultEndedSessionsOlderThanDays,
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
@@ -142,6 +145,10 @@ class Settings {
   static const double defaultTerminalFontSize = 13.0;
   static const double minTerminalFontSize = 8.0;
   static const double maxTerminalFontSize = 28.0;
+
+  static const int defaultToolImageMaxAgeDays = 14;
+  static const int defaultToolImageMaxMegabytes = 256;
+  static const int defaultEndedSessionsOlderThanDays = 30;
 
   /// Bounds for [uiTextScale] (90%–150%).
   static const double minUiTextScale = 0.9;
@@ -319,6 +326,15 @@ class Settings {
   /// The terminal grid's font size, separate from [uiTextScale] on purpose.
   final double terminalFontSize;
 
+  /// How long the server keeps a tool image nobody reads, and how much the
+  /// cache may hold. The server reads both keys (`ToolImageLimits`).
+  final int toolImageMaxAgeDays;
+  final int toolImageMaxMegabytes;
+
+  /// How old an ended session must be for Settings → Server to offer to clean
+  /// it up. Nothing is deleted without the person pressing Clean up.
+  final int endedSessionsOlderThanDays;
+
   /// Whether Notes is offered at all. Off hides it and deletes nothing.
   final bool notesEnabled;
 
@@ -444,6 +460,9 @@ class Settings {
     bool clearTerminalThemeSource = false,
     double? uiTextScale,
     double? terminalFontSize,
+    int? toolImageMaxAgeDays,
+    int? toolImageMaxMegabytes,
+    int? endedSessionsOlderThanDays,
     bool? notesEnabled,
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
@@ -526,6 +545,10 @@ class Settings {
         : (terminalThemeSource ?? this.terminalThemeSource),
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
+    toolImageMaxAgeDays: toolImageMaxAgeDays ?? this.toolImageMaxAgeDays,
+    toolImageMaxMegabytes: toolImageMaxMegabytes ?? this.toolImageMaxMegabytes,
+    endedSessionsOlderThanDays:
+        endedSessionsOlderThanDays ?? this.endedSessionsOlderThanDays,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
@@ -626,6 +649,9 @@ class Settings {
     'terminalThemeSource',
     'uiTextScale',
     'terminalFontSize',
+    'toolImageMaxAgeDays',
+    'toolImageMaxMegabytes',
+    'endedSessionsOlderThanDays',
     'notesEnabled',
     'hideEmptySections',
     'explorerAgentFilter',
@@ -701,6 +727,9 @@ class Settings {
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
+    'toolImageMaxAgeDays': toolImageMaxAgeDays,
+    'toolImageMaxMegabytes': toolImageMaxMegabytes,
+    'endedSessionsOlderThanDays': endedSessionsOlderThanDays,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'explorerAgentFilter': explorerAgentFilter,
@@ -903,6 +932,18 @@ class Settings {
             minTerminalFontSize,
             maxTerminalFontSize,
           ),
+      toolImageMaxAgeDays: _positiveInt(
+        json['toolImageMaxAgeDays'],
+        defaultToolImageMaxAgeDays,
+      ),
+      toolImageMaxMegabytes: _positiveInt(
+        json['toolImageMaxMegabytes'],
+        defaultToolImageMaxMegabytes,
+      ),
+      endedSessionsOlderThanDays: _positiveInt(
+        json['endedSessionsOlderThanDays'],
+        defaultEndedSessionsOlderThanDays,
+      ),
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
@@ -993,6 +1034,9 @@ class Settings {
       other.terminalThemeSource == terminalThemeSource &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
+      other.toolImageMaxAgeDays == toolImageMaxAgeDays &&
+      other.toolImageMaxMegabytes == toolImageMaxMegabytes &&
+      other.endedSessionsOlderThanDays == endedSessionsOlderThanDays &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
@@ -1062,6 +1106,9 @@ class Settings {
           quitAsks,
           quitReopens,
           quitKeepsHostSessions,
+          toolImageMaxAgeDays,
+          toolImageMaxMegabytes,
+          endedSessionsOlderThanDays,
           usageLimitBehavior,
           resumeMessage,
           continueInterruptedTurns,
@@ -1132,3 +1179,7 @@ class Settings {
     return true;
   }
 }
+
+/// [value] when it is a whole number above zero, else [fallback].
+int _positiveInt(Object? value, int fallback) =>
+    value is int && value > 0 ? value : fallback;

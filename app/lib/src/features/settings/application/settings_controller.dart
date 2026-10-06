@@ -514,6 +514,20 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// The tool-image cache's limits; the server reads them at its next sweep.
+  void setToolImageLimits({int? maxAgeDays, int? maxMegabytes}) {
+    state = state.copyWith(
+      toolImageMaxAgeDays: maxAgeDays,
+      toolImageMaxMegabytes: maxMegabytes,
+    );
+    _save();
+  }
+
+  void setEndedSessionsOlderThanDays(int days) {
+    state = state.copyWith(endedSessionsOlderThanDays: days);
+    _save();
+  }
+
   void setQuitAsks(bool value) {
     state = state.copyWith(quitAsks: value);
     _save();

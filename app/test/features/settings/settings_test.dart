@@ -172,6 +172,38 @@ void main() {
     });
   });
 
+  group('Server storage settings', () {
+    test('default to the server\'s own limits and 30 days', () {
+      const s = Settings();
+      expect(s.toolImageMaxAgeDays, 14);
+      expect(s.toolImageMaxMegabytes, 256);
+      expect(s.endedSessionsOlderThanDays, 30);
+      expect(Settings.fromJson(const {}), s);
+    });
+
+    test('survive a JSON round-trip under the keys the server reads', () {
+      const s = Settings(
+        toolImageMaxAgeDays: 3,
+        toolImageMaxMegabytes: 1024,
+        endedSessionsOlderThanDays: 90,
+      );
+      final json = s.toJson();
+      expect(json['toolImageMaxAgeDays'], 3);
+      expect(json['toolImageMaxMegabytes'], 1024);
+      expect(Settings.fromJson(json), s);
+      expect(s, isNot(const Settings()));
+    });
+
+    test('a value that is not a whole number above zero is the default', () {
+      final s = Settings.fromJson(const {
+        'toolImageMaxAgeDays': 0,
+        'toolImageMaxMegabytes': 'big',
+        'endedSessionsOlderThanDays': -4,
+      });
+      expect(s, const Settings());
+    });
+  });
+
   group('resume-running-panes setting', () {
     test('is on by default', () {
       // The owner asked for it: "if there were active panes on last close start
