@@ -77,6 +77,10 @@ const String kAgentSwitchRole = 'agentSwitch';
 /// it: what a hook said, an error, a compaction. Drawn as a small note.
 const String kTranscriptNoticeRole = 'notice';
 
+/// The thinking a row carries for reasoning the model sent encrypted
+/// (`redacted_thinking`): there is nothing to read, only that it thought.
+const String kRedactedThinking = 'Thinking (redacted)';
+
 /// The role of a command the person ran in the CLI itself — a slash command,
 /// a `!` shell line — with what it printed as its tool's output.
 const String kTranscriptCommandRole = 'command';
@@ -592,7 +596,9 @@ String? _reasoningOf(Map<String, dynamic> json, TranscriptDialect dialect) {
           if (block is Map &&
               block['type'] == 'thinking' &&
               block['thinking'] is String)
-            block['thinking'] as String,
+            block['thinking'] as String
+          else if (block is Map && block['type'] == 'redacted_thinking')
+            kRedactedThinking,
     ];
   } else {
     return null;

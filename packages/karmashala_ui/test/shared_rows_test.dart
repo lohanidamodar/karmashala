@@ -1,3 +1,4 @@
+import 'package:agent_cli/read.dart' show kRedactedThinking;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -14,6 +15,19 @@ import 'support/layout_probe.dart';
 void main() {
   group('ThinkingAccordion', () {
     const thinking = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine';
+
+    testWidgets('redacted thinking is a small marker that opens to nothing', (
+      tester,
+    ) async {
+      await pumpInBox(
+        tester,
+        width: 320,
+        child: const ThinkingAccordion(thinking: kRedactedThinking),
+      );
+      expect(find.text('Thinking (redacted)'), findsOneWidget);
+      expect(find.textContaining('Thought'), findsNothing);
+      expect(find.byType(InkWell), findsNothing);
+    });
 
     for (final width in [200.0, 240.0]) {
       for (final scale in sweepScales) {

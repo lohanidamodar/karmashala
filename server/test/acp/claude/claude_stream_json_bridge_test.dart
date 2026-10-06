@@ -415,6 +415,38 @@ void main() {
       },
     );
 
+    test('redacted thinking is only a marker on the reply', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.emit({
+              'type': 'assistant',
+              'message': {
+                'id': 'msg_r',
+                'role': 'assistant',
+                'content': [
+                  {'type': 'redacted_thinking', 'data': 'ZW5jcnlwdGVk'},
+                  {'type': 'text', 'text': 'Done.'},
+                ],
+              },
+              'parent_tool_use_id': null,
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final reply = rows().singleWhere(
+        (r) => r.role == SessionMessageRole.agent && r.text.isNotEmpty,
+      );
+      expect(reply.text, 'Done.');
+      expect(reply.thinking, 'Thinking (redacted)');
+      await rt.stop();
+    });
+
     test("a NotebookEdit's row is a diff of the cell it changed", () async {
       final machine = FakeClaudeMachine(
         turns: [

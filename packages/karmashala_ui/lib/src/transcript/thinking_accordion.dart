@@ -1,3 +1,4 @@
+import 'package:agent_cli/read.dart' show kRedactedThinking;
 import 'package:flutter/material.dart';
 
 import '../app_icons.dart';
@@ -21,6 +22,32 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
+    // Encrypted reasoning: a marker that it happened, with nothing to open.
+    if (widget.thinking.trim() == kRedactedThinking) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        child: Row(
+          children: [
+            Icon(
+              AppIcons.chatCircleDots,
+              size: Chrome.iconSmall,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Insets.xs),
+            Flexible(
+              child: Text(
+                kRedactedThinking,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final lines = widget.thinking.split('\n').length;
     final summary = lines <= 1 ? 'Thought' : 'Thought for $lines lines';
 

@@ -56,6 +56,21 @@ void main() {
       expect(messages.last.thinking, 'Try small factors: 7 times 13.');
     });
 
+    test('a redacted thinking block is only a marker', () async {
+      final messages = await read(AgentIds.claudeCode, [
+        assistant([
+          {'type': 'redacted_thinking', 'data': 'ZW5jcnlwdGVk'},
+        ]),
+        assistant([
+          {'type': 'text', 'text': 'Done.'},
+        ]),
+      ]);
+
+      expect(messages.single.text, 'Done.');
+      expect(messages.single.thinking, kRedactedThinking);
+      expect(kRedactedThinking, 'Thinking (redacted)');
+    });
+
     test('an empty signed thinking block shows nothing', () async {
       final messages = await read(AgentIds.claudeCode, [
         assistant([thinking('')]),

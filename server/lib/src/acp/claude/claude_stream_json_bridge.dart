@@ -12,6 +12,8 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         JsonMap,
         JsonRpcErrorCodes;
 
+import 'package:agent_cli/read.dart' show kRedactedThinking;
+
 import '../../domain/uuid.dart';
 import '../acp_extensions.dart';
 import '../acp_transport.dart';
@@ -766,6 +768,11 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         case 'thinking':
           if (parent == null && !streamed) {
             _chunk('agent_thought_chunk', block['thinking'], id);
+          }
+        // Never streamed: it has no delta, only encrypted data.
+        case 'redacted_thinking':
+          if (parent == null) {
+            _chunk('agent_thought_chunk', kRedactedThinking, id);
           }
         case 'tool_use':
           _onToolUse(block, parent);
