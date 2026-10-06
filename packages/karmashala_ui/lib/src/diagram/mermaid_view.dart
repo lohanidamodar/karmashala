@@ -121,7 +121,6 @@ class _MermaidBlockState extends State<MermaidBlock> {
                   IconButton(
                     key: const ValueKey('mermaid-toggle'),
                     tooltip: _showSource ? 'Show diagram' : 'Show source',
-                    iconSize: 16,
                     visualDensity: VisualDensity.compact,
                     icon: Icon(
                       _showSource ? AppIcons.treeStructure : AppIcons.code,
@@ -131,7 +130,6 @@ class _MermaidBlockState extends State<MermaidBlock> {
                 IconButton(
                   key: const ValueKey('mermaid-copy'),
                   tooltip: 'Copy source',
-                  iconSize: 16,
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(AppIcons.copy),
                   onPressed: () => Clipboard.setData(
