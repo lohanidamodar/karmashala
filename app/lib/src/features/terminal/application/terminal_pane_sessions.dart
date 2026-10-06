@@ -47,6 +47,10 @@ class PaneSessions {
       if (chatPaneSessionId(paneId) == null) paneId,
   ];
 
+  /// Every pane of this window showing [sessionId], its chat pane included.
+  List<String> panesOf(String sessionId) =>
+      _panesBySession[sessionId] ?? const [];
+
   /// A pane of this window showing [sessionId] whose liveness passes [where];
   /// with no [where], a live one before any other. Null when none does.
   String? paneOf(String sessionId, {bool Function(PaneLiveness)? where}) {
