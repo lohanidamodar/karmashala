@@ -66,8 +66,12 @@ class SessionCard extends StatelessWidget {
     this.settled = false,
     this.tickEnabled = true,
     this.tickDisabledTooltip,
+    this.runningBelow,
     super.key,
   });
+
+  /// After the title: its sub-sessions still at work ([RunningBelowBadge]).
+  final Widget? runningBelow;
 
   /// Whether this row may join the selection as it stands. See
   /// [ExplorerRowTick].
@@ -239,6 +243,7 @@ class SessionCard extends StatelessWidget {
               parentTitle: parentTitle,
               lineageBroken: lineageBroken,
               pinned: pinned,
+              runningBelow: runningBelow,
               showMenu: showMenu,
               menuItemsBuilder: menuItemsBuilder,
               onMenu: onMenu,
@@ -372,6 +377,10 @@ class SessionCard extends StatelessWidget {
               color: scheme.primary,
               semanticLabel: 'Pinned',
             ),
+          ],
+          if (runningBelow case final badge?) ...[
+            SizedBox(width: density.glyphGap),
+            badge,
           ],
         ],
       ),
@@ -608,12 +617,14 @@ class _SessionCardTitleLine extends StatelessWidget {
     required this.parentTitle,
     required this.lineageBroken,
     required this.pinned,
+    required this.runningBelow,
     required this.showMenu,
     required this.menuItemsBuilder,
     required this.onMenu,
     required this.density,
   });
 
+  final Widget? runningBelow;
   final String title;
 
   /// [SessionCard.pointerDetails]: the whole title, the agent and where it
@@ -681,6 +692,10 @@ class _SessionCardTitleLine extends StatelessWidget {
               ? titleText
               : Tooltip(message: details, child: titleText),
         ),
+        if (runningBelow case final badge?) ...[
+          SizedBox(width: density.glyphGap),
+          badge,
+        ],
         if (showMenu)
           RowMenuButton(
             tooltip: 'Session actions',

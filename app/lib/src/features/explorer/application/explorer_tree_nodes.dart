@@ -264,10 +264,14 @@ final class SessionRowNode extends ExplorerNode {
     this.link,
     this.parentTitle,
     this.lineageBroken = false,
+    this.runningBelow = 0,
   }) : super(id: 'session:${session.id}');
 
   final String projectId;
   final Session session;
+
+  /// Its sub-sessions still running or waiting, worn on its own row.
+  final int runningBelow;
 
   /// Where inside the project this session works, when that is not the root.
   final String? subPath;
@@ -288,7 +292,8 @@ final class SessionRowNode extends ExplorerNode {
       other.pinned == pinned &&
       other.link == link &&
       other.parentTitle == parentTitle &&
-      other.lineageBroken == lineageBroken;
+      other.lineageBroken == lineageBroken &&
+      other.runningBelow == runningBelow;
 
   @override
   int get hashCode => Object.hash(
@@ -300,6 +305,7 @@ final class SessionRowNode extends ExplorerNode {
     link,
     parentTitle,
     lineageBroken,
+    runningBelow,
   );
 }
 
@@ -413,11 +419,15 @@ final class SubSessionsNode extends ExplorerNode {
     required this.parentId,
     required this.label,
     required this.folded,
+    this.expandable = true,
   });
 
   final String parentId;
   final String label;
   final bool folded;
+
+  /// Whether folding hides anything; false draws no chevron.
+  final bool expandable;
 
   @override
   bool operator ==(Object other) =>
@@ -425,10 +435,11 @@ final class SubSessionsNode extends ExplorerNode {
       other.id == id &&
       other.depth == depth &&
       other.label == label &&
-      other.folded == folded;
+      other.folded == folded &&
+      other.expandable == expandable;
 
   @override
-  int get hashCode => Object.hash(id, depth, label, folded);
+  int get hashCode => Object.hash(id, depth, label, folded, expandable);
 }
 
 /// A context header's collapse id; [workspaceId] null is *No context*.

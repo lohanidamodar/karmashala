@@ -4,11 +4,12 @@ import '../../sessions/application/sub_session_fold.dart';
 import 'agent_states.dart';
 import 'workspace_session_entry.dart';
 
-/// The Sessions list's groups with every ended sub-session taken out of its
-/// group and kept beneath the top-most ancestor the list shows. A live one
-/// stays in its own group — running, waiting, or needing the person.
+/// The Sessions list's groups with every sub-session taken out of its group
+/// and kept beneath the top-most ancestor the list shows — a live one too, so
+/// a child is never in a status group of its own and the fold's count is the
+/// rows beneath it. One whose ancestors are all gone stays where it is.
 class SubSessionNesting {
-  SubSessionNesting._(this.groups, this._nested, this._folds);
+  SubSessionNesting._(this.groups, this._nested, this._live, this._folds);
 
   factory SubSessionNesting.of(List<AgentStateGroup> groups) {
     final stateOf = <String, AgentState>{};
@@ -35,17 +36,24 @@ class SubSessionNesting {
 
     final below = <String, List<Session>>{};
     final nested = <String, List<WorkspaceSessionEntry>>{};
+    final liveIds = <String>{};
     for (final entry in byId.values) {
       final native = entry.native;
       if (native == null) continue;
       final anchor = anchorOf(entry);
       if (anchor == null) continue;
       (below[anchor] ??= []).add(native);
-      if (!live(native)) (nested[anchor] ??= []).add(entry);
+      (nested[anchor] ??= []).add(entry);
+      if (live(native)) liveIds.add(entry.id);
     }
-    for (final children in nested.values) {
-      children.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    }
+    final ordered = {
+      for (final MapEntry(key: id, value: children) in nested.entries)
+        id: runningFirst(
+          children,
+          isLive: (e) => liveIds.contains(e.id),
+          createdAt: (e) => e.createdAt,
+        ),
+    };
     final hidden = {
       for (final children in nested.values)
         for (final child in children) child.id,
@@ -65,20 +73,33 @@ class SubSessionNesting {
                     if (!hidden.contains(entry.id)) entry,
                 ]),
       ],
-      nested,
+      ordered,
+      liveIds,
       folds,
     );
   }
 
-  /// The groups as drawn, without the sub-sessions folded beneath a parent.
+  /// The groups as drawn, without the sub-sessions kept beneath a parent.
   final List<AgentStateGroup> groups;
   final Map<String, List<WorkspaceSessionEntry>> _nested;
+  final Set<String> _live;
   final Map<String, SubSessionFold> _folds;
 
   /// The fold line under [entry], or null when nothing came from it.
   SubSessionFold? foldOf(WorkspaceSessionEntry entry) => _folds[entry.id];
 
-  /// The ended sub-sessions kept beneath [parentId], newest first.
-  List<WorkspaceSessionEntry> nestedUnder(String parentId) =>
-      _nested[parentId] ?? const [];
+  /// The sub-sessions drawn beneath [parentId]: the live ones first, newest
+  /// first in each; only the live ones while [folded].
+  List<WorkspaceSessionEntry> nestedUnder(
+    String parentId, {
+    bool folded = false,
+  }) {
+    final all = _nested[parentId] ?? const [];
+    return folded
+        ? [
+            for (final e in all)
+              if (_live.contains(e.id)) e,
+          ]
+        : all;
+  }
 }

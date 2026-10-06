@@ -21,7 +21,10 @@ DataChange? _intentsChangeFromJson(String name, Map<String, Object?> json) =>
         paneId: json['paneId']! as String,
         title: json['title']! as String,
       ),
-      'closeTerminalTab' => CloseTerminalTab(json['paneId']! as String),
+      'closeTerminalTab' => CloseTerminalTab(
+        json['paneId']! as String,
+        sessionId: json['sessionId'] as String?,
+      ),
       'selectCheckout' => SelectCheckout(json['repositoryId']! as String),
       'insertSnippet' => InsertSnippet(
         snippetId: json['snippetId']! as String,
@@ -84,14 +87,19 @@ final class OpenTerminalTab extends ClientIntent {
 /// Close the tab showing pane [paneId]; the server already ended or let go of
 /// its terminal.
 final class CloseTerminalTab extends ClientIntent {
-  const CloseTerminalTab(this.paneId);
+  const CloseTerminalTab(this.paneId, {this.sessionId});
 
   final String paneId;
+
+  /// The terminal's session at the server, for a window that shows it under
+  /// a pane id of its own — an agent's tab it opened itself.
+  final String? sessionId;
 
   @override
   Map<String, Object?> toJson() => {
     'change': 'closeTerminalTab',
     'paneId': paneId,
+    'sessionId': ?sessionId,
   };
 }
 

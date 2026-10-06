@@ -186,8 +186,9 @@ annotated destructive: nothing un-happens it.
 does not, and nothing brings it back.
 
 **Tidy up the sessions you started: `session_archive`.** Once a child's work is
-merged or handed back and the child has ended, archive it, so the person's
-session lists stay short. It takes only your own children and their
+merged or handed back, end it with `session_end`, then archive it, so the
+person's session lists stay short. Ending is not archiving, and nothing does
+either for you. It takes only your own children and their
 descendants, and only once they have ended — anything else is refused with the
 reason. Archiving hides and nothing more: the transcript, files and worktree
 stay, its ended descendants go with it (live ones are left and named in

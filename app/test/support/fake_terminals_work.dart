@@ -31,6 +31,13 @@ class FakeTerminalsWork {
     _server._tell(null, [TerminalChanged(record)]);
   }
 
+  /// Terminal [sessionId] closed by somebody else — `terminal_close`, another
+  /// window, a phone — or, with [closed] false, its ended record pruned.
+  void remove(String sessionId, {bool closed = true}) {
+    records.remove(sessionId);
+    _server._tell(null, [TerminalRemoved(sessionId, closed: closed)]);
+  }
+
   Object? _handle(TerminalWorkRequest<Object?> request) {
     switch (request) {
       case TerminalsProfiles():
@@ -80,7 +87,7 @@ class FakeTerminalsWork {
         if (records.remove(sessionId) == null) {
           throw DataRefused.notFound('no terminal $sessionId');
         }
-        _server._tell(null, [TerminalRemoved(sessionId)]);
+        _server._tell(null, [TerminalRemoved(sessionId, closed: true)]);
       case TerminalRename(:final sessionId, :final title):
         final record = records[sessionId];
         if (record == null) throw DataRefused.notFound('no terminal $sessionId');

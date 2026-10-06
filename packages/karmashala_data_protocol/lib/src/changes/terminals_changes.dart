@@ -7,7 +7,10 @@ part of '../data_change.dart';
 DataChange? _terminalsChangeFromJson(String name, Map<String, Object?> json) =>
     switch (name) {
       'terminalChanged' => TerminalChanged(TerminalRecord.fromJson(_row(json))),
-      'terminalRemoved' => TerminalRemoved(json['id']! as String),
+      'terminalRemoved' => TerminalRemoved(
+        json['id']! as String,
+        closed: json['closed'] == true,
+      ),
       _ => null,
     };
 
@@ -34,13 +37,18 @@ final class TerminalChanged extends TerminalChange {
 /// Terminal [sessionId] is gone: closed on request, or its ended record
 /// pruned.
 final class TerminalRemoved extends TerminalChange {
-  const TerminalRemoved(this.sessionId);
+  const TerminalRemoved(this.sessionId, {this.closed = false});
 
   final String sessionId;
+
+  /// Closed on request, so every window drops its tab; false for a record
+  /// pruned, whose tab may still hold history someone kept.
+  final bool closed;
 
   @override
   Map<String, Object?> toJson() => {
     'change': 'terminalRemoved',
     'id': sessionId,
+    if (closed) 'closed': true,
   };
 }

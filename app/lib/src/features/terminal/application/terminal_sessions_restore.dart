@@ -185,6 +185,13 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     // shell profile.
     final profile = terminalProfileFromId(pane.profileId);
     if (pane.agentLaunch == null && profile == null) return false;
+    // A dead tab named only by its id has nothing to show or start again.
+    final title = pane.title.trim();
+    if (pane.agentLaunch == null &&
+        !pane.wasLive &&
+        (title.isEmpty || title == pane.id)) {
+      return false;
+    }
 
     if (profile != null &&
         shouldRestartOnLaunch(

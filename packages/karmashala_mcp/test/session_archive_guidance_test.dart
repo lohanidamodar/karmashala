@@ -21,6 +21,18 @@ void main() {
     expect(kKarmashalaMcpInstructions, contains('ended'));
   });
 
+  test('a parent ends its child once the work is merged or handed back, '
+      'then archives it', () {
+    expect(
+      kKarmashalaMcpInstructions,
+      contains('end it with session_end, then archive it with session_archive'),
+    );
+    expect(
+      sessions.render(),
+      contains('end it with `session_end`, then archive it'),
+    );
+  });
+
   test('both are catalogued, need no operator grant, and are listed', () {
     for (final tool in ['session_archive', 'session_unarchive']) {
       final annotations = kMcpToolAnnotations[tool];

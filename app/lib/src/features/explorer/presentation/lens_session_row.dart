@@ -41,12 +41,20 @@ import 'sidebar_chrome.dart';
 /// the enclosing [SelectionOrderScope], and a ticked row's menu acts on the
 /// whole selection.
 class LensSessionRow extends ConsumerWidget {
-  const LensSessionRow({required this.entry, this.depth = 0, super.key});
+  const LensSessionRow({
+    required this.entry,
+    this.depth = 0,
+    this.runningBelow = 0,
+    super.key,
+  });
 
   final WorkspaceSessionEntry entry;
 
   /// How far it sits beneath the session it came from.
   final int depth;
+
+  /// Its sub-sessions still running or waiting, worn on its own row.
+  final int runningBelow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -337,6 +345,13 @@ class LensSessionRow extends ConsumerWidget {
                     ],
                   ),
           ),
+          if (runningBelow > 0) ...[
+            const SizedBox(width: Insets.xs),
+            RunningBelowBadge(
+              key: ValueKey('running-below:$id'),
+              count: runningBelow,
+            ),
+          ],
           // A thumb ends a session from the ⋮ (End session): the × beside
           // it took the title's room at phone width.
           if (endable && !density.isTouch) ...[

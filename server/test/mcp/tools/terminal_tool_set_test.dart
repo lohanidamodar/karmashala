@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
@@ -7,6 +8,7 @@ import 'package:karmashala_host/src/mcp/tools/terminal_tool_schemas.dart';
 import 'package:karmashala_host/src/mcp/tools/terminal_tool_set.dart';
 import 'package:karmashala_host/src/pty/fake_pty.dart';
 import 'package:karmashala_host/src/terminals/server_terminals.dart';
+import 'package:karmashala_host/src/serve/session_store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -167,6 +169,78 @@ void main() {
     );
   });
 
+  test(
+    'terminal_list leaves out an ended terminal a restarted server only '
+    'restored from its store: no record, no title, nothing to show',
+    () async {
+      final root = Directory.systemTemp.createTempSync('karmashala-r19');
+      addTearDown(() {
+        try {
+          root.deleteSync(recursive: true);
+        } on FileSystemException {
+          // A handle can still be held on Windows; nothing here depends on it.
+        }
+      });
+      SessionStore store() => SessionStore(
+        Directory('${root.path}/sessions'),
+        owner: '/data/this-server',
+      )..ensureDirectory();
+
+      final before = SessionRegistry(
+        launcher: launcher,
+        store: store(),
+        hostname: 'this-mac',
+      );
+      final beforeTerminals = ServerTerminals(
+        registry: before,
+        environments: () => const [],
+        tell: (_) {},
+        hostEnvironment: const {'SHELL': '/bin/zsh'},
+        installedShells: () => const ['/bin/bash', '/bin/zsh'],
+        windows: false,
+        settle: Duration.zero,
+      );
+      final beforeTools = TerminalToolSet(
+        terminals: beforeTerminals,
+        registry: before,
+        data: data,
+        newPaneId: () => 'stub',
+      );
+      await beforeTools.call('terminal_open', const {}, null);
+      launcher.handles.single.finish(0);
+      await pumpEventQueue();
+      await beforeTerminals.dispose();
+
+      // The server restarts: the registry reads the ended shell back.
+      final after = SessionRegistry(
+        launcher: FakePtyLauncher(),
+        store: store(),
+        hostname: 'this-mac',
+      );
+      expect(after.find('karmashala_local_stub'), isNotNull);
+      final afterTools = TerminalToolSet(
+        terminals: ServerTerminals(
+          registry: after,
+          environments: () => const [],
+          tell: (_) {},
+          hostEnvironment: const {'SHELL': '/bin/zsh'},
+          installedShells: () => const ['/bin/bash', '/bin/zsh'],
+          windows: false,
+          settle: Duration.zero,
+        ),
+        registry: after,
+        data: data,
+        newPaneId: () => 'fresh',
+      );
+
+      final listed =
+          (await afterTools.call('terminal_list', const {}, null))!
+              as Map<String, Object?>;
+      final tabs = (listed['tabs']! as List).cast<Map<String, Object?>>();
+      expect(tabs.map((t) => t['id']), isNot(contains('stub')));
+    },
+  );
+
   group('terminal_close', () {
     test('a shell with history is detached: its tab closes, and it keeps '
         'running in the server', () async {
@@ -184,7 +258,10 @@ void main() {
         registry.find('karmashala_local_pane1')!.lifecycle.hasEnded,
         isFalse,
       );
-      expect(told.whereType<CloseTerminalTab>().single.paneId, 'pane1');
+      final intent = told.whereType<CloseTerminalTab>().single;
+      expect(intent.paneId, 'pane1');
+      // A window may show it under a pane id of its own: it resolves this.
+      expect(intent.sessionId, 'karmashala_local_pane1');
       expect(pty.signals, isEmpty);
     });
 
@@ -212,6 +289,38 @@ void main() {
       pty.finish(0);
       final closed = await closing;
       expect(((closed['panes']! as List).single as Map)['outcome'], 'ended');
+    });
+
+    test('an ended terminal tells every client it was closed, so each window '
+        'drops its tab', () async {
+      final told = <DataChange>[];
+      final telling = ServerTerminals(
+        registry: registry,
+        environments: () => const [],
+        tell: told.addAll,
+        hostEnvironment: const {'SHELL': '/bin/zsh'},
+        installedShells: () => const ['/bin/bash', '/bin/zsh'],
+        windows: false,
+        settle: Duration.zero,
+      );
+      final closer = TerminalToolSet(
+        terminals: telling,
+        registry: registry,
+        data: data,
+        newPaneId: () => 'pane9',
+      );
+      await closer.call('terminal_open', const {}, null);
+      await closer.call('terminal_close', {
+        'tabId': 'pane9',
+        'kill': true,
+      }, null);
+
+      final removed = told.whereType<TerminalRemoved>().single;
+      expect(removed.sessionId, 'karmashala_local_pane9');
+      expect(removed.closed, isTrue);
+      final wire = DataChange.fromJson(removed.toJson())! as TerminalRemoved;
+      expect(wire.closed, isTrue, reason: 'it crosses the wire');
+      await telling.dispose();
     });
 
     test('an unknown tab is refused', () async {

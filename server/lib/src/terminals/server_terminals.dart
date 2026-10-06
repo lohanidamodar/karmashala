@@ -465,7 +465,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
     _renamed.remove(sessionId);
     _dirty.remove(sessionId);
     _forgetPane(sessionId);
-    _tell([TerminalRemoved(sessionId)]);
+    _tell([TerminalRemoved(sessionId, closed: true)]);
     onPanesChanged?.call();
     return const DataAck();
   }

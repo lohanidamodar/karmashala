@@ -182,8 +182,14 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     final items = <Widget>[];
     void addRow(WorkspaceSessionEntry entry) {
       shownIds.add(entry.id);
-      items.add(LensSessionRow(key: ValueKey(entry.id), entry: entry));
       final fold = nesting.foldOf(entry);
+      items.add(
+        LensSessionRow(
+          key: ValueKey(entry.id),
+          entry: entry,
+          runningBelow: fold?.running ?? 0,
+        ),
+      );
       if (fold == null) return;
       final folded = fold.foldedIn(prefs);
       items.add(
@@ -193,10 +199,10 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
           label: fold.label,
           folded: folded,
           depth: 1,
+          expandable: fold.expandable,
         ),
       );
-      if (folded) return;
-      for (final child in nesting.nestedUnder(entry.id)) {
+      for (final child in nesting.nestedUnder(entry.id, folded: folded)) {
         shownIds.add(child.id);
         items.add(
           LensSessionRow(key: ValueKey(child.id), entry: child, depth: 1),
@@ -204,10 +210,19 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
       }
     }
 
+    // A parent whose children still run stays in sight, however its own
+    // group is folded or capped.
+    bool keepsLiveBelow(WorkspaceSessionEntry entry) =>
+        (nesting.foldOf(entry)?.running ?? 0) > 0;
+
     for (final group in groups) {
       if (group.isEmpty) continue;
       final opened = _opened.contains(group.state);
-      final shown = visibleRowCount(group, expanded: opened);
+      final cap = visibleRowCount(group, expanded: opened);
+      final drawn = [
+        for (final (i, entry) in group.entries.indexed)
+          if (i < cap || keepsLiveBelow(entry)) entry,
+      ];
       items.add(
         _StateHeader(
           key: ValueKey('agents-group:${group.state.name}'),
@@ -223,15 +238,16 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
           spaceAbove: items.isNotEmpty,
         ),
       );
-      group.entries.take(shown).forEach(addRow);
+      drawn.forEach(addRow);
       if (group.state.fold == AgentStateFold.capped &&
-          group.length > kReadyVisibleRows) {
+          group.length > kReadyVisibleRows &&
+          (opened || drawn.length < group.length)) {
         items.add(
           _FoldRow(
             key: ValueKey('agents-fold:${group.state.name}'),
             label: opened
                 ? 'Show fewer'
-                : 'Show ${group.length - kReadyVisibleRows} more',
+                : 'Show ${group.length - drawn.length} more',
             onTap: () => _toggle(group.state),
           ),
         );

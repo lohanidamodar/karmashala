@@ -89,6 +89,7 @@ class ExplorerTreeRow extends StatelessWidget {
       label: node.label,
       folded: node.folded,
       depth: node.depth,
+      expandable: node.expandable,
     ),
     final ArchivedNode node => ArchivedSessionsRow(
       count: node.count,
@@ -293,6 +294,7 @@ class ExplorerNativeSessionRow extends ConsumerWidget {
       link: node.link,
       parentTitle: node.parentTitle,
       lineageBroken: node.lineageBroken,
+      runningBelow: node.runningBelow,
     );
   }
 }
