@@ -41,9 +41,12 @@ import 'sidebar_chrome.dart';
 /// the enclosing [SelectionOrderScope], and a ticked row's menu acts on the
 /// whole selection.
 class LensSessionRow extends ConsumerWidget {
-  const LensSessionRow({required this.entry, super.key});
+  const LensSessionRow({required this.entry, this.depth = 0, super.key});
 
   final WorkspaceSessionEntry entry;
+
+  /// How far it sits beneath the session it came from.
+  final int depth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -226,7 +229,7 @@ class LensSessionRow extends ConsumerWidget {
     return ExplorerRow(
       kind: ExplorerRowKind.session,
       minHeight: Sidebar.rowHeight,
-      depth: 0,
+      depth: depth,
       selected: selected || ticked,
       needsYou: waiting,
       settled: state == AgentState.ended,

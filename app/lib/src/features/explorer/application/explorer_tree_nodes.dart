@@ -405,6 +405,32 @@ final class ArchivedNode extends ExplorerNode {
   int get hashCode => Object.hash(id, depth, count);
 }
 
+/// "12 sub-sessions · 2 running" under a parent session: folds the ended ones.
+final class SubSessionsNode extends ExplorerNode {
+  SubSessionsNode({
+    required super.id,
+    required super.depth,
+    required this.parentId,
+    required this.label,
+    required this.folded,
+  });
+
+  final String parentId;
+  final String label;
+  final bool folded;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubSessionsNode &&
+      other.id == id &&
+      other.depth == depth &&
+      other.label == label &&
+      other.folded == folded;
+
+  @override
+  int get hashCode => Object.hash(id, depth, label, folded);
+}
+
 /// A context header's collapse id; [workspaceId] null is *No context*.
 ///
 /// One spelling: a reveal that built the string itself would drift from the

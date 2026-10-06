@@ -175,6 +175,7 @@ void main() {
     final ImportedRowNode node => node.session.displayTitle,
     final TerminalRowNode node => node.terminal.label,
     ArchivedNode() => 'Archived',
+    final SubSessionsNode node => node.label,
     HintNode() || null => null,
   };
 

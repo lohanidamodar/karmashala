@@ -27,6 +27,7 @@ import 'archived_sessions_row.dart';
 import 'explorer_project_row.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
+import 'sub_sessions_fold_row.dart';
 
 /// One Explorer row for [node]. Each kind is its own widget so that the
 /// readings a row needs are watched by that row alone.
@@ -83,6 +84,12 @@ class ExplorerTreeRow extends StatelessWidget {
       pinned: node.pinned,
     ),
     final TerminalRowNode node => ExplorerTerminalRow(node: node),
+    final SubSessionsNode node => SubSessionsFoldRow(
+      parentId: node.parentId,
+      label: node.label,
+      folded: node.folded,
+      depth: node.depth,
+    ),
     final ArchivedNode node => ArchivedSessionsRow(
       count: node.count,
       depth: node.depth,

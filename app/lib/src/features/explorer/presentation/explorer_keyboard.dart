@@ -113,6 +113,7 @@ String explorerNodeTitle(ExplorerNode node) => switch (node) {
   final TerminalRowNode node => node.terminal.label,
   HintNode() => '',
   ArchivedNode() => 'Archived',
+  final SubSessionsNode node => node.label,
 };
 
 /// Whether the arrow keys stop on [node]: every row with a verb of its own. A

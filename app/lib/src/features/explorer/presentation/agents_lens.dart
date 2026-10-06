@@ -13,11 +13,15 @@ import '../application/agent_states.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_list_snapshot.dart';
 import '../application/session_selection.dart';
+import '../application/sub_session_nesting.dart';
+import '../application/workspace_session_entry.dart';
+import '../../sessions/application/session_list_prefs.dart';
 import 'archived_sessions_row.dart';
 import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
 import 'purge_progress_strip.dart';
 import 'session_selection_bar.dart';
+import 'sub_sessions_fold_row.dart';
 import 'sidebar_chrome.dart';
 import 'stale_session_list.dart';
 
@@ -168,12 +172,38 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
   }
 
   Widget _live(BuildContext context) {
-    final groups = ref.watch(agentStateGroupsProvider);
+    final nesting = SubSessionNesting.of(ref.watch(agentStateGroupsProvider));
+    final groups = nesting.groups;
+    final prefs = ref.watch(sessionListPrefsProvider);
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
     final shownIds = <String>[];
     final items = <Widget>[];
+    void addRow(WorkspaceSessionEntry entry) {
+      shownIds.add(entry.id);
+      items.add(LensSessionRow(key: ValueKey(entry.id), entry: entry));
+      final fold = nesting.foldOf(entry);
+      if (fold == null) return;
+      final folded = fold.foldedIn(prefs);
+      items.add(
+        SubSessionsFoldRow(
+          key: ValueKey('agents-sub:${entry.id}'),
+          parentId: entry.id,
+          label: fold.label,
+          folded: folded,
+          depth: 1,
+        ),
+      );
+      if (folded) return;
+      for (final child in nesting.nestedUnder(entry.id)) {
+        shownIds.add(child.id);
+        items.add(
+          LensSessionRow(key: ValueKey(child.id), entry: child, depth: 1),
+        );
+      }
+    }
+
     for (final group in groups) {
       if (group.isEmpty) continue;
       final opened = _opened.contains(group.state);
@@ -193,10 +223,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
           spaceAbove: items.isNotEmpty,
         ),
       );
-      for (final entry in group.entries.take(shown)) {
-        shownIds.add(entry.id);
-        items.add(LensSessionRow(key: ValueKey(entry.id), entry: entry));
-      }
+      group.entries.take(shown).forEach(addRow);
       if (group.state.fold == AgentStateFold.capped &&
           group.length > kReadyVisibleRows) {
         items.add(
