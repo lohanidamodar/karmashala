@@ -15,6 +15,7 @@ import 'package:agent_cli/discovery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/agent_store_server_providers.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
+import '../../cli_detection/data/store_scan_worker.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
@@ -1148,24 +1149,20 @@ class SessionActions {
       (await _detectedByKey({(agentId, externalId)}))[(agentId, externalId)];
 
   /// The store files behind `(agentId, conversationId)` pairs in **one** walk,
-  /// however many are asked for; single and bulk deletes share it.
+  /// however many are asked for; single and bulk deletes share it. On the
+  /// worker isolate: on the one that draws, it froze the window for as long
+  /// as every transcript took to read.
   Future<Map<(String, String), DetectedSession>> _detectedByKey(
     Set<(String, String)> wanted,
   ) async {
     final environments = _ref.read(environmentsDataProvider).getAll();
+    final runner = _ref.read(storeScanRunnerProvider);
     final stores = await _ref
         .read(cliStoreLocatorProvider)
         .locate(environments);
-    final projects = await _ref.read(cliDetectionServiceProvider).detect(
-      stores,
-      {for (final environment in environments) environment.id: environment},
-    );
     final found = <(String, String), DetectedSession>{};
-    for (final project in projects) {
-      for (final session in [
-        ...project.sessions,
-        ...project.subagentSessions,
-      ]) {
+    await for (final chunk in runner.scan(StoreScanRequest(stores: stores))) {
+      for (final session in chunk.sessions) {
         final key = (session.cli, session.sessionId);
         if (wanted.contains(key)) found[key] = session;
       }

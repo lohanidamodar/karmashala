@@ -8,7 +8,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
-import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/bulk_session_delete.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -19,6 +18,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/fake_store_scan_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/temp_directory.dart';
@@ -59,7 +59,7 @@ void main() {
   }
 
   late FakeDataServer server;
-  late _StoreDetection detection;
+  late FixedScanRunner detection;
 
   setUp(() {
     server = FakeDataServer();
@@ -67,7 +67,7 @@ void main() {
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
-    detection = _StoreDetection([]);
+    detection = FixedScanRunner([]);
   });
 
   /// A native row, with a real transcript the store scan can find.
@@ -130,7 +130,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         cliSessionMutatorProvider.overrideWithValue(effective),
         cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),
-        cliDetectionServiceProvider.overrideWithValue(detection),
+        storeScanRunnerProvider.overrideWithValue(detection),
         if (presenter != null)
           notificationPresenterProvider.overrideWithValue(presenter),
       ],
@@ -383,7 +383,7 @@ void main() {
             _RefusingMutator(const {'cli-i0'}),
           ),
           cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),
-          cliDetectionServiceProvider.overrideWithValue(detection),
+          storeScanRunnerProvider.overrideWithValue(detection),
           notificationPresenterProvider.overrideWithValue(presenter),
         ],
       );
@@ -399,37 +399,6 @@ void main() {
       expect(presenter.shown, isEmpty);
     });
   });
-}
-
-/// A detection service that answers from a fixed list, so a test never walks
-/// the machine's own `~/.claude`.
-class _StoreDetection implements CliDetectionService {
-  _StoreDetection(this.sessions);
-
-  final List<DetectedSession> sessions;
-
-  /// How many times the whole store was walked — the number the batch exists to
-  /// keep at one.
-  int passes = 0;
-
-  @override
-  Future<List<DetectedProject>> detect(
-    List<CliStore> stores,
-    Map<String, ExecutionEnvironment> environmentsById,
-  ) async {
-    passes++;
-    return [
-      DetectedProject(
-        canonicalKey: 'demo',
-        displayPath: r'C:\src\demo\app',
-        sessions: List.of(sessions),
-        subagentSessions: const [],
-      ),
-    ];
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Refuses the named conversations and really deletes the rest, so a partial
