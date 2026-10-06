@@ -38,18 +38,33 @@ class ServerHookVault {
   File get _file => File(p.join(_directory.path, fileName));
 
   /// This server's listen key, made on first use.
-  Future<String> listenKey() async {
+  Future<String> listenKey() {
+    // One in flight, and waited on: two callers must never mint two keys, nor
+    // hand out one that is not yet on disk.
+    final making = _makingKey;
+    if (making != null) return making;
     final held = _listenKey;
-    if (held != null) return held;
-    final key = newWebhookListenKey();
-    await _change(() => _listenKey = key, () => _listenKey = null);
-    return key;
+    if (held != null) return Future.value(held);
+    return _makingKey = () async {
+      final key = newWebhookListenKey();
+      try {
+        await _change(() => _listenKey = key, () => _listenKey = null);
+        return key;
+      } finally {
+        _makingKey = null;
+      }
+    }();
   }
+
+  Future<String>? _makingKey;
 
   /// The key if one was ever made — the listener needs no new one to stay shut.
   String? get heldListenKey => _listenKey;
 
   String? secretOf(String hookId) => _secrets[hookId];
+
+  /// The hooks a secret is held for.
+  List<String> get hookIds => [..._secrets.keys];
 
   /// A new secret for [hookId], replacing any old one at once.
   Future<String> rotate(String hookId) async {

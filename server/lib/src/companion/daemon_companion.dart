@@ -115,9 +115,7 @@ class DaemonCompanion implements CompanionHandler {
       if (service != null) unawaited(service.reconcileDevices());
     };
     // "Move to the default relay": the hosted relay new pairings get.
-    _dataService.defaultRelay = () => _config.hostedEnabled
-        ? _service?.relay ?? KnownRelays.popupBits.upgrade(_config.relay)
-        : null;
+    _dataService.defaultRelay = () => hostedRelay;
     this.localRelay =
         localRelay ??
         ServerLocalRelay(
@@ -321,6 +319,12 @@ class DaemonCompanion implements CompanionHandler {
 
   /// What it is serving by now.
   CompanionConfig get config => _config;
+
+  /// The hosted relay this server pairs through — the default or the owner's
+  /// own — or null when hosted pairing is off. Webhooks listen on it too.
+  Uri? get hostedRelay => _config.hostedEnabled
+      ? _service?.relay ?? KnownRelays.popupBits.upgrade(_config.relay)
+      : null;
 
   /// Where the LAN listener bound, while serving.
   int? get port => _service?.lanPortBound;

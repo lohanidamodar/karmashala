@@ -7,6 +7,7 @@ import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
+import 'package:karmashala_automations/automations.dart' show Automation;
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart'
@@ -34,6 +35,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:path/path.dart' as p;
 
 import '../acp/acp_auth.dart' show AcpStartAuth;
@@ -90,6 +92,7 @@ class DaemonAutomations implements ChecksWork {
     AgentTerminalOpener? openAgent,
     bool Function(ExecutionEnvironment environment)? reachesBox,
     AcpRuntimeFactory? acpRuntimes,
+    WorktreeService? worktrees,
     AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
     acpAuth,
   }) : _db = database,
@@ -146,7 +149,7 @@ class DaemonAutomations implements ChecksWork {
     checks = checkRunner;
     final preflight = UnattendedPreflight(facts: facts, checks: projectChecks);
     late final HostedAgentLauncher launcher;
-    final runner = AutomationRunner(
+    final runner = _runner = AutomationRunner(
       automations: automations,
       preflight: preflight,
       facts: facts,
@@ -182,6 +185,7 @@ class DaemonAutomations implements ChecksWork {
           directory: directory,
         ),
         acpRuntimes: acpRuntimes,
+        worktrees: worktrees,
         acpAuth: acpAuth,
       ),
       now: now,
@@ -377,6 +381,39 @@ class DaemonAutomations implements ChecksWork {
   late final AutomationScheduler scheduler;
   late final AutomationRunSettler settler;
   late final ProjectCheckRunner checks;
+  late final AutomationRunner _runner;
+
+  /// One webhook call's run: [automation], its prompt already filled, started
+  /// now through the same gate, base checkpoint and launch a scheduled run
+  /// takes — never queued, since its caller is waiting for the answer.
+  Future<AutomationRun> startWebhookRun(Automation automation, String note) {
+    final at = DateTime.now().toUtc();
+    final checkout = facts.repository(automation.repositoryId)?.path;
+    if (checkout != null && !facts.startsAgentsIn(checkout)) {
+      final run = AutomationRun(
+        id: newUuid(),
+        automationId: automation.id,
+        scheduledFor: at,
+        firedAt: at,
+        state: AutomationRunState.failed,
+        reason:
+            'This checkout is on ${facts.describeEnvironment(checkout)}, '
+            'where this server cannot start agents, so nothing was started.',
+        finishedAt: at,
+      );
+      _automations.insertRun(run);
+      return Future.value(run);
+    }
+    return _runner.start(automation, at, note: note);
+  }
+
+  /// Whether a run holds [automation]'s checkout now.
+  bool checkoutBusy(Automation automation) => _automations.liveRuns().any(
+    (run) =>
+        run.state == AutomationRunState.running &&
+        _automations.getById(run.automationId)?.repositoryId ==
+            automation.repositoryId,
+  );
 
   /// Each agent this host starts is watched, briefly, for a first-run
   /// question nobody is there to answer; its run then fails with the reason.

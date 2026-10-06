@@ -116,6 +116,7 @@ Future<DaemonAutomations?> _startAutomations({
   AgentTerminalOpener? openAgent,
   bool Function(ExecutionEnvironment environment)? reachesBox,
   AcpRuntimeFactory? acpRuntimes,
+  WorktreeService? worktrees,
   AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
   acpAuth,
 }) async {
@@ -141,6 +142,7 @@ Future<DaemonAutomations?> _startAutomations({
     openAgent: openAgent,
     reachesBox: reachesBox,
     acpRuntimes: acpRuntimes,
+    worktrees: worktrees,
     acpAuth: acpAuth,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
@@ -171,6 +173,37 @@ Future<DaemonAutomations?> _startAutomations({
     errSink.writeln('karmashala_host: automations did not start ($error)');
     return null;
   }
+}
+
+/// Webhooks: the calls the relay forwards, answered by starting automation
+/// runs. Null, reported, without a store or automations to start them with.
+Future<DaemonWebhooks?> _startWebhooks({
+  required AppDatabase? database,
+  required DataService data,
+  required DaemonAutomations? automations,
+  required Uri? Function() relay,
+  required String dataDirectory,
+  required IOSink errSink,
+}) async {
+  if (database == null || automations == null) return null;
+  final webhooks = DaemonWebhooks(
+    database: database,
+    vault: ServerHookVault(dataDirectory: dataDirectory),
+    launch: automations.startWebhookRun,
+    busy: automations.checkoutBusy,
+    relay: relay,
+    tell: data.announce,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final written = data.automationsWritten;
+  data
+    ..webhooksWork = webhooks
+    ..automationsWritten = () {
+      written?.call();
+      webhooks.reconcile();
+    };
+  webhooks.reconcile();
+  return webhooks;
 }
 
 /// What the greeting says of the LAN relay this server hosts.

@@ -33,6 +33,18 @@ void main() {
     expect(await vault().listenKey(), first);
   });
 
+  test('callers racing for the key get one key, and only once it is on '
+      'disk', () async {
+    final v = vault();
+    final rotating = v.rotate('h1');
+    final a = v.listenKey();
+    final b = v.listenKey();
+    await rotating;
+    final keys = await Future.wait([a, b]);
+    expect(keys.toSet(), hasLength(1));
+    expect(vault().heldListenKey, keys.first);
+  });
+
   test('a rotated secret replaces the old one at once and persists', () async {
     final v = vault();
     final one = await v.rotate('h1');

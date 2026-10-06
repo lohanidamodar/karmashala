@@ -93,4 +93,8 @@ const Set<String> kServerFeatures = <String>{
   // `artifacts.*`: what agents showed in their threads, their revisions
   // and content, and the `artifactChanged` change.
   'artifacts',
+  // Webhooks: an automation started by a call to its relay URL, saved with
+  // `automations.save`; `webhooks.rotate`, `webhooks.status` and the
+  // `webhookCallRecorded` change.
+  'automations.webhooks',
 };
