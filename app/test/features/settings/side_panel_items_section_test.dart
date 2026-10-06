@@ -123,9 +123,7 @@ void main() {
       ),
     );
     expect(find.text(SettingsAnchor.sidePanel.heading), findsOneWidget);
-    for (final surface in SidePanelSurface.offered(
-      debugMode: container.read(settingsControllerProvider).debugMode,
-    )) {
+    for (final surface in SidePanelSurface.offered()) {
       if (ContextTab.of(surface) != ContextTab.more) continue;
       expect(checked(tester, surface.label), isTrue, reason: surface.label);
     }

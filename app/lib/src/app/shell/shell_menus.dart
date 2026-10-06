@@ -13,7 +13,6 @@ import '../../features/notes/application/notes_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
-import '../../features/settings/application/settings_controller.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_actions.dart';
@@ -68,6 +67,8 @@ class ShellMenuActions {
 
   void toggleFocusMode() =>
       _ref.read(terminalMaximizedProvider.notifier).toggle();
+
+  void openLogs() => openLogsTab(_ref);
 
   /// Whether there is a terminal for the Terminal verbs to act on.
   bool get hasTerminal =>
@@ -338,9 +339,6 @@ List<List<ViewMenuEntry>> viewMenuSections(
   );
   final more = [
     for (final surface in SidePanelSurface.offered(
-      debugMode: ref.watch(
-        settingsControllerProvider.select((s) => s.debugMode),
-      ),
       notesEnabled: ref.watch(notesEnabledProvider),
       readsServerDisk: ref.watch(
         capabilitiesProvider.select((c) => c.readsServerDisk),
@@ -441,6 +439,12 @@ List<List<ViewMenuEntry>> viewMenuSections(
             onPressed: withTerminal(actions.commandsRun),
           ),
         ],
+      ),
+      ViewMenuCommand(
+        label: 'Logs',
+        icon: AppIcons.article,
+        command: 'logs.open',
+        onPressed: actions.openLogs,
       ),
     ],
   ];

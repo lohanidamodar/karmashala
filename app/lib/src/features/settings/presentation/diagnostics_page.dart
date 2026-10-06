@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../app/shell/workbench_tabs.dart' show openLogsTab;
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import '../../../core/logging/memory_census_source.dart';
@@ -19,7 +20,7 @@ import 'settings_section.dart';
 
 /// Settings → Diagnostics → Debug mode.
 /// `AppLogger.debug` is `Logger.fine`, below the root's `INFO` floor, so the
-/// switch drops the root to `ALL` rather than revealing an empty panel.
+/// switch drops the root to `ALL` rather than revealing an empty Logs tab.
 class DebugModeSection extends ConsumerWidget {
   const DebugModeSection({super.key});
 
@@ -37,11 +38,17 @@ class DebugModeSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Debug mode',
-            help:
-                'Records extra detail and adds Logs to the context panel’s '
-                'More menu.',
+            help: 'Records extra detail and adds Logs to the activity strip.',
             value: settings.debugMode,
             onChanged: controller.setDebugMode,
+          ),
+          SettingsRow(
+            label: 'Logs',
+            help: 'The live log, and this machine’s server log, in a tab.',
+            control: OutlinedButton(
+              onPressed: () => openLogsTab(ref),
+              child: const Text('Open Logs'),
+            ),
           ),
           SettingsRow(
             label: 'Lines kept in memory',

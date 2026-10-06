@@ -122,6 +122,9 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// Stores is one view over every app, so, like Usage, one tab.
   String openStoresTab() => openDocumentTab(kStoresPaneId);
 
+  /// The log tail is one view of this machine's logs, so, like Stores, one tab.
+  String openLogsTab() => openDocumentTab(kLogsPaneId);
+
   /// Opens [hostPath] in an editor tab: one tab per file, or two buffers would
   /// disagree about the same bytes.
   String openEditorTab(String hostPath) =>

@@ -380,6 +380,12 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
               return null;
             },
           ),
+          OpenLogsIntent: CallbackAction<OpenLogsIntent>(
+            onInvoke: (intent) {
+              openLogsTab(ref);
+              return null;
+            },
+          ),
           ShowShellAreaIntent: CallbackAction<ShowShellAreaIntent>(
             onInvoke: (intent) {
               // Ctrl+4 on a client with no Devices area does nothing.

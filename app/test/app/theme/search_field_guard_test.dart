@@ -98,7 +98,7 @@ void main() {
   test('every search bar named in round 13 is a SearchField', () {
     const searchBars = {
       'lib/src/app/shell/quick_open/quick_open_list.dart': 'quick open, tabs',
-      'lib/src/app/shell/logs_panel.dart': 'server log filter',
+      'lib/src/app/shell/logs_tab_view.dart': 'logs tab filter',
       'lib/src/features/explorer/presentation/explorer_panel.dart': 'projects',
       'lib/src/features/sessions/presentation/filter_menu_field.dart':
           'project, checkout and branch pickers',

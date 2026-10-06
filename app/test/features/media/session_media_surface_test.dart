@@ -48,10 +48,7 @@ void main() {
   }
 
   test('Media is offered in the context panel\'s More menu', () {
-    expect(
-      SidePanelSurface.offered(debugMode: false),
-      contains(SidePanelSurface.media),
-    );
+    expect(SidePanelSurface.offered(), contains(SidePanelSurface.media));
     expect(ContextTab.of(SidePanelSurface.media), ContextTab.more);
     // Not scoped to a checkout: it describes the *session* on screen, so the
     // repository context line above the scoped surfaces would be answering a

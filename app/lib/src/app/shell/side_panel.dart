@@ -6,7 +6,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/panes.dart';
-import 'logs_panel.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';
@@ -29,7 +28,6 @@ import '../../features/sessions/presentation/decision_record_panel.dart';
 import '../../features/todos/presentation/todos_view.dart';
 import '../../features/explorer/presentation/sidebar_chrome.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
-import '../../features/settings/application/settings_controller.dart';
 
 /// **The context panel** (UI overhaul spec §6): tabs — Changes, Repo,
 /// History, Files, and More for every other surface — over the open surface.
@@ -58,9 +56,6 @@ class SidePanel extends ConsumerWidget {
     final selected = ref.watch(sidePanelProvider);
     if (selected == null) return null;
     final offered = selected.isOffered(
-      debugMode: ref.watch(
-        settingsControllerProvider.select((s) => s.debugMode),
-      ),
       notesEnabled: ref.watch(notesEnabledProvider),
       readsServerDisk: ref.watch(
         capabilitiesProvider.select((c) => c.readsServerDisk),
@@ -88,7 +83,6 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.todos => AppIcons.listChecks,
     SidePanelSurface.notes => AppIcons.note,
     SidePanelSurface.agentContext => AppIcons.robot,
-    SidePanelSurface.logs => AppIcons.article,
   };
 
   /// A tab's glyph: in the tab row when the panel is too narrow for labels,
@@ -209,7 +203,6 @@ class ContextTabs extends ConsumerWidget {
     final hidden = ref.read(hiddenSidePanelSurfacesProvider);
     return [
       for (final surface in SidePanelSurface.offered(
-        debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
         readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
         devicesArea: ref.read(capabilitiesProvider).devicesArea,
@@ -427,7 +420,6 @@ class ContextSurfaceBody extends StatelessWidget {
     SidePanelSurface.todos => const TodosView(),
     SidePanelSurface.notes => const NotesView(),
     SidePanelSurface.agentContext => const AgentContextPanel(),
-    SidePanelSurface.logs => const LogsPanel(),
   };
 }
 

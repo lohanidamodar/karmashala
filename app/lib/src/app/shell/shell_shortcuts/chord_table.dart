@@ -58,6 +58,11 @@ const List<ShellCommandInfo> unboundShellCommands = [
     intent: OpenAboutIntent(),
     does: 'About Karmashala',
   ),
+  ShellCommandInfo(
+    command: 'logs.open',
+    intent: OpenLogsIntent(),
+    does: 'Open Logs',
+  ),
 ];
 
 /// One entry in the application's keyboard map. [shellShortcutMap] and

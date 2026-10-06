@@ -66,7 +66,7 @@ void main() {
       ..setDebugMode(true)
       ..setDetailSidebarWidth(620)
       ..setExplorerPaneWidth(560);
-    container.read(sidePanelProvider.notifier).select(SidePanelSurface.logs);
+    container.read(sidePanelProvider.notifier).select(SidePanelSurface.todos);
   }
 
   group('ShellLayout.allocate', () {

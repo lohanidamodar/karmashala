@@ -1,5 +1,9 @@
-import 'package:karmashala/src/app/shell/logs_panel.dart';
+import 'dart:io';
+
+import 'package:karmashala/src/app/shell/logs_tab_view.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/core/logging/server_log_tail.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
@@ -27,14 +31,21 @@ void main() {
     Logger.root.level = Level.INFO;
   });
 
-  Future<void> pumpPanel(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(420, 800);
+  Future<void> pumpPanel(
+    WidgetTester tester, {
+    Size size = const Size(420, 800),
+    ServerLogTail? server,
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [diagnosticsProvider.overrideWithValue(diagnostics)],
-        child: const MaterialApp(home: Scaffold(body: LogsPanel())),
+        overrides: [
+          diagnosticsProvider.overrideWithValue(diagnostics),
+          serverLogTailProvider.overrideWithValue(server),
+        ],
+        child: const MaterialApp(home: Scaffold(body: LogsTabView())),
       ),
     );
     await tester.pump();
@@ -57,7 +68,7 @@ void main() {
   ) async {
     await pumpPanel(tester);
     AppLogger.named('sessions').info('created session s-1');
-    await tester.pump(LogsPanel.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
 
     expect(find.textContaining('created session s-1'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 200));
@@ -68,7 +79,7 @@ void main() {
   ) async {
     await pumpPanel(tester);
     final logger = AppLogger.named('device-stream');
-    LogsPanel.debugBuildCount = 0;
+    LogsTabView.debugBuildCount = 0;
 
     // 20,000 records in one synchronous burst — far faster than the frame
     // budget, and exactly what `device-stream` does.
@@ -76,14 +87,14 @@ void main() {
       logger.info('frame $i');
     }
     // Nothing has repainted yet: the buffer notifies nobody.
-    expect(LogsPanel.debugBuildCount, 0);
+    expect(LogsTabView.debugBuildCount, 0);
 
-    await tester.pump(LogsPanel.refreshInterval);
-    await tester.pump(LogsPanel.refreshInterval);
-    await tester.pump(LogsPanel.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
 
     expect(
-      LogsPanel.debugBuildCount,
+      LogsTabView.debugBuildCount,
       lessThanOrEqualTo(4),
       reason: 'the tail must repaint on its timer, not per record',
     );
@@ -124,8 +135,8 @@ void main() {
     await tester.tap(find.byTooltip('Following  ·  click to pause'));
     await tester.pump();
     AppLogger.named('remote').info('while paused');
-    await tester.pump(LogsPanel.refreshInterval);
-    await tester.pump(LogsPanel.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
 
     expect(find.textContaining('while paused'), findsNothing);
     expect(find.textContaining('before the pause'), findsOneWidget);
@@ -133,7 +144,7 @@ void main() {
     await tester.tap(
       find.byTooltip('Paused  ·  click to follow the newest lines'),
     );
-    await tester.pump(LogsPanel.refreshInterval);
+    await tester.pump(LogsTabView.refreshInterval);
     expect(find.textContaining('while paused'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 200));
   });
@@ -234,10 +245,13 @@ void main() {
     addTearDown(() => FlutterError.onError = previousOnError);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [diagnosticsProvider.overrideWithValue(diagnostics)],
+        overrides: [
+          diagnosticsProvider.overrideWithValue(diagnostics),
+          serverLogTailProvider.overrideWithValue(null),
+        ],
         child: const MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(2)),
-          child: MaterialApp(home: Scaffold(body: LogsPanel())),
+          child: MaterialApp(home: Scaffold(body: LogsTabView())),
         ),
       ),
     );
@@ -258,20 +272,122 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   });
 
-  test('the surface is hidden unless debug mode is on', () {
-    expect(
-      SidePanelSurface.offered(debugMode: false),
-      isNot(contains(SidePanelSurface.logs)),
-    );
-    expect(
-      SidePanelSurface.offered(debugMode: true),
-      contains(SidePanelSurface.logs),
-    );
-    // And nothing else moved: every surface but the Inbox, which is an area
-    // of the activity strip rather than of the panel.
-    expect(SidePanelSurface.offered(debugMode: true), [
+  test('the context panel has no Logs surface: it is a workbench tab', () {
+    expect(SidePanelSurface.fromId('logs'), isNull);
+    expect(SidePanelSurface.offered(), [
       for (final surface in SidePanelSurface.values)
         if (surface != SidePanelSurface.inbox) surface,
     ]);
   });
+
+  testWidgets('a wide tab puts its controls on one row', (tester) async {
+    await pumpPanel(tester, size: const Size(1440, 900));
+
+    final search = tester.getCenter(find.byType(TextField));
+    final level = tester.getCenter(find.byType(DropdownButton<Level>));
+    expect((search.dy - level.dy).abs(), lessThan(4));
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  group('the Server source', () {
+    LogEntry line(int sequence, Level level, String channel, String text) =>
+        LogEntry(
+          sequence: sequence,
+          time: DateTime(2026, 10, 6, 9, 30),
+          level: level,
+          channel: channel,
+          message: text,
+        );
+
+    Future<void> showServer(WidgetTester tester) async {
+      await tester.tap(find.text('Server'));
+      await tester.pump();
+      await tester.pump(LogsTabView.serverPollInterval);
+    }
+
+    testWidgets('is not offered where this machine hosts no server', (
+      tester,
+    ) async {
+      await pumpPanel(tester);
+      expect(find.text('Server'), findsNothing);
+      expect(find.text('App'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 200));
+    });
+
+    testWidgets('shows server.log through the same filters', (tester) async {
+      AppLogger.named('remote').info('an app line');
+      final server = _FakeServerLogTail([
+        line(0, Level.INFO, 'stdout', 'listening on 7420'),
+        line(1, Level.WARNING, 'stderr', 'relay retrying'),
+      ]);
+      await pumpPanel(tester, server: server);
+      expect(find.textContaining('an app line'), findsOneWidget);
+
+      await showServer(tester);
+      expect(find.textContaining('listening on 7420'), findsOneWidget);
+      expect(find.textContaining('relay retrying'), findsOneWidget);
+      expect(find.textContaining('an app line'), findsNothing);
+
+      await tester.tap(find.text('All levels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Warnings and up').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('listening on 7420'), findsNothing);
+      expect(find.textContaining('relay retrying'), findsOneWidget);
+
+      // A file is not ours to empty.
+      final clear = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, AppIcons.trash),
+      );
+      expect(clear.onPressed, isNull);
+
+      await tester.tap(find.text('App'));
+      await tester.pump();
+      expect(find.textContaining('an app line'), findsNothing);
+      expect(find.textContaining('relay retrying'), findsNothing);
+      await tester.tap(find.text('Warnings and up').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All levels').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('an app line'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 200));
+    });
+
+    testWidgets('follows the file as the server writes it', (tester) async {
+      final server = _FakeServerLogTail([
+        line(0, Level.INFO, 'stdout', 'first'),
+      ]);
+      await pumpPanel(tester, server: server);
+      await showServer(tester);
+      expect(find.textContaining('first'), findsOneWidget);
+
+      server.entries = [...server.entries!, line(1, Level.INFO, 'x', 'second')];
+      await tester.pump(LogsTabView.serverPollInterval);
+      await tester.pump();
+      expect(find.textContaining('second'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 200));
+    });
+
+    testWidgets('says so when the server has written nothing yet', (
+      tester,
+    ) async {
+      await pumpPanel(tester, server: _FakeServerLogTail(null));
+      await showServer(tester);
+      expect(
+        find.text('The server has not written its log yet.'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+    });
+  });
+}
+
+/// `server.log` without the disk: what [read] answers is [entries], as is.
+class _FakeServerLogTail extends ServerLogTail {
+  _FakeServerLogTail(this.entries) : super(File('server.log'));
+
+  List<LogEntry>? entries;
+
+  @override
+  Future<List<LogEntry>?> read() async => entries;
 }

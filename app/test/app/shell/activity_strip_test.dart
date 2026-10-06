@@ -88,4 +88,29 @@ void main() {
       ),
     );
   });
+
+  testWidgets('Logs is drawn only when given a way to open it', (tester) async {
+    await pump(tester);
+    expect(find.bySemanticsLabel('Logs'), findsNothing);
+
+    var opened = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(
+            height: 600,
+            child: ActivityStrip(
+              selected: null,
+              onSelect: (_) {},
+              onSettings: () {},
+              onLogs: () => opened++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.bySemanticsLabel('Logs'));
+    expect(opened, 1);
+  });
 }

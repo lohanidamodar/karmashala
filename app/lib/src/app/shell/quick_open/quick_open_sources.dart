@@ -42,7 +42,6 @@ import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_git/repositories.dart' show Repository;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import '../../../features/files/application/files_tab_actions.dart';
-import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_catalog.dart'
     show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -448,7 +447,6 @@ class QuickOpenSources {
         ),
       ],
       for (final surface in SidePanelSurface.offered(
-        debugMode: ref.read(settingsControllerProvider).debugMode,
         notesEnabled: ref.read(notesEnabledProvider),
         readsServerDisk: ref.read(capabilitiesProvider).readsServerDisk,
         devicesArea: ref.read(capabilitiesProvider).devicesArea,
@@ -558,6 +556,15 @@ class QuickOpenSources {
         ],
         opensTab: true,
         onSelect: () => openStoresTab(ref),
+      ),
+      _command(
+        'Open Logs',
+        subtitle: 'This app’s live log, and this machine’s server log',
+        icon: AppIcons.article,
+        shortcut: shellCommandLabel('logs.open'),
+        keywords: const ['logs', 'log tail', 'server log', 'diagnostics'],
+        opensTab: true,
+        onSelect: () => openLogsTab(ref),
       ),
     ];
   }

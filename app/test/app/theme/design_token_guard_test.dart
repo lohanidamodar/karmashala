@@ -76,7 +76,7 @@ void main() {
     // the position it names. Tooltip wait is named in the theme itself.
     const notMotion = {
       'lib/src/app/shell/keymap_controller.dart',
-      'lib/src/app/shell/logs_panel.dart',
+      'lib/src/app/shell/logs_tab_view.dart',
       'lib/src/features/projects/presentation/new_project_dialog.dart',
       'lib/src/features/terminal/presentation/terminal_pane_touch.dart',
       'lib/src/features/sessions/presentation/approval_request_card/tool_ask_answers.dart',

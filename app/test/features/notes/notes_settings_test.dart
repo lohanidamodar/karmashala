@@ -49,32 +49,23 @@ void main() {
       // One list feeds the rail, the View menu and quick open, so the surface
       // cannot be hidden in one place and reachable in another.
       expect(
-        SidePanelSurface.offered(debugMode: true, notesEnabled: true),
+        SidePanelSurface.offered(notesEnabled: true),
         contains(SidePanelSurface.notes),
       );
       expect(
-        SidePanelSurface.offered(debugMode: true, notesEnabled: false),
+        SidePanelSurface.offered(notesEnabled: false),
         isNot(contains(SidePanelSurface.notes)),
       );
       // And it takes nothing else with it.
       expect(
-        SidePanelSurface.offered(debugMode: true, notesEnabled: false),
-        contains(SidePanelSurface.logs),
+        SidePanelSurface.offered(notesEnabled: false),
+        contains(SidePanelSurface.todos),
       );
     });
 
     test('closes the surface if it is open, rather than leaving a body', () {
-      expect(
-        SidePanelSurface.notes.isOffered(debugMode: true, notesEnabled: false),
-        isFalse,
-      );
-      expect(
-        SidePanelSurface.changes.isOffered(
-          debugMode: false,
-          notesEnabled: false,
-        ),
-        isTrue,
-      );
+      expect(SidePanelSurface.notes.isOffered(notesEnabled: false), isFalse);
+      expect(SidePanelSurface.changes.isOffered(notesEnabled: false), isTrue);
     });
 
     test('hides the feature and keeps the notes', () async {
@@ -93,7 +84,6 @@ void main() {
       expect(container.read(notesEnabledProvider), isFalse);
       expect(
         SidePanelSurface.offered(
-          debugMode: false,
           notesEnabled: container.read(notesEnabledProvider),
         ),
         isNot(contains(SidePanelSurface.notes)),

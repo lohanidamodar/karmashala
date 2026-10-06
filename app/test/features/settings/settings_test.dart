@@ -22,6 +22,15 @@ Future<Settings> _stored(FakeDataServer server) async {
 void main() {
   group('simulator slimming', _simulatorSlimmingTests);
 
+  test('a hidden Logs surface is forgotten: Logs is a tab now', () {
+    // Unknown ids are kept for a newer build; this one is retired, so no
+    // build will want it back.
+    final settings = Settings.fromJson(const {
+      'hiddenSidePanelSurfaces': ['logs', 'notes', 'fromANewerBuild'],
+    });
+    expect(settings.hiddenSidePanelSurfaces, ['fromANewerBuild', 'notes']);
+  });
+
   group('the sidebar area', () {
     test('is unset by default and survives a JSON round-trip', () {
       expect(const Settings().sidebarArea, isNull);

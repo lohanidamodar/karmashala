@@ -915,7 +915,8 @@ class Settings {
       hiddenSidePanelSurfaces: json['hiddenSidePanelSurfaces'] is List
           ? ((json['hiddenSidePanelSurfaces'] as List)
                 .whereType<String>()
-                .where((id) => id.isNotEmpty)
+                // `logs` is a workbench tab now, not a surface any build has.
+                .where((id) => id.isNotEmpty && id != 'logs')
                 .toSet()
                 .toList()
               ..sort())
