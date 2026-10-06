@@ -23,6 +23,7 @@ class ServerStorageSection extends ConsumerWidget {
   static const _ageChoices = [3, 7, 14, 30, 90];
   static const _capChoices = [64, 128, 256, 512, 1024, 2048];
   static const _sessionAgeChoices = [7, 30, 90, 180];
+  static const _timelineChoices = [0, 30, 90, 180, 365];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +61,19 @@ class ServerStorageSection extends ConsumerWidget {
             ),
           ),
           const _OldSessionsRow(),
+          SettingsRow(
+            label: 'Keep the timeline for',
+            help: 'What happened, when: kept apart from the sessions, so '
+                'deleting one leaves its history.',
+            control: _choice(
+              value: settings.activityLogKeepDays,
+              choices: _timelineChoices,
+              label: (days) => days == 0 ? 'Forever' : _days(days),
+              onChanged: ref
+                  .read(settingsControllerProvider.notifier)
+                  .setActivityLogKeepDays,
+            ),
+          ),
         ],
       ),
     );

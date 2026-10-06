@@ -986,6 +986,13 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['old sessions', 'clean up', 'delete', 'purge', 'ended'],
   ),
   SettingsEntry(
+    'Keep the timeline for',
+    anchor: SettingsAnchor.serverStorage,
+    description: 'How many days of the activity log the timeline is drawn '
+        'from to keep; forever by default.',
+    keywords: ['timeline', 'activity', 'history', 'retention', 'overview'],
+  ),
+  SettingsEntry(
     'Worktree setup',
     anchor: SettingsAnchor.worktreeSetup,
     description: 'What to copy and run in a checkout’s new worktree.',
