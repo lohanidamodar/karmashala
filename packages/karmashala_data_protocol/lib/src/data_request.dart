@@ -219,6 +219,10 @@ sealed class DataRequest<R> {
         args.value('patch', SessionPatch.fromJson),
       ),
       SessionDelete.name => SessionDelete(args.string('id')),
+      SessionsDeleteMany.name => SessionsDeleteMany(
+        sessionIds: args.strings('sessionIds', orEmpty: true),
+        importedIds: args.strings('importedIds', orEmpty: true),
+      ),
       SessionLinkAdd.name => SessionLinkAdd(
         sessionId: args.string('sessionId'),
         repositoryId: args.string('repositoryId'),
