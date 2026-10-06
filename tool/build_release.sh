@@ -18,6 +18,8 @@ cd "$(dirname "$0")/.."
 # The app logs "version not recorded" without the dart-define, which is the
 # honest outcome rather than a stale number.
 APPVER="$(grep '^version:' app/pubspec.yaml | awk '{print $2}')"
+# The host reports the same release; `dart build cli` takes no define for it.
+dart tool/sync_host_version.dart
 APPSHORT="${APPVER%%+*}"
 APP="app/build/macos/Build/Products/Release/karmashala.app"
 OUT="app/build/macos/karmashala-$APPSHORT.dmg"

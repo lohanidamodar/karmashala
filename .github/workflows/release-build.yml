@@ -100,6 +100,7 @@ jobs:
           # whose build hook `compile exe` refuses. The app looks for it at
           # host\bin\karmashala_host.exe beside karmashala.exe, and the bundle
           # keeps its SQLite at ..\lib, so it is copied whole.
+          dart tool/sync_host_version.dart
           dart build cli -t server/bin/karmashala_host.dart -o build/host-windows
           Copy-Item -Recurse -Force build/host-windows/bundle app/build/windows/x64/runner/Release/host
       # The Linux hosts the `build-host-linux` job built, into the install
@@ -157,6 +158,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/artifacts
+          dart tool/sync_host_version.dart
           for arch in x64 arm64; do
             dart build cli \
               -t server/bin/karmashala_host.dart \
@@ -201,7 +203,9 @@ jobs:
           cache: true
       - run: flutter pub get --enforce-lockfile
       - name: Build the server bundle
-        run: dart build cli -t server/bin/karmashala_host.dart -o build/host
+        run: |
+          dart tool/sync_host_version.dart
+          dart build cli -t server/bin/karmashala_host.dart -o build/host
       - name: Package it (macOS)
         if: matrix.platform == 'macos'
         run: |
@@ -393,6 +397,7 @@ jobs:
           bundle=app/build/linux/x64/release/bundle
           flutter pub get --directory packages/mcp_bridge
           dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o "$bundle/karmashala_mcp"
+          dart tool/sync_host_version.dart
           dart build cli -t server/bin/karmashala_host.dart -o build/host-linux-app
           cp -R build/host-linux-app/bundle "$bundle/host"
       # The deployable hosts beside the app, as the Windows installer has them.

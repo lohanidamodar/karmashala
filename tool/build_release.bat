@@ -40,6 +40,11 @@ for /f "delims=+" %%a in ("!APPVER!") do set APPVERSHORT=%%a
 if "!APPVERSHORT!"=="" set APPVERSHORT=1.2.0
 echo === BUILDING !APPVER! === > "%LOG%"
 
+rem The host reports the same release, and `dart build cli` takes no define for
+rem it: write the pubspec's into kHostVersion before anything is built.
+"%DARTEXE%" tool\sync_host_version.dart >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+
 echo === WINDOWS RELEASE === >> "%LOG%"
 rem The Flutter client is app\; everything else here runs from the root.
 pushd app
