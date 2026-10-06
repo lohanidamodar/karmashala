@@ -112,6 +112,45 @@ final class StoreAppIcon {
   );
 }
 
+enum StoreAppReadPhase { queued, reading, failed }
+
+/// Where one app stands in a read of the stores. An app with none is as last
+/// read, with nothing under way.
+final class StoreAppRead {
+  const StoreAppRead.queued()
+    : phase = StoreAppReadPhase.queued,
+      message = null,
+      at = null;
+  const StoreAppRead.reading()
+    : phase = StoreAppReadPhase.reading,
+      message = null,
+      at = null;
+  const StoreAppRead.failed(String this.message, DateTime this.at)
+    : phase = StoreAppReadPhase.failed;
+
+  final StoreAppReadPhase phase;
+
+  /// Why the last read failed, as a sentence; only when [phase] is failed.
+  final String? message;
+  final DateTime? at;
+
+  Map<String, Object?> toJson() => {
+    'phase': phase.name,
+    'message': ?message,
+    if (at case final at?) 'at': at.toUtc().toIso8601String(),
+  };
+
+  factory StoreAppRead.fromJson(Map<String, Object?> json) =>
+      switch (json['phase']) {
+        'queued' => const StoreAppRead.queued(),
+        'reading' => const StoreAppRead.reading(),
+        _ => StoreAppRead.failed(
+          json['message'] as String? ?? '',
+          DateTime.parse(json['at']! as String),
+        ),
+      };
+}
+
 /// Everything the Stores tab and an agent are shown, as the server holds it.
 final class StoresView {
   const StoresView({
@@ -123,6 +162,7 @@ final class StoresView {
     this.links = const [],
     this.refreshedAt,
     this.refreshing = false,
+    this.reads = const {},
   });
 
   final AppleKeySummary? apple;
@@ -149,6 +189,10 @@ final class StoresView {
   /// Whether a read of the stores is under way.
   final bool refreshing;
 
+  /// Each app's place in the read under way, or why its last read failed,
+  /// by [StoreApp.key]. Not kept across a server's restart.
+  final Map<String, StoreAppRead> reads;
+
   /// The stores the server holds a credential for.
   Set<StoreKind> get connected => {
     if (apple != null) StoreKind.appStore,
@@ -171,6 +215,9 @@ final class StoresView {
     'links': [for (final link in links) link.toJson()],
     'refreshedAt': refreshedAt?.toUtc().toIso8601String(),
     'refreshing': refreshing,
+    'reads': {
+      for (final MapEntry(:key, :value) in reads.entries) key: value.toJson(),
+    },
   };
 
   factory StoresView.fromJson(Map<String, Object?> json) {
@@ -209,6 +256,12 @@ final class StoresView {
       ],
       refreshedAt: refreshedAt is String ? DateTime.parse(refreshedAt) : null,
       refreshing: json['refreshing'] as bool? ?? false,
+      // Absent from an older server's view.
+      reads: {
+        for (final MapEntry(:key, :value)
+            in ((json['reads'] as Map?) ?? const {}).entries)
+          key as String: StoreAppRead.fromJson(map(value)),
+      },
     );
   }
 }

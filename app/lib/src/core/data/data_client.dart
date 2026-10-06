@@ -1103,6 +1103,12 @@ class DataClient {
         case StoresChanged(:final view):
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
+        case final StoreAppChanged change:
+          // One app moved: the kept view takes it and is told whole, so a
+          // listener follows one stream.
+          final view = (storesView ?? const StoresView()).withApp(change);
+          storesView = view;
+          if (!_storesChanges.isClosed) _storesChanges.add(view);
         case StoresProgress(:final done, :final total):
           if (!_storesProgress.isClosed) {
             _storesProgress.add((done: done, total: total));

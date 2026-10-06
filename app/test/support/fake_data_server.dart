@@ -478,7 +478,7 @@ class FakeDataServer {
           break;
         case QuickAccessChanged(:final pins):
           quickAccessPins = [...pins];
-        case StoresChanged() || StoresProgress():
+        case StoresChanged() || StoresProgress() || StoreAppChanged():
           // Told by [stores] as it changes; a test seeds its view directly.
           break;
         case TerminalChanged(:final terminal):

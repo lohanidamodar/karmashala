@@ -11,8 +11,86 @@ DataChange? _storesChangeFromJson(String name, Map<String, Object?> json) =>
         done: json['done']! as int,
         total: json['total']! as int,
       ),
+      'storeAppChanged' => StoreAppChanged(
+        app: StoreApp.fromJson(_storesMap(json['app'])),
+        read: json['read'] == null
+            ? null
+            : StoreAppRead.fromJson(_storesMap(json['read'])),
+        snapshot: json['snapshot'] == null
+            ? null
+            : StoreAppSnapshot.fromJson(_storesMap(json['snapshot'])),
+        icon: json['icon'] == null
+            ? null
+            : StoreAppIcon.fromJson(_storesMap(json['icon'])),
+      ),
       _ => null,
     };
+
+Map<String, Object?> _storesMap(Object? value) =>
+    (value! as Map).cast<String, Object?>();
+
+/// One app's place in a read, and what was read about it when it lands: told
+/// as each app moves, so a client fills its rows in one at a time without the
+/// whole view crossing again.
+final class StoreAppChanged extends DataChange {
+  const StoreAppChanged({
+    required this.app,
+    this.read,
+    this.snapshot,
+    this.icon,
+  });
+
+  final StoreApp app;
+
+  /// Null when the app is as last read, with nothing under way.
+  final StoreAppRead? read;
+
+  /// What was just read; null when only [read] moved.
+  final StoreAppSnapshot? snapshot;
+
+  /// The icon just looked up; null when it was not.
+  final StoreAppIcon? icon;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'storeAppChanged',
+    'app': app.toJson(),
+    if (read case final read?) 'read': read.toJson(),
+    if (snapshot case final snapshot?) 'snapshot': snapshot.toJson(),
+    if (icon case final icon?) 'icon': icon.toJson(),
+  };
+}
+
+extension StoresViewApps on StoresView {
+  /// This view with [change] applied to its app.
+  StoresView withApp(StoreAppChanged change) {
+    final key = change.app.key;
+    final snapshot = change.snapshot;
+    final icon = change.icon;
+    final read = change.read;
+    return StoresView(
+      apple: apple,
+      play: play,
+      stores: stores,
+      apps: snapshot == null
+          ? apps
+          : [
+              for (final held in apps)
+                if (held.app.key != key) held,
+              snapshot,
+            ],
+      icons: icon == null ? icons : {...icons, key: icon},
+      links: links,
+      refreshedAt: refreshedAt,
+      refreshing: refreshing,
+      reads: {
+        for (final MapEntry(key: other, :value) in reads.entries)
+          if (other != key) other: value,
+        key: ?read,
+      },
+    );
+  }
+}
 
 /// The whole view as it now stands — told when a refresh starts and ends,
 /// when a credential changes, and to a client that subscribes.

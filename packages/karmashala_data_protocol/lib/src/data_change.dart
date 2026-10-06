@@ -55,6 +55,8 @@ import 'attention_values.dart';
 import 'usage_limit_values.dart';
 import 'files_values.dart' show QuickAccessPin;
 import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;
+import 'package:store_console/store_console.dart'
+    show StoreApp, StoreAppSnapshot;
 
 part 'changes/automations_changes.dart';
 part 'changes/checkpoints_changes.dart';

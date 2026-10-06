@@ -11,6 +11,10 @@ DataRequest<Object?>? _storesRequestFromJson(String kind, _Arguments args) =>
       StoresRefresh.name => StoresRefresh(
         maxAgeSeconds: args.optionalInt('maxAgeSeconds'),
       ),
+      StoresRefreshApp.name => StoresRefreshApp(
+        store: StoreKind.parse(args.string('store')),
+        id: args.string('id'),
+      ),
       StoreAppleSet.name => StoreAppleSet(
         keyId: args.string('keyId'),
         issuerId: args.string('issuerId'),
@@ -82,6 +86,25 @@ final class StoresRefresh extends _StoresViewRequest {
   Map<String, Object?> argumentsToJson() => {
     if (maxAgeSeconds != null) 'maxAgeSeconds': maxAgeSeconds,
   };
+}
+
+/// Reads one app again, now, and answers when done: the retry for an app
+/// whose read failed. Refused for an app the server does not hold.
+final class StoresRefreshApp extends _StoresViewRequest {
+  const StoresRefreshApp({required this.store, required this.id});
+
+  static const String name = 'stores.refresh.app';
+
+  final StoreKind store;
+
+  /// The app's [StoreApp.id] on [store].
+  final String id;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'store': store.name, 'id': id};
 }
 
 /// Sets the App Store Connect key. A null [privateKeyPem] keeps the key file
