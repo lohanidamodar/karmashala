@@ -88,13 +88,17 @@ void main() {
 
   /// The server is configured with the old relay, as an install that enabled
   /// remote access before the move is: the policy reads it as the new one.
-  Future<RemoteHostService> start({Uri? local}) async {
+  Future<RemoteHostService> start({
+    Uri? local,
+    List<Uri> extraRelays = const [],
+  }) async {
     final started = RemoteHostService(
       devices: dao,
       hostId: _hostId,
       bindings: FakeRemoteBindings().bindings,
       relay: oldUri,
       localRelayUrl: local,
+      extraRelays: extraRelays,
       knownRelays: KnownRelays(current: newUri, retired: [oldUri]),
       lanPort: 0,
       advertise: false,
@@ -131,6 +135,7 @@ void main() {
   }) => DesktopServerDialer(
     store: store,
     acceptRelayMove: acceptRelayMove,
+    knownRelays: KnownRelays(current: newUri, retired: [oldUri]),
     relayFactory: (relay, rendezvous) {
       dialled.add(relay);
       return relayTransport(relay, rendezvous);
@@ -194,6 +199,11 @@ void main() {
     )).byHost(_hostId.value)!;
     expect(saved.relayHome, newUri);
     expect(saved.relay, newUri);
+    expect(
+      saved.candidates.map((c) => c.url),
+      isNot(contains(oldUri)),
+      reason: 'the retired relay is dropped once the move is acknowledged',
+    );
   });
 
   test('a lost ack: the phone saved the move but the host never heard it — '
@@ -215,15 +225,16 @@ void main() {
     expect(row.relayMoveSettled, isTrue);
   });
 
-  test('mid-move: the row switched, but the phone comes back on the old '
-      'relay — the host still listens there, and moves it again', () async {
-    await pair(oldUri.toString());
+  test('mid-move off a relay that is not retired: the row switched, but the '
+      'phone comes back on the old relay — the host still listens there, '
+      'and moves it again', () async {
+    await pair(otherUri.toString());
     dao.moveRelay(_deviceId.value, newUri.toString());
     await start();
-    expect(listening(), containsAll([oldUri.toString(), newUri.toString()]));
+    expect(listening(), containsAll([otherUri.toString(), newUri.toString()]));
 
     final store = InMemoryCompanionStore();
-    final link = await dialer(store).dial(await record(oldUri));
+    final link = await dialer(store).dial(await record(otherUri));
     addTearDown(() => link.close());
     await echoes(link);
 
@@ -235,18 +246,18 @@ void main() {
       'old relay and is served there, the move left open', () async {
     // Nothing listens on port 1: the relay the row moved to cannot be reached.
     final unreachable = Uri.parse('http://127.0.0.1:1');
-    await pair(oldUri.toString());
+    await pair(otherUri.toString());
     dao.moveRelay(_deviceId.value, unreachable.toString());
     await start();
 
     final store = InMemoryCompanionStore();
-    final link = await dialer(store).dial(await record(oldUri));
+    final link = await dialer(store).dial(await record(otherUri));
     addTearDown(() => link.close());
     await echoes(link);
 
     final row = dao.getById(_deviceId.value)!;
     expect(row.relayMoveSettled, isFalse);
-    expect(listening(), contains(oldUri.toString()));
+    expect(listening(), contains(otherUri.toString()));
   });
 
   test('an old phone, whose hello does not know the frame, is never sent '
@@ -271,6 +282,7 @@ void main() {
       store,
     )).byHost(_hostId.value)!;
     expect(saved.relayHome, isNull);
+    expect(saved.relay, oldUri, reason: 'an old build keeps the retired relay');
   });
 
   test('a self-hosted relay is never moved', () async {
@@ -329,5 +341,46 @@ void main() {
     expect(row.relayMovedFrom, otherUri.toString());
     expect(row.relayMoveTo, isNull);
     expect(row.relayMoveSettled, isTrue);
+  });
+
+  test('the retired relay is only drained: once the row switches the host '
+      'stops listening there for it, before the phone is even heard on the '
+      'new one', () async {
+    await pair(oldUri.toString());
+    await start();
+    expect(listening(), contains(oldUri.toString()), reason: 'the drain');
+
+    dao.moveRelay(_deviceId.value, newUri.toString());
+    await service!.reconcileDevices();
+    final row = dao.getById(_deviceId.value)!;
+    expect(row.relayMoveSettled, isFalse);
+    expect(listening(), {newUri.toString()});
+  });
+
+  test('the retired relay is never offered to a new pairing, put in a QR '
+      'code, announced, or dialled for a pairing that is not on it', () async {
+    await pair(newUri.toString());
+    final host = await start(extraRelays: [oldUri, otherUri]);
+
+    final pairing = await host.beginPairing(
+      capabilities: CapabilitySet.all,
+      relay: oldUri,
+    );
+    expect(pairing.payload.relay, newUri);
+    expect(pairing.payload.relays, isNot(contains(oldUri)));
+    expect(pairing.payload.relays, contains(otherUri));
+
+    final row = dao.getById(_deviceId.value)!;
+    expect(host.activeRelayUrlsFor(row), isNot(contains(oldUri)));
+    expect(host.announcedRelaysFor(row), isNot(contains(oldUri)));
+  });
+
+  test('a pairing still on the retired relay is listened for there, but it '
+      'is never announced to its phone', () async {
+    await pair(oldUri.toString());
+    final host = await start();
+    final row = dao.getById(_deviceId.value)!;
+    expect(host.activeRelayUrlsFor(row), contains(oldUri));
+    expect(host.announcedRelaysFor(row), isNot(contains(oldUri)));
   });
 }

@@ -9,7 +9,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_host_protocol/host_access.dart' show RemoteChannel;
 
-import '../domain/known_relays.dart' show sameRelay;
+import '../domain/known_relays.dart' show KnownRelays, sameRelay;
 import '../domain/remote_payloads.dart' show RemoteHostStatus;
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';

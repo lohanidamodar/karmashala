@@ -29,6 +29,18 @@ void main() {
         Uri.parse('wss://relay.example.com:8443/base'),
       );
     });
+
+    test('the retired PopupBits relay typed in is written as the current '
+        'one', () {
+      expect(
+        resolveRelayUri('wss://relay.popupbits.com'),
+        Uri.parse(kPopupBitsRelayUrl),
+      );
+      expect(
+        resolveRelayUri('wss://relay.my-own.net'),
+        Uri.parse('wss://relay.my-own.net'),
+      );
+    });
   });
 
   group('the controller', () {

@@ -30,14 +30,15 @@ import 'remote_providers.dart';
 const String kDefaultRelayUrl = String.fromEnvironment('KARMASHALA_RELAY_URL');
 
 /// The relay URL to dial: the user's setting when it parses, this build's
-/// default otherwise, and null when there is neither.
+/// default otherwise, and null when there is neither. A retired PopupBits
+/// relay is never written: it reads as the current one.
 Uri? resolveRelayUri(String? configured) {
   final text = configured?.trim() ?? '';
   final parsed = text.isEmpty ? null : Uri.tryParse(text);
   if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
     return defaultCompanionRelay;
   }
-  return parsed;
+  return KnownRelays.popupBits.upgrade(parsed);
 }
 
 /// The internet relay the server's config names, else this build's default;

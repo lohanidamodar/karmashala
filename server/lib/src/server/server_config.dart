@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show CompanionConfig;
 import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
-import 'package:karmashala_remote/remote.dart' show kHostCompanionPort;
+import 'package:karmashala_remote/remote.dart'
+    show KnownRelays, kHostCompanionPort;
 import 'package:path/path.dart' as p;
 
 import '../mcp/mcp_credentials.dart' show writeOwnerOnly;
@@ -373,7 +374,21 @@ class ServerConfig {
     } on FormatException catch (error) {
       throw ServerConfigError('${file.path}: not JSON (${error.message})');
     }
-    return fromJson(json, source: file.path);
+    final config = fromJson(json, source: file.path);
+    final relay = config.relay;
+    final known = KnownRelays.popupBits;
+    if (relay == null || !known.isRetired(relay)) return config;
+    // Written while the retired relay was the default: it is dropped for the
+    // current one, on disk, so this is said once. Its token went with it.
+    final moved = config.patchedWith({
+      'companion': {'relay': known.current.toString(), 'relayToken': null},
+    }, source: file.path);
+    await moved.write(dataDirectory);
+    log?.call(
+      '${file.path} named the retired relay ${relay.host}; it now names '
+      '${known.current.host}',
+    );
+    return moved;
   }
 
   /// This with [patch] laid over it: [patch] is shaped like the file, a key

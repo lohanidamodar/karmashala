@@ -25,8 +25,10 @@ class DesktopServerDialer {
     this.scout,
     this.onLog,
     this.acceptRelayMove = true,
+    KnownRelays? knownRelays,
     DateTime Function()? now,
-  }) : _lanDialer = lanDialer ?? _dialLan,
+  }) : knownRelays = knownRelays ?? KnownRelays.popupBits,
+       _lanDialer = lanDialer ?? _dialLan,
        _relayFactory = relayFactory ?? _dialRelay,
        _now = now ?? DateTime.now;
 
@@ -49,6 +51,9 @@ class DesktopServerDialer {
   /// Whether this end says it knows `link.relay.move` and saves the moves a
   /// server asks for. False only to stand in for a build that predates it.
   final bool acceptRelayMove;
+
+  /// Which relays are retired: a saved one is dropped once a move is saved.
+  final KnownRelays knownRelays;
 
   final LanDialerFn _lanDialer;
   final RelayTransportFactoryFn _relayFactory;
@@ -295,7 +300,8 @@ class DesktopServerDialer {
   }
 
   /// Saves the relay the server moved [pairing] to: dialled first from now
-  /// on, the others kept behind it for as long as the server names them.
+  /// on, the others kept behind it for as long as the server names them —
+  /// but a retired relay is dropped, since the server drains it no longer.
   Future<void> _saveRelayMove(CompanionPairing pairing, Uri to) async {
     await CompanionConnections.mutate(store, (all) {
       final saved = all.byHost(pairing.hostId.value) ?? pairing;
@@ -307,7 +313,8 @@ class DesktopServerDialer {
           candidates: [
             if (!saved.candidates.any((c) => c.key == key))
               RelayCandidate(url: to),
-            ...saved.candidates,
+            for (final c in saved.candidates)
+              if (!knownRelays.isRetired(c.url)) c,
           ],
         ),
       );

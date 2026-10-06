@@ -166,20 +166,14 @@ class RemoteHostService {
       _pushClientAt(relayUrlFor(device));
 
   /// Where a push goes while [device]'s own relay cannot carry one (a 503):
-  /// the relay it moved off, and for a pairing on the current PopupBits relay
-  /// the retired ones, which may still hold an FCM secret. The token and tag
-  /// are the relay's to forward, never to read.
+  /// the relay it moved off — never a retired one, which a moved device is
+  /// done with.
   List<RelayPushClient> _pushFallbacksFor(PairedDevice device) {
-    if (!_hostedEnabled) return const [];
-    final own = device.hostedRelayUri;
-    return [
-      for (final url in [
-        ?_relayUri(device.relayMovedFrom),
-        if (own != null && sameRelay(own, knownRelays.current))
-          ...knownRelays.retired,
-      ])
-        ?_pushClientAt(url),
-    ];
+    final from = _relayUri(device.relayMovedFrom);
+    if (!_hostedEnabled || from == null || knownRelays.isRetired(from)) {
+      return const [];
+    }
+    return [?_pushClientAt(from)];
   }
 
   RelayPushClient? _pushClientAt(Uri? url) {
@@ -234,6 +228,13 @@ class RemoteHostService {
       final from = _movedFrom(device);
       if (from != null) urls[from.toString()] = from;
     }
+    // A retired relay is only drained: listened on for a row still recorded
+    // on it, until its move is acknowledged, and for nobody else.
+    final own = device.hostedRelayUri;
+    urls.removeWhere(
+      (_, url) =>
+          knownRelays.isRetired(url) && (own == null || !sameRelay(url, own)),
+    );
     return List.unmodifiable(urls.values);
   }
 
@@ -265,8 +266,10 @@ class RemoteHostService {
 
   /// The relay set announced in `host.status` — the same list the listeners are
   /// open on, so a phone is never told about a relay nobody is waiting at.
-  List<Uri> announcedRelaysFor(PairedDevice device) =>
-      activeRelayUrlsFor(device);
+  List<Uri> announcedRelaysFor(PairedDevice device) => [
+    for (final url in activeRelayUrlsFor(device))
+      if (!knownRelays.isRetired(url)) url,
+  ];
 
   /// `host:port` of the direct LAN listener — a hint for a network that eats
   /// multicast; loopback is never announced and DHCP can make it stale.
@@ -412,7 +415,7 @@ class RemoteHostService {
       throw StateError('remote access is not running');
     }
     await cancelPairing();
-    final pairingRelay = relay ?? this.relay;
+    final pairingRelay = knownRelays.upgrade(relay) ?? this.relay;
     final fallback = this.relay;
     final payload = await PairingPayload.generateWithCode(
       // The payload carries a relay either way; a direct pairing names nowhere.
@@ -422,9 +425,12 @@ class RemoteHostService {
       // The tab's relay stays the payload's `relay` — an older companion reads
       // that alone — while the QR names every other relay this host serves.
       relays: [
-        ?_localRelayUrl,
-        ..._extraRelays,
-        if (_hostedEnabled && fallback != null) fallback,
+        for (final url in [
+          ?_localRelayUrl,
+          ..._extraRelays,
+          if (_hostedEnabled && fallback != null) fallback,
+        ])
+          if (!knownRelays.isRetired(url)) url,
       ],
     );
     final session = HostPairingSession(

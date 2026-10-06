@@ -23,8 +23,10 @@ void main() {
   late PairedDeviceDao dao;
   late RelayServer oldRelay;
   late RelayServer newRelay;
+  late RelayServer otherRelay;
   late Uri oldUri;
   late Uri newUri;
+  late Uri otherUri;
   late RemoteHostService service;
   late List<String> posts;
   late Set<int> unconfigured;
@@ -36,18 +38,25 @@ void main() {
     unconfigured = {};
     oldRelay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     newRelay = await RelayServer.bind(address: '127.0.0.1', port: 0);
+    otherRelay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     oldUri = Uri.parse('http://127.0.0.1:${oldRelay.port}');
     newUri = Uri.parse('http://127.0.0.1:${newRelay.port}');
+    otherUri = Uri.parse('http://127.0.0.1:${otherRelay.port}');
   });
 
   tearDown(() async {
     await service.stop();
     await oldRelay.close();
     await newRelay.close();
+    await otherRelay.close();
     db.close();
   });
 
-  String nameOf(int port) => port == oldRelay.port ? 'old' : 'new';
+  String nameOf(int port) => port == oldRelay.port
+      ? 'old'
+      : port == newRelay.port
+      ? 'new'
+      : 'other';
 
   Future<void> start() async {
     service = RemoteHostService(
@@ -106,8 +115,8 @@ void main() {
     expect(posts, ['new register', 'new push']);
   });
 
-  test('the new relay answering 503: the old relay carries the push, and the '
-      'new one is not asked again on the next', () async {
+  test('moved off the retired relay: the new relay answering 503 is push '
+      'unavailable, and nothing is ever posted to the retired one', () async {
     pair(relayUrl: oldUri.toString());
     dao
       ..moveRelay(_deviceId, newUri.toString())
@@ -118,18 +127,39 @@ void main() {
     await news();
     await news();
 
-    expect(posts, ['new register', 'old register', 'old push', 'old push']);
+    expect(posts, ['new register']);
   });
 
-  test('a pairing made on the new relay falls back to the retired one while '
-      'the new one has no push', () async {
+  test('moved off a self-hosted relay: while the new one answers 503 the '
+      'old one carries the push, and the new one is not asked on the '
+      'next', () async {
+    pair(relayUrl: otherUri.toString());
+    dao
+      ..moveRelay(_deviceId, newUri.toString())
+      ..settleRelayMove(_deviceId);
+    unconfigured.add(newRelay.port);
+    await start();
+
+    await news();
+    await news();
+
+    expect(posts, [
+      'new register',
+      'other register',
+      'other push',
+      'other push',
+    ]);
+  });
+
+  test('a pairing made on the new relay is never pushed through the retired '
+      'one', () async {
     pair(relayUrl: newUri.toString());
     unconfigured.add(newRelay.port);
     await start();
 
     await news();
 
-    expect(posts, ['new register', 'old register', 'old push']);
+    expect(posts, ['new register']);
   });
 
   test('a pairing that never moved is pushed on its own relay alone', () async {
