@@ -29,6 +29,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionAgentChanged,
         SessionQueueChanged,
         SessionSend,
+        TabReveal,
         TerminalOpen,
         UsageLimitNotice,
         UsageLimitNoticed,
@@ -1285,6 +1286,8 @@ Future<int> _serve(
               sessionId: started.sessionId,
               title: started.session.title,
               launch: started.launch,
+              // Nobody asked for it in the window, so it takes no one's tab.
+              reveal: TabReveal.background,
             ),
           );
         },
@@ -1501,8 +1504,7 @@ Future<int> _serve(
   final delegations = DelegationResults(
     turnOf: (childId, since) =>
         childTurns.firstTurn(childId, bound: kDelegationBound, since: since),
-    nextTurnOf: (childId, since) =>
-        childTurns.nextTurn(childId, since: since),
+    nextTurnOf: (childId, since) => childTurns.nextTurn(childId, since: since),
     answerOf: answerOf,
     queue: sessionQueue,
     store: SessionDelegationDao(database),
@@ -1544,13 +1546,14 @@ Future<int> _serve(
         answerOf: answerOf,
         sentBy: delegations.sent,
         endedBy: delegations.endedBy,
-        resumeWith: (sessionId, prompt) async {
+        resumeWith: (sessionId, prompt, reveal) async {
           final started = await launches.resume(sessionId, prompt: prompt);
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
               title: started.session.title,
               launch: started.launch,
+              reveal: reveal,
             ),
           );
         },

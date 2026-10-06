@@ -169,6 +169,18 @@ void main() {
       expect(answer['reattached'], isTrue);
       expect(pty.started, hasLength(1));
       expect(told.whereType<OpenSessionTab>(), hasLength(1));
+      expect(told.whereType<OpenSessionTab>().single.reveal, TabReveal.front);
+    });
+
+    test('a session asks to open is shown behind the person\'s tab', () async {
+      final told = window();
+      await (open.call('open_session', {'id': 's1'}, 'caller')
+              as Future<Object?>)
+          .timeout(const Duration(seconds: 5));
+      expect(
+        told.whereType<OpenSessionTab>().single.reveal,
+        TabReveal.background,
+      );
     });
 
     test('with no window, the session still runs and the answer says so, '

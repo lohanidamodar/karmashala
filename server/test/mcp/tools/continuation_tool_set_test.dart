@@ -233,9 +233,12 @@ void main() {
         'instruction': 'finish it',
         'cli': 'codex',
       });
+      final intent = told.whereType<OpenSessionTab>().single;
+      expect(intent.sessionId, answer['sessionId']);
       expect(
-        told.whereType<OpenSessionTab>().single.sessionId,
-        answer['sessionId'],
+        intent.reveal,
+        TabReveal.background,
+        reason: 'a continuation has a parent: a session started it',
       );
     });
   });

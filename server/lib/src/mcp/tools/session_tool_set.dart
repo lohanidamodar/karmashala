@@ -16,6 +16,7 @@ import '../../status/child_turn_wait.dart';
 import '../../status/daemon_prompt_answers.dart';
 import '../../status/hosted_session_wait.dart';
 import '../../sessions/session_queue.dart';
+import 'launch_tool_set.dart' show revealFor;
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_tool_schemas.dart';
@@ -55,7 +56,12 @@ class SessionToolSet extends ServerToolSet {
 
   /// Resumes a session that is not running with [prompt] as its opening
   /// message, and shows it in the person's window; null refuses instead.
-  final Future<void> Function(String sessionId, String prompt)? resumeWith;
+  final Future<void> Function(
+    String sessionId,
+    String prompt,
+    TabReveal reveal,
+  )?
+  resumeWith;
   final HostedSessionWait waits;
 
   /// What a session said last, which a wait that settles ready answers with;
@@ -336,7 +342,15 @@ class SessionToolSet extends ServerToolSet {
     }
     var delivered = false;
     try {
-      delivered = await _deliverNow(sessionId, message, held: held);
+      delivered = await _deliverNow(
+        sessionId,
+        message,
+        held: held,
+        reveal: revealFor(
+          callerSessionId: callerSessionId,
+          parentSessionId: session.parentSessionId,
+        ),
+      );
     } finally {
       queue?.afterImmediate(sessionId, delivered: delivered);
     }
@@ -368,6 +382,7 @@ class SessionToolSet extends ServerToolSet {
     String sessionId,
     String message, {
     required bool held,
+    required TabReveal reveal,
   }) async {
     if (!held && resumeWith == null) {
       throw StateError(
@@ -409,7 +424,7 @@ class SessionToolSet extends ServerToolSet {
     }
     final delivered = held
         ? await typist.send(sessionId, message)
-        : await resumeWith!(sessionId, message).then((_) => true);
+        : await resumeWith!(sessionId, message, reveal).then((_) => true);
     if (!delivered) {
       throw StateError(
         'That session\'s process ended before the message could be typed '
