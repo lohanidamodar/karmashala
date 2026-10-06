@@ -1,9 +1,14 @@
+import 'package:karmashala/src/features/server/application/server_commands.dart';
+import 'package:karmashala/src/features/server/application/server_overview.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/system/native_adapters.dart'
+    show TrayMenuItem;
 import 'package:karmashala/src/features/system/launcher_hotkey.dart';
 import 'package:karmashala/src/features/system/native_status.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala_terminal_runtime/instances.dart'
@@ -49,8 +54,22 @@ void main() {
     await service.init();
   }
 
+  /// What the tray's Server section reads; set before [build], or change it
+  /// and invalidate [serverOverviewProvider].
+  late ServerOverview serverOverview;
+
   setUp(() {
-    container = ProviderContainer(overrides: []);
+    serverOverview = const ServerOverview(
+      state: ServerRunState.running,
+      appVersion: '1.31.1',
+      liveSessions: 3,
+      endedSessions: 0,
+    );
+    container = ProviderContainer(
+      overrides: [
+        serverOverviewProvider.overrideWith((ref) async => serverOverview),
+      ],
+    );
     natives = FakeNatives();
     quitCalls = [];
     terminalViews = TerminalViewGate();
@@ -526,6 +545,159 @@ void main() {
       service.onWindowEvent('hide');
       await service.dispose();
       expect(terminalViews.isSuspended, isFalse, reason: 'never left shut');
+    });
+  });
+
+  group('the Server section', () {
+    List<TrayMenuItem> items() => natives.tray.menu!.items;
+    List<String> labels() => [for (final i in items()) i.label];
+    TrayMenuItem item(String label) =>
+        items().singleWhere((i) => i.label == label);
+
+    Future<void> settle() async {
+      await container.read(serverOverviewProvider.future);
+      await pumpEventQueue();
+    }
+
+    test('says the server\'s state and offers what it takes', () async {
+      await build();
+      await settle();
+
+      final line = item('Server: running · 3 sessions');
+      expect(line.disabled, isTrue);
+      expect(labels(), containsAll(['Restart server', 'Stop server']));
+      expect(labels(), isNot(contains('Start server')));
+      expect(item('Open Server settings').disabled, isFalse);
+      // Its own short section, between the window's items and the toggles.
+      final at = labels().indexOf('Server: running · 3 sessions');
+      expect(items()[at - 1].isSeparator, isTrue);
+      expect(labels().indexOf('Open Karmashala'), lessThan(at));
+      expect(labels().indexOf('Keep system awake'), greaterThan(at));
+    });
+
+    test('a stopped server offers Start alone', () async {
+      serverOverview = const ServerOverview(
+        state: ServerRunState.stopped,
+        appVersion: '1.31.1',
+        canStart: true,
+        canRestart: false,
+        canStop: false,
+      );
+      await build();
+      await settle();
+
+      expect(labels(), contains('Server: stopped'));
+      expect(labels(), contains('Start server'));
+      expect(labels(), isNot(contains('Stop server')));
+      expect(labels(), isNot(contains('Restart server')));
+    });
+
+    test('follows the server as it changes', () async {
+      await build();
+      await settle();
+      expect(labels(), contains('Stop server'));
+
+      serverOverview = const ServerOverview(
+        state: ServerRunState.stopped,
+        appVersion: '1.31.1',
+        canStart: true,
+        canRestart: false,
+        canStop: false,
+      );
+      container.invalidate(serverOverviewProvider);
+      await settle();
+      expect(labels(), contains('Start server'));
+      expect(labels(), isNot(contains('Stop server')));
+    });
+
+    for (final command in [ServerCommand.stop, ServerCommand.restart]) {
+      test('${command.label} brings the window forward and asks the shell, '
+          'whose confirm names what it ends', () async {
+        natives.window.focused = false;
+        await build();
+        await settle();
+        natives.window.calls.clear();
+
+        service.onTrayMenuItemClicked(item(command.label).key!);
+        await pumpEventQueue();
+
+        expect(natives.window.calls, containsAllInOrder(['show', 'focus']));
+        expect(container.read(serverCommandRequestProvider)?.command, command);
+      });
+    }
+
+    test('Start needs no window: it asks the shell to start it', () async {
+      serverOverview = const ServerOverview(
+        state: ServerRunState.stopped,
+        appVersion: '1.31.1',
+        canStart: true,
+        canRestart: false,
+        canStop: false,
+      );
+      await build();
+      await settle();
+      natives.window.calls.clear();
+
+      service.onTrayMenuItemClicked(item('Start server').key!);
+      await pumpEventQueue();
+
+      expect(natives.window.calls, isNot(contains('show')));
+      expect(
+        container.read(serverCommandRequestProvider)?.command,
+        ServerCommand.start,
+      );
+    });
+
+    test(
+      'Open Server settings brings the window forward on that page',
+      () async {
+        await build();
+        await settle();
+        natives.window.calls.clear();
+
+        service.onTrayMenuItemClicked(item('Open Server settings').key!);
+        await pumpEventQueue();
+
+        expect(natives.window.calls, containsAllInOrder(['show', 'focus']));
+        final request = container.read(serverCommandRequestProvider);
+        expect(request, isNotNull);
+        expect(request!.command, isNull);
+      },
+    );
+
+    test('a window using another machine\'s server says so, and offers no '
+        'control', () async {
+      serverOverview = const ServerOverview(
+        state: ServerRunState.running,
+        appVersion: '1.31.1',
+        liveSessions: 3,
+        controlsRefusal: 'Elsewhere.',
+        usesAnotherMachine: true,
+      );
+      await build();
+      await settle();
+
+      expect(item('Server: on another machine').disabled, isTrue);
+      for (final label in ['Start server', 'Restart server', 'Stop server']) {
+        expect(labels(), isNot(contains(label)));
+      }
+      expect(labels(), contains('Open Server settings'));
+    });
+
+    test('says it has not read the server yet rather than a state', () async {
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          serverOverviewProvider.overrideWith(
+            (ref) => Completer<ServerOverview>().future,
+          ),
+        ],
+      );
+      await build();
+      await pumpEventQueue();
+
+      expect(labels(), contains('Server: not read yet'));
+      expect(labels(), isNot(contains('Stop server')));
     });
   });
 }

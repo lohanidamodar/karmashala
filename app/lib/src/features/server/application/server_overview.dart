@@ -38,8 +38,10 @@ class ServerOverview {
     this.dataFolder,
     this.socketPath,
     this.controlsRefusal,
+    this.canStart = false,
     this.canRestart = true,
     this.canStop = true,
+    this.usesAnotherMachine = false,
   });
 
   final ServerRunState state;
@@ -53,8 +55,12 @@ class ServerOverview {
 
   /// Why Restart and Stop cannot act from this window, or null when they can.
   final String? controlsRefusal;
+  final bool canStart;
   final bool canRestart;
   final bool canStop;
+
+  /// Whether this window is a client of a server on another machine.
+  final bool usesAnotherMachine;
 
   bool get versionsDiffer =>
       serverVersion != null &&
@@ -88,6 +94,7 @@ Future<ServerOverview> localServerOverview({
   String? dataFolder,
   String? socketPath,
   String? controlsRefusal,
+  bool usesAnotherMachine = false,
   String version = appVersion,
 }) async {
   final phase = supervision?.phase;
@@ -131,6 +138,14 @@ Future<ServerOverview> localServerOverview({
         (reading?.hostUnresponsive ?? false) ||
         (reading?.hostOutdated ?? false),
     canStop: answers || (reading?.hostOutdated ?? false),
+    // As the status line offers it: supervision gave up or is between
+    // attempts, or nothing holds the socket.
+    canStart:
+        phase == HostSupervisionPhase.stopped ||
+        phase == HostSupervisionPhase.restarting ||
+        (reading?.status == HostDeploymentStatus.unknown &&
+            !reading!.hostUnresponsive),
+    usesAnotherMachine: usesAnotherMachine,
   );
 }
 
@@ -164,6 +179,7 @@ final serverOverviewProvider = FutureProvider<ServerOverview>((ref) async {
         : null,
     dataFolder: dataFolder,
     socketPath: access?.socketPath,
+    usesAnotherMachine: !caps.serverSettings,
     controlsRefusal: !caps.serverSettings
         ? 'This window is connected to a server on another machine, so this '
               'app is not the one running this machine\'s server.'
@@ -199,5 +215,6 @@ ServerOverview _connectedServerOverview(Ref ref) {
     controlsRefusal: 'Restart and Stop are on the server\'s own machine.',
     canRestart: false,
     canStop: false,
+    usesAnotherMachine: true,
   );
 }

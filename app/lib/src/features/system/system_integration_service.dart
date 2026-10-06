@@ -16,6 +16,8 @@ import '../../core/lifecycle/app_lifecycle.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../core/probe/probe_mode.dart';
 import '../notifications/application/attention_inbox.dart';
+import '../server/application/server_commands.dart';
+import '../server/application/server_overview.dart';
 import '../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -34,6 +36,11 @@ const _kMenuKeepAwake = 'keep_awake';
 const _kMenuNotifications = 'notifications';
 const _kMenuOnlyWhenUnfocused = 'notifications_unfocused';
 const _kMenuQuit = 'quit';
+const _kMenuServerSettings = 'server_settings';
+
+/// Prefix for the Server section's commands; the suffix is a [ServerCommand]'s
+/// name.
+const _kMenuServerPrefix = 'server:';
 
 /// Where `applicationShouldTerminate` asks Dart to quit. See `AppDelegate`.
 const MethodChannel _lifecycleChannel = MethodChannel('karmashala/lifecycle');
@@ -341,6 +348,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
         (_, _) => unawaited(_refreshMenu(_settings)),
       ),
     );
+    _subscriptions.add(
+      // Immediately too: it may have been read while [apply] drew the menu.
+      _container.listen<AsyncValue<ServerOverview>>(
+        serverOverviewProvider,
+        (_, _) => unawaited(_refreshMenu(_settings)),
+        fireImmediately: true,
+      ),
+    );
     // A clicked toast asks for the window, from outside the widget tree.
     _subscriptions.add(
       _container.listen<int>(
@@ -590,6 +605,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
           const TrayMenuItem(key: _kMenuShow, label: 'Open Karmashala'),
           const TrayMenuItem(key: _kMenuHide, label: 'Hide window'),
           const TrayMenuItem.separator(),
+          ..._serverMenuItems(),
+          const TrayMenuItem.separator(),
           TrayMenuItem.checkbox(
             key: _kMenuKeepAwake,
             label: 'Keep system awake',
@@ -639,6 +656,44 @@ class SystemIntegrationService with TrayListener, WindowListener {
           disabled: true,
         ),
     ];
+  }
+
+  /// "Server: running · 3 sessions", then the commands its state takes — none
+  /// while this window uses another machine's server — and its Settings page.
+  List<TrayMenuItem> _serverMenuItems() {
+    final overview = _container.read(serverOverviewProvider).value;
+    return [
+      TrayMenuItem(
+        key: 'server_status',
+        label: describeServerLine(overview),
+        disabled: true,
+      ),
+      for (final command in serverCommandsFor(overview))
+        TrayMenuItem(
+          key: '$_kMenuServerPrefix${command.name}',
+          label: command.label,
+        ),
+      const TrayMenuItem(
+        key: _kMenuServerSettings,
+        label: 'Open Server settings',
+      ),
+    ];
+  }
+
+  /// Runs a Server section item through the shell, which holds the Settings
+  /// page's confirm; the window comes forward first for anything it shows,
+  /// out of the tray if it was hidden there.
+  void _serverMenuItem(String key) {
+    final requests = _container.read(serverCommandRequestProvider.notifier);
+    if (key == _kMenuServerSettings) {
+      unawaited(_raiseWindow());
+      requests.openSettings();
+      return;
+    }
+    final name = key.substring(_kMenuServerPrefix.length);
+    final command = ServerCommand.values.firstWhere((c) => c.name == name);
+    if (command != ServerCommand.start) unawaited(_raiseWindow());
+    requests.ask(command);
   }
 
   /// Brings the app forward on the session behind tray item [index].
@@ -841,6 +896,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
       // The rest are the server's settings: nothing to change between servers.
       case _ when !_bound:
         return;
+      case _kMenuServerSettings:
+      case _ when key.startsWith(_kMenuServerPrefix):
+        _serverMenuItem(key);
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
       case _kMenuNotifications:

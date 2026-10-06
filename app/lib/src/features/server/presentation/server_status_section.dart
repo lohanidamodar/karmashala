@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_host_protocol/host_access.dart';
-import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/capabilities/capabilities.dart';
@@ -18,6 +17,7 @@ import '../../ssh/application/host_install_controller.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../application/server_files.dart';
 import '../application/server_overview.dart';
+import 'server_command_actions.dart';
 
 /// Settings → Server → Status and controls. A phone sees a read-only summary
 /// of the server it is connected to; Restart and Stop are a desktop's.
@@ -26,7 +26,9 @@ class ServerStatusSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final desktop = ref.watch(capabilitiesProvider.select((c) => c.hostsServer));
+    final desktop = ref.watch(
+      capabilitiesProvider.select((c) => c.hostsServer),
+    );
     final overview = ref.watch(serverOverviewProvider);
     return SettingsSection(
       title: SettingsAnchor.serverStatus.heading,
@@ -200,7 +202,7 @@ class _ControlsRow extends ConsumerWidget {
         children: [
           OutlinedButton(
             onPressed: refusal == null && overview.canRestart
-                ? () => _restart(context, ref)
+                ? () => confirmServerRestart(context, overview)
                 : null,
             child: Text(
               sessionHostRestartLabel(ref.watch(localHostStatusProvider)),
@@ -209,7 +211,7 @@ class _ControlsRow extends ConsumerWidget {
           const SizedBox(width: Insets.xs),
           OutlinedButton(
             onPressed: refusal == null && overview.canStop
-                ? () => _stop(context, ref)
+                ? () => confirmServerStop(context, overview)
                 : null,
             child: const Text('Stop'),
           ),
@@ -217,65 +219,6 @@ class _ControlsRow extends ConsumerWidget {
       ),
     );
   }
-
-  Future<void> _restart(BuildContext context, WidgetRef ref) async {
-    final live = overview.liveSessions;
-    final continues = ref.read(settingsControllerProvider).continueInterruptedTurns;
-    final message = switch (live) {
-      null =>
-        'The server would not say what it holds. Restarting it ends every '
-            'session it is running; their panes keep what they showed, but '
-            'the processes stop.',
-      0 =>
-        'It runs no sessions, so nothing ends. This window reconnects when '
-            'it is back.',
-      _ =>
-        'This ends the ${_sessions(live)} it holds: their panes keep what '
-            'they showed, but the processes stop and are not reattached.',
-    };
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Restart the server?',
-      message: live != 0 && continues
-          ? '$message An agent turn it cuts off is continued once it is '
-                'back.'
-          : message,
-      confirmLabel: 'Restart',
-      destructive: live != 0,
-    );
-    if (!confirmed) return;
-    await ref.read(localHostStatusProvider.notifier).restart(force: live != 0);
-    ref.invalidate(serverOverviewProvider);
-  }
-
-  Future<void> _stop(BuildContext context, WidgetRef ref) async {
-    final live = overview.liveSessions;
-    final message = switch (live) {
-      null =>
-        'The server would not say what it holds. Stopping it ends every '
-            'session it is running, and nothing starts it again until you '
-            'press Start.',
-      0 =>
-        'It runs no sessions, so nothing ends. Nothing starts it again until '
-            'you press Start, and this window has no data until then.',
-      _ =>
-        'This ends the ${_sessions(live)} it holds, and nothing starts it '
-            'again until you press Start. This window has no data until then.',
-    };
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Stop the server?',
-      message: message,
-      confirmLabel: 'Stop',
-      destructive: true,
-    );
-    if (!confirmed) return;
-    await ref.read(localHostStatusProvider.notifier).stop(force: live != 0);
-    ref.invalidate(serverOverviewProvider);
-  }
-
-  static String _sessions(int count) =>
-      count == 1 ? '1 running session' : '$count running sessions';
 }
 
 /// One line when another machine's server, as last read this launch, is

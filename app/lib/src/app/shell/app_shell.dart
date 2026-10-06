@@ -22,6 +22,7 @@ import '../../features/automations/application/usage_limit_notices.dart';
 import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
+import '../../features/server/presentation/server_command_actions.dart';
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/application/server_session_notices.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
@@ -298,6 +299,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.listen(quickOpenRequestProvider, (_, _) {
       if (mounted) QuickOpen.show(context);
     });
+    // The tray's Restart and Stop confirm here, in the window it raised.
+    listenForServerCommandRequests(context, ref);
     // A limit notice's "Options…" is pressed in a bar that holds no dialog.
     ref.listen(resumeDialogRequestProvider, (_, request) {
       if (request == null || !mounted) return;
