@@ -279,7 +279,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
             'Could not finish the handshake on ${_paths.socketPath}: '
             '${answered.reason} A host holds that socket, so no second one was '
             'started over it. If it stays silent, restart it in Settings → '
-            'Terminal → Shell integration & session host.',
+            'Server.',
         platform: _platform(now),
         remotePath: binary.path,
         hostUnresponsive: true,

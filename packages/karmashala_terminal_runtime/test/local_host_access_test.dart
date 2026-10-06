@@ -218,7 +218,7 @@ void main() {
     expect(reading.reason, contains('did not answer'));
     expect(reading.reason, contains(paths.socketPath));
     expect(reading.hostUnresponsive, isTrue);
-    expect(reading.reason, contains('restart it in Settings'));
+    expect(reading.reason, contains('restart it in Settings → Server.'));
   });
 
   test(
