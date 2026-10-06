@@ -22,6 +22,16 @@ class FakeDeviceRows {
     _server._tell(null, [_told(device.id)]);
   }
 
+  /// The hosted relay "Move to the default relay" asks for, as the server
+  /// reads it from its config. Null: the server has none.
+  Uri? defaultRelay;
+
+  /// The phone acknowledged a move to [to], as the companion records it.
+  void moveRelay(String id, String to) {
+    store.moveRelay(id, to);
+    _server._tell(null, [_told(id)]);
+  }
+
   DataChange _told(String id) =>
       DeviceChanged(pairedDeviceWithoutSecrets(store.getById(id)!));
 
@@ -58,6 +68,19 @@ class FakeDeviceRows {
       DeviceRevoke(:final id) => () {
         existing(id);
         store.revoke(id);
+        return written(id);
+      }(),
+      DeviceMoveRelay(:final id) => () {
+        final device = existing(id);
+        final target = defaultRelay;
+        if (device.revoked || device.pairedViaLocalRelay || target == null) {
+          throw const DataRefused.invalid('This device is not moved.');
+        }
+        final own = device.hostedRelayUri;
+        if (own != null && sameRelay(own, target)) {
+          throw const DataRefused.invalid('Already on the default relay.');
+        }
+        store.askRelayMove(id, target.toString());
         return written(id);
       }(),
     };

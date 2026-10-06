@@ -4,7 +4,8 @@ import 'app_database.dart';
 import 'row_mapping.dart';
 import 'package:karmashala_remote/remote.dart';
 
-/// Data access for the `paired_devices` table (schema v18, `relay_url` v19).
+/// Data access for the `paired_devices` table (schema v18, `relay_url` v19,
+/// relay moves v78).
 class PairedDeviceDao implements PairedDeviceStore {
   PairedDeviceDao(this._db);
 
@@ -26,6 +27,7 @@ class PairedDeviceDao implements PairedDeviceStore {
       'generation = excluded.generation, '
       'revoked = excluded.revoked, '
       'relay_url = excluded.relay_url, '
+      'relay_move_to = NULL, relay_moved_from = NULL, relay_move_settled = 1, '
       'last_seen_at = COALESCE(excluded.last_seen_at, last_seen_at), '
       'push_token = COALESCE(excluded.push_token, push_token), '
       'push_platform = COALESCE(excluded.push_platform, push_platform);',
@@ -151,6 +153,32 @@ class PairedDeviceDao implements PairedDeviceStore {
     _db.execute('DELETE FROM paired_devices WHERE id = ?;', [id]);
   }
 
+  @override
+  void askRelayMove(String id, String? to) {
+    _db.execute('UPDATE paired_devices SET relay_move_to = ? WHERE id = ?;', [
+      to,
+      id,
+    ]);
+  }
+
+  @override
+  void moveRelay(String id, String to) {
+    _db.execute(
+      'UPDATE paired_devices SET relay_moved_from = relay_url, '
+      'relay_url = ?, relay_move_to = NULL, relay_move_settled = 0 '
+      'WHERE id = ? AND relay_url IS NOT ?;',
+      [to, id, to],
+    );
+  }
+
+  @override
+  void settleRelayMove(String id) {
+    _db.execute(
+      'UPDATE paired_devices SET relay_move_settled = 1 WHERE id = ?;',
+      [id],
+    );
+  }
+
   PairedDevice _fromRow(Map<String, Object?> row) => PairedDevice(
     id: row['id']! as String,
     name: row['name']! as String,
@@ -167,6 +195,11 @@ class PairedDeviceDao implements PairedDeviceStore {
       at: row['presence_at'] == null ? null : dateFromIso(row['presence_at']),
     ),
     relayUrl: row['relay_url'] as String?,
+    relayMoveTo: row['relay_move_to'] as String?,
+    relayMovedFrom: row['relay_moved_from'] as String?,
+    relayMoveSettled:
+        row['relay_move_settled'] == null ||
+        boolFromInt(row['relay_move_settled']),
     createdAt: dateFromIso(row['created_at']),
     lastSeenAt: row['last_seen_at'] == null
         ? null

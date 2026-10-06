@@ -17,11 +17,17 @@ import '../protocol.dart';
 import 'push_crypto.dart';
 import 'relay_push_client.dart';
 
+/// How long a relay that answered 503 — push not configured there, or full —
+/// is left alone before it is asked again. Pushes meanwhile go to the next
+/// relay that can carry them, or nowhere, but never back at it on each one.
+const Duration kPushUnavailableRetry = Duration(minutes: 30);
+
 class PushFanout {
   PushFanout({
     required List<PairedDevice> Function() devices,
     required bool Function(String deviceId) hasLiveLink,
     required RelayPushClient? Function(PairedDevice device) clientFor,
+    List<RelayPushClient> Function(PairedDevice device)? fallbackClientsFor,
     DateTime Function()? now,
     this.onLog,
   }) : _now = now ?? DateTime.now,
@@ -30,7 +36,9 @@ class PushFanout {
        // ignore: prefer_initializing_formals — private field, named for callers.
        _hasLiveLink = hasLiveLink,
        // ignore: prefer_initializing_formals — private field, named for callers.
-       _clientFor = clientFor;
+       _clientFor = clientFor,
+       // ignore: prefer_initializing_formals — private field, named for callers.
+       _fallbackClientsFor = fallbackClientsFor;
 
   final List<PairedDevice> Function() _devices;
   final bool Function(String deviceId) _hasLiveLink;
@@ -38,14 +46,23 @@ class PushFanout {
   /// The push client for one device's OWN relay — null when that relay is off,
   /// which is exactly when a push through it could not arrive.
   final RelayPushClient? Function(PairedDevice device) _clientFor;
+
+  /// Relays tried, in order, while the device's own cannot carry a push — the
+  /// one it moved off, which may still deliver.
+  final List<RelayPushClient> Function(PairedDevice device)?
+  _fallbackClientsFor;
   final DateTime Function() _now;
 
   /// Lifecycle only — never called with a title, a token or a payload.
   final void Function(String message)? onLog;
 
-  /// The token last registered with the relay, per device id, so a rotated
-  /// token re-registers and an unchanged one does not repeat itself.
+  /// The token last registered, per device and relay, so a rotated token
+  /// re-registers, an unchanged one does not repeat itself, and a relay the
+  /// device moved to is registered with afresh.
   final Map<String, String> _registeredTokens = {};
+
+  /// Relays that answered 503, until they are asked again.
+  final Map<String, DateTime> _unavailableUntil = {};
 
   /// Fans one piece of attention news out to every eligible device.
   /// Never throws.
@@ -90,8 +107,8 @@ class PushFanout {
       return;
     }
     // A device whose relay is switched off has nowhere for a push to land.
-    final client = _clientFor(device);
-    if (client == null) {
+    final own = _clientFor(device);
+    if (own == null) {
       onLog?.call('a push was not sent: that relay is off');
       return;
     }
@@ -112,30 +129,82 @@ class PushFanout {
     );
     final platform = device.pushPlatform ?? 'android';
 
-    if (_registeredTokens[device.id] != token) {
-      if (!await client.register(tag: tag, token: token, platform: platform)) {
-        return;
+    final seen = <String>{};
+    for (final client in [own, ...?_fallbackClientsFor?.call(device)]) {
+      final relay = client.pushEndpoint.toString();
+      if (!seen.add(relay)) continue;
+      final until = _unavailableUntil[relay];
+      if (until != null && _now().isBefore(until)) continue;
+      final outcome = await _deliver(
+        client,
+        device: device,
+        tag: tag,
+        token: token,
+        platform: platform,
+        payloadB64: payloadB64,
+      );
+      switch (outcome) {
+        case PushOutcome.accepted:
+          _unavailableUntil.remove(relay);
+          onLog?.call('a push left for the relay');
+          return;
+        case PushOutcome.notConfigured:
+          _unavailableUntil[relay] = _now().add(kPushUnavailableRetry);
+          onLog?.call(
+            'push unavailable at ${client.pushEndpoint.host}; asked again in '
+            '${kPushUnavailableRetry.inMinutes} min',
+          );
+          continue;
+        case PushOutcome.tokenGone:
+          // Registration must wait for the phone to bring a fresh token.
+          _registeredTokens.removeWhere(
+            (k, _) => k.startsWith('${device.id}|'),
+          );
+          onLog?.call('a push token is gone; waiting for a fresh one');
+          return;
+        case PushOutcome.unknownTag:
+        case PushOutcome.failed:
+          onLog?.call('a push was not delivered: ${outcome.name}');
+          return;
       }
-      _registeredTokens[device.id] = token;
+    }
+    onLog?.call('a push was not sent: no relay can carry it now');
+  }
+
+  /// Registers [token] on [client]'s relay when it has not been, then pushes;
+  /// a relay that forgot the tag is registered with again, once.
+  Future<PushOutcome> _deliver(
+    RelayPushClient client, {
+    required PairedDevice device,
+    required String tag,
+    required String token,
+    required String platform,
+    required String payloadB64,
+  }) async {
+    final registered = '${device.id}|${client.registerEndpoint}';
+    Future<PushOutcome> register() async {
+      final outcome = await client.registerOutcome(
+        tag: tag,
+        token: token,
+        platform: platform,
+      );
+      if (outcome == PushOutcome.accepted) {
+        _registeredTokens[registered] = token;
+      }
+      return outcome;
+    }
+
+    if (_registeredTokens[registered] != token) {
+      final outcome = await register();
+      if (outcome != PushOutcome.accepted) return outcome;
     }
     var outcome = await client.push(tag: tag, payloadB64: payloadB64);
     if (outcome == PushOutcome.unknownTag) {
       // The relay restarted and forgot the tag: re-register, retry once.
-      if (await client.register(tag: tag, token: token, platform: platform)) {
-        outcome = await client.push(tag: tag, payloadB64: payloadB64);
-      }
+      final again = await register();
+      if (again != PushOutcome.accepted) return again;
+      outcome = await client.push(tag: tag, payloadB64: payloadB64);
     }
-    switch (outcome) {
-      case PushOutcome.accepted:
-        onLog?.call('a push left for the relay');
-      case PushOutcome.tokenGone:
-        // Registration must wait for the phone to bring a fresh token.
-        _registeredTokens.remove(device.id);
-        onLog?.call('a push token is gone; waiting for a fresh one');
-      case PushOutcome.unknownTag:
-      case PushOutcome.notConfigured:
-      case PushOutcome.failed:
-        onLog?.call('a push was not delivered: ${outcome.name}');
-    }
+    return outcome;
   }
 }

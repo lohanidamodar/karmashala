@@ -602,7 +602,12 @@ class HostSessionApi {
             ErrorCode.notFound,
             'no suspended link to resume',
           );
+        case FrameType.linkRelayMoved:
+          // The device runtime takes a move it offered; any other is dropped,
+          // unanswered, as an ack always is.
+          break;
         // Host-only types cannot reach here: sentBy refused them above.
+        case FrameType.linkRelayMove:
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:
         case FrameType.approvalRequested:

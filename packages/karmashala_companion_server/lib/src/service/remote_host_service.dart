@@ -36,7 +36,8 @@ class RemoteHostService {
     required this.devices,
     required this.hostId,
     required this.bindings,
-    required this.relay,
+    required Uri? relay,
+    KnownRelays? knownRelays,
     Uri? localRelayUrl,
     bool hostedEnabled = true,
     List<Uri> extraRelays = const [],
@@ -55,7 +56,9 @@ class RemoteHostService {
     this.onDevicesChanged,
     this.onHostLink,
     this.onLog,
-  }) : _now = now ?? DateTime.now,
+  }) : knownRelays = knownRelays ?? KnownRelays.popupBits,
+       relay = (knownRelays ?? KnownRelays.popupBits).upgrade(relay),
+       _now = now ?? DateTime.now,
        _relayFactory = relayFactory ?? _defaultRelayFactory,
        // ignore: prefer_initializing_formals — private fields, named for callers.
        _localRelayUrl = localRelayUrl,
@@ -78,8 +81,12 @@ class RemoteHostService {
   /// relay is absent or unreadable, and the default pairing relay. Null on a
   /// machine that meets phones only where each row says — a box: a phone
   /// paired straight to its address then costs no outbound connection, and a
-  /// pairing with no relay named is a direct one.
+  /// pairing with no relay named is a direct one. A retired relay in the
+  /// config reads as [knownRelays]' current one.
   final Uri? relay;
+
+  /// Which pairings move relay on their own: only those on a retired one.
+  final KnownRelays knownRelays;
 
   /// Where the local relay can be dialled right now, or null while it is
   /// stopped — local-relay devices are parked then.
@@ -148,14 +155,28 @@ class RemoteHostService {
     // stream, so for news it counts as not hearing it.
     hasLiveLink: isWatching,
     clientFor: _pushClientFor,
+    fallbackClientsFor: _pushFallbacksFor,
     now: _now,
     onLog: onLog,
   );
 
   final Map<String, RelayPushClient> _pushClients = {};
 
-  RelayPushClient? _pushClientFor(PairedDevice device) {
-    final url = relayUrlFor(device);
+  RelayPushClient? _pushClientFor(PairedDevice device) =>
+      _pushClientAt(relayUrlFor(device));
+
+  /// Where a push goes while [device]'s own relay cannot carry one (a 503):
+  /// the relay it moved off — never a retired one, which a moved device is
+  /// done with.
+  List<RelayPushClient> _pushFallbacksFor(PairedDevice device) {
+    final from = _relayUri(device.relayMovedFrom);
+    if (!_hostedEnabled || from == null || knownRelays.isRetired(from)) {
+      return const [];
+    }
+    return [?_pushClientAt(from)];
+  }
+
+  RelayPushClient? _pushClientAt(Uri? url) {
     if (url == null) return null;
     try {
       return _pushClients[url.toString()] ??= RelayPushClient(
@@ -200,14 +221,55 @@ class RemoteHostService {
       if (own != null) urls[own.toString()] = own;
       final fallback = relay;
       if (fallback != null) urls[fallback.toString()] = fallback;
+      // Mid-move, both ends of it: whichever the phone reaches first, the
+      // host is there.
+      final target = relayMoveTargetFor(device);
+      if (target != null) urls[target.toString()] = target;
+      final from = _movedFrom(device);
+      if (from != null) urls[from.toString()] = from;
     }
+    // A retired relay is only drained: listened on for a row still recorded
+    // on it, until its move is acknowledged, and for nobody else.
+    final own = device.hostedRelayUri;
+    urls.removeWhere(
+      (_, url) =>
+          knownRelays.isRetired(url) && (own == null || !sameRelay(url, own)),
+    );
     return List.unmodifiable(urls.values);
+  }
+
+  /// Where [device]'s pairing is to move — a move asked for in Settings, or
+  /// [knownRelays]' policy — or null when it stays. Never a LAN pairing.
+  Uri? relayMoveTargetFor(PairedDevice device) {
+    if (!_hostedEnabled || device.revoked || device.pairedViaLocalRelay) {
+      return null;
+    }
+    final asked = _relayUri(device.relayMoveTo);
+    final own = device.hostedRelayUri;
+    if (asked != null) {
+      return own != null && sameRelay(asked, own) ? null : asked;
+    }
+    return knownRelays.moveTargetFor(device.relayUrl);
+  }
+
+  /// The relay [device] moved off and has not yet been heard since leaving.
+  Uri? _movedFrom(PairedDevice device) =>
+      device.relayMoveSettled ? null : _relayUri(device.relayMovedFrom);
+
+  static Uri? _relayUri(String? text) {
+    if (text == null || text == kLocalRelayMarker) return null;
+    final parsed = Uri.tryParse(text);
+    return parsed != null && parsed.hasScheme && parsed.host.isNotEmpty
+        ? parsed
+        : null;
   }
 
   /// The relay set announced in `host.status` — the same list the listeners are
   /// open on, so a phone is never told about a relay nobody is waiting at.
-  List<Uri> announcedRelaysFor(PairedDevice device) =>
-      activeRelayUrlsFor(device);
+  List<Uri> announcedRelaysFor(PairedDevice device) => [
+    for (final url in activeRelayUrlsFor(device))
+      if (!knownRelays.isRetired(url)) url,
+  ];
 
   /// `host:port` of the direct LAN listener — a hint for a network that eats
   /// multicast; loopback is never announced and DHCP can make it stale.
@@ -353,7 +415,7 @@ class RemoteHostService {
       throw StateError('remote access is not running');
     }
     await cancelPairing();
-    final pairingRelay = relay ?? this.relay;
+    final pairingRelay = knownRelays.upgrade(relay) ?? this.relay;
     final fallback = this.relay;
     final payload = await PairingPayload.generateWithCode(
       // The payload carries a relay either way; a direct pairing names nowhere.
@@ -363,9 +425,12 @@ class RemoteHostService {
       // The tab's relay stays the payload's `relay` — an older companion reads
       // that alone — while the QR names every other relay this host serves.
       relays: [
-        ?_localRelayUrl,
-        ..._extraRelays,
-        if (_hostedEnabled && fallback != null) fallback,
+        for (final url in [
+          ?_localRelayUrl,
+          ..._extraRelays,
+          if (_hostedEnabled && fallback != null) fallback,
+        ])
+          if (!knownRelays.isRetired(url)) url,
       ],
     );
     final session = HostPairingSession(
@@ -477,6 +542,9 @@ class RemoteHostService {
       }
       if (row.capabilities.bits != runtime.device.capabilities.bits) {
         await runtime.applyGrant(row);
+      }
+      if (row.relayMoveTo != runtime.device.relayMoveTo) {
+        await runtime.applyRelayMove(row);
       }
     }
     for (final row in rows.values) {

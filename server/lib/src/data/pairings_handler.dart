@@ -16,6 +16,10 @@ class PairingsHandler {
   /// is enforced on the next frame). Set by the companion while it serves.
   void Function()? onWritten;
 
+  /// The hosted relay "Move to the default relay" moves a pairing to: the
+  /// companion's, read when asked. Null when the server has none.
+  Uri? Function()? defaultRelay;
+
   List<PairedDevice> list() => [
     for (final device in _devices.getAll()) pairedDeviceWithoutSecrets(device),
   ];
@@ -42,6 +46,33 @@ class PairingsHandler {
   PairedDevice revoke(DeviceRevoke request, List<DataChange> changes) {
     _existing(request.id);
     _devices.revoke(request.id);
+    return _told(request.id, changes);
+  }
+
+  PairedDevice moveRelay(DeviceMoveRelay request, List<DataChange> changes) {
+    final device = _existing(request.id);
+    if (device.revoked) {
+      throw const DataRefused.invalid(
+        'This device is revoked: pair it again instead.',
+      );
+    }
+    if (device.pairedViaLocalRelay) {
+      throw const DataRefused.invalid(
+        'This device is paired through the local relay, which is not moved.',
+      );
+    }
+    final target =
+        defaultRelay?.call() ??
+        (throw const DataRefused.invalid(
+          'This server has no hosted relay to move the device to.',
+        ));
+    final own = device.hostedRelayUri;
+    if (own != null && sameRelay(own, target)) {
+      throw const DataRefused.invalid(
+        'This device is already on the default relay.',
+      );
+    }
+    _devices.askRelayMove(request.id, target.toString());
     return _told(request.id, changes);
   }
 

@@ -114,6 +114,10 @@ class DaemonCompanion implements CompanionHandler {
       final service = _service;
       if (service != null) unawaited(service.reconcileDevices());
     };
+    // "Move to the default relay": the hosted relay new pairings get.
+    _dataService.defaultRelay = () => _config.hostedEnabled
+        ? _service?.relay ?? KnownRelays.popupBits.upgrade(_config.relay)
+        : null;
     this.localRelay =
         localRelay ??
         ServerLocalRelay(

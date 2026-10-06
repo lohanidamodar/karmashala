@@ -56,6 +56,7 @@ class CompanionPairing {
     this.directEndpoint,
     HostRoute? route,
     CompanionRoutePin? pin,
+    this.relayHome,
   }) : pin = pin ?? CompanionRoutePin.auto,
        route = route ?? (directEndpoint == null ? null : HostRoute.direct),
        deviceKey = Uint8List.fromList(deviceKey),
@@ -84,6 +85,11 @@ class CompanionPairing {
   /// record written before Loop 83 has exactly one entry, [relay], rebuilt on
   /// read — no pairing is ever lost to the new shape.
   final List<RelayCandidate> candidates;
+
+  /// The relay the host moved this pairing to (`link.relay.move`): dialled
+  /// first whatever the others' health says, until the host stops naming it.
+  /// Null for a pairing never moved.
+  final Uri? relayHome;
 
   /// `host:port` where the host's LAN listener was last announced — a discovery
   /// hint that may be stale the moment DHCP moves, nothing more.
@@ -128,6 +134,8 @@ class CompanionPairing {
     HostRoute? route,
     CompanionRoutePin? pin,
     CapabilitySet? capabilities,
+    Uri? relayHome,
+    bool clearRelayHome = false,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
@@ -142,6 +150,7 @@ class CompanionPairing {
     directEndpoint: directEndpoint ?? this.directEndpoint,
     route: route ?? this.route,
     pin: pin ?? this.pin,
+    relayHome: clearRelayHome ? null : relayHome ?? this.relayHome,
   );
 
   CompanionPairing withGeneration(int next) => copyWith(generation: next);
@@ -172,6 +181,7 @@ class CompanionPairing {
     if (directEndpoint != null) 'directEndpoint': directEndpoint,
     if (route != null) 'via': route!.wire,
     'pin': ?pin.toJson(),
+    'home': ?relayHome?.toString(),
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -190,6 +200,9 @@ class CompanionPairing {
     final lastConnected = json['lastConnectedAt'];
     final lanHint = json['lanHint'];
     final direct = json['directEndpoint'];
+    final home = json['home'] is String
+        ? Uri.tryParse(json['home']! as String)
+        : null;
     return CompanionPairing(
       hostId: DeviceId.parse(hostId),
       deviceId: DeviceId.parse(deviceId),
@@ -209,6 +222,9 @@ class CompanionPairing {
       directEndpoint: direct is String && direct.isNotEmpty ? direct : null,
       route: HostRoute.tryParse(json['via']),
       pin: CompanionRoutePin.fromJson(json['pin']),
+      relayHome: home != null && home.hasScheme && home.host.isNotEmpty
+          ? home
+          : null,
     );
   }
 

@@ -409,6 +409,15 @@ enum FrameType {
   /// capability: `host.attach` already required an attach tier.
   linkResume('link.resume', origin: FrameOrigin.companion),
 
+  /// Meet this host on `p.to` from now on. Sent before `host.status`, and only
+  /// to a hello that named `relay.move` (`kLinkFeatureRelayMove`), so a phone
+  /// that predates it never sees one. Sealed, so only the host can move it.
+  linkRelayMove('link.relay.move', origin: FrameOrigin.host),
+
+  /// The phone saved the move to `p.to`, echoing the move's `id`; sent before
+  /// `host.attach`. Never answered: the host switches its row on it.
+  linkRelayMoved('link.relay.moved', origin: FrameOrigin.companion),
+
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),

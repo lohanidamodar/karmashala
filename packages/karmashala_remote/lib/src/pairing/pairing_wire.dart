@@ -22,11 +22,19 @@ Map<String, Object?>? _decodeMap(List<int> frame) {
   }
 }
 
+/// A hello from a phone that knows `link.relay.move`: it saves a move the host
+/// asks for, and acknowledges it, before it attaches.
+const String kLinkFeatureRelayMove = 'relay.move';
+
 /// The first frame a companion sends on any connection: which rendezvous — and
 /// therefore which sealed channel — this link belongs to. Required on the LAN
 /// path, where a TCP listener has no URL.
 class LinkHello {
-  const LinkHello(this.rendezvous, {this.resume = false});
+  const LinkHello(
+    this.rendezvous, {
+    this.resume = false,
+    this.features = const {},
+  });
 
   final RendezvousId rendezvous;
 
@@ -36,12 +44,18 @@ class LinkHello {
   /// exactly as before; a server that predates it reads a plain hello.
   final bool resume;
 
+  /// What this end understands beyond the protocol's minimum, such as
+  /// [kLinkFeatureRelayMove]. Cleartext, so a hint only: it decides whether a
+  /// frame is offered, never whether one is trusted. Omitted when empty.
+  final Set<String> features;
+
   Uint8List encode() => Uint8List.fromList(
     utf8.encode(
       jsonEncode({
         'karmashala': 'link',
         'r': rendezvous.value,
         if (resume) 'resume': true,
+        if (features.isNotEmpty) 'f': features.toList(),
       }),
     ),
   );
@@ -51,7 +65,17 @@ class LinkHello {
     if (json == null || json['karmashala'] != 'link') return null;
     final r = json['r'];
     if (r is! String || !RendezvousId.pattern.hasMatch(r)) return null;
-    return LinkHello(RendezvousId.parse(r), resume: json['resume'] == true);
+    final f = json['f'];
+    return LinkHello(
+      RendezvousId.parse(r),
+      resume: json['resume'] == true,
+      features: f is List
+          ? {
+              for (final x in f)
+                if (x is String) x,
+            }
+          : const {},
+    );
   }
 }
 

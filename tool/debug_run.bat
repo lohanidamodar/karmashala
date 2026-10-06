@@ -45,6 +45,6 @@ if not defined LIVE (
   echo === PROBE DATA !KARMASHALA_DATA_DIR! === >> "%LOG%"
 )
 
-call "%FLUTTER%" run --debug -d windows --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://relay.popupbits.com >> "%LOG%" 2>&1
+call "%FLUTTER%" run --debug -d windows --dart-define=KARMASHALA_VERSION=!APPVER! --dart-define=KARMASHALA_RELAY_URL=wss://kmrelay.popupbits.com >> "%LOG%" 2>&1
 echo EXITED > "%DONE%"
 exit /b 0

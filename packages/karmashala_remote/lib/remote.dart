@@ -4,6 +4,7 @@
 library;
 
 export 'src/domain/companion_presence.dart';
+export 'src/domain/known_relays.dart';
 export 'src/domain/paired_device.dart';
 export 'src/domain/paired_device_json.dart';
 export 'src/domain/paired_device_store.dart';

@@ -111,4 +111,70 @@ void main() {
     expect(wire(told.single.toJson()), isNot(contains(token)));
     expect(applied, 0);
   });
+
+  group('Move to the default relay', () {
+    const self = 'wss://relay.my-own.net';
+    const hosted = 'wss://kmrelay.example.org';
+
+    setUp(() {
+      service.defaultRelay = () => Uri.parse(hosted);
+      devices.insert(
+        PairedDevice(
+          id: 'bb22',
+          name: 'Tablet',
+          deviceKey: key,
+          capabilities: CapabilitySet.all,
+          generation: 2,
+          createdAt: DateTime.utc(2026, 9, 2),
+          relayUrl: self,
+        ),
+      );
+    });
+
+    test('asks the move, tells it and applies it to the live link', () {
+      final reply = app.handle(const DeviceMoveRelay('bb22'));
+      expect(reply.value.relayMoveTo, hosted);
+      expect(reply.value.relayUrl, self, reason: 'until the phone acks');
+      expect(devices.getById('bb22')!.relayMoveTo, hosted);
+      expect(applied, 1);
+      expect(
+        (told.single.changes.single as DeviceChanged).device.relayMoveTo,
+        hosted,
+      );
+    });
+
+    test('is refused for a pairing on the local relay, a revoked one, one '
+        'already there, and a server with no hosted relay', () {
+      expect(
+        () => app.handle(const DeviceMoveRelay('aa11')),
+        refused(DataRefusalCode.invalid, 'local'),
+      );
+      devices.insert(
+        PairedDevice(
+          id: 'cc33',
+          name: 'Old',
+          deviceKey: key,
+          capabilities: CapabilitySet.all,
+          generation: 1,
+          createdAt: DateTime.utc(2026, 9, 3),
+          relayUrl: hosted,
+        ),
+      );
+      expect(
+        () => app.handle(const DeviceMoveRelay('cc33')),
+        refused(DataRefusalCode.invalid, 'already'),
+      );
+      devices.revoke('bb22');
+      expect(
+        () => app.handle(const DeviceMoveRelay('bb22')),
+        refused(DataRefusalCode.invalid, 'revoked'),
+      );
+      service.defaultRelay = () => null;
+      expect(
+        () => app.handle(const DeviceMoveRelay('cc33')),
+        refused(DataRefusalCode.invalid, 'no hosted relay'),
+      );
+      expect(applied, 0);
+    });
+  });
 }

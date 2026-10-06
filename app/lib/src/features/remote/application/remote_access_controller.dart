@@ -30,14 +30,15 @@ import 'remote_providers.dart';
 const String kDefaultRelayUrl = String.fromEnvironment('KARMASHALA_RELAY_URL');
 
 /// The relay URL to dial: the user's setting when it parses, this build's
-/// default otherwise, and null when there is neither.
+/// default otherwise, and null when there is neither. A retired PopupBits
+/// relay is never written: it reads as the current one.
 Uri? resolveRelayUri(String? configured) {
   final text = configured?.trim() ?? '';
   final parsed = text.isEmpty ? null : Uri.tryParse(text);
   if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
     return defaultCompanionRelay;
   }
-  return parsed;
+  return KnownRelays.popupBits.upgrade(parsed);
 }
 
 /// The internet relay the server's config names, else this build's default;
@@ -200,6 +201,13 @@ class RemoteAccessController {
   /// Revokes a device: the server deletes its key and drops its link.
   Future<void> revoke(PairedDevice device) =>
       _device('revoke', _ref.read(pairedDevicesDataProvider).revoke(device.id));
+
+  /// Moves a device to the default relay: the server offers the move at the
+  /// phone's next link and switches once the phone acknowledges it.
+  Future<void> moveRelay(PairedDevice device) => _device(
+    'relay move',
+    _ref.read(pairedDevicesDataProvider).moveRelay(device.id),
+  );
 
   /// A device write the server may refuse; the list shows what it holds.
   Future<void> _device(String what, Future<PairedDevice> write) async {
