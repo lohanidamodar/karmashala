@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
 import '../../automations/application/automation_check_runner.dart';
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
@@ -27,7 +26,7 @@ import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/delivery_providers.dart';
 import '../application/session_actions.dart';
 import '../application/delivery_update_service.dart';
-import '../application/session_archive_service.dart';
+import 'archive_session_action.dart';
 import '../application/session_handoff_service.dart';
 import '../application/acp_session_providers.dart';
 import '../application/host_lifecycle/host_lifecycle_providers.dart';
@@ -155,79 +154,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     ref.invalidate(checkoutForgeProvider(Checkout(directory)));
   }
 
-  Future<void> _archive() => _run(() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final worktree = ref
-        .read(sessionsDataProvider)
-        .getById(widget.sessionId)
-        ?.worktree;
-    if (worktree == null) return;
-
-    final confirmed = await _confirm(
-      title: 'Archive this worktree?',
-      body:
-          'The directory ${worktree.path} is removed.\n\n'
-          'The transcript, review notes and checkpoints are kept, and so is '
-          'the branch.',
-      action: 'Archive',
-    );
-    if (confirmed != true) return;
-
-    final service = ref.read(sessionArchiveServiceProvider);
-    var outcome = await service.archive(widget.sessionId);
-    if (outcome.refusal == ArchiveRefusal.uncommittedChanges) {
-      // A second, separate confirmation: this one destroys work no branch
-      // holds, and it is asked about *this* session rather than set as a mode.
-      final discard = await _confirm(
-        title: 'Discard uncommitted work?',
-        body:
-            '${outcome.message}\n\n'
-            'They are in no commit and no branch, so this cannot be undone.',
-        action: 'Discard and archive',
-        destructive: true,
-      );
-      if (discard != true) {
-        messenger.showSnackBar(SnackBar(content: Text(outcome.message)));
-        return;
-      }
-      outcome = await service.archive(
-        widget.sessionId,
-        discardUncommitted: true,
-      );
-    }
-    messenger.showSnackBar(SnackBar(content: Text(outcome.message)));
-  });
-
-  Future<bool?> _confirm({
-    required String title,
-    required String body,
-    required String action,
-    bool destructive = false,
-  }) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          if (destructive)
-            DestructiveButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(action),
-            )
-          else
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(action),
-            ),
-        ],
-      ),
-    );
-  }
+  Future<void> _archive() =>
+      _run(() => deleteSessionWorktree(context, ref, widget.sessionId));
 
   void _press(OfferedAction offered, SessionDelivery? delivery) {
     final pr = delivery?.pullRequest;
@@ -961,8 +889,8 @@ String _appActionTooltip(DeliveryAction action) => switch (action) {
         'agent is running, or the merge would conflict.',
   DeliveryAction.markReady => 'Takes the pull request out of draft',
   DeliveryAction.archive =>
-    'Removes the worktree directory. The transcript, review notes and '
-        'checkpoints are kept.',
+    'Removes the worktree directory. The session, its transcript, review '
+        'notes and checkpoints are kept.',
   _ => '',
 };
 

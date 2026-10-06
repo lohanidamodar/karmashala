@@ -819,7 +819,7 @@ void main() {
       'Push',
       'Open PR',
       'Run tests',
-      'Archive worktree',
+      'Delete worktree',
       'Continue with…',
     ];
 

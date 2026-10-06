@@ -66,7 +66,7 @@ class FakeSessionRows implements SessionStatusStore {
   void updateView(String id, SessionView view) =>
       _patch(id, SessionPatch.view(view));
   void markWorktreeRemoved(String id, DateTime at) =>
-      _patch(id, SessionPatch.removeWorktree(at));
+      _patch(id, SessionPatch.worktreeDeleted(at));
   void markArchived(String id, DateTime at) =>
       _patch(id, SessionPatch.archive(at));
   void updatePermissionMode(String id, String? mode) =>

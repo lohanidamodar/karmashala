@@ -65,10 +65,10 @@ class ArchiveOutcome {
           'change${changedFileCount(changes) == 1 ? '' : 's'} would be destroyed.',
     ArchiveRefusal.noWorktree =>
       'This session works in the repository itself; there is no worktree to '
-          'archive.',
-    ArchiveRefusal.alreadyArchived => 'This worktree is already archived.',
+          'delete.',
+    ArchiveRefusal.alreadyArchived => 'This worktree is already deleted.',
     ArchiveRefusal.sessionGone => 'This session no longer exists.',
-    null => error == null ? 'Worktree archived.' : '$error',
+    null => error == null ? 'Worktree deleted.' : '$error',
   };
 }
 

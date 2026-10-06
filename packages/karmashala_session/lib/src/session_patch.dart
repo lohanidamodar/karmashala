@@ -38,12 +38,18 @@ final class SessionPatch {
   /// Shown again. A removed worktree stays removed.
   const SessionPatch.unarchive() : this._(const {_archivedAt: null});
 
-  /// Its worktree removed at [at], which archives it too.
+  /// Its worktree removed at [at], which archives it too — what the worktree
+  /// cleanup records.
   SessionPatch.removeWorktree(DateTime at)
     : this._({
         _archivedAt: at.toUtc().toIso8601String(),
         _worktreeRemovedAt: at.toUtc().toIso8601String(),
       });
+
+  /// Its worktree deleted at [at] by a person ("Delete worktree"); whether
+  /// it is archived is left as it is.
+  SessionPatch.worktreeDeleted(DateTime at)
+    : this._({_worktreeRemovedAt: at.toUtc().toIso8601String()});
 
   /// The permission mode chosen for it, verbatim, or null to follow the
   /// agent's default live.

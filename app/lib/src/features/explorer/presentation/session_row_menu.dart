@@ -106,6 +106,12 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
     DesktopMenuItem(value: 'unarchive', label: 'Unarchive', icon: AppIcons.tray)
   else
     DesktopMenuItem(value: 'archive', label: 'Archive', icon: AppIcons.tray),
+  if (ownsWorktree(session))
+    DesktopMenuItem(
+      value: 'delete-worktree',
+      label: 'Delete worktree',
+      icon: AppIcons.folder,
+    ),
   DesktopMenuItem(
     value: 'delete',
     label: 'Delete',
@@ -169,6 +175,8 @@ Future<void> runNativeSessionMenuAction(
       await archiveSessionsFromUi(context, ref, [session]);
     case 'unarchive':
       await unarchiveSessionsFromUi(context, ref, [session.id]);
+    case 'delete-worktree':
+      await deleteSessionWorktree(context, ref, session.id);
     case 'delete':
       unawaited(
         _deleteNative(

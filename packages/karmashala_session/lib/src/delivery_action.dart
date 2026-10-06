@@ -59,7 +59,7 @@ enum DeliveryAction {
 
   /// Ours, and confirmed: removes the session's worktree directory and nothing
   /// else. The transcript, review notes and checkpoints stay.
-  archive(label: 'Archive worktree');
+  archive(label: 'Delete worktree');
 
   const DeliveryAction({required this.label, this.prompt});
 

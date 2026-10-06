@@ -120,14 +120,15 @@ void main() {
     );
   }
 
-  test('removes the worktree and records when', () async {
+  test('removes the worktree, records when, and leaves the session as it '
+      'is', () async {
     addSession();
     final outcome = await build().service.archive('s1');
     await data.settled();
 
     expect(outcome.isArchived, isTrue);
-    expect(server.sessionRows.getById('s1')!.isArchived, isTrue);
-    expect(server.sessionRows.getById('s1')!.archivedAt, testTime);
+    expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
+    expect(server.sessionRows.getById('s1')!.worktreeRemovedAt, testTime);
     expect(
       requests.map((r) => r.arguments).where((a) => a.contains('worktree')),
       [
@@ -174,7 +175,7 @@ void main() {
     final outcome = await harness.service.archive('s1');
     expect(outcome.refusal, ArchiveRefusal.stillRunning);
     expect(outcome.message, contains('still running'));
-    expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
+    expect(server.sessionRows.getById('s1')!.worktreeRemoved, isFalse);
     expect(requests.any((r) => r.arguments.contains('remove')), isFalse);
   });
 
@@ -186,7 +187,7 @@ void main() {
     expect(outcome.refusal, ArchiveRefusal.uncommittedChanges);
     expect(outcome.changes.length, 2);
     expect(outcome.message, contains('2 uncommitted changes'));
-    expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
+    expect(server.sessionRows.getById('s1')!.worktreeRemoved, isFalse);
     expect(
       requests.any((r) => r.arguments.contains('remove')),
       isFalse,
@@ -249,7 +250,7 @@ void main() {
       final outcome = await build().service.archive('s1');
       expect(outcome.isArchived, isFalse);
       expect(outcome.message, contains('cannot remove working tree'));
-      expect(server.sessionRows.getById('s1')!.isArchived, isFalse);
+      expect(server.sessionRows.getById('s1')!.worktreeRemoved, isFalse);
     },
   );
 

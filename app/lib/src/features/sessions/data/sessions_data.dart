@@ -105,9 +105,9 @@ class SessionsData extends SessionRowsIndex {
   void updatePaneId(String id, String? paneId) =>
       _edit(id, SessionPatch.pane(paneId));
 
-  /// Its worktree removed, which archives it too.
+  /// Its worktree deleted; archived or not, it stays as it was.
   void markWorktreeRemoved(String id, DateTime at) =>
-      _edit(id, SessionPatch.removeWorktree(at));
+      _edit(id, SessionPatch.worktreeDeleted(at));
 
   void markArchived(String id, DateTime at) =>
       _edit(id, SessionPatch.archive(at));

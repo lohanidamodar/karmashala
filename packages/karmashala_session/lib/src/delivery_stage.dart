@@ -23,7 +23,7 @@ enum DeliveryStage {
 
   /// The worktree has been removed. The transcript, review notes and
   /// checkpoints are all still there — see `SessionArchiveService`.
-  archived(order: 6, label: 'Archived');
+  archived(order: 6, label: 'Worktree deleted');
 
   const DeliveryStage({required this.order, required this.label});
 
