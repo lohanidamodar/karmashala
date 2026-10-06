@@ -713,4 +713,5 @@ const codexDescriptor = AgentDescriptor(
         'Codex keeps its servers in ~/.codex/config.toml, and nothing here '
         'reads TOML yet, so what it would be given has not been read.',
   ),
+  instructionFiles: ['AGENTS.md'],
 );

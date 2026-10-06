@@ -2,17 +2,43 @@
 /// whatever the person asked: where it is, and that the repositories are
 /// its to choose.
 ///
-/// Plain prose, because every agent reads a first message; a system-prompt
-/// file would reach only the agents that take one.
+/// Plain prose, for an agent that reads no instruction file from its folder.
+/// One that does reads [kScratchInstructionFiles] there instead, and its first
+/// message is only what the person wrote.
 String scratchPreamble(String folder) =>
     '$_opens '
-    '$folder, which is an empty git repository. To work on a repository, '
+    '$folder, which is an empty git repository. $_attach '
+    '$_closes';
+
+const _attach =
+    'To work on a repository, '
     'attach one to this session: list_projects and list_checkouts show what '
     'this machine has, session_checkout_attach attaches a checkout (pass '
     'worktree to work on a branch of your own instead of the checkout '
     'itself), and project_add with a gitUrl clones a repository this machine '
-    'lacks into ~/karmashala/<repo>, after which you attach it the same way. '
-    '$_closes';
+    'lacks into ~/karmashala/<repo>, after which you attach it the same way.';
+
+/// The files a scratch folder is given, by name: the guidance in `AGENTS.md`,
+/// and a `CLAUDE.md` that imports it. Kept out of git by the folder's own
+/// `.git/info/exclude`, and never rewritten once there.
+const Map<String, String> kScratchInstructionFiles = {
+  'AGENTS.md':
+      '# A Karmashala scratch folder\n'
+      '\n'
+      'This session has no project. It runs in this scratch folder of its '
+      'own, an empty git repository. $_attach '
+      'Work that belongs to no repository can stay here.\n'
+      '\n'
+      'Karmashala wrote this file and CLAUDE.md; git ignores both '
+      '(.git/info/exclude).\n',
+  'CLAUDE.md': '@AGENTS.md\n',
+};
+
+/// Whether a folder holding [kScratchInstructionFiles] reaches an agent that
+/// reads [declared] (`AgentDescriptor.instructionFiles`): only when it reads
+/// some file and every one is there. Otherwise it is told in words.
+bool scratchFilesCover(List<String> declared) =>
+    declared.isNotEmpty && declared.every(kScratchInstructionFiles.containsKey);
 
 const _opens =
     'This session has no project. It runs in a scratch folder of its own,';

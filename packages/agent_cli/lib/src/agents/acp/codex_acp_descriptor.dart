@@ -91,4 +91,5 @@ const codexAcpDescriptor = AgentDescriptor(
       ],
     ),
   ),
+  instructionFiles: ['AGENTS.md'],
 );

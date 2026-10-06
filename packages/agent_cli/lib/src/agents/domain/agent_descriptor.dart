@@ -105,6 +105,7 @@ class AgentDescriptor {
     this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
     this.acp,
     this.chatFormOf,
+    this.instructionFiles = const [],
   });
 
   final String id;
@@ -198,6 +199,13 @@ class AgentDescriptor {
   /// form of: the two are listed as one agent (`AgentRegistry.formsOf`).
   /// Declared on the chat side, so a terminal agent needs no edit to gain one.
   final String? chatFormOf;
+
+  /// **The files this agent reads from its working folder at start**, as
+  /// project instructions (`CLAUDE.md`, `AGENTS.md`). Where Karmashala has
+  /// something to tell a session about its folder, it writes it there rather
+  /// than into the first message. Empty when undeclared, and an undeclared
+  /// agent is told in words.
+  final List<String> instructionFiles;
 
   @override
   String toString() => 'AgentDescriptor($id)';

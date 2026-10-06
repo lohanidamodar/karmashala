@@ -968,4 +968,5 @@ const claudeCodeDescriptor = AgentDescriptor(
         '`enabledMcpjsonServers` and `disabledMcpjsonServers`; the binary '
         'carries the literal `.mcp.json`. Read 2026-09-13.',
   ),
+  instructionFiles: ['CLAUDE.md'],
 );

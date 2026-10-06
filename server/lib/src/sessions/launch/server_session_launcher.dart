@@ -69,6 +69,7 @@ class ServerSessionLauncher {
     this.registryOfAgents = AgentRegistry.builtIn,
     this.trustScratchFolder,
     this.discardFailedScratch,
+    this.writeScratchInstructions,
     this.log,
   });
 
@@ -105,6 +106,11 @@ class ServerSessionLauncher {
     EnvironmentPath folder,
   )?
   trustScratchFolder;
+
+  /// Gives a scratch folder its instruction files
+  /// (`ProjectFolders.writeScratchInstructions`), answering whether they are
+  /// there; null writes none, and every agent is told in words.
+  final Future<bool> Function(EnvironmentPath folder)? writeScratchInstructions;
 
   /// Removes a scratch checkout a fresh launch failed in, when nothing else
   /// is there (`ProjectFolders.discardFailedScratch`); null keeps it.
@@ -311,11 +317,17 @@ class ServerSessionLauncher {
         ? spec.prompt
         : attribution.render(spec.prompt!);
     // A fresh conversation in a scratch folder is told where it is and that
-    // the repositories are its to attach; a resumed one was told already.
+    // the repositories are its to attach; a resumed one was told already. An
+    // agent that reads its folder's instruction files reads it there, so its
+    // first message is only what the person wrote.
     final freshConversation =
         !restarting && resumeId == null && spec.forkConversationId == null;
     final inScratch = rows.isScratchProject(repository.projectId);
-    final prompt = freshConversation && inScratch
+    final toldByFile =
+        freshConversation &&
+        inScratch &&
+        await _instructScratch(installation, launchDirectory);
+    final prompt = freshConversation && inScratch && !toldByFile
         ? withScratchPreamble(launchDirectory.path, attributed)
         : attributed;
     if (inScratch) await _trustScratch(installation, launchDirectory);
@@ -694,6 +706,29 @@ class ServerSessionLauncher {
 
   /// [trustScratchFolder] for [folder], never failing the launch: an agent
   /// that still asks about the folder is a prompt, not a refusal.
+  /// Whether [folder]'s instruction files reach [installation]'s agent: it
+  /// reads only files a scratch folder is given, and they were written.
+  Future<bool> _instructScratch(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  ) async {
+    final write = writeScratchInstructions;
+    final declared = registryOfAgents
+        .byId(installation.agentId)
+        ?.instructionFiles;
+    if (write == null || declared == null || !scratchFilesCover(declared)) {
+      return false;
+    }
+    final written = await write(folder);
+    if (!written) {
+      log?.call(
+        '${folder.path} has no instruction files; telling the agent in '
+        'its first message',
+      );
+    }
+    return written;
+  }
+
   Future<void> _trustScratch(
     AgentInstallation installation,
     EnvironmentPath folder,

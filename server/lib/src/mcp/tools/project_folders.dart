@@ -9,7 +9,8 @@ import 'package:karmashala_git/git.dart'
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
-import 'package:karmashala_session/session.dart' show SessionStatus;
+import 'package:karmashala_session/session.dart'
+    show SessionStatus, kScratchInstructionFiles;
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:path/path.dart' as p;
 
@@ -75,6 +76,12 @@ String scratchFolderName(DateTime day, String? hint, String id) {
 /// quotes and newlines a script is made of (`mkdir: missing operand`).
 CommandRequest _shellScript(String script) =>
     CommandRequest(executable: 'sh', arguments: ['-s'], stdinText: script);
+
+/// The `grep -e` arguments that let [kScratchInstructionFiles] through the
+/// "fresh folder" check in a script.
+final String _scratchFileGrep = [
+  for (final name in kScratchInstructionFiles.keys) ' -e $name',
+].join();
 
 /// Six hex characters: enough to keep one day's scratch folders apart.
 String scratchId([Random? random]) {
@@ -244,8 +251,59 @@ class ProjectFolders {
     }
   }
 
+  /// Gives a scratch [folder] its [kScratchInstructionFiles], each only when
+  /// absent, and lists them in the folder's own `.git/info/exclude` so they
+  /// never show as changes. Whether they are there afterwards; never throws.
+  Future<bool> writeScratchInstructions(EnvironmentPath folder) async {
+    try {
+      final target = _reach.environment(folder.environmentId);
+      if (target == null) return false;
+      if (_isPosix(target)) {
+        final quoted = "'${folder.path.replaceAll("'", r"'\''")}'";
+        final script = StringBuffer(
+          'cd $quoted || exit 3\nmkdir -p .git/info\n',
+        );
+        for (final MapEntry(key: name, value: text)
+            in kScratchInstructionFiles.entries) {
+          script
+            ..write("[ -e $name ] || cat > $name <<'KARMASHALA_EOF'\n")
+            ..write(text.endsWith('\n') ? text : '$text\n')
+            ..write('KARMASHALA_EOF\n')
+            ..write(
+              'grep -qxF $name .git/info/exclude 2>/dev/null || '
+              'echo $name >> .git/info/exclude\n',
+            );
+        }
+        final result = await _reach.runners
+            .forEnvironment(target)
+            .run(_shellScript(script.toString()));
+        return result.ok;
+      }
+      final info = Directory(p.join(folder.path, '.git', 'info'))
+        ..createSync(recursive: true);
+      final exclude = File(p.join(info.path, 'exclude'));
+      final excluded = exclude.existsSync()
+          ? exclude.readAsLinesSync().toSet()
+          : <String>{};
+      for (final MapEntry(key: name, value: text)
+          in kScratchInstructionFiles.entries) {
+        final file = File(p.join(folder.path, name));
+        if (!file.existsSync()) file.writeAsStringSync(text);
+        if (!excluded.contains(name)) {
+          final raw = exclude.existsSync() ? exclude.readAsStringSync() : '';
+          final separator = raw.isEmpty || raw.endsWith('\n') ? '' : '\n';
+          exclude.writeAsStringSync('$separator$name\n', mode: FileMode.append);
+        }
+      }
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   /// Deletes [checkout]'s folder when it holds only a repository with no
-  /// commit — what [createScratchCheckout] left there.
+  /// commit — what [createScratchCheckout] left there, its
+  /// [kScratchInstructionFiles] included.
   Future<bool> _deleteIfUntouched(
     ExecutionEnvironment target,
     Repository checkout,
@@ -256,7 +314,8 @@ class ProjectFolders {
       final script =
           '''
 cd $quoted || exit 3
-[ "\$(ls -A)" = ".git" ] || exit 4
+[ -d .git ] || exit 4
+[ -z "\$(ls -A | grep -vxF -e .git$_scratchFileGrep)" ] || exit 4
 git rev-parse -q --verify HEAD >/dev/null && exit 5
 cd / && rm -rf $quoted
 ''';
@@ -266,8 +325,9 @@ cd / && rm -rf $quoted
       return result.ok;
     }
     final folder = Directory(path);
-    final entries = folder.listSync();
-    if (entries.length != 1 || p.basename(entries.single.path) != '.git') {
+    final names = {for (final e in folder.listSync()) p.basename(e.path)};
+    if (!names.remove('.git') ||
+        names.any((n) => !kScratchInstructionFiles.containsKey(n))) {
       return false;
     }
     final heads = Directory(p.join(path, '.git', 'refs', 'heads'));

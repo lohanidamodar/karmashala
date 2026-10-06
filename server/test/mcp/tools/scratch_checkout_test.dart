@@ -169,6 +169,96 @@ void main() {
     });
   });
 
+  group('the guidance a scratch folder holds', () {
+    test(
+      'is AGENTS.md and CLAUDE.md, written once and kept out of git',
+      () async {
+        final checkout = await fixture.folders.createScratchCheckout(
+          target: host(),
+        );
+        final folder = checkout.path.path;
+
+        expect(
+          await fixture.folders.writeScratchInstructions(checkout.path),
+          isTrue,
+        );
+        for (final entry in kScratchInstructionFiles.entries) {
+          expect(
+            File(p.join(folder, entry.key)).readAsStringSync(),
+            entry.value,
+          );
+        }
+        final exclude = File(p.join(folder, '.git', 'info', 'exclude'));
+        final excluded = exclude.readAsLinesSync();
+        for (final name in kScratchInstructionFiles.keys) {
+          expect(excluded.where((l) => l == name), hasLength(1));
+        }
+
+        // A second launch neither rewrites an edited file nor repeats a line.
+        File(p.join(folder, 'AGENTS.md')).writeAsStringSync('mine');
+        expect(
+          await fixture.folders.writeScratchInstructions(checkout.path),
+          isTrue,
+        );
+        expect(File(p.join(folder, 'AGENTS.md')).readAsStringSync(), 'mine');
+        expect(exclude.readAsLinesSync(), excluded);
+      },
+    );
+
+    test(
+      'does not stop a failed launch taking its fresh folder with it',
+      () async {
+        final checkout = await fixture.folders.createScratchCheckout(
+          target: host(),
+        );
+        await fixture.folders.writeScratchInstructions(checkout.path);
+        session('s1', checkout.id);
+        SessionDao(fixture.database).updateStatus('s1', SessionStatus.failed);
+
+        expect(await fixture.folders.discardFailedScratch(checkout), isTrue);
+        expect(Directory(checkout.path.path).existsSync(), isFalse);
+      },
+    );
+
+    test('is written by a script on a POSIX machine', () async {
+      final requests = <CommandRequest>[];
+      final wsl = ExecutionEnvironment(
+        id: 'wsl:arch',
+        kind: EnvironmentKind.wsl,
+        name: 'arch',
+        wslDistribution: 'arch',
+        createdAt: RepoToolFixture.now,
+      );
+      fixture.data.ensureEnvironment(wsl);
+      final folders = ProjectFolders(
+        fixture.context,
+        CheckoutReach(
+          fixture.database,
+          runners: _Answering((request) {
+            requests.add(request);
+            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+          }),
+        ),
+        localHome: fixture.home,
+      );
+
+      expect(
+        await folders.writeScratchInstructions(
+          const EnvironmentPath(
+            environmentId: 'wsl:arch',
+            path: '/home/me/karmashala/scratch/x',
+          ),
+        ),
+        isTrue,
+      );
+      final script = requests.single.stdinText!;
+      expect(script, contains("cd '/home/me/karmashala/scratch/x'"));
+      expect(script, contains(kScratchInstructionFiles['AGENTS.md']!.trim()));
+      expect(script, contains('[ -e CLAUDE.md ] ||'));
+      expect(script, contains('.git/info/exclude'));
+    });
+  });
+
   group('createScratchCheckout in a POSIX environment', () {
     test('spells the folder into the shell script unquoted, inside the '
         'quoted path', () async {

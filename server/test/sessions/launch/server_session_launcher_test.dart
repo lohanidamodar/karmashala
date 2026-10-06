@@ -84,6 +84,8 @@ void main() {
   Set<String> vault = const {};
   AgentTerminalOpener? openAgent;
   List<String> discarded = [];
+  bool instructionsWritten = true;
+  List<String> instructed = [];
 
   ServerSessionLauncher build() {
     final rows = CheckoutRows(database);
@@ -126,6 +128,10 @@ void main() {
       discardFailedScratch: (checkout) async {
         discarded.add(checkout.id);
         return true;
+      },
+      writeScratchInstructions: (folder) async {
+        instructed.add(folder.path);
+        return instructionsWritten;
       },
     );
   }
@@ -172,6 +178,8 @@ void main() {
     registry = SessionRegistry(launcher: pty);
     openAgent = null;
     discarded = [];
+    instructionsWritten = true;
+    instructed = [];
     launches = build();
   });
 
@@ -277,6 +285,61 @@ void main() {
       throwsA(isA<ProcessException>()),
     );
     expect(discarded, ['rs']);
+  });
+
+  group('a fresh launch in a scratch folder', () {
+    setUp(() {
+      database.execute(
+        'INSERT INTO projects (id, name, root_environment_id, root_path, '
+        'kind, created_at) VALUES (?, ?, ?, ?, ?, ?);',
+        [
+          'ps',
+          'Scratch',
+          'local',
+          '/home/u/karmashala/scratch',
+          'scratch',
+          '$t0',
+        ],
+      );
+      database.execute(
+        'INSERT INTO repositories (id, project_id, name, environment_id, '
+        'path, created_at) VALUES (?, ?, ?, ?, ?, ?);',
+        [
+          'rs',
+          'ps',
+          'fresh',
+          'local',
+          '/home/u/karmashala/scratch/fresh',
+          '$t0',
+        ],
+      );
+    });
+
+    Future<void> start(String installationId) => launches.start(
+      SessionStartSpec(
+        repositoryId: 'rs',
+        installationId: installationId,
+        title: 'Scratch',
+        prompt: 'go',
+      ),
+    );
+
+    test('reads its guidance from the folder, so its first message is only '
+        'what the person wrote', () async {
+      await start('a1');
+      expect(instructed, ['/home/u/karmashala/scratch/fresh']);
+      expect(pty.started.last.argv.last, 'go');
+    });
+
+    test(
+      'is still told in words when the files could not be written',
+      () async {
+        instructionsWritten = false;
+        await start('a1');
+        expect(pty.started.last.argv.last, contains('no project'));
+        expect(pty.started.last.argv.last, endsWith('go'));
+      },
+    );
   });
 
   test('Settings decide the mode and model nobody chose', () async {

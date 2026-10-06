@@ -142,4 +142,5 @@ const claudeAcpDescriptor = AgentDescriptor(
       ],
     ),
   ),
+  instructionFiles: ['CLAUDE.md'],
 );
