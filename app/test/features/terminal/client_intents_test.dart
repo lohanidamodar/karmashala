@@ -165,6 +165,29 @@ void main() {
     );
   });
 
+  test('closing a session\'s tab the server names by session closes the tab '
+      'this window opened under its own pane id', () async {
+    final (container, server) = await start();
+    server.sessionRows.insert(session(id: 's9', title: 'Spawned'));
+    server.sessionWork.running.add('s9');
+    runOnHost('karmashala_s9');
+    server.sessionWork.tellIntent(
+      const OpenSessionTab(sessionId: 's9', title: 'Spawned'),
+    );
+    await pumpEventQueue();
+    await pumpEventQueue();
+    final pane = container.read(sessionsDataProvider).getById('s9')!.paneId!;
+    expect(pane, isNot('session-s9'));
+    expect(tabsWith(container, pane), 1);
+
+    // What terminal_close tells about an agent's terminal it detached.
+    server.sessionWork.tellIntent(
+      const CloseTerminalTab('session-s9', sessionId: 'karmashala_s9'),
+    );
+    await pumpEventQueue();
+    expect(tabsWith(container, pane), 0);
+  });
+
   test('a session an agent started on an ACP agent opens as its chat tab, '
       'as the New session dialog opens one — never a terminal pane', () async {
     final (container, server) = await start();

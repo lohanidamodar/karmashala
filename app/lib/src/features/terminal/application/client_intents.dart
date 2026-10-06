@@ -47,8 +47,11 @@ class ClientIntents extends Notifier<void> {
           ref
               .read(terminalSessionsControllerProvider.notifier)
               .openHostedRunTab(paneId: paneId, title: title);
-        case CloseTerminalTab(:final paneId):
+        case CloseTerminalTab(:final paneId, :final sessionId):
           _closeTab(paneId);
+          if (sessionId != null) {
+            ref.read(sessionActionsProvider).closeTerminalViews(sessionId);
+          }
         case SelectCheckout(:final repositoryId):
           final repository = ref
               .read(workspaceDataProvider)

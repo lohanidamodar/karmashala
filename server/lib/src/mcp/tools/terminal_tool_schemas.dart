@@ -220,7 +220,9 @@ const List<Map<String, Object?>> terminalControlToolSchemas = [
         'printed nothing is ended, because there is nothing to come back for. '
         'The result says which happened to each pane. Pass kill=true to skip '
         'that entirely and end them all — DESTRUCTIVE, and nothing brings back '
-        'what they were part-way through.',
+        'what they were part-way through. A session\'s chat tab is not a '
+        'terminal and is not listed: session_archive closes every view of a '
+        'session in every window.',
     'inputSchema': {
       'type': 'object',
       'properties': {

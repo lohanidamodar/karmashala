@@ -423,7 +423,9 @@ class TerminalToolSet extends ServerToolSet {
         }
       }
     }
-    data.tellIntent(CloseTerminalTab(terminal.paneId));
+    data.tellIntent(
+      CloseTerminalTab(terminal.paneId, sessionId: terminal.sessionId),
+    );
     return <String, Object?>{
       'tabId': tabId,
       'closed': true,

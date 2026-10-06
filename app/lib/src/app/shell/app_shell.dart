@@ -24,7 +24,7 @@ import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/server/presentation/server_command_actions.dart';
 import '../../features/sessions/application/session_actions.dart'
-    show archivedSessionTabsCloserProvider;
+    show archivedSessionTabsCloserProvider, closedTerminalTabsCloserProvider;
 import '../../features/sessions/application/quit_resume_launch.dart';
 import '../../features/sessions/application/server_session_notices.dart';
 import '../../features/sessions/presentation/quit_sessions_dialog.dart';
@@ -282,6 +282,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(noteTabsObserverProvider);
     // And for an archived session, whose tabs here close.
     ref.watch(archivedSessionTabsCloserProvider);
+    // And for a terminal the server closed, whose tabs here close.
+    ref.watch(closedTerminalTabsCloserProvider);
     // And for an agent switched from another client, whose old terminal
     // here goes.
     ref.watch(sessionSwitchFollowerProvider);

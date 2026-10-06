@@ -5309,7 +5309,7 @@
     },
     {
       "name": "terminal_close",
-      "description": "Close a terminal tab. A pane that is doing something — an agent session, a running command, a shell with real history — is DETACHED rather than ended: the window closes its tab and it keeps running in the Karmashala server, still listed by terminal_list, which is how a long build survives its tab being tidied away. An idle shell that has printed nothing is ended, because there is nothing to come back for. The result says which happened to each pane. Pass kill=true to skip that entirely and end them all — DESTRUCTIVE, and nothing brings back what they were part-way through.",
+      "description": "Close a terminal tab. A pane that is doing something — an agent session, a running command, a shell with real history — is DETACHED rather than ended: the window closes its tab and it keeps running in the Karmashala server, still listed by terminal_list, which is how a long build survives its tab being tidied away. An idle shell that has printed nothing is ended, because there is nothing to come back for. The result says which happened to each pane. Pass kill=true to skip that entirely and end them all — DESTRUCTIVE, and nothing brings back what they were part-way through. A session's chat tab is not a terminal and is not listed: session_archive closes every view of a session in every window.",
       "inputSchema": {
         "type": "object",
         "properties": {

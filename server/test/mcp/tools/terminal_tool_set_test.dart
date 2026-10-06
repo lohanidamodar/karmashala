@@ -258,7 +258,10 @@ void main() {
         registry.find('karmashala_local_pane1')!.lifecycle.hasEnded,
         isFalse,
       );
-      expect(told.whereType<CloseTerminalTab>().single.paneId, 'pane1');
+      final intent = told.whereType<CloseTerminalTab>().single;
+      expect(intent.paneId, 'pane1');
+      // A window may show it under a pane id of its own: it resolves this.
+      expect(intent.sessionId, 'karmashala_local_pane1');
       expect(pty.signals, isEmpty);
     });
 
@@ -286,6 +289,38 @@ void main() {
       pty.finish(0);
       final closed = await closing;
       expect(((closed['panes']! as List).single as Map)['outcome'], 'ended');
+    });
+
+    test('an ended terminal tells every client it was closed, so each window '
+        'drops its tab', () async {
+      final told = <DataChange>[];
+      final telling = ServerTerminals(
+        registry: registry,
+        environments: () => const [],
+        tell: told.addAll,
+        hostEnvironment: const {'SHELL': '/bin/zsh'},
+        installedShells: () => const ['/bin/bash', '/bin/zsh'],
+        windows: false,
+        settle: Duration.zero,
+      );
+      final closer = TerminalToolSet(
+        terminals: telling,
+        registry: registry,
+        data: data,
+        newPaneId: () => 'pane9',
+      );
+      await closer.call('terminal_open', const {}, null);
+      await closer.call('terminal_close', {
+        'tabId': 'pane9',
+        'kill': true,
+      }, null);
+
+      final removed = told.whereType<TerminalRemoved>().single;
+      expect(removed.sessionId, 'karmashala_local_pane9');
+      expect(removed.closed, isTrue);
+      final wire = DataChange.fromJson(removed.toJson())! as TerminalRemoved;
+      expect(wire.closed, isTrue, reason: 'it crosses the wire');
+      await telling.dispose();
     });
 
     test('an unknown tab is refused', () async {

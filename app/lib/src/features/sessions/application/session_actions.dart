@@ -31,7 +31,9 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionsArchived;
+    show SessionsArchived, TerminalRemoved, paneIdOfTerminalSession;
+import 'package:karmashala_host_protocol/protocol.dart' show parseBoxSessionRef;
+import '../../../core/data/data_providers.dart';
 import 'acp_session_providers.dart';
 import 'host_lifecycle/host_agent_statuses.dart';
 import 'host_lifecycle/host_lifecycle_providers.dart';
@@ -212,6 +214,19 @@ class SessionActions {
 
   /// Closes this window's tabs and panes showing [ids], as one layout change.
   void closeViewsOf(Iterable<String> ids) => _closeViews(_viewsOf(ids));
+
+  /// Closes this window's views of the server terminal [terminalSessionId]:
+  /// a shell's pane, or every view of the agent session it ran.
+  void closeTerminalViews(String terminalSessionId) {
+    final own =
+        parseBoxSessionRef(terminalSessionId)?.sessionId ?? terminalSessionId;
+    if (paneIdOfTerminalSession(own) case final paneId?) {
+      _closeViews([paneId]);
+      return;
+    }
+    const agent = 'karmashala_';
+    if (own.startsWith(agent)) closeViewsOf([own.substring(agent.length)]);
+  }
 
   /// A deleted session's tabs and panes have nothing left to show.
   void _closeViews(List<String> paneIds) {
@@ -1284,6 +1299,22 @@ final archivedSessionTabsCloserProvider = Provider<void>((ref) {
     ];
     archived = now;
     if (moved.isNotEmpty) actions.closeViewsOf(moved);
+  });
+  ref.onDispose(() => unawaited(changes.cancel()));
+});
+
+/// Closes this window's views of every terminal the server closes on request
+/// — `terminal_close`, another window, a phone. The window names its panes
+/// itself, so a shell is found by the pane its session id carries and an
+/// agent by its session row. A pruned record closes nothing. Watched by the
+/// shell.
+final closedTerminalTabsCloserProvider = Provider<void>((ref) {
+  final actions = ref.watch(sessionActionsProvider);
+  final changes = ref.watch(dataClientProvider).terminalChanges.listen((
+    change,
+  ) {
+    if (change is! TerminalRemoved || !change.closed) return;
+    actions.closeTerminalViews(change.sessionId);
   });
   ref.onDispose(() => unawaited(changes.cancel()));
 });
