@@ -200,15 +200,34 @@ class _Message extends StatelessWidget {
 }
 
 /// [entries] and every child below them, depth first, each with how deep it
-/// sits under the session the panel is for (0 for its own).
+/// sits under the session the panel is for (0 for its own). At every depth
+/// what is still working comes first, then what ended; newest first in each,
+/// so what needs watching is at the top (owner, 2026-10-06).
 Iterable<(SessionSubagent, int)> subagentLineage(
   List<SessionSubagent> entries, [
   int depth = 0,
 ]) sync* {
-  for (final entry in entries) {
+  for (final entry in _workingFirst(entries)) {
     yield (entry, depth);
     yield* subagentLineage(entry.children, depth + 1);
   }
+}
+
+List<SessionSubagent> _workingFirst(List<SessionSubagent> entries) {
+  bool working(SessionSubagent e) =>
+      e.state == SubagentState.running || e.state == SubagentState.blocked;
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  final indexed = [for (var i = 0; i < entries.length; i++) (i, entries[i])];
+  indexed.sort((a, b) {
+    final byState = (working(a.$2) ? 0 : 1).compareTo(working(b.$2) ? 0 : 1);
+    if (byState != 0) return byState;
+    final byStart = (b.$2.startedAt ?? epoch).compareTo(
+      a.$2.startedAt ?? epoch,
+    );
+    // Same or unknown start: the later arrival first.
+    return byStart != 0 ? byStart : b.$1.compareTo(a.$1);
+  });
+  return [for (final (_, entry) in indexed) entry];
 }
 
 /// How long [entry] ran, or has run so far; null when it never said when it

@@ -199,6 +199,43 @@ void main() {
     });
   });
 
+  test('what is still working comes first, newest first; then what ended, '
+      'newest first; at every depth', () {
+    final t = DateTime.utc(2026, 10, 6, 9);
+    SessionSubagent entry(
+      String id,
+      SubagentState state,
+      int minute, [
+      List<SessionSubagent> children = const [],
+    ]) => SessionSubagent(
+      kind: SubagentKind.childSession,
+      id: id,
+      title: id,
+      state: state,
+      startedAt: t.add(Duration(minutes: minute)),
+      children: children,
+    );
+
+    final ordered = subagentLineage([
+      entry('old-done', SubagentState.done, 0),
+      entry('old-running', SubagentState.running, 1),
+      entry('new-done', SubagentState.done, 5, [
+        entry('kid-done', SubagentState.done, 6),
+        entry('kid-blocked', SubagentState.blocked, 7),
+      ]),
+      entry('new-running', SubagentState.running, 8),
+    ]).map((e) => e.$1.id).toList();
+
+    expect(ordered, [
+      'new-running',
+      'old-running',
+      'new-done',
+      'kid-blocked',
+      'kid-done',
+      'old-done',
+    ]);
+  });
+
   test('a link reads in words, never as its stored name', () {
     expect(subagentLinkLabel('spawn'), 'child session');
     expect(subagentLinkLabel(null), 'child session');
@@ -267,9 +304,7 @@ void main() {
     });
   }
 
-  testWidgets('with no child sessions the badge takes no room', (
-    tester,
-  ) async {
+  testWidgets('with no child sessions the badge takes no room', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
