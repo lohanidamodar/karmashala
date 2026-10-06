@@ -81,10 +81,7 @@ class KeyedReplica<V> {
     _unanswered.clear();
     final wasPrimed = _primed;
     _primed = true;
-    if (!wasPrimed || !_sameRows(before)) {
-      _version++;
-      _changes.add(null);
-    }
+    if (!wasPrimed || !_sameRows(before)) _changed();
     if (!wasPrimed || !_serverChanges.hasListener) return;
     for (final entry in before.entries) {
       final after = _rows[entry.key];
@@ -136,19 +133,51 @@ class KeyedReplica<V> {
     return true;
   }
 
+  /// [setLocal] to null for every one of [keys], as one change.
+  void removeLocal(Iterable<String> keys) {
+    hold();
+    try {
+      for (final key in keys) {
+        setLocal(key, null);
+      }
+    } finally {
+      release();
+    }
+  }
+
+  var _holds = 0;
+  var _changedWhileHeld = false;
+
+  /// Holds [changes] until the matching [release], which fires it once if
+  /// anything moved: a batch of N rows wakes each listener once, not N times.
+  void hold() => _holds++;
+
+  void release() {
+    if (_holds == 0 || --_holds > 0 || !_changedWhileHeld) return;
+    _changedWhileHeld = false;
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  void _changed() {
+    _version++;
+    if (_holds > 0) {
+      _changedWhileHeld = true;
+    } else {
+      _changes.add(null);
+    }
+  }
+
   /// Whether [key] changed.
   bool _set(String key, V? value) {
     if (value == null) {
       if (_rows.remove(key) == null) return false;
-      _version++;
-      _changes.add(null);
+      _changed();
       return true;
     }
     final current = _rows[key];
     if (current != null && _same(current, value)) return false;
     _rows[key] = value;
-    _version++;
-    _changes.add(null);
+    _changed();
     return true;
   }
 

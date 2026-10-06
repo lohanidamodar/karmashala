@@ -26,6 +26,7 @@ import 'explorer_scope_bar.dart';
 import 'explorer_selection_actions.dart';
 import 'explorer_tree_rows.dart';
 import 'session_rows.dart';
+import 'purge_progress_strip.dart';
 import 'session_selection_bar.dart';
 import 'sidebar_chrome.dart';
 
@@ -141,6 +142,7 @@ class ExplorerPanel extends ConsumerWidget {
                 child: Column(
                   children: [
                     if (selecting) const SessionSelectionBar(),
+                    const PurgeProgressStrip(),
                     Expanded(
                       child: showingViews
                           ? const ExplorerSectionsList()

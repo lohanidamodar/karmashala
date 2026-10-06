@@ -589,6 +589,17 @@ extension _FakeSessionsHandling on FakeDataServer {
           _deleteSession(id, c);
           return const DataAck();
         }(),
+        SessionsDeleteMany(:final sessionIds, :final importedIds) => () {
+          for (final id in sessionIds.toSet()) {
+            if (sessionRows.getById(id) != null) _deleteSession(id, c);
+          }
+          for (final id in importedIds.toSet()) {
+            if (importedRows._rows.remove(id) != null) {
+              c.add(ImportedRemoved(id));
+            }
+          }
+          return const DataAck();
+        }(),
         final SessionLinkAdd r => _linkSession(r, c),
         final SessionLinkRemove r => () {
           _sessionOrRefuse(r.sessionId);

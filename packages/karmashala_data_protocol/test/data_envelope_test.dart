@@ -151,6 +151,7 @@ void main() {
       SessionPatch.pane(null).and(SessionPatch.rename('x', byUser: true)),
     ),
     const SessionDelete('s1'),
+    const SessionsDeleteMany(sessionIds: ['s1', 's2'], importedIds: ['i']),
     const SessionLinkAdd(sessionId: 's1', repositoryId: 'r2'),
     const SessionLinkRemove(sessionId: 's1', repositoryId: 'r2'),
     const SessionEvents('s1'),

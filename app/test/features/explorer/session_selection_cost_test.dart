@@ -11,7 +11,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
-import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/bulk_session_delete.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
@@ -25,6 +24,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/test_machine.dart';
 import '../../support/fake_data_server.dart';
+import '../../support/fake_store_scan_runner.dart';
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -312,14 +312,14 @@ void main() {
           );
 
         final mutator = CliSessionMutator();
-        final detection = _CountingDetection(detected);
+        final detection = FixedScanRunner(detected);
         final container = ProviderContainer(
           overrides: [
             await server.override(),
             clockProvider.overrideWithValue(FixedClock(testTime)),
             cliSessionMutatorProvider.overrideWithValue(mutator),
             cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),
-            cliDetectionServiceProvider.overrideWithValue(detection),
+            storeScanRunnerProvider.overrideWithValue(detection),
           ],
         );
         addTearDown(container.dispose);
@@ -336,8 +336,8 @@ void main() {
         measured[count] = _Cost(
           storeScans: mutator.storeScans,
           indexEntriesRead: mutator.indexEntriesRead,
-          detectionPasses: detection.passes,
-          rowDeletes: db.statements.where((k) => k.endsWith('.delete')).length,
+          detectionPasses: detection.scans,
+          rowDeletes: db.statements.where((k) => k.contains('delete')).length,
           statements: db.count,
           publishes: publishes,
         );
@@ -386,12 +386,12 @@ void main() {
           reason: 'at $count: exactly one publish for the whole selection',
         );
 
-        // The rows themselves are linear in what was asked for, and nothing
-        // else is: no read-back, no per-row transaction of its own.
+        // One request for the whole selection, applied in one transaction:
+        // one per row was N batches told to every other client.
         expect(
           cost.rowDeletes,
-          count,
-          reason: 'at $count: one delete asked per row and not one more',
+          1,
+          reason: 'at $count: one delete request for the whole selection',
         );
       }
 
@@ -426,35 +426,7 @@ class _Cost {
 
   @override
   String toString() =>
-      '(detections: $detectionPasses, scans: $storeScans, '
+      '(walks: $detectionPasses, scans: $storeScans, '
       'entries: $indexEntriesRead, rowDeletes: $rowDeletes, '
       'statements: $statements, publishes: $publishes)';
-}
-
-/// A detection service that answers from a fixed list and counts how often it
-/// was asked — the number the batch exists to keep at one.
-class _CountingDetection implements CliDetectionService {
-  _CountingDetection(this.sessions);
-
-  final List<DetectedSession> sessions;
-  int passes = 0;
-
-  @override
-  Future<List<DetectedProject>> detect(
-    List<CliStore> stores,
-    Map<String, ExecutionEnvironment> environmentsById,
-  ) async {
-    passes++;
-    return [
-      DetectedProject(
-        canonicalKey: 'demo',
-        displayPath: r'C:\src\demo\app',
-        sessions: List.of(sessions),
-        subagentSessions: const [],
-      ),
-    ];
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

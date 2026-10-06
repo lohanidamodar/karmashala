@@ -391,6 +391,22 @@ class SessionsHandler {
     return const DataAck();
   }
 
+  /// One transaction for a whole selection: N autocommits and N batches told
+  /// to every client were what made a bulk delete lag.
+  DataAck deleteMany(SessionsDeleteMany request, List<DataChange> changes) {
+    _db.transaction(() {
+      for (final id in request.sessionIds.toSet()) {
+        if (_sessions.getById(id) == null) continue;
+        delete(SessionDelete(id), changes);
+      }
+      for (final id in request.importedIds.toSet()) {
+        if (_imported.getById(id) == null) continue;
+        deleteImported(ImportedDelete(id), changes);
+      }
+    });
+    return const DataAck();
+  }
+
   // What the server itself wrote, told to every client.
 
   /// The rows of [sessionIds] as they now stand — for a write the server made

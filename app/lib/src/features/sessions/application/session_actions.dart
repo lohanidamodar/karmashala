@@ -15,6 +15,7 @@ import 'package:agent_cli/discovery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/agent_store_server_providers.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
+import '../../cli_detection/data/store_scan_worker.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
@@ -207,12 +208,27 @@ class SessionActions {
     List<ImportedSession> imported = const [],
   }) {
     if (natives.isEmpty && imported.isEmpty) return;
-    for (final session in natives) {
-      _removeNativeRow(session, fromCliStore: false);
+    // One request for the lot: one per row was N batches on every client.
+    _ref
+        .read(sessionsDataProvider)
+        .deleteMany(
+          [for (final session in natives) session.id],
+          importedIds: [for (final session in imported) session.id],
+        );
+    final selected = _ref.read(selectedSessionIdProvider);
+    if (selected != null && natives.any((s) => s.id == selected)) {
+      _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    for (final session in imported) {
-      _removeImportedRow(session);
+    final selectedImported = _ref.read(selectedImportedSessionIdProvider);
+    if (selectedImported != null &&
+        imported.any((s) => s.id == selectedImported)) {
+      _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
+    _log.info(
+      'Deleted ${natives.length} session(s) and ${imported.length} imported '
+      'record(s) from the workspace: '
+      '${[for (final s in natives) s.id, for (final s in imported) s.id].join(', ')}',
+    );
     // Coarse on purpose: this named several rows, so no single one. Not
     // `workspaceChanged` — no project, repository or checkout moved.
     _publish(
@@ -1133,24 +1149,20 @@ class SessionActions {
       (await _detectedByKey({(agentId, externalId)}))[(agentId, externalId)];
 
   /// The store files behind `(agentId, conversationId)` pairs in **one** walk,
-  /// however many are asked for; single and bulk deletes share it.
+  /// however many are asked for; single and bulk deletes share it. On the
+  /// worker isolate: on the one that draws, it froze the window for as long
+  /// as every transcript took to read.
   Future<Map<(String, String), DetectedSession>> _detectedByKey(
     Set<(String, String)> wanted,
   ) async {
     final environments = _ref.read(environmentsDataProvider).getAll();
+    final runner = _ref.read(storeScanRunnerProvider);
     final stores = await _ref
         .read(cliStoreLocatorProvider)
         .locate(environments);
-    final projects = await _ref.read(cliDetectionServiceProvider).detect(
-      stores,
-      {for (final environment in environments) environment.id: environment},
-    );
     final found = <(String, String), DetectedSession>{};
-    for (final project in projects) {
-      for (final session in [
-        ...project.sessions,
-        ...project.subagentSessions,
-      ]) {
+    await for (final chunk in runner.scan(StoreScanRequest(stores: stores))) {
+      for (final session in chunk.sessions) {
         final key = (session.cli, session.sessionId);
         if (wanted.contains(key)) found[key] = session;
       }

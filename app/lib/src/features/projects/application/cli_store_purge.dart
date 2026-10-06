@@ -5,6 +5,7 @@ import '../../cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
+import '../../explorer/application/purge_progress.dart';
 import '../../sessions/application/session_actions.dart';
 
 /// Deletes CLI session files **behind** the workspace change that asked for
@@ -21,8 +22,8 @@ class CliStorePurgeRunner {
   /// True once the container is gone: nothing may read a provider after that.
   bool _stopped = false;
 
-  /// How many purges are still running. The Explorer does not draw this today —
-  /// the row it deleted is already gone — but a test can assert on it.
+  /// How many purges are still running; the files they hold are counted in
+  /// [purgeProgressProvider], which the lists draw.
   int get pending => _running.length;
 
   /// Completes when every purge started so far has finished. A loop rather than
@@ -40,11 +41,13 @@ class CliStorePurgeRunner {
     required List<ImportedSession> sessions,
   }) {
     if (sessions.isEmpty || _stopped) return;
+    final progress = _ref.read(purgeProgressProvider.notifier)
+      ..started(sessions.length);
     late final Future<void> task;
-    task = _run(
-      projectName,
-      sessions,
-    ).whenComplete(() => _running.remove(task));
+    task = _run(projectName, sessions).whenComplete(() {
+      _running.remove(task);
+      if (!_stopped) progress.finished(sessions.length);
+    });
     _running.add(task);
   }
 

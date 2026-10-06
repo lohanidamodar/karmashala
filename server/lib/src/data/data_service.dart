@@ -663,6 +663,7 @@ class DataService {
         final SessionCreate r => _sessions.create(r, changes),
         final SessionEdit r => _sessions.edit(r, changes),
         final SessionDelete r => _sessions.delete(r, changes),
+        final SessionsDeleteMany r => _sessions.deleteMany(r, changes),
         final SessionLinkAdd r => _sessions.link(r, changes),
         final SessionLinkRemove r => _sessions.unlink(r, changes),
         final SessionEvents r => _sessions.events(r),

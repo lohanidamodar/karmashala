@@ -79,6 +79,30 @@ final class SessionDelete extends _AckRequest {
   Map<String, Object?> argumentsToJson() => {'id': id};
 }
 
+/// Deletes a selection — sessions as [SessionDelete] does, imported records as
+/// [ImportedDelete] does — in one transaction, told as one batch. An id
+/// already gone is skipped: another client may have deleted it first.
+final class SessionsDeleteMany extends _AckRequest {
+  const SessionsDeleteMany({
+    this.sessionIds = const [],
+    this.importedIds = const [],
+  });
+
+  static const String name = 'sessions.deleteMany';
+
+  final List<String> sessionIds;
+  final List<String> importedIds;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionIds': sessionIds,
+    'importedIds': importedIds,
+  };
+}
+
 /// Adds a checkout to a session, beside its primary one. Answers the
 /// session's links. Refused for a checkout of another project.
 final class SessionLinkAdd extends _LinksRequest {
