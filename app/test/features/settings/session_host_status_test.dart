@@ -135,15 +135,9 @@ void main() {
     expect(line, contains('checked 1d ago'));
   });
 
-  group('the restart button', () {
-    HostDeployment outdated(List<String> live) => HostDeployment(
-      status: HostDeploymentStatus.ready,
-      observedAt: DateTime.now(),
-      reason: 'older',
-      hostOutdated: true,
-      liveSessionIds: live,
-    );
-
+  // Restart and Stop moved to Settings → Server's controls row, which asks
+  // first every time (server_status_section_test).
+  group('the line', () {
     Future<_FakeAccess> pumpLine(WidgetTester tester, HostDeployment r) async {
       final access = _FakeAccess(r);
       await tester.pumpWidget(
@@ -161,72 +155,40 @@ void main() {
       return access;
     }
 
-    final restart = find.byKey(const ValueKey('session-host-restart'));
-    final confirm = find.descendant(
-      of: find.byType(AlertDialog),
-      matching: find.text('Restart'),
-    );
+    final start = find.byKey(const ValueKey('session-host-start'));
 
-    HostDeployment current() => HostDeployment(
-      status: HostDeploymentStatus.ready,
-      observedAt: DateTime.now(),
-      reason: 'current',
-    );
-
-    testWidgets('is offered for a current host too', (tester) async {
-      await pumpLine(tester, current());
-      expect(restart, findsOneWidget);
+    testWidgets('a running host offers Sessions and Check, not Restart', (
+      tester,
+    ) async {
+      await pumpLine(
+        tester,
+        HostDeployment(
+          status: HostDeploymentStatus.ready,
+          observedAt: DateTime.now(),
+          reason: 'current',
+        ),
+      );
+      expect(find.text('Sessions'), findsOneWidget);
       expect(find.text('Check'), findsOneWidget);
+      expect(find.text('Restart'), findsNothing);
+      expect(find.text('Stop'), findsNothing);
     });
 
-    testWidgets('asks the host what it holds when the reading does not say', (
+    testWidgets('a host that will not answer is offered no Start', (
       tester,
     ) async {
-      final access = await pumpLine(tester, current())
-        ..live = const ['a', 'b', 'c'];
-      await tester.tap(restart);
-      await tester.pumpAndSettle();
-      expect(find.textContaining('ends the 3 session(s)'), findsOneWidget);
-      await tester.tap(confirm);
-      await tester.pumpAndSettle();
-      expect(access.restarts, [true]);
+      final access = await pumpLine(
+        tester,
+        HostDeployment(
+          status: HostDeploymentStatus.unknown,
+          observedAt: DateTime.now(),
+          reason: 'silent',
+          hostUnresponsive: true,
+        ),
+      );
+      expect(start, findsNothing);
+      expect(access.listed, 0);
     });
-
-    testWidgets('restarts a current host holding nothing without asking', (
-      tester,
-    ) async {
-      final access = await pumpLine(tester, current())
-        ..live = const [];
-      await tester.tap(restart);
-      await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(access.restarts, [false]);
-    });
-
-    testWidgets(
-      'is offered for a host that will not answer, which is not asked again',
-      (tester) async {
-        final access =
-            await pumpLine(
-                tester,
-                HostDeployment(
-                  status: HostDeploymentStatus.unknown,
-                  observedAt: DateTime.now(),
-                  reason: 'silent',
-                  hostUnresponsive: true,
-                ),
-              )
-              ..live = const [];
-        expect(find.byKey(const ValueKey('session-host-start')), findsNothing);
-        await tester.tap(restart);
-        await tester.pumpAndSettle();
-        expect(access.listed, 0);
-        expect(find.textContaining('would not say what it holds'), findsOne);
-        await tester.tap(confirm);
-        await tester.pumpAndSettle();
-        expect(access.restarts, [true]);
-      },
-    );
 
     testWidgets('Start is offered when no host is running, and starts one', (
       tester,
@@ -239,14 +201,13 @@ void main() {
           reason: 'Nothing is listening',
         ),
       );
-      expect(restart, findsNothing);
-      await tester.tap(find.byKey(const ValueKey('session-host-start')));
+      await tester.tap(start);
       await tester.pumpAndSettle();
       expect(access.starts, 1);
       expect(find.textContaining('is running'), findsOneWidget);
     });
 
-    testWidgets('is not offered when no host answers', (tester) async {
+    testWidgets('nothing to start when no host can run', (tester) async {
       await pumpLine(
         tester,
         HostDeployment(
@@ -255,37 +216,8 @@ void main() {
           reason: 'No karmashala_host beside this app.',
         ),
       );
-      expect(restart, findsNothing);
-    });
-
-    testWidgets('ends running sessions only after the person confirms', (
-      tester,
-    ) async {
-      final access = await pumpLine(tester, outdated(const ['a', 'b']));
-      await tester.tap(restart);
-      await tester.pumpAndSettle();
-      expect(find.textContaining('ends the 2 session(s)'), findsOneWidget);
-      expect(access.restarts, isEmpty, reason: 'nothing before the answer');
-
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      expect(access.restarts, isEmpty);
-
-      await tester.tap(restart);
-      await tester.pumpAndSettle();
-      await tester.tap(confirm);
-      await tester.pumpAndSettle();
-      expect(access.restarts, [true]);
-    });
-
-    testWidgets('replaces a host holding nothing without asking or force', (
-      tester,
-    ) async {
-      final access = await pumpLine(tester, outdated(const []));
-      await tester.tap(restart);
-      await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(access.restarts, [false]);
+      expect(start, findsNothing);
+      expect(find.text('Check'), findsOneWidget);
     });
   });
 }
@@ -296,15 +228,13 @@ class _FakeAccess extends LocalHostSessionAccess {
     : super(paths: HostPaths(Directory.systemTemp.createTempSync('ks-status')));
 
   HostDeployment reading;
-  final restarts = <bool>[];
   var starts = 0;
   var listed = 0;
-  List<String>? live;
 
   @override
   Future<List<String>?> liveSessionIds() async {
     listed++;
-    return live;
+    return const [];
   }
 
   @override
@@ -320,15 +250,4 @@ class _FakeAccess extends LocalHostSessionAccess {
 
   @override
   Future<HostDeployment> observe() async => reading;
-
-  @override
-  Future<HostDeployment> restartHost({required bool force}) async {
-    restarts.add(force);
-    return reading = HostDeployment(
-      status: HostDeploymentStatus.ready,
-      observedAt: DateTime.now(),
-      reason: 'replaced',
-      restartedByUs: true,
-    );
-  }
 }

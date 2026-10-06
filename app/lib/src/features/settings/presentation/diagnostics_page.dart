@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/workbench_tabs.dart' show openLogsTab;
 import 'package:karmashala_ui/tokens.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import '../../../core/logging/memory_census_source.dart';
 import 'package:karmashala_core/logging.dart';
@@ -13,6 +14,7 @@ import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/settings_controller.dart';
+import '../application/settings_tab.dart';
 import '../domain/diagnostics_settings.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
@@ -256,41 +258,24 @@ class MemoryFootprintSection extends ConsumerWidget {
   }
 }
 
-/// This machine's server log, which a detached server writes with nobody
-/// reading its output. Nothing on a client that hosts no server.
+/// A pointer to this machine's server log, which lives on Settings → Server.
+/// Nothing on a client that hosts no server.
 class _ServerLogRow extends ConsumerWidget {
   const _ServerLogRow();
 
-  Future<void> _open(BuildContext context, WidgetRef ref, File log) async {
-    final manager = HostFileManager.forHost();
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    void say(String message) =>
-        messenger?.showSnackBar(SnackBar(content: Text(message)));
-    if (manager == null) {
-      return say('This platform has no way for Karmashala to open a file.');
-    }
-    if (!log.existsSync()) {
-      return say('The server has not written its log yet.');
-    }
-    try {
-      await ref
-          .read(hostCommandRunnerProvider)
-          .run(RevealInFileManager.requestFor(manager, log.path));
-    } on CommandException catch (error) {
-      say('Could not open the server log: ${error.message}');
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final log = ref.watch(serverLogFileProvider).asData?.value;
-    if (log == null) return const SizedBox.shrink();
+    if (!ref.watch(clientCapabilitiesProvider).hostsServer) {
+      return const SizedBox.shrink();
+    }
     return SettingsRow(
       label: 'Server log',
-      help: log.path,
+      help: 'Its path, and opening it, are on Settings → Server.',
       control: OutlinedButton(
-        onPressed: () => _open(context, ref, log),
-        child: const Text('Open server log'),
+        onPressed: () => ref
+            .read(settingsTabSectionProvider.notifier)
+            .reveal(SettingsTarget.anchor(SettingsAnchor.serverLog)),
+        child: const Text('Open Server'),
       ),
     );
   }

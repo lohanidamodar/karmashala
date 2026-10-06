@@ -15,6 +15,7 @@ import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/settings/application/settings_tab.dart';
 import '../../features/settings/presentation/settings_nav.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import 'logs_tab_view.dart' show LogSource, logsTabSourceProvider;
 import 'phone_routes.dart';
 
 /// Brings [tabId] to the front and makes sure the terminal is what the workbench
@@ -124,8 +125,9 @@ void openStoresTab(WidgetRef ref) {
   activateTerminalTab(ref, tabId);
 }
 
-/// Opens the live log tail as a workbench tab, or brings the open one forward.
-void openLogsTab(WidgetRef ref) {
+/// Opens the Logs tab, or brings it forward; [source] picks the log it shows.
+void openLogsTab(WidgetRef ref, {LogSource? source}) {
+  if (source != null) ref.read(logsTabSourceProvider.notifier).show(source);
   // The phone keeps its own Log page under More, built for copying out.
   final phone = ref.read(phoneShellRouterProvider).current;
   if (phone != null) {

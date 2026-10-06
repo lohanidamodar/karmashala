@@ -41,7 +41,20 @@ const List<(String, Level)> _levelFilters = [
   ('Errors only', Level.SEVERE),
 ];
 
-enum _LogSource { app, server }
+/// Which log the Logs tab shows. Kept outside the tab, so a link can open it
+/// on the server's log (Settings → Server → Log).
+enum LogSource { app, server }
+
+class LogsTabSource extends Notifier<LogSource> {
+  @override
+  LogSource build() => LogSource.app;
+
+  void show(LogSource source) => state = source;
+}
+
+final logsTabSourceProvider = NotifierProvider<LogsTabSource, LogSource>(
+  LogsTabSource.new,
+);
 
 /// From this width the controls fit one row above the lines.
 const double _oneRowWidth = 720;
@@ -51,7 +64,7 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
   Timer? _serverTicker;
   int _seenRevision = -1;
   bool _follow = true;
-  _LogSource _source = _LogSource.app;
+  LogSource get _source => ref.read(logsTabSourceProvider);
 
   /// The tail as it was when following stopped. Empty while following.
   List<LogEntry> _frozen = const [];
@@ -76,6 +89,11 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
       (_) => unawaited(_pollServer()),
     );
     _scroll.addListener(_onScroll);
+    // A link may ask for the other log while the tab is open.
+    ref.listenManual(logsTabSourceProvider, (_, _) => _sourceChanged());
+    if (_source == LogSource.server) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _pollServer());
+    }
   }
 
   @override
@@ -88,14 +106,14 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
   }
 
   void _tick() {
-    if (!_follow || !mounted || _source != _LogSource.app) return;
+    if (!_follow || !mounted || _source != LogSource.app) return;
     final revision = ref.read(diagnosticsProvider).buffer.revision;
     if (revision == _seenRevision) return;
     setState(() => _seenRevision = revision);
   }
 
   Future<void> _pollServer() async {
-    if (!_follow || !mounted || _source != _LogSource.server) return;
+    if (!_follow || !mounted || _source != LogSource.server) return;
     final tail = ref.read(serverLogTailProvider);
     if (tail == null) return;
     final read = await tail.read();
@@ -106,9 +124,11 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
     });
   }
 
-  void _setSource(_LogSource source) {
+  void _setSource(LogSource source) =>
+      ref.read(logsTabSourceProvider.notifier).show(source);
+
+  void _sourceChanged() {
     setState(() {
-      _source = source;
       _follow = true;
       _frozen = const [];
     });
@@ -127,7 +147,7 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
       _follow = value;
       _frozen = value
           ? const []
-          : _source == _LogSource.app
+          : _source == LogSource.app
           ? ref.read(diagnosticsProvider).buffer.snapshot()
           : (_server ?? const []);
     });
@@ -161,9 +181,9 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
     );
   }
 
-  String _emptyMessage(_LogSource source, List<LogEntry> all) {
+  String _emptyMessage(LogSource source, List<LogEntry> all) {
     if (all.isNotEmpty) return 'Nothing matches these filters.';
-    if (source == _LogSource.app) return 'Nothing has been logged yet.';
+    if (source == LogSource.app) return 'Nothing has been logged yet.';
     if (!_serverRead) return 'Reading the server log…';
     return _server == null
         ? 'The server has not written its log yet.'
@@ -175,10 +195,12 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
     LogsTabView.debugBuildCount++;
     final buffer = ref.watch(diagnosticsProvider).buffer;
     final hasServer = ref.watch(serverLogTailProvider) != null;
-    final source = hasServer ? _source : _LogSource.app;
+    final source = hasServer
+        ? ref.watch(logsTabSourceProvider)
+        : LogSource.app;
     final all = !_follow
         ? _frozen
-        : source == _LogSource.app
+        : source == LogSource.app
         ? buffer.snapshot()
         : (_server ?? const <LogEntry>[]);
     final visible = _filter(all);
@@ -204,7 +226,7 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
             onFollow: _setFollow,
             onCopy: visible.isEmpty ? null : () => _copy(visible),
             // A file is the server's, not ours to empty.
-            onClear: source == _LogSource.server
+            onClear: source == LogSource.server
                 ? null
                 : () {
                     ref.read(diagnosticsProvider).clear();
@@ -242,7 +264,7 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
         _StatusLine(
           parts: [
             '${visible.length} shown',
-            if (source == _LogSource.app) ...[
+            if (source == LogSource.app) ...[
               '${buffer.length} held',
               if (buffer.dropped > 0) '${buffer.dropped} dropped',
             ] else
@@ -279,12 +301,12 @@ class _Controls extends StatelessWidget {
   final TextEditingController search;
 
   /// Null where there is no server log to offer.
-  final _LogSource? source;
+  final LogSource? source;
   final bool following;
   final Level minLevel;
   final String? channel;
   final List<String> channels;
-  final ValueChanged<_LogSource> onSource;
+  final ValueChanged<LogSource> onSource;
   final ValueChanged<String> onQuery;
   final ValueChanged<Level> onLevel;
   final ValueChanged<String?> onChannel;
@@ -306,12 +328,12 @@ class _Controls extends StatelessWidget {
       ),
     );
     final sourcePicker = switch (source) {
-      final source? => SegmentedButton<_LogSource>(
+      final source? => SegmentedButton<LogSource>(
         showSelectedIcon: false,
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
         segments: const [
-          ButtonSegment(value: _LogSource.app, label: Text('App')),
-          ButtonSegment(value: _LogSource.server, label: Text('Server')),
+          ButtonSegment(value: LogSource.app, label: Text('App')),
+          ButtonSegment(value: LogSource.server, label: Text('Server')),
         ],
         selected: {source},
         onSelectionChanged: (choice) => onSource(choice.first),

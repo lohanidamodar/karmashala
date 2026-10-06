@@ -139,6 +139,16 @@ enum SettingsSectionId {
         'their tooling.',
     ['environments', 'environment'],
   ),
+  // This machine's server; other machines' stay on Machines beside the rest
+  // of each machine. Was Terminal › Shell integration & session host.
+  server(
+    'Server',
+    AppIcons.stack,
+    SettingsGroup.connections,
+    'This machine\'s Karmashala server: whether it runs, its log, and what '
+        'it keeps on disk.',
+    ['server', 'host', 'session host', 'karmashala host', 'karmashala_host'],
+  ),
   // Was Remote access.
   remote(
     'Remote and pairing',
@@ -363,11 +373,11 @@ enum SettingsAnchor {
     'chords',
     'keys',
   ]),
-  terminalAdvanced(
-    SettingsSectionId.terminal,
-    'Shell integration & session host',
-    ['integration', 'session host'],
-  ),
+  // The enum name is kept so old links resolve; its session host half moved
+  // to Server.
+  terminalAdvanced(SettingsSectionId.terminal, 'Shell integration', [
+    'integration',
+  ]),
   worktreeSetup(SettingsSectionId.projects, 'Worktree setup', [
     'worktree',
     'worktrees',
@@ -587,6 +597,33 @@ enum SettingsAnchor {
     'known hosts',
     'keys',
   ]),
+  serverStatus(SettingsSectionId.server, 'Status and controls', [
+    'status',
+    'restart',
+    'stop',
+    'start',
+    'version',
+    'uptime',
+    'data folder',
+    'socket',
+    'session host',
+  ]),
+  serverLog(SettingsSectionId.server, 'Log', [
+    'server log',
+    'server.log',
+    'logs',
+    'log file',
+  ]),
+  serverStorage(SettingsSectionId.server, 'Storage', [
+    'storage',
+    'disk',
+    'database',
+    'size',
+    'tool images',
+    'cache',
+    'clean up',
+    'old sessions',
+  ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
     'phone',
@@ -649,6 +686,10 @@ enum SettingsAnchor {
     androidEmulators || iosSimulators => caps.devicesArea,
     // The server-side half: its device list is refused without admin anyway.
     remoteAccess => caps.pairsHere || caps.serverAdmin,
+    // This machine's server log; a phone hosts no server.
+    serverLog => caps.hostsServer,
+    // Read from and cleared at this machine's server, by this machine's app.
+    serverStorage => caps.hostsServer && caps.serverSettings,
     _ => true,
   };
 }
@@ -893,10 +934,55 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['osc 133', 'exit codes', 'command blocks'],
   ),
   SettingsEntry(
-    'Run local terminals in the session host',
-    anchor: SettingsAnchor.terminalAdvanced,
-    description: 'Shells that survive a crash or a restart of the app.',
-    keywords: ['session host', 'karmashala_host', 'persistent'],
+    'Server status',
+    anchor: SettingsAnchor.serverStatus,
+    description:
+        'Whether this machine\'s server runs. Its shells survive a crash or a '
+        'restart of the app.',
+    keywords: ['session host', 'karmashala_host', 'persistent', 'uptime'],
+  ),
+  SettingsEntry(
+    'Restart or stop the server',
+    anchor: SettingsAnchor.serverStatus,
+    description: 'Each asks first, naming the sessions it ends.',
+    keywords: ['restart', 'stop', 'session host'],
+  ),
+  SettingsEntry(
+    'Keep sessions running when Karmashala quits',
+    anchor: SettingsAnchor.serverStatus,
+    description:
+        'Terminals and agents in the server go on after the app closes.',
+    keywords: ['quit', 'background', 'session host', 'keep running'],
+  ),
+  SettingsEntry(
+    'Server log',
+    anchor: SettingsAnchor.serverLog,
+    description:
+        'Where this machine\'s server writes its log, opened in an app or '
+        'in Logs.',
+    keywords: ['server.log', 'logs', 'troubleshoot', 'report'],
+  ),
+  SettingsEntry(
+    'Database size',
+    anchor: SettingsAnchor.serverStorage,
+    description: 'How much the server\'s database holds, and its largest '
+        'tables.',
+    keywords: ['database', 'sqlite', 'disk', 'size', 'tables'],
+  ),
+  SettingsEntry(
+    'Tool-image cache',
+    anchor: SettingsAnchor.serverStorage,
+    description:
+        'Pictures agents\' tools answered with: how many, how long they are '
+        'kept, the size cap, and Clear.',
+    keywords: ['tool images', 'screenshots', 'cache', 'clear', 'disk'],
+  ),
+  SettingsEntry(
+    'Clean up old ended sessions',
+    anchor: SettingsAnchor.serverStorage,
+    description: 'Delete ended sessions older than a number of days, when '
+        'you ask.',
+    keywords: ['old sessions', 'clean up', 'delete', 'purge', 'ended'],
   ),
   SettingsEntry(
     'Worktree setup',

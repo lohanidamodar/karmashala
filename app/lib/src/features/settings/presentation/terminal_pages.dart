@@ -8,7 +8,6 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'data_connection_notice.dart';
-import 'session_host_status_line.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -64,8 +63,8 @@ class DefaultTerminalSection extends ConsumerWidget {
   }
 }
 
-/// Settings → Terminal → Shell integration & session host: the two switches
-/// that change what a new pane can report, so they sit last.
+/// Settings → Terminal → Shell integration: the switch that changes what a
+/// new pane can report, so it sits last. The session host is Settings → Server.
 class TerminalAdvancedSection extends ConsumerWidget {
   const TerminalAdvancedSection({super.key});
 
@@ -84,8 +83,6 @@ class TerminalAdvancedSection extends ConsumerWidget {
             value: settings.shellIntegrationEnabled,
             onChanged: controller.setShellIntegrationEnabled,
           ),
-          // Every local and WSL terminal runs in the server (slice 5a).
-          const SessionHostStatusLine(),
           const DataConnectionNotice(),
         ],
       ),

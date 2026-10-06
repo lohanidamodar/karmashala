@@ -149,6 +149,61 @@ void main() {
     });
   });
 
+  // Moved from Terminal to Settings → Server (round 15b): the key and its
+  // stored value are the quit question's, unchanged.
+  group('keep-sessions-running-when-quitting setting', () {
+    test('a stored off reads back off, under the key it always had', () {
+      final stored = Settings.fromJson(const {'quitKeepsHostSessions': false});
+      expect(stored.quitKeepsHostSessions, isFalse);
+      expect(stored.toJson()['quitKeepsHostSessions'], isFalse);
+      expect(Settings.fromJson(const {}).quitKeepsHostSessions, isTrue);
+    });
+
+    test('the Server page\'s setter persists it', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(container.dispose);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setQuitKeepsHostSessions(false);
+
+      expect((await _stored(server)).quitKeepsHostSessions, isFalse);
+    });
+  });
+
+  group('Server storage settings', () {
+    test('default to the server\'s own limits and 30 days', () {
+      const s = Settings();
+      expect(s.toolImageMaxAgeDays, 14);
+      expect(s.toolImageMaxMegabytes, 256);
+      expect(s.endedSessionsOlderThanDays, 30);
+      expect(Settings.fromJson(const {}), s);
+    });
+
+    test('survive a JSON round-trip under the keys the server reads', () {
+      const s = Settings(
+        toolImageMaxAgeDays: 3,
+        toolImageMaxMegabytes: 1024,
+        endedSessionsOlderThanDays: 90,
+      );
+      final json = s.toJson();
+      expect(json['toolImageMaxAgeDays'], 3);
+      expect(json['toolImageMaxMegabytes'], 1024);
+      expect(Settings.fromJson(json), s);
+      expect(s, isNot(const Settings()));
+    });
+
+    test('a value that is not a whole number above zero is the default', () {
+      final s = Settings.fromJson(const {
+        'toolImageMaxAgeDays': 0,
+        'toolImageMaxMegabytes': 'big',
+        'endedSessionsOlderThanDays': -4,
+      });
+      expect(s, const Settings());
+    });
+  });
+
   group('resume-running-panes setting', () {
     test('is on by default', () {
       // The owner asked for it: "if there were active panes on last close start
