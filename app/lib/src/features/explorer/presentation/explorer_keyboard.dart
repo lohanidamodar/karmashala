@@ -112,6 +112,7 @@ String explorerNodeTitle(ExplorerNode node) => switch (node) {
   final ImportedRowNode node => node.session.displayTitle,
   final TerminalRowNode node => node.terminal.label,
   HintNode() => '',
+  HiddenWorkingNode() => 'Working',
   ArchivedNode() => 'Archived',
   final SubSessionsNode node => node.label,
 };

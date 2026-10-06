@@ -21,6 +21,7 @@ import '../../settings/application/settings_controller.dart';
 import '../domain/explorer_section.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'explorer_agent_filter.dart';
+import 'hidden_working_sessions.dart';
 
 /// The saved sections, in sidebar order, and every write to them. A write
 /// shows at once and goes to the server, whose copy the list then follows.
@@ -226,16 +227,16 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
   return List.unmodifiable(<SectionCandidate>[
     for (final session in ref.read(sessionsDataProvider).getAll())
       if (showArchived || !session.isArchived)
-      SectionCandidate(
-        id: session.id,
-        title: session.title,
-        native: session,
-        status: session.status,
-        archived: session.isArchived,
-        projectId: repositories[session.repositoryId]?.projectId,
-        repositoryPath: repositories[session.repositoryId]?.path,
-        worktree: session.worktree,
-      ),
+        SectionCandidate(
+          id: session.id,
+          title: session.title,
+          native: session,
+          status: session.status,
+          archived: session.isArchived,
+          projectId: repositories[session.repositoryId]?.projectId,
+          repositoryPath: repositories[session.repositoryId]?.path,
+          worktree: session.worktree,
+        ),
     for (final session in ref.read(importedSessionsProvider).getAll())
       SectionCandidate(
         id: session.id,
@@ -366,7 +367,7 @@ T? _warm<T>(Ref ref, FutureProvider<T>? provider) {
 /// Which section claims each session, resolved once for the whole sidebar:
 /// priority is a question about all the sections at once, so it cannot be
 /// answered per section.
-final explorerSectionAssignmentProvider =
+final _sectionClaimsProvider =
     Provider.autoDispose<Map<String, List<SectionFacts>>>((ref) {
       final sections = ref.watch(explorerSectionsProvider);
       // Selected rather than watched whole so an unrelated settings write does
@@ -382,6 +383,33 @@ final explorerSectionAssignmentProvider =
           pinnedIds: pinned,
         ),
       );
+    });
+
+/// The assignment as drawn: a session "Hide while working" hides is filed
+/// first and then left out, so the section it would be in can count it.
+final explorerSectionAssignmentProvider =
+    Provider.autoDispose<Map<String, List<SectionFacts>>>((ref) {
+      final claims = ref.watch(_sectionClaimsProvider);
+      final hidden = ref.watch(hiddenWorkingSessionsProvider);
+      if (hidden.isEmpty) return claims;
+      return Map.unmodifiable({
+        for (final MapEntry(key: id, value: members) in claims.entries)
+          id: List<SectionFacts>.unmodifiable([
+            for (final facts in members)
+              if (!hidden.contains(facts.id)) facts,
+          ]),
+      });
+    });
+
+/// How many sessions "Hide while working" took out of section [String].
+final explorerSectionHiddenWorkingProvider = Provider.autoDispose
+    .family<int, String>((ref, sectionId) {
+      final hidden = ref.watch(hiddenWorkingSessionsProvider);
+      if (hidden.isEmpty) return 0;
+      final members = ref.watch(
+        _sectionClaimsProvider.select((claims) => claims[sectionId]),
+      );
+      return members == null ? 0 : hidden.countIn(members.map((f) => f.id));
     });
 
 /// What one section holds right now, selected out of the shared assignment so

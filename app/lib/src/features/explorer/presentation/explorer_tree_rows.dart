@@ -26,6 +26,7 @@ import 'explorer_no_project_row.dart';
 import 'archived_sessions_row.dart';
 import 'explorer_project_row.dart';
 import 'explorer_sections_view.dart';
+import 'hidden_working_row.dart';
 import 'session_rows.dart';
 import 'sub_sessions_fold_row.dart';
 
@@ -90,6 +91,10 @@ class ExplorerTreeRow extends StatelessWidget {
       folded: node.folded,
       depth: node.depth,
       expandable: node.expandable,
+    ),
+    final HiddenWorkingNode node => HiddenWorkingRow(
+      count: node.count,
+      depth: node.depth,
     ),
     final ArchivedNode node => ArchivedSessionsRow(
       count: node.count,

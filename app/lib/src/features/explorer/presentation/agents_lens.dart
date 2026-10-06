@@ -18,6 +18,7 @@ import '../application/workspace_session_entry.dart';
 import '../../sessions/application/session_list_prefs.dart';
 import 'archived_sessions_row.dart';
 import 'explorer_selection_actions.dart';
+import 'hidden_working_row.dart';
 import 'lens_session_row.dart';
 import 'purge_progress_strip.dart';
 import 'session_selection_bar.dart';
@@ -215,7 +216,17 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     bool keepsLiveBelow(WorkspaceSessionEntry entry) =>
         (nesting.foldOf(entry)?.running ?? 0) > 0;
 
+    final hiddenWorking = ref.watch(agentsHiddenWorkingCountProvider);
     for (final group in groups) {
+      // Where Quiet and Working end: every group is listed, empty or not.
+      if (group.state == AgentState.failed && hiddenWorking > 0) {
+        items.add(
+          HiddenWorkingRow(
+            key: const ValueKey('agents-working-hidden'),
+            count: hiddenWorking,
+          ),
+        );
+      }
       if (group.isEmpty) continue;
       final opened = _opened.contains(group.state);
       final cap = visibleRowCount(group, expanded: opened);

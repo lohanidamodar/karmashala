@@ -239,10 +239,22 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
         count: visible.archived,
       ),
   ];
+  // At the top, where running sessions sort.
+  final working = [
+    if (visible.working > 0)
+      HiddenWorkingNode(
+        id: 'working:${project.id}',
+        depth: depth,
+        count: visible.working,
+      ),
+  ];
   if (sessions.isEmpty) {
-    // Every session it has is archived: that row is all there is to say.
-    if (archived.isNotEmpty && visible.hidden == 0) return archived;
+    // Every session it has is archived or working: those rows say it all.
+    if ((archived.isNotEmpty || working.isNotEmpty) && visible.hidden == 0) {
+      return [...working, ...archived];
+    }
     return [
+      ...working,
       ...archived,
       HintNode(
         id: 'hint-empty:${project.id}',
@@ -261,6 +273,7 @@ List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
     ];
   }
   return [
+    ...working,
     ..._sessionNodes(ref, project, sessions, depth: depth),
     // Said where the rows are missing, and only while a narrowing is in
     // force: a partly-filtered list looks exactly like a shorter one.
