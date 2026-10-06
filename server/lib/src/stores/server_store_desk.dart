@@ -90,6 +90,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   var _salesLedger = AppleSalesLedger();
   var _installMonths = PlayInstallMonths();
 
+  /// The Play access token, good for an hour, kept across refreshes.
+  var _playTokens = PlayTokens();
+
   final _stores = <StoreKind, Reading<List<StoreApp>>>{};
   final _apps = <String, StoreAppSnapshot>{};
 
@@ -613,7 +616,11 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
             AppleStoreClient(apple.key, salesLedger: _salesLedger),
       if (play != null)
         _playClient?.call(play.account) ??
-            PlayStoreClient(play.account, installMonths: _installMonths),
+            PlayStoreClient(
+              play.account,
+              installMonths: _installMonths,
+              tokens: _playTokens,
+            ),
     ], now: _now);
   }
 
@@ -730,6 +737,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         _salesLedger = AppleSalesLedger();
       case StoreKind.googlePlay:
         _installMonths = PlayInstallMonths();
+        _playTokens = PlayTokens();
     }
   }
 

@@ -26,17 +26,20 @@ class PlayStoreClient
   /// [httpClient] is the transport the token and every call go through; a
   /// test hands in a fake. [installMonths] is what was read of the monthly
   /// installs reports before; whoever outlives this client hands it in so a
-  /// month is read once.
+  /// month is read once. [tokens] keeps the access token across clients
+  /// the same way.
   PlayStoreClient(
     PlayAccount account, {
     http.Client? httpClient,
     DateTime Function()? now,
     PlayInstallMonths? installMonths,
+    PlayTokens? tokens,
   }) : this._(
          account,
          httpClient ?? http.Client(),
          now ?? DateTime.now,
          installMonths ?? PlayInstallMonths(),
+         tokens,
        );
 
   PlayStoreClient._(
@@ -44,8 +47,9 @@ class PlayStoreClient
     http.Client transport,
     this._now,
     this._installMonths,
+    PlayTokens? tokens,
   ) : _transport = transport,
-      _auth = PlayAuth(account, transport);
+      _auth = PlayAuth(account, transport, tokens: tokens, now: _now);
 
   final PlayAccount account;
   final PlayInstallMonths _installMonths;
