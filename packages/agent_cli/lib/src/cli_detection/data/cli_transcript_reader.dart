@@ -195,6 +195,23 @@ class TranscriptMessage {
     parentToolUseId: parentToolUseId,
   );
 
+  /// This row with [tool] replaced, and the text that summarises it.
+  TranscriptMessage withTool(ToolActivity value) => TranscriptMessage(
+    role: role,
+    text: value.summary,
+    tool: value,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+  );
+
   /// This row with [agentInstallationId] set.
   TranscriptMessage withAgent(String? installationId) => TranscriptMessage(
     role: role,
@@ -427,10 +444,12 @@ class _TranscriptParse {
   // line of its own: spent on that row.
   String? pendingThinking;
   _CodexCalls codex = _CodexCalls();
+  ClaudeCodeTaskLedger taskPlan = ClaudeCodeTaskLedger();
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
     ..codex = codex.copy()
+    ..taskPlan = taskPlan.copy()
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -495,6 +514,7 @@ class _TranscriptParse {
         background,
         acrossBoundary,
         runs,
+        taskPlan,
         at,
       );
       final boundary = pendingCompaction;
@@ -857,6 +877,7 @@ void _parseClaudeLine(
   Map<String, int> background,
   Map<String, int> acrossBoundary,
   _BackgroundRuns runs,
+  ClaudeCodeTaskLedger taskPlan,
   DateTime? at,
 ) {
   final type = json['type'];
@@ -963,6 +984,7 @@ void _parseClaudeLine(
               pending[id] = out.length;
               if (isSubagentToolName(name)) tasks[id] = out.length;
               runs.called(id, part['input'], name: name);
+              taskPlan.called(id, name, part['input']);
             }
             out.add(
               TranscriptMessage(
@@ -998,6 +1020,16 @@ void _parseClaudeLine(
             answers: answersIn(json['toolUseResult']),
             image: () => _claudeResultImage(part['content']),
           );
+          final plan = taskPlan.answered(
+            id,
+            json['toolUseResult'],
+            isError: isError,
+          );
+          if (plan != null && row != null && row < out.length) {
+            if (out[row].tool case final tool?) {
+              out[row] = out[row].withTool(tool.withPlan(plan));
+            }
+          }
           final launched = _asyncAgentId(json['toolUseResult']);
           if (launched != null && row != null) background[launched] = row;
           if (row != null) runs.launched(id, json['toolUseResult'], row);

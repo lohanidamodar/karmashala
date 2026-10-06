@@ -389,3 +389,71 @@ final Map<String, AgentPlanSupport> agentPlanToolsByName = {
 /// lookup unless it really is one of the two.
 AgentPlan? agentPlanForToolCall(String toolName, Object? payload) =>
     agentPlanToolsByName[toolName]?.planIn(payload);
+
+/// **Claude Code's task tools**, `TaskCreate` and `TaskUpdate`, which replace
+/// `TodoWrite` in 2.1.x. Unlike it they are deltas: each call names one task,
+/// and the plan is what they add up to, folded here by the CLI's task id.
+///
+/// The id exists only in the create's answer (`toolUseResult.task.id`), so a
+/// call changes the plan when it is answered, and an answer marked as an error
+/// changes nothing.
+class ClaudeCodeTaskLedger {
+  static const String createTool = 'TaskCreate';
+  static const String updateTool = 'TaskUpdate';
+
+  final Map<String, ({String subject, String status})> _tasks = {};
+  final Map<String, (String, Map<Object?, Object?>)> _calls = {};
+
+  ClaudeCodeTaskLedger copy() => ClaudeCodeTaskLedger()
+    .._tasks.addAll(_tasks)
+    .._calls.addAll(_calls);
+
+  /// A `tool_use`: kept until its answer only when it is a task tool.
+  void called(Object? callId, String name, Object? input) {
+    if (callId is! String || input is! Map) return;
+    if (name != createTool && name != updateTool) return;
+    _calls[callId] = (name, input);
+  }
+
+  /// The plan after [callId]'s answer, or null when that answer changed none.
+  AgentPlan? answered(Object? callId, Object? result, {required bool isError}) {
+    final call = _calls.remove(callId);
+    if (call == null || isError) return null;
+    final (name, input) = call;
+    if (name == createTool) {
+      final task = result is Map ? result['task'] : null;
+      final id = task is Map ? task['id'] : null;
+      if (id == null) return null;
+      final subject = task['subject'] ?? input['subject'];
+      _tasks['$id'] = (subject: '${subject ?? ''}', status: 'pending');
+    } else {
+      final id = '${input['taskId']}';
+      final task = _tasks[id];
+      if (task == null) return null;
+      final status = input['status'];
+      if (status == 'deleted') {
+        _tasks.remove(id);
+      } else {
+        final subject = input['subject'];
+        _tasks[id] = (
+          subject: subject is String ? subject : task.subject,
+          status: status is String ? status : task.status,
+        );
+      }
+    }
+    final ids = _tasks.keys.toList()
+      ..sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
+    final items = [
+      for (final id in ids)
+        if (_tasks[id]!.subject.trim() case final text when text.isNotEmpty)
+          AgentPlanItem(
+            text: text,
+            state:
+                kClaudeCodeTodoWrite.stateWords[_tasks[id]!.status] ??
+                AgentPlanItemState.unrecorded,
+          ),
+    ];
+    // Every task deleted is an empty plan, which is a real state here.
+    return AgentPlan(items: items);
+  }
+}

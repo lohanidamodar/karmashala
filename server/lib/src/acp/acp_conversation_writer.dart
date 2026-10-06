@@ -40,7 +40,7 @@ class AcpConversationWriter {
   final _thinking = StringBuffer();
   String? _openRow;
   String? _openMessageId;
-  String? _planRow;
+  String? _lastPlan;
   Timer? _timer;
   final _tools = <String, _ToolRow>{};
   final _rendered = <String>[];
@@ -127,7 +127,6 @@ class AcpConversationWriter {
     flush();
     _openRow = null;
     _openMessageId = null;
-    _planRow = null;
     _tools.clear();
   }
 
@@ -179,18 +178,16 @@ class AcpConversationWriter {
     }
   }
 
+  /// Each change is a row of its own, so the plan's history stays readable;
+  /// the same plan sent again is not a change.
   void _plan(List<PlanEntry> entries) {
-    _closeAgentRow();
     final json = jsonEncode({
       'entries': [for (final entry in entries) entry.toJson()],
     });
-    final row = _planRow;
-    if (row == null) {
-      _planRow = _append(SessionMessageRole.agent, planJson: json);
-    } else {
-      messages.patch(row, planJson: json);
-      onChanged();
-    }
+    if (json == _lastPlan) return;
+    _closeAgentRow();
+    _lastPlan = json;
+    _append(SessionMessageRole.agent, planJson: json);
     _render('[plan] ${entries.length} step(s)');
   }
 
