@@ -387,8 +387,10 @@ void main() {
       await pump(tester, expand: false);
       await openMenu(tester, find.byType(ProjectCard));
 
-      expect(find.text('Open in File Explorer'), findsOneWidget);
       expect(find.text('Copy path'), findsOneWidget);
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Open in File Explorer'), findsOneWidget);
 
       await tester.tap(find.text('Open in File Explorer'));
       await tester.pumpAndSettle();
@@ -402,6 +404,8 @@ void main() {
       revealHost.throwError = CommandException('explorer.exe not found');
       await pump(tester, expand: false);
       await openMenu(tester, find.byType(ProjectCard));
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Open in File Explorer'));
       await tester.pumpAndSettle();
@@ -447,12 +451,16 @@ void main() {
       );
 
       expect(find.text('Copy path'), findsOneWidget);
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
       expect(find.text('Open in File Explorer'), findsNothing);
     });
 
     testWidgets('the project menu can rescan for repositories', (tester) async {
       await pump(tester, expand: false);
       await openMenu(tester, find.byType(ProjectCard));
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
       expect(find.text('Rescan for repositories'), findsOneWidget);
     });
 
@@ -473,6 +481,8 @@ void main() {
       ];
       await pump(tester, expand: false);
       await openMenu(tester, find.byType(ProjectCard));
+      await tester.tap(find.text('More…'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Rescan for repositories'));
       await tester.pumpAndSettle();

@@ -210,4 +210,28 @@ void main() {
     expect(rows.getById('done')!.isArchived, isTrue);
     expect(rows.getById('done2')!.isArchived, isTrue);
   });
+
+  testWidgets('the session menu keeps its rare verbs behind More…, '
+      'destructive last', (tester) async {
+    await pump(tester, const Size(1440, 900));
+    await openEnded(tester);
+    await tester.tap(find.text('Chat done'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    double top(String label) => tester.getTopLeft(find.text(label)).dy;
+    for (final label in ['Continue with…', 'Rename', 'Files changed…']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+    for (final label in ['Recap', 'Export session…', 'Copy resume command']) {
+      expect(find.text(label), findsNothing, reason: '$label is under More…');
+    }
+    expect(top('Archive'), greaterThan(top('More…')));
+    expect(top('Delete'), greaterThan(top('Archive')));
+
+    await tester.tap(find.text('More…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recap'), findsOneWidget);
+    expect(find.text('Export session…'), findsOneWidget);
+    expect(find.text('Copy resume command'), findsOneWidget);
+  });
 }

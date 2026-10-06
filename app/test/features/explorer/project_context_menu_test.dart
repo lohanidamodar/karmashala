@@ -98,8 +98,13 @@ void main() {
     matching: find.text(label),
   );
 
-  Future<void> openProjectMenu(WidgetTester tester) async {
+  /// The project menu, and its More… where the contexts are unless [more]
+  /// is false.
+  Future<void> openProjectMenu(WidgetTester tester, {bool more = true}) async {
     await tester.tap(find.byType(ProjectCard).first, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    if (!more) return;
+    await tester.tap(find.text('More…'));
     await tester.pumpAndSettle();
   }
 
@@ -192,7 +197,10 @@ void main() {
       findsNothing,
       reason: 'a verb that would do nothing is not a verb',
     );
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
     // The destructive one is still there, and is not the same words.
+    await openProjectMenu(tester, more: false);
     expect(find.text('Remove from workspace'), findsOneWidget);
   });
 

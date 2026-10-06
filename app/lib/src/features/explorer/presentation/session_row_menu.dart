@@ -25,11 +25,13 @@ import '../../sessions/presentation/session_recap_card.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/explorer_actions.dart';
 import 'explorer_selection_actions.dart';
+import 'more_menu.dart';
 import 'section_membership_dialog.dart';
 import 'session_rows.dart';
 
 /// A native session's row menu. The project tree and the Sessions list both
-/// draw this one, so the two cannot drift apart.
+/// draw this one, so the two cannot drift apart. The frequent verbs, then
+/// "More…" ([nativeSessionMoreItems]), then the lifecycle, destructive last.
 List<PopupMenuEntry<String>> nativeSessionMenuItems(
   WidgetRef ref,
   Session session, {
@@ -42,6 +44,56 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
     label: 'Continue with…',
     icon: AppIcons.gitBranch,
   ),
+  if (terminals.isNotEmpty)
+    DesktopMenuItem(
+      value: 'terminal:${terminals.first.id}',
+      label: 'Open in system terminal',
+      icon: AppIcons.terminal,
+    ),
+  const DesktopMenuDivider(),
+  _renameItem(),
+  _pinItem(pinned),
+  if (hasSections) _sectionsItem(),
+  // Every session gets this, including one whose agent keeps no record of its
+  // own — that case is *why* the dialog exists.
+  DesktopMenuItem(
+    value: 'changed-files',
+    label: 'Files changed…',
+    icon: AppIcons.gitDiff,
+  ),
+  selectRowMenuItem(),
+  moreMenuItem(),
+  const DesktopMenuDivider(),
+  // Only while something runs it: an ended session has nothing to end. Not
+  // red — ending stops the process and keeps the conversation.
+  if (sessionRunsNow(ref, session.id))
+    DesktopMenuItem(value: 'end', label: 'End session', icon: AppIcons.power),
+  // Offered on a live one too, which says why it cannot be archived yet.
+  if (session.isArchived)
+    DesktopMenuItem(value: 'unarchive', label: 'Unarchive', icon: AppIcons.tray)
+  else
+    DesktopMenuItem(value: 'archive', label: 'Archive', icon: AppIcons.tray),
+  const DesktopMenuDivider(),
+  if (ownsWorktree(session))
+    DesktopMenuItem(
+      value: 'delete-worktree',
+      label: 'Delete worktree',
+      icon: AppIcons.folder,
+      destructive: true,
+    ),
+  DesktopMenuItem(
+    value: 'delete',
+    label: 'Delete',
+    icon: AppIcons.trash,
+    destructive: true,
+  ),
+];
+
+/// A native session's "More…": the verbs reached for rarely.
+List<PopupMenuEntry<String>> nativeSessionMoreItems(
+  WidgetRef ref,
+  Session session,
+) => [
   // It spends a turn, so it is picked, never done by the row itself.
   DesktopMenuItem(value: 'recap', label: 'Recap', icon: AppIcons.article),
   // Read when the menu opens: what it offers depends on what waits.
@@ -63,22 +115,6 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
       icon: AppIcons.x,
     ),
   ],
-  if (terminals.isNotEmpty)
-    DesktopMenuItem(
-      value: 'terminal:${terminals.first.id}',
-      label: 'Open in system terminal',
-      icon: AppIcons.terminal,
-    ),
-  const DesktopMenuDivider(),
-  _pinItem(pinned),
-  if (hasSections) _sectionsItem(),
-  // Every session gets this, including one whose agent keeps no record of its
-  // own — that case is *why* the dialog exists.
-  DesktopMenuItem(
-    value: 'changed-files',
-    label: 'Files changed…',
-    icon: AppIcons.gitDiff,
-  ),
   _copyCommandItem(),
   // Offered once something was attached, or while the log is still being
   // read: an empty dialog reads as a broken feature.
@@ -93,31 +129,6 @@ List<PopupMenuEntry<String>> nativeSessionMenuItems(
     label: 'Export session…',
     icon: AppIcons.package,
   ),
-  _renameItem(),
-  selectRowMenuItem(),
-  const DesktopMenuDivider(),
-  // Only while something runs it: an ended session has nothing to end. Not
-  // red — ending stops the process and keeps the conversation, which a click
-  // on the row resumes; Delete, under it, is the act that loses something.
-  if (sessionRunsNow(ref, session.id))
-    DesktopMenuItem(value: 'end', label: 'End session', icon: AppIcons.power),
-  // Offered on a live one too, which says why it cannot be archived yet.
-  if (session.isArchived)
-    DesktopMenuItem(value: 'unarchive', label: 'Unarchive', icon: AppIcons.tray)
-  else
-    DesktopMenuItem(value: 'archive', label: 'Archive', icon: AppIcons.tray),
-  if (ownsWorktree(session))
-    DesktopMenuItem(
-      value: 'delete-worktree',
-      label: 'Delete worktree',
-      icon: AppIcons.folder,
-    ),
-  DesktopMenuItem(
-    value: 'delete',
-    label: 'Delete',
-    icon: AppIcons.trash,
-    destructive: true,
-  ),
 ];
 
 /// Runs [action] from [nativeSessionMenuItems]. Selection actions are the
@@ -129,6 +140,20 @@ Future<void> runNativeSessionMenuAction(
   String action, {
   required List<SystemTerminal> terminals,
 }) async {
+  if (action == kMoreMenuValue) {
+    final picked = await showMoreMenu(
+      context,
+      nativeSessionMoreItems(ref, session),
+    );
+    if (picked == null || !context.mounted) return;
+    return runNativeSessionMenuAction(
+      context,
+      ref,
+      session,
+      picked,
+      terminals: terminals,
+    );
+  }
   final actions = ref.read(sessionActionsProvider);
   if (action.startsWith('terminal:')) {
     final terminal = _terminal(terminals, action);
