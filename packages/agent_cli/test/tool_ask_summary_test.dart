@@ -54,4 +54,21 @@ void main() {
     final other = summarizeToolAsk(ask('Frobnicate', const {'n': 3}));
     expect(other.subject, isNot(contains('{')));
   });
+
+  test('a call previews as one line of what it wants and on what', () {
+    expect(
+      summarizeToolAsk(
+        ask('WebSearch', const {'query': 'Dart 3 records'}),
+      ).preview,
+      'Wants to search the web: Dart 3 records',
+    );
+    expect(
+      summarizeToolAsk(ask('Bash', const {'command': 'echo hi'})).preview,
+      'Wants to run: echo hi',
+    );
+    expect(
+      summarizeToolAsk(ask('Frobnicate', const {})).preview,
+      'Wants to use Frobnicate',
+    );
+  });
 }

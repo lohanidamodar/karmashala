@@ -269,6 +269,52 @@ void main() {
     expect(item.detail, 'Which colour do you like? Red / Green / Blue');
   });
 
+  AgentStatusReport approvalOnScreen({AgentToolAsk? toolAsk}) =>
+      AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-1',
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.terminalGrid,
+        observedAt: clock.nowUtc(),
+        waiting: AgentWaitKind.approval,
+        evidence: const ['────────────────', '────────────────'],
+        toolAsk: toolAsk,
+      );
+
+  test('an approval is filed as the call it asks about, not the screen\'s '
+      'rules', () async {
+    hook('PreToolUse');
+    await attention.poll();
+    reports.record(
+      approvalOnScreen(
+        toolAsk: AgentToolAsk(
+          toolName: 'WebSearch',
+          input: const {'query': 'Dart 3 records'},
+          at: clock.nowUtc(),
+        ),
+      ),
+    );
+    await attention.poll();
+    await flush();
+
+    final item = lastInbox()!.inbox.items.single;
+    expect(item.kind, InboxItemKind.needsApproval);
+    expect(item.detail, 'Wants to search the web: Dart 3 records');
+  });
+
+  test('an approval with no call read is filed without the screen\'s '
+      'text', () async {
+    hook('PreToolUse');
+    await attention.poll();
+    reports.record(approvalOnScreen());
+    await attention.poll();
+    await flush();
+
+    final item = lastInbox()!.inbox.items.single;
+    expect(item.kind, InboxItemKind.needsApproval);
+    expect(item.detail, isNull);
+  });
+
   test('an ask on a session that has since ended is not left waiting on a '
       'person', () async {
     hook('PreToolUse');
