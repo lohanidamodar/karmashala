@@ -16,6 +16,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../system/system_integration_service.dart';
 import '../application/machines_providers.dart';
+import 'machine_rename.dart';
 import 'machine_route.dart';
 import 'pair_machine_page.dart';
 
@@ -55,12 +56,18 @@ class MachinesSection extends ConsumerWidget {
             ),
           for (final machine in paired)
             _MachineRow(
-              name: machine.hostName.isEmpty ? 'Server' : machine.hostName,
-              detail: machineRouteLine(
-                machine,
-                inUse: active?.hostId == machine.hostId,
-              ),
+              name: machineName(machine),
+              detail: [
+                // Renamed here: the machine's own name stays in sight.
+                if (machine.label != null && machine.hostName.isNotEmpty)
+                  machine.hostName,
+                machineRouteLine(
+                  machine,
+                  inUse: active?.hostId == machine.hostId,
+                ),
+              ].join(' · '),
               inUse: active?.hostId == machine.hostId,
+              rename: MachineRenameButton(machine: machine),
               route: routeIsChoosable(machine)
                   ? MachineRouteButton(machine: machine)
                   : null,
@@ -106,7 +113,7 @@ class MachinesSection extends ConsumerWidget {
   ) async {
     final machines = ref.read(machinesProvider);
     if (machines == null) return;
-    final name = to?.hostName ?? 'this computer';
+    final name = to == null ? 'this computer' : machineName(to);
     final go = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -180,7 +187,11 @@ class _MachineRow extends StatelessWidget {
     this.onUse,
     this.onForget,
     this.route,
+    this.rename,
   });
+
+  /// *Rename…*, on a paired machine.
+  final Widget? rename;
 
   final String name;
   final String detail;
@@ -197,8 +208,10 @@ class _MachineRow extends StatelessWidget {
     help: detail,
     // Buttons and a chip: at their own width under the label, not stretched.
     stackedFit: SettingsControlFit.start,
-    control: Row(
-      mainAxisSize: MainAxisSize.min,
+    // Up to four actions: they wrap rather than overflow a narrow row.
+    control: Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         // A value, not a chip: the board states a fact in a pill.
         if (inUse)
@@ -206,6 +219,7 @@ class _MachineRow extends StatelessWidget {
         else if (onUse != null)
           TextButton(onPressed: onUse, child: const Text('Use')),
         ?route,
+        ?rename,
         if (onForget != null && !inUse)
           TextButton(onPressed: onForget, child: const Text('Forget')),
       ],

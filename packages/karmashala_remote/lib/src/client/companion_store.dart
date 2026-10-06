@@ -19,6 +19,20 @@ const String kPairingRelayStoreKey = 'karmashala.companion.relay';
 /// rather than inside one, because it must outlive unpairing every host.
 const String kDeviceIdStoreKey = 'karmashala.remote.device_id';
 
+/// The longest name a client may give a machine: room for "Office PC
+/// upstairs", short enough for a top bar.
+const int kMachineLabelMaxLength = 40;
+
+/// [raw] as a machine's label: trimmed and capped at
+/// [kMachineLabelMaxLength] characters; null when nothing is left.
+String? normaliseMachineLabel(String? raw) {
+  final name = raw?.trim() ?? '';
+  if (name.isEmpty) return null;
+  final runes = name.runes;
+  if (runes.length <= kMachineLabelMaxLength) return name;
+  return String.fromCharCodes(runes.take(kMachineLabelMaxLength)).trimRight();
+}
+
 /// A tiny async key/value store for the companion's secrets and counters.
 abstract interface class CompanionStore {
   Future<String?> read(String key);
@@ -57,7 +71,9 @@ class CompanionPairing {
     HostRoute? route,
     CompanionRoutePin? pin,
     this.relayHome,
-  }) : pin = pin ?? CompanionRoutePin.auto,
+    String? label,
+  }) : label = normaliseMachineLabel(label),
+       pin = pin ?? CompanionRoutePin.auto,
        route = route ?? (directEndpoint == null ? null : HostRoute.direct),
        deviceKey = Uint8List.fromList(deviceKey),
        // A record always knows at least the relay it paired through, so the
@@ -118,7 +134,15 @@ class CompanionPairing {
   /// number both ends persist. Bumped after a session pairs.
   final int generation;
 
+  /// The machine's own name, as it paired.
   final String hostName;
+
+  /// This client's own name for the machine, like a contact's: never sent,
+  /// and never the machine's name for anyone else. Null uses [hostName].
+  final String? label;
+
+  /// What this client calls the machine: [label], else [hostName].
+  String get displayName => label ?? hostName;
 
   /// When this phone last held a link to this host, UTC. Orders the
   /// Connections list and picks the fallback after an active unpair.
@@ -136,6 +160,8 @@ class CompanionPairing {
     CapabilitySet? capabilities,
     Uri? relayHome,
     bool clearRelayHome = false,
+    String? label,
+    bool clearLabel = false,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
@@ -151,6 +177,7 @@ class CompanionPairing {
     route: route ?? this.route,
     pin: pin ?? this.pin,
     relayHome: clearRelayHome ? null : relayHome ?? this.relayHome,
+    label: clearLabel ? null : label ?? this.label,
   );
 
   CompanionPairing withGeneration(int next) => copyWith(generation: next);
@@ -163,6 +190,12 @@ class CompanionPairing {
   CompanionPairing withRelay(Uri url) => copyWith(relay: url);
 
   CompanionPairing withPin(CompanionRoutePin pin) => copyWith(pin: pin);
+
+  /// Names the machine [label] on this client; null, or blank, clears it.
+  CompanionPairing withLabel(String? label) {
+    final name = normaliseMachineLabel(label);
+    return name == null ? copyWith(clearLabel: true) : copyWith(label: name);
+  }
 
   Map<String, Object?> toJson() => {
     'hostId': hostId.value,
@@ -182,6 +215,8 @@ class CompanionPairing {
     if (route != null) 'via': route!.wire,
     'pin': ?pin.toJson(),
     'home': ?relayHome?.toString(),
+    // Only when set: an older build reads the record without it.
+    'label': ?label,
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -225,6 +260,7 @@ class CompanionPairing {
       relayHome: home != null && home.hasScheme && home.host.isNotEmpty
           ? home
           : null,
+      label: json['label'] is String ? json['label']! as String : null,
     );
   }
 
@@ -416,4 +452,9 @@ class CompanionConnections {
   }
 
   static Future<void> _mutations = Future<void>.value();
+
+  /// For tests only. A completed future hands its result on in the zone it
+  /// was made in, so a chain left by one widget test's fake-async zone never
+  /// answers the next test's write; each widget test starts a fresh chain.
+  static void debugResetMutations() => _mutations = Future<void>.value();
 }

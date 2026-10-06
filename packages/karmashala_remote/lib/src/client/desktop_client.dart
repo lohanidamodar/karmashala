@@ -141,11 +141,15 @@ class DesktopResumeRoute {
     required this.open,
     this.noted,
     this.relayHost,
+    this.relay,
     this.address,
   });
 
   /// `direct`, `lan`, `relay`… for the log.
   final String path;
+
+  /// For a relay route, the relay itself: what the link says it is on.
+  final Uri? relay;
 
   /// For a relay route, the relay's host: a link resumed here is on a relay,
   /// and may later be promoted off it.
@@ -216,6 +220,10 @@ const Duration kDesktopPromotionHoldOffCap = Duration(minutes: 16);
 /// [DesktopLinkResume.keepaliveOffered], an idle link pings, and one silent
 /// past [kLinkDeadAfter] is treated as dropped — a half-open socket.
 ///
+/// [onRoute] hears the route the link is on whenever it lands somewhere:
+/// [relay] once attached, then each relay a resume or a promotion moves it
+/// to — null for an address on this network.
+///
 /// With [onRelayMove], the hello says this end knows `link.relay.move`: a move
 /// the server asks for is handed to it to save, then acknowledged before the
 /// attach. When [hopOnMove] then answers true the socket is let go and
@@ -228,6 +236,8 @@ Future<SealedHostLink> connectDesktopLink({
   void Function(RemoteHostStatus status)? onHostStatus,
   DesktopLinkResume? resume,
   String? relayHost,
+  Uri? relay,
+  void Function(Uri? relay)? onRoute,
   Future<void> Function(Uri to)? onRelayMove,
   bool Function(Uri to)? hopOnMove,
 }) async {
@@ -250,7 +260,9 @@ Future<SealedHostLink> connectDesktopLink({
     rendezvous: rendezvous,
     generation: generation,
     resume: resume,
-    relayHost: relayHost,
+    relayHost: relayHost ?? relay?.host,
+    relay: relay,
+    onRoute: onRoute,
     onEnvelope: (envelope, opened) {
       switch (envelope.knownType) {
         case FrameType.linkRelayMove
@@ -335,6 +347,7 @@ Future<SealedHostLink> connectDesktopLink({
   final opened = keeper.link!;
   unawaited(opened.done.then((_) => keeper.release()));
   keeper.started();
+  onRoute?.call(relay);
   return opened;
 }
 

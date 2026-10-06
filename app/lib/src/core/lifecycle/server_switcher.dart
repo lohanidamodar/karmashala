@@ -80,7 +80,7 @@ enum ServerSwitchOutcome {
 /// How a switch names a server: "this computer", or its host's name.
 String serverNameForSwitch(CompanionPairing? remote) {
   if (remote == null) return 'this computer';
-  final name = remote.hostName.trim();
+  final name = remote.displayName.trim();
   return name.isEmpty ? 'the server' : name;
 }
 
@@ -253,8 +253,11 @@ class ServerSwitcher {
           await relaunch();
           return ServerSwitchOutcome.relaunched;
         } on Object catch (error, stack) {
-          _log.warning('switch: the relaunch failed; opening in process.',
-              error, stack);
+          _log.warning(
+            'switch: the relaunch failed; opening in process.',
+            error,
+            stack,
+          );
         }
       } else {
         _log.warning(

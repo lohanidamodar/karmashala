@@ -13,16 +13,19 @@ import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/remote/presentation/machine_route.dart'
-    show machineRouteLine;
+    show machineName, machineRouteLine;
 import '../../features/remote/presentation/machines_section.dart'
     show AddMachineDialog;
 import '../../features/remote/presentation/pair_machine_page.dart';
+import '../../features/remote/presentation/route_switch_sheet.dart'
+    show LinkRouteChip;
 import '../widgets/adaptive_modal.dart';
 import 'phone_shell.dart';
 import 'quick_open/quick_open.dart';
 
-/// The phone's top bar: which server this is (and a switch to another),
-/// search, and how many sessions need you.
+/// The phone's top bar: which server this is (and a switch to another), the
+/// route it is reached by (and a switch to another), search, and how many
+/// sessions need you.
 class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
   const PhoneTopBar({super.key});
 
@@ -34,6 +37,7 @@ class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
     titleSpacing: Insets.xs,
     title: const PhoneHostSwitcher(),
     actions: [
+      const LinkRouteChip(),
       IconButton(
         tooltip: 'Search',
         icon: const Icon(AppIcons.magnifyingGlass),
@@ -68,13 +72,12 @@ class PhoneHostSwitcher extends ConsumerWidget {
 
   static String nameOf(CompanionPairing? machine) {
     if (machine == null) return 'This computer';
-    final name = machine.hostName.trim();
-    return name.isEmpty ? 'Server' : name;
+    return machineName(machine);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = nameOf(ref.watch(activeMachineProvider));
+    final name = nameOf(ref.watch(machineInUseProvider));
     final theme = Theme.of(context);
     return Align(
       alignment: AlignmentDirectional.centerStart,
@@ -229,7 +232,15 @@ class _HostList extends ConsumerWidget {
         for (final machine in paired.value ?? const <CompanionPairing>[])
           row(
             machine,
-            machineRouteLine(machine, inUse: machine.hostId == active?.hostId),
+            [
+              // Renamed here: the machine's own name stays in sight.
+              if (machine.label != null && machine.hostName.isNotEmpty)
+                machine.hostName,
+              machineRouteLine(
+                machine,
+                inUse: machine.hostId == active?.hostId,
+              ),
+            ].join(' · '),
           ),
         if (paired.isLoading && !paired.hasValue)
           const ListTile(title: Text('Loading machines…')),

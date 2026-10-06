@@ -8,6 +8,10 @@ import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
 
 import '../../../core/server/remote_server_access.dart';
 import '../../../core/server/server_link.dart';
+import '../../remote/application/machines_providers.dart'
+    show machineInUseProvider;
+import '../../remote/presentation/route_switch_sheet.dart'
+    show RouteSwitchButton;
 import '../../remote/presentation/use_auto_button.dart';
 import '../../settings/presentation/session_host_status_line.dart'
     show sessionHostRestartLabel, sessionHostStatusText;
@@ -163,7 +167,7 @@ class RemoteResumingStrip extends ConsumerWidget {
 }
 
 /// The desktop draws it with neither [linkActions] nor [whenDown]: resuming
-/// only, nothing to press.
+/// only, with *Route…* the one thing to press.
 class _ResumingStrip extends ConsumerWidget {
   const _ResumingStrip({
     required this.access,
@@ -182,6 +186,8 @@ class _ResumingStrip extends ConsumerWidget {
       final connection = ref.watch(serverLinkProvider);
       if (connection.state == DataLinkState.unavailable) down = connection;
     }
+    final name =
+        ref.watch(machineInUseProvider)?.displayName ?? access.hostName;
     return ValueListenableBuilder<bool>(
       valueListenable: access.resuming,
       builder: (context, resuming, _) {
@@ -215,8 +221,8 @@ class _ResumingStrip extends ConsumerWidget {
                     children: [
                       Text(
                         resuming
-                            ? 'Reconnecting to ${access.hostName}…'
-                            : 'Not connected to ${access.hostName}',
+                            ? 'Reconnecting to $name…'
+                            : 'Not connected to $name',
                         style: textTheme.labelMedium?.copyWith(color: fore),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -232,6 +238,7 @@ class _ResumingStrip extends ConsumerWidget {
                     ],
                   ),
                 ),
+                RouteSwitchButton(foreground: fore),
                 if (linkActions) UseAutoButton(foreground: fore),
                 if (!resuming)
                   TextButton(

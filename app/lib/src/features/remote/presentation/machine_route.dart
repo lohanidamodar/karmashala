@@ -34,8 +34,15 @@ String relayName(Uri url) {
       : 'the relay at $at';
 }
 
-String _capitalised(String text) =>
+String capitalised(String text) =>
     text.isEmpty ? text : '${text[0].toUpperCase()}${text.substring(1)}';
+
+/// What this client calls [machine]: its label, else its own name, else
+/// [fallback].
+String machineName(CompanionPairing machine, {String fallback = 'Server'}) {
+  final name = machine.displayName.trim();
+  return name.isEmpty ? fallback : name;
+}
 
 /// Whether [machine] can have its route chosen: not one paired at its own
 /// address, which is always dialled first and was chosen at pairing.
@@ -91,19 +98,54 @@ String? _lastDial(CompanionPairing machine) {
   return 'on this network';
 }
 
-/// Opens the route picker for [machine] and applies what is picked through
-/// [RoutePinController.choose], which redials when [machine] is in use.
-Future<void> pickMachineRoute(
-  BuildContext context,
-  WidgetRef ref,
-  CompanionPairing machine,
-) async {
-  final name = machine.hostName.isEmpty ? 'the server' : machine.hostName;
+/// One route a machine can be pinned to, as both route pickers list it.
+typedef RouteOption = ({CompanionRoutePin pin, String title, String detail});
+
+/// Every route [machine] can be pinned to: Automatic, this network, each
+/// relay it knows by host and port, and a pinned relay its server no longer
+/// announces.
+List<RouteOption> routeOptions(CompanionPairing machine) {
+  final name = machineName(machine, fallback: 'the server');
   final current = machine.pin;
   final relays = knownRelays(machine);
   final pinnedGone =
       current.kind == CompanionRouteKind.relay &&
       !relays.any((url) => url.toString() == current.relay.toString());
+  return [
+    (
+      pin: CompanionRoutePin.auto,
+      title: 'Automatic',
+      detail: 'This network when $name is on it, otherwise a relay.',
+    ),
+    (
+      pin: CompanionRoutePin.lan,
+      title: 'This network only',
+      detail: 'Only while this device and $name share a network.',
+    ),
+    for (final url in relays)
+      (
+        pin: CompanionRoutePin.relay(url),
+        title: capitalised(relayName(url)),
+        detail: 'Only this relay, wherever you are.',
+      ),
+    if (pinnedGone)
+      (
+        pin: current,
+        title: capitalised(relayName(current.relay!)),
+        detail: 'No longer announced by $name.',
+      ),
+  ];
+}
+
+/// Opens the route picker for [machine] and applies what is picked through
+/// [applyMachineRoute].
+Future<void> pickMachineRoute(
+  BuildContext context,
+  WidgetRef ref,
+  CompanionPairing machine,
+) async {
+  final name = machineName(machine, fallback: 'the server');
+  final current = machine.pin;
   final chosen = await showAdaptiveModal<CompanionRoutePin>(
     context: context,
     title: 'How to reach $name',
@@ -111,41 +153,32 @@ Future<void> pickMachineRoute(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _RouteOption(
-          pin: CompanionRoutePin.auto,
-          current: current,
-          title: 'Automatic',
-          detail: 'This network when $name is on it, otherwise a relay.',
-        ),
-        _RouteOption(
-          pin: CompanionRoutePin.lan,
-          current: current,
-          title: 'This network only',
-          detail: 'Only while this device and $name share a network.',
-        ),
-        for (final url in relays)
-          _RouteOption(
-            pin: CompanionRoutePin.relay(url),
+        for (final option in routeOptions(machine))
+          RouteOptionTile(
+            option: option,
             current: current,
-            title: _capitalised(relayName(url)),
-            detail: 'Only this relay, wherever you are.',
-          ),
-        if (pinnedGone)
-          _RouteOption(
-            pin: current,
-            current: current,
-            title: _capitalised(relayName(current.relay!)),
-            detail: 'No longer announced by $name.',
+            onTap: () => Navigator.of(context).pop(option.pin),
           ),
       ],
     ),
   );
   if (chosen == null || chosen == current || !context.mounted) return;
+  await applyMachineRoute(context, ref, machine, chosen);
+}
+
+/// Pins [machine] to [pin] through [RoutePinController.choose] — the one way
+/// any picker changes a route — which redials when [machine] is in use.
+Future<void> applyMachineRoute(
+  BuildContext context,
+  WidgetRef ref,
+  CompanionPairing machine,
+  CompanionRoutePin pin,
+) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     await ref
         .read(routePinProvider.notifier)
-        .choose(chosen, hostId: machine.hostId.value);
+        .choose(pin, hostId: machine.hostId.value);
   } on Object catch (error) {
     messenger?.showSnackBar(
       SnackBar(
@@ -155,22 +188,22 @@ Future<void> pickMachineRoute(
   }
 }
 
-class _RouteOption extends StatelessWidget {
-  const _RouteOption({
-    required this.pin,
+/// A [RouteOption] as a row, ticked when it is [current].
+class RouteOptionTile extends StatelessWidget {
+  const RouteOptionTile({
+    required this.option,
     required this.current,
-    required this.title,
-    required this.detail,
+    required this.onTap,
+    super.key,
   });
 
-  final CompanionRoutePin pin;
+  final RouteOption option;
   final CompanionRoutePin current;
-  final String title;
-  final String detail;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final selected = pin == current;
+    final selected = option.pin == current;
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
       selected: selected,
@@ -178,9 +211,9 @@ class _RouteOption extends StatelessWidget {
         selected ? AppIcons.checkCircle : AppIcons.circle,
         color: selected ? scheme.primary : scheme.onSurfaceVariant,
       ),
-      title: Text(title),
-      subtitle: Text(detail),
-      onTap: () => Navigator.of(context).pop(pin),
+      title: Text(option.title),
+      subtitle: Text(option.detail),
+      onTap: onTap,
     );
   }
 }

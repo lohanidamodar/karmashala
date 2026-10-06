@@ -143,9 +143,12 @@ class DesktopServerDialer {
     void Function(bool held)? onHeld,
     bool Function()? promoteOffered,
     bool Function()? keepaliveOffered,
+    void Function(Uri? relay)? onRoute,
   }) async {
     final notes = <String>[];
-    final name = pairing.hostName.isEmpty ? 'the server' : pairing.hostName;
+    final name = pairing.displayName.trim().isEmpty
+        ? 'the server'
+        : pairing.displayName.trim();
     String said() => notes.isEmpty ? '' : ' (${notes.toSet().join('; ')})';
     final scout = this.scout;
     final resume = resumeOffered == null
@@ -182,6 +185,7 @@ class DesktopServerDialer {
         timeout: timeout,
         open: (_) async => _lanDialer(direct.$1, direct.$2),
         resume: resume,
+        onRoute: onRoute,
       );
       if (link != null) return link;
     }
@@ -196,6 +200,7 @@ class DesktopServerDialer {
         pinnedRelay,
         notes,
         resume: resume,
+        onRoute: onRoute,
         pinned: true,
       );
       if (link != null) return link;
@@ -221,6 +226,7 @@ class DesktopServerDialer {
           host,
           pinned: pinnedLan,
           resume: resume,
+          onRoute: onRoute,
         );
         if (link != null) return link;
       }
@@ -243,6 +249,7 @@ class DesktopServerDialer {
           hinted,
           pinned: pinnedLan,
           resume: resume,
+          onRoute: onRoute,
         );
         if (link != null) return link;
       }
@@ -269,6 +276,7 @@ class DesktopServerDialer {
           url,
           notes,
           resume: resume,
+          onRoute: onRoute,
           hopOnMove: (to) =>
               hops < kMaxRelayMoveHops &&
               !sameRelay(to, url) &&
@@ -386,6 +394,7 @@ class DesktopServerDialer {
         if (!answered) unawaited(_noteRelayFailure(saved, url));
       },
       relayHost: url.host,
+      relay: url,
     );
     final pin = saved.pin;
     final pinnedRelay = pin.kind == CompanionRouteKind.relay ? pin.relay : null;
@@ -434,6 +443,7 @@ class DesktopServerDialer {
     DiscoveredHost host, {
     required bool pinned,
     DesktopLinkResume? resume,
+    void Function(Uri? relay)? onRoute,
   }) async {
     final scout = this.scout;
     final link = await _attempt(
@@ -446,6 +456,7 @@ class DesktopServerDialer {
           ? scout.dial(host)
           : _lanDialer(host.address.address, host.port),
       resume: resume,
+      onRoute: onRoute,
     );
     if (scout != null) {
       if (link == null) {
@@ -462,6 +473,7 @@ class DesktopServerDialer {
     Uri url,
     List<String> notes, {
     DesktopLinkResume? resume,
+    void Function(Uri? relay)? onRoute,
     bool Function(Uri to)? hopOnMove,
     bool pinned = false,
   }) async {
@@ -477,6 +489,7 @@ class DesktopServerDialer {
       open: (generation) async =>
           _relayFactory(url, await rendezvousFor(key, generation)),
       resume: resume,
+      onRoute: onRoute,
       hopOnMove: hopOnMove,
       // A pin is "only": a pairing pinned to a relay is not moved off it.
       movable: !pinned,
@@ -497,6 +510,7 @@ class DesktopServerDialer {
     required Future<RemoteTransport> Function(int generation) open,
     Uri? relay,
     DesktopLinkResume? resume,
+    void Function(Uri? relay)? onRoute,
     bool Function(Uri to)? hopOnMove,
     bool movable = true,
   }) async {
@@ -521,6 +535,8 @@ class DesktopServerDialer {
           onHostStatus: (announced) => status = announced,
           resume: resume,
           relayHost: relay?.host,
+          relay: relay,
+          onRoute: onRoute,
           onRelayMove: onRelayMove,
           hopOnMove: hopOnMove,
         );

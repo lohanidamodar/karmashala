@@ -96,6 +96,14 @@ class Machines {
         if (record != null) all.upsert(record.withPin(pin));
       });
 
+  /// Names [hostId]'s server [label] on this client only; null or blank uses
+  /// the machine's own name again. Nothing is sent to the machine.
+  Future<void> rename(String hostId, String? label) =>
+      CompanionConnections.mutate(store, (all) {
+        final record = all.byHost(hostId);
+        if (record != null) all.upsert(record.withLabel(label));
+      });
+
   /// Forgets a paired server; this window falls back to its own if it used it.
   Future<void> forget(String hostId) async {
     await CompanionConnections.mutate(store, (all) => all.remove(hostId));

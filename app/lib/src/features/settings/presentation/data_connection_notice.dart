@@ -8,6 +8,8 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/data/data_client.dart';
 import '../../../core/data/data_providers.dart';
 import '../../../core/server/remote_server_access.dart';
+import '../../remote/application/machines_providers.dart'
+    show machineInUseProvider;
 import '../../terminal/application/local_host_providers.dart';
 import 'settings_notice.dart';
 
@@ -42,7 +44,9 @@ class DataConnectionNotice extends ConsumerWidget {
     final remote = access is RemoteServerAccess ? access : null;
     final message = dataConnectionText(
       connection,
-      remoteHost: remote?.hostName,
+      remoteHost: remote == null
+          ? null
+          : ref.watch(machineInUseProvider)?.displayName ?? remote.hostName,
     );
     if (message == null) return const SizedBox.shrink();
     if (remote == null) return _notice(ref, client, connection, message);

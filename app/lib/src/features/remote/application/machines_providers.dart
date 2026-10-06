@@ -20,3 +20,14 @@ final pairedMachinesProvider = FutureProvider<List<CompanionPairing>>((
   final machines = ref.watch(machinesProvider);
   return machines == null ? const [] : machines.remote();
 });
+
+/// [activeMachineProvider] as last saved: the same machine, with a rename or
+/// a pin chosen since the session opened. Null for this computer's own.
+final machineInUseProvider = Provider<CompanionPairing?>((ref) {
+  final active = ref.watch(activeMachineProvider);
+  if (active == null) return null;
+  for (final saved in ref.watch(pairedMachinesProvider).value ?? const []) {
+    if (saved.hostId == active.hostId) return saved;
+  }
+  return active;
+});
