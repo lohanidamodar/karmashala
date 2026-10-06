@@ -69,6 +69,9 @@ double sidebarWidthFrom(Object? saved) {
   return width == _kLegacyUnsetSidebarWidth ? kDefaultSidebarWidth : width;
 }
 
+/// What a session can hear of a session it starts, as the server reads them.
+const List<String> kChildReportModes = ['final', 'each_turn', 'none'];
+
 /// User settings: the default agent and per-agent permission preferences.
 class Settings {
   const Settings({
@@ -121,6 +124,7 @@ class Settings {
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
     this.letAgentsUpdateThemselves,
+    this.childReportMode,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
     this.uiTextScale = 1.0,
@@ -315,6 +319,11 @@ class Settings {
   /// own updates outside Karmashala are untouched.
   final bool? letAgentsUpdateThemselves;
 
+  /// What a session hears of a session it starts unless it says: `none`,
+  /// `final` or `each_turn` (the server's `childReportMode`). Null is
+  /// unset, which the server reads as `final`.
+  final String? childReportMode;
+
   /// The terminal colour scheme: `null` for Match app, `preset:<id>` for a
   /// built-in scheme (an unknown id reads as Match app), or `<format>:<path>`
   /// for a Ghostty or Warp theme file.
@@ -455,6 +464,7 @@ class Settings {
     bool? quitKeepsHostSessions,
     bool? letAgentsUpdateThemselves,
     bool clearLetAgentsUpdateThemselves = false,
+    String? childReportMode,
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
@@ -538,6 +548,7 @@ class Settings {
     letAgentsUpdateThemselves: clearLetAgentsUpdateThemselves
         ? null
         : (letAgentsUpdateThemselves ?? this.letAgentsUpdateThemselves),
+    childReportMode: childReportMode ?? this.childReportMode,
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
@@ -645,6 +656,7 @@ class Settings {
     'quitReopens',
     'quitKeepsHostSessions',
     'letAgentsUpdateThemselves',
+    'childReportMode',
     'terminalChordOverrides',
     'terminalThemeSource',
     'uiTextScale',
@@ -722,6 +734,7 @@ class Settings {
     'quitKeepsHostSessions': quitKeepsHostSessions,
     if (letAgentsUpdateThemselves != null)
       'letAgentsUpdateThemselves': letAgentsUpdateThemselves,
+    if (childReportMode != null) 'childReportMode': childReportMode,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
@@ -913,6 +926,10 @@ class Settings {
       letAgentsUpdateThemselves: json['letAgentsUpdateThemselves'] is bool
           ? json['letAgentsUpdateThemselves'] as bool
           : null,
+      childReportMode: switch (json['childReportMode']) {
+        final String mode when kChildReportModes.contains(mode) => mode,
+        _ => null,
+      },
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
           for (final entry in (json['terminalChordOverrides'] as Map).entries)
@@ -1030,6 +1047,7 @@ class Settings {
       other.quitReopens == quitReopens &&
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
+      other.childReportMode == childReportMode &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       other.uiTextScale == uiTextScale &&
@@ -1104,6 +1122,7 @@ class Settings {
         editorAutoSaveDelayMs,
         Object.hash(
           quitAsks,
+          childReportMode,
           quitReopens,
           quitKeepsHostSessions,
           toolImageMaxAgeDays,

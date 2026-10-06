@@ -26,12 +26,16 @@ class ChildTurnOutcome {
     this.block,
     this.exitCode,
     this.exitCodeKnown = false,
+    this.idle = false,
   });
 
   final ChildTurnState state;
   final SessionBlock? block;
   final int? exitCode;
   final bool exitCodeKnown;
+
+  /// Ended without a turn: [ChildTurnWait.nextTurn] saw no work before it.
+  final bool idle;
 }
 
 /// **Waits for a session's first turn to settle** — the wait behind
@@ -66,10 +70,25 @@ class ChildTurnWait {
     String sessionId, {
     required Duration bound,
     required DateTime since,
+  }) => _turn(sessionId, bound: bound, since: since, afterWork: false);
+
+  /// The next turn [sessionId] works, however long it sits idle first: it
+  /// settles only once the agent was seen working, so a ready screen, an
+  /// answer already given or a prompt still open from before settle nothing.
+  Future<ChildTurnOutcome> nextTurn(
+    String sessionId, {
+    required DateTime since,
+  }) => _turn(sessionId, bound: null, since: since, afterWork: true);
+
+  Future<ChildTurnOutcome> _turn(
+    String sessionId, {
+    required Duration? bound,
+    required DateTime since,
+    required bool afterWork,
   }) async {
     final status = waits.status;
     final running = status.liveScreenOf(sessionId);
-    if (running == null) return _ended(sessionId);
+    if (running == null) return _ended(sessionId, idle: afterWork);
 
     final settled = Completer<ChildTurnOutcome>();
     void settle(ChildTurnOutcome outcome) {
@@ -80,10 +99,11 @@ class ChildTurnWait {
     Future<void> consider(AgentStatusReport? report) async {
       if (settled.isCompleted) return;
       if (status.liveScreenOf(sessionId) == null) {
-        settle(_ended(sessionId));
+        settle(_ended(sessionId, idle: afterWork && !worked));
         return;
       }
-      if (waits.blockedOn(sessionId) case final block?) {
+      if (waits.blockedOn(sessionId) case final block?
+          when !afterWork || worked) {
         settle(ChildTurnOutcome(ChildTurnState.blocked, block: block));
         return;
       }
@@ -97,6 +117,7 @@ class ChildTurnWait {
           report.status == AgentActivityStatus.failed ||
           report.status == AgentActivityStatus.awaitingApproval;
       if (!ready) return;
+      if (!worked && afterWork) return;
       // Ready and never seen working is also a session not yet started:
       // only an answer recorded since the launch tells them apart.
       if (!worked && await answerOf(sessionId, since: since) == null) return;
@@ -119,6 +140,7 @@ class ChildTurnWait {
         .listen((_) {
           final report = status.statusOf(sessionId)?.report;
           if (report == null || report.status == AgentActivityStatus.unknown) {
+            if (afterWork && !worked) return;
             worked = true;
             if (waits.blockedOn(sessionId) == null &&
                 status.liveScreenOf(sessionId) != null) {
@@ -138,15 +160,18 @@ class ChildTurnWait {
             ChildTurnState.ended,
             exitCode: end.exitCode,
             exitCodeKnown: end.exitCode != null,
+            idle: afterWork && !worked,
           ),
         );
       }),
     );
-    unawaited(
-      _deadline(bound).then((_) {
-        settle(const ChildTurnOutcome(ChildTurnState.running));
-      }),
-    );
+    if (bound != null) {
+      unawaited(
+        _deadline(bound).then((_) {
+          settle(const ChildTurnOutcome(ChildTurnState.running));
+        }),
+      );
+    }
     unawaited(consider(status.statusOf(sessionId)?.report));
     try {
       return await settled.future;
@@ -157,12 +182,13 @@ class ChildTurnWait {
     }
   }
 
-  ChildTurnOutcome _ended(String sessionId) {
+  ChildTurnOutcome _ended(String sessionId, {bool idle = false}) {
     final ended = waits.ended(sessionId, null, null);
     return ChildTurnOutcome(
       ChildTurnState.ended,
       exitCode: ended.exitCode,
       exitCodeKnown: ended.exitCodeKnown,
+      idle: idle,
     );
   }
 }

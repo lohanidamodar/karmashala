@@ -81,12 +81,13 @@ fail in the same places. Pick one whose `cli` is not the one you are running as.
 
 1. `list_agents`, and choose an installation from another family.
 2. `open_new_session` with that `agentInstallationId`, the same `projectId`,
-   **no worktree**, and a prompt holding the decision, the evidence you already
+   its `report` set to every turn, **no worktree**, and a prompt holding the
+   decision, the evidence you already
    have, and the question. Say you want a critique and no edits — an agent given
    a problem will otherwise solve it.
-3. `session_wait` on the id you get back. `idle` means ready for input and is
-   never proof it answered you; `done` is idle-and-seen-changed. Then
-   `session_transcript`.
+3. End your turn and wait. When its turn ends, its answer arrives as a
+   `[Karmashala]` message, or sooner if it calls `report_to_parent`; do not
+   poll transcripts or files. `session_transcript` has the whole of it.
 4. `session_end` when you have the answer. The transcript survives; the turn in
    flight does not.
 
@@ -137,13 +138,14 @@ prompt rather than assuming you were given a careful reader.
 ## Convening
 
 1. Two `open_new_session` calls with different `cli`s, the same `projectId`,
-   and a worktree each. Separate worktrees are what stops two diagnoses editing
-   one file.
+   each one's `report` set to every turn, and a worktree each. Separate
+   worktrees are what stop two diagnoses editing one file.
 2. Give both the **same prompt**: the symptom, the exact command and its output,
    what you already tried and what it did. Ask for the cause and the evidence
    for it. A committee asked to fix something returns two fixes and no
    diagnosis.
-3. `session_wait` on each, then `session_transcript` on both **before** you
+3. End your turn and wait for both to report back — each arrives as a
+   `[Karmashala]` message — then `session_transcript` on both **before** you
    judge either. Reading the first alone is one opinion at twice the price.
 4. `session_end` both, and `worktree_remove` what you no longer need.
 

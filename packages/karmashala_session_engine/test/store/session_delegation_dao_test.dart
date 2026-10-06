@@ -66,6 +66,77 @@ void main() {
     expect(dao.awaitNextTurn('nobody', since: t0), isNull);
   });
 
+  test("a child's last report is kept: what, how and when", () {
+    dao.put(row('c1'));
+    expect(dao.byChild('c1')!.reportState, isNull);
+    final later = t0.add(const Duration(minutes: 3));
+    expect(
+      dao.reported('c1', state: 'done', via: 'report', at: later),
+      isTrue,
+    );
+    final read = dao.byChild('c1')!;
+    expect(read.reportState, 'done');
+    expect(read.reportVia, 'report');
+    expect(read.reportedAt, later);
+    expect(dao.reported('nobody', state: 'done', via: 'report', at: t0), isFalse);
+  });
+
+  test('a report keeps its text and whether it reached the parent', () {
+    dao.put(row('c1'));
+    dao.reported(
+      'c1',
+      state: 'done',
+      via: 'report',
+      at: t0,
+      text: 'All five fixed.',
+      delivered: false,
+    );
+    final read = dao.byChild('c1')!;
+    expect(read.reportText, 'All five fixed.');
+    expect(read.reportDelivered, isFalse);
+  });
+
+  test('the report mode reads back, each_turn when never written, and can '
+      'be changed, reopening a closed delegation', () {
+    dao.put(row('c1'));
+    expect(dao.byChild('c1')!.reportMode, 'each_turn');
+    dao.put(
+      SessionDelegation(
+        childSessionId: 'c2',
+        parentSessionId: 'p',
+        title: 'T',
+        agent: 'A',
+        delegatedAt: t0,
+        turn: 1,
+        reportMode: 'none',
+        closedAt: t0,
+      ),
+    );
+    expect(dao.byChild('c2')!.reportMode, 'none');
+    expect(dao.setReportMode('c2', 'final', at: t0), isTrue);
+    final changed = dao.byChild('c2')!;
+    expect(changed.reportMode, 'final');
+    expect(changed.isOpen, isTrue);
+    expect(dao.setReportMode('c1', 'none', at: t0), isTrue);
+    expect(dao.byChild('c1')!.isOpen, isFalse);
+    expect(dao.setReportMode('nobody', 'final', at: t0), isFalse);
+  });
+
+  test('closed, it is kept but no longer followed or awaited', () {
+    dao
+      ..put(row('c1'))
+      ..put(row('c2'));
+    dao.close('c1', at: t0);
+    final closed = dao.byChild('c1')!;
+    expect(closed.isOpen, isFalse);
+    expect(closed.closedAt, t0);
+    expect(closed.awaiting, isFalse);
+    expect(dao.open().map((d) => d.childSessionId), ['c2']);
+    expect(dao.awaiting().map((d) => d.childSessionId), ['c2']);
+    expect(dao.awaitNextTurn('c1', since: t0), isNull);
+    expect(dao.forParent('p').map((d) => d.childSessionId), ['c1', 'c2']);
+  });
+
   test('removed, it is gone; a parent lists only its own', () {
     dao
       ..put(row('c1'))

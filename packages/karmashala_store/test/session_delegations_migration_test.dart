@@ -9,14 +9,14 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 76', () => expect(db.schemaVersion, 76));
+  test('the head is 77', () => expect(db.schemaVersion, 77));
 
   test('v73 creates session_delegations', () {
     final columns = db
         .query('PRAGMA table_info(session_delegations);')
         .map((r) => r['name']! as String)
         .toList();
-    expect(columns, [
+    expect(columns.take(9), [
       'child_session_id',
       'parent_session_id',
       'title',

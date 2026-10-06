@@ -17,11 +17,11 @@ void main() {
       .map((r) => r['name']! as String)
       .toList();
 
-  test('the head is 76 and the keys stay contiguous', () {
+  test('the head is 77 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 76);
+    expect(db.schemaVersion, 77);
   });
 
   test('v66 adds leading_arguments, null for every row written before', () {

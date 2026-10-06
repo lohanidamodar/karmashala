@@ -31,6 +31,35 @@ void main() {
     expect(settings.hiddenSidePanelSurfaces, ['fromANewerBuild', 'notes']);
   });
 
+  group('what a session hears of a session it starts', () {
+    test('is unset by default, so the server reports "final"', () {
+      expect(const Settings().childReportMode, isNull);
+      expect(Settings.fromJson(const {}).childReportMode, isNull);
+    });
+
+    test('survives a JSON round-trip, under the key the server reads', () {
+      const s = Settings(childReportMode: 'each_turn');
+      expect(s.toJson()['childReportMode'], 'each_turn');
+      expect(Settings.fromJson(s.toJson()), s);
+      expect(s, isNot(const Settings()));
+      expect(
+        Settings.fromJson(const {'childReportMode': 'loud'}).childReportMode,
+        isNull,
+      );
+    });
+
+    test('the controller persists a choice', () async {
+      final server = FakeDataServer();
+      final container = ProviderContainer(overrides: [await server.override()]);
+      addTearDown(container.dispose);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setChildReportMode('none');
+      expect(container.read(settingsControllerProvider).childReportMode, 'none');
+      expect((await _stored(server)).childReportMode, 'none');
+    });
+  });
+
   group('the sidebar area', () {
     test('is unset by default and survives a JSON round-trip', () {
       expect(const Settings().sidebarArea, isNull);

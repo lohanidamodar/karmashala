@@ -83,6 +83,40 @@ class DefaultAgentRow extends ConsumerWidget {
   }
 }
 
+/// Settings → Agents and accounts → Sessions agents start: what a session
+/// hears of a session it starts, unless it says. Read by the server.
+class ChildReportSection extends ConsumerWidget {
+  const ChildReportSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode =
+        ref.watch(settingsControllerProvider).childReportMode ?? 'final';
+    final controller = ref.read(settingsControllerProvider.notifier);
+    return SettingsSection(
+      title: 'Sessions agents start',
+      child: SettingsRow(
+        label: 'Report back',
+        help:
+            'What a session hears of one it starts: a final report, the end '
+            'of every turn, or nothing. The agent can choose per session.',
+        control: SegmentedButton<String>(
+          key: const ValueKey('child-report-mode'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 'final', label: Text('Final')),
+            ButtonSegment(value: 'each_turn', label: Text('Every turn')),
+            ButtonSegment(value: 'none', label: Text('Nothing')),
+          ],
+          selected: {mode},
+          onSelectionChanged: (chosen) =>
+              controller.setChildReportMode(chosen.single),
+        ),
+      ),
+    );
+  }
+}
+
 /// Settings → Agents and accounts → Agent updates: whether a launched agent may
 /// update itself, and the command to update each one by hand instead.
 class AgentUpdatesSection extends ConsumerWidget {

@@ -541,6 +541,14 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// What a session hears of a session it starts, unless it says: one of
+  /// [kChildReportModes]. Applies to the next session an agent starts.
+  void setChildReportMode(String mode) {
+    if (!kChildReportModes.contains(mode)) return;
+    state = state.copyWith(childReportMode: mode);
+    _save();
+  }
+
   void setTerminalThemeSource(String? id) {
     state = state.copyWith(
       terminalThemeSource: id,

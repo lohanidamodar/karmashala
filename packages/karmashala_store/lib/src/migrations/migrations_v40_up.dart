@@ -862,3 +862,24 @@ void _migrateToV76(Database db) {
     'WHERE archived_at IS NOT NULL AND worktree_path IS NOT NULL;',
   );
 }
+
+/// A delegation's last report — its state, `report` (the child's own) or
+/// `turn` (a turn's end), when, its text, and whether it reached the parent
+/// — what the parent asked to be told (`report_mode`: none, final,
+/// each_turn), and when it stopped being followed: closed rather than
+/// deleted, so its parent still sees how it ended.
+void _migrateToV77(Database db) {
+  for (final column in [
+    'report_state',
+    'report_via',
+    'reported_at',
+    'closed_at',
+    'report_mode',
+    'report_text',
+  ]) {
+    db.execute('ALTER TABLE session_delegations ADD COLUMN $column TEXT;');
+  }
+  db.execute(
+    'ALTER TABLE session_delegations ADD COLUMN report_delivered INTEGER;',
+  );
+}
