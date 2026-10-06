@@ -129,6 +129,16 @@ void main() {
         ],
         ['s1'],
       );
+      for (final spelling in ['fix-login', 'fix_login', 'FixLogin']) {
+        expect(
+          [
+            for (final r in await list('list_sessions', {'query': spelling}))
+              r['id'],
+          ],
+          ['s1'],
+          reason: 'separators and case do not matter: $spelling',
+        );
+      }
       expect(
         [
           for (final r in await list('list_sessions', {'query': 'appwrite'}))

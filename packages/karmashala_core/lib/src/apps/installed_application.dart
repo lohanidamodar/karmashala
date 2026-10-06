@@ -10,6 +10,8 @@ library;
 
 import 'package:path/path.dart' as p;
 
+import '../util/search_match.dart';
+
 /// One application, as its own desktop lists it.
 class InstalledApplication {
   const InstalledApplication({
@@ -190,12 +192,9 @@ List<InstalledApplication> matchingApplications(
   List<InstalledApplication> apps,
   String query,
 ) {
-  final needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return apps;
+  if (query.trim().isEmpty) return apps;
   return [
     for (final app in apps)
-      if (app.name.toLowerCase().contains(needle) ||
-          app.launchPath.toLowerCase().contains(needle))
-        app,
+      if (matchesSearchAny(query, [app.name, app.launchPath])) app,
   ];
 }

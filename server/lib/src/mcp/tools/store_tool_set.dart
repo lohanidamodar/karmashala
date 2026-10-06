@@ -1,3 +1,4 @@
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:store_console/store_console.dart';
 
@@ -336,7 +337,7 @@ class StoreToolSet extends ServerToolSet {
       (g) => g.entries.any((e) => e.app.bundleId == query),
       (g) => g.entries.any((e) => e.app.bundleId.toLowerCase() == lower),
       (g) => g.entries.any((e) => e.app.name.toLowerCase() == lower),
-      (g) => g.entries.any((e) => e.app.name.toLowerCase().contains(lower)),
+      (g) => g.entries.any((e) => matchesSearch(query, e.app.name)),
     ];
     for (final test in tests) {
       final hits = groups.where(test).toList();

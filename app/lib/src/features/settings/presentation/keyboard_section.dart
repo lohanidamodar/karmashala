@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/code.dart' show CodeEditorKeys;
@@ -58,15 +59,16 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
       settingsControllerProvider.select((s) => s.terminalChordOverrides),
     );
     final path = status.path;
-    final query = _filter.text.trim().toLowerCase();
+    final query = _filter.text.trim();
     final caps = ref.watch(capabilitiesProvider);
     final bindings = [
       for (final binding in resolvedKeymapBindings(overrides))
         if (shellCommandShownWith(binding.command, caps) &&
-            (query.isEmpty ||
-                binding.does.toLowerCase().contains(query) ||
-                binding.command.toLowerCase().contains(query) ||
-                (binding.keys?.toLowerCase().contains(query) ?? false)))
+            matchesSearchAny(query, [
+              binding.does,
+              binding.command,
+              binding.keys,
+            ]))
           binding,
     ];
     List<KeymapBinding> where(bool Function(KeymapBinding b) test) => [

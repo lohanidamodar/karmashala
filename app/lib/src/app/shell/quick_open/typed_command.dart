@@ -4,6 +4,8 @@
 /// provider, so every rule is unit-testable without a widget.
 library;
 
+import 'package:karmashala_core/util.dart';
+
 import 'quick_open_item.dart';
 
 /// The verbs. Matched only when typed in full and followed by a space, so a
@@ -369,60 +371,11 @@ const int kCommandSuggestionLimit = 12;
 
 // --- scoring ----------------------------------------------------------------
 
-bool _isBoundary(int code) =>
-    code == 0x20 || // space
-    code == 0x2D || // -
-    code == 0x5F || // _
-    code == 0x2F || // /
-    code == 0x5C || // \
-    code == 0x2E || // .
-    code == 0x3A; // :
-
-bool _startsWordAt(String text, int i) {
-  if (i == 0) return true;
-  final previous = text.codeUnitAt(i - 1);
-  if (_isBoundary(previous)) return true;
-  final current = text.codeUnitAt(i);
-  final upper = current >= 0x41 && current <= 0x5A;
-  final lowerBefore = previous >= 0x61 && previous <= 0x7A;
-  return upper && lowerBefore;
-}
-
-/// Realm's argument scorer: a case-insensitive subsequence, +1 a character, +3
-/// at a word start, +2 for a consecutive character, +3 when [query] is a prefix
-/// of the whole [label]. Null when [label] lacks [query]'s characters in order.
-int? commandMatchScore(String query, String label) {
-  if (query.isEmpty) return 0;
-  final needle = query.toLowerCase();
-  final haystack = label.toLowerCase();
-  var score = 0;
-  var from = 0;
-  var previous = -2;
-  for (var q = 0; q < needle.length; q++) {
-    final target = needle.codeUnitAt(q);
-    var found = -1;
-    // A word start or the next character wins over the first occurrence, so
-    // `aw` lands on `appwrite`'s `w` only when nothing better is there.
-    var fallback = -1;
-    for (var i = from; i < haystack.length; i++) {
-      if (haystack.codeUnitAt(i) != target) continue;
-      if (fallback < 0) fallback = i;
-      if (i == previous + 1 || _startsWordAt(label, i)) {
-        found = i;
-        break;
-      }
-    }
-    if (found < 0) found = fallback;
-    if (found < 0) return null;
-    score += 1;
-    if (_startsWordAt(label, found)) score += 3;
-    if (found == previous + 1) score += 2;
-    previous = found;
-    from = found + 1;
-  }
-  if (haystack.startsWith(needle)) score += 3;
-  return score;
-}
+/// The argument scorer: the shared search rule with scattered initials, so
+/// `appwrite_ai` and `aaw` both find `appwrite-ai-workdir`. Null when [label]
+/// does not match.
+int? commandMatchScore(String query, String label) =>
+    searchMatch(query, label, initials: true)?.score.round();
 
 class _Ranked<T> {
   _Ranked(this.item, this.score, this.index, {required this.exact});

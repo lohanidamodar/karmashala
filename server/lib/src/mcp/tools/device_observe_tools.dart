@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_devices/karmashala_devices.dart';
 import 'device_drive_tools.dart';
 import 'device_tool_support.dart';
@@ -147,14 +148,14 @@ class DeviceObserveTools extends DeviceToolFamily {
 
     var nodes = full ? tree.allNodes.toList() : interestingNodes(tree);
     if (filter != null && filter.trim().isNotEmpty) {
-      final needle = filter.trim().toLowerCase();
-      bool has(String value) => value.toLowerCase().contains(needle);
       nodes = [
         for (final node in nodes)
-          if (has(node.text) ||
-              has(node.contentDescription) ||
-              has(node.resourceId) ||
-              has(node.className))
+          if (matchesSearchAny(filter, [
+            node.text,
+            node.contentDescription,
+            node.resourceId,
+            node.className,
+          ]))
             node,
       ];
     }

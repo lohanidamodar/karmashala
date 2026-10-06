@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -250,11 +251,7 @@ class _CombinePickerState extends State<_CombinePicker> {
   String _query = '';
 
   bool _matches(StoreApp app) {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return true;
-    return app.name.toLowerCase().contains(query) ||
-        app.id.toLowerCase().contains(query) ||
-        app.bundleId.toLowerCase().contains(query);
+    return matchesSearchAny(_query, [app.name, app.id, app.bundleId]);
   }
 
   /// Why picking this app changes another pair, or null when it does not.

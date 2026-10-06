@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:karmashala_core/util.dart';
 
 import 'package:karmashala_ui/icons.dart';
 
@@ -255,9 +256,7 @@ enum SettingsSectionId {
     if (caps != null && !shownWith(caps)) return false;
     final q = normaliseSettingsQuery(query);
     if (q.isEmpty) return true;
-    if (label.toLowerCase().contains(q)) return true;
-    if (description.toLowerCase().contains(q)) return true;
-    return _keywords(caps).any((k) => k.contains(q)) ||
+    return matchesSearchAny(q, [label, description, ..._keywords(caps)]) ||
         entries.any(
           (e) => (caps == null || e.anchor.shownWith(caps)) && e.matches(q),
         );
@@ -674,14 +673,16 @@ class SettingsEntry {
   /// [query] is already normalised by [normaliseSettingsQuery].
   bool matches(String query) {
     if (query.isEmpty) return false;
-    return label.toLowerCase().contains(query) ||
-        description.toLowerCase().contains(query) ||
-        anchor.title.toLowerCase().contains(query) ||
-        keywords.any((k) => k.contains(query));
+    return matchesSearchAny(query, [
+      label,
+      description,
+      anchor.title,
+      ...keywords,
+    ]);
   }
 }
 
-String normaliseSettingsQuery(String query) => query.trim().toLowerCase();
+String normaliseSettingsQuery(String query) => query.trim();
 
 /// The options [query] finds, in page-list order; with [caps], none in a
 /// section this client hides.

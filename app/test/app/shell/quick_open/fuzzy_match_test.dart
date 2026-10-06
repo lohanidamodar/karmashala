@@ -40,6 +40,17 @@ void main() {
       expect(fuzzyMatch('shell', 'AppShell'), isNotNull);
     });
 
+    test('separators and camelCase do not matter', () {
+      for (final query in [
+        'appwrite ai workdir',
+        'appwrite_ai_workdir',
+        'appwriteAiWorkdir',
+      ]) {
+        expect(fuzzyMatch(query, 'appwrite-ai-workdir'), isNotNull);
+      }
+      expect(fuzzyMatch('ai work', 'AppwriteAIWorkdir'), isNotNull);
+    });
+
     test('positions point at the characters that matched', () {
       final match = fuzzyMatch('shell', 'app_shell.dart')!;
       expect(match.positions, [4, 5, 6, 7, 8]);

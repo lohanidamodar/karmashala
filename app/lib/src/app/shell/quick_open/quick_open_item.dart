@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:karmashala_core/util.dart';
 
 import 'fuzzy_match.dart';
 
@@ -63,15 +64,10 @@ enum QuickOpenGroup {
   bool get matchesWholeOnly => this == QuickOpenGroup.settings;
 }
 
-/// Whether [query] appears whole, ignoring case, in [item]'s title, subtitle
-/// or one of its keywords.
-bool _containsWhole(String query, QuickOpenItem item) {
-  final needle = query.toLowerCase();
-  bool has(String text) => text.toLowerCase().contains(needle);
-  return has(item.title) ||
-      (item.subtitle != null && has(item.subtitle!)) ||
-      item.keywords.any(has);
-}
+/// Whether [query]'s words are found in [item]'s title, subtitle or one of its
+/// keywords, without falling back to scattered initials.
+bool _containsWhole(String query, QuickOpenItem item) =>
+    matchesSearchAny(query, [item.title, item.subtitle, ...item.keywords]);
 
 /// One findable thing. [onSelect] is a closure because every jump already has
 /// exactly one implementation elsewhere: a second way *in*, not a second one.

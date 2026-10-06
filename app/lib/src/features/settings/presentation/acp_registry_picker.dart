@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -84,12 +85,9 @@ class _AcpRegistryPickerState extends ConsumerState<AcpRegistryPicker> {
         style: theme.textTheme.bodySmall,
       );
     }
-    final query = _filter.text.trim().toLowerCase();
     final shown = [
       for (final entry in catalog.agents)
-        if (query.isEmpty ||
-            entry.label.toLowerCase().contains(query) ||
-            (entry.description?.toLowerCase().contains(query) ?? false))
+        if (matchesSearchAny(_filter.text, [entry.label, entry.description]))
           entry,
     ];
     return Column(

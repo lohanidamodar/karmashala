@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup;
 import 'package:flutter/widgets.dart';
+import 'package:karmashala_core/util.dart';
 
 import 'app_icons.dart';
 import 'file_browser.dart';
@@ -146,12 +147,10 @@ class FileBrowserController extends ChangeNotifier {
 
   /// The rows the hidden toggle and [filter] leave on screen.
   List<BrowsedEntry> visible(String filter) {
-    final needle = filter.trim().toLowerCase();
     return [
       for (final entry in _entries)
         if (HiddenFilesPreference.shown || !entry.hidden)
-          if (needle.isEmpty || entry.name.toLowerCase().contains(needle))
-            entry,
+          if (matchesSearch(filter, entry.name)) entry,
     ];
   }
 
@@ -552,9 +551,7 @@ Future<List<BrowsePlace>> localShortcuts(
 
   final answered = await Future.wait([
     for (final place in candidates)
-      exists(
-        place.path,
-      ).timeout(kPlaceProbePatience, onTimeout: () => false),
+      exists(place.path).timeout(kPlaceProbePatience, onTimeout: () => false),
   ]);
   return [
     for (var i = 0; i < candidates.length; i++)

@@ -196,9 +196,16 @@ void main() {
       final words = commandMatchScore('aw', 'ai-workdir')!;
       final scattered = commandMatchScore('aw', 'rawhide')!;
       expect(words, greaterThan(scattered));
-      // The documented arithmetic: 1+3 for `a` (start), 1+2 for `p` (run),
-      // 1+2 for the second `p`, +3 for a whole-label prefix.
-      expect(commandMatchScore('app', 'appwrite'), 13);
+    });
+
+    test('ignores separators and case, as every search does', () {
+      for (final typed in ['appwrite_ai', 'appwrite.ai', 'appwriteAiWorkdir']) {
+        expect(
+          commandMatchScore(typed, 'appwrite-ai-workdir'),
+          isNotNull,
+          reason: typed,
+        );
+      }
     });
 
     test('an empty query matches everything, scoring nothing', () {

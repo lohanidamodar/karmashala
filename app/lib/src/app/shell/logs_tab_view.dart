@@ -9,6 +9,7 @@ import 'package:logging/logging.dart';
 import '../../core/logging/diagnostics_providers.dart';
 import '../../core/logging/server_log_tail.dart';
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -136,15 +137,15 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
   }
 
   List<LogEntry> _filter(List<LogEntry> all) {
-    final query = _query.trim().toLowerCase();
     return [
       for (final entry in all)
         if (entry.level >= _minLevel &&
             (_channel == null || entry.channel == _channel) &&
-            (query.isEmpty ||
-                entry.channel.toLowerCase().contains(query) ||
-                entry.message.toLowerCase().contains(query) ||
-                (entry.error?.toLowerCase().contains(query) ?? false)))
+            matchesSearchAny(_query, [
+              entry.channel,
+              entry.message,
+              entry.error,
+            ]))
           entry,
     ];
   }
