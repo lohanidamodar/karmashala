@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -441,43 +442,83 @@ void main() {
       expect(done.inFlight, isEmpty);
     });
 
-    // Declined with Esc, or left to "Chat about this", a question fires no
-    // hook of its own: the turn is interrupted, so no PostToolUse and no Stop.
-    // The agent's own composer back on screen is then the only word that it
-    // closed — on the owner's phone the question stayed open long after.
-    test('a question the screen no longer draws is closed, though no hook '
-        'said so', () {
-      keeper.track('row-1', agentId: claude.id);
-      final idleScreen = screenOf('claude-code-tui', 0.85, claude);
-      final asked = hook('PreToolUse', {
-        'tool_name': 'AskUserQuestion',
-        'tool_use_id': 'toolu_1',
-        'tool_input': {
-          'questions': [
-            {
-              'question': 'Pick a fruit',
-              'options': [
-                {'label': 'Apple'},
-              ],
-            },
-          ],
-        },
+    // A question closed with no hook to say so: the agent's own composer
+    // back on screen is then the only word that it closed — on the owner's
+    // phone the question stayed open long after. Real screens, Claude Code
+    // 2.1.287 in a ConPTY at 120×30 (round 31): the menu replaces the
+    // composer's footer while it is drawn, and Esc or "Chat about this"
+    // brings the footer back.
+    group('a question on a real Claude Code screen', () {
+      List<String> captured(String name) {
+        final rows = File(
+          '../../app/test/features/agents/fixtures/$name.screen',
+        ).readAsLinesSync();
+        final scan = claude.grid.scanLines;
+        return rows.length <= scan ? rows : rows.sublist(rows.length - scan);
+      }
+
+      void ask() {
+        keeper.track('row-1', agentId: claude.id);
+        final asked = hook('PreToolUse', {
+          'tool_name': 'AskUserQuestion',
+          'tool_use_id': 'toolu_1',
+          'tool_input': {
+            'questions': [
+              {
+                'question': 'Pick a colour',
+                'header': 'Colour',
+                'options': [
+                  {'label': 'Red'},
+                  {'label': 'Blue'},
+                ],
+              },
+            ],
+          },
+        });
+        expect(asked!.report.hasOpenQuestion, isTrue);
+      }
+
+      test('stays open while its menu is drawn, however long', () {
+        ask();
+        final open = captured('claude-code-question-open');
+        for (final wait in const [
+          Duration(milliseconds: 500),
+          Duration(seconds: 3),
+          Duration(minutes: 10),
+        ]) {
+          clock.now = clock.now.add(wait);
+          keeper.screen('row-1', open);
+          final now = keeper.statusOf('row-1')!;
+          expect(now.report.hasOpenQuestion, isTrue, reason: 'after $wait');
+          expect(now.report.hasOpenPrompt, isFalse);
+        }
       });
-      expect(asked!.report.hasOpenQuestion, isTrue);
 
-      clock.now = clock.now.add(const Duration(milliseconds: 500));
-      keeper.screen('row-1', idleScreen);
-      expect(
-        keeper.statusOf('row-1')!.report.hasOpenQuestion,
-        isTrue,
-        reason: 'a screen just after the hook may not have redrawn yet',
-      );
+      for (final (left, fixture) in const [
+        ('declined with Esc', 'claude-code-question-declined'),
+        ('left to "Chat about this"', 'claude-code-question-chat'),
+      ]) {
+        test('$left, closes once the composer is back, though no hook said '
+            'so', () {
+          ask();
+          clock.now = clock.now.add(const Duration(seconds: 1));
+          keeper.screen('row-1', captured('claude-code-question-open'));
+          expect(keeper.statusOf('row-1')!.report.hasOpenQuestion, isTrue);
 
-      clock.now = clock.now.add(const Duration(seconds: 3));
-      final closed = keeper.screen('row-1', idleScreen);
-      expect(closed!.report.hasOpenQuestion, isFalse);
-      expect(closed.report.status, AgentActivityStatus.idle);
-      expect(closed.question, isNull);
+          final back = captured(fixture);
+          // Read inside the redraw lag the hook still stands.
+          clock.now = clock.now.add(const Duration(milliseconds: 500));
+          keeper.screen('row-1', back);
+          expect(keeper.statusOf('row-1')!.report.hasOpenQuestion, isTrue);
+
+          clock.now = clock.now.add(const Duration(seconds: 3));
+          keeper.screen('row-1', back);
+          final closed = keeper.statusOf('row-1')!;
+          expect(closed.report.hasOpenQuestion, isFalse);
+          expect(closed.report.status, AgentActivityStatus.idle);
+          expect(closed.question, isNull);
+        });
+      }
     });
 
     test('an approval the screen no longer draws is closed, though no hook '
@@ -496,34 +537,6 @@ void main() {
       );
       expect(closed!.report.hasOpenPrompt, isFalse);
       expect(closed.report.status, AgentActivityStatus.idle);
-    });
-
-    test('a question still drawn stays open under a fresh hook', () {
-      keeper.track('row-1', agentId: claude.id);
-      hook('PreToolUse', {
-        'tool_name': 'AskUserQuestion',
-        'tool_use_id': 'toolu_1',
-        'tool_input': {
-          'questions': [
-            {
-              'question': 'Pick a fruit',
-              'options': [
-                {'label': 'Apple'},
-              ],
-            },
-          ],
-        },
-      });
-      clock.now = clock.now.add(const Duration(seconds: 3));
-      keeper.screen('row-1', const [
-        '',
-        ' Pick a fruit',
-        ' ❯ 1. Apple',
-        '   2. Type something.',
-        '',
-        ' Enter to select · ↑/↓ to navigate · Esc to cancel',
-      ]);
-      expect(keeper.statusOf('row-1')!.report.hasOpenQuestion, isTrue);
     });
 
     test('a stale hook is still the word when the screen says nothing', () {

@@ -1,0 +1,21 @@
+ ▐▛███▛█   Claude Code v2.1.287
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   ~/scratch/question-demo
+
+
+❯ Throwaway UI test. Call no tool except AskUserQuestion, exactly once, with one single-choice question "Pick a colour"
+  (header Colour) with options Red and Blue. After it returns reply only with the word done.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Colour
+
+Pick a colour
+
+❯ 1. Red
+     The colour red
+  2. Blue
+     The colour blue
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
