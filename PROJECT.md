@@ -1341,7 +1341,7 @@ happened on 2026-09-21 (`Agent hooks: 6 installed … 3 reporting by spool` in a
 debug instance's log).
 
 **Every agent that runs a second instance of this app runs it as a probe.**
-Never run a bare `flutter run`, `debug_run.bat` without `-Fresh`, or a built
+Never run a bare `flutter run`, `debug_run.bat -Live`, or a built
 exe beside the installed app.
 
 ### Running one
@@ -1363,7 +1363,9 @@ cd app
 C:\Users\<you>\flutter\bin\flutter.bat run -d windows --debug
 ```
 
-or `tool\debug_run.bat -Fresh`, which sets both (data in `app\build\debug-data`).
+or `tool\debug_run.bat`, which sets both by default (data in
+`app\build\debug-data`; `-Live` attaches to the real data instead, and `-Fresh`
+is still accepted).
 A profile build for CPU or heap work is `tool\profile_run.bat`, which is always
 a probe (data in `app\build\profile-data` unless `KARMASHALA_DATA_DIR` is set).
 `flutter run` does not build `karmashala_mcp.exe`; drive a profile probe with
