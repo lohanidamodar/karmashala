@@ -57,6 +57,15 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_inappwebview_windows 0.6.0 builds as C++17 against a WIL that then
+# reaches for <experimental/coroutine>, which MSVC 14.5x refuses (STL1011)
+# unless told this define. Scoped to that one plugin; drop it when the plugin
+# moves to C++20 coroutines.
+if(TARGET flutter_inappwebview_windows_plugin)
+  target_compile_definitions(flutter_inappwebview_windows_plugin PRIVATE
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
