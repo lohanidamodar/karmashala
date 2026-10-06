@@ -6,6 +6,7 @@ import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_automations/store.dart';
+import 'package:karmashala_automations/webhooks.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -141,6 +142,7 @@ class AutomationsHandler {
     }
     _repository(automation.repositoryId);
     final before = _automations.getById(automation.id);
+    automation = _webhookOf(automation, before);
     if (before == null) {
       _automations.insert(automation);
     } else {
@@ -154,6 +156,30 @@ class AutomationsHandler {
     final stored = _automation(automation.id);
     changes.add(AutomationChanged(stored));
     return stored;
+  }
+
+  /// The webhook part as the server keeps it: its hook id is the server's
+  /// own (from a CSPRNG, kept across edits), a client that predates webhooks
+  /// cannot drop one by saving, and the template must be one it can fill.
+  static Automation _webhookOf(Automation automation, Automation? before) {
+    final kept = before?.webhook;
+    final asked = automation.webhook;
+    if (asked == null) {
+      return kept == null ? automation : automation.copyWith(webhook: kept);
+    }
+    if (automation.isEventDriven) {
+      throw const DataRefused.invalid(
+        'An automation is a webhook or an event rule, not both.',
+      );
+    }
+    final refusal = webhookTemplateRefusal(automation.prompt);
+    if (refusal != null) throw DataRefused.invalid(refusal);
+    return automation.copyWith(
+      webhook: asked.copyWith(
+        hookId: kept?.hookId ?? newWebhookHookId(),
+        callsPerHour: asked.callsPerHour.clamp(1, kMaxWebhookCallsPerHour),
+      ),
+    );
   }
 
   DataAck _delete(String id, List<DataChange> changes) {

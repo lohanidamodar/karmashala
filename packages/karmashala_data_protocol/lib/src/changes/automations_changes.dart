@@ -28,6 +28,7 @@ DataChange? _automationsChangeFromJson(
   ),
   'resumeChanged' => ResumeChanged(scheduledResumeFromJson(_row(json))),
   'resumeRemoved' => ResumeRemoved(json['id']! as String),
+  'webhookCallRecorded' => WebhookCallRecorded(webhookCallFromJson(_row(json))),
   _ => null,
 };
 
@@ -153,4 +154,17 @@ final class ResumeRemoved extends AutomationsChange {
 
   @override
   Map<String, Object?> toJson() => {'change': 'resumeRemoved', 'id': id};
+}
+
+/// A call to a webhook, accepted or refused, was logged. Never its body.
+final class WebhookCallRecorded extends AutomationsChange {
+  const WebhookCallRecorded(this.call);
+
+  final WebhookCall call;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'webhookCallRecorded',
+    'row': webhookCallToJson(call),
+  };
 }

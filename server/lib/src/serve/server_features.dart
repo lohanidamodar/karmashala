@@ -96,4 +96,8 @@ const Set<String> kServerFeatures = <String>{
   // `terminals.running` and `terminals.stopProcess`: what the server runs,
   // with its ports, and stopping a process a pane started.
   'terminals.running',
+  // Webhooks: an automation started by a call to its relay URL, saved with
+  // `automations.save`; `webhooks.rotate`, `webhooks.status` and the
+  // `webhookCallRecorded` change.
+  'automations.webhooks',
 };

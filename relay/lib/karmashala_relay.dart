@@ -19,8 +19,10 @@ export 'src/relay_server.dart'
         kDefaultConnectionsPerMinute,
         kDefaultLoneTimeout,
         kDefaultMaxFrameBytes,
+        kDefaultMaxHookListeners,
         kDefaultMaxPushPayloadBytes,
         kDefaultMaxPushTokens,
         kDefaultMaxRendezvous,
         kDefaultPingInterval,
-        kMaxPendingFrames;
+        kMaxPendingFrames,
+        hooksListenIdOf;

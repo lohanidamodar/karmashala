@@ -1,5 +1,6 @@
 /// What each tool does to the world: the spec's four axes plus `movesAttention`,
-/// ours. Hints, never enforcement — and no `automation_*` tool is ever served.
+/// ours. Hints, never enforcement — and no `automation_*` tool is ever served;
+/// `webhook_create` arms only a webhook, under the grant, never bypassing.
 library;
 
 /// Tools that change something and still need no grant: the records an agent
@@ -518,6 +519,11 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // new record, so not idempotent.
   'checks_run': McpToolAnnotations(movesAttention: true),
   'checks_results': McpToolAnnotations.read,
+
+  // Webhooks. Creating one arms a URL anyone holding it can call, so it is a
+  // write the operator grant covers; nothing is called by creating it.
+  'webhook_list': McpToolAnnotations.read,
+  'webhook_create': McpToolAnnotations(openWorld: true, movesAttention: false),
   'verification_list': McpToolAnnotations.read,
   'verification_get': McpToolAnnotations.read,
   // A `url` run connects a browser before it records anything, which lands
@@ -948,6 +954,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'checks_results': McpToolListing(
     McpToolCategory.verification,
     'Parsed diagnostics and test results, and what this session broke.',
+  ),
+  'webhook_list': McpToolListing(
+    McpToolCategory.sessions,
+    'The webhooks armed here: their URLs and settings, never a secret.',
+  ),
+  'webhook_create': McpToolListing(
+    McpToolCategory.sessions,
+    'Arm a URL that starts a session from a JSON body; secret shown once.',
   ),
   'verification_start': McpToolListing(
     McpToolCategory.verification,

@@ -17,6 +17,7 @@ dependencies:
   # Service-account auth for the FCM HTTP v1 sender; used only when the
   # operator configures RELAY_FCM_SERVICE_ACCOUNT.
   googleapis_auth: ^2.0.0
+  crypto: ^3.0.0
   http: ^1.2.0
   shelf: ^1.4.2
   shelf_web_socket: ^3.0.0

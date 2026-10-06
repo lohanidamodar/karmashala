@@ -9,7 +9,7 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 80', () => expect(db.schemaVersion, 80));
+  test('the head is 81', () => expect(db.schemaVersion, 81));
 
   test('v73 creates session_delegations', () {
     final columns = db

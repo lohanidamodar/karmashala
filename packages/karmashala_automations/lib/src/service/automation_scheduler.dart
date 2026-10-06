@@ -78,7 +78,7 @@ class AutomationScheduler {
 
   /// The enabled automations the clock fires; an event rule has no schedule.
   Iterable<Automation> get _scheduled =>
-      _dao.enabled().where((automation) => !automation.isEventDriven);
+      _dao.enabled().where((automation) => automation.isScheduled);
 
   /// The soonest moment anything is due, or null when nothing ever is.
   DateTime? nextOccurrence(DateTime after) {

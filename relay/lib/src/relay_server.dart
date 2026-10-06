@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -38,6 +41,9 @@ const int kDefaultMaxPushTokens = 10000;
 /// Longest base64url push payload accepted — FCM caps a data message at 4 KiB.
 const int kDefaultMaxPushPayloadBytes = 4096;
 
+/// Hooks listeners the relay will hold at once before it starts refusing.
+const int kDefaultMaxHookListeners = 10000;
+
 /// Knobs an operator can turn. None of them change what the relay can see.
 class RelayOptions {
   const RelayOptions({
@@ -51,8 +57,18 @@ class RelayOptions {
     this.maxPushPayloadBytes = kDefaultMaxPushPayloadBytes,
     this.trustedProxy = false,
     this.accessToken,
+    this.hookCallsPerMinute = kDefaultHookCallsPerMinute,
+    this.hookAnswerTimeout = kHookAnswerTimeout,
+    this.maxHookListeners = kDefaultMaxHookListeners,
     this.onLog,
   });
+
+  /// Calls one hooks listen id may receive a minute. Zero or less is no limit.
+  final int hookCallsPerMinute;
+
+  /// How long a call waits for its server's answer before a 504.
+  final Duration hookAnswerTimeout;
+  final int maxHookListeners;
 
   /// When set, every route is served only under `/k/<token>/` and anything
   /// else is an unknown path. Null — the default — leaves the relay open. An
@@ -124,6 +140,11 @@ class RelayServer {
   final Map<String, ({String token, String platform})> _pushTokens = {};
 
   final _RateLimiter _limiter = _RateLimiter();
+
+  /// listen id → the one server socket listening for its hooks.
+  final Map<String, _HookListener> _hookListeners = {};
+  final _RateLimiter _hookLimiter = _RateLimiter();
+  final Random _random = Random.secure();
   final DateTime _startedAt = DateTime.now();
 
   int get port => _server.port;
@@ -135,11 +156,18 @@ class RelayServer {
   /// Push registrations currently held.
   int get pushTokenCount => _pushTokens.length;
 
+  /// Hooks listeners currently held.
+  int get hookListenerCount => _hookListeners.length;
+
   Future<void> close() async {
     for (final rendezvous in _rendezvous.values.toList()) {
       rendezvous.dispose(kCloseNoPeer, 'relay closing');
     }
     _rendezvous.clear();
+    for (final listener in _hookListeners.values.toList()) {
+      listener.dispose(kCloseNoPeer, 'relay closing');
+    }
+    _hookListeners.clear();
     await _server.close(force: true);
   }
 
@@ -149,6 +177,10 @@ class RelayServer {
     if (path == kRelayHealthPath) return _health();
     if (path == kRelayPushRegisterPath) return _pushRegister(request);
     if (path == kRelayPushPath) return _pushSend(request);
+    if (hooksListenKeyOf(path) case final key?) {
+      return _hooksListen(request, key);
+    }
+    if (isHookCallRoute(path)) return _hookCall(request, path);
 
     final id = rendezvousIdOf(path);
     if (id == null) return Response.notFound('not found\n');
@@ -194,6 +226,7 @@ class RelayServer {
       'sockets': _rendezvous.values.fold<int>(0, (n, r) => n + r.socketCount),
       'push_tokens': _pushTokens.length,
       'push_delivery': options.delivery == null ? 'not configured' : 'ok',
+      'hook_listeners': _hookListeners.length,
       'uptime_s': DateTime.now().difference(_startedAt).inSeconds,
     }),
     headers: const {'content-type': 'application/json'},
@@ -299,6 +332,133 @@ class RelayServer {
     }
     return decoded;
   }
+
+  /// `GET v1/hooks/<listen key>`: a server's hooks listener. The listen id is
+  /// derived here from the key, so knowing a hook URL is not enough to listen.
+  FutureOr<Response> _hooksListen(Request request, String listenKey) {
+    final client = _clientIp(request, trustedProxy: options.trustedProxy);
+    if (!_limiter.allow(client, options.connectionsPerMinute)) {
+      _log('rate limited a client');
+      return Response(RelayStatus.slowDown, body: 'slow down\n');
+    }
+    final listenId = hooksListenIdOf(listenKey);
+    if (!_hookListeners.containsKey(listenId) &&
+        _hookListeners.length >= options.maxHookListeners) {
+      return Response(RelayStatus.unavailable, body: 'relay full\n');
+    }
+    return webSocketHandler((WebSocketChannel socket, _) {
+      // The key holder reconnecting after a half-open socket: newest wins.
+      _hookListeners[listenId]?.dispose(kCloseReplaced, 'replaced');
+      late final _HookListener listener;
+      listener = _HookListener(
+        socket,
+        onGone: () {
+          if (identical(_hookListeners[listenId], listener)) {
+            _hookListeners.remove(listenId);
+          }
+        },
+      );
+      _hookListeners[listenId] = listener;
+      socket.sink.add(
+        HooksReady(
+          listenId: listenId,
+          timeoutMs: options.hookAnswerTimeout.inMilliseconds,
+        ).encode(),
+      );
+      _log('a hooks listener connected (${_hookListeners.length} held)');
+    }, pingInterval: options.pingInterval)(request);
+  }
+
+  /// `POST h/<listen id>/<hook id>`: forwarded to that listener as one frame,
+  /// answered with what it answers. The body is held only while in flight.
+  Future<Response> _hookCall(Request request, String path) async {
+    if (request.method != 'POST') {
+      return _hookError(
+        HookStatus.methodNotAllowed,
+        'method not allowed',
+        headers: const {'allow': 'POST'},
+      );
+    }
+    final route = hookCallOf(path);
+    if (route == null) return _hookError(HookStatus.notFound, 'not found');
+    final declared = request.contentLength;
+    if (declared != null && declared > kHookMaxBodyBytes) {
+      return _hookError(HookStatus.tooLarge, 'body too large');
+    }
+    if (!_hookLimiter.allow(route.listenId, options.hookCallsPerMinute)) {
+      _log('rate limited a hook call');
+      return _hookError(HookStatus.slowDown, 'slow down');
+    }
+    if (_hookListeners[route.listenId] == null) {
+      return _hookError(HookStatus.serverOffline, 'server offline');
+    }
+    final body = BytesBuilder(copy: false);
+    await for (final chunk in request.read()) {
+      body.add(chunk);
+      if (body.length > kHookMaxBodyBytes) {
+        return _hookError(HookStatus.tooLarge, 'body too large');
+      }
+    }
+    // Again: the listener may have gone while the body arrived.
+    final listener = _hookListeners[route.listenId];
+    if (listener == null) {
+      return _hookError(HookStatus.serverOffline, 'server offline');
+    }
+    if (listener.inFlight >= kHookMaxInFlight) {
+      return _hookError(HookStatus.slowDown, 'slow down');
+    }
+    final call = HookCall(
+      id: _callId(),
+      hookId: route.hookId,
+      method: request.method,
+      headers: {
+        for (final name in kHookForwardedHeaders)
+          if (request.headers[name] case final value?)
+            name: value.length > kHookMaxHeaderValue
+                ? value.substring(0, kHookMaxHeaderValue)
+                : value,
+      },
+      body: body.takeBytes(),
+      ip: _clientIp(request, trustedProxy: options.trustedProxy),
+    );
+    final outcome = await listener.forward(call, options.hookAnswerTimeout);
+    return switch (outcome) {
+      _Answered(:final answer) => Response(
+        answer.status,
+        body: jsonEncode(answer.body),
+        headers: _hookHeaders,
+      ),
+      _Unanswered.badAnswer => _hookError(HookStatus.badAnswer, 'bad answer'),
+      _Unanswered.gone => _hookError(
+        HookStatus.serverOffline,
+        'server offline',
+      ),
+      _Unanswered.timedOut => _hookError(
+        HookStatus.timedOut,
+        'server did not answer',
+      ),
+    };
+  }
+
+  static const Map<String, String> _hookHeaders = {
+    'content-type': 'application/json',
+    'cache-control': 'no-store',
+  };
+
+  static Response _hookError(
+    int status,
+    String words, {
+    Map<String, String> headers = const {},
+  }) => Response(
+    status,
+    body: hookErrorBody(words),
+    headers: {..._hookHeaders, ...headers},
+  );
+
+  String _callId() => [
+    for (var i = 0; i < 16; i++)
+      _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ].join();
 
   void _join(String id, WebSocketChannel socket) {
     final existing = _rendezvous[id];
@@ -468,4 +628,85 @@ String _clientIp(Request request, {required bool trustedProxy}) {
   final info = request.context['shelf.io.connection_info'];
   if (info is HttpConnectionInfo) return info.remoteAddress.address;
   return 'unknown';
+}
+
+/// The listen id [listenKey] derives to — see [hooksListenIdInput].
+String hooksListenIdOf(String listenKey) => sha256
+    .convert(utf8.encode(hooksListenIdInput(listenKey)))
+    .toString()
+    .substring(0, 32);
+
+sealed class _Outcome {}
+
+final class _Answered implements _Outcome {
+  _Answered(this.answer);
+  final HookAnswer answer;
+}
+
+enum _Unanswered implements _Outcome { badAnswer, gone, timedOut }
+
+/// One server's hooks socket, and the calls waiting on its answers.
+class _HookListener {
+  _HookListener(this._socket, {required this.onGone}) {
+    _subscription = _socket.stream.listen(
+      _onFrame,
+      onDone: () => dispose(kClosePeerLeft, 'listener left'),
+      onError: (Object _) => dispose(kClosePeerFailed, 'listener failed'),
+      cancelOnError: true,
+    );
+  }
+
+  final WebSocketChannel _socket;
+  final void Function() onGone;
+  late final StreamSubscription<Object?> _subscription;
+  final Map<String, Completer<_Outcome>> _waiting = {};
+  bool _disposed = false;
+
+  int get inFlight => _waiting.length;
+
+  Future<_Outcome> forward(HookCall call, Duration timeout) async {
+    if (_disposed) return _Unanswered.gone;
+    final answer = Completer<_Outcome>();
+    _waiting[call.id] = answer;
+    _socket.sink.add(call.encode());
+    try {
+      return await answer.future.timeout(
+        timeout,
+        onTimeout: () => _Unanswered.timedOut,
+      );
+    } finally {
+      _waiting.remove(call.id);
+    }
+  }
+
+  void _onFrame(Object? frame) {
+    if (frame is! String || frame.length > kHookMaxAnswerBytes * 2) return;
+    final Object? json;
+    try {
+      json = jsonDecode(frame);
+    } on FormatException {
+      return;
+    }
+    if (json is! Map<String, Object?> || json['type'] != HookAnswer.type) {
+      return;
+    }
+    final waiting = _waiting.remove(json['id']);
+    if (waiting == null || waiting.isCompleted) return;
+    final answer = HookAnswer.tryParse(json);
+    waiting.complete(
+      answer == null ? _Unanswered.badAnswer : _Answered(answer),
+    );
+  }
+
+  void dispose(int code, String reason) {
+    if (_disposed) return;
+    _disposed = true;
+    _subscription.cancel();
+    for (final waiting in _waiting.values) {
+      if (!waiting.isCompleted) waiting.complete(_Unanswered.gone);
+    }
+    _waiting.clear();
+    _socket.sink.close(code, reason);
+    onGone();
+  }
 }

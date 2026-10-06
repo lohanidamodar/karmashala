@@ -26,6 +26,8 @@ import 'automation_dialog.dart';
 import 'automation_dry_run_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
+import 'webhook_dialog.dart';
+import 'webhook_panel.dart';
 
 /// Settings → Checkpoints and automations: where a run is armed, paused,
 /// deleted, and where "did it run last night" is answered. Arming happens here
@@ -50,7 +52,18 @@ class AutomationsPage extends ConsumerWidget {
           title: 'AUTOMATIONS',
           trailing: repositories.isEmpty
               ? null
-              : _ArmButton(checkouts: repositories),
+              : Wrap(
+                  spacing: Insets.xs,
+                  children: [
+                    _ArmButton(checkouts: repositories),
+                    if (ref.watch(webhooksOfferedProvider))
+                      _ArmButton(
+                        key: const ValueKey('new-webhook'),
+                        checkouts: repositories,
+                        webhook: true,
+                      ),
+                  ],
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -78,19 +91,23 @@ class AutomationsPage extends ConsumerWidget {
   }
 }
 
-/// Arms a new automation in a checkout the workspace knows about.
+/// Arms a new automation — or, with [webhook], a new webhook — in a checkout
+/// the workspace knows about.
 class _ArmButton extends ConsumerWidget {
-  const _ArmButton({required this.checkouts});
+  const _ArmButton({required this.checkouts, this.webhook = false, super.key});
 
   final List<Repository> checkouts;
+  final bool webhook;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => PopupMenuButton<String>(
-    tooltip: 'Arm an automation',
-    onSelected: (id) => AutomationDialog.show(
-      context,
-      repository: checkouts.firstWhere((r) => r.id == id),
-    ),
+    tooltip: webhook ? 'New webhook' : 'Arm an automation',
+    onSelected: (id) {
+      final repository = checkouts.firstWhere((r) => r.id == id);
+      webhook
+          ? WebhookDialog.show(context, repository: repository)
+          : AutomationDialog.show(context, repository: repository);
+    },
     itemBuilder: (_) => [
       for (final repository in checkouts)
         PopupMenuItem(
@@ -98,14 +115,17 @@ class _ArmButton extends ConsumerWidget {
           child: Text('${repository.name}  ·  ${repository.path.path}'),
         ),
     ],
-    child: const Padding(
-      padding: EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xs,
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.plus),
-          SizedBox(width: Insets.xs),
-          Text('Arm an automation'),
+          Icon(webhook ? AppIcons.globe : AppIcons.plus),
+          const SizedBox(width: Insets.xs),
+          Text(webhook ? 'New webhook' : 'Arm an automation'),
         ],
       ),
     ),
@@ -164,7 +184,21 @@ class AutomationCard extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: Insets.sm),
-        if (trigger == null)
+        if (automation.webhook case final webhook?) ...[
+          _Line(
+            label: 'Fires',
+            value:
+                'A call to its URL starts a session'
+                '${webhook.worktree ? ' in a worktree of its own' : ''}'
+                '${automation.enabled ? '' : ' — paused'}',
+          ),
+          _Line(
+            label: 'Limits',
+            value:
+                '${webhook.requireSignature ? 'Signed calls only' : 'Unsigned calls taken'}'
+                ' · at most ${webhook.callsPerHour} an hour',
+          ),
+        ] else if (trigger == null)
           _Line(
             label: 'Runs',
             value: describeSchedule(automation, now: now),
@@ -205,12 +239,23 @@ class AutomationCard extends ConsumerWidget {
             onPressed: () => AutomationDryRunDialog.show(context, automation),
             child: const Text('Dry run'),
           ),
-        TextButton(
-          onPressed: () => AutomationDialog.show(
-            context,
-            repository: repository,
-            existing: automation,
+        if (automation.isWebhook)
+          TextButton(
+            onPressed: () => WebhookPanel.show(context, automation),
+            child: const Text('Webhook…'),
           ),
+        TextButton(
+          onPressed: () => automation.isWebhook
+              ? WebhookDialog.show(
+                  context,
+                  repository: repository,
+                  existing: automation,
+                )
+              : AutomationDialog.show(
+                  context,
+                  repository: repository,
+                  existing: automation,
+                ),
           child: const Text('Edit'),
         ),
         TextButton(

@@ -50,6 +50,7 @@ import 'terminal_work.dart';
 import 'todos_handler.dart';
 import 'workspace_handler.dart';
 import 'worktrees_handler.dart';
+import 'webhooks_work.dart';
 
 /// The server's data API over its store: every client's reads and writes of
 /// notes, todos, preferences, the workspace, sessions, and where agents run
@@ -161,6 +162,10 @@ class DataService {
   /// A session's project checks run for a client (`checks.run`, slice 5c),
   /// set by `serve` once automations run; else refused `unavailable`.
   ChecksWork? checksWork;
+
+  /// A webhook's secret rotated, or what is seen of it (`webhooks.*`), set
+  /// by `serve` once webhooks run; else refused `unavailable`.
+  WebhooksWork? webhooksWork;
 
   /// The server's one launch path (slice 5b: a start, a resume, a handoff, a
   /// fork, an end), set by `serve`; without it that work is refused
@@ -579,6 +584,7 @@ class DataService {
         FilesWorkRequest() ||
         TerminalWorkRequest() ||
         ChecksWorkRequest() ||
+        WebhooksWorkRequest() ||
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
         ArtifactsRequest() ||
@@ -801,6 +807,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is FilesWorkRequest ||
       request is TerminalWorkRequest ||
       request is ChecksWorkRequest ||
+      request is WebhooksWorkRequest ||
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
       request is ArtifactsRequest ||
@@ -1010,6 +1017,19 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       final result = await work.run(asked);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final WebhooksWorkRequest<Object?> asked) {
+      final work =
+          _service.webhooksWork ??
+          (throw const DataRefused.unavailable(
+            'this server takes no webhook calls',
+          ));
+      final Object result = switch (asked) {
+        WebhookRotate(:final automationId) => await work.rotate(automationId),
+        WebhookStatusRead(:final automationId, :final limit) =>
+          await work.status(automationId, limit: limit),
+      };
+      return DataReply(result as R, _service._revision);
+    }
     return handle(request);
   }
 
@@ -1115,6 +1135,9 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     ClaudeAccountDelete() || CodexAccountDelete() =>
       'a phone may not delete this server\'s agent accounts; use a desktop '
           'paired with it',
+    WebhookRotate() =>
+      'a phone may not make a webhook\'s signing secret; use a desktop '
+          'paired with this server',
     _ => null,
   };
   if (denied != null || grants == null) return denied;

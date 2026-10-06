@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_signals.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
+import '../../features/automations/presentation/session_origin_label.dart';
 import '../../features/sessions/presentation/session_repositories_bar.dart';
 import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_subagents_panel.dart';
@@ -162,6 +163,7 @@ class SessionMoreBody extends StatelessWidget {
             StopSessionButton(sessionId: sessionId),
           ],
         ),
+        SessionOriginLabel(sessionId: sessionId),
         const SizedBox(height: Insets.sm),
         Text('REPOSITORIES', style: label),
         const SizedBox(height: Insets.xs),

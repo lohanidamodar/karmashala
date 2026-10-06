@@ -5,6 +5,7 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_automations/webhooks.dart' show WebhookCall;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
@@ -60,6 +61,26 @@ class AutomationsData extends AutomationCopyReads {
     _copy.rules.setLocal(automation.id, automation);
     _send(_write(_client, AutomationSave(automation)), automation.name);
   }
+
+  // Webhooks: their saves are awaited, since the server chooses the hook id
+  // and a secret can only be made for a webhook it has stored.
+
+  /// Saves [automation] and answers it as the server stored it; throws the
+  /// server's refusal.
+  Future<Automation> saveAndWait(Automation automation) =>
+      _write(_client, AutomationSave(automation));
+
+  /// A new signing secret for webhook [automationId] — the only time it is
+  /// ever sent — replacing the old one at once.
+  Future<WebhookIssued> rotateWebhook(String automationId) async =>
+      (await _client.send(WebhookRotate(automationId))).value;
+
+  /// Webhook [automationId]'s URL, whether it is listened for, and its log.
+  Future<WebhookStatus> webhookStatus(String automationId) async =>
+      (await _client.send(WebhookStatusRead(automationId))).value;
+
+  /// Each call the server logs, as it is told.
+  Stream<WebhookCall> get webhookCalls => _copy.webhookCalls;
 
   void delete(String id) {
     _copy.rules.setLocal(id, null);

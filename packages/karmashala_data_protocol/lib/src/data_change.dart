@@ -28,6 +28,8 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_automations/webhooks.dart'
+    show WebhookCall, webhookCallFromJson, webhookCallToJson;
 import 'package:karmashala_checkpoints/checkpoints.dart'
     show Checkpoint, checkpointFromJson, checkpointToJson;
 import 'package:karmashala_comparisons/comparisons.dart'

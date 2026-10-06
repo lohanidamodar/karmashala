@@ -307,6 +307,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       title: automation.name,
       permissionMode: automation.permissionMode?.canonical,
       prompt: automation.prompt,
+      modelId: automation.webhook?.modelId,
+      worktree: automation.webhook?.worktree ?? false,
     ),
   )).id;
 

@@ -3,6 +3,7 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart' show capabilitiesProvider;
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../data/automations_data.dart';
@@ -17,6 +18,28 @@ export '../data/automations_data.dart'
 final automationsProvider = Provider<List<Automation>>((ref) {
   ref.watch(automationsRevisionProvider);
   return ref.watch(automationsDataProvider).getAll();
+});
+
+/// Whether the server this app talks to takes webhook calls.
+final webhooksOfferedProvider = Provider<bool>(
+  (ref) => ref.watch(capabilitiesProvider).serverOffers('automations.webhooks'),
+);
+
+/// How a session came to be when an automation started it: "from webhook
+/// triage-issue", "from automation Nightly sweep" — or null for any other.
+final sessionAutomationOriginProvider = Provider.family<String?, String>((
+  ref,
+  sessionId,
+) {
+  ref.watch(automationsRevisionProvider);
+  final data = ref.watch(automationsDataProvider);
+  final run = data.runForSession(sessionId);
+  if (run == null) return null;
+  final automation = data.getById(run.automationId);
+  if (automation == null) return null;
+  return automation.isWebhook
+      ? 'from webhook ${automation.name}'
+      : 'from automation ${automation.name}';
 });
 
 final automationRunsProvider = Provider.family<List<AutomationRun>, String>((

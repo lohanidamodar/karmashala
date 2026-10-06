@@ -6,6 +6,7 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_automations/webhooks.dart' show WebhookCall;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import 'keyed_replica.dart';
@@ -52,6 +53,11 @@ class AutomationsCopy {
   /// Fires after any row of the domain changed.
   Stream<void> get changes => _merge([for (final r in _all) r.changes]);
 
+  /// Each webhook call the server logged, as it is told. Not a row: the log
+  /// is read whole with `webhooks.status` when a person opens it.
+  Stream<WebhookCall> get webhookCalls => _webhookCalls.stream;
+  final _webhookCalls = StreamController<WebhookCall>.broadcast();
+
   void replace(AutomationsSnapshot snapshot, int revision) {
     checks.replaceAll(snapshot.checks, revision);
     origins.replaceAll(snapshot.origins, revision);
@@ -95,6 +101,8 @@ class AutomationsCopy {
         resumes.applyAt(resume.id, resume, revision);
       case ResumeRemoved(:final id):
         resumes.applyAt(id, null, revision);
+      case WebhookCallRecorded(:final call):
+        _webhookCalls.add(call);
     }
   }
 
@@ -130,6 +138,7 @@ class AutomationsCopy {
   }
 
   void dispose() {
+    unawaited(_webhookCalls.close());
     for (final replica in _all) {
       unawaited(replica.dispose());
     }

@@ -10,6 +10,7 @@ import 'package:agent_cli/process.dart'
         ExecutionEnvironment,
         localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
+import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoiceDao, ExecutionEnvironmentDao;
 
@@ -22,6 +23,7 @@ import 'package:karmashala_checkpoints/store.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AnthropicSignIn,
+        AutomationSave,
         DataRefused,
         DecisionAppend,
         DecisionRecorded,
@@ -101,6 +103,8 @@ import '../stores/server_store_desk.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
+import '../automations/webhooks/daemon_webhooks.dart';
+import '../automations/webhooks/server_hook_vault.dart';
 import '../automations/server_resume_runner.dart';
 import 'package:karmashala_session/session.dart'
     show QueuedMessageOrigin, SessionStatus;
@@ -122,6 +126,7 @@ import '../hooks/hook_server.dart';
 import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
+import '../mcp/tools/webhook_tool_set.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../activity/activity_backfill.dart';
 import '../activity/server_activity.dart';
@@ -142,7 +147,8 @@ import '../mcp/tools/server_tool_context.dart';
 import '../mcp/tools/server_tools.dart';
 import '../companion/daemon_worktrees.dart';
 import '../automations/daemon_checkout_facts.dart';
-import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_automations/store.dart'
+    show AutomationDao, CheckoutRows;
 import '../domain/uuid.dart';
 import '../mcp/tools/checkout_reach.dart';
 import '../mcp/tools/project_folders.dart';
@@ -989,9 +995,8 @@ Future<int> _serve(
   final artifactMarkers = ServerArtifactMarkers(
     artifacts,
     database: database,
-    notice: (sessionId, message) => data.announce([
-      SessionNoticed(sessionId: sessionId, message: message),
-    ]),
+    notice: (sessionId, message) =>
+        data.announce([SessionNoticed(sessionId: sessionId, message: message)]),
   );
   acpHost
     ..agentSaid = ((sessionId, agentId, text) =>
@@ -1036,6 +1041,16 @@ Future<int> _serve(
     // A resume of an ACP session that ended starts it again over ACP.
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
+    worktrees: worktrees,
+  );
+  // Webhooks reach this server through the relay it pairs through.
+  final webhooks = await _startWebhooks(
+    database: database,
+    data: data,
+    automations: automations,
+    relay: () => companionServing ? companion.hostedRelay : null,
+    dataDirectory: dataDirectory,
+    errSink: errSink,
   );
   // Event rules and usage limits follow every status the server keeps,
   // app or no app.
@@ -1584,6 +1599,25 @@ Future<int> _serve(
   // automations'.
   mcpTools.tools
     ..add(ChecksToolSet(automations?.localTool ?? (_, _, _) => null))
+    // Saved through the same rules a person's save follows.
+    ..add(
+      WebhookToolSet(
+        save: (automation) => data.applyAsServer(AutomationSave(automation)),
+        webhooks: AutomationDao(database).webhooks,
+        work: () => webhooks,
+        permissionsOf: (installationId) {
+          final installation = checkoutRows.installation(installationId);
+          return installation == null
+              ? null
+              : liveAgents
+                    .descriptorOf(installation.agentId)
+                    ?.launch
+                    .permission;
+        },
+        now: () => DateTime.now().toUtc(),
+        newId: newUuid,
+      ),
+    )
     // Every session is operated here: every agent runs in this server.
     ..add(
       SessionToolSet(
@@ -1668,13 +1702,17 @@ Future<int> _serve(
   );
   // `server.config.set` brings the phone listener in line at once.
   if (companionServing) {
-    config.apply = (settings) => companion.reconfigure(
-      config: settings.companion,
-      lanAddress: settings.bind,
-      lanPort: settings.companionPort,
-      localRelayEnabled: settings.localRelay,
-      localRelayPort: settings.localRelayPort,
-    );
+    config.apply = (settings) async {
+      await companion.reconfigure(
+        config: settings.companion,
+        lanAddress: settings.bind,
+        lanPort: settings.companionPort,
+        localRelayEnabled: settings.localRelay,
+        localRelayPort: settings.localRelayPort,
+      );
+      // The relay may have moved, or hosted pairing been turned off.
+      webhooks?.reconcile();
+    };
   }
   // Devices, revoke, agents and the config, from `karmashala_host` and the
   // desktop app on this machine; the server looks for its agent CLIs now.
@@ -1879,6 +1917,7 @@ Future<int> _serve(
   await status.close();
   // Before the sessions end: a check the shutdown kills is not a verdict.
   await statusFollow?.cancel();
+  await webhooks?.close();
   await automations?.close();
   // Its links and watchers, before the sessions it hosts end; then the
   // Chrome this server launched (never one it only attached to).

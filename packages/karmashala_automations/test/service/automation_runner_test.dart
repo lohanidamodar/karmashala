@@ -133,4 +133,19 @@ void main() {
     expect(run.state, AutomationRunState.failed);
     expect(run.reason, contains('no such executable'));
   });
+
+  test('start answers the run it made, with its session', () async {
+    final run = await runner.start(automation(), fixtureTime, note: 'call');
+    expect(run.id, dao.runsFor('auto1').single.id);
+    expect(run.sessionId, 'session-1');
+    expect(run.state, AutomationRunState.running);
+    expect(run.reason, 'call');
+  });
+
+  test('start answers a refused run too, never a session', () async {
+    facts.reachable = UnattendedReach.unreachable;
+    final run = await runner.start(automation(), fixtureTime);
+    expect(run.state, AutomationRunState.failed);
+    expect(run.sessionId, isNull);
+  });
 }

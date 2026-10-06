@@ -5,6 +5,7 @@ import 'automation.dart';
 import 'automation_check_verdict.dart';
 import 'automation_run.dart';
 import 'automation_trigger.dart';
+import 'automation_webhook.dart';
 import 'project_check.dart';
 import 'scheduled_resume.dart';
 
@@ -47,7 +48,27 @@ Map<String, Object?> automationToJson(Automation a) => {
   'maxRuntimeSeconds': a.maxRuntime?.inSeconds,
   'triggerEvent': a.trigger?.kind.storedName,
   'eventAction': a.trigger?.action.storedName,
+  if (a.webhook case final w?)
+    'webhook': {
+      'hookId': w.hookId,
+      'requireSignature': w.requireSignature,
+      'modelId': w.modelId,
+      'worktree': w.worktree,
+      'callsPerHour': w.callsPerHour,
+    },
 };
+
+AutomationWebhook? _webhook(Object? json) {
+  if (json == null) return null;
+  final map = _as<Map<String, Object?>>(json);
+  return AutomationWebhook(
+    hookId: map['hookId'] as String? ?? '',
+    requireSignature: map['requireSignature'] as bool? ?? true,
+    modelId: map['modelId'] as String?,
+    worktree: map['worktree'] as bool? ?? false,
+    callsPerHour: map['callsPerHour'] as int? ?? kDefaultWebhookCallsPerHour,
+  );
+}
 
 Automation automationFromJson(Map<String, Object?> json) {
   final armedAt = _date(json['armedAt']);
@@ -82,6 +103,7 @@ Automation automationFromJson(Map<String, Object?> json) {
       event: json['triggerEvent'] as String?,
       action: json['eventAction'] as String?,
     ),
+    webhook: _webhook(json['webhook']),
   );
 }
 

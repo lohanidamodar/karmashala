@@ -18,6 +18,8 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  # HMAC-SHA256 and SHA-256 for webhook signatures and body hashes.
+  crypto: ^3.0.0
   # The agent an automation launches and the environment it runs in, and the
   # usage windows a scheduled resume waits on.
   agent_cli:
