@@ -939,10 +939,21 @@ class DataClient {
   Stream<void> get batchEnds => _batchEnds.stream;
 
   void _batch(void Function() apply) {
-    _batchDepth++;
+    // Each copy tells its listeners once per batch, after every row of it is
+    // in: a project's hundred sessions used to fire a hundred events.
+    if (_batchDepth++ == 0) {
+      for (final replica in _replicas) {
+        replica.hold();
+      }
+    }
     try {
       apply();
     } finally {
+      if (_batchDepth == 1) {
+        for (final replica in _replicas) {
+          replica.release();
+        }
+      }
       if (--_batchDepth == 0 && !_batchEnds.isClosed) _batchEnds.add(null);
     }
   }
@@ -1302,40 +1313,42 @@ class DataClient {
     unawaited(_sessionAgentChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
-    unawaited(notes.dispose());
-    unawaited(todos.dispose());
-    unawaited(preferences.dispose());
     automations.dispose();
-    for (final replica in <KeyedReplica<Object>>[
-      workspaces,
-      projects,
-      repositories,
-      sections,
-      sessions,
-      sessionLinks,
-      imported,
-      decisions,
-      recaps,
-      followUps,
-      environments,
-      sshHosts,
-      knownHosts,
-      installations,
-      claudeAccounts,
-      codexAccounts,
-      usageStates,
-      devices,
-      worktreeSetups,
-      worktreeRuns,
-      reviewThreads,
-      snippets,
-      presets,
-      verificationRuns,
-      comparisons,
-    ]) {
+    for (final replica in _replicas) {
       unawaited(replica.dispose());
     }
   }
+
+  late final List<KeyedReplica<Object>> _replicas = [
+    notes,
+    todos,
+    preferences,
+    workspaces,
+    projects,
+    repositories,
+    sections,
+    sessions,
+    sessionLinks,
+    imported,
+    decisions,
+    recaps,
+    followUps,
+    environments,
+    sshHosts,
+    knownHosts,
+    installations,
+    claudeAccounts,
+    codexAccounts,
+    usageStates,
+    devices,
+    worktreeSetups,
+    worktreeRuns,
+    reviewThreads,
+    snippets,
+    presets,
+    verificationRuns,
+    comparisons,
+  ];
 
   void _failWaiting() {
     final waiting = [..._waiting];

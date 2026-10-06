@@ -121,14 +121,15 @@ void main() {
 
       expect(told, hasLength(1), reason: 'one batch for the whole act');
       final changes = told.single.changes;
-      expect(
-        changes.whereType<SessionRowRemoved>().map((c) => c.id),
-        ['s0', 's1', 's2'],
-      );
-      expect(
-        changes.whereType<ImportedRemoved>().map((c) => c.id),
-        ['i0', 'i1'],
-      );
+      expect(changes.whereType<SessionRowRemoved>().map((c) => c.id), [
+        's0',
+        's1',
+        's2',
+      ]);
+      expect(changes.whereType<ImportedRemoved>().map((c) => c.id), [
+        'i0',
+        'i1',
+      ]);
       final after = app.handle(const SessionsList()).value;
       expect(after.sessions.map((s) => s.id), unorderedEquals(['s3', 's4']));
       expect(after.imported.map((s) => s.id), unorderedEquals(['i2', 'i3']));

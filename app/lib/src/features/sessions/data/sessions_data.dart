@@ -134,6 +134,27 @@ class SessionsData extends SessionRowsIndex {
     );
   }
 
+  /// Deletes [ids] and the imported records [importedIds] as one request,
+  /// moving each table of the copy once.
+  void deleteMany(
+    Iterable<String> ids, {
+    Iterable<String> importedIds = const [],
+  }) {
+    final sessionIds = ids.toList();
+    final imported = importedIds.toList();
+    if (sessionIds.isEmpty && imported.isEmpty) return;
+    _client.sessions.removeLocal(sessionIds);
+    _client.sessionLinks.removeLocal(sessionIds);
+    _client.imported.removeLocal(imported);
+    _send(
+      _client.write(
+        SessionsDeleteMany(sessionIds: sessionIds, importedIds: imported),
+        domain: DataDomain.sessions,
+      ),
+      'the delete of ${sessionIds.length + imported.length} sessions',
+    );
+  }
+
   /// Adds a checkout to [sessionId]; refused for another project's.
   Future<List<SessionRepositoryLink>> link(
     String sessionId,

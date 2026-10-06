@@ -207,12 +207,27 @@ class SessionActions {
     List<ImportedSession> imported = const [],
   }) {
     if (natives.isEmpty && imported.isEmpty) return;
-    for (final session in natives) {
-      _removeNativeRow(session, fromCliStore: false);
+    // One request for the lot: one per row was N batches on every client.
+    _ref
+        .read(sessionsDataProvider)
+        .deleteMany(
+          [for (final session in natives) session.id],
+          importedIds: [for (final session in imported) session.id],
+        );
+    final selected = _ref.read(selectedSessionIdProvider);
+    if (selected != null && natives.any((s) => s.id == selected)) {
+      _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    for (final session in imported) {
-      _removeImportedRow(session);
+    final selectedImported = _ref.read(selectedImportedSessionIdProvider);
+    if (selectedImported != null &&
+        imported.any((s) => s.id == selectedImported)) {
+      _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
+    _log.info(
+      'Deleted ${natives.length} session(s) and ${imported.length} imported '
+      'record(s) from the workspace: '
+      '${[for (final s in natives) s.id, for (final s in imported) s.id].join(', ')}',
+    );
     // Coarse on purpose: this named several rows, so no single one. Not
     // `workspaceChanged` — no project, repository or checkout moved.
     _publish(

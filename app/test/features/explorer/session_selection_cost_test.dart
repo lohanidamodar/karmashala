@@ -337,7 +337,7 @@ void main() {
           storeScans: mutator.storeScans,
           indexEntriesRead: mutator.indexEntriesRead,
           detectionPasses: detection.passes,
-          rowDeletes: db.statements.where((k) => k.endsWith('.delete')).length,
+          rowDeletes: db.statements.where((k) => k.contains('delete')).length,
           statements: db.count,
           publishes: publishes,
         );
@@ -386,12 +386,12 @@ void main() {
           reason: 'at $count: exactly one publish for the whole selection',
         );
 
-        // The rows themselves are linear in what was asked for, and nothing
-        // else is: no read-back, no per-row transaction of its own.
+        // One request for the whole selection, applied in one transaction:
+        // one per row was N batches told to every other client.
         expect(
           cost.rowDeletes,
-          count,
-          reason: 'at $count: one delete asked per row and not one more',
+          1,
+          reason: 'at $count: one delete request for the whole selection',
         );
       }
 
