@@ -15,6 +15,7 @@ import '../application/session_list_snapshot.dart';
 import '../application/session_selection.dart';
 import 'explorer_selection_actions.dart';
 import 'lens_session_row.dart';
+import 'purge_progress_strip.dart';
 import 'session_selection_bar.dart';
 import 'sidebar_chrome.dart';
 import 'stale_session_list.dart';
@@ -224,6 +225,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
         child: Column(
           children: [
             if (selecting) const SessionSelectionBar(),
+            const PurgeProgressStrip(),
             Expanded(
               child: ListView.builder(
                 // Room under the last row for the phone's FAB.

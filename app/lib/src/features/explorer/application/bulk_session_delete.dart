@@ -7,6 +7,7 @@ import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
+import 'purge_progress.dart';
 import 'package:karmashala_session/session.dart';
 
 /// The rows one bulk delete is about, resolved *before* the confirmation so it
@@ -45,8 +46,8 @@ class SessionBulkDelete {
   /// True once the container is gone: nothing may read a provider after that.
   bool _stopped = false;
 
-  /// How many purges are still running. A test's handle; the Explorer does not
-  /// draw it, because the rows it deleted are already gone.
+  /// How many purges are still running; the files they hold are counted in
+  /// [purgeProgressProvider], which the lists draw.
   int get pending => _running.length;
 
   /// Completes when every purge started so far has finished.
@@ -94,8 +95,13 @@ class SessionBulkDelete {
   /// transcript is a `DetectedSession`, not an [ImportedSession].
   void start(BulkDeleteTargets targets) {
     if (targets.isEmpty || _stopped) return;
+    final progress = _ref.read(purgeProgressProvider.notifier)
+      ..started(targets.count);
     late final Future<void> task;
-    task = _run(targets).whenComplete(() => _running.remove(task));
+    task = _run(targets).whenComplete(() {
+      _running.remove(task);
+      if (!_stopped) progress.finished(targets.count);
+    });
     _running.add(task);
   }
 
