@@ -1540,6 +1540,7 @@ Future<int> _serve(
         endChild: endChild,
         callHolds: openTurns.heldByCall,
         delegate: delegations.watch,
+        reportToParent: delegations.report,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).

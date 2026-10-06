@@ -22,6 +22,8 @@ const Set<String> kMcpUngatedWrites = {
   'snippet_add',
   'session_rename',
   'session_draft',
+  // Reaches only the session that started the caller, which asked for it.
+  'report_to_parent',
 };
 
 /// Whether calling [tool] from a session needs the person's operator grant
@@ -161,6 +163,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // open_new_session's launch, tab included, then a wait on its answer.
   'subagent_run': McpToolAnnotations(movesAttention: true),
   'delegation_capabilities': McpToolAnnotations.read,
+  'report_to_parent': McpToolAnnotations(movesAttention: false),
   // Reveals or resumes; for an imported CLI session it opens an external
   // window, one per call — a driver once opened one per `list_sessions` row.
   'open_session': McpToolAnnotations(movesAttention: true),
@@ -621,6 +624,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'delegation_capabilities': McpToolListing(
     McpToolCategory.sessions,
     'The agents and models you can delegate to, and whether you still may.',
+  ),
+  'report_to_parent': McpToolListing(
+    McpToolCategory.sessions,
+    'Tell the session that started yours you are done, blocked or need it.',
   ),
   'open_session': McpToolListing(
     McpToolCategory.sessions,

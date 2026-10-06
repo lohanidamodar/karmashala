@@ -16,7 +16,7 @@ import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_host/src/sessions/delegation_results.dart'
-    show DelegatedChild;
+    show DelegatedChild, ParentReport, ReportStatus;
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/status/child_turn_wait.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
@@ -57,6 +57,7 @@ void main() {
   late List<String> endedChildren;
   late List<(String, bool)> holds;
   late List<DelegatedChild> delegated;
+  late List<ParentReport> reports;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -73,6 +74,7 @@ void main() {
     endedChildren = [];
     holds = [];
     delegated = [];
+    reports = [];
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -146,6 +148,7 @@ void main() {
       endChild: (sessionId) async => endedChildren.add(sessionId),
       callHolds: (sessionId, held) => holds.add((sessionId, held)),
       delegate: delegated.add,
+      reportToParent: reports.add,
     );
   });
 
@@ -583,6 +586,93 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(pty.started, isEmpty);
+    });
+  });
+
+  group('report_to_parent', () {
+    test("goes to the caller's parent, naming the caller; done unless "
+        'told', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      final answer =
+          (await tools.call('report_to_parent', {
+                'text': 'All five fixed.',
+              }, 'child'))!
+              as Map<String, Object?>;
+      final sent = reports.single;
+      expect(sent.childId, 'child');
+      expect(sent.parentId, 'caller');
+      expect(sent.title, 'Orchestrator child');
+      expect(sent.agent, isNotEmpty);
+      expect(sent.status, ReportStatus.done);
+      expect(sent.text, 'All five fixed.');
+      expect(answer['parentSessionId'], 'caller');
+      expect(answer['status'], 'done');
+
+      await tools.call('report_to_parent', {
+        'text': 'Which branch?',
+        'status': 'needs_input',
+      }, 'child');
+      expect(reports.last.status, ReportStatus.needsInput);
+    });
+
+    test('a session nobody started is refused in words', () async {
+      insertCaller('caller');
+      await expectLater(
+        tools.call('report_to_parent', {'text': 'Done.'}, 'caller'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('no parent'),
+          ),
+        ),
+      );
+      await expectLater(
+        tools.call('report_to_parent', {'text': 'Done.'}, null),
+        throwsA(isA<StateError>()),
+      );
+      SessionDao(database).insert(
+        Session(
+          id: 'fork',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'A fork',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+          parentSessionId: 'caller',
+          parentLink: SessionLink.fork,
+        ),
+      );
+      await expectLater(
+        tools.call('report_to_parent', {'text': 'Done.'}, 'fork'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('forked from'),
+          ),
+        ),
+      );
+      expect(reports, isEmpty);
+    });
+
+    test('a blank text or an unknown status is refused', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      await expectLater(
+        tools.call('report_to_parent', {'text': '  '}, 'child'),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        tools.call('report_to_parent', {
+          'text': 'x',
+          'status': 'finished',
+        }, 'child'),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(reports, isEmpty);
     });
   });
 

@@ -12,9 +12,13 @@ import 'session_subagents.dart' show boundedText;
 /// with `session_transcript`.
 const int kDelegationAnswerMaxChars = 4000;
 
-/// How long an async child is watched before its parent is told it is still
-/// running and no more is pushed.
+/// How long an async child's first turn is watched before its parent is told
+/// it is still running.
 const Duration kDelegationBound = Duration(hours: 6);
+
+/// How a delegation's last report came: the child's own, or a turn's end.
+const String kReportViaChild = 'report';
+const String kReportViaTurn = 'turn';
 
 /// A child started in async mode, whose first turn's result is pushed to its
 /// parent.
@@ -67,6 +71,47 @@ class DelegationResult {
 
   /// Which of the child's turns this is: 1, or a follow-up's.
   final int turn;
+}
+
+/// What a child says of itself with `report_to_parent`.
+enum ReportStatus {
+  done('done', 'done'),
+  blocked('blocked', 'BLOCKED'),
+  needsInput('needs_input', 'needs input');
+
+  const ReportStatus(this.wire, this.words);
+
+  /// As the tool takes it and the store keeps it.
+  final String wire;
+  final String words;
+
+  static ReportStatus? byWire(String wire) {
+    for (final status in values) {
+      if (status.wire == wire) return status;
+    }
+    return null;
+  }
+}
+
+/// A child's own report to the session that started it.
+class ParentReport {
+  const ParentReport({
+    required this.childId,
+    required this.parentId,
+    required this.title,
+    required this.agent,
+    required this.status,
+    required this.text,
+  });
+
+  final String childId;
+  final String parentId;
+  final String title;
+
+  /// The agent's display name.
+  final String agent;
+  final ReportStatus status;
+  final String text;
 }
 
 /// One awaited turn of a delegated child: which, and from when its answer
@@ -150,7 +195,7 @@ class DelegationResults {
   /// Re-arms every turn a parent still awaited when the server last stopped,
   /// and follows again every other child that comes back running.
   void start() {
-    for (final row in store.all()) {
+    for (final row in store.open()) {
       final child = _childOf(row);
       if (row.turnStartedAt case final since?) {
         final follow = _watched[child.childId] = _Follow(
@@ -236,7 +281,7 @@ class DelegationResults {
     }
     if (_closed || !isLive(child.childId)) return;
     if (_watched.containsKey(child.childId)) return;
-    if (store.byChild(child.childId) == null) return;
+    if (store.byChild(child.childId)?.isOpen != true) return;
     _stand(child);
   }
 
@@ -252,9 +297,48 @@ class DelegationResults {
   /// next is not pushed.
   void stopped(String childId) {
     final had = _watched.remove(childId) != null;
-    if (store.byChild(childId) == null && !had) return;
-    store.remove(childId);
+    if (store.byChild(childId)?.isOpen != true && !had) return;
+    store.close(childId, at: _now());
     log?.call('delegation $childId: stopped; nothing more is pushed');
+  }
+
+  /// A child's own [report], put in its parent's queue at once — never
+  /// batched, never lifting a pause — and kept as its last. The turn it was
+  /// made in is not pushed as well. A child nothing follows is recorded as a
+  /// closed delegation, so its parent's list still shows it.
+  void report(ParentReport report) {
+    final at = _now();
+    queue.postDelegation(
+      report.parentId,
+      parentReportMessage(report),
+      originId: report.childId,
+    );
+    final recorded = store.reported(
+      report.childId,
+      state: report.status.wire,
+      via: kReportViaChild,
+      at: at,
+    );
+    if (!recorded) {
+      store.put(
+        SessionDelegation(
+          childSessionId: report.childId,
+          parentSessionId: report.parentId,
+          title: report.title,
+          agent: report.agent,
+          delegatedAt: at,
+          turn: 0,
+          reportState: report.status.wire,
+          reportVia: kReportViaChild,
+          reportedAt: at,
+          closedAt: at,
+        ),
+      );
+    }
+    log?.call(
+      'delegation ${report.childId}: reported ${report.status.wire} to '
+      '${report.parentId}',
+    );
   }
 
   Future<void> close() async {
@@ -303,7 +387,7 @@ class DelegationResults {
     if (_closed || !identical(_watched[id], follow)) return;
     if (isArchived?.call(id) ?? false) {
       _watched.remove(id);
-      store.remove(id);
+      store.close(id, at: _now());
       log?.call('delegation $id: archived; nothing more is pushed');
       return;
     }
@@ -332,12 +416,28 @@ class DelegationResults {
     } else {
       _stand(child);
     }
+    // The child said what it had to with report_to_parent during this turn.
+    final row = store.byChild(id);
+    if (row != null &&
+        row.reportVia == kReportViaChild &&
+        (row.reportedAt?.isAfter(follow.since) ?? false)) {
+      final ended = child.endOnAnswer && outcome.state == ChildTurnState.done
+          ? await _end(id)
+          : null;
+      if (over || ended == true) {
+        store.close(id, at: _now());
+      } else {
+        store.turnReported(id, turn: settled.turn);
+      }
+      log?.call('delegation $id: turn ${settled.turn} reported by the child');
+      return;
+    }
     final answer = switch (outcome.state) {
       ChildTurnState.running || ChildTurnState.blocked => null,
       _ => await _answer(settled),
     };
     // Stopped while the answer was read.
-    if (_closed || store.byChild(id) == null) return;
+    if (_closed || store.byChild(id)?.isOpen != true) return;
     final ended = child.endOnAnswer && outcome.state == ChildTurnState.done
         ? await _end(id)
         : null;
@@ -413,10 +513,16 @@ class DelegationResults {
     // reports it again rather than never.
     for (final (result, follow) in fresh) {
       final childId = follow.child.childId;
+      store.reported(
+        childId,
+        state: result.outcome.state.name,
+        via: kReportViaTurn,
+        at: _now(),
+      );
       final over =
           result.outcome.state == ChildTurnState.ended || result.ended == true;
       if (over) {
-        store.remove(childId);
+        store.close(childId, at: _now());
         continue;
       }
       store.turnReported(childId, turn: follow.turn);
@@ -467,6 +573,41 @@ String delegationMessage(List<DelegationResult> results) {
       ..writeln()
       ..write(_next(result));
   }
+  return out.toString();
+}
+
+/// The message a parent is given for a child's own [report].
+String parentReportMessage(ParentReport report) {
+  final id = report.childId;
+  final (text, cut) = boundedText(report.text.trim(), kDelegationAnswerMaxChars);
+  final out = StringBuffer()
+    ..writeln(
+      '[Karmashala] "${report.title}" (session $id · ${report.agent}), a '
+      'session you started, reports: ${report.status.words}.',
+    )
+    ..writeln()
+    ..writeln(text);
+  if (cut) {
+    out
+      ..writeln()
+      ..writeln(
+        '[cut at $kDelegationAnswerMaxChars characters; the rest is in '
+        'session_transcript (sessionId: $id)]',
+      );
+  }
+  out
+    ..writeln()
+    ..write(switch (report.status) {
+      ReportStatus.done =>
+        'Follow up with session_send, or end it with session_end when you '
+            'are done with it.',
+      ReportStatus.blocked =>
+        'It cannot go on by itself: answer it with session_send, or ask the '
+            'user.',
+      ReportStatus.needsInput =>
+        'It is waiting for your answer: reply with session_send '
+            '(sessionId: $id).',
+    });
   return out.toString();
 }
 

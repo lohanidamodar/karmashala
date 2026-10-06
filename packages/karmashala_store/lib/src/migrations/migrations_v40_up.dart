@@ -846,3 +846,17 @@ void _migrateToV75(Database db) {
     'ALTER TABLE session_queued_messages ADD COLUMN cancelled_by TEXT;',
   );
 }
+
+/// A delegation's last report — its state, `report` (the child's own) or
+/// `turn` (a turn's end), and when — and when it stopped being followed:
+/// closed rather than deleted, so its parent still sees how it ended.
+void _migrateToV76(Database db) {
+  for (final column in [
+    'report_state',
+    'report_via',
+    'reported_at',
+    'closed_at',
+  ]) {
+    db.execute('ALTER TABLE session_delegations ADD COLUMN $column TEXT;');
+  }
+}

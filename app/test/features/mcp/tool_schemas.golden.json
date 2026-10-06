@@ -2886,6 +2886,38 @@
       }
     },
     {
+      "name": "report_to_parent",
+      "description": "Report to the session that started you (open_new_session or subagent_run): it gets your text at once as a message naming you — after its turn if it is working. Use it when you are done, blocked, or need its answer, then end your turn. The end of the turn you report in is not pushed to it as well. Refused when no session started yours.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "What you did and what it needs to know, or what you need from it. Cut at 4000 characters."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "done",
+              "blocked",
+              "needs_input"
+            ],
+            "description": "\"done\" (default): finished; it is marked reported in your parent's delegation list. \"blocked\": you cannot go on. \"needs_input\": you are waiting for its answer."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "get_usage",
       "description": "An agent account's usage against its limits, read live. cli is \"claude\", \"codex\" or \"antigravity\"; environmentId is optional (defaults to the first matching installation). Each window carries a label and, when the agent reported one, a \"percent\" used and a \"resetsAt\". A window with no \"percent\" was not measured — Antigravity names the account's tiers and reports no quota against them — and that absence means unknown, never zero. \"fetchedAt\" is when the reading was taken.",
       "inputSchema": {
@@ -5662,6 +5694,10 @@
     "delegation_capabilities": {
       "category": "sessions",
       "summary": "The agents and models you can delegate to, and whether you still may."
+    },
+    "report_to_parent": {
+      "category": "sessions",
+      "summary": "Tell the session that started yours you are done, blocked or need it."
     },
     "get_usage": {
       "category": "sessions",

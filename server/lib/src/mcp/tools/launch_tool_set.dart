@@ -10,12 +10,14 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart' show SessionLink;
 import 'package:karmashala_session/session.dart' show Session;
 
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../automations/daemon_agents.dart';
-import '../../sessions/delegation_results.dart' show DelegatedChild;
+import '../../sessions/delegation_results.dart'
+    show DelegatedChild, ParentReport, ReportStatus;
 import '../../sessions/launch/server_session_launcher.dart';
 import '../../sessions/session_subagents.dart' show boundedText;
 import '../../status/child_turn_wait.dart';
@@ -64,6 +66,7 @@ class LaunchToolSet extends ServerToolSet {
     this.endChild,
     this.callHolds,
     this.delegate,
+    this.reportToParent,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -111,6 +114,10 @@ class LaunchToolSet extends ServerToolSet {
   /// async mode is refused in words.
   final void Function(DelegatedChild child)? delegate;
 
+  /// Delivers a child's own report to its parent
+  /// (`DelegationResults.report`); null where this server pushes nothing.
+  final void Function(ParentReport report)? reportToParent;
+
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
 
@@ -122,6 +129,9 @@ class LaunchToolSet extends ServerToolSet {
   ) {
     if (tool == 'delegation_capabilities') {
       return runTool(() async => _capabilities(arguments, callerSessionId));
+    }
+    if (tool == 'report_to_parent') {
+      return runTool(() async => _reportToParent(arguments, callerSessionId));
     }
     if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
@@ -194,6 +204,73 @@ class LaunchToolSet extends ServerToolSet {
       'ends, its result (agent, model, how long, its final answer) arrives '
       'as a message from Karmashala — at once if you are idle, after your '
       'turn if you are working. Child: session $id.';
+
+  /// `report_to_parent`: the caller's own report, to the session that started
+  /// it. Refused in words for a session no session started.
+  Map<String, Object?> _reportToParent(
+    Map<String, dynamic> args,
+    String? callerSessionId,
+  ) {
+    final text = (args['text'] as String?)?.trim() ?? '';
+    if (text.isEmpty) {
+      throw ArgumentError(
+        'text is required and cannot be blank: say what you did, or what '
+        'you need.',
+      );
+    }
+    final raw = (args['status'] as String?)?.trim() ?? '';
+    final status = raw.isEmpty
+        ? ReportStatus.done
+        : ReportStatus.byWire(raw) ??
+              (throw ArgumentError(
+                'Unknown status "$raw": "done", "blocked" or "needs_input".',
+              ));
+    final session = callerSessionId == null
+        ? null
+        : SessionDao(_context.database).getById(callerSessionId);
+    final parentId = session?.parentSessionId;
+    if (session == null || parentId == null) {
+      throw StateError(
+        'You have no parent session: report_to_parent goes to the session '
+        'that started you, and none started this one. Say it in your reply '
+        'instead.',
+      );
+    }
+    final link = session.parentLink;
+    if (link != null && link != SessionLink.spawn) {
+      throw StateError(
+        'This session was ${link.phrase} session $parentId, not started by '
+        'it to do a task, so no session is waiting on your report. Say it in '
+        'your reply instead.',
+      );
+    }
+    final deliver =
+        reportToParent ??
+        (throw StateError('This server cannot deliver a report.'));
+    final agentId = _context.data.installations
+        .where((i) => i.id == session.agentInstallationId)
+        .firstOrNull
+        ?.agentId;
+    deliver(
+      ParentReport(
+        childId: session.id,
+        parentId: parentId,
+        title: session.title,
+        agent: agentId == null ? 'not recorded' : agents.nameOf(agentId),
+        status: status,
+        text: text,
+      ),
+    );
+    return {
+      'reported': true,
+      'parentSessionId': parentId,
+      'status': status.wire,
+      'note':
+          'Delivered to session $parentId: at once if it is idle, after its '
+          'turn if it is working. The end of this turn is not pushed to it '
+          'as well, so end your turn when you have nothing more to do.',
+    };
+  }
 
   /// `delegation_capabilities`: the agents and models the caller can hand a
   /// child, in the caller's environment unless one is named.
@@ -1024,6 +1101,36 @@ const List<Map<String, Object?>> launchToolSchemas = [
         },
       },
       'required': <String>[],
+    },
+  },
+  {
+    'name': 'report_to_parent',
+    'description':
+        'Report to the session that started you (open_new_session or '
+        'subagent_run): it gets your text at once as a message naming you — '
+        'after its turn if it is working. Use it when you are done, blocked, '
+        'or need its answer, then end your turn. The end of the turn you '
+        'report in is not pushed to it as well. Refused when no session '
+        'started yours.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'text': {
+          'type': 'string',
+          'description':
+              'What you did and what it needs to know, or what you need '
+              'from it. Cut at 4000 characters.',
+        },
+        'status': {
+          'type': 'string',
+          'enum': ['done', 'blocked', 'needs_input'],
+          'description':
+              '"done" (default): finished; it is marked reported in your '
+              'parent\'s delegation list. "blocked": you cannot go on. '
+              '"needs_input": you are waiting for its answer.',
+        },
+      },
+      'required': <String>['text'],
     },
   },
 ];
