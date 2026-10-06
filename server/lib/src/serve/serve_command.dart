@@ -157,7 +157,8 @@ import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
 import 'package:karmashala_host_protocol/protocol.dart'
-    show AgentHookEvent, LifecycleEventKind;
+    show AgentHookEvent, LifecycleEventKind, kHostVersion;
+import 'package:logging/logging.dart' show Logger;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../server/server_administration.dart';
@@ -226,21 +227,32 @@ Future<int> runServe(
 }) async {
   // Everything it says is kept in `<data>/logs/server.log` too.
   final log = ServerLogFile();
+  // Nobody may be reading either once the app that started this has quit; a
+  // write that fails must cost the line, never the daemon.
+  final errSink = FiledSink(SurvivingSink(err ?? stderr), log, channel: 'err');
+  // The libraries serve runs log through package:logging, which reaches no
+  // sink unless something listens.
+  final records = Logger.root.onRecord.listen((record) {
+    final error = record.error == null ? '' : ' (${record.error})';
+    errSink.writeln(
+      'karmashala_host: ${record.level.name.toLowerCase()} '
+      '${record.loggerName}: ${record.message}$error',
+    );
+  });
   try {
     return await _serve(
       args,
       log: log,
       environment: environment,
       agentScanDelay: agentScanDelay,
-      // Nobody may be reading either once the app that started this has
-      // quit; a write that fails must cost the line, never the daemon.
       sink: FiledSink(SurvivingSink(out ?? stdout), log, channel: 'out'),
-      errSink: FiledSink(SurvivingSink(err ?? stderr), log, channel: 'err'),
+      errSink: errSink,
       paths: paths,
       until: until,
       agentsFor: agentsFor,
     );
   } finally {
+    await records.cancel();
     await log.close();
   }
 }
@@ -278,6 +290,9 @@ Future<int> _serve(
     return 2;
   }
   log.open(dataDirectory);
+  // First, and on disk at once: the file exists whatever happens next.
+  sink.writeln('serve $kHostVersion started; data $dataDirectory');
+  await log.flush();
   // The config is read, and refused, before anything binds: a server told
   // to bind somewhere it cannot parse must not bind somewhere else.
   final ServerConfigService config;
