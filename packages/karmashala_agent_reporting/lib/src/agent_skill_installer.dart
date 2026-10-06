@@ -4,6 +4,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/descriptors.dart';
 
+import 'real_home_guard.dart';
+
 /// Writes Karmashala's skills into an agent CLI's skills root and takes exactly
 /// those back out: a `SKILL.md` carrying [karmashalaSkillMarker], and no more.
 class AgentSkillInstaller {
@@ -38,6 +40,7 @@ class AgentSkillInstaller {
     required List<KarmashalaSkill> skills,
     SkillSweepDeadline? deadline,
   }) async {
+    refuseRealHomeUnderTest(storeHome);
     final root = rootFor(descriptor, storeHome);
     if (root == null || skills.isEmpty) return false;
     for (final skill in skills) {
@@ -90,6 +93,7 @@ class AgentSkillInstaller {
     required String storeHome,
     SkillSweepDeadline? deadline,
   }) async {
+    refuseRealHomeUnderTest(storeHome);
     final root = rootFor(descriptor, storeHome);
     if (root == null) return false;
     final directory = Directory(root);

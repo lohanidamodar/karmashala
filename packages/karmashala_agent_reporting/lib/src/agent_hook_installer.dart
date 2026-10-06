@@ -8,6 +8,8 @@ import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 
+import 'real_home_guard.dart';
+
 /// Marks the hook entries Karmashala owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
 const String agentHookMarker = 'karmashala-agent-hook';
@@ -128,6 +130,7 @@ class AgentHookInstaller {
     required EnvironmentKind environment,
   }) async {
     final spec = descriptor.hooks;
+    refuseRealHomeUnderTest(storeHome);
     if (spec == null) return false;
     if (!endpoint.reaches(environment)) return false;
 
@@ -222,6 +225,7 @@ class AgentHookInstaller {
     required String storeHome,
   }) async {
     final spec = descriptor.hooks;
+    refuseRealHomeUnderTest(storeHome);
     if (spec == null) return false;
 
     var changed = false;
@@ -254,6 +258,7 @@ class AgentHookInstaller {
     required AgentDescriptor descriptor,
     required String storeHome,
   }) async {
+    refuseRealHomeUnderTest(storeHome);
     if (descriptor.hooks == null) return false;
     var removed = false;
     final file = _endpointFile(descriptor, storeHome);
