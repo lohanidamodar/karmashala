@@ -670,7 +670,7 @@ final class CodexAppServerBridge implements AcpTransport {
         }
         return;
     }
-    if (codexItemNotice(item) case final note?) return _note(note);
+    if (_noticeItem(item)) return;
     final call = codexToolCall(item, cwd: _cwd);
     if (call == null) return;
     _outputDue.remove(id);
@@ -698,12 +698,21 @@ final class CodexAppServerBridge implements AcpTransport {
         }
       case 'agentMessage' || 'plan' || 'reasoning':
         _itemCompleted(item);
-      case _ when codexItemNotice(item) != null:
-        _note(codexItemNotice(item)!);
       default:
+        if (_noticeItem(item)) return;
         final call = codexToolCall(item, cwd: _cwd);
         if (call != null) _update({'sessionUpdate': 'tool_call', ...call});
     }
+  }
+
+  /// Says an item that is a note rather than a call, and what a review it
+  /// ends found; false for any other item.
+  bool _noticeItem(JsonMap item) {
+    final note = codexItemNotice(item);
+    if (note == null) return false;
+    _note(note);
+    _message(codexReviewFindings(item), '${item['id']}');
+    return true;
   }
 
   void _message(Object? text, String itemId) {

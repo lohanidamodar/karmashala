@@ -911,7 +911,7 @@ void main() {
     },
   );
 
-  group('what ends a turn badly is said in the chat, as a terminal session '
+  group("what is no one's turn is said in the chat, as a terminal session "
       'says it', () {
     List<(String, String)> said() => [
       for (final row in rows())
@@ -986,6 +986,44 @@ void main() {
       await runtime.send('/compact');
       await runtime.awaitTurn();
       expect(said(), [('notice', 'Codex compacted its context')]);
+      await runtime.stop();
+    });
+
+    test('a review is said as Codex says it, its findings kept', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async {
+          final entered = {
+            'type': 'enteredReviewMode',
+            'id': 'rv-1',
+            'review': 'current changes',
+          };
+          turn.started(entered);
+          turn.completed(entered);
+          final exited = {
+            'type': 'exitedReviewMode',
+            'id': 'rv-2',
+            'review': 'No issues found in the diff.',
+          };
+          turn.started(exited);
+          turn.completed(exited);
+          turn.end('completed');
+        },
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/review');
+      await runtime.awaitTurn();
+      final shown = [
+        for (final row in rows())
+          if (SessionMessageTranscriptSource.project(row) case final m
+              when m.role != 'user')
+            (m.role, m.text),
+      ];
+      expect(shown, [
+        ('notice', 'Code review started: current changes'),
+        ('notice', 'Code review finished'),
+        ('agent', 'No issues found in the diff.'),
+      ]);
       await runtime.stop();
     });
   });
