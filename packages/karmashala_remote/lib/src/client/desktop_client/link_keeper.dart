@@ -13,6 +13,8 @@ class _DesktopLinkKeeper {
     required this.resume,
     required this.onEnvelope,
     this.relayHost,
+    this.relay,
+    this.onRoute,
   });
 
   final SealedChannel channel;
@@ -23,6 +25,13 @@ class _DesktopLinkKeeper {
   /// The relay the link is on now, or null when it is not on one. Only a
   /// link on a relay is promoted.
   String? relayHost;
+
+  /// The relay itself, beside [relayHost]: two relays on one host are two
+  /// routes. Null off every relay, or where the dial did not say.
+  Uri? relay;
+
+  /// Hears [relay] each time a resume or a promotion lands the link.
+  final void Function(Uri? relay)? onRoute;
 
   /// The relay a promotion set aside: still open and still subscribed, but
   /// no longer read, until the new socket has taken the resume (then it is
@@ -282,6 +291,8 @@ class _DesktopLinkKeeper {
           // Back over a relay (the LAN went): promotable again when the LAN
           // returns.
           relayHost = route.relayHost;
+          relay = route.relay;
+          onRoute?.call(relay);
           _armLiveness();
           _tell(
             'resumed link to ${resume.hostName} over ${route.path} at '
@@ -595,6 +606,8 @@ class _DesktopLinkKeeper {
     if (outcome == null) {
       // Break: only now is the relay let go.
       relayHost = null;
+      relay = null;
+      onRoute?.call(null);
       _holdOff = Duration.zero;
       _promoteNotBefore = null;
       _armLiveness();
@@ -662,6 +675,7 @@ class _DesktopLinkKeeper {
       'resuming it within ${resume.grace.inSeconds}s',
     );
     relayHost = null;
+    relay = null;
     _hold(current, resume);
   }
 
