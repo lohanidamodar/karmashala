@@ -17,7 +17,12 @@ import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../automations/daemon_agents.dart';
 import '../../sessions/delegation_results.dart'
-    show DelegatedChild, ParentReport, ReportStatus;
+    show
+        DelegatedChild,
+        DelegationView,
+        ParentReport,
+        ReportStatus,
+        kReportViaChild;
 import '../../sessions/launch/server_session_launcher.dart';
 import '../../sessions/session_subagents.dart' show boundedText;
 import '../../status/child_turn_wait.dart';
@@ -67,6 +72,7 @@ class LaunchToolSet extends ServerToolSet {
     this.callHolds,
     this.delegate,
     this.reportToParent,
+    this.delegationOf,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
        _folders = folders {
@@ -118,6 +124,10 @@ class LaunchToolSet extends ServerToolSet {
   /// (`DelegationResults.report`); null where this server pushes nothing.
   final void Function(ParentReport report)? reportToParent;
 
+  /// Where a child stands (`DelegationResults.viewOf`); null where this
+  /// server follows nothing, and each child's state is not recorded.
+  final DelegationView Function(String childId)? delegationOf;
+
   @override
   List<Map<String, Object?>> get schemas => launchToolSchemas;
 
@@ -132,6 +142,9 @@ class LaunchToolSet extends ServerToolSet {
     }
     if (tool == 'report_to_parent') {
       return runTool(() async => _reportToParent(arguments, callerSessionId));
+    }
+    if (tool == 'delegations') {
+      return runTool(() async => _delegations(callerSessionId));
     }
     if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
@@ -247,16 +260,12 @@ class LaunchToolSet extends ServerToolSet {
     final deliver =
         reportToParent ??
         (throw StateError('This server cannot deliver a report.'));
-    final agentId = _context.data.installations
-        .where((i) => i.id == session.agentInstallationId)
-        .firstOrNull
-        ?.agentId;
     deliver(
       ParentReport(
         childId: session.id,
         parentId: parentId,
         title: session.title,
-        agent: agentId == null ? 'not recorded' : agents.nameOf(agentId),
+        agent: _agentNameOf(session),
         status: status,
         text: text,
       ),
@@ -269,6 +278,62 @@ class LaunchToolSet extends ServerToolSet {
           'Delivered to session $parentId: at once if it is idle, after its '
           'turn if it is working. The end of this turn is not pushed to it '
           'as well, so end your turn when you have nothing more to do.',
+    };
+  }
+
+  String _agentNameOf(Session session) {
+    final agentId = _context.data.installations
+        .where((i) => i.id == session.agentInstallationId)
+        .firstOrNull
+        ?.agentId;
+    return agentId == null ? 'not recorded' : agents.nameOf(agentId);
+  }
+
+  /// `delegations`: the sessions the caller started, and where each stands.
+  Map<String, Object?> _delegations(String? callerSessionId) {
+    if (callerSessionId == null) {
+      throw StateError(
+        'delegations lists the sessions a session started, and this call '
+        'came from no session.',
+      );
+    }
+    final children = [
+      for (final child in SessionDao(_context.database).childrenOf(
+        callerSessionId,
+      ))
+        if (child.parentLink == null || child.parentLink == SessionLink.spawn)
+          child,
+    ];
+    return {
+      'children': [
+        for (final child in children) _delegationRow(child),
+      ],
+      'note':
+          'state is running, reported done, blocked, needs input, failed or '
+          'ended. A followed child pushes the end of each turn it works to '
+          'you, and report_to_parent arrives at once: end your turn and wait '
+          'for them rather than polling.',
+    };
+  }
+
+  Map<String, Object?> _delegationRow(Session child) {
+    final view = delegationOf?.call(child.id);
+    final at = view?.reportedAt;
+    return {
+      'sessionId': child.id,
+      'title': child.title,
+      'agent': _agentNameOf(child),
+      'state': view?.state ?? 'not recorded',
+      'followed': view?.followed ?? false,
+      'lastReport': at == null
+          ? 'not recorded'
+          : {
+              'status': view!.reportState,
+              'by': view.reportVia == kReportViaChild
+                  ? 'the child, with report_to_parent'
+                  : 'the end of its turn',
+              'at': at.toIso8601String(),
+            },
     };
   }
 
@@ -1102,6 +1167,17 @@ const List<Map<String, Object?>> launchToolSchemas = [
       },
       'required': <String>[],
     },
+  },
+  {
+    'name': 'delegations',
+    'description':
+        'The sessions you started with open_new_session or subagent_run, '
+        'each with its state — running, reported done, blocked, needs input, '
+        'failed or ended — whether its turn ends are pushed to you '
+        '(followed), and its last report: what, by whom, when. Read it '
+        'instead of polling transcripts or files; results and reports '
+        'arrive by themselves.',
+    'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
   },
   {
     'name': 'report_to_parent',

@@ -2886,6 +2886,21 @@
       }
     },
     {
+      "name": "delegations",
+      "description": "The sessions you started with open_new_session or subagent_run, each with its state — running, reported done, blocked, needs input, failed or ended — whether its turn ends are pushed to you (followed), and its last report: what, by whom, when. Read it instead of polling transcripts or files; results and reports arrive by themselves.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "report_to_parent",
       "description": "Report to the session that started you (open_new_session or subagent_run): it gets your text at once as a message naming you — after its turn if it is working. Use it when you are done, blocked, or need its answer, then end your turn. The end of the turn you report in is not pushed to it as well. Refused when no session started yours.",
       "inputSchema": {
@@ -5694,6 +5709,10 @@
     "delegation_capabilities": {
       "category": "sessions",
       "summary": "The agents and models you can delegate to, and whether you still may."
+    },
+    "delegations": {
+      "category": "sessions",
+      "summary": "The sessions you started and where each stands, without polling."
     },
     "report_to_parent": {
       "category": "sessions",

@@ -114,6 +114,29 @@ class ParentReport {
   final String text;
 }
 
+/// Where a child stands for its parent, read now.
+class DelegationView {
+  const DelegationView({
+    required this.state,
+    required this.followed,
+    this.reportState,
+    this.reportVia,
+    this.reportedAt,
+  });
+
+  /// `running`, `reported done`, `blocked`, `needs input`, `failed` or
+  /// `ended`.
+  final String state;
+
+  /// Whether its turn ends are pushed to its parent.
+  final bool followed;
+  final String? reportState;
+
+  /// [kReportViaChild] or [kReportViaTurn].
+  final String? reportVia;
+  final DateTime? reportedAt;
+}
+
 /// One awaited turn of a delegated child: which, and from when its answer
 /// counts. A [next] follow waits for whatever turn the child works next; its
 /// [turn] is decided when that turn settles.
@@ -143,6 +166,7 @@ class DelegationResults {
     required this.queue,
     required this.store,
     required this.isLive,
+    this.isWorking,
     this.isArchived,
     this.restoreGrace = const Duration(minutes: 2),
     this.endChild,
@@ -159,6 +183,9 @@ class DelegationResults {
   /// Settles when the next turn [String] works does — `ChildTurnWait.nextTurn`.
   final Future<ChildTurnOutcome> Function(String childId, DateTime since)
   nextTurnOf;
+
+  /// Whether row [String]'s turn is running now (`TurnSettlement.running`).
+  final bool Function(String sessionId)? isWorking;
 
   /// Whether row [String] is archived: its delegation then ends unreported.
   final bool Function(String sessionId)? isArchived;
@@ -338,6 +365,33 @@ class DelegationResults {
     log?.call(
       'delegation ${report.childId}: reported ${report.status.wire} to '
       '${report.parentId}',
+    );
+  }
+
+  /// Where [childId] stands for its parent: ended when nothing runs it,
+  /// running while it works or before its first push, else its last report.
+  DelegationView viewOf(String childId) {
+    final row = store.byChild(childId);
+    final String state;
+    if (!isLive(childId)) {
+      state = 'ended';
+    } else if ((isWorking?.call(childId) ?? false) ||
+        row?.reportState == null ||
+        (row!.awaiting && row.reportVia != kReportViaChild)) {
+      state = 'running';
+    } else {
+      state = switch (row.reportState!) {
+        'done' => 'reported done',
+        'needs_input' => 'needs input',
+        final other => other,
+      };
+    }
+    return DelegationView(
+      state: state,
+      followed: row?.isOpen ?? false,
+      reportState: row?.reportState,
+      reportVia: row?.reportVia,
+      reportedAt: row?.reportedAt,
     );
   }
 

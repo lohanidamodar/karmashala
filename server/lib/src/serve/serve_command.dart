@@ -1484,6 +1484,7 @@ Future<int> _serve(
     queue: sessionQueue,
     store: SessionDelegationDao(database),
     isLive: prompts.status.holds,
+    isWorking: sessionQueue.turns.running,
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
@@ -1541,6 +1542,7 @@ Future<int> _serve(
         callHolds: openTurns.heldByCall,
         delegate: delegations.watch,
         reportToParent: delegations.report,
+        delegationOf: delegations.viewOf,
       ),
     )
     // `get_usage` is read here from the server's own usage (slice 2a).

@@ -502,6 +502,72 @@ void main() {
     });
   });
 
+  group('where a child stands', () {
+    test('running until its first push, then its last report; ended once '
+        'nothing runs it', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      expect(delegations.viewOf('c1').state, 'running');
+      expect(delegations.viewOf('c1').followed, isTrue);
+      expect(delegations.viewOf('c1').reportedAt, isNull);
+
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      expect(delegations.viewOf('c1').state, 'running');
+      clock = t0.add(const Duration(minutes: 3));
+      delegations.report(
+        ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.done,
+          text: 'Done.',
+        ),
+      );
+      answers['c1'] = 'Done.';
+      hook('c1', 'Stop');
+      await settle();
+      final done = delegations.viewOf('c1');
+      expect(done.state, 'reported done');
+      expect(done.reportVia, kReportViaChild);
+      expect(done.reportedAt, clock);
+
+      pty.handles.last.finish(0);
+      await settle();
+      expect(delegations.viewOf('c1').state, 'ended');
+      expect(delegations.viewOf('c1').reportedAt, clock);
+    });
+
+    test('a child that reported blocked reads blocked', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.report(
+        ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.blocked,
+          text: 'No access to the bucket.',
+        ),
+      );
+      final view = delegations.viewOf('c1');
+      expect(view.state, 'blocked');
+      expect(view.followed, isFalse);
+    });
+
+    test('a child nothing recorded and nothing runs is ended, not '
+        'reported', () {
+      final view = delegations.viewOf('c2');
+      expect(view.state, 'ended');
+      expect(view.reportState, isNull);
+    });
+  });
+
   group('across a restart', () {
     test('a child still running is watched again by the next tracker, and '
         'its result pushed', () async {

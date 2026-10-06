@@ -16,7 +16,7 @@ import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_host/src/sessions/delegation_results.dart'
-    show DelegatedChild, ParentReport, ReportStatus;
+    show DelegatedChild, DelegationView, ParentReport, ReportStatus;
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/status/child_turn_wait.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
@@ -58,6 +58,7 @@ void main() {
   late List<(String, bool)> holds;
   late List<DelegatedChild> delegated;
   late List<ParentReport> reports;
+  late Map<String, DelegationView> views;
   var ids = 0;
 
   Future<({String text, DateTime? at})?> answerOf(
@@ -75,6 +76,7 @@ void main() {
     holds = [];
     delegated = [];
     reports = [];
+    views = {};
     answers = {};
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -149,6 +151,8 @@ void main() {
       callHolds: (sessionId, held) => holds.add((sessionId, held)),
       delegate: delegated.add,
       reportToParent: reports.add,
+      delegationOf: (id) =>
+          views[id] ?? const DelegationView(state: 'ended', followed: false),
     );
   });
 
@@ -673,6 +677,66 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(reports, isEmpty);
+    });
+  });
+
+  group('delegations', () {
+    test("lists the caller's children with where each stands, forks "
+        'aside', () async {
+      insertCaller('caller');
+      insertCaller('done-child', parent: 'caller');
+      insertCaller('gone-child', parent: 'caller');
+      insertCaller('elsewhere', parent: 'someone-else');
+      SessionDao(database).insert(
+        Session(
+          id: 'fork',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'A fork',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+          parentSessionId: 'caller',
+          parentLink: SessionLink.fork,
+        ),
+      );
+      final at = t0.add(const Duration(minutes: 9));
+      views['done-child'] = DelegationView(
+        state: 'reported done',
+        followed: true,
+        reportState: 'done',
+        reportVia: 'report',
+        reportedAt: at,
+      );
+      views['gone-child'] = const DelegationView(
+        state: 'ended',
+        followed: false,
+      );
+      final result =
+          (await tools.call('delegations', const {}, 'caller'))!
+              as Map<String, Object?>;
+      final children = (result['children']! as List)
+          .cast<Map<String, Object?>>();
+      expect(children.map((c) => c['sessionId']), ['done-child', 'gone-child']);
+      final done = children.first;
+      expect(done['title'], 'Orchestrator done-child');
+      expect(done['agent'], isNotEmpty);
+      expect(done['state'], 'reported done');
+      expect(done['followed'], isTrue);
+      expect(done['lastReport'], {
+        'status': 'done',
+        'by': 'the child, with report_to_parent',
+        'at': at.toIso8601String(),
+      });
+      expect(children.last['state'], 'ended');
+      expect(children.last['lastReport'], 'not recorded');
+    });
+
+    test('needs a calling session', () async {
+      await expectLater(
+        tools.call('delegations', const {}, null),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 

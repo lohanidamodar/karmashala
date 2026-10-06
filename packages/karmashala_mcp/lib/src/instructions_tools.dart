@@ -96,6 +96,7 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'subagent_run',
       'delegation_capabilities',
       'report_to_parent',
+      'delegations',
       'open_session',
     ],
     body: '''
