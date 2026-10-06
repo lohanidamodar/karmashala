@@ -153,6 +153,7 @@ Map<String, Object?> gitWorktreeToJson(GitWorktree worktree) => {
   'branch': ?worktree.branch,
   'head': ?worktree.head,
   if (worktree.isBare) 'bare': true,
+  if (worktree.isPrunable) 'prunable': true,
 };
 
 GitWorktree gitWorktreeFromJson(Map<String, Object?> json) => GitWorktree(
@@ -160,6 +161,7 @@ GitWorktree gitWorktreeFromJson(Map<String, Object?> json) => GitWorktree(
   branch: json['branch'] as String?,
   head: json['head'] as String?,
   isBare: json['bare'] == true,
+  isPrunable: json['prunable'] == true,
 );
 
 Map<String, Object?> gitBranchRefToJson(GitBranchRef branch) => {

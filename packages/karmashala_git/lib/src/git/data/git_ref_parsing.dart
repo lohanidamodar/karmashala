@@ -12,6 +12,7 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
   String? head;
   String? branch;
   var bare = false;
+  var prunable = false;
 
   void flush() {
     if (path != null) {
@@ -21,6 +22,7 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
           head: head,
           branch: branch,
           isBare: bare,
+          isPrunable: prunable,
         ),
       );
     }
@@ -28,6 +30,7 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
     head = null;
     branch = null;
     bare = false;
+    prunable = false;
   }
 
   for (final raw in porcelain.split(RegExp(r'[\r\n]'))) {
@@ -45,6 +48,8 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
       branch = line.substring('branch '.length).replaceFirst('refs/heads/', '');
     } else if (line == 'bare') {
       bare = true;
+    } else if (line == 'prunable' || line.startsWith('prunable ')) {
+      prunable = true;
     }
   }
   flush();

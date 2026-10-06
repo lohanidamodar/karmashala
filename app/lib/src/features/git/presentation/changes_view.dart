@@ -21,7 +21,6 @@ import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'diff_view.dart';
 import 'remote_link.dart';
-import 'worktree_browse.dart';
 
 /// Read-only Git change review: what changed, listed. Reading a change happens
 /// in a workbench tab ([DiffTabView]), which has the room for it.
@@ -46,9 +45,6 @@ class ChangesView extends ConsumerWidget {
           icon: AppIcons.gitDiff,
           title: 'Changes',
           actions: [
-            // Which worktree is being *read*; the session's checkout is moved
-            // from the Repository pane, by another verb.
-            const Flexible(child: WorktreeBrowsePicker()),
             // Flexible so a long branch ellipsises: this side panel can be
             // dragged down to 240px.
             const Flexible(child: _DeliveryLinks()),
@@ -68,7 +64,6 @@ class ChangesView extends ConsumerWidget {
             const _SendReviewThreadsButton(),
           ],
         ),
-        const WorktreeBrowseNotice(),
         // Flexible, not fixed: this panel is dragged down to 240px, and the
         // file list must not be squeezed out by a commit box that will not
         // give way. It scrolls inside whatever it is left.
@@ -88,11 +83,6 @@ class _DeliveryLinks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
-    // The branch and pull request are the *selected checkout's*, so they would
-    // mislabel a browsed worktree; the head commit follows the tree being read.
-    final browsing = ref.watch(
-      browsedWorktreeProvider.select((browse) => browse != null),
-    );
     final delivery = repositoryId == null
         ? null
         : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
@@ -105,7 +95,7 @@ class _DeliveryLinks extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (delivery?.branch case final branch? when !browsing) ...[
+        if (delivery?.branch case final branch?) ...[
           const SizedBox(width: Insets.sm),
           Flexible(
             child: RemoteLink(
@@ -128,7 +118,7 @@ class _DeliveryLinks extends ConsumerWidget {
             ),
           ),
         ],
-        if (delivery?.pullRequest case final pr? when !browsing) ...[
+        if (delivery?.pullRequest case final pr?) ...[
           const SizedBox(width: Insets.sm),
           Flexible(
             child: RemoteLink(

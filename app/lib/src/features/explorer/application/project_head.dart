@@ -47,6 +47,18 @@ final projectHeadBranchProvider = FutureProvider.autoDispose
       return ref.read(projectHeadCacheProvider).read(checkout, stamp);
     });
 
+/// [projectHeadBranchProvider] for one checkout: what the side panel's
+/// context line names, read again on the same occasions.
+final checkoutHeadBranchProvider = FutureProvider.autoDispose
+    .family<String?, Checkout>((ref, checkout) async {
+      final stamp = (
+        ref.watch(checkoutReadingsProvider.select((r) => r[checkout] ?? 0)),
+        ref.watch(windowRefocusCountProvider),
+        ref.watch(checkoutTouchesProvider.select((t) => t[checkout] ?? 0)),
+      );
+      return ref.read(projectHeadCacheProvider).read(checkout, stamp);
+    });
+
 /// Every `HEAD` a project row has been told, per checkout and the moment it
 /// was asked at: a row coming back on screen, a rebuild or a fold asks the
 /// server nothing until something that moves a branch has happened.

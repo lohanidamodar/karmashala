@@ -34,7 +34,14 @@ enum QuickOpenGroup {
   actions('Actions'),
 
   /// A project's repositories, each a step of its own; never in the full list.
-  repositories('Repositories');
+  repositories('Repositories'),
+
+  /// The selected checkout's worktrees, in "Switch worktree…"; never in the
+  /// full list.
+  worktrees('Worktrees'),
+
+  /// Its merged, clean, unused worktrees, listed last.
+  mergedWorktrees('Merged');
 
   const QuickOpenGroup(this.label);
 

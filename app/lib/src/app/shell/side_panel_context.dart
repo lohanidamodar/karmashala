@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -8,16 +7,19 @@ import 'package:karmashala_ui/menus.dart';
 
 import 'package:karmashala_git/repositories.dart';
 import '../../features/explorer/application/checkout_picker.dart';
+import '../../features/explorer/application/worktree_choices.dart';
 import '../../features/workspaces/data/workspace_data.dart';
 import '../../features/projects/application/projects_controller.dart';
+import 'worktree_switcher.dart';
 
 /// Asks for a rescan of the project's folder from the picker.
 class _RescanChoice {
   const _RescanChoice();
 }
 
-/// Which checkout the panel is describing, and the picker that moves it. The
-/// menu is offered even for a single checkout, for the **Rescan** under it.
+/// Which checkout the panel is describing, and the two pickers that move it:
+/// `<checkout> ▾ / <worktree> ▾`. The checkout menu is offered even for a
+/// single checkout, for the **Rescan** under it.
 class SidePanelContextLine extends ConsumerStatefulWidget {
   const SidePanelContextLine({super.key});
 
@@ -57,11 +59,35 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
     }
   }
 
+  /// The repository [selected] is a worktree of, for the left half while the
+  /// right names the worktree. Borrowed from what git already said, never
+  /// asked for here: drawing the line starts no git process.
+  Repository? _ownerOf(Repository selected) {
+    final labels = checkoutLabelsProvider(selected.projectId);
+    if (ref.exists(labels)) {
+      final label = ref.watch(labels).asData?.value[selected.id];
+      final id = label?.ownerRepositoryId;
+      if (label?.isWorktree == true && id != null && id != selected.id) {
+        return ref.read(workspaceDataProvider).repository(id);
+      }
+    }
+    if (ref.exists(worktreeChoicesProvider)) {
+      return ref
+          .watch(worktreeChoicesProvider)
+          ?.all
+          .where((c) => c.isMain && !c.current)
+          .firstOrNull
+          ?.repository;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final repository = ref.watch(selectedCheckoutProvider);
-    if (repository == null) return const SizedBox.shrink();
+    final selected = ref.watch(selectedCheckoutProvider);
+    if (selected == null) return const SizedBox.shrink();
     final checkouts = ref.watch(projectCheckoutsProvider);
+    final repository = _ownerOf(selected) ?? selected;
     final project = ref
         .read(workspaceDataProvider)
         .project(repository.projectId);
@@ -69,12 +95,7 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
         ? null
         : relativeSubPath(project.root, repository.path);
 
-    final line = _ContextLineBody(
-      repository: repository,
-      within: within,
-      pickable: true,
-    );
-    return PopupMenuButton<Object>(
+    final picker = PopupMenuButton<Object>(
       tooltip:
           '${repository.path.path}\n'
           'Switch to another checkout in this project, or rescan for new ones',
@@ -88,7 +109,7 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
       onSelected: (picked) => switch (picked) {
         final Repository checkout =>
           ref.read(checkoutPickerProvider).select(checkout),
-        _ => _rescan(repository.projectId),
+        _ => _rescan(selected.projectId),
       },
       itemBuilder: (context) => [
         for (final checkout in checkouts)
@@ -99,7 +120,7 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
               within: project == null
                   ? null
                   : relativeSubPath(project.root, checkout.path),
-              selected: checkout.id == repository.id,
+              selected: checkout.id == selected.id,
             ),
           ),
         const DesktopMenuDivider(),
@@ -112,32 +133,38 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
           icon: AppIcons.arrowsClockwise,
         ),
       ],
-      child: line,
+      child: _CheckoutPart(repository: repository, within: within),
+    );
+    return Container(
+      height: Chrome.statusBarOf(context),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      child: Row(
+        children: [
+          Flexible(child: picker),
+          const Flexible(child: WorktreeSwitcherButton()),
+        ],
+      ),
     );
   }
 }
 
-/// The status-bar-high strip. Identical whether or not it is a button.
-class _ContextLineBody extends StatelessWidget {
-  const _ContextLineBody({
-    required this.repository,
-    required this.within,
-    required this.pickable,
-  });
+/// The checkout half of the line: its name, where it sits in the project, and
+/// the caret of the menu it opens.
+class _CheckoutPart extends StatelessWidget {
+  const _CheckoutPart({required this.repository, required this.within});
 
   final Repository repository;
   final String? within;
-  final bool pickable;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Container(
+    return SizedBox(
       height: Chrome.statusBarOf(context),
-      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-      color: scheme.surfaceContainerLowest,
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             AppIcons.bookBookmark,
@@ -167,14 +194,13 @@ class _ContextLineBody extends StatelessWidget {
               ),
             ),
           ],
-          if (pickable) ...[
-            const SizedBox(width: Insets.xs / 2),
-            Icon(
-              AppIcons.caretDown,
-              size: Chrome.iconSmall,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
+          const SizedBox(width: Insets.xs / 2),
+          Icon(
+            AppIcons.caretDown,
+            size: Chrome.iconSmall,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
         ],
       ),
     );
@@ -211,111 +237,6 @@ class _CheckoutMenuRow extends ConsumerWidget {
       detailMaxLines: 1,
       icon: AppIcons.bookBookmark,
       selected: selected,
-    );
-  }
-}
-
-/// Level two of the picker: the worktrees of this checkout. One the workspace
-/// has never recorded is listed but is not a destination; Rescan changes that.
-class SidePanelWorktrees extends ConsumerWidget {
-  const SidePanelWorktrees({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final worktrees =
-        ref.watch(selectedCheckoutWorktreesProvider).value ?? const [];
-    if (worktrees.isEmpty) return const SizedBox.shrink();
-
-    final selected = ref.watch(selectedCheckoutProvider);
-    final rows = {
-      for (final checkout in ref.watch(projectCheckoutRowsProvider))
-        Checkout(checkout.path): checkout,
-    };
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Container(
-      color: scheme.surfaceContainerLowest,
-      padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.sm, Insets.xs),
-      child: Wrap(
-        spacing: Insets.xs,
-        runSpacing: Insets.xs,
-        children: [
-          for (final worktree in worktrees)
-            _WorktreeChip(
-              label: worktree.branch ?? p.basename(worktree.path.path),
-              path: worktree.path.path,
-              selected: rows[Checkout(worktree.path)]?.id == selected?.id,
-              onTap: switch (rows[Checkout(worktree.path)]) {
-                final Repository row =>
-                  () => ref.read(checkoutPickerProvider).select(row),
-                _ => null,
-              },
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One worktree. Unselectable when the workspace has no row for it, and it says
-/// so rather than looking broken.
-class _WorktreeChip extends StatelessWidget {
-  const _WorktreeChip({
-    required this.label,
-    required this.path,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final String path;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final colour = selected
-        ? scheme.primary
-        : onTap == null
-        ? scheme.onSurfaceVariant.withValues(alpha: 0.6)
-        : scheme.onSurfaceVariant;
-    return Tooltip(
-      message: onTap == null
-          ? '$path\nNot in this workspace yet — rescan to add it'
-          : path,
-      child: Material(
-        color: selected ? StateLayers.selected(scheme) : Colors.transparent,
-        borderRadius: BorderRadius.circular(Radii.sm),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(Radii.sm),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: Insets.xs / 2,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(AppIcons.gitBranch, size: Chrome.iconSmall, color: colour),
-                const SizedBox(width: Insets.xs),
-                // The tooltip carries the full path, so a long branch can end.
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

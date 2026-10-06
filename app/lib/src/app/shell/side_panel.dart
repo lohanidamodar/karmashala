@@ -387,10 +387,7 @@ class ContextSurfaceBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!surface.drawsOwnHeader) _SidePanelHeader(surface: surface),
-        if (surface.scopedToRepository) ...[
-          const SidePanelContextLine(),
-          const SidePanelWorktrees(),
-        ],
+        if (surface.scopedToRepository) const SidePanelContextLine(),
         Expanded(child: _surfaceBody(surface)),
       ],
     ),

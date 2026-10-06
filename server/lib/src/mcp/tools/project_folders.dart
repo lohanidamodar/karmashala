@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/git.dart'
-    show kGitChildEnvironment, kGitRemovedEnvironment;
+    show GitService, GitWorktree, kGitChildEnvironment, kGitRemovedEnvironment;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
@@ -175,7 +175,7 @@ class ProjectFolders {
         projectName: name,
         root: root,
         workspaceId: workspaceId,
-        found: await _discover(root, target),
+        found: await _withWorktrees(await _discover(root, target), const []),
       ),
     );
     await _recorded(created.repositories);
@@ -386,15 +386,25 @@ mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" 
     return (root: root, path: path);
   }
 
-  /// Re-reads [project]'s root for checkouts it does not record, records
-  /// them, and answers the rows added. Checkouts provably gone are retired
-  /// afterwards, **not awaited**: the caller asked what the scan found.
+  /// Re-reads [project]'s root, and the worktrees git lists for its
+  /// checkouts, for checkouts it does not record, records them, and answers
+  /// the rows added. Checkouts provably gone are retired afterwards, **not
+  /// awaited**: the caller asked what the scan found.
   Future<List<Repository>> rediscover(Project project) async {
     final environment = _environmentOf(project.root.environmentId);
+    final recorded = [
+      for (final repository in RepositoryDao(
+        _context.database,
+      ).getByProject(project.id))
+        repository.path,
+    ];
     final added = _context.write(
       CheckoutsAdd(
         projectId: project.id,
-        found: await _discover(project.root, environment),
+        found: await _withWorktrees(
+          await _discover(project.root, environment),
+          recorded,
+        ),
       ),
     );
     unawaited(_retireMissing(project, environment));
@@ -451,6 +461,55 @@ mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" 
         ),
     ];
   }
+
+  /// [found], and every worktree git lists for it or for [recorded]: the walk
+  /// skips dot-folders and never leaves the root, and a worktree is usually
+  /// in one or beside it. One `git worktree list` per repository family, run
+  /// in the checkout's own environment. A worktree whose directory is gone,
+  /// or that another project records, is left out.
+  Future<List<DiscoveredRepository>> _withWorktrees(
+    List<DiscoveredRepository> found,
+    List<EnvironmentPath> recorded,
+  ) async {
+    final result = [...found];
+    final listed = <Checkout>{};
+    final known = {for (final f in found) Checkout(f.path)};
+    final repositories = RepositoryDao(_context.database);
+    for (final checkout in [...recorded, for (final f in found) f.path]) {
+      if (listed.contains(Checkout(checkout))) continue;
+      final environment = _reach.environment(checkout.environmentId);
+      if (environment == null || !_reach.reaches(environment)) continue;
+      final List<GitWorktree> worktrees;
+      try {
+        worktrees = await GitService(
+          _reach.runners.forEnvironment(environment),
+        ).listWorktrees(checkout);
+      } on Object {
+        continue;
+      }
+      for (final (index, worktree) in worktrees.indexed) {
+        final path = _spelledFor(worktree.path, environment);
+        listed.add(Checkout(path));
+        // `git worktree list` prints the main worktree first, always.
+        if (index == 0 || worktree.isBare || worktree.isPrunable) continue;
+        if (!known.add(Checkout(path))) continue;
+        if (repositories.getByLocation(path).isNotEmpty) continue;
+        result.add(DiscoveredRepository(name: worktree.name, path: path));
+      }
+    }
+    return result;
+  }
+
+  /// Git for Windows prints `C:/src/x`; a row is spelled `C:\src\x`.
+  EnvironmentPath _spelledFor(
+    EnvironmentPath path,
+    ExecutionEnvironment environment,
+  ) => environment.kind == EnvironmentKind.windowsNative
+      ? EnvironmentPath(
+          environmentId: path.environmentId,
+          path: p.windows.normalize(path.path),
+        )
+      : path;
 
   /// Clones [url] into [path] in [target] and answers where it landed — an
   /// existing clone there is adopted rather than cloned over.
@@ -518,12 +577,9 @@ cd "\$TARGET" && pwd
     try {
       final host = _reach.host;
       if (host == null) return;
-      final candidates = [
-        for (final repository in RepositoryDao(
-          _context.database,
-        ).getByProject(project.id))
-          if (isUnder(project.root, repository.path)) repository,
-      ];
+      final candidates = RepositoryDao(
+        _context.database,
+      ).getByProject(project.id);
       if (candidates.isEmpty) return;
       final ssh = environment.kind == EnvironmentKind.ssh
           ? _overSsh(environment)
@@ -536,12 +592,22 @@ cd "\$TARGET" && pwd
             windows: host,
           );
       if (await presenceOf(project.root) != CheckoutPresence.present) return;
-      final presences = await Future.wait([
-        for (final candidate in candidates) presenceOf(candidate.path),
-      ]);
+      // Outside the root — a worktree beside it — the folder it sits in is
+      // what must be found, so an unmounted drive retires nothing.
+      Future<bool> isGone(Repository candidate) async {
+        if (await presenceOf(candidate.path) != CheckoutPresence.absent) {
+          return false;
+        }
+        if (isUnder(project.root, candidate.path)) return true;
+        final parent = _parentOf(candidate.path);
+        return parent != null &&
+            await presenceOf(parent) == CheckoutPresence.present;
+      }
+
+      final verdicts = await Future.wait(candidates.map(isGone));
       final gone = [
         for (final (index, candidate) in candidates.indexed)
-          if (presences[index] == CheckoutPresence.absent) candidate.id,
+          if (verdicts[index]) candidate.id,
       ];
       if (gone.isNotEmpty) _context.write(CheckoutsRetire(gone));
     } on Object catch (error) {
@@ -549,6 +615,21 @@ cd "\$TARGET" && pwd
         'retiring missing checkouts of ${project.id} failed: $error',
       );
     }
+  }
+
+  /// The folder [path] sits in, by either separator, or null at a root.
+  static EnvironmentPath? _parentOf(EnvironmentPath path) {
+    var spelled = path.path;
+    while (spelled.length > 1 &&
+        (spelled.endsWith('/') || spelled.endsWith(r'\'))) {
+      spelled = spelled.substring(0, spelled.length - 1);
+    }
+    final cut = max(spelled.lastIndexOf('/'), spelled.lastIndexOf(r'\'));
+    if (cut <= 0 || spelled.substring(0, cut).endsWith(':')) return null;
+    return EnvironmentPath(
+      environmentId: path.environmentId,
+      path: spelled.substring(0, cut),
+    );
   }
 
   PosixRepositoryDiscovery _overSsh(ExecutionEnvironment environment) =>

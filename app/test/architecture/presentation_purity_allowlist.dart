@@ -39,7 +39,6 @@ const Set<String> presentationPurityDebt = {
   'lib/src/features/git/presentation/changes_view.dart',
   'lib/src/features/git/presentation/diff_tab_view.dart',
   'lib/src/features/git/presentation/diff_view.dart',
-  'lib/src/features/git/presentation/worktree_browse.dart',
   'lib/src/features/git/presentation/worktree_cleanup_section.dart',
   'lib/src/features/git/presentation/worktree_create_dialog.dart',
   'lib/src/features/git/presentation/worktree_setup_page.dart',
