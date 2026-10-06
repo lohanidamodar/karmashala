@@ -4,7 +4,7 @@
 environment**: one Flutter app that runs coding-agent CLIs on your desktop,
 on a server, or both, and follows them from your phone.
 
-**Version 1.31.1.** [`CHANGELOG.md`](CHANGELOG.md) records what changed in
+**Version 1.32.1.** [`CHANGELOG.md`](CHANGELOG.md) records what changed in
 each release.
 
 ## What it does
@@ -13,9 +13,20 @@ each release.
   — started, resumed, given a permission mode and reported on in its own
   words. Sessions the CLIs started outside the app are imported from their own
   stores, and titles sync both ways.
+- **Any agent that speaks ACP.** Agents on the Agent Client Protocol are added
+  from the ACP registry or by command (Grok, for one) and run as chat
+  sessions: their modes, models, slash commands, plans, diffs and permission
+  options in the chat, and usage-limit resumes like the rest.
 - **Terminals and chat.** Each session is an embedded terminal (ConPTY on
   Windows, `forkpty` elsewhere) or a chat view of the same conversation, in
-  split, tabbed workbench groups that survive a restart.
+  split, tabbed workbench groups that survive a restart. Each agent can run in
+  either form.
+- **Sessions that start sessions.** An agent can start sub-sessions on any
+  agent and model, which report back to it when they finish (or every turn),
+  hand work back and forth, or switch a session's agent in place. Sub-sessions
+  fold beneath their parent, the Subagents panel follows them live, and
+  finished ones are archived out of sight. A session with no project runs in a
+  scratch folder of its own and attaches the checkouts it needs.
 - **An editor and a file explorer.** Open, edit and save files in tabs, browse
   any environment's tree, view images, video and audio, and hand a file to a
   session.
@@ -23,16 +34,20 @@ each release.
   An SSH host gets the Karmashala server deployed to it and runs its sessions
   there.
 - **A server you can run headless.** `karmashala_host` keeps the sessions,
-  automations and pairings, and the desktop app is one of its clients. See
-  [`server/README.md`](server/README.md).
+  automations and pairings, and the desktop app is one of its clients. Settings
+  → Server, quick open and the tray show its state and stop, restart or start
+  it; its log is `<data>/logs/server.log`, read in the Logs tab beside the
+  app's. See [`server/README.md`](server/README.md).
 - **Your phone.** The same app built for Android and iOS pairs with a desktop
   or a server — on the LAN, through a relay, or at an address. It lists
   sessions, reads and answers them, approves tool calls, starts new ones, opens
   their terminals and files, and keeps notes. Every frame is sealed end to end;
-  a relay sees nothing inside.
-- **Tools for the agents.** An MCP server of its own (about 85 tools: sessions,
-  terminals, devices, browser, checkpoints, notes, todos, store data), with a
-  stdio bridge for sessions inside WSL.
+  a relay sees nothing inside. A pairing moves to a new relay without a
+  re-pair, the route a link takes (this network or a relay) is switched from
+  the connection chip, and each machine can be given a name of your own.
+- **Tools for the agents.** An MCP server of its own (about 130 tools:
+  sessions and sub-sessions, terminals, devices, browser, checkpoints, notes,
+  todos, store data), with a stdio bridge for sessions inside WSL.
 - **Status by hook, not by poll.** The agents' own hooks report what they are
   doing, and an attention inbox collects what needs you.
 - **Checkpoints, fan-out and verification.** Per-turn snapshots of the working
@@ -167,6 +182,11 @@ distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
 [`tool/build_release.bat`](tool/build_release.bat) and
 [`tool/build_release.sh`](tool/build_release.sh) build the same desktop
 artifacts locally on Windows and macOS.
+
+A version bump is `app/pubspec.yaml` alone. Every build recipe and release
+job writes its release into the server's version first
+([`tool/sync_host_version.dart`](tool/sync_host_version.dart)), so app and
+server always report the same one; `host_version_test` guards it on commits.
 
 ## Environment variables
 

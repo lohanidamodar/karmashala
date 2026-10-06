@@ -17,6 +17,114 @@ installs claim the same version name.
 
 ---
 
+## Since 1.32.1, on `feat/acp`
+
+- **A quick route switch.** The phone's top bar shows the route a link is on
+  (this network, or a relay by host), and tapping it pins Automatic, this
+  network only, or one relay, with the same meaning as Settings → Machines.
+  The reconnecting strip offers the same sheet on phone and desktop.
+- **Rename a machine on this client.** A label of your own for a paired
+  machine, shown everywhere that client names it, with the machine's own name
+  kept beneath; an older build ignores it.
+- **Subagents dock on desktop.** The Subagents panel is a surface of the side
+  panel, under History beside Plan, read next to the parent's chat instead of
+  over it. A phone keeps its sheet.
+
+## 1.32.1 — 2026-10-06 (build 62)
+
+The ACP release: any agent on the Agent Client Protocol, sessions that start
+and manage sessions, and the server in the app's own menus. 1.32.0 (build 61)
+was a local build only; this release replaces it, with app and server bumped
+together.
+
+- **ACP agents.**
+  - Add any ACP agent from the registry or by command, and run it as a chat
+    session: its modes, models and config options, slash commands, plan,
+    inline diffs and every permission option it offers (always included),
+    answered from any client.
+  - Claude Code and Codex also run as chat sessions over their own protocols
+    (stream-json, and Codex's app-server), translated to ACP.
+  - Antigravity runs from the registry's archive, and Gemini CLI leaves the
+    shipped list.
+  - ACP agents can log in from Settings and New Session, attach images, run
+    commands on the session's machine, and are resumed at a usage-limit
+    reset.
+- **Sessions that start sessions.**
+  - `subagent_run` and `open_new_session` start a child on any agent and model,
+    in either form.
+  - A child reports back to its parent (`report_to_parent`; `report: none`,
+    `final` or `each_turn`), and `delegations` shows where each one stands.
+  - Children's results are pushed to the parent and survive a restart.
+  - A session can switch agent in place, its transcript stitched by span.
+  - The Subagents panel and lineage tree follow every delegate. A parent's
+    sub-sessions fold beneath it, with the working ones in sight and an "N
+    running" badge on the parent.
+  - Stop on a parent offers to stop its children.
+- **Archive.**
+  - Archiving hides an ended session everywhere, the server owns the flag, and
+    any client can unarchive it.
+  - Archiving, closing or deleting a session closes its tabs in every window,
+    chat tab included.
+  - Agents archive their own finished sub-sessions with `session_archive`.
+  - Archive may also delete the worktree; Delete worktree is its own verb.
+- **Sessions without a project** run in a scratch folder of their own and
+  attach the checkouts they need. The folder's guidance is its `AGENTS.md`
+  (and a `CLAUDE.md` that imports it), so the first message is only what was
+  typed.
+- **Queued messages.** A message sent while a turn runs is queued at the
+  server, delivered one per turn, and can be seen, edited or cancelled from the
+  session (phone included).
+- **Turns that stop.**
+  - A turn cut off by a restart is continued at the next boot.
+  - One the host's stop cut off, or an API error ended, is filed in the inbox
+    as "Stopped on an error", with Resume.
+  - Usage-limit resumes run by default and count down in the session bar.
+- **In the chat.**
+  - Plans as checklists, inline diff cards with a per-turn files-changed line,
+    and approvals and plan approval answered under their call.
+  - Background runs are listed above the composer, a background command's row
+    shows its output and exit code rather than the CLI's launch text, and
+    thinking is shown apart from the answer.
+- **The server in the app.**
+  - Settings → Server shows this machine's server, with Stop, Restart and
+    Start, its log and its storage (the tool-image cache's limits, old-session
+    clean-up).
+  - The same commands are in quick open and the tray.
+  - Serve writes `<data>/logs/server.log` from its first line, the Logs tab
+    shows it beside the app's, and Diagnostics names it.
+- **Remote access.**
+  - New pairings meet on `wss://kmrelay.popupbits.com`.
+  - An existing pairing moves there over its own sealed link, without a re-pair:
+    the host listens on both relays until the phone confirms.
+  - `relay.popupbits.com` is retired: a config naming it is rewritten once, and
+    it is drained, never offered.
+  - Each pairing's relay is shown in Settings, with "Move to the default
+    relay".
+  - A moved phone registers for push on its new relay, and a 503 there means
+    "push unavailable", not a retry loop.
+- **Workbench and search.**
+  - A session's tab and bar wear its agent's mark, and the bar says where the
+    session runs.
+  - Logs is a workbench tab.
+  - Every search ignores case and separators, and every search bar has Clear.
+  - Quick open starts a session without the dialog, and New Session remembers
+    its choices.
+  - Deleting many sessions is one transaction, and the Stores page tells each
+    app as it is read.
+- **Fixes worth knowing.**
+  - Dead tabs titled only with an id no longer survive a restart.
+  - A test can no longer delete the real hook endpoint files, and the running
+    app heals one that went.
+  - `worktree_create` records the worktree it made.
+  - A build ships only its own commit's Linux server bundles: earlier
+    versions' bundles had ridden along, 20 MB of them.
+- **Build.**
+  - Every build recipe writes the app's version into the server's
+    (`tool/sync_host_version.dart`).
+  - `tool/debug_run.bat` is a probe unless given `-Live`.
+  - The old companion APK is gone, and a release APK is never signed with the
+    debug key.
+
 ## 1.31.1 — 2026-10-02 (build 60)
 
 The first release made for self-hosting, and the first under a licence.
