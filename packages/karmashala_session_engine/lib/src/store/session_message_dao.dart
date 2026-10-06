@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:karmashala_store/database.dart';
 
-/// Who a stored message is from. A [notice] is neither side's turn: a note
-/// the session itself made, such as a hook's failure or a turn's error.
-enum SessionMessageRole { user, agent, tool, notice }
+/// Who a stored message is from. A [notice] or an [error] is neither side's
+/// turn but a note the session made: a hook's message, a turn that failed.
+enum SessionMessageRole { user, agent, tool, notice, error }
 
 /// One row of `session_messages`: a turn of an ACP session's conversation as
 /// the server stored it. [ordinal] and [revision] are the

@@ -196,6 +196,13 @@ String _embedded(Object? resource) {
   return text is String ? '$uri\n```\n$text\n```' : '$uri';
 }
 
+/// The note a Codex item stands for in the chat, in a terminal session's
+/// words, or null for an item that is not one.
+String? codexItemNotice(JsonMap item) => switch (item['type']) {
+  'contextCompaction' => 'Codex compacted its context',
+  _ => null,
+};
+
 /// The ACP tool call fields for a Codex item, or null for an item that is
 /// not a tool (messages, reasoning, compaction). Codex's own fields ride in
 /// `_meta.codex`.

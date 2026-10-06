@@ -30,7 +30,7 @@ SessionStats acpSessionStats({
         toolCalls++;
         final name = _toolName(row.toolJson);
         if (name != null) byName[name] = (byName[name] ?? 0) + 1;
-      case SessionMessageRole.notice:
+      case SessionMessageRole.notice || SessionMessageRole.error:
         break;
     }
   }

@@ -523,6 +523,7 @@ class SessionToolSet extends ServerToolSet {
             ).listAfter(sessionId))
               if (row.role != SessionMessageRole.tool &&
                   row.role != SessionMessageRole.notice &&
+                  row.role != SessionMessageRole.error &&
                   row.text.trim().isNotEmpty)
                 row,
           ]
