@@ -123,12 +123,11 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   /// Shows or hides [projectId]. [all] is every project there is: picking
   /// the last one back is "all" again, so a project added later shows too.
-  void toggleProject(String projectId, {required List<String> all}) {
-    final shown = {...state.filter.projects ?? all};
-    if (!shown.remove(projectId)) shown.add(projectId);
-    final everything = all.every(shown.contains);
-    _setFilter(projects: everything ? null : shown, keepProjects: false);
-  }
+  void toggleProject(String projectId, {required List<String> all}) =>
+      _setFilter(
+        projects: toggledIn(state.filter.projects, projectId, all),
+        keepProjects: false,
+      );
 
   void showAllProjects() => _setFilter(projects: null, keepProjects: false);
 
@@ -197,3 +196,11 @@ final overviewPrefsProvider =
     NotifierProvider<OverviewPrefsController, OverviewPrefs>(
       OverviewPrefsController.new,
     );
+
+/// [shown] with [value] flipped, where null is "every one of [all]": picking
+/// the last one back returns null, so one added later shows too.
+Set<T>? toggledIn<T>(Set<T>? shown, T value, Iterable<T> all) {
+  final next = {...shown ?? all};
+  if (!next.remove(value)) next.add(value);
+  return all.every(next.contains) ? null : next;
+}
