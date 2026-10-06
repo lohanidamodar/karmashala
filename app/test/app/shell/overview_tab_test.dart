@@ -15,7 +15,7 @@ import 'package:karmashala/src/core/logging/server_log_tail.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
-import 'package:karmashala/src/features/overview/presentation/overview_timeline_view.dart';
+import 'package:karmashala/src/features/overview/timeline/presentation/overview_timeline_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
@@ -146,7 +146,7 @@ void main() {
     expect(overviewTabsIn(container), hasLength(1));
   });
 
-  testWidgets('Timeline is the second view, a placeholder until round 28', (
+  testWidgets('Timeline is the second view, drawn from the activity log', (
     tester,
   ) async {
     await launch(tester);
@@ -157,6 +157,27 @@ void main() {
     await settle(tester);
 
     expect(find.byType(OverviewTimelineView), findsOneWidget);
+    expect(find.text('The Timeline is not built yet.'), findsNothing);
+  });
+
+  testWidgets('a Timeline bar for a deleted session says so, and opens '
+      'nothing', (tester) async {
+    final container = await launch(tester);
+    openOverviewTab(refOf(tester));
+    await settle(tester);
+    await tester.tap(find.text('Timeline'));
+    await settle(tester);
+    final tabsBefore = overviewTabsIn(container).length;
+
+    final element = tester.element(find.byType(OverviewTimelineView));
+    await openTimelineSession(element, element as WidgetRef, 'deleted-id');
+    await tester.pump();
+
+    expect(
+      find.text('That session was deleted. Its history stays on the Timeline.'),
+      findsOneWidget,
+    );
+    expect(overviewTabsIn(container), hasLength(tabsBefore));
   });
 
   test('its chord is Ctrl+Shift+O, and clashes with no other', () {

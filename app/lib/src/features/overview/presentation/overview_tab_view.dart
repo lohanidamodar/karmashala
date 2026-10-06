@@ -5,6 +5,9 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
+import '../../explorer/application/explorer_actions.dart';
+import '../../sessions/application/session_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
@@ -12,7 +15,7 @@ import 'overview_board_view.dart';
 import 'overview_filters.dart';
 import 'overview_peek.dart';
 import 'overview_strip.dart';
-import 'overview_timeline_view.dart';
+import '../timeline/presentation/overview_timeline_view.dart';
 
 /// **The Overview tab**: what is going on across all the work, as a Board
 /// (state by project or machine) or a Timeline. Built only while its tab is
@@ -32,7 +35,7 @@ class OverviewTabView extends ConsumerWidget {
     );
     final body = switch (view) {
       OverviewView.board => const _BoardBody(),
-      OverviewView.timeline => const OverviewTimelineView(),
+      OverviewView.timeline => const _TimelineBody(),
     };
     return Scaffold(
       appBar: untitled
@@ -110,6 +113,51 @@ const double _peekWidth = 340;
 /// The filters, the strip, then the Board (or its list) with the peek beside
 /// it — or, narrow, in a sheet. Arrows move between cards, Enter peeks, Esc
 /// closes the peek.
+/// The Timeline, opening a bar's session as the Board does. Its log outlives
+/// the sessions it draws, so a bar can name one that has since been deleted:
+/// that is said, not treated as a failure.
+class _TimelineBody extends ConsumerWidget {
+  const _TimelineBody();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => OverviewTimelineView(
+    onOpenSession: (id) => openTimelineSession(context, ref, id),
+  );
+}
+
+/// Opens session [id] from the Timeline: its tab when the row is still here,
+/// otherwise a line saying it was deleted and its history stays.
+Future<void> openTimelineSession(
+  BuildContext context,
+  WidgetRef ref,
+  String id,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
+  final actions = ref.read(explorerActionsProvider);
+  final imported = ref.read(importedSessionsProvider).getById(id);
+  final ExplorerResult result;
+  if (ref.read(sessionsDataProvider).getById(id) != null) {
+    result = await actions.openNative(id);
+  } else if (imported != null) {
+    result = await actions.openImported(imported);
+  } else {
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'That session was deleted. Its history stays on the Timeline.',
+        ),
+      ),
+    );
+    return;
+  }
+  if (!result.isFailure) showWorkbench?.call();
+  final message = result.message;
+  if (message != null) {
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
 class _BoardBody extends ConsumerStatefulWidget {
   const _BoardBody();
 
