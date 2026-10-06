@@ -517,6 +517,49 @@ void main() {
       expect(delegated.single.endOnAnswer, isFalse);
     });
 
+    test('open_new_session from a session reports back unless told '
+        'detached', () async {
+      insertCaller('caller');
+      final result =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'prompt': 'Write the docs',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(result['reportsBack'], isTrue);
+      expect(result['mode'], 'async');
+      expect(delegated.single.childId, result['sessionId']);
+
+      final detached =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'prompt': 'Leave me be',
+                'mode': 'detached',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(detached['reportsBack'], isNull);
+      expect(detached['mode'], 'detached');
+      expect(delegated, hasLength(1));
+    });
+
+    test('open_new_session from no session, or where nothing can push, is '
+        'detached by default', () async {
+      final result =
+          (await tools.call('open_new_session', {'projectId': 'p1'}, null))!
+              as Map<String, Object?>;
+      expect(result['mode'], 'detached');
+      expect(delegated, isEmpty);
+    });
+
+    test('subagent_run still waits by default', () async {
+      insertCaller('caller');
+      final answer = await run({'prompt': 'Audit'});
+      expect(delegated, isEmpty);
+      expect(holds.first, ('new-1', true));
+      deadline.complete();
+      expect((await answer)['state'], 'running');
+    });
+
     test('async needs a calling session to report back to', () async {
       await expectLater(
         tools.call('open_new_session', {

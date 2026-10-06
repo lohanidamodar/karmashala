@@ -2758,7 +2758,7 @@
               "detached",
               "async"
             ],
-            "description": "\"detached\" (default): nothing comes back unless you ask with session_wait. \"async\": when the new session's first turn ends, its result is pushed to you as a message — end your turn rather than polling. The session is never ended for you."
+            "description": "\"async\" (the default when you are a session): when the new session's first turn ends, its result is pushed to you as a message — end your turn rather than polling. \"detached\": nothing comes back unless you ask with session_wait. The session is never ended for you."
           }
         },
         "required": []

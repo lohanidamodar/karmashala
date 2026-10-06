@@ -137,9 +137,14 @@ class LaunchToolSet extends ServerToolSet {
   }
 
   /// Whether [args] ask for async mode, refused in words when it cannot be.
+  /// `open_new_session` from a session is async unless told otherwise: a
+  /// client may hold a schema older than this default, never older behaviour.
   bool _async(Map<String, dynamic> args, String? callerSessionId, String tool) {
     final mode = (args['mode'] as String?)?.trim() ?? '';
     final fallback = tool == 'subagent_run' ? 'wait' : 'detached';
+    if (mode.isEmpty && tool == 'open_new_session') {
+      return callerSessionId != null && delegate != null;
+    }
     if (mode.isEmpty || mode == fallback) return false;
     if (mode != 'async') {
       throw ArgumentError(
@@ -165,7 +170,7 @@ class LaunchToolSet extends ServerToolSet {
     final reportsBack = _async(args, callerSessionId, 'open_new_session');
     final started = _context.now();
     final opened = await _open(args, callerSessionId);
-    if (!reportsBack) return opened.answer;
+    if (!reportsBack) return {...opened.answer, 'mode': 'detached'};
     delegate!(
       DelegatedChild(
         childId: opened.session.id,
@@ -178,6 +183,7 @@ class LaunchToolSet extends ServerToolSet {
     );
     return {
       ...opened.answer,
+      'mode': 'async',
       'reportsBack': true,
       'note': _asyncNote(opened.session.id),
     };
@@ -882,10 +888,11 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'string',
           'enum': ['detached', 'async'],
           'description':
-              '"detached" (default): nothing comes back unless you ask with '
-              'session_wait. "async": when the new session\'s first turn '
-              'ends, its result is pushed to you as a message — end your '
-              'turn rather than polling. The session is never ended for you.',
+              '"async" (the default when you are a session): when the new '
+              'session\'s first turn ends, its result is pushed to you as a '
+              'message — end your turn rather than polling. "detached": '
+              'nothing comes back unless you ask with session_wait. The '
+              'session is never ended for you.',
         },
       },
       'required': <String>[],
