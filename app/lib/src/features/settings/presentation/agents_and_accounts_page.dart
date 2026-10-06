@@ -36,7 +36,7 @@ import 'agent_label.dart';
 import 'agent_path_section.dart' show AgentExecutableRows;
 import 'agents_group_section.dart';
 import 'agents_header_strip.dart';
-import 'agents_pages.dart' show AgentUpdatesSection;
+import 'agents_pages.dart' show AgentUpdatesSection, ChildReportSection;
 import 'permissions_page.dart' show PermissionAxisDropdown;
 import 'settings_catalog.dart';
 import 'settings_notice.dart';
@@ -186,6 +186,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
               anchor: SettingsAnchor.agentUpdates,
               child: AgentUpdatesSection(),
             ),
+            ChildReportSection(),
             SettingsAnchorTarget(
               anchor: SettingsAnchor.detection,
               child: AgentDetectionSection(),

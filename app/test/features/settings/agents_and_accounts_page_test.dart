@@ -392,6 +392,28 @@ void main() {
     );
   });
 
+  testWidgets('what a session hears of a session it starts is chosen here, '
+      'a final report until changed', (tester) async {
+    await pump(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(AgentsAndAccountsBody)),
+    );
+    final choice = find.byKey(const ValueKey('child-report-mode'));
+    await tester.ensureVisible(choice);
+    expect(
+      tester.widget<SegmentedButton<String>>(choice).selected,
+      {'final'},
+    );
+    await tester.tap(
+      find.descendant(of: choice, matching: find.text('Every turn')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      container.read(settingsControllerProvider).childReportMode,
+      'each_turn',
+    );
+  });
+
   const phone = WindowCell('390x844 (phone)', Size(390, 844));
   const cells = [phone, minimumWindow, desktopWindow, minimumWindowLargeText];
 
