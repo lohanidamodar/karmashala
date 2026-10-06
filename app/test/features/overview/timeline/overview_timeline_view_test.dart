@@ -8,12 +8,14 @@ import 'package:karmashala/src/features/overview/timeline/application/timeline_c
 import 'package:karmashala/src/features/overview/timeline/data/timeline_data.dart';
 import 'package:karmashala/src/features/overview/timeline/presentation/overview_timeline_view.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_ui/tokens.dart' show TypeSizes;
 
 class _FakeTimelineData implements TimelineData {
   final List<ActivityEntry> entries = [];
   final List<({DateTime from, DateTime to, List<String>? projects})> asked = [];
-  final StreamController<List<ActivityEntry>> live =
-      StreamController.broadcast(sync: true);
+  final StreamController<List<ActivityEntry>> live = StreamController.broadcast(
+    sync: true,
+  );
 
   @override
   Stream<List<ActivityEntry>> get appended => live.stream;
@@ -90,7 +92,11 @@ void main() {
     ]);
   }
 
-  Future<void> pump(WidgetTester tester, Size size) async {
+  Future<void> pump(
+    WidgetTester tester,
+    Size size, {
+    double textScale = 1,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -107,6 +113,12 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: Scaffold(
             body: OverviewTimelineView(
               onOpenSession: opened.add,
@@ -135,29 +147,58 @@ void main() {
     final lane = find.byKey(const ValueKey('timeline-lane-s1'));
     final box = tester.getRect(lane);
     // 10:30, inside the turn, on the bar past the label column.
-    await tester.tapAt(Offset(box.left + 240 + (10.5 / 24) * (box.width - 240),
-        box.center.dy));
+    await tester.tapAt(
+      Offset(box.left + 240 + (10.5 / 24) * (box.width - 240), box.center.dy),
+    );
     expect(opened, ['s1']);
 
     // A deleted session draws but opens nothing.
-    final gone = tester.getRect(find.byKey(const ValueKey('timeline-lane-gone')));
-    await tester.tapAt(Offset(gone.left + 240 + (14.5 / 24) * (gone.width - 240),
-        gone.center.dy));
+    final gone = tester.getRect(
+      find.byKey(const ValueKey('timeline-lane-gone')),
+    );
+    await tester.tapAt(
+      Offset(
+        gone.left + 240 + (14.5 / 24) * (gone.width - 240),
+        gone.center.dy,
+      ),
+    );
     expect(opened, ['s1']);
   });
 
-  testWidgets('hovering a wait says how long and what was asked',
-      (tester) async {
+  for (final scale in const [1.0, 1.3, 1.6]) {
+    testWidgets('the time axis is tall enough for its labels at text scale '
+        '$scale', (tester) async {
+      seedDay();
+      await pump(tester, const Size(1440, 900), textScale: scale);
+      final axis = tester.getSize(find.byKey(const ValueKey('timeline-axis')));
+      final label = (TextPainter(
+        text: const TextSpan(
+          text: 'Mon 30',
+          style: TextStyle(
+            fontSize: TypeSizes.caption,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: TextScaler.linear(scale),
+      )..layout()).height;
+      // The label from the top, then room for the tick and the "now" dot.
+      expect(axis.height, greaterThanOrEqualTo(2 + label + 4 + 6));
+    });
+  }
+
+  testWidgets('hovering a wait says how long and what was asked', (
+    tester,
+  ) async {
     seedDay();
     await pump(tester, const Size(1440, 900));
     final box = tester.getRect(find.byKey(const ValueKey('timeline-lane-s1')));
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(Offset(
-      box.left + 240 + (10.1 / 24) * (box.width - 240),
-      box.center.dy,
-    ));
+    await mouse.moveTo(
+      Offset(box.left + 240 + (10.1 / 24) * (box.width - 240), box.center.dy),
+    );
     await tester.pump();
     expect(
       find.text(
@@ -173,17 +214,22 @@ void main() {
     final semantics = tester.ensureSemantics();
     await pump(tester, const Size(1440, 900));
     expect(
-      find.bySemanticsLabel(RegExp(r'^Session s1, Alpha, .*waiting on you 12m')),
+      find.bySemanticsLabel(
+        RegExp(r'^Session s1, Alpha, .*waiting on you 12m'),
+      ),
       findsOneWidget,
     );
     semantics.dispose();
   });
 
-  testWidgets('a child is grouped under its parent and folds away',
-      (tester) async {
+  testWidgets('a child is grouped under its parent and folds away', (
+    tester,
+  ) async {
     seedDay();
     await pump(tester, const Size(1440, 900));
-    final parent = tester.getRect(find.byKey(const ValueKey('timeline-lane-s1')));
+    final parent = tester.getRect(
+      find.byKey(const ValueKey('timeline-lane-s1')),
+    );
     final child = tester.getRect(
       find.byKey(const ValueKey('timeline-lane-child')),
     );
@@ -254,15 +300,27 @@ void main() {
     for (var s = 0; s < 150; s++) {
       final project = s.isEven ? 'p1' : 'p2';
       data.entries.add(
-        e(ActivityKind.sessionStarted, (s % 20) * 0.5,
-            session: 'x$s', project: project),
+        e(
+          ActivityKind.sessionStarted,
+          (s % 20) * 0.5,
+          session: 'x$s',
+          project: project,
+        ),
       );
       for (var t = 0; t < 20; t++) {
         final at = (s % 20) * 0.5 + t * 0.15;
         data.entries
-          ..add(e(ActivityKind.turnStarted, at, session: 'x$s', project: project))
-          ..add(e(ActivityKind.turnEnded, at + 0.1,
-              session: 'x$s', project: project));
+          ..add(
+            e(ActivityKind.turnStarted, at, session: 'x$s', project: project),
+          )
+          ..add(
+            e(
+              ActivityKind.turnEnded,
+              at + 0.1,
+              session: 'x$s',
+              project: project,
+            ),
+          );
       }
     }
     final watch = Stopwatch()..start();
@@ -270,7 +328,8 @@ void main() {
     watch.stop();
     expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
     final built = find.byWidgetPredicate(
-      (w) => w.key is ValueKey<String> &&
+      (w) =>
+          w.key is ValueKey<String> &&
           (w.key! as ValueKey<String>).value.startsWith('timeline-lane-'),
     );
     expect(built.evaluate().length, inInclusiveRange(10, 60));

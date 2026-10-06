@@ -28,6 +28,9 @@ class TimelineChart extends StatefulWidget {
   final TimelineZoomController? controller;
 
   static const double labelWidth = 240;
+
+  /// The axis band's least height; the band grows with the text scale
+  /// (`TimelineAxisPainter.heightFor`).
   static const double axisHeight = 24;
   static const double headerHeight = 30;
   static const double laneHeight = 28;
@@ -102,7 +105,8 @@ class _TimelineChartState extends State<TimelineChart> {
   @override
   void didUpdateWidget(TimelineChart old) {
     super.didUpdateWidget(old);
-    if (old.model.from != widget.model.from || old.model.to != widget.model.to) {
+    if (old.model.from != widget.model.from ||
+        old.model.to != widget.model.to) {
       _viewport = _whole;
     }
     if (old.controller != widget.controller) {
@@ -230,6 +234,10 @@ class _TimelineChartState extends State<TimelineChart> {
   Widget build(BuildContext context) {
     final palette = TimelinePalette.of(context);
     final scaler = MediaQuery.textScalerOf(context);
+    final axisHeight = TimelineAxisPainter.heightFor(
+      scaler,
+      minimum: TimelineChart.axisHeight,
+    );
     final items = _items();
     final arrows = _arrows(items);
     return LayoutBuilder(
@@ -245,7 +253,8 @@ class _TimelineChartState extends State<TimelineChart> {
             Column(
               children: [
                 SizedBox(
-                  height: TimelineChart.axisHeight,
+                  key: const ValueKey('timeline-axis'),
+                  height: axisHeight,
                   child: Row(
                     children: [
                       const SizedBox(width: TimelineChart.labelWidth),
@@ -288,10 +297,8 @@ class _TimelineChartState extends State<TimelineChart> {
                         onOpen: () => widget.onOpen(session),
                         onSignal: (event, x) => _signal(event, barWidth, x),
                         onPan: (dx) => _pan(dx, barWidth),
-                        onPinch: (scale, x) => _zoom(
-                          1 / scale,
-                          (x / barWidth).clamp(0, 1),
-                        ),
+                        onPinch: (scale, x) =>
+                            _zoom(1 / scale, (x / barWidth).clamp(0, 1)),
                         onHover: (text, global) {
                           final box =
                               _stack.currentContext?.findRenderObject()
@@ -315,7 +322,7 @@ class _TimelineChartState extends State<TimelineChart> {
                   palette: palette,
                   scroll: _scroll,
                   left: TimelineChart.labelWidth,
-                  top: TimelineChart.axisHeight,
+                  top: axisHeight,
                 ),
               ),
             ),

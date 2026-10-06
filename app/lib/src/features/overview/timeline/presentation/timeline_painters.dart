@@ -339,6 +339,27 @@ class TimelineAxisPainter extends CustomPainter {
     Duration(days: 7),
   ];
 
+  /// How tall the axis band must be for its labels at [textScaler]: the label
+  /// from 2 px down, then room for the tick and the "now" dot under it. Never
+  /// less than [minimum], so a small scale keeps the band it always had.
+  /// Measured, not assumed: the app's own font is taller than a test's.
+  static double heightFor(TextScaler textScaler, {double minimum = 24}) {
+    final label = TextPainter(
+      text: const TextSpan(
+        text: 'Mon 30',
+        style: TextStyle(
+          fontSize: TypeSizes.caption,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+    )..layout();
+    final height = (2 + label.height + 4 + 6).ceilToDouble();
+    label.dispose();
+    return math.max(minimum, height);
+  }
+
   /// The step between labels for [viewport] across [width]: about one per
   /// 80 pixels.
   static Duration stepFor(TimelineViewport viewport, double width) {
@@ -363,7 +384,11 @@ class TimelineAxisPainter extends CustomPainter {
     while (at.isBefore(viewport.end.toLocal()) && guard++ < 500) {
       final x = viewport.xOf(at.toUtc(), w);
       if (x >= 0) {
-        canvas.drawLine(Offset(x, size.height - 6), Offset(x, size.height), line);
+        canvas.drawLine(
+          Offset(x, size.height - 6),
+          Offset(x, size.height),
+          line,
+        );
         final midnight = at.hour == 0 && at.minute == 0;
         final text = midnight
             ? '${_weekdays[at.weekday - 1]} ${at.day}'
