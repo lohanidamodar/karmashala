@@ -141,6 +141,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// nobody pulls, and the one that mounts takes what waited.
   final _filesQueued = ValueNotifier<int>(0);
 
+  /// Ticks to take the conversation to its newest message.
+  final _toLatest = ValueNotifier<int>(0);
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -248,7 +251,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _composer.dispose();
     unawaited(_dropped.close());
     _filesQueued.dispose();
+    _toLatest.dispose();
     super.dispose();
+  }
+
+  /// Takes the reader to the open ask: the conversation's newest message,
+  /// where its card hangs, then the card itself wholly in view.
+  void _showAsk() {
+    _toLatest.value++;
+    ref.read(chatAskRevealsProvider.notifier).request(widget.sessionId);
   }
 
   void _onFilesDropped(List<String> paths) {
@@ -745,6 +756,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Per session: this view outlives a switch within its group, and an
           // unkeyed list kept the last session's scroll offset.
           key: ValueKey(widget.sessionId),
+          toLatest: _toLatest,
           messages: messages,
           earlier: earlier,
           onLoadEarlier: earlier > 0
@@ -963,12 +975,25 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             child: !widget.holdForPrompt
                 ? composer(prompted: false)
                 : Consumer(
-                    builder: (context, ref, _) => composer(
-                      // Watched here and only here: the footer is built once.
-                      prompted: ref.watch(
+                    builder: (context, ref, _) {
+                      // Watched here: the footer is built once.
+                      final prompted = ref.watch(
                         _promptOpenProvider(widget.sessionId),
-                      ),
-                    ),
+                      );
+                      final box = composer(prompted: prompted);
+                      if (!prompted) return box;
+                      // The held box is the way to what holds it.
+                      return Semantics(
+                        button: true,
+                        label: 'Show the prompt to answer',
+                        child: GestureDetector(
+                          key: const ValueKey('answer-prompt-above'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _showAsk,
+                          child: box,
+                        ),
+                      );
+                    },
                   ),
           ),
         ],

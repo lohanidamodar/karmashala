@@ -36,6 +36,28 @@ class ChatInlineAsks extends Notifier<Set<String>> {
   }
 }
 
+/// Sessions whose open ask was asked to be shown ("Answer the prompt above
+/// first" tapped): the card under the call scrolls itself into view, then
+/// takes the request.
+final chatAskRevealsProvider = NotifierProvider<ChatAskReveals, Set<String>>(
+  ChatAskReveals.new,
+);
+
+class ChatAskReveals extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void request(String sessionId) {
+    if (!state.contains(sessionId)) state = {...state, sessionId};
+  }
+
+  void taken(String sessionId) {
+    if (ref.mounted && state.contains(sessionId)) {
+      state = {...state}..remove(sessionId);
+    }
+  }
+}
+
 /// Whether [report] is asking about the call [toolUseId]: an approval whose
 /// hook or protocol request named that call.
 bool asksAboutCall(AgentStatusReport? report, String toolUseId) =>
@@ -91,6 +113,19 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
     );
   }
 
+  /// Scrolls this card wholly into view once laid out, and takes the request.
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    ref.read(chatAskRevealsProvider.notifier).taken(widget.sessionId);
+    // The far edge first, then the near one: the answers, then its top.
+    for (final policy in const [
+      ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    ]) {
+      Scrollable.ensureVisible(context, alignmentPolicy: policy);
+    }
+  });
+
   /// A plan prompt read off the screen: an approval no hook named a call
   /// for, while this pending call is the agent's plan tool.
   bool _screenPlanPrompt(AgentStatusReport? report, AgentRegistry registry) =>
@@ -128,6 +163,11 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
                 widget.toolUseId;
     if (asking != _shown) _tell(asking);
     if (!asking) return const SizedBox.shrink();
+    if (ref.watch(
+      chatAskRevealsProvider.select((s) => s.contains(widget.sessionId)),
+    )) {
+      _reveal();
+    }
     // A plan prompt, when the agent's descriptor says this ask is one.
     final report = ref
         .read(agentSessionStatusProvider(widget.sessionId))

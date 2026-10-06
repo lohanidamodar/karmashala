@@ -61,6 +61,7 @@ void main() {
     WidgetTester tester, {
     required Size size,
     required bool phone,
+    List<TranscriptMessage> before = const [],
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -69,6 +70,7 @@ void main() {
     final h = await ChatCardHarness.open(
       kind,
       messages: [
+        ...before,
         TranscriptMessage(role: 'user', text: 'Plan webhooks.', at: testTime),
         TranscriptMessage(
           role: 'tool',
@@ -216,5 +218,59 @@ void main() {
     expect(find.text('Answer the prompt above first'), findsNothing);
     expect(find.text('Message the agent…'), findsOneWidget);
     expect(find.text('queued message 1'), findsOneWidget);
+  });
+
+  testWidgets('"Answer the prompt above first" takes the reader to the '
+      'question, scrolled away from it', (tester) async {
+    const size = Size(390, 844);
+    await open(
+      tester,
+      size: size,
+      phone: true,
+      before: [
+        for (var i = 0; i < 30; i++)
+          TranscriptMessage(
+            role: i.isEven ? 'user' : 'assistant',
+            text:
+                'Earlier message $i, long enough to take a line or two of '
+                'the phone\'s width as it wraps.',
+            at: testTime,
+          ),
+      ],
+    );
+    // Read back up the conversation: the card is out of sight.
+    await tester.fling(
+      find.byType(ListView).first,
+      const Offset(0, 3000),
+      3000,
+    );
+    await tester.pumpAndSettle();
+    final send = find.descendant(
+      of: inline,
+      matching: find.text('Send answer'),
+    );
+    bool onScreen() =>
+        send.evaluate().isNotEmpty &&
+        (Offset.zero & size).contains(tester.getCenter(send));
+    expect(onScreen(), isFalse);
+
+    // Where the hint is drawn: the disabled field under it takes no taps, so
+    // what answers is the held box's own target, there.
+    await tester.tap(
+      find.text('Answer the prompt above first'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(onScreen(), isTrue);
+    for (final action in ['Decline', 'Chat about this', 'Send answer']) {
+      final button = find.descendant(of: inline, matching: find.text(action));
+      final rect = tester.getRect(button);
+      expect(
+        rect.top >= 0 && rect.bottom <= size.height,
+        isTrue,
+        reason: '$action $rect',
+      );
+    }
   });
 }

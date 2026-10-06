@@ -179,10 +179,15 @@ class ChatTranscriptView extends StatefulWidget {
     this.firstOrdinal = 0,
     this.agentId,
     this.emptyBuilder,
+    this.toLatest,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// Each notification takes the list to its newest message, as *Jump to
+  /// latest* does — where an open ask hangs.
+  final Listenable? toLatest;
 
   /// What to show in place of the standard empty state, which it is handed.
   final Widget Function(Widget standard)? emptyBuilder;
@@ -259,10 +264,21 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     super.initState();
     _scroll.addListener(_onScroll);
     FocusManager.instance.addListener(_revealFocused);
+    widget.toLatest?.addListener(_toLatest);
+  }
+
+  @override
+  void didUpdateWidget(ChatTranscriptView old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.toLatest, widget.toLatest)) {
+      old.toLatest?.removeListener(_toLatest);
+      widget.toLatest?.addListener(_toLatest);
+    }
   }
 
   @override
   void dispose() {
+    widget.toLatest?.removeListener(_toLatest);
     FocusManager.instance.removeListener(_revealFocused);
     _scroll.dispose();
     _tappedTurn.dispose();
