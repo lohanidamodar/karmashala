@@ -182,6 +182,14 @@ annotated destructive: nothing un-happens it.
 **`session_end` ends the process.** The transcript survives. The turn in flight
 does not, and nothing brings it back.
 
+**Tidy up the sessions you started: `session_archive`.** Once a child's work is
+merged or handed back and the child has ended, archive it, so the person's
+session lists stay short. It takes only your own children and their
+descendants, and only once they have ended — anything else is refused with the
+reason. Archiving hides and nothing more: the transcript, files and worktree
+stay, its ended descendants go with it (live ones are left and named in
+`leftLive`), and `session_unarchive` brings it back.
+
 **`session_fork_from_checkpoint` delivers two halves, and only one is a
 rewind.** The files go back to the checkpoint you named; the conversation is
 carried **whole**. No agent CLI here can resume a conversation at a turn, so

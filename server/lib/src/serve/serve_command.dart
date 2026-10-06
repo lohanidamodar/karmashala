@@ -65,6 +65,7 @@ import '../agents/server_agent_work.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
+import '../mcp/tools/session_archive_tool_set.dart';
 import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
@@ -1522,6 +1523,7 @@ Future<int> _serve(
         },
       ),
     )
+    ..add(SessionArchiveToolSet(tools))
     // An agent's `open_new_session` and `subagent_run`, through the one
     // launch path.
     ..add(

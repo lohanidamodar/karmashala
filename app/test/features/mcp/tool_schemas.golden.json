@@ -2693,6 +2693,103 @@
       }
     },
     {
+      "name": "session_archive",
+      "description": "Archive a session you started — your child or one of its descendants — once it has ended: it leaves every session list, and its inbox items retire. Its ended descendants are archived with it; live ones are left and named. The transcript, files and worktree all stay, and session_unarchive restores it. Refused for a session that is not yours or is still running. Archive a child once its work is merged or handed back.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "The sub-session to archive. Never defaults to you."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "archived": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "leftLive": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "archived",
+          "leftLive"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "session_unarchive",
+      "description": "Restore a session you archived with session_archive — your child or one of its descendants — and its archived descendants, to the session lists. Refused for a session that is not yours.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "The sub-session to restore. Never defaults to you."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "unarchived": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "sessionId",
+          "unarchived"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "open_new_session",
       "description": "Start a NEW agent session (not a resume), as a terminal tab in Karmashala. In a project when projectId is given; without one, or with scratch, in a scratch folder of its own with no project — the new agent attaches whatever repositories it needs. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the session's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
       "inputSchema": {
@@ -5650,6 +5747,14 @@
     "session_end": {
       "category": "sessions",
       "summary": "Stop the agent process behind a session; the turn in flight is lost."
+    },
+    "session_archive": {
+      "category": "sessions",
+      "summary": "Hide an ended session you started from the lists; nothing is deleted."
+    },
+    "session_unarchive": {
+      "category": "sessions",
+      "summary": "Bring back a session you archived."
     },
     "open_new_session": {
       "category": "sessions",
