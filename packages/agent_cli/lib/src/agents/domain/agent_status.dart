@@ -725,8 +725,14 @@ class AgentTerminalRules {
     this.typedTextArrivesWhole = false,
     this.typedOpeningLeadIn,
     this.takesInputMidTurn = false,
+    this.pastePlaceholder,
     this.evidence,
   });
+
+  /// How the composer begins the placeholder it shows **instead of** a long
+  /// paste (`[Pasted text #`), matched as a plain substring: seeing it is
+  /// seeing the paste land. Null when none is known.
+  final String? pastePlaceholder;
 
   /// Whether a message typed and sent while the agent's turn runs is taken
   /// by the agent itself — queued by its composer or read at its next step —

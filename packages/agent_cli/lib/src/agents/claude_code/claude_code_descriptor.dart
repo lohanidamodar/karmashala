@@ -886,6 +886,7 @@ const claudeCodeDescriptor = AgentDescriptor(
     // instructions until you confirm" (probe, 2026-10-04).
     typedOpeningLeadIn: 'Please carry out this request: ',
     takesInputMidTurn: true,
+    pastePlaceholder: '[Pasted text #',
     evidence:
         'A message typed while Claude Code works is queued by it and taken at '
         'its next step (the owner, 2026-10-05). '

@@ -700,11 +700,13 @@ const codexDescriptor = AgentDescriptor(
   terminal: AgentTerminalRules(
     pasteBurstFoldsReturn: true,
     takesInputMidTurn: true,
+    pastePlaceholder: '[Pasted Content ',
     evidence:
         'Codex takes fast typing as a paste burst and folds the Return after '
         'it into a newline; a typed message ends the burst with Ctrl+E first. '
         'A message sent while a task runs is queued by Codex itself (the '
-        'owner, 2026-10-05).',
+        'owner, 2026-10-05). A large paste shows as "[Pasted Content <n> '
+        'chars]" (codex 0.160.0 binary, read 2026-10-06).',
   ),
   mcpConfig: AgentMcpConfigSpec.undeclared(
     refusal:

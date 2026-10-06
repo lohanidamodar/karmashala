@@ -5,7 +5,15 @@ import 'package:test/test.dart';
 /// sits above the rule — answered, or queued with a `❯` of its own — and the
 /// composer is the row between the rules.
 class FakeComposer {
-  FakeComposer({this.folds = 0});
+  FakeComposer({this.folds = 0, this.foldsPastes = false});
+
+  /// Whether a long message shows as `[Pasted text #1 +N lines]` rather than
+  /// its words, as Claude Code draws one.
+  final bool foldsPastes;
+
+  String _shown(String text) => foldsPastes && text.length > 800
+      ? '[Pasted text #1 +${'\n'.allMatches(text).length} lines]'
+      : text;
 
   /// How many Returns are read as the end of a paste and folded into a
   /// newline, leaving the message in the field. The real composer does this to
@@ -19,14 +27,14 @@ class FakeComposer {
   List<String> get rows => [
     '● I will start on that now.',
     for (final message in queued) ...[
-      for (final (i, line) in message.split('\n').indexed)
+      for (final (i, line) in _shown(message).split('\n').indexed)
         i == 0 ? '❯ $line' : '  $line',
     ],
     '─' * 40,
     ...(field.isEmpty
         ? const ['❯']
         : [
-            for (final (i, line) in field.split('\n').indexed)
+            for (final (i, line) in _shown(field).split('\n').indexed)
               i == 0 ? '❯ $line' : '  $line',
           ]),
     '─' * 40,
@@ -57,9 +65,11 @@ class FakeComposer {
 SessionMessageTypist typistFor(
   FakeComposer composer, {
   List<String>? markers = const ['❯', '›'],
+  String? placeholder,
 }) => SessionMessageTypist(
   readScreen: (_) => composer.rows,
   markersFor: (_) => markers,
+  pastePlaceholderFor: (_) => placeholder,
   type: composer.type,
   press: composer.press,
   poll: const Duration(milliseconds: 1),
@@ -140,6 +150,44 @@ void main() {
         expect(composer.written.where((w) => w == '\r'), hasLength(1));
       },
     );
+
+    group('a long message the composer folds into a placeholder', () {
+      final long = [for (var i = 0; i < 40; i++) 'line $i of the brief'].join(
+        '\n',
+      );
+
+      test('is read back by its placeholder', () async {
+        final composer = FakeComposer(foldsPastes: true);
+        final delivery = await typistFor(
+          composer,
+          placeholder: '[Pasted text #',
+        ).deliver('s1', long);
+
+        expect(delivery, MessageDelivery.readBack);
+        expect(composer.queued, [long]);
+        expect(composer.written.where((w) => w == '\r'), hasLength(1));
+      });
+
+      test('a Return folded into it is pressed again', () async {
+        final composer = FakeComposer(foldsPastes: true, folds: 1);
+        final delivery = await typistFor(
+          composer,
+          placeholder: '[Pasted text #',
+        ).deliver('s1', long);
+
+        expect(delivery, MessageDelivery.readBack);
+        expect(composer.field, isEmpty);
+        expect(composer.written.where((w) => w == '\r'), hasLength(2));
+      });
+
+      test('is unverified when the agent names no placeholder', () async {
+        final composer = FakeComposer(foldsPastes: true);
+        final delivery = await typistFor(composer).deliver('s1', long);
+
+        expect(delivery, MessageDelivery.unverified);
+        expect(composer.written.where((w) => w == '\r'), hasLength(1));
+      });
+    });
 
     test('without a live pane nothing is typed', () async {
       final typist = SessionMessageTypist(

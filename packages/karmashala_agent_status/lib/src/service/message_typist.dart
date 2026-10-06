@@ -14,6 +14,7 @@ class SessionMessageTypist {
     required this.markersFor,
     required this.type,
     required this.press,
+    this.pastePlaceholderFor = _noPlaceholder,
     this.poll = const Duration(milliseconds: 50),
     this.typedPatience = const Duration(milliseconds: 1500),
     this.sendPatience = const Duration(seconds: 2),
@@ -31,6 +32,12 @@ class SessionMessageTypist {
   /// The glyphs the session's agent starts its composer row with, or null when
   /// its screen was never measured — then the send cannot be verified.
   final List<String>? Function(String sessionId) markersFor;
+
+  /// How the session's agent begins the placeholder it shows for a long
+  /// paste (`AgentTerminalRules.pastePlaceholder`), or null when none is known.
+  final String? Function(String sessionId) pastePlaceholderFor;
+
+  static String? _noPlaceholder(String sessionId) => null;
 
   /// Types the message into the pane, without its Return; false without one.
   final bool Function(String sessionId, String text) type;
@@ -79,18 +86,20 @@ class SessionMessageTypist {
     final markers = markersFor(sessionId);
     final probe = messageProbe(trimmed);
     // A long message a composer folds into "[Pasted text #1]" never shows its
-    // words. Then there is nothing to read the send back from, and it is left
-    // at one Return, exactly as it was before this class.
-    final typed =
-        markers != null &&
-        await _until(sessionId, (rows) => composerHolds(rows, markers, probe));
+    // words; its placeholder stands for them. An agent that names none is
+    // left at one Return, unverified.
+    final placeholder = pastePlaceholderFor(sessionId);
+    bool holds(List<String> rows) =>
+        composerHolds(rows, markers!, probe) ||
+        (placeholder != null && composerHolds(rows, markers, placeholder));
+    final typed = markers != null && await _until(sessionId, holds);
     if (!press(sessionId, _enter)) return MessageDelivery.none;
     if (!typed) return MessageDelivery.unverified;
 
     for (var pressed = 1; ; pressed++) {
       if (await _until(
         sessionId,
-        (rows) => !composerHolds(rows, markers, probe),
+        (rows) => !holds(rows),
         within: sendPatience,
       )) {
         return MessageDelivery.readBack;

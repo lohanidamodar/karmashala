@@ -676,6 +676,8 @@ class SessionToolSet extends ServerToolSet {
       readScreen: (sessionId) =>
           status.liveScreenOf(sessionId)?.tailText(kMenuScreenRows),
       markersFor: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
+      pastePlaceholderFor: (sessionId) =>
+          prompts.agentOf(sessionId)?.terminal.pastePlaceholder,
       type: (sessionId, text) {
         if (!status.typeAsServer(sessionId, utf8.encode(text))) return false;
         // Ends the paste burst an agent like Codex takes fast typing for,

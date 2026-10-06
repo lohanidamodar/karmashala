@@ -60,6 +60,23 @@ void main() {
       );
     });
 
+    test('Claude Code and Codex name the placeholder a long paste shows as; '
+        'an unmeasured agent names none', () {
+      expect(
+        adapter(AgentIds.claudeCode).descriptor.terminal.pastePlaceholder,
+        '[Pasted text #',
+      );
+      expect(
+        adapter(AgentIds.codex).descriptor.terminal.pastePlaceholder,
+        '[Pasted Content ',
+      );
+      expect(
+        adapter(AgentIds.antigravity).descriptor.terminal.pastePlaceholder,
+        isNull,
+      );
+      expect(const AgentTerminalRules().pastePlaceholder, isNull);
+    });
+
     test('a long typed message reaches Claude Code whole; unmeasured '
         'elsewhere', () {
       expect(

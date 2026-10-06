@@ -28,6 +28,14 @@ final sessionMessageTypistProvider = Provider<SessionMessageTypist>((ref) {
         session.agentInstallationId,
       )?.menus?.markers;
     },
+    pastePlaceholderFor: (sessionId) {
+      final session = ref.read(sessionsDataProvider).getById(sessionId);
+      if (session == null) return null;
+      return sessionDescriptor(
+        ref,
+        session.agentInstallationId,
+      )?.terminal.pastePlaceholder;
+    },
     type: (sessionId, text) =>
         ref.read(sessionLauncherProvider).typeInto(sessionId, text),
     press: (sessionId, keys) =>
