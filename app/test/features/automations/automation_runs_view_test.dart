@@ -146,8 +146,19 @@ void main() {
         .map((t) => t.run.id)
         .toList();
     expect(names, ['r3', 'r1', 'r2']);
-    expect(find.text('Run now · just now · running'), findsOneWidget);
-    expect(find.text('Schedule · 7h ago · 3m 12s'), findsOneWidget);
+    for (final column in const [
+      'Automation',
+      'Result',
+      'Started by',
+      'When',
+      'Took',
+    ]) {
+      expect(find.text(column.toUpperCase()), findsOneWidget);
+    }
+    expect(find.text('Run now'), findsOneWidget);
+    expect(find.text('running'), findsOneWidget);
+    expect(find.text('7h ago'), findsOneWidget);
+    expect(find.text('3m 12s'), findsNWidgets(2));
     expect(find.text('Failed · 1'), findsOneWidget);
     expect(find.text('Running · 1'), findsOneWidget);
   });
@@ -175,7 +186,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await tester.tap(find.text('Schedule · 1d ago · 3m 12s'));
+    await tester.tap(find.text('1d ago'));
     await tester.pumpAndSettle();
     expect(find.text('reason of r2'), findsOneWidget);
     expect(find.textContaining('Fail · tests'), findsOneWidget);
@@ -185,7 +196,7 @@ void main() {
     expect(find.byKey(const ValueKey('run-again')), findsOneWidget);
     expect(find.byKey(const ValueKey('run-cancel')), findsNothing);
 
-    await tester.tap(find.text('Run now · just now · running'));
+    await tester.tap(find.text('running'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('run-cancel')));
     await tester.pumpAndSettle();
@@ -207,11 +218,22 @@ void main() {
       400,
       scrollable: find.byType(Scrollable).last,
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('runs-older')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('runs-older')));
     await tester.pumpAndSettle();
     // The page asked for the runs before the oldest shown; there are none.
     expect(container.read(olderRunsProvider).more, isFalse);
     expect(find.byKey(const ValueKey('runs-older')), findsNothing);
+  });
+
+  testWidgets('a phone reads each run on two lines instead of columns', (
+    tester,
+  ) async {
+    await pump(tester, size: const Size(390, 844));
+    expect(find.text('AUTOMATION'), findsNothing);
+    expect(find.text('Run now · just now · running'), findsOneWidget);
+    expect(find.text('Schedule · 7h ago · 3m 12s'), findsOneWidget);
   });
 
   testWidgets('it fits a phone, a desktop and large text', (tester) async {

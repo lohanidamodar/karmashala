@@ -98,26 +98,50 @@ class AutomationRunsView extends ConsumerWidget {
                   icon: AppIcons.lightning,
                   message: 'No runs match.',
                 )
-              : ListView.builder(
-                  key: const ValueKey('runs-list'),
-                  padding: const EdgeInsets.only(bottom: Insets.lg),
-                  itemCount: runs.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == runs.length) return const _OlderButton();
-                    final run = runs[index];
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: Chrome.readableWidth,
-                        ),
-                        child: RunTile(
-                          key: ValueKey(run.id),
-                          run: run,
-                          checks: checksOf(run),
-                        ),
-                      ),
-                    );
-                  },
+              : LayoutBuilder(
+                  builder: (context, constraints) => _RunsColumns(
+                    on: WidthClass.of(
+                      constraints.maxWidth < Chrome.readableWidth
+                          ? constraints.maxWidth
+                          : Chrome.readableWidth,
+                      textScaler: MediaQuery.textScalerOf(context),
+                    ).isExpanded,
+                    child: ListView.builder(
+                      key: const ValueKey('runs-list'),
+                      padding: const EdgeInsets.only(bottom: Insets.lg),
+                      itemCount: runs.length + 2,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return runsInColumns(context)
+                              ? Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: Chrome.readableWidth,
+                                    ),
+                                    child: const _RunsHeader(),
+                                  ),
+                                )
+                              : const SizedBox.shrink();
+                        }
+                        if (index == runs.length + 1) {
+                          return const _OlderButton();
+                        }
+                        final run = runs[index - 1];
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: Chrome.readableWidth,
+                            ),
+                            child: RunTile(
+                              key: ValueKey(run.id),
+                              run: run,
+                              checks: checksOf(run),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
         ),
       ],
@@ -181,6 +205,68 @@ class _OlderButton extends ConsumerWidget {
   }
 }
 
+/// Whether Runs is wide enough for its columns, as the list was measured.
+bool runsInColumns(BuildContext context) =>
+    context.dependOnInheritedWidgetOfExactType<_RunsColumns>()?.on ?? false;
+
+/// Whether the rows below draw columns: only at the expanded width class of
+/// the room the list was given, read at the text scale.
+class _RunsColumns extends InheritedWidget {
+  const _RunsColumns({required this.on, required super.child});
+
+  final bool on;
+
+  @override
+  bool updateShouldNotify(_RunsColumns oldWidget) => oldWidget.on != on;
+}
+
+const _resultWidth = Touch.target * 2.5;
+const _causeWidth = Touch.target * 2;
+const _whenWidth = Touch.target * 2;
+const _tookWidth = Touch.target * 1.5;
+
+class _Cell extends StatelessWidget {
+  const _Cell({required this.width, required this.child});
+
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    child: DefaultTextStyle.merge(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      child: child,
+    ),
+  );
+}
+
+/// The column names over the rows, where there are columns.
+class _RunsHeader extends StatelessWidget {
+  const _RunsHeader();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.fromLTRB(
+      Insets.lg + Touch.iconSmall + Insets.sm,
+      Insets.sm,
+      Insets.lg,
+      Insets.xs,
+    ),
+    child: Row(
+      children: [
+        Expanded(child: EyebrowLabel('Automation')),
+        SizedBox(width: Insets.sm),
+        _Cell(width: _resultWidth, child: EyebrowLabel('Result')),
+        _Cell(width: _causeWidth, child: EyebrowLabel('Started by')),
+        _Cell(width: _whenWidth, child: EyebrowLabel('When')),
+        _Cell(width: _tookWidth, child: EyebrowLabel('Took')),
+      ],
+    ),
+  );
+}
+
 /// What started [run], read off its automation when it was not recorded.
 AutomationRunCause runCause(AutomationRun run, Automation? automation) =>
     run.startedBy ??
@@ -227,9 +313,11 @@ class _RunTileState extends ConsumerState<RunTile> {
     final quiet = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    final meta =
-        '${runCause(run, automation).label} · '
-        '${describeAge(run.firedAt, now: now)} · ${tookWords(run)}';
+    final cause = runCause(run, automation).label;
+    final age = describeAge(run.firedAt, now: now);
+    final took = tookWords(run);
+    final meta = '$cause · $age · $took';
+    final wide = runsInColumns(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -259,17 +347,39 @@ class _RunTileState extends ConsumerState<RunTile> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        meta,
-                        style: quiet,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      if (!wide)
+                        Text(
+                          meta,
+                          style: quiet,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(width: Insets.sm),
-                RunOutcomeChip(outcome: outcome),
+                if (wide) ...[
+                  _Cell(
+                    width: _resultWidth,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: RunOutcomeChip(outcome: outcome),
+                    ),
+                  ),
+                  _Cell(
+                    width: _causeWidth,
+                    child: Text(cause, style: quiet),
+                  ),
+                  _Cell(
+                    width: _whenWidth,
+                    child: Text(age, style: quiet),
+                  ),
+                  _Cell(
+                    width: _tookWidth,
+                    child: Text(took, style: quiet),
+                  ),
+                ] else
+                  RunOutcomeChip(outcome: outcome),
               ],
             ),
           ),

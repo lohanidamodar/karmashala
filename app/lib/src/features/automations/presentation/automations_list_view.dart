@@ -277,7 +277,18 @@ class AutomationRow extends ConsumerWidget {
   final String checkout;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context, WidgetRef ref) => LayoutBuilder(
+    builder: (context, constraints) => _row(
+      context,
+      ref,
+      wide: !WidthClass.of(
+        constraints.maxWidth,
+        textScaler: MediaQuery.textScalerOf(context),
+      ).isCompact,
+    ),
+  );
+
+  Widget _row(BuildContext context, WidgetRef ref, {required bool wide}) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = ref.watch(clockProvider).nowUtc();
@@ -303,10 +314,6 @@ class AutomationRow extends ConsumerWidget {
         : '${runOutcome(last, checks).label} '
               '${describeAge(last.firedAt, now: now)}';
     final next = nextRunWords(automation, now: now);
-    final wide = !WidthClass.of(
-      MediaQuery.sizeOf(context).width,
-      textScaler: MediaQuery.textScalerOf(context),
-    ).isCompact;
     final status = Text(
       wide ? lastRun : '$lastRun · $next',
       style: theme.textTheme.bodySmall?.copyWith(

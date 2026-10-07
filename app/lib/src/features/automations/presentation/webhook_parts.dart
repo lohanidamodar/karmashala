@@ -392,7 +392,7 @@ class CopyRow extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 64,
+          width: Touch.target + Insets.lg,
           child: Text(label, style: theme.textTheme.labelSmall),
         ),
         Expanded(
