@@ -8,6 +8,8 @@ import 'package:karmashala_core/util.dart';
 
 import 'quick_open_item.dart';
 
+part 'typed_command_session_verbs.dart';
+
 /// The verbs. Matched only when typed in full and followed by a space, so a
 /// query that merely starts like one is ordinary search.
 enum CommandVerb {
@@ -17,7 +19,14 @@ enum CommandVerb {
   answer('answer'),
   stop('stop'),
   fork('fork'),
-  end('end');
+  end('end'),
+  allow('allow'),
+  deny('deny'),
+  message('message'),
+  archive('archive'),
+
+  /// `open <session>`: its peek on the Agent dashboard.
+  peek('open');
 
   const CommandVerb(this.spelling);
 
@@ -35,11 +44,25 @@ enum CommandVerb {
     'stop': CommandVerb.stop,
     'fork': CommandVerb.fork,
     'end': CommandVerb.end,
+    'allow': CommandVerb.allow,
+    'deny': CommandVerb.deny,
+    'message': CommandVerb.message,
+    'msg': CommandVerb.message,
+    'archive': CommandVerb.archive,
+    'peek': CommandVerb.peek,
   };
 }
 
 /// What the argument being typed is.
-enum CommandArgKind { keyword, project, agent, flag, session, environment }
+enum CommandArgKind {
+  keyword,
+  project,
+  agent,
+  flag,
+  session,
+  environment,
+  option,
+}
 
 /// The dot a session row carries.
 enum SessionDot { waiting, working, idle, stopped, unknown }
@@ -151,7 +174,12 @@ class CommandSession {
     this.stopRefusal = 'Not running, so there is nothing to interrupt.',
     this.endRefusal = 'Not running, so there is nothing to end.',
     this.forkRefusal,
+    this.archiveRefusal = 'Not a session of this app, so it has no archive.',
     this.live = false,
+    this.question,
+    this.questionUnread = false,
+    this.approval,
+    this.branch,
   });
 
   final String id;
@@ -167,9 +195,72 @@ class CommandSession {
   final String? stopRefusal;
   final String? endRefusal;
   final String? forkRefusal;
+  final String? archiveRefusal;
   final bool live;
 
+  /// The question it is asking, when one is open and could be read.
+  final CommandQuestion? question;
+
+  /// A question is open but has not been read yet.
+  final bool questionUnread;
+
+  /// The command approval it waits on, when this machine can answer it.
+  final CommandApproval? approval;
+
+  /// Its checkout's branch, only when something already read it.
+  final String? branch;
+
   bool get waiting => dot == SessionDot.waiting;
+
+  /// "Round 21 · feat/acp": the title and where it is, for a preview.
+  String get named => [
+    title,
+    branch ?? (projectName.isEmpty ? null : projectName),
+  ].nonNulls.join(' · ');
+}
+
+/// A question a session asks, as `answer` can pick from it.
+class CommandQuestion {
+  const CommandQuestion({
+    required this.toolUseId,
+    required this.options,
+    this.refusal,
+  });
+
+  final String toolUseId;
+
+  /// The option labels, in order; option 1 is the first.
+  final List<String> options;
+
+  /// Why one option cannot answer it: several questions, or several choices.
+  final String? refusal;
+}
+
+/// A command approval a session waits on.
+class CommandApproval {
+  const CommandApproval({
+    required this.subject,
+    required this.folder,
+    this.toolName = '',
+    this.allowRefusal,
+    this.denyRefusal,
+  });
+
+  /// The exact command, path or input it asks about.
+  final String subject;
+
+  /// Where it would run; empty when nothing said.
+  final String folder;
+  final String toolName;
+  final String? allowRefusal;
+  final String? denyRefusal;
+
+  /// Whether [other] asks the very same thing in the very same folder — the
+  /// only approvals ever answered together.
+  bool sameAs(CommandApproval other) =>
+      other.subject == subject &&
+      other.folder == folder &&
+      other.toolName == toolName;
 }
 
 class CommandEnvironment {
@@ -258,6 +349,7 @@ class StartCommand extends CommandAction {
     required this.installationId,
     this.worktree = false,
     this.firstMessage,
+    this.keepHere = false,
   });
 
   /// Null starts it with no project, in a scratch folder on the agent's machine.
@@ -265,6 +357,9 @@ class StartCommand extends CommandAction {
   final String installationId;
   final bool worktree;
   final String? firstMessage;
+
+  /// Started at the server with no tab, and peeked on the Agent dashboard.
+  final bool keepHere;
 }
 
 /// The New-session dialog, opened on what was typed instead of starting.
@@ -320,6 +415,78 @@ class EndCommand extends CommandAction {
   final String sessionId;
 }
 
+/// Picks option [option] (0-based) of the question [toolUseId] opened.
+class AnswerQuestionCommand extends CommandAction {
+  const AnswerQuestionCommand({
+    required this.sessionId,
+    required this.toolUseId,
+    required this.option,
+  });
+
+  final String sessionId;
+  final String toolUseId;
+  final int option;
+}
+
+/// Allows or denies the command approval [sessionId] waits on.
+class ApprovalCommand extends CommandAction {
+  const ApprovalCommand(this.sessionId, {required this.allow});
+
+  final String sessionId;
+  final bool allow;
+}
+
+/// Says [text] to every one of [sessionIds], through the dashboard's send.
+class MessageCommand extends CommandAction {
+  const MessageCommand(this.sessionIds, this.text);
+
+  final List<String> sessionIds;
+  final String text;
+}
+
+/// Interrupts each of [sessionIds], as [StopCommand] does one.
+class StopAllCommand extends CommandAction {
+  const StopAllCommand(this.sessionIds);
+
+  final List<String> sessionIds;
+}
+
+/// Brings [sessionId] back at the server, with [message] as its next turn.
+class BackgroundResumeCommand extends CommandAction {
+  const BackgroundResumeCommand(this.sessionId, {this.message});
+
+  final String sessionId;
+  final String? message;
+}
+
+class ArchiveCommand extends CommandAction {
+  const ArchiveCommand(this.sessionId);
+
+  final String sessionId;
+}
+
+/// Peeks [sessionId] on the Agent dashboard.
+class PeekCommand extends CommandAction {
+  const PeekCommand(this.sessionId);
+
+  final String sessionId;
+}
+
+/// What a command touching several sessions asks before it runs.
+class CommandConfirm {
+  const CommandConfirm({
+    required this.title,
+    required this.names,
+    required this.confirmLabel,
+  });
+
+  final String title;
+
+  /// Each session it acts on, by name.
+  final List<String> names;
+  final String confirmLabel;
+}
+
 /// A command with every required argument: what it would do, and why not.
 class CommandPlan {
   const CommandPlan({
@@ -328,7 +495,11 @@ class CommandPlan {
     this.action,
     this.refusal,
     this.note,
+    this.confirm,
   });
+
+  /// Asked, naming the sessions, before a group command runs.
+  final CommandConfirm? confirm;
 
   /// One line, before anything runs: `Start Codex in api · WSL archlinux`.
   final String preview;
@@ -547,7 +718,9 @@ TypedCommand? parseTypedCommand(
   var input = cursor == null
       ? text
       : text.substring(0, cursor.clamp(0, text.length));
-  final verb = typedCommandVerbOf(input);
+  final verb =
+      typedCommandVerbOf(input) ??
+      (_opensSession(input, catalog) ? CommandVerb.peek : null);
   if (verb == null) return null;
   // `new api: fix the login bug` — what follows the colon is said first.
   String? message;
@@ -574,7 +747,28 @@ TypedCommand? parseTypedCommand(
     committed: committed,
     partial: partial,
     message: message,
+    rest: trimmed.substring(words.first.length).trimLeft(),
   ).parse();
+}
+
+/// Whether [text] could be `open <session>`: quick open runs the parse for
+/// it, which answers null — plain search — unless a session is named.
+bool typedCommandMayOpenSession(String text) {
+  final trimmed = text.trimLeft().toLowerCase();
+  return trimmed.startsWith('open ') && trimmed.substring(5).trim().isNotEmpty;
+}
+
+/// `open <words>` names a session only when its words are found in one's
+/// title or token, as a search would find them — never by scattered letters,
+/// so "open settings" stays a search.
+bool _opensSession(String text, CommandCatalog catalog) {
+  if (!typedCommandMayOpenSession(text)) return false;
+  final words = text.trimLeft().substring(5).trim();
+  return catalog.sessions.any(
+    (s) =>
+        s.token.toLowerCase() == words.split(_space).first.toLowerCase() ||
+        matchesSearchAny(words.split(_space).first, [s.title, s.token]),
+  );
 }
 
 class _Parser {
@@ -585,10 +779,14 @@ class _Parser {
     required this.committed,
     required this.partial,
     this.message,
+    this.rest = '',
   });
 
   final CommandCatalog catalog;
   final CommandVerb verb;
+
+  /// Everything after the verb, as typed — what a message is cut from.
+  final String rest;
 
   /// `start`'s opening message, typed after a colon.
   final String? message;
@@ -603,12 +801,18 @@ class _Parser {
 
   String _completion(String token) => '$_base$token ';
 
-  TypedCommand parse() => switch (verb) {
-    CommandVerb.start => _start(),
+  TypedCommand? parse() => switch (verb) {
+    CommandVerb.start => _agentInProject() ?? _start(),
     CommandVerb.resume => _resume(),
     CommandVerb.openTerminal => _openTerminal(),
-    CommandVerb.answer => _answer(),
+    CommandVerb.answer =>
+      committed.isEmpty && partial.isEmpty ? _answer() : _answerSession(),
+    CommandVerb.stop when _all => _group(),
+    CommandVerb.message => _all ? _group() : _message(),
     CommandVerb.stop || CommandVerb.fork || CommandVerb.end => _sessionVerb(),
+    CommandVerb.allow || CommandVerb.deny => _approval(),
+    CommandVerb.archive => _archive(),
+    CommandVerb.peek => _peek(),
   };
 
   TypedCommand _fail(String error) => TypedCommand(verb: verb, error: error);
@@ -719,6 +923,7 @@ class _Parser {
     CommandSession s,
     String? refusal, {
     String? said,
+    String? completion,
   }) => CommandSuggestion(
     id: 'session/${s.id}',
     kind: CommandArgKind.session,
@@ -732,7 +937,7 @@ class _Parser {
         : 'said: $said',
     detail: _dotLabel(s.dot),
     dot: s.dot,
-    completion: _completion(s.token),
+    completion: completion ?? _completion(s.token),
     disabledReason: refusal,
   );
 
@@ -1097,10 +1302,11 @@ class _Parser {
   TypedCommand _resume() {
     CommandProject? project;
     CommandSession? session;
+    var used = 0;
     for (final word in committed) {
-      if (session != null) {
-        return _fail('resume takes one session — "$word" is one too many.');
-      }
+      // What follows the session is said to it as it comes back.
+      if (session != null) break;
+      used++;
       if (project == null) {
         project = _projectByToken(word);
         if (project != null) {
@@ -1136,26 +1342,10 @@ class _Parser {
       }
     }
     if (session != null) {
-      if (typed.isNotEmpty) {
-        return _fail('resume takes one session — "$typed" is one too many.');
-      }
-      final how = session.live ? 'Go to' : 'Resume';
-      return TypedCommand(
-        verb: verb,
-        plan: CommandPlan(
-          preview: [
-            '$how "${session.title}"',
-            if (session.agentName.isNotEmpty) session.agentName,
-            session.projectName,
-            ?session.ageLabel,
-          ].join(' · '),
-          canonical: 'resume ${session.token}',
-          action: ResumeCommand(
-            sessionId: session.id,
-            imported: session.imported,
-          ),
-        ),
-      );
+      final said = used < committed.length || typed.isNotEmpty
+          ? _after(used).trim()
+          : '';
+      return TypedCommand(verb: verb, plan: _resumePlan(session, said));
     }
     if (project != null) {
       // A project expands to its sessions, waiting first.

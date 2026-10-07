@@ -9,6 +9,7 @@ import 'package:karmashala_git/git.dart';
 
 import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/remote/application/remote_approval_bindings.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/sessions/presentation/session_destination_picker.dart'
     show SessionDestination;
@@ -19,6 +20,7 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../phone_routes.dart';
 import '../shell_shortcuts.dart';
+import '../workbench_tabs.dart' show openOverviewTab;
 import 'conversation_hits.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
@@ -28,6 +30,7 @@ import 'quick_open_step.dart';
 import 'repo_file_index.dart';
 import 'typed_command.dart';
 import 'typed_command_catalog.dart';
+import 'typed_command_confirm.dart';
 import 'typed_command_history.dart';
 import 'typed_command_runner.dart';
 
@@ -392,10 +395,13 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     _commandRows.clear();
     final text = _controller.text;
     if (text.trim().isEmpty) return _historySection();
-    if (typedCommandVerbOf(text) == null) return null;
+    if (typedCommandVerbOf(text) == null && !typedCommandMayOpenSession(text)) {
+      return null;
+    }
     final typed = parseTypedCommand(text, _catalogNow());
     if (typed == null) return null;
     _askGitFor(typed);
+    _readQuestionsFor(typed);
 
     final items = <QuickOpenItem>[];
     void add(String id, _CommandRow row, QuickOpenItem Function(String) make) {
@@ -514,7 +520,29 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     CommandArgKind.session => AppIcons.chatCircle,
     CommandArgKind.environment || CommandArgKind.keyword => AppIcons.terminal,
     CommandArgKind.flag => AppIcons.gitBranch,
+    CommandArgKind.option => AppIcons.listChecks,
   };
+
+  /// The questions `answer` picks from are read off the frame, kept read
+  /// while the palette is open, and the palette re-ranks when one lands.
+  final Map<String, ProviderSubscription<AsyncValue<Object?>>> _questions = {};
+
+  void _readQuestionsFor(TypedCommand typed) {
+    if (typed.verb != CommandVerb.answer) return;
+    for (final session in _catalogNow().sessions) {
+      if (!session.questionUnread || _questions.containsKey(session.id)) {
+        continue;
+      }
+      _questions[session.id] = ref.listenManual(
+        chatOpenQuestionProvider(session.id),
+        (_, next) {
+          if (!mounted || next.asData?.value == null) return;
+          _catalog = null;
+          setState(_rerank);
+        },
+      );
+    }
+  }
 
   /// `--worktree` is refused on a folder that is not under Git; whether it is
   /// is read once per project, off the frame, and the palette re-ranks.
@@ -628,11 +656,25 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         sources.focusSession(action.sessionId, imported: action.imported);
         return;
       }
-      TypedCommandRunner(
+      // While the palette's ref still reads: the runner's own work outlives it.
+      if (action is PeekCommand ||
+          (action is StartCommand && action.keepHere)) {
+        openOverviewTab(ref);
+      }
+      final runner = TypedCommandRunner(
         container,
         say: (message) =>
             messenger?.showSnackBar(SnackBar(content: Text(message))),
-      ).run(action);
+      );
+      if (plan.confirm case final confirm?) {
+        unawaited(
+          confirmTypedCommand(host, confirm).then((go) {
+            if (go) runner.run(action);
+          }),
+        );
+        return;
+      }
+      runner.run(action);
       // A terminal opened, or a session's ask, is drawn on the session page.
       if (action is OpenTerminalCommand || action is AnswerCommand) {
         sources.phone?.showWorkbench();
@@ -843,7 +885,13 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
             Text('$count result${count == 1 ? '' : 's'}'),
             if (step == null && _walking != null && !_indexed) ...[
               const SizedBox(width: Insets.sm),
-              const Text('· indexing files…'),
+              const Flexible(
+                child: Text(
+                  '· indexing files…',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ],
         ),

@@ -4,12 +4,14 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/typed_command_history.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_resume.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/new_session_memory.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -46,6 +48,19 @@ class _RecordingExplorerActions extends ExplorerActions {
   }
 }
 
+/// Records a resume from the dashboard instead of resuming.
+class _RecordingResumer extends OverviewResumer {
+  _RecordingResumer(super.ref);
+
+  final resumed = <(String, String?)>[];
+
+  @override
+  Future<ExplorerResult> resume(String sessionId, {String? message}) async {
+    resumed.add((sessionId, message));
+    return const ExplorerResult(ExplorerOutcome.resumed);
+  }
+}
+
 void main() {
   late TestMachine db;
   late FakeDataServer server;
@@ -65,14 +80,20 @@ void main() {
   });
 
   late _RecordingExplorerActions explorer;
+  late _RecordingResumer resumer;
 
-  Future<ProviderContainer> open(WidgetTester tester) async {
+  Future<ProviderContainer> open(
+    WidgetTester tester, {
+    List<Override> overrides = const [],
+  }) async {
     final data = await server.override();
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         data,
         explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),
+        overviewResumerProvider.overrideWith(_RecordingResumer.new),
+        ...overrides,
       ],
     );
     addTearDown(container.dispose);
@@ -80,6 +101,7 @@ void main() {
     // test's recorder.
     explorer =
         container.read(explorerActionsProvider) as _RecordingExplorerActions;
+    resumer = container.read(overviewResumerProvider) as _RecordingResumer;
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -182,16 +204,22 @@ void main() {
     expect(boxText(tester), 'start Karmashala anti');
   });
 
-  testWidgets('resume by session name opens that session', (tester) async {
+  testWidgets('resume by session name resumes it on the dashboard, with no '
+      'tab', (tester) async {
     final container = await open(tester);
 
     await type(tester, 'resume fix');
     await press(tester, LogicalKeyboardKey.tab);
     expect(boxText(tester), 'resume fix-login-redirect ');
+    expect(
+      find.textContaining('Resume "Fix login redirect" in the background'),
+      findsOneWidget,
+    );
 
     await press(tester, LogicalKeyboardKey.enter);
 
-    expect(container.read(selectedSessionIdProvider), 's1');
+    expect(resumer.resumed, [('s1', null)]);
+    expect(container.read(selectedSessionIdProvider), isNull);
     expect(find.byType(QuickOpen), findsNothing);
     expect(TypedCommandHistory(server.store).list(), [
       'resume fix-login-redirect',
@@ -202,14 +230,14 @@ void main() {
     tester,
   ) async {
     TypedCommandHistory(server.store).record('resume write-the-release-notes');
-    final container = await open(tester);
+    await open(tester);
 
     expect(find.text('RECENT COMMANDS'), findsOneWidget);
     expect(find.text('resume write-the-release-notes'), findsOneWidget);
 
     await press(tester, LogicalKeyboardKey.enter);
 
-    expect(container.read(selectedSessionIdProvider), 's2');
+    expect(resumer.resumed, [('s2', null)]);
     expect(find.byType(QuickOpen), findsNothing);
   });
 

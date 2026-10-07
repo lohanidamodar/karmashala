@@ -23,7 +23,12 @@ import '../../../features/sessions/application/session_last_active_providers.dar
 import '../../../features/sessions/application/session_launcher.dart';
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/application/session_status_providers.dart';
+import '../../../features/remote/application/remote_approval_bindings.dart';
+import '../../../features/sessions/application/session_engine_provider.dart';
+import '../../../features/sessions/presentation/approval_request_card.dart'
+    show BoardApproval, ProviderReader, boardApprovalOffersBy;
 import '../../../features/terminal/application/terminal_profiles.dart';
+import 'package:karmashala_remote/remote.dart' show RemoteQuestion;
 import 'quick_open_cache.dart';
 import 'typed_command.dart';
 
@@ -151,6 +156,15 @@ CommandCatalog readCommandCatalog(
         agentName: agentId == null ? 'this agent' : agentName,
         externalSessionId: native.externalSessionId,
       );
+      final runs =
+          live ||
+          native.status.claimsLive ||
+          read(sessionEngineProvider).isActive(native.id) ||
+          launcher.heldByHostOnly(native.id);
+      final open = (report?.hasOpenQuestion ?? false)
+          ? read(chatOpenQuestionProvider(native.id))
+          : null;
+      final repository = workspace.repository(native.repositoryId);
       sessions.add(
         CommandSession(
           id: native.id,
@@ -171,6 +185,22 @@ CommandCatalog readCommandCatalog(
             agentName: agentName,
           ),
           forkRefusal: fork.isRefused ? fork.explanation : null,
+          archiveRefusal: native.isArchived
+              ? 'Already archived.'
+              : runs
+              ? 'Still running — end it first.'
+              : null,
+          question: switch (open?.value) {
+            final question? => _questionOf(question),
+            null => null,
+          },
+          questionUnread: open != null && open.value == null,
+          approval: (report?.hasOpenPrompt ?? false)
+              ? _approvalOf(read, native.id, report!)
+              : null,
+          branch: repository == null
+              ? null
+              : cache.factsFor(repository.id).branches.firstOrNull,
         ),
       );
     } else {
@@ -362,6 +392,48 @@ List<CommandEnvironment> _environments(List<ExecutionEnvironment> all) {
         label: environmentLabel(env) ?? env.name,
       ),
   ];
+}
+
+CommandQuestion _questionOf(RemoteQuestion question) {
+  final first = question.questions.firstOrNull;
+  return CommandQuestion(
+    toolUseId: question.toolUseId,
+    options: [for (final o in first?.options ?? const []) o.label],
+    refusal: question.questions.length > 1
+        ? 'It asks ${question.questions.length} questions — answer them in '
+              'its view.'
+        : first == null || first.options.isEmpty
+        ? 'It offers no options to pick — answer it in its view.'
+        : first.multiSelect
+        ? 'It takes several choices — answer it in its view.'
+        : null,
+  );
+}
+
+/// The approval [report] holds open, as the board would answer it.
+CommandApproval _approvalOf(
+  ProviderReader read,
+  String sessionId,
+  AgentStatusReport report,
+) {
+  final ask = report.toolAsk;
+  final offers = boardApprovalOffersBy(read, sessionId);
+  const only = 'Only its terminal can answer this prompt.';
+  return CommandApproval(
+    subject: ask == null ? '' : summarizeToolAsk(ask).subject,
+    folder: ask?.cwd ?? '',
+    toolName: ask?.toolName ?? '',
+    allowRefusal: offers.isEmpty
+        ? only
+        : offers.contains(BoardApproval.allow)
+        ? null
+        : 'This prompt names no way to allow.',
+    denyRefusal: offers.isEmpty
+        ? only
+        : offers.contains(BoardApproval.deny)
+        ? null
+        : 'This prompt names no way to decline.',
+  );
 }
 
 /// Only a prompt the agent itself advertises an interrupt for is pressed: Esc
