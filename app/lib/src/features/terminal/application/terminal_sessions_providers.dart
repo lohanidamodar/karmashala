@@ -135,19 +135,28 @@ final terminalPaneTitleProvider = Provider.autoDispose.family<String, String>((
       .titleForPane(paneId);
 });
 
-/// Which face each workspace group's active tab shows, defaulting to the
-/// terminal. **Per group, not per window**: three transcripts must fit at once.
+/// The face each workspace group was **put** on; a group with no entry rests on
+/// [groupOpensOnChatProvider]'s answer. **Per group, not per window**: three
+/// transcripts must fit at once.
 class TerminalFacesController extends Notifier<Map<String, bool>> {
   @override
   Map<String, bool> build() => const {};
 
   void show(String groupId, {required bool terminal}) {
-    if ((state[groupId] ?? true) == terminal) return;
+    if (state[groupId] == terminal) return;
     state = {...state, groupId: terminal};
   }
 
-  void toggle(String groupId) =>
-      show(groupId, terminal: !(state[groupId] ?? true));
+  void toggle(String groupId) => show(
+    groupId,
+    terminal: !(state[groupId] ?? !ref.read(groupOpensOnChatProvider(groupId))),
+  );
+
+  /// Lets group [groupId] go back to the face its active tab opens on.
+  void reset(String groupId) {
+    if (!state.containsKey(groupId)) return;
+    state = {...state}..remove(groupId);
+  }
 
   /// Drops the entries of groups that no longer exist.
   void forget(Set<String> live) {
@@ -164,10 +173,36 @@ final terminalFacesProvider =
       TerminalFacesController.new,
     );
 
+/// Whether [tab] runs an agent session in a terminal pane — a tab with a chat
+/// to open on. A plain shell, a document and an ACP chat have none.
+bool tabRunsTerminalSession(PaneSessions panes, TerminalTab? tab) =>
+    tab != null &&
+    tab.layout.panes.any(
+      (paneId) =>
+          chatPaneSessionId(paneId) == null && panes.sessionOf(paneId) != null,
+    );
+
+/// Whether group [groupId] rests on its chat while nobody has put it on a
+/// face: its active tab runs a terminal agent session, and the person opens
+/// those in chat ([sessionsOpenInChatProvider]).
+final groupOpensOnChatProvider = Provider.family<bool, String>((ref, groupId) {
+  // Asked without opening the terminal: with none, there is no tab to run one.
+  if (!ref.watch(terminalSessionsOpenedProvider)) return false;
+  final tab = ref.watch(
+    terminalSessionsControllerProvider.select((s) {
+      final tabId = s.workspace?.groupById(groupId)?.activePaneId;
+      return s.tabs.where((t) => t.id == tabId).firstOrNull;
+    }),
+  );
+  return tabRunsTerminalSession(ref.watch(paneSessionsProvider), tab) &&
+      ref.watch(sessionsOpenInChatProvider);
+});
+
 /// Whether group [groupId] is showing its terminal rather than its chat.
 final terminalVisibleInGroupProvider = Provider.family<bool, String>(
   (ref, groupId) =>
-      ref.watch(terminalFacesProvider.select((f) => f[groupId] ?? true)),
+      ref.watch(terminalFacesProvider.select((f) => f[groupId])) ??
+      !ref.watch(groupOpensOnChatProvider(groupId)),
 );
 
 /// The **focused** group's face — what a command with no group in hand means.
@@ -180,13 +215,17 @@ final terminalVisibleProvider = Provider<bool>((ref) {
 
 /// Whether **any** group is showing a conversation — what a cost gate on
 /// transcript work asks now that more than one can be up at once.
-final anyChatVisibleProvider = Provider<bool>(
-  (ref) => ref.watch(
-    terminalFacesProvider.select(
-      (faces) => faces.values.any((terminal) => !terminal),
-    ),
-  ),
-);
+final anyChatVisibleProvider = Provider<bool>((ref) {
+  final faces = ref.watch(terminalFacesProvider);
+  if (faces.values.any((terminal) => !terminal)) return true;
+  if (!ref.watch(terminalSessionsOpenedProvider)) return false;
+  final groups = ref.watch(workspaceLayoutProvider)?.groups ?? const [];
+  return groups.any(
+    (group) =>
+        !faces.containsKey(group.id) &&
+        ref.watch(groupOpensOnChatProvider(group.id)),
+  );
+});
 
 /// Whether the terminal fills the whole window rather than sitting in its dock.
 class TerminalMaximizedController extends Notifier<bool> {

@@ -2,6 +2,8 @@ import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/capabilities/capabilities.dart'
+    show clientCapabilitiesProvider;
 import '../../../core/data/data_providers.dart';
 import '../../../core/logging/diagnostics_bootstrap.dart';
 import '../../../core/logging/diagnostics_providers.dart';
@@ -500,6 +502,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Written concretely, so the choice outlives the platform default.
+  void setOpenSessionsInChat(bool value) {
+    state = state.copyWith(openSessionsInChat: value);
+    _save();
+  }
+
   /// The quit question's answers, as it will use them without asking.
   void setQuitAnswers({
     required bool asks,
@@ -579,3 +587,13 @@ class SettingsController extends Notifier<Settings> {
 
 final settingsControllerProvider =
     NotifierProvider<SettingsController, Settings>(SettingsController.new);
+
+/// Whether a terminal agent session opens on its chat: the setting, and until
+/// it is set, whether this client is held by touch — a phone yes, a desktop no.
+final sessionsOpenInChatProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(
+        settingsControllerProvider.select((s) => s.openSessionsInChat),
+      ) ??
+      ref.watch(clientCapabilitiesProvider.select((c) => c.density.isTouch)),
+);

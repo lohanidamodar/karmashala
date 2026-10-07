@@ -1569,7 +1569,7 @@ class QuickOpenSources {
                 sessions.activateTab(tab.id);
                 // The group that holds the tab, which activating it has just
                 // focused — not whichever group was in front before.
-                sessions.showTerminalForTab(tab.id);
+                sessions.revealTab(tab.id);
                 shell.focusPane(ShellPane.detail);
               }),
             ),

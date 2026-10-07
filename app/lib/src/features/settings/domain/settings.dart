@@ -121,6 +121,7 @@ class Settings {
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
     this.bringAgentSessionsToFront = false,
+    this.openSessionsInChat,
     this.quitAsks = true,
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
@@ -307,6 +308,10 @@ class Settings {
   /// rather than behind the tab being read.
   final bool bringAgentSessionsToFront;
 
+  /// Whether a terminal agent session opens on its chat. **Null is not
+  /// "no"**: nobody has said, and a touch client answers yes.
+  final bool? openSessionsInChat;
+
   /// Whether quitting with sessions running asks first. Off, quit uses the
   /// two answers below — and still asks when it would stop a turn midway.
   final bool quitAsks;
@@ -472,6 +477,7 @@ class Settings {
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
     bool? bringAgentSessionsToFront,
+    bool? openSessionsInChat,
     bool? quitAsks,
     bool? quitReopens,
     bool? quitKeepsHostSessions,
@@ -558,6 +564,7 @@ class Settings {
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
     bringAgentSessionsToFront:
         bringAgentSessionsToFront ?? this.bringAgentSessionsToFront,
+    openSessionsInChat: openSessionsInChat ?? this.openSessionsInChat,
     quitAsks: quitAsks ?? this.quitAsks,
     quitReopens: quitReopens ?? this.quitReopens,
     quitKeepsHostSessions: quitKeepsHostSessions ?? this.quitKeepsHostSessions,
@@ -670,6 +677,7 @@ class Settings {
     'shellIntegrationEnabled',
     'restoreLivePanes',
     'bringAgentSessionsToFront',
+    'openSessionsInChat',
     'quitAsks',
     'quitReopens',
     'quitKeepsHostSessions',
@@ -749,6 +757,7 @@ class Settings {
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
     'bringAgentSessionsToFront': bringAgentSessionsToFront,
+    if (openSessionsInChat != null) 'openSessionsInChat': openSessionsInChat,
     'quitAsks': quitAsks,
     'quitReopens': quitReopens,
     'quitKeepsHostSessions': quitKeepsHostSessions,
@@ -940,6 +949,9 @@ class Settings {
       // `!= false`: defaults on, so a file written before the key reads as on.
       restoreLivePanes: json['restoreLivePanes'] != false,
       bringAgentSessionsToFront: json['bringAgentSessionsToFront'] == true,
+      openSessionsInChat: json['openSessionsInChat'] is bool
+          ? json['openSessionsInChat'] as bool
+          : null,
       // `!= false`: defaults on; a file that chose off keeps it.
       // `!= false`: all three default on, so an older file reads as on.
       quitAsks: json['quitAsks'] != false,
@@ -1070,6 +1082,7 @@ class Settings {
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
       other.bringAgentSessionsToFront == bringAgentSessionsToFront &&
+      other.openSessionsInChat == openSessionsInChat &&
       other.quitAsks == quitAsks &&
       other.quitReopens == quitReopens &&
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
@@ -1151,6 +1164,7 @@ class Settings {
         Object.hash(
           quitAsks,
           bringAgentSessionsToFront,
+          openSessionsInChat,
           childReportMode,
           quitReopens,
           quitKeepsHostSessions,

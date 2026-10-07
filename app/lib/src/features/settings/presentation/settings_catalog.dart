@@ -287,6 +287,13 @@ enum SettingsAnchor {
     'background',
     'focus',
   ]),
+  sessionView(SettingsSectionId.general, 'Session view', [
+    'chat',
+    'chat view',
+    'terminal',
+    'open',
+    'session',
+  ]),
   launcherHotkey(SettingsSectionId.general, 'Launcher hotkey', [
     'hotkey',
     'launcher',
@@ -763,6 +770,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['sleep', 'keep awake', 'caffeinate'],
   ),
   SettingsEntry(
+    'Open agent sessions in chat view',
+    anchor: SettingsAnchor.sessionView,
+    description: 'Terminal sessions show their chat first.',
+    keywords: ['chat', 'terminal', 'phone', 'default'],
+  ),
+  SettingsEntry(
     'Launcher hotkey',
     anchor: SettingsAnchor.launcherHotkey,
     description: 'A global shortcut that brings Karmashala forward.',
@@ -993,7 +1006,8 @@ const settingsEntries = <SettingsEntry>[
   SettingsEntry(
     'Keep the timeline for',
     anchor: SettingsAnchor.serverStorage,
-    description: 'How many days of the activity log the timeline is drawn '
+    description:
+        'How many days of the activity log the timeline is drawn '
         'from to keep; forever by default.',
     keywords: ['timeline', 'activity', 'history', 'retention', 'overview'],
   ),

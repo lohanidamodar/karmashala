@@ -60,7 +60,8 @@ void main() {
     container = ProviderContainer(
       overrides: [
         data,
-        ...fakeTerminalOverrides(machine: db),
+        // A phone: its sessions open on their chat, the default it ships with.
+        ...fakeTerminalOverrides(machine: db, openSessionsInChat: true),
         needsYouProvider.overrideWith((ref) => asking),
         // Both transcript sources poll a real timer or ask the fake server for
         // what it does not serve; the workbench only needs a conversation.

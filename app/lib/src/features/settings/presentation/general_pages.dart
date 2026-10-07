@@ -262,6 +262,29 @@ class StartupSection extends ConsumerWidget {
   }
 }
 
+/// Settings → General → Session view: which face an agent session opens on.
+/// Shown on every client — a phone is where the answer differs.
+class SessionViewSection extends ConsumerWidget {
+  const SessionViewSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SettingsSection(
+      title: SettingsAnchor.sessionView.heading,
+      child: SettingsSwitchRow(
+        label: 'Open agent sessions in chat view',
+        help:
+            'Terminal sessions show their chat first; the Terminal '
+            'toggle is still one click away.',
+        value: ref.watch(sessionsOpenInChatProvider),
+        onChanged: ref
+            .read(settingsControllerProvider.notifier)
+            .setOpenSessionsInChat,
+      ),
+    );
+  }
+}
+
 /// The global hotkey that summons the window. Recording happens only inside
 /// the Change dialog, so it never captures the settings page's keypresses.
 class LauncherHotkeySection extends ConsumerWidget {

@@ -4,7 +4,8 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_terminal_core/geometry.dart' show chatPaneSessionId;
+import 'package:karmashala_terminal_core/geometry.dart'
+    show PaneGroup, chatPaneSessionId;
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_session/session.dart';
 import 'session_providers.dart';
@@ -55,7 +56,11 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
   if (!ref.watch(terminalSessionsOpenedProvider)) return const [];
   // **Every group showing its terminal**, not just the focused one: a pane the
   // user can see is a pane the inbox must not badge.
-  final faces = ref.watch(terminalFacesProvider);
+  final onTerminal = {
+    for (final group
+        in ref.watch(workspaceLayoutProvider)?.groups ?? const <PaneGroup>[])
+      if (ref.watch(terminalVisibleInGroupProvider(group.id))) group.id,
+  };
   final joined = ref.watch(
     terminalSessionsControllerProvider.select((state) {
       final tree = state.workspace;
@@ -63,7 +68,7 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
       final byTab = {for (final tab in state.tabs) tab.id: tab};
       return [
         for (final group in tree.groups)
-          if (faces[group.id] ?? true)
+          if (onTerminal.contains(group.id))
             if (byTab[group.activePaneId] case final tab?)
               ...tab.layout.visiblePanes,
       ].join('\u0000');
