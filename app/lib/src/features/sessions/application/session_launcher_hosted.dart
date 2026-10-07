@@ -43,10 +43,14 @@ extension SessionHostedVerbs on SessionLauncher {
   /// Continues [sessionId] at the server — its own conversation, in its own
   /// row — and shows what came back: a pane attached to the terminal, or the
   /// chat tab of an agent spoken to over a protocol. One already running is
-  /// answered as it is, never started twice.
-  Future<SessionLaunchResult> resumeAtServer(String sessionId) async {
+  /// answered as it is, never started twice. Without [openTab] nothing opens
+  /// or takes focus here.
+  Future<SessionLaunchResult> resumeAtServer(
+    String sessionId, {
+    bool openTab = true,
+  }) async {
     final started = await _ref.read(sessionsClientProvider).resume(sessionId);
-    return _show(started);
+    return _show(started, openTab: openTab);
   }
 
   /// Ends the agent behind [sessionId]: its live pane, else the server's

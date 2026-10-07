@@ -117,7 +117,88 @@ class ExplorerActions {
           .openChatTab(sessionId);
       return const ExplorerResult(ExplorerOutcome.selected);
     }
+    return _resumeConversation(session, openTab: true);
+  }
 
+  /// Resumes [sessionId] where the person is: at the server, with no tab
+  /// opened and no focus moved — idle, or with [message] as its next turn.
+  /// An archived session is unarchived first, and the result says so.
+  Future<ExplorerResult> resumeInBackground(
+    String sessionId, {
+    String? message,
+  }) async {
+    final session = _ref.read(sessionsDataProvider).getById(sessionId);
+    if (session == null) {
+      return const ExplorerResult(
+        ExplorerOutcome.failed,
+        message: 'This session no longer exists.',
+      );
+    }
+    final actions = _ref.read(sessionActionsProvider);
+    final unarchived = session.isArchived;
+    if (unarchived) await actions.unarchiveSessions([sessionId]);
+    String? said(String? message) => unarchived
+        ? [
+            'This session was archived; it is unarchived now.',
+            ?message,
+          ].join(' ')
+        : message;
+    final text = message?.trim() ?? '';
+    try {
+      if (text.isNotEmpty) {
+        await actions.continueInBackground(sessionId, text);
+        return ExplorerResult(ExplorerOutcome.resumed, message: said(null));
+      }
+      final launcher = _ref.read(sessionLauncherProvider);
+      final twin = _liveTwinOf(session);
+      if (launcher.livePaneFor(sessionId) != null ||
+          launcher.heldByHostOnly(sessionId) ||
+          twin != null) {
+        return ExplorerResult(
+          ExplorerOutcome.reattached,
+          message: said(
+            twin == null
+                ? 'It is already running.'
+                : '"${twin.title}" is already running this conversation.',
+          ),
+        );
+      }
+      final ExplorerResult result;
+      if (installationSpeaksAcp(_ref, session.agentInstallationId)) {
+        final starting = _ref.read(sessionsStartingProvider.notifier)
+          ..add(sessionId);
+        try {
+          final launched = await launcher.resumeAtServer(
+            sessionId,
+            openTab: false,
+          );
+          result = ExplorerResult(
+            ExplorerOutcome.resumed,
+            message: launched.workingDirectoryNotice,
+          );
+        } finally {
+          starting.remove(sessionId);
+        }
+      } else {
+        result = await _resumeConversation(
+          _ref.read(sessionsDataProvider).getById(sessionId) ?? session,
+          openTab: false,
+        );
+      }
+      return ExplorerResult(result.outcome, message: said(result.message));
+    } catch (error) {
+      return ExplorerResult(ExplorerOutcome.failed, message: said(_say(error)));
+    }
+  }
+
+  /// Starts [session]'s agent on its recorded conversation — found from its
+  /// directory when the CLI never named it — once the guards allow it.
+  Future<ExplorerResult> _resumeConversation(
+    Session session, {
+    required bool openTab,
+  }) async {
+    final sessionId = session.id;
+    final launcher = _ref.read(sessionLauncherProvider);
     var externalId = session.externalSessionId;
     String? continueNotice;
     if (externalId == null || externalId.isEmpty) {
@@ -200,6 +281,10 @@ class ExplorerActions {
         break;
     }
 
+    // Kept where the person is, it says it is coming back until it has.
+    final starting = openTab
+        ? null
+        : (_ref.read(sessionsStartingProvider.notifier)..add(sessionId));
     try {
       final launched = await launcher.launch(
         SessionLaunchRequest(
@@ -209,9 +294,14 @@ class ExplorerActions {
           purpose: SessionPurpose.existingSession,
           resumeExternalSessionId: externalId,
           existingWorktree: session.worktree,
+          openTab: openTab,
         ),
       );
-      _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
+      if (openTab) {
+        _ref
+            .read(selectedSessionIdProvider.notifier)
+            .select(launched.session.id);
+      }
       // A session whose recorded directory has gone resumes at the repository
       // root — a different conversation to an agent whose store is keyed by
       // directory, so it must not happen quietly. Both notices matter.
@@ -222,6 +312,8 @@ class ExplorerActions {
       );
     } catch (error) {
       return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
+    } finally {
+      starting?.remove(sessionId);
     }
   }
 
