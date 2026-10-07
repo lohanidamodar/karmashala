@@ -17,6 +17,16 @@ installs claim the same version name.
 
 ---
 
+## 1.33.3 — 2026-10-07 (build 66)
+
+- **Permission and model are chips on the session bar again**, one click
+  each, rather than folded into one Agent menu. The bar is one line from
+  1000px and two rows below it, so both stay in sight.
+- **No "Not checked" on every session.** The verification mark and "Check
+  this" show only once a check has run; the Verification pane keeps the
+  rest.
+- **⋯ stays in reach** in a narrow split group.
+
 ## 1.33.2 — 2026-10-07 (build 65)
 
 - **An SSH host whose account uses zsh can be installed to.** Commands sent to
