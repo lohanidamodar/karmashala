@@ -6,8 +6,12 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../../app/shell/workbench_tabs.dart' show openSettingsTab;
+import '../../../../core/capabilities/capabilities.dart';
+import '../../../../core/util/failure_words.dart';
 import '../../../projects/application/projects_controller.dart';
 import '../../../sessions/application/session_ui_providers.dart';
+import '../../../settings/presentation/settings_catalog.dart';
 import '../application/timeline_controller.dart';
 import '../domain/timeline_model.dart';
 import 'timeline_chart.dart';
@@ -29,10 +33,19 @@ const double kTimelinePhoneWidth = 600;
 /// **The Overview tab's Timeline**: what happened, when — drawn from the
 /// server's activity log, so it outlives the sessions it shows.
 class OverviewTimelineView extends ConsumerStatefulWidget {
-  const OverviewTimelineView({this.onOpenSession, this.clock, super.key});
+  const OverviewTimelineView({
+    this.onOpenSession,
+    this.onUpdateServer,
+    this.clock,
+    super.key,
+  });
 
   /// Opens a session's tab. Defaults to selecting it.
   final void Function(String sessionId)? onOpenSession;
+
+  /// Opens Settings → Server, where an older server is updated. Defaults to
+  /// the Settings tab.
+  final VoidCallback? onUpdateServer;
 
   /// For tests: what "now" is.
   final DateTime Function()? clock;
@@ -123,16 +136,37 @@ class _OverviewTimelineViewState extends ConsumerState<OverviewTimelineView> {
                   _modelFor(value, range),
                   phone: phone,
                 ),
-                AsyncError(:final error) => _Message(
-                  key: const ValueKey('timeline-error'),
-                  text: 'The timeline could not be read: $error',
-                ),
+                // Riverpod retries a failure as loading-with-error.
+                AsyncValue(:final error?) => _failure(error),
                 _ => const Center(child: CircularProgressIndicator()),
               },
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _failure(Object error) {
+    // A server from before the activity log refuses the request outright.
+    if (!ref.read(capabilitiesProvider).serverOffers(ActivityRange.feature)) {
+      return _Message(
+        key: const ValueKey('timeline-older-server'),
+        text:
+            "This server is older than the app and can't show the Timeline. "
+            'Update the server in Settings → Server.',
+        action: OutlinedButton(
+          key: const ValueKey('timeline-update-server'),
+          onPressed:
+              widget.onUpdateServer ??
+              () => openSettingsTab(ref, section: SettingsSectionId.server),
+          child: const Text('Open Settings → Server'),
+        ),
+      );
+    }
+    return _Message(
+      key: const ValueKey('timeline-error'),
+      text: 'The timeline could not be read: ${describeFailure(error)}',
     );
   }
 
@@ -157,18 +191,28 @@ class _OverviewTimelineViewState extends ConsumerState<OverviewTimelineView> {
 }
 
 class _Message extends StatelessWidget {
-  const _Message({required this.text, super.key});
+  const _Message({required this.text, this.action, super.key});
 
   final String text;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
+    child: SingleChildScrollView(
       padding: const EdgeInsets.all(Insets.xl),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (action case final action?) ...[
+            const SizedBox(height: Insets.md),
+            action,
+          ],
+        ],
       ),
     ),
   );
@@ -349,7 +393,10 @@ class _Legend extends StatelessWidget {
               child: CustomPaint(
                 painter: TimelineLanePainter(
                   session: sample,
-                  viewport: TimelineViewport(start: sample.start, end: sample.end),
+                  viewport: TimelineViewport(
+                    start: sample.start,
+                    end: sample.end,
+                  ),
                   palette: palette,
                   now: now,
                   compact: true,
@@ -374,7 +421,11 @@ class _Legend extends StatelessWidget {
           item('Waiting on you', TimelineState.waiting),
           item('Ready', TimelineState.ready),
           item('Paused at a limit', TimelineState.paused),
-          item('Recovered or approximate', TimelineState.working, inferred: true),
+          item(
+            'Recovered or approximate',
+            TimelineState.working,
+            inferred: true,
+          ),
         ],
       ),
     );

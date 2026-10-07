@@ -76,6 +76,30 @@ class OverviewResumingLabel extends ConsumerWidget {
   }
 }
 
+/// Archive for [sessionId], disabled with "Resuming…" while it comes back:
+/// its row can still say ended while the process is already starting.
+class OverviewArchiveGate extends ConsumerWidget {
+  const OverviewArchiveGate({
+    required this.sessionId,
+    required this.builder,
+    super.key,
+  });
+
+  final String sessionId;
+
+  /// The button, given whether a resume is in flight.
+  final Widget Function(bool resuming) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resuming = ref.watch(
+      sessionsStartingProvider.select((s) => s.contains(sessionId)),
+    );
+    final button = builder(resuming);
+    return resuming ? Tooltip(message: 'Resuming…', child: button) : button;
+  }
+}
+
 /// A card's ⋯: Resume, kept here, and Open tab — offered only where the
 /// session can be resumed.
 class OverviewCardMenu extends ConsumerWidget {

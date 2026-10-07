@@ -471,6 +471,138 @@ void main() {
     expect(delivered['parent'], hasLength(1));
   });
 
+  group('a question', () {
+    /// Opens c1 as a Claude Code pane with nothing drawn yet, followed.
+    Future<void> openC1() async {
+      registry.open(
+        'karmashala_c1',
+        PtySpawnRequest(
+          argv: const ['claude'],
+          workingDirectory: '/src/shop/api',
+          environment: const {},
+          columns: 120,
+          rows: 30,
+        ),
+      );
+      delegations.watch(child('c1'));
+      await pumpEventQueue();
+    }
+
+    void askC1(String question) => status.hook(
+      AgentHookEvent(
+        agent: AgentIds.claudeCode,
+        event: 'PreToolUse',
+        sessionHeader: 'c1',
+        receivedAt: DateTime.now().toUtc(),
+        body: {
+          'session_id': 'conv-c1',
+          'hook_event_name': 'PreToolUse',
+          'tool_name': 'AskUserQuestion',
+          'tool_use_id': 'toolu_q1',
+          'tool_input': {
+            'questions': [
+              {
+                'question': question,
+                'options': [
+                  {'label': 'Apple'},
+                  {'label': 'Pear'},
+                ],
+              },
+            ],
+          },
+        },
+      ),
+    );
+
+    test('with nothing but a one-character screen fragment for evidence is '
+        'not a block, and nothing is reported', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await openC1();
+      status.report(
+        'c1',
+        AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'conv-c1',
+          status: AgentActivityStatus.awaitingApproval,
+          source: AgentStatusSource.terminalGrid,
+          observedAt: DateTime.now().toUtc(),
+          waiting: AgentWaitKind.question,
+          evidence: const ['x'],
+        ),
+      );
+      expect(waits.blockedOn('c1'), isNull);
+      expect(waits.openAskOf('c1'), isNull);
+      await settle();
+      expect(delivered['parent'], isNull);
+    });
+
+    test('drawn whole on the screen still blocks with no hook', () async {
+      await openC1();
+      final rows = File(
+        '../app/test/features/agents/fixtures/claude-code-question-open.screen',
+      ).readAsLinesSync();
+      status.report(
+        'c1',
+        AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'conv-c1',
+          status: AgentActivityStatus.awaitingApproval,
+          source: AgentStatusSource.terminalGrid,
+          observedAt: DateTime.now().toUtc(),
+          waiting: AgentWaitKind.question,
+          evidence: [
+            for (final row in rows)
+              if (row.trim().isNotEmpty) row,
+          ],
+        ),
+      );
+      expect(waits.blockedOn('c1')?.kind, 'question');
+      expect(waits.openAskOf('c1'), startsWith('question:'));
+    });
+
+    test(
+      'that AskUserQuestion really asked blocks, in its own words',
+      () async {
+        await runTerminal('parent');
+        hook('parent', 'Stop');
+        await openC1();
+        askC1('Which fruit?');
+        expect(waits.blockedOn('c1')?.kind, 'question');
+        await settle();
+        final message = delivered['parent']!.single;
+        expect(message, contains('BLOCKED'));
+        expect(message, contains('Which fruit?'));
+      },
+    );
+
+    test('is not delivered once the child is working again', () async {
+      await runTerminal('parent');
+      hook('parent', 'UserPromptSubmit');
+      await openC1();
+      askC1('Which fruit?');
+      await settle();
+      expect(queue.list('parent'), hasLength(1));
+
+      status.hook(
+        AgentHookEvent(
+          agent: AgentIds.claudeCode,
+          event: 'UserPromptSubmit',
+          sessionHeader: 'c1',
+          receivedAt: DateTime.now().toUtc(),
+          body: {
+            'session_id': 'conv-c1',
+            'hook_event_name': 'UserPromptSubmit',
+          },
+        ),
+      );
+      expect(waits.blockedOn('c1'), isNull);
+      hook('parent', 'Stop');
+      await settle();
+      expect(delivered['parent'], isNull);
+    });
+  });
+
   group('a blocked result whose prompt is gone', () {
     /// Opens c1 on Claude Code's permission prompt, followed by its parent.
     Future<void> blockC1() async {

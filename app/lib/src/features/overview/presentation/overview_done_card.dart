@@ -13,6 +13,7 @@ import '../application/overview_reads.dart';
 import '../application/overview_tiles.dart';
 import 'overview_card_parts.dart';
 import 'overview_cards.dart';
+import 'overview_resume_actions.dart';
 
 /// What Hand back says to the parent: the sub-session is done, and what it
 /// last answered.
@@ -96,12 +97,15 @@ class _OverviewDoneCardState extends ConsumerState<OverviewDoneCard> {
             runSpacing: Insets.xs,
             children: [
               if (native != null && !native.isArchived)
-                TextButton(
-                  key: ValueKey('overview-done-archive:$id'),
-                  onPressed: idle
-                      ? () => archiveSessionsFromUi(context, ref, [native])
-                      : null,
-                  child: const Text('Archive'),
+                OverviewArchiveGate(
+                  sessionId: id,
+                  builder: (resuming) => TextButton(
+                    key: ValueKey('overview-done-archive:$id'),
+                    onPressed: idle && !resuming
+                        ? () => archiveSessionsFromUi(context, ref, [native])
+                        : null,
+                    child: const Text('Archive'),
+                  ),
                 ),
               if (parent != null)
                 Tooltip(

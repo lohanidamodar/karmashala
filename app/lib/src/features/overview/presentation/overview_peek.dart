@@ -385,12 +385,16 @@ class _PeekHeader extends ConsumerWidget {
                     label: const Text('Stop'),
                   ),
                 if (archivable)
-                  TextButton.icon(
-                    key: const ValueKey('overview-peek-archive'),
-                    onPressed: () =>
-                        archiveSessionsFromUi(context, ref, [native]),
-                    icon: const Icon(AppIcons.tray),
-                    label: const Text('Archive'),
+                  OverviewArchiveGate(
+                    sessionId: id,
+                    builder: (resuming) => TextButton.icon(
+                      key: const ValueKey('overview-peek-archive'),
+                      onPressed: resuming
+                          ? null
+                          : () => archiveSessionsFromUi(context, ref, [native]),
+                      icon: const Icon(AppIcons.tray),
+                      label: const Text('Archive'),
+                    ),
                   ),
                 OutlinedButton.icon(
                   key: const ValueKey('overview-peek-open'),
