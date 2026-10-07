@@ -121,13 +121,13 @@ class _IssueRow extends StatelessWidget {
                 ),
               ),
               if (issue.location.isNotEmpty) ...[
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.xxs),
                 SelectableText(
                   issue.location,
                   style: MonoStyles.body.copyWith(color: muted?.color),
                 ),
               ],
-              const SizedBox(height: 2),
+              const SizedBox(height: Insets.xxs),
               Text(
                 meta,
                 style: muted?.copyWith(

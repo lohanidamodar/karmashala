@@ -5,6 +5,7 @@ import 'package:logging/logging.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../core/logging/diagnostics_providers.dart';
@@ -55,75 +56,63 @@ class _PhoneLogPageState extends ConsumerState<PhoneLogPage> {
     final theme = Theme.of(context);
     final visible = _visible;
     final dropped = ref.read(diagnosticsProvider).buffer.dropped;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.lg,
-            Insets.xs,
-            Insets.xs,
-            0,
-          ),
-          child: Row(
-            children: [
-              FilterChip(
-                label: const Text('Problems only'),
-                selected: _problemsOnly,
-                onSelected: (value) => setState(() => _problemsOnly = value),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(AppIcons.arrowClockwise),
-                onPressed: _refresh,
-              ),
-              IconButton(
-                tooltip: 'Copy',
-                icon: const Icon(AppIcons.copy),
-                onPressed: visible.isEmpty ? null : () => _copy(visible),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.all(Insets.lg),
-              children: [
-                SelectableText(buildIdentity(), style: MonoStyles.label),
-                if (dropped > 0)
-                  Text(
-                    '$dropped earlier lines have been dropped.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                const Divider(),
-                if (visible.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Insets.xl),
-                    child: Text(
-                      _problemsOnly
-                          ? 'No warnings or errors this run. Turn off '
-                                'Problems only to see everything.'
-                          : 'Nothing logged yet.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  )
-                else
-                  // One block: on a phone the useful gesture is "take it all".
-                  SelectableText(
-                    [for (final entry in visible) entry.format()].join('\n'),
-                    style: MonoStyles.label,
-                  ),
-              ],
-            ),
-          ),
+    return WorkbenchTabScaffold(
+      icon: AppIcons.article,
+      title: 'Log',
+      controls: [
+        FilterChip(
+          label: const Text('Problems only'),
+          selected: _problemsOnly,
+          onSelected: (value) => setState(() => _problemsOnly = value),
         ),
       ],
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          icon: const Icon(AppIcons.arrowClockwise),
+          onPressed: _refresh,
+        ),
+        IconButton(
+          tooltip: 'Copy',
+          icon: const Icon(AppIcons.copy),
+          onPressed: visible.isEmpty ? null : () => _copy(visible),
+        ),
+      ],
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          padding: const EdgeInsets.all(Insets.lg),
+          children: [
+            SelectableText(buildIdentity(), style: MonoStyles.label),
+            if (dropped > 0)
+              Text(
+                '$dropped earlier lines have been dropped.',
+                style: theme.textTheme.bodySmall,
+              ),
+            const Divider(),
+            if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Insets.xl),
+                child: Text(
+                  _problemsOnly
+                      ? 'No warnings or errors this run. Turn off '
+                            'Problems only to see everything.'
+                      : 'Nothing logged yet.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              // One block: on a phone the useful gesture is "take it all".
+              SelectableText(
+                [for (final entry in visible) entry.format()].join('\n'),
+                style: MonoStyles.label,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -261,7 +261,7 @@ class _Spread extends StatelessWidget {
       children: [
         for (final MapEntry(key: stars, value: count) in counts.entries)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1),
+            padding: const EdgeInsets.symmetric(vertical: Insets.hair),
             child: Row(
               children: [
                 SizedBox(width: 12, child: Text('$stars', style: style)),
@@ -453,7 +453,7 @@ class _ReviewCard extends ConsumerWidget {
               Row(
                 children: [
                   if (showStore) ...[
-                    StoreLogo(store, size: 14),
+                    StoreLogo(store, size: Chrome.iconAction),
                     const SizedBox(width: Insets.xs),
                   ],
                   Expanded(child: Text(meta, style: muted)),
@@ -477,7 +477,7 @@ class _ReviewCard extends ConsumerWidget {
                             : 'Your reply · '
                                   '${formatShortDay(review.repliedAt!, now)}',
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: Insets.xxs),
                       Text(reply, style: theme.textTheme.bodySmall),
                     ],
                   ),

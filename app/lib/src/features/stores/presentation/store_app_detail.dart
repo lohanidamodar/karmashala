@@ -343,7 +343,7 @@ class _Header extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.xxs),
                 // Combined by hand, each store's id on its own line.
                 for (final id in storeGroupIdLines(group))
                   SelectableText(
@@ -416,7 +416,7 @@ class _StorePresence extends StatelessWidget {
             Flexible(
               child: StoreLogo.named(
                 store,
-                size: 14,
+                size: Chrome.iconAction,
                 color: scheme.onSurface,
                 style: style?.copyWith(fontWeight: FontWeight.w600),
               ),
@@ -424,8 +424,8 @@ class _StorePresence extends StatelessWidget {
             const SizedBox(width: Insets.sm),
             if (isLive) ...[
               Container(
-                width: 6,
-                height: 6,
+                width: Chrome.dot,
+                height: Chrome.dot,
                 decoration: BoxDecoration(
                   color: SemanticColors.of(context).idle,
                   shape: BoxShape.circle,
@@ -541,7 +541,7 @@ class _SignalsPanel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.only(top: Insets.xxs),
                     child: Icon(
                       signalIcon(signal),
                       size: Chrome.icon,
@@ -596,7 +596,7 @@ class _Numbers extends ConsumerWidget {
       final store = entry.app.store;
       // Which store a tile is from, when there are two: its logo before the
       // label, its name for a screen reader (owner, 2026-10-01).
-      final logo = both ? StoreLogo(store, size: 13) : null;
+      final logo = both ? StoreLogo(store, size: Chrome.iconSmall) : null;
       String spoken(String what) => both ? '$what · ${store.label}' : what;
       void note(String what, ReadingMissing<Object?> missing) => notes
           .putIfAbsent(store, () => [])
@@ -780,7 +780,7 @@ class _MissingNotes extends StatelessWidget {
               alignment: AlignmentDirectional.centerStart,
               child: StoreLogo.named(
                 store,
-                size: 14,
+                size: Chrome.iconAction,
                 color: scheme.onSurface,
                 style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w600,
@@ -834,7 +834,7 @@ class _DownloadsChart extends StatelessWidget {
               if (store != null)
                 StoreLogo.named(
                   store,
-                  size: 14,
+                  size: Chrome.iconAction,
                   color: scheme.onSurface,
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w600,

@@ -103,7 +103,7 @@ class AllTimeInstallsFigure extends StatelessWidget {
                 size: Chrome.iconAction,
                 color: muted,
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: Insets.xxs),
               Text(
                 figure,
                 style: theme.textTheme.bodySmall?.copyWith(

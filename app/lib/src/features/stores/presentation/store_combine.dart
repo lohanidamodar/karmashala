@@ -317,10 +317,8 @@ class _CombinePickerState extends State<_CombinePicker> {
           ),
           child: SearchField(
             autofocus: !touch,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(AppIcons.magnifyingGlass),
+            decoration: compactSearchDecoration(
               hintText: 'Search by name or id',
-              isDense: true,
             ),
             onChanged: (value) => setState(() => _query = value),
           ),
