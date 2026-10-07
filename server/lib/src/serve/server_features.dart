@@ -100,4 +100,7 @@ const Set<String> kServerFeatures = <String>{
   // `automations.save`; `webhooks.rotate`, `webhooks.status` and the
   // `webhookCallRecorded` change.
   'automations.webhooks',
+  // `projects.createFromFolder` takes `createFolder`, `initGit` and
+  // `scan: false`: a missing folder made, and the root recorded alone.
+  'projects.createFolder',
 };

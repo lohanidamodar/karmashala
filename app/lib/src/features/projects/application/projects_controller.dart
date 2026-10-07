@@ -158,6 +158,9 @@ class ProjectsController extends Notifier<List<Project>> {
     required String windowsPath,
     required String targetEnvironmentId,
     String? workspaceId,
+    bool createFolder = false,
+    bool initGit = false,
+    bool scan = true,
   }) {
     final dao = ref.read(environmentsDataProvider);
     final windows = dao.getById(localHostEnvironmentId);
@@ -175,7 +178,14 @@ class ProjectsController extends Notifier<List<Project>> {
     return _created(
       ref
           .read(gitDataProvider)
-          .createProject(name: name, root: root, workspaceId: workspaceId),
+          .createProject(
+            name: name,
+            root: root,
+            workspaceId: workspaceId,
+            createFolder: createFolder,
+            initGit: initGit,
+            scan: scan,
+          ),
     );
   }
 
@@ -187,6 +197,9 @@ class ProjectsController extends Notifier<List<Project>> {
     required String folderPath,
     String? gitRepoUrl,
     String? workspaceId,
+    bool createFolder = false,
+    bool initGit = false,
+    bool scan = true,
   }) => _created(
     ref
         .read(gitDataProvider)
@@ -198,6 +211,9 @@ class ProjectsController extends Notifier<List<Project>> {
           ),
           gitUrl: gitRepoUrl,
           workspaceId: workspaceId,
+          createFolder: createFolder,
+          initGit: initGit,
+          scan: scan,
         ),
   );
 

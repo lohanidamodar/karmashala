@@ -115,6 +115,9 @@ DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
         root: args.value('root', environmentPathFromJson),
         gitUrl: args.optionalString('gitUrl'),
         workspaceId: args.optionalString('workspaceId'),
+        createFolder: args.boolean('createFolder', orElse: false),
+        initGit: args.boolean('initGit', orElse: false),
+        scan: args.boolean('scan', orElse: true),
       ),
       ProjectRescan.name => ProjectRescan(args.string('projectId')),
       ScratchCheckoutCreate.name => ScratchCheckoutCreate(
@@ -1015,20 +1018,38 @@ final class WorktreeCleanupLogRead extends GitWorkRequest<WorktreeCleanupLog> {
 /// given (an empty path in WSL or SSH clones into `~/karmashala/<repo>`),
 /// with a checkout for every repository beneath it. Nothing is written when
 /// the folder cannot be read. The new checkouts' CLI history is imported.
+///
+/// A server without [feature] ignores [createFolder], [initGit] and [scan].
 final class ProjectFoldersCreate extends GitWorkRequest<ProjectCheckouts> {
   const ProjectFoldersCreate({
     required this.projectName,
     required this.root,
     this.gitUrl,
     this.workspaceId,
+    this.createFolder = false,
+    this.initGit = false,
+    this.scan = true,
   });
 
   static const String name = 'projects.createFromFolder';
+
+  /// In `welcome.features` when [createFolder], [initGit] and [scan] are
+  /// served.
+  static const String feature = 'projects.createFolder';
 
   final String projectName;
   final EnvironmentPath root;
   final String? gitUrl;
   final String? workspaceId;
+
+  /// Makes a missing [root], with its parents, rather than refusing it.
+  final bool createFolder;
+
+  /// `git init` in a folder [createFolder] made; an existing one is left be.
+  final bool initGit;
+
+  /// Records every repository beneath [root]; without it, [root] alone.
+  final bool scan;
 
   @override
   String get kind => name;
@@ -1039,6 +1060,9 @@ final class ProjectFoldersCreate extends GitWorkRequest<ProjectCheckouts> {
     'root': environmentPathToJson(root),
     'gitUrl': ?gitUrl,
     'workspaceId': ?workspaceId,
+    if (createFolder) 'createFolder': true,
+    if (initGit) 'initGit': true,
+    if (!scan) 'scan': false,
   };
 
   @override
