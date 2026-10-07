@@ -22,7 +22,8 @@ import 'package:karmashala/src/features/overview/presentation/overview_peek.dart
 import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala_session/delivery.dart' show OfferedAction, SessionDelivery;
+import 'package:karmashala_session/delivery.dart'
+    show OfferedAction, SessionDelivery;
 import 'package:karmashala/src/features/sessions/application/session_active_model_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ActiveModelSource, ActivityEntry, ActivityKind;
@@ -67,6 +68,7 @@ class MissionFixture {
     this.fileStats = const {},
     this.models = const {},
     this.merges = const {},
+    this.peekChat,
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
@@ -94,6 +96,10 @@ class MissionFixture {
   /// The Merge the delivery strip offers each session, and the base it
   /// would merge into.
   final Map<String, (OfferedAction, String)> merges;
+
+  /// What the peek draws for a session's chat; a line naming it by default.
+  final Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)?
+  peekChat;
 
   /// The server's activity log, which the strips and the heartbeat draw.
   final List<ActivityEntry> activity;
@@ -565,7 +571,10 @@ class MissionFixture {
   };
 
   /// [MissionFixture] with every reading above filled in.
-  static MissionFixture full() => MissionFixture(
+  static MissionFixture full({
+    Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)? peekChat,
+  }) => MissionFixture(
+    peekChat: peekChat,
     models: const {'ks-r32': 'Opus 5.5'},
     stats: realisticStats(),
     fileStats: const {
@@ -650,15 +659,14 @@ class MissionFixture {
       },
     ),
     overviewPeekChatProvider.overrideWithValue(
-      (entry, seenUntil) => Text(
-        'chat:${entry.id} seen:${seenUntil?.toIso8601String()}',
-        key: ValueKey('overview-peek-chat:${entry.id}'),
-      ),
+      peekChat ??
+          (entry, seenUntil) => Text(
+            'chat:${entry.id} seen:${seenUntil?.toIso8601String()}',
+            key: ValueKey('overview-peek-chat:${entry.id}'),
+          ),
     ),
     overviewSessionPaneProvider.overrideWith((ref, id) => panes[id]),
-    sessionDeliveryActionsProvider.overrideWith(
-      (ref, id) => [?merges[id]?.$1],
-    ),
+    sessionDeliveryActionsProvider.overrideWith((ref, id) => [?merges[id]?.$1]),
     sessionDeliveryProvider.overrideWith(
       (ref, id) async => SessionDelivery(baseBranch: merges[id]?.$2),
     ),
@@ -679,9 +687,7 @@ class MissionFixture {
     sessionDiffStatProvider.overrideWith(
       (ref, id) async => stats[id] ?? SessionDiffStat.unknown,
     ),
-    overviewReaderProvider.overrideWithValue(
-      reader,
-    ),
+    overviewReaderProvider.overrideWithValue(reader),
   ];
 }
 
