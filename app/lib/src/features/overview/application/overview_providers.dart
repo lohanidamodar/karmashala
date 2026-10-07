@@ -236,19 +236,23 @@ final overviewPullRequestProvider = Provider.autoDispose
 /// Which card the keyboard is on, and which one the peek shows.
 @immutable
 class OverviewFocus {
-  const OverviewFocus({this.selected, this.peeked});
+  const OverviewFocus({this.selected, this.peeked, this.editing = false});
 
   final String? selected;
   final String? peeked;
+
+  /// The peek opened with its command approval's command editable.
+  final bool editing;
 
   @override
   bool operator ==(Object other) =>
       other is OverviewFocus &&
       other.selected == selected &&
-      other.peeked == peeked;
+      other.peeked == peeked &&
+      other.editing == editing;
 
   @override
-  int get hashCode => Object.hash(selected, peeked);
+  int get hashCode => Object.hash(selected, peeked, editing);
 }
 
 class OverviewFocusController extends Notifier<OverviewFocus> {
@@ -256,10 +260,20 @@ class OverviewFocusController extends Notifier<OverviewFocus> {
   OverviewFocus build() => const OverviewFocus();
 
   void select(String? id) =>
-      state = OverviewFocus(selected: id, peeked: state.peeked);
+      state = OverviewFocus(
+        selected: id,
+        peeked: state.peeked,
+        editing: state.editing,
+      );
 
-  /// Peeks [id], which is also where the keyboard now is.
-  void peek(String id) => state = OverviewFocus(selected: id, peeked: id);
+  /// Peeks [id], which is also where the keyboard now is; with [editing],
+  /// its command approval's command is open to change.
+  void peek(String id, {bool editing = false}) =>
+      state = OverviewFocus(selected: id, peeked: id, editing: editing);
+
+  /// The command is no longer being edited.
+  void stopEditing() =>
+      state = OverviewFocus(selected: state.selected, peeked: state.peeked);
 
   void closePeek() => state = OverviewFocus(selected: state.selected);
 }

@@ -5,12 +5,9 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
-import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_reads.dart';
 import 'overview_card_parts.dart';
-import 'overview_quick_composer.dart';
 import 'overview_session_parts.dart';
 
 /// The edge a card of [state] is drawn with: colour only where the owner is
@@ -133,42 +130,6 @@ class OverviewCardHeader extends ConsumerWidget {
           ),
           const SizedBox(width: Insets.sm),
           chip ?? OverviewStatePill(card: card),
-        ],
-      ),
-    );
-  }
-}
-
-/// **One session waiting on you**: what it asks, answerable here through the
-/// ask path every surface uses, its plan, and a reply in words.
-class OverviewQueueCard extends ConsumerWidget {
-  const OverviewQueueCard({required this.card, required this.onOpen, super.key});
-
-  final OverviewCard card;
-  final ValueChanged<OverviewCard> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final failed = card.state == AgentState.failed;
-    final plan = ref.watch(overviewGlanceProvider(card.id)).asData?.value?.plan;
-    return OverviewCardFrame(
-      card: card,
-      onOpen: onOpen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OverviewCardHeader(card: card),
-          const SizedBox(height: Insets.sm),
-          OverviewActivityLine(card: card),
-          if (!failed)
-            ApprovalRequestCard(sessionId: card.id, dense: true),
-          if (plan != null) ...[
-            const SizedBox(height: Insets.sm),
-            OverviewPlanLine(plan: plan),
-          ],
-          const SizedBox(height: Insets.sm),
-          OverviewQuickComposer(card: card),
         ],
       ),
     );

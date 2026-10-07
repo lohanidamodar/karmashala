@@ -52,6 +52,9 @@ class OverviewPeek extends ConsumerWidget {
     final archivable =
         native != null && !native.isArchived && !sessionIsLive(ref, native);
     final ended = card.state == AgentState.ended;
+    final editing = ref.watch(
+      overviewFocusProvider.select((f) => f.editing && f.peeked == id),
+    );
     final plan = ref.watch(overviewGlanceProvider(id)).asData?.value?.plan;
     final children =
         ref.watch(overviewBoardProvider.select((b) => b.children[id])) ??
@@ -126,7 +129,14 @@ class OverviewPeek extends ConsumerWidget {
             if (card.column == BoardColumn.needsYou)
               Padding(
                 padding: const EdgeInsets.only(top: Insets.sm),
-                child: ApprovalRequestCard(sessionId: id),
+                child: editing
+                    ? BoardEditCommand(
+                        sessionId: id,
+                        onDone: ref
+                            .read(overviewFocusProvider.notifier)
+                            .stopEditing,
+                      )
+                    : ApprovalRequestCard(sessionId: id),
               ),
             if (plan != null)
               section(

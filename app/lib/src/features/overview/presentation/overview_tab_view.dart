@@ -131,14 +131,14 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     super.dispose();
   }
 
-  void _open(OverviewCard card) {
+  void _open(OverviewCard card, {bool editing = false}) {
     _focus.requestFocus();
     final focus = ref.read(overviewFocusProvider.notifier);
     if (_docks) {
-      focus.peek(card.id);
+      focus.peek(card.id, editing: editing);
       return;
     }
-    focus.select(card.id);
+    editing ? focus.peek(card.id, editing: true) : focus.select(card.id);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -225,7 +225,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             )
           : null;
-      final main = OverviewHybrid(onOpen: _open);
+      final main = OverviewHybrid(
+        onOpen: _open,
+        onEdit: (card) => _open(card, editing: true),
+      );
       return Focus(
         focusNode: _focus,
         onKeyEvent: _key,

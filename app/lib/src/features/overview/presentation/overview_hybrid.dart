@@ -11,6 +11,8 @@ import '../application/overview_providers.dart';
 import 'overview_cards.dart';
 import 'overview_filters.dart';
 import 'overview_heartbeat.dart';
+import 'overview_queue_card.dart';
+import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 
 /// What the Overview draws, in reading order.
 typedef OverviewSections = ({
@@ -68,10 +70,23 @@ List<List<String>> overviewDrawnCards(OverviewSections sections) => [
 /// on the left — answerable in place — and what is at work on the right, each
 /// card with its last two hours. On a phone, the queue first, then the work.
 class OverviewHybrid extends ConsumerStatefulWidget {
-  const OverviewHybrid({required this.onOpen, super.key});
+  const OverviewHybrid({
+    required this.onOpen,
+    this.onEdit,
+    this.onTerminal,
+    this.questionControllerOf,
+    super.key,
+  });
 
   /// A card was tapped: peek it.
   final ValueChanged<OverviewCard> onOpen;
+
+  /// See [OverviewQueueCard.onEdit] and [OverviewQueueCard.onTerminal].
+  final ValueChanged<OverviewCard>? onEdit;
+  final ValueChanged<OverviewCard>? onTerminal;
+
+  /// The keyboard's hold on each waiting question, by session id.
+  final QuestionPromptController Function(String id)? questionControllerOf;
 
   @override
   ConsumerState<OverviewHybrid> createState() => _OverviewHybridState();
@@ -143,6 +158,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   key: ValueKey('overview-queue-card:${card.id}'),
                   card: card,
                   onOpen: onOpen,
+                  onEdit: widget.onEdit,
+                  onTerminal: widget.onTerminal,
+                  questionController: widget.questionControllerOf?.call(
+                    card.id,
+                  ),
                 ),
               ),
           ],
