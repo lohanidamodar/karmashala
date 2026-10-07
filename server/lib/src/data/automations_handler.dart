@@ -143,6 +143,7 @@ class AutomationsHandler {
     _repository(automation.repositoryId);
     final before = _automations.getById(automation.id);
     automation = _webhookOf(automation, before);
+    automation = _stepsOf(automation, before);
     if (before == null) {
       _automations.insert(automation);
     } else {
@@ -180,6 +181,23 @@ class AutomationsHandler {
         callsPerHour: asked.callsPerHour.clamp(1, kMaxWebhookCallsPerHour),
       ),
     );
+  }
+
+  /// A client that predates steps sends none, and its save must not drop the
+  /// steps, model or worktree a newer one set.
+  static Automation _stepsOf(Automation automation, Automation? before) {
+    if (automation.steps.stated) return automation;
+    var kept = automation.copyWith(
+      steps: before?.steps ?? AutomationSteps.standard,
+    );
+    if (kept.webhook == null && before != null) {
+      kept = kept.copyWith(
+        modelId: before.modelId,
+        clearModel: before.modelId == null,
+        worktree: before.worktree,
+      );
+    }
+    return kept;
   }
 
   DataAck _delete(String id, List<DataChange> changes) {

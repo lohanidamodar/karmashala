@@ -4,6 +4,7 @@ import 'package:karmashala_core/verdicts.dart';
 import 'automation.dart';
 import 'automation_check_verdict.dart';
 import 'automation_run.dart';
+import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
 import 'project_check.dart';
@@ -48,12 +49,16 @@ Map<String, Object?> automationToJson(Automation a) => {
   'maxRuntimeSeconds': a.maxRuntime?.inSeconds,
   'triggerEvent': a.trigger?.kind.storedName,
   'eventAction': a.trigger?.action.storedName,
+  'modelId': a.modelId,
+  'worktree': a.worktree,
+  'steps': a.steps.toJson(),
   if (a.webhook case final w?)
     'webhook': {
       'hookId': w.hookId,
       'requireSignature': w.requireSignature,
-      'modelId': w.modelId,
-      'worktree': w.worktree,
+      // Where a reader that predates steps looks for them.
+      'modelId': a.modelId,
+      'worktree': a.worktree,
       'callsPerHour': w.callsPerHour,
     },
 };
@@ -64,8 +69,6 @@ AutomationWebhook? _webhook(Object? json) {
   return AutomationWebhook(
     hookId: map['hookId'] as String? ?? '',
     requireSignature: map['requireSignature'] as bool? ?? true,
-    modelId: map['modelId'] as String?,
-    worktree: map['worktree'] as bool? ?? false,
     callsPerHour: map['callsPerHour'] as int? ?? kDefaultWebhookCallsPerHour,
   );
 }
@@ -73,6 +76,7 @@ AutomationWebhook? _webhook(Object? json) {
 Automation automationFromJson(Map<String, Object?> json) {
   final armedAt = _date(json['armedAt']);
   final seconds = json['maxRuntimeSeconds'] as int?;
+  final hook = json['webhook'] is Map ? json['webhook']! as Map : const {};
   return Automation(
     id: _as<String>(json['id']),
     repositoryId: _as<String>(json['repositoryId']),
@@ -104,6 +108,11 @@ Automation automationFromJson(Map<String, Object?> json) {
       action: json['eventAction'] as String?,
     ),
     webhook: _webhook(json['webhook']),
+    modelId: json['modelId'] as String? ?? hook['modelId'] as String?,
+    worktree: json['worktree'] as bool? ?? hook['worktree'] as bool? ?? false,
+    steps: json.containsKey('steps')
+        ? AutomationSteps.fromJson(json['steps'])
+        : AutomationSteps.unstated,
   );
 }
 
@@ -121,6 +130,9 @@ Map<String, Object?> automationRunToJson(AutomationRun r) => {
   'checksObservedAt': _iso(r.checksObservedAt),
   'origin': r.origin,
   'eventSessionId': r.eventSessionId,
+  'startedBy': r.startedBy?.name,
+  if (r.stepResults.isNotEmpty)
+    'stepResults': [for (final step in r.stepResults) step.toJson()],
 };
 
 AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
@@ -137,6 +149,8 @@ AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   checksObservedAt: _optionalDate(json['checksObservedAt']),
   origin: _strings(json['origin']),
   eventSessionId: json['eventSessionId'] as String?,
+  startedBy: AutomationRunCause.fromName(json['startedBy'] as String?),
+  stepResults: AutomationStepResult.listFromJson(json['stepResults']),
 );
 
 Map<String, Object?> checkVerdictToJson(AutomationCheckVerdict v) => {

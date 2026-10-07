@@ -34,9 +34,9 @@ void main() {
     permissionMode: const PermissionSelection({'mode': 'plan'}),
     enabled: enabled,
     armedAt: now,
+    modelId: 'opus',
     webhook: const AutomationWebhook(
       hookId: '0123456789abcdef0123456789abcdef',
-      modelId: 'opus',
     ),
   );
 

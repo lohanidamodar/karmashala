@@ -18,8 +18,10 @@ void main() {
     UnattendedReach reach = UnattendedReach.reachable,
     String reachReason = '',
     bool requiresChecks = true,
+    bool hasCheckStep = true,
   }) => UnattendedGateInput(
     requiresChecks: requiresChecks,
+    hasCheckStep: hasCheckStep,
     repositoryName: 'app',
     verificationEnabled: verificationEnabled,
     projectCheckCount: projectCheckCount,
@@ -56,6 +58,35 @@ void main() {
 
     test('one check is enough', () {
       expect(unattendedRefusal(input(projectCheckCount: 1)), isNull);
+    });
+  });
+
+  group('a check step judges what the agent did', () {
+    test('an agent that may change things needs one', () {
+      final refusal = unattendedRefusal(input(hasCheckStep: false));
+      expect(refusal?.kind, UnattendedRefusalKind.noCheckStep);
+      expect(refusal!.reason, contains('Check the result'));
+    });
+
+    test('a read-only agent changes nothing, so needs no check at all', () {
+      expect(
+        unattendedRefusal(
+          input(
+            permits: PermissionRisk.readOnly,
+            verificationEnabled: false,
+            projectCheckCount: 0,
+            hasCheckStep: false,
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('the check step comes before the mode, as the other checks do', () {
+      final refusal = unattendedRefusal(
+        input(permits: PermissionRisk.ask, hasCheckStep: false),
+      );
+      expect(refusal?.kind, UnattendedRefusalKind.noCheckStep);
     });
   });
 

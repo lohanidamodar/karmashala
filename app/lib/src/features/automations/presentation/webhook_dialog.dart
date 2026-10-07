@@ -61,14 +61,14 @@ class _WebhookDialogState extends ConsumerState<WebhookDialog> {
     _id = existing?.id ?? ref.read(automationControllerProvider).newId();
     _name = TextEditingController(text: existing?.name ?? '');
     _template = TextEditingController(text: existing?.prompt ?? '');
-    _model = TextEditingController(text: webhook?.modelId ?? '');
+    _model = TextEditingController(text: existing?.modelId ?? '');
     _perHour = TextEditingController(
       text: '${webhook?.callsPerHour ?? kDefaultWebhookCallsPerHour}',
     );
     _installationId = existing?.agentInstallationId;
     _mode = existing?.permissionMode;
     _signed = webhook?.requireSignature ?? true;
-    _worktree = webhook?.worktree ?? false;
+    _worktree = existing?.worktree ?? false;
   }
 
   @override
@@ -126,11 +126,12 @@ class _WebhookDialogState extends ConsumerState<WebhookDialog> {
           existing?.stopAfterFailures ?? kDefaultStopAfterFailures,
       consecutiveFailures: existing?.consecutiveFailures ?? 0,
       maxRuntime: existing?.maxRuntime,
+      modelId: model.isEmpty ? null : model,
+      worktree: _worktree,
+      steps: existing?.steps ?? AutomationSteps.standard,
       webhook: AutomationWebhook(
         hookId: existing?.webhook?.hookId ?? '',
         requireSignature: _signed,
-        modelId: model.isEmpty ? null : model,
-        worktree: _worktree,
         callsPerHour: perHour,
       ),
     );

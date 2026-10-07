@@ -12,12 +12,12 @@ Automation webhookRule({
   String id = 'hook1',
   AutomationWebhook webhook = const AutomationWebhook(
     hookId: _hook,
-    modelId: 'opus',
-    worktree: true,
     callsPerHour: 12,
   ),
   bool enabled = true,
 }) => Automation(
+  modelId: 'opus',
+  worktree: true,
   id: id,
   repositoryId: 'r1',
   name: 'triage-issue',

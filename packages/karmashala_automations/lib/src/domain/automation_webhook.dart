@@ -12,8 +12,6 @@ class AutomationWebhook {
   const AutomationWebhook({
     this.hookId = '',
     this.requireSignature = true,
-    this.modelId,
-    this.worktree = false,
     this.callsPerHour = kDefaultWebhookCallsPerHour,
   });
 
@@ -25,27 +23,16 @@ class AutomationWebhook {
   /// the credential.
   final bool requireSignature;
 
-  /// The model to start with; null is the agent's default.
-  final String? modelId;
-
-  /// Whether each call's session gets a worktree of its own.
-  final bool worktree;
-
   /// Accepted calls allowed in any hour; a call beyond it is a 429.
   final int callsPerHour;
 
   AutomationWebhook copyWith({
     String? hookId,
     bool? requireSignature,
-    String? modelId,
-    bool clearModel = false,
-    bool? worktree,
     int? callsPerHour,
   }) => AutomationWebhook(
     hookId: hookId ?? this.hookId,
     requireSignature: requireSignature ?? this.requireSignature,
-    modelId: clearModel ? null : modelId ?? this.modelId,
-    worktree: worktree ?? this.worktree,
     callsPerHour: callsPerHour ?? this.callsPerHour,
   );
 
@@ -54,13 +41,10 @@ class AutomationWebhook {
       other is AutomationWebhook &&
       other.hookId == hookId &&
       other.requireSignature == requireSignature &&
-      other.modelId == modelId &&
-      other.worktree == worktree &&
       other.callsPerHour == callsPerHour;
 
   @override
-  int get hashCode =>
-      Object.hash(hookId, requireSignature, modelId, worktree, callsPerHour);
+  int get hashCode => Object.hash(hookId, requireSignature, callsPerHour);
 
   @override
   String toString() => 'webhook';

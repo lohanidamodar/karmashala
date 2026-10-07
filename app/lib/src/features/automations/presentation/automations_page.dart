@@ -189,7 +189,7 @@ class AutomationCard extends ConsumerWidget {
             label: 'Fires',
             value:
                 'A call to its URL starts a session'
-                '${webhook.worktree ? ' in a worktree of its own' : ''}'
+                '${automation.worktree ? ' in a worktree of its own' : ''}'
                 '${automation.enabled ? '' : ' — paused'}',
           ),
           _Line(

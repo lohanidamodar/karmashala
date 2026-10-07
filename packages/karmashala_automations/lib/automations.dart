@@ -3,5 +3,6 @@
 library;
 
 export 'src/domain/automation.dart';
+export 'src/domain/automation_steps.dart';
 export 'src/domain/automation_trigger.dart';
 export 'src/domain/automation_webhook.dart';

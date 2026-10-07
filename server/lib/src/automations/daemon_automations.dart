@@ -57,7 +57,10 @@ import 'server_resume_runner.dart';
 import 'server_usage_limits.dart';
 import 'session_mcp_access.dart';
 import '../domain/host_session.dart';
-import 'package:karmashala_notifications/attention.dart' show InboxItem;
+import 'package:karmashala_notifications/attention.dart'
+    show InboxItem, InboxItemKind;
+import 'package:karmashala_notifications/watched.dart'
+    show AgentSessionKey, WatchedSession;
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 
@@ -278,6 +281,50 @@ class DaemonAutomations implements ChecksWork {
       checks: checkRunner,
       facts: facts,
       automations: automations,
+      sessionOf: sessions.getById,
+      followUps: AutomationFollowUps(
+        automations: automations,
+        resumes: resumes,
+        repositoryName: (id) => facts.repository(id)?.name ?? 'this checkout',
+        notify: (automation, run, text, {required failed}) {
+          final file = raise;
+          if (file == null) {
+            throw StateError('This server files no notifications.');
+          }
+          final sessionId = run.sessionId;
+          final session = sessionId == null
+              ? null
+              : sessions.getById(sessionId);
+          final agentId = session == null
+              ? null
+              : rows.installation(session.agentInstallationId)?.agentId;
+          final external = session?.externalSessionId;
+          file(
+            InboxItem(
+              session: WatchedSession(
+                key: AgentSessionKey(
+                  agentId ?? 'automation',
+                  external == null || external.isEmpty
+                      ? session?.id ?? run.id
+                      : external,
+                ),
+                label: session?.title ?? automation.name,
+                openId: session?.id ?? '',
+                imported: false,
+              ),
+              kind: failed
+                  ? InboxItemKind.checksFailed
+                  : InboxItemKind.finished,
+              at: now(),
+              id: 'automation:${run.id}',
+              detail: text,
+            ),
+          );
+        },
+        now: now,
+        newId: ids,
+        onChanged: _changed,
+      ),
     );
     settler = AutomationRunSettler(
       automations: automations,

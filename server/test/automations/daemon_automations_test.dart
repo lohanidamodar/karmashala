@@ -30,6 +30,8 @@ import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_host/src/automations/webhooks/webhook_call_handler.dart';
 import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart'
     show HookCall;
+import 'package:karmashala_notifications/attention.dart'
+    show InboxItem, InboxItemKind;
 import 'package:test/test.dart';
 
 import '../acp/acp_fixture.dart';
@@ -195,12 +197,16 @@ void main() {
   /// What the server started on an SSH box (slice 5d), by launch.
   final onBox = <AgentPaneLaunch>[];
 
+  final raised = <InboxItem>[];
+
   Future<void> startDaemon({
     bool reachesBoxes = false,
     ResumeQueue? queue,
   }) async {
     onBox.clear();
+    raised.clear();
     automations = DaemonAutomations(
+      raise: raised.add,
       reachesBox: reachesBoxes ? (_) => true : null,
       openAgent: reachesBoxes
           ? (launch, columns, rows) async {
@@ -241,22 +247,26 @@ void main() {
     await pump();
   }
 
-  void nightly({String repositoryId = 'r1', DateTime? armedAt}) =>
-      automationDao().insert(
-        Automation(
-          id: 'auto-$repositoryId',
-          repositoryId: repositoryId,
-          name: 'Nightly sweep',
-          schedule: const AutomationSchedule.cron('0 3 * * *'),
-          agentInstallationId: 'a1',
-          prompt: 'Fix what broke.',
-          permissionMode: const PermissionSelection({
-            'mode': 'bypassPermissions',
-          }),
-          enabled: true,
-          armedAt: armedAt ?? due.subtract(const Duration(hours: 2)).toUtc(),
-        ),
-      );
+  void nightly({
+    String repositoryId = 'r1',
+    DateTime? armedAt,
+    AutomationSteps steps = AutomationSteps.standard,
+    String? modelId,
+  }) => automationDao().insert(
+    Automation(
+      id: 'auto-$repositoryId',
+      repositoryId: repositoryId,
+      name: 'Nightly sweep',
+      schedule: const AutomationSchedule.cron('0 3 * * *'),
+      agentInstallationId: 'a1',
+      prompt: 'Fix what broke.',
+      permissionMode: const PermissionSelection({'mode': 'bypassPermissions'}),
+      enabled: true,
+      armedAt: armedAt ?? due.subtract(const Duration(hours: 2)).toUtc(),
+      steps: steps,
+      modelId: modelId,
+    ),
+  );
 
   List<AutomationRun> runs([String id = 'auto-r1']) =>
       automationDao().runsFor(id);
@@ -325,7 +335,7 @@ void main() {
   group('a webhook call', () {
     const hookId = '0123456789abcdef0123456789abcdef';
 
-    void webhook({bool verified = true}) {
+    void webhook({bool verified = true, String mode = 'plan'}) {
       if (!verified) {
         ProjectCheckDao(
           db,
@@ -339,13 +349,13 @@ void main() {
           schedule: AutomationSchedule.once(now),
           agentInstallationId: 'a1',
           prompt: 'Triage {{issue.title}}',
-          permissionMode: const PermissionSelection({'mode': 'plan'}),
+          permissionMode: PermissionSelection({'mode': mode}),
           enabled: true,
           armedAt: now,
+          modelId: 'opus',
           webhook: const AutomationWebhook(
             hookId: hookId,
             requireSignature: false,
-            modelId: 'opus',
           ),
         ),
       );
@@ -396,7 +406,8 @@ void main() {
     });
 
     test('a gate refusal starts nothing and answers 500', () async {
-      webhook(verified: false);
+      // Read-only needs no check, so an agent that may edit is refused.
+      webhook(verified: false, mode: 'bypassPermissions');
       await startDaemon();
       final answer = await handlerFor().answer(call('d2'));
       expect(answer.status, 500);
@@ -450,6 +461,50 @@ void main() {
         registry.sessions.where((s) => s.id.startsWith(kCheckSessionPrefix)),
         isEmpty,
       );
+    });
+
+    test('after a failed check it tells the agent and notifies, as its steps '
+        'say, with the model it picked', () async {
+      nightly(
+        modelId: 'sonnet',
+        steps: AutomationSteps(const [
+          AutomationStep(kind: AutomationStepKind.check),
+          AutomationStep(
+            kind: AutomationStepKind.tell,
+            when: AutomationStepWhen.failure,
+            text: 'Fix these:\n{{steps.check.output}}',
+          ),
+          AutomationStep(
+            kind: AutomationStepKind.notify,
+            when: AutomationStepWhen.always,
+            text: '{{automation}} in {{project}}: {{run.status}}',
+          ),
+        ]),
+      );
+      await startDaemon();
+      final run = runs().single;
+      expect(launcher.started.first.argv, contains('sonnet'));
+      launcher.handles.single.finish(0);
+      await pump();
+      launcher.handles.last
+        ..emit('2 tests failed\r\n'.codeUnits)
+        ..finish(1);
+      await pump();
+      await automations.checks.drain();
+      await pump();
+
+      final settled = automationDao().runById(run.id)!;
+      expect(settled.stepResults.map((s) => s.kind), [
+        AutomationStepKind.tell,
+        AutomationStepKind.notify,
+      ]);
+      final told =
+          ScheduledResumeDao(db).lastEndedFor(run.sessionId!) ??
+          ScheduledResumeDao(db).liveFor(run.sessionId!);
+      expect(told!.message, startsWith('Fix these:\nthe tests: Fail.'));
+      expect(told.scheduledBy, 'automation "Nightly sweep"');
+      expect(raised.single.detail, 'Nightly sweep in repo-r1: failed');
+      expect(raised.single.kind, InboxItemKind.checksFailed);
     });
 
     test('an interval is re-armed from the run\'s finish', () async {

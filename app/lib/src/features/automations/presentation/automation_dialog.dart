@@ -174,6 +174,9 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
       consecutiveFailures: existing?.consecutiveFailures ?? 0,
       maxRuntime: existing?.maxRuntime,
       trigger: _trigger,
+      modelId: existing?.modelId,
+      worktree: existing?.worktree ?? false,
+      steps: existing?.steps ?? AutomationSteps.standard,
     );
   }
 

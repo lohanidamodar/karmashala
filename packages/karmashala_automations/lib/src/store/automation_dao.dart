@@ -9,6 +9,7 @@ import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
+import '../domain/automation_steps.dart';
 import '../domain/automation_trigger.dart';
 import '../domain/automation_webhook.dart';
 
@@ -27,9 +28,9 @@ class AutomationDao implements AutomationRecords {
     'late_policy, stop_after_failures, consecutive_failures, '
     'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
     'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
-    'webhook_per_hour) '
+    'webhook_per_hour, model_id, run_in_worktree, steps) '
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-    '?, ?, ?, ?, ?);',
+    '?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -48,6 +49,7 @@ class AutomationDao implements AutomationRecords {
       automation.trigger?.kind.storedName,
       automation.trigger?.action.storedName,
       ..._webhookColumns(automation),
+      ..._stepColumns(automation),
     ],
   );
 
@@ -60,7 +62,8 @@ class AutomationDao implements AutomationRecords {
     'stop_after_failures = ?, consecutive_failures = ?, disabled_reason = ?, '
     'max_runtime_seconds = ?, trigger_event = ?, event_action = ?, '
     'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
-    'webhook_worktree = ?, webhook_per_hour = ? '
+    'webhook_worktree = ?, webhook_per_hour = ?, model_id = ?, '
+    'run_in_worktree = ?, steps = ? '
     'WHERE id = ?;',
     [
       automation.name,
@@ -78,6 +81,7 @@ class AutomationDao implements AutomationRecords {
       automation.trigger?.kind.storedName,
       automation.trigger?.action.storedName,
       ..._webhookColumns(automation),
+      ..._stepColumns(automation),
       automation.id,
     ],
   );
@@ -88,11 +92,18 @@ class AutomationDao implements AutomationRecords {
     return [
       webhook.hookId.isEmpty ? null : webhook.hookId,
       intFromBool(webhook.requireSignature),
-      webhook.modelId,
-      intFromBool(webhook.worktree),
+      // Still written: a build before v84 reads a webhook's model here.
+      automation.modelId,
+      intFromBool(automation.worktree),
       webhook.callsPerHour,
     ];
   }
+
+  static List<Object?> _stepColumns(Automation automation) => [
+    automation.modelId,
+    intFromBool(automation.worktree),
+    automation.steps.toColumn(),
+  ];
 
   /// cron, fires_at, every_seconds — all null for an event rule, so a build
   /// that predates triggers cannot read one as a schedule and fire it.
@@ -251,7 +262,8 @@ class AutomationDao implements AutomationRecords {
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
     'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
-    'event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'event_session_id, started_by, step_results) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -265,13 +277,21 @@ class AutomationDao implements AutomationRecords {
       run.commitsMade,
       run.origin.isEmpty ? null : jsonEncode(run.origin),
       run.eventSessionId,
+      run.startedBy?.name,
+      _stepResultsColumn(run),
     ],
   );
+
+  static String? _stepResultsColumn(AutomationRun run) =>
+      run.stepResults.isEmpty
+      ? null
+      : jsonEncode([for (final step in run.stepResults) step.toJson()]);
 
   @override
   void updateRun(AutomationRun run) => _db.execute(
     'UPDATE automation_runs SET state = ?, reason = ?, base_checkpoint_id = ?, '
-    'session_id = ?, finished_at = ?, commits_made = ? WHERE id = ?;',
+    'session_id = ?, finished_at = ?, commits_made = ?, step_results = ? '
+    'WHERE id = ?;',
     [
       run.state.name,
       run.reason,
@@ -279,6 +299,7 @@ class AutomationDao implements AutomationRecords {
       run.sessionId,
       run.finishedAt == null ? null : isoFromDate(run.finishedAt!),
       run.commitsMade,
+      _stepResultsColumn(run),
       run.id,
     ],
   );
@@ -540,12 +561,13 @@ class AutomationDao implements AutomationRecords {
           : AutomationWebhook(
               hookId: row['webhook_id']! as String,
               requireSignature: boolFromInt(row['webhook_signature'] ?? 1),
-              modelId: row['webhook_model'] as String?,
-              worktree: boolFromInt(row['webhook_worktree'] ?? 0),
               callsPerHour:
                   row['webhook_per_hour'] as int? ??
                   kDefaultWebhookCallsPerHour,
             ),
+      modelId: row['model_id'] as String?,
+      worktree: boolFromInt(row['run_in_worktree'] ?? 0),
+      steps: AutomationSteps.fromColumn(row['steps'] as String?),
     );
   }
 
@@ -567,5 +589,9 @@ class AutomationDao implements AutomationRecords {
         : dateFromIso(row['checks_observed_at']),
     origin: _ids(row['origin'] as String?),
     eventSessionId: row['event_session_id'] as String?,
+    startedBy: AutomationRunCause.fromName(row['started_by'] as String?),
+    stepResults: AutomationStepResult.listFromColumn(
+      row['step_results'] as String?,
+    ),
   );
 }

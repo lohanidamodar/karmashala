@@ -1,4 +1,5 @@
 import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -103,6 +104,26 @@ void main() {
   AutomationsSnapshot snapshot() => app.handle(const AutomationsList()).value;
 
   List<DataChange> lastTold() => told.last.changes;
+
+  test('a client that predates steps keeps what a newer one set', () {
+    final steps = AutomationSteps(const [
+      AutomationStep(
+        kind: AutomationStepKind.notify,
+        when: AutomationStepWhen.always,
+      ),
+    ]);
+    app.handle(AutomationSave(rule().copyWith(steps: steps, modelId: 'opus')));
+    final old = automationFromJson(
+      automationToJson(rule(name: 'Renamed'))
+        ..remove('steps')
+        ..remove('modelId')
+        ..remove('worktree'),
+    );
+    final saved = app.handle(AutomationSave(old)).value;
+    expect(saved.name, 'Renamed');
+    expect(saved.steps, steps);
+    expect(saved.modelId, 'opus');
+  });
 
   test(
     'a saved automation is stored, told, and the scheduler looks again',
