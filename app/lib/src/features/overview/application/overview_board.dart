@@ -613,6 +613,3 @@ OverviewStrip summarizeStrip(
     spend: Map.unmodifiable(spend),
   );
 }
-
-/// An arrow key on the Board.
-enum BoardMove { up, down, left, right }

@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_queue_card.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -334,6 +336,161 @@ void main() {
     await settleMission(tester);
     expect(find.byKey(const ValueKey('overview-peek:ks-r21')), findsOneWidget);
     await unmountMission(tester);
+  });
+
+  group('keyboard triage', () {
+    String? selected(ProviderContainer c) =>
+        c.read(overviewFocusProvider).selected;
+    String? peeked(ProviderContainer c) => c.read(overviewFocusProvider).peeked;
+    Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await settleMission(tester);
+    }
+
+    testWidgets('N walks what waits on you, asks before failures', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), 'ks-r21');
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), isIn(['ask-q', 'term']));
+      await press(tester, LogicalKeyboardKey.keyN);
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), 'store-reviews');
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), 'ks-r21');
+      expect(peeked(c), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Y allows the selected command, and the next is selected', (
+      tester,
+    ) async {
+      final (c, recorder) = await pump(tester);
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), 'ks-r21');
+      await press(tester, LogicalKeyboardKey.keyY);
+      final allow = recorder.asked.single as ApprovalAnswerRequest;
+      expect((allow.sessionId, allow.approve), ('ks-r21', true));
+      expect(selected(c), isNot('ks-r21'));
+      expect(selected(c), isNotNull);
+
+      // A on a question offers nothing: the key does nothing.
+      await press(tester, LogicalKeyboardKey.keyA);
+      expect(recorder.asked, hasLength(1));
+      await unmountMission(tester);
+    });
+
+    testWidgets('A always allows; D denies', (tester) async {
+      final (c, recorder) = await pump(tester);
+      await press(tester, LogicalKeyboardKey.keyN);
+      await press(tester, LogicalKeyboardKey.keyA);
+      expect((recorder.asked.single as MenuAnswerRequest).option, 1);
+      c.read(overviewFocusProvider.notifier).select('ks-r21');
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.keyD);
+      expect((recorder.asked.last as ApprovalAnswerRequest).approve, isFalse);
+      await unmountMission(tester);
+    });
+
+    testWidgets('1–9 picks an option, Enter sends it and moves on', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).select('ask-q');
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.digit2);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('question-option-desc-0-1')),
+            )
+            .maxLines,
+        isNull,
+        reason: 'the chosen option shows its description whole',
+      );
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(questions.single.answers.single.options, [1]);
+      expect(selected(c), isNot('ask-q'));
+      expect(selected(c), isNotNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('↑ ↓ and J K move between sessions; Enter opens; Esc closes', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      final first = selected(c);
+      expect(first, isNotNull);
+      await press(tester, LogicalKeyboardKey.keyJ);
+      final second = selected(c);
+      expect(second, isNot(first));
+      await press(tester, LogicalKeyboardKey.keyK);
+      expect(selected(c), first);
+
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(peeked(c), first);
+      // With the peek open, moving opens the next one in it.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(peeked(c), second);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(peeked(c), isNull);
+      expect(selected(c), second);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(selected(c), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('with the peek open, N opens the next waiting item in it', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-queue-title:ks-r21')));
+      await settleMission(tester);
+      expect(peeked(c), 'ks-r21');
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(peeked(c), isIn(['ask-q', 'term']));
+      await unmountMission(tester);
+    });
+
+    testWidgets('keys never fire while typing in a field', (tester) async {
+      final (c, recorder) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).select('ks-r21');
+      await tester.tap(find.byKey(const ValueKey('question-reply-in-words')));
+      await settleMission(tester);
+      final field = find.byKey(const ValueKey('overview-composer:ask-q'));
+      await tester.tap(field);
+      await settleMission(tester);
+      c.read(overviewFocusProvider.notifier).select('ks-r21');
+      await settleMission(tester);
+      for (final key in [
+        LogicalKeyboardKey.keyY,
+        LogicalKeyboardKey.keyN,
+        LogicalKeyboardKey.keyD,
+        LogicalKeyboardKey.digit1,
+      ]) {
+        await press(tester, key);
+      }
+      expect(recorder.asked, isEmpty);
+      expect(selected(c), 'ks-r21');
+      await unmountMission(tester);
+    });
+
+    testWidgets('? shows the keys', (tester) async {
+      await pump(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.slash, character: '?');
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('overview-keys')), findsOneWidget);
+      expect(find.text('Allow, always allow or deny the selected command'),
+          findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await settleMission(tester);
+      await unmountMission(tester);
+    });
   });
 
   for (final (name, size, phone) in [

@@ -64,8 +64,12 @@ class OverviewQueueCard extends ConsumerStatefulWidget {
     this.onEdit,
     this.onTerminal,
     this.questionController,
+    this.onAnswered,
     super.key,
   });
+
+  /// An answer went, by button or by key: move on.
+  final ValueChanged<OverviewCard>? onAnswered;
 
   final OverviewCard card;
 
@@ -206,6 +210,9 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
                 : () => widget.onEdit!(card),
             onReplyInWords: () => setState(() => _replying = !_replying),
             questionController: widget.questionController,
+            onAnswered: widget.onAnswered == null
+                ? null
+                : () => widget.onAnswered!(card),
           ),
           if (_replying) ...[
             const SizedBox(height: Insets.xs),

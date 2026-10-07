@@ -13,6 +13,8 @@ import '../../../app/shell/keymap_controller.dart';
 import '../../../app/shell/shell_area.dart' show shellCommandShownWith;
 import '../../../core/capabilities/capabilities.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../overview/presentation/overview_triage.dart'
+    show kOverviewTriageKeys, kOverviewTriageNote;
 import '../application/settings_controller.dart';
 import 'copyable_name.dart';
 import 'settings_catalog.dart';
@@ -161,6 +163,29 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
         _group(
           'In the editor',
           where((b) => b.keys != null && b.when == KeymapWhen.editorFocus),
+        ),
+        SettingsSection(
+          key: const ValueKey('keyboard-overview-keys'),
+          title: 'On the Overview',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SettingsNote(
+                '$kOverviewTriageNote Fixed keys: keymap.json does not '
+                'rebind them.',
+              ),
+              for (final (keys, does) in kOverviewTriageKeys)
+                if (_filter.text.isEmpty ||
+                    '$keys $does'.toLowerCase().contains(
+                      _filter.text.toLowerCase(),
+                    ))
+                  SettingsRow(
+                    label: does,
+                    controlMaxWidth: 200,
+                    control: SettingsValue(label: keys, mono: true),
+                  ),
+            ],
+          ),
         ),
         _group(
           'No keys — quick open and menus',

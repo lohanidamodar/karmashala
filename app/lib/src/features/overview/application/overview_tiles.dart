@@ -13,34 +13,6 @@ Set<BoardColumn>? counterTapped(
 int doneTodayOf(OverviewBoard board) =>
     board.lanes.fold(0, (sum, lane) => sum + lane.doneToday.length);
 
-/// The mark an arrow lands on, from [from], over [tiles] — each tile's mark
-/// ids as drawn. Left and right walk a tile; up and down reach the nearest
-/// tile with marks, at the same place or its last. No mark yet picks the
-/// first; an edge stays put.
-String? moveOnTiles(List<List<String>> tiles, String? from, BoardMove move) {
-  final t = tiles.indexWhere((tile) => tile.contains(from));
-  if (t < 0) {
-    for (final tile in tiles) {
-      if (tile.isNotEmpty) return tile.first;
-    }
-    return null;
-  }
-  final i = tiles[t].indexOf(from!);
-  switch (move) {
-    case BoardMove.left || BoardMove.right:
-      final next = i + (move == BoardMove.right ? 1 : -1);
-      return next < 0 || next >= tiles[t].length ? from : tiles[t][next];
-    case BoardMove.up || BoardMove.down:
-      final step = move == BoardMove.down ? 1 : -1;
-      for (var k = t + step; k >= 0 && k < tiles.length; k += step) {
-        final tile = tiles[k];
-        if (tile.isEmpty) continue;
-        return tile[i < tile.length ? i : tile.length - 1];
-      }
-      return from;
-  }
-}
-
 /// What an active-filter chip clears.
 enum OverviewFilterKind { projects, agents, machines, archived }
 

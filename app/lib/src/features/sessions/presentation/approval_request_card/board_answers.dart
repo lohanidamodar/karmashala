@@ -119,6 +119,7 @@ class _BoardApprovalAnswers extends ConsumerStatefulWidget {
     required this.summary,
     this.where,
     this.onEdit,
+    this.onAnswered,
   });
 
   final String sessionId;
@@ -126,6 +127,7 @@ class _BoardApprovalAnswers extends ConsumerStatefulWidget {
   final ToolAskSummary summary;
   final String? where;
   final VoidCallback? onEdit;
+  final VoidCallback? onAnswered;
 
   @override
   ConsumerState<_BoardApprovalAnswers> createState() =>
@@ -142,6 +144,8 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
     final refused = await answerBoardApproval(ref, widget.sessionId, kind);
     if (refused != null) {
       messenger.showSnackBar(SnackBar(content: Text(refused)));
+    } else {
+      widget.onAnswered?.call();
     }
     if (mounted) setState(() => _busy = false);
   }

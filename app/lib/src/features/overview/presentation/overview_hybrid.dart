@@ -61,11 +61,6 @@ OverviewSections overviewSectionsOf(
   );
 }
 
-/// The ids the arrow keys move over, one card per row, as they are drawn.
-List<List<String>> overviewDrawnCards(OverviewSections sections) => [
-  for (final card in [...sections.queue, ...sections.work]) [card.id],
-];
-
 /// **The Overview, hybrid**: the fleet's heartbeat on top, what waits on you
 /// on the left — answerable in place — and what is at work on the right, each
 /// card with its last two hours. On a phone, the queue first, then the work.
@@ -75,8 +70,12 @@ class OverviewHybrid extends ConsumerStatefulWidget {
     this.onEdit,
     this.onTerminal,
     this.questionControllerOf,
+    this.onAnswered,
     super.key,
   });
+
+  /// See [OverviewQueueCard.onAnswered].
+  final ValueChanged<OverviewCard>? onAnswered;
 
   /// A card was tapped: peek it.
   final ValueChanged<OverviewCard> onOpen;
@@ -160,6 +159,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   onOpen: onOpen,
                   onEdit: widget.onEdit,
                   onTerminal: widget.onTerminal,
+                  onAnswered: widget.onAnswered,
                   questionController: widget.questionControllerOf?.call(
                     card.id,
                   ),

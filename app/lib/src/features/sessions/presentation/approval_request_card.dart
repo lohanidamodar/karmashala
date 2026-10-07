@@ -57,8 +57,12 @@ class ApprovalRequestCard extends ConsumerWidget {
     this.onEdit,
     this.onReplyInWords,
     this.questionController,
+    this.onAnswered,
     super.key,
   });
+
+  /// On the [board]: an answer went, by button or by key.
+  final VoidCallback? onAnswered;
 
   final String sessionId;
 
@@ -162,6 +166,7 @@ class ApprovalRequestCard extends ConsumerWidget {
         summary: summarizeToolAsk(report.toolAsk!),
         where: where,
         onEdit: onEdit,
+        onAnswered: onAnswered,
       );
     }
 
@@ -262,6 +267,7 @@ class ApprovalRequestCard extends ConsumerWidget {
               board: board,
               onReplyInWords: onReplyInWords,
               controller: questionController,
+              onAnswered: onAnswered,
               where: board ? null : where,
               trailing: dense && !board
                   ? _WaitingFor(since: report.waitingSince)
@@ -442,6 +448,7 @@ class _QuestionOr extends ConsumerWidget {
     this.board = false,
     this.onReplyInWords,
     this.controller,
+    this.onAnswered,
   });
 
   final String sessionId;
@@ -455,6 +462,7 @@ class _QuestionOr extends ConsumerWidget {
   final bool board;
   final VoidCallback? onReplyInWords;
   final QuestionPromptController? controller;
+  final VoidCallback? onAnswered;
 
   /// See [QuestionPromptCard.where] and [QuestionPromptCard.trailing].
   final String? where;
@@ -511,6 +519,7 @@ class _QuestionOr extends ConsumerWidget {
               ? 'Left to talk over.'
               : 'Answered.',
         );
+        if (!chat) onAnswered?.call();
       },
     );
   }

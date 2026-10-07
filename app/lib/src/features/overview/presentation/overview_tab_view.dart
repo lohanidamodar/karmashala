@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -16,6 +15,10 @@ import '../application/overview_tiles.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
+import 'overview_queue_card.dart';
+import 'overview_triage.dart';
+import '../../sessions/presentation/approval_request_card.dart';
+import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 
 /// **The Overview tab**: what is going on across all the work, as a Board
@@ -113,7 +116,7 @@ Future<void> openTimelineSession(
 }
 
 /// Mission control with the peek docked beside it, or in a sheet where it
-/// would crowd. Arrows move between marks, Enter peeks, Esc closes the peek.
+/// would crowd, triaged from the keyboard ([overviewTriageShortcuts]).
 class _BoardBody extends ConsumerStatefulWidget {
   const _BoardBody();
 
@@ -123,6 +126,7 @@ class _BoardBody extends ConsumerStatefulWidget {
 
 class _BoardBodyState extends ConsumerState<_BoardBody> {
   final _focus = FocusNode(debugLabel: 'overview-board');
+  final _questions = <String, QuestionPromptController>{};
   var _docks = true;
 
   @override
@@ -130,6 +134,15 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     _focus.dispose();
     super.dispose();
   }
+
+  QuestionPromptController _questionOf(String id) =>
+      _questions.putIfAbsent(id, QuestionPromptController.new);
+
+  OverviewSections _sections() => overviewSectionsOf(
+    ref.read(overviewBoardProvider),
+    waitingSince: (id) =>
+        ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
+  );
 
   void _open(OverviewCard card, {bool editing = false}) {
     _focus.requestFocus();
@@ -165,55 +178,153 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     );
   }
 
-  KeyEventResult _key(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    // A key a text field let through is still the field's, never the Board's.
-    if (overviewTyping()) return KeyEventResult.ignored;
+  /// Shows [id]: in the peek when one is open, else as the selection.
+  void _goTo(String id) {
     final focus = ref.read(overviewFocusProvider);
-    final controller = ref.read(overviewFocusProvider.notifier);
-    final move = switch (event.logicalKey) {
-      LogicalKeyboardKey.arrowUp => BoardMove.up,
-      LogicalKeyboardKey.arrowDown => BoardMove.down,
-      LogicalKeyboardKey.arrowLeft => BoardMove.left,
-      LogicalKeyboardKey.arrowRight => BoardMove.right,
-      _ => null,
-    };
-    if (move != null) {
-      final marks = overviewDrawnCards(
-        overviewSectionsOf(
-          ref.read(overviewBoardProvider),
-          waitingSince: (id) =>
-              ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
-        ),
-      );
-      controller.select(moveOnTiles(marks, focus.selected, move));
-      return KeyEventResult.handled;
-    }
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      final card = overviewCardOf(
-        ref.read(overviewBoardProvider),
-        focus.selected,
-      );
-      if (card == null) return KeyEventResult.ignored;
+    final card = overviewCardOf(ref.read(overviewBoardProvider), id);
+    if (card != null && focus.peeked != null && _docks) {
       _open(card);
-      return KeyEventResult.handled;
+    } else {
+      ref.read(overviewFocusProvider.notifier).select(id);
     }
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      if (focus.peeked != null) {
-        controller.closePeek();
-      } else if (focus.selected != null) {
-        controller.select(null);
-      } else {
-        return KeyEventResult.ignored;
-      }
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
+
+  /// The waiting item after [from], round the queue; null when none other.
+  String? _nextWaiting(String? from) {
+    final queue = [for (final card in _sections().queue) card.id];
+    final others = [for (final id in queue) if (id != from) id];
+    if (others.isEmpty) return null;
+    final at = queue.indexOf(from ?? '');
+    if (at < 0) return others.first;
+    for (var i = 1; i <= queue.length; i++) {
+      final id = queue[(at + i) % queue.length];
+      if (id != from) return id;
+    }
+    return others.first;
+  }
+
+  /// After [card] was answered, the next waiting item is selected by itself.
+  void _advance(OverviewCard card) {
+    final next = _nextWaiting(card.id);
+    if (next != null) {
+      _goTo(next);
+      return;
+    }
+    final controller = ref.read(overviewFocusProvider.notifier);
+    if (ref.read(overviewFocusProvider).peeked == card.id) {
+      controller.closePeek();
+    }
+    controller.select(null);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Nothing else is waiting on you')),
+    );
+  }
+
+  /// The selected card when it waits on you.
+  OverviewCard? _target() {
+    final selected = ref.read(overviewFocusProvider).selected;
+    for (final card in _sections().queue) {
+      if (card.id == selected) return card;
+    }
+    return null;
+  }
+
+  void _terminal(OverviewCard card) => openSessionTerminal(ref, card.id);
+
+  Map<Type, Action<Intent>> get _actions => {
+    OverviewNextWaitingIntent: _Triage<OverviewNextWaitingIntent>((_) {
+      final focus = ref.read(overviewFocusProvider);
+      final next = _nextWaiting(focus.peeked ?? focus.selected);
+      final current = focus.peeked ?? focus.selected;
+      final queue = [for (final card in _sections().queue) card.id];
+      if (next == null && queue.isEmpty) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Nothing is waiting on you')),
+        );
+        return;
+      }
+      _goTo(next ?? current!);
+    }),
+    OverviewPickOptionIntent: _Triage<OverviewPickOptionIntent>(
+      (intent) => _questions[_target()?.id]?.pick(intent.number - 1),
+      enabled: (_) => _questions[_target()?.id] != null,
+    ),
+    OverviewSendIntent: _Triage<OverviewSendIntent>((_) {
+      final target = _target();
+      if (target != null && (_questions[target.id]?.send() ?? false)) {
+        _advance(target);
+        return;
+      }
+      final selected = overviewCardOf(
+        ref.read(overviewBoardProvider),
+        ref.read(overviewFocusProvider).selected,
+      );
+      if (selected != null) _open(selected);
+    }, enabled: (_) => ref.read(overviewFocusProvider).selected != null),
+    OverviewApproveIntent: _Triage<OverviewApproveIntent>(
+      (intent) async {
+        final target = _target()!;
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        final refused = await answerBoardApproval(
+          ref,
+          target.id,
+          intent.answer,
+        );
+        if (!mounted) return;
+        if (refused != null) {
+          messenger?.showSnackBar(SnackBar(content: Text(refused)));
+        } else {
+          _advance(target);
+        }
+      },
+      enabled: (intent) => switch (_target()) {
+        final target? => boardApprovalOffers(
+          ref,
+          target.id,
+        ).contains(intent.answer),
+        null => false,
+      },
+    ),
+    OverviewTerminalIntent: _Triage<OverviewTerminalIntent>(
+      (_) => _terminal(_target()!),
+      enabled: (_) => switch (_target()) {
+        final target? =>
+          overviewAskKind(
+                target,
+                ref.read(sessionStatusLookupProvider)(target.id),
+              ) ==
+              OverviewAskKind.terminalOnly,
+        null => false,
+      },
+    ),
+    OverviewMoveIntent: _Triage<OverviewMoveIntent>((intent) {
+      final sections = _sections();
+      final order = [
+        for (final card in [...sections.queue, ...sections.work]) card.id,
+      ];
+      if (order.isEmpty) return;
+      final focus = ref.read(overviewFocusProvider);
+      final at = order.indexOf(focus.peeked ?? focus.selected ?? '');
+      final next = at < 0
+          ? 0
+          : (at + (intent.down ? 1 : -1)).clamp(0, order.length - 1);
+      _goTo(order[next]);
+    }),
+    OverviewDismissIntent: _Triage<OverviewDismissIntent>(
+      (_) {
+        final focus = ref.read(overviewFocusProvider);
+        final controller = ref.read(overviewFocusProvider.notifier);
+        focus.peeked != null ? controller.closePeek() : controller.select(null);
+      },
+      enabled: (_) {
+        final focus = ref.read(overviewFocusProvider);
+        return focus.peeked != null || focus.selected != null;
+      },
+    ),
+    OverviewShowKeysIntent: _Triage<OverviewShowKeysIntent>(
+      (_) => showOverviewKeys(context),
+    ),
+  };
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -228,31 +339,59 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       final main = OverviewHybrid(
         onOpen: _open,
         onEdit: (card) => _open(card, editing: true),
+        onTerminal: _terminal,
+        onAnswered: _advance,
+        questionControllerOf: _questionOf,
       );
-      return Focus(
-        focusNode: _focus,
-        onKeyEvent: _key,
-        child: peeked == null
-            ? main
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: main),
-                  const VerticalDivider(width: 1),
-                  SizedBox(
-                    width: _peekWidth,
-                    child: OverviewPeek(
-                      key: ValueKey('overview-peek:${peeked.id}'),
-                      card: peeked,
-                      onPeek: _open,
-                      onClose: ref
-                          .read(overviewFocusProvider.notifier)
-                          .closePeek,
-                    ),
+      return Shortcuts(
+        shortcuts: overviewTriageShortcuts,
+        child: Actions(
+          actions: _actions,
+          child: Focus(
+            focusNode: _focus,
+            autofocus: true,
+            child: peeked == null
+                ? main
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: main),
+                      const VerticalDivider(width: 1),
+                      SizedBox(
+                        width: _peekWidth,
+                        child: OverviewPeek(
+                          key: ValueKey('overview-peek:${peeked.id}'),
+                          card: peeked,
+                          onPeek: _open,
+                          onClose: ref
+                              .read(overviewFocusProvider.notifier)
+                              .closePeek,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+          ),
+        ),
       );
     },
   );
+}
+
+/// One of the board's keys: never while a field is typed into, and only
+/// where [enabled] says it applies, so an inapplicable key goes on its way.
+class _Triage<T extends Intent> extends Action<T> {
+  _Triage(this.run, {this.enabled});
+
+  final void Function(T intent) run;
+  final bool Function(T intent)? enabled;
+
+  @override
+  bool isEnabled(T intent) =>
+      !overviewTyping() && (enabled?.call(intent) ?? true);
+
+  @override
+  Object? invoke(T intent) {
+    run(intent);
+    return null;
+  }
 }
