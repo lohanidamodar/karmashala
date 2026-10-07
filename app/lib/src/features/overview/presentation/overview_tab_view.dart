@@ -21,6 +21,7 @@ import 'overview_batch_bar.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
+import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import 'overview_resume_picker.dart';
 import 'overview_triage.dart';
@@ -526,6 +527,47 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     return _laidOut();
   }
 
+  /// Two live chats docked together beside the board, the board giving way
+  /// when it would be narrower than a peek.
+  Widget _sideBySide(
+    double width,
+    Widget main,
+    Widget first,
+    OverviewCard second,
+  ) {
+    final focus = ref.read(overviewFocusProvider.notifier);
+    final double each = ((width - kOverviewBoardMinWidth) / 2).clamp(
+      _peekMinWidth,
+      _peekMaxWidth,
+    );
+    final board = width - each * 2 >= _peekMinWidth;
+    final secondPeek = OverviewPeek(
+      key: ValueKey('overview-peek-beside:${second.id}'),
+      card: second,
+      beside: true,
+      onPeek: _open,
+      onClose: focus.closeBeside,
+    );
+    const divider = VerticalDivider(width: Insets.xs + Insets.hair);
+    return Row(
+      key: const ValueKey('overview-side-by-side-peeks'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (board) ...[
+          Expanded(child: main),
+          divider,
+          SizedBox(width: each, child: first),
+          divider,
+          SizedBox(width: each, child: secondPeek),
+        ] else ...[
+          Expanded(child: first),
+          divider,
+          Expanded(child: secondPeek),
+        ],
+      ],
+    );
+  }
+
   Widget _laidOut() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth;
@@ -573,8 +615,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ),
             )
           : math.min(kOverviewPeekWidth, width);
+      // A second peek only where two fit; narrower, the first stays alone.
+      final beside =
+          peek == null ||
+              _mode != OverviewPeekMode.docked ||
+              !overviewSideBySideFits(context)
+          ? null
+          : overviewCardOf(
+              ref.watch(overviewBoardProvider),
+              ref.watch(overviewFocusProvider.select((f) => f.beside)),
+            );
       final Widget laidOut = switch ((peek, _mode)) {
         (null, _) => main,
+        (final peek?, OverviewPeekMode.docked) when beside != null =>
+          _sideBySide(width, main, peek, beside),
         (final peek?, OverviewPeekMode.docked) => Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

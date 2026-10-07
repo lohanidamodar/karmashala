@@ -32,6 +32,7 @@ import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
 import '../application/overview_tiles.dart';
 import 'overview_card_parts.dart';
+import 'overview_pins.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -70,11 +71,15 @@ class OverviewPeek extends ConsumerStatefulWidget {
     this.onPeek,
     this.onPrevious,
     this.onNext,
+    this.beside = false,
     super.key,
   });
 
   final OverviewCard card;
   final VoidCallback onClose;
+
+  /// The second of two peeks side by side: its tab is its own.
+  final bool beside;
 
   /// Another session — a sub-session or the parent — was opened from here.
   final ValueChanged<OverviewCard>? onPeek;
@@ -91,6 +96,7 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
   /// When the owner last looked, before this look: fixed while it is open.
   DateTime? _seenUntil;
   late final OverviewSeenController _seen;
+  var _besideTab = OverviewPeekTab.chat;
 
   @override
   void initState() {
@@ -127,10 +133,14 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
           const <OverviewCard>[],
     );
     final files = ref.watch(overviewChangedFilesProvider(id)).asData?.value;
-    final editing = ref.watch(
-      overviewFocusProvider.select((f) => f.editing && f.peeked == id),
-    );
-    final asked = ref.watch(overviewFocusProvider.select((f) => f.tab));
+    final editing =
+        !widget.beside &&
+        ref.watch(
+          overviewFocusProvider.select((f) => f.editing && f.peeked == id),
+        );
+    final asked = widget.beside
+        ? _besideTab
+        : ref.watch(overviewFocusProvider.select((f) => f.tab));
     final tabs = [
       OverviewPeekTab.chat,
       if (pane != null) OverviewPeekTab.terminal,
@@ -219,7 +229,9 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
                       ),
                   ],
                   selected: tab,
-                  onChanged: focus.showTab,
+                  onChanged: widget.beside
+                      ? (t) => setState(() => _besideTab = t)
+                      : focus.showTab,
                 ),
               ),
             ),
@@ -336,6 +348,7 @@ class _PeekHeader extends ConsumerWidget {
                   ],
                 ),
               ),
+              OverviewPinButton(sessionId: id),
               IconButton(
                 key: const ValueKey('overview-peek-previous'),
                 tooltip: 'Previous session (↑)',

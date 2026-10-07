@@ -244,10 +244,15 @@ class OverviewFocus {
     this.peeked,
     this.editing = false,
     this.tab = OverviewPeekTab.chat,
+    this.beside,
   });
 
   final String? selected;
   final String? peeked;
+
+  /// A second session peeked beside [peeked], where the window is wide
+  /// enough for two; null for one peek.
+  final String? beside;
 
   /// The peek opened with its command approval's command editable.
   final bool editing;
@@ -259,10 +264,11 @@ class OverviewFocus {
       other.selected == selected &&
       other.peeked == peeked &&
       other.editing == editing &&
-      other.tab == tab;
+      other.tab == tab &&
+      other.beside == beside;
 
   @override
-  int get hashCode => Object.hash(selected, peeked, editing, tab);
+  int get hashCode => Object.hash(selected, peeked, editing, tab, beside);
 }
 
 class OverviewFocusController extends Notifier<OverviewFocus> {
@@ -271,6 +277,19 @@ class OverviewFocusController extends Notifier<OverviewFocus> {
 
   void select(String? id) => state = OverviewFocus(
     selected: id,
+    peeked: state.peeked,
+    editing: state.editing,
+    tab: state.tab,
+    beside: state.beside,
+  );
+
+  /// Peeks [first] and [second] side by side, each on its chat.
+  void peekSideBySide(String first, String second) =>
+      state = OverviewFocus(selected: first, peeked: first, beside: second);
+
+  /// Closes the second peek, keeping the first.
+  void closeBeside() => state = OverviewFocus(
+    selected: state.selected,
     peeked: state.peeked,
     editing: state.editing,
     tab: state.tab,
@@ -294,6 +313,7 @@ class OverviewFocusController extends Notifier<OverviewFocus> {
     peeked: state.peeked,
     editing: state.editing,
     tab: tab,
+    beside: state.beside,
   );
 
   /// The command is no longer being edited.
@@ -301,6 +321,7 @@ class OverviewFocusController extends Notifier<OverviewFocus> {
     selected: state.selected,
     peeked: state.peeked,
     tab: state.tab,
+    beside: state.beside,
   );
 
   void closePeek() => state = OverviewFocus(selected: state.selected);

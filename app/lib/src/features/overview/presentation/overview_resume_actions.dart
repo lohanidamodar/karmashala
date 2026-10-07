@@ -9,9 +9,11 @@ import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_board.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_resume.dart';
 import 'overview_peek.dart';
+import 'overview_pins.dart';
 
 /// Whether [card]'s session can be resumed from here: one of ours that
 /// nothing runs — stopped, ended, or done with its agent gone.
@@ -76,8 +78,8 @@ class OverviewResumingLabel extends ConsumerWidget {
   }
 }
 
-/// A card's ⋯: Resume, kept here, and Open tab — offered only where the
-/// session can be resumed.
+/// A card's ⋯: Pin or Unpin, and — where the session can be resumed —
+/// Resume, kept here, and Open tab.
 class OverviewCardMenu extends ConsumerWidget {
   const OverviewCardMenu({required this.card, super.key});
 
@@ -85,7 +87,10 @@ class OverviewCardMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!watchOverviewResumable(ref, card)) return const SizedBox.shrink();
+    final resumable = watchOverviewResumable(ref, card);
+    final pinned = ref.watch(
+      overviewPrefsProvider.select((p) => p.pinned.contains(card.id)),
+    );
     final density = UiDensity.of(context);
     return Builder(
       builder: (button) => IconButton(
@@ -99,18 +104,27 @@ class OverviewCardMenu extends ConsumerWidget {
         onPressed: () async {
           final picked = await showDesktopMenuUnder<String>(button, [
             DesktopMenuItem(
-              value: 'resume',
-              label: 'Resume',
-              icon: AppIcons.play,
+              value: 'pin',
+              label: pinned ? 'Unpin' : 'Pin to the top',
+              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
             ),
-            DesktopMenuItem(
-              value: 'open',
-              label: 'Open tab',
-              icon: AppIcons.arrowSquareOut,
-            ),
+            if (resumable) ...[
+              DesktopMenuItem(
+                value: 'resume',
+                label: 'Resume',
+                icon: AppIcons.play,
+              ),
+              DesktopMenuItem(
+                value: 'open',
+                label: 'Open tab',
+                icon: AppIcons.arrowSquareOut,
+              ),
+            ],
           ]);
           if (!button.mounted) return;
           switch (picked) {
+            case 'pin':
+              toggleOverviewPin(button, ref, card.id);
             case 'resume':
               await resumeOnDashboard(button, ref, card.id);
             case 'open':

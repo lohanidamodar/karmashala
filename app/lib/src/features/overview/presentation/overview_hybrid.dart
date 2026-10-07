@@ -13,6 +13,7 @@ import 'overview_cards.dart';
 import 'overview_filters.dart';
 import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
+import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 
@@ -122,6 +123,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       waitingSince: (id) => statusOf(id)?.waitingSince,
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
+    final pinned = watchOverviewPinned(ref).isNotEmpty;
     final allStates = ref.watch(
       overviewPrefsProvider.select((p) => p.filter.allStates),
     );
@@ -258,6 +260,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 child: OverviewActiveFilterChips(),
               ),
             const SizedBox(height: Insets.lg),
+            if (pinned) ...[
+              OverviewPinnedStrip(onOpen: onOpen),
+              const SizedBox(height: Insets.lg),
+            ],
             if (sideBySide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
