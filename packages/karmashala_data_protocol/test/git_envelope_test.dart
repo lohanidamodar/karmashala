@@ -91,6 +91,13 @@ void main() {
       gitUrl: 'git@github.com:o/r.git',
       workspaceId: 'w1',
     ),
+    const ProjectFoldersCreate(
+      projectName: 'Fresh',
+      root: path,
+      createFolder: true,
+      initGit: true,
+      scan: false,
+    ),
     const ProjectRescan('p1'),
     const ProjectMove(
       'p1',
@@ -377,6 +384,20 @@ void main() {
     );
     expect(log.entries.single.worktreePath, '/wt');
     expect(log.lastSweep!.removed, 1);
+  });
+
+  test('a create sends its new options only when set, so an older server '
+      'reads the default request unchanged', () {
+    const plain = ProjectFoldersCreate(projectName: 'Demo', root: path);
+    expect(plain.argumentsToJson().keys, unorderedEquals(['name', 'root']));
+    final read =
+        DataRequest.fromJson(ProjectFoldersCreate.name, {
+              ...plain.argumentsToJson(),
+              'createFolder': true,
+              'scan': false,
+            })
+            as ProjectFoldersCreate;
+    expect((read.createFolder, read.initGit, read.scan), (true, false, false));
   });
 
   test('a project\'s folders answer the rows written', () {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 
@@ -40,9 +41,7 @@ class NoteToolbar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SegmentedButton<bool>(
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            showSelectedIcon: false,
+          CompactSegmented<bool>(
             segments: [
               ButtonSegment(
                 value: false,
@@ -60,9 +59,8 @@ class NoteToolbar extends StatelessWidget {
                 tooltip: 'Preview  ·  $toggleChord',
               ),
             ],
-            selected: {preview},
-            onSelectionChanged: (selection) =>
-                onPreviewChanged(selection.single),
+            selected: preview,
+            onChanged: onPreviewChanged,
           ),
           const Spacer(),
           Flexible(child: NoteSaveIndicator(state: saveState)),

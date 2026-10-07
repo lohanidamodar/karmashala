@@ -126,7 +126,10 @@ class StatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(Radii.pill),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 2),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.xxs,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -260,7 +263,7 @@ class RatingFigure extends StatelessWidget {
                 size: Chrome.iconAction,
                 color: semantic.attention,
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: Insets.xxs),
               Text(rating.average.toStringAsFixed(1), style: base),
               if (glyph != null && trend != null) ...[
                 const SizedBox(width: Insets.xs),
@@ -299,7 +302,7 @@ class MissingReadingLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.only(top: Insets.xxs),
           child: Icon(
             expected ? AppIcons.info : AppIcons.warning,
             size: Chrome.iconSmall,

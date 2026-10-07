@@ -146,12 +146,19 @@ class ProjectFolders {
   /// Creates a project in [target], cloning [gitUrl] first when given. With
   /// an empty [targetPath] the clone lands in `~/karmashala/<repo>`.
   /// Discovery failures throw before anything is written.
+  ///
+  /// A missing folder is made with [createFolder] — and `git init`ed with
+  /// [initGit] — and refused without it. Without [scan] the root is the one
+  /// checkout, whatever is beneath it.
   Future<ProjectCheckouts> create({
     required String name,
     required ExecutionEnvironment target,
     required String targetPath,
     String? gitUrl,
     String? workspaceId,
+    bool createFolder = false,
+    bool initGit = false,
+    bool scan = true,
   }) async {
     final url = gitUrl?.trim();
     final hasGit = url != null && url.isNotEmpty;
@@ -168,14 +175,25 @@ class ProjectFolders {
       );
     }
 
-    final resolved = hasGit ? await _clone(url, path, target) : path;
+    final resolved = hasGit
+        ? await _clone(url, path, target)
+        : createFolder || !scan
+        ? await _ensureFolder(
+            path,
+            target,
+            create: createFolder,
+            initGit: initGit,
+          )
+        : path;
     final root = EnvironmentPath(environmentId: target.id, path: resolved);
     final created = _context.write(
       ProjectCreate(
         projectName: name,
         root: root,
         workspaceId: workspaceId,
-        found: await _withWorktrees(await _discover(root, target), const []),
+        found: scan
+            ? await _withWorktrees(await _discover(root, target), const [])
+            : const [],
       ),
     );
     await _recorded(created.repositories);
@@ -368,23 +386,104 @@ mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" 
     final path = p.join(root, folder);
     Directory(path).createSync(recursive: true);
     if (!Directory(p.join(path, '.git')).existsSync()) {
-      final result = await runner.run(
-        CommandRequest(
-          executable: 'git',
-          arguments: ['init', '-q', path],
-          environment: kGitChildEnvironment,
-          removedEnvironment: kGitRemovedEnvironment,
-        ),
-      );
-      if (!result.ok) {
-        throw RepositoryDiscoveryException(
-          'Could not initialise a repository in $path: '
-          '${result.stderr.trim()}',
-        );
-      }
+      await _gitInit(runner, path);
     }
     return (root: root, path: path);
   }
+
+  Future<void> _gitInit(CommandRunner runner, String path) async {
+    final result = await runner.run(
+      CommandRequest(
+        executable: 'git',
+        arguments: ['init', '-q', path],
+        environment: kGitChildEnvironment,
+        removedEnvironment: kGitRemovedEnvironment,
+      ),
+    );
+    if (!result.ok) {
+      throw RepositoryDiscoveryException(
+        'Could not initialise a repository in $path: '
+        '${result.stderr.trim()}',
+      );
+    }
+  }
+
+  /// Answers [path] in [target] once it is a folder there: made — with its
+  /// parents, and `git init`ed with [initGit] — when missing and [create]
+  /// allows, refused otherwise. A POSIX target answers it as `pwd` spells it.
+  Future<String> _ensureFolder(
+    String path,
+    ExecutionEnvironment target, {
+    required bool create,
+    required bool initGit,
+  }) async {
+    final runner = _reach.runners.forEnvironment(target);
+    if (_isPosix(target)) {
+      if (!path.startsWith('/') && !path.startsWith('~')) {
+        throw RepositoryDiscoveryException(
+          'Give the full path of the folder on ${target.name}: $path',
+        );
+      }
+      final missing = posixQuote('Folder does not exist: $path');
+      final script = StringBuffer()
+        ..writeln('TARGET=${_posixTarget(path)}')
+        ..writeln('if [ ! -d "\$TARGET" ]; then')
+        ..writeln(
+          '  [ -e "\$TARGET" ] && { echo ${posixQuote('Not a folder: $path')}'
+          ' >&2; exit 5; }',
+        )
+        ..writeln(
+          create
+              ? '  mkdir -p "\$TARGET" || exit 6'
+              : '  echo $missing >&2; exit 4',
+        );
+      if (create && initGit) {
+        script.writeln('  git init -q "\$TARGET" || exit 7');
+      }
+      script
+        ..writeln('fi')
+        ..writeln('cd "\$TARGET" && pwd');
+      final result = await runner.run(_shellScript(script.toString()));
+      if (!result.ok) {
+        final detail = result.stderr.trim();
+        throw RepositoryDiscoveryException(
+          detail.isEmpty
+              ? 'Could not make $path on ${target.name}.'
+              : '$detail (${target.name})',
+        );
+      }
+      return result.stdout.trim().split('\n').last.trim();
+    }
+    if (!p.isAbsolute(path)) {
+      throw RepositoryDiscoveryException(
+        'Give the full path of the folder: $path',
+      );
+    }
+    final directory = Directory(path);
+    if (directory.existsSync()) return path;
+    if (FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound) {
+      throw RepositoryDiscoveryException('Not a folder: $path');
+    }
+    if (!create) {
+      throw RepositoryDiscoveryException('Folder does not exist: $path');
+    }
+    try {
+      directory.createSync(recursive: true);
+    } on FileSystemException catch (error) {
+      throw RepositoryDiscoveryException(
+        'Could not make $path: ${error.osError?.message ?? error.message}',
+      );
+    }
+    if (initGit) await _gitInit(runner, path);
+    return path;
+  }
+
+  /// [path] as a POSIX shell word, with a leading `~` left to the shell.
+  static String _posixTarget(String path) => path == '~'
+      ? r'"$HOME"'
+      : path.startsWith('~/')
+      ? '${r'"$HOME"'}/${posixQuote(path.substring(2))}'
+      : posixQuote(path);
 
   /// Re-reads [project]'s root, and the worktrees git lists for its
   /// checkouts, for checkouts it does not record, records them, and answers
@@ -521,14 +620,9 @@ mkdir -p "\$TARGET" && git init -q "\$TARGET" && echo "\$ROOT" && cd "\$TARGET" 
     final runner = _reach.runners.forEnvironment(target);
     if (target.kind == EnvironmentKind.wsl ||
         target.kind == EnvironmentKind.ssh) {
-      final targetExpression = path == '~'
-          ? r'"$HOME"'
-          : path.startsWith('~/')
-          ? '${r'"$HOME"'}/${posixQuote(path.substring(2))}'
-          : posixQuote(path);
       final cloneScript =
           '''
-TARGET=$targetExpression
+TARGET=${_posixTarget(path)}
 if [ -d "\$TARGET/.git" ]; then
   echo "EXISTS"
 else

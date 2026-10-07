@@ -197,9 +197,9 @@ class _HeaviestRow extends StatelessWidget {
           hoverColor: tones.selected,
           onTap: onOpen,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: Insets.sm,
-              vertical: 6,
+              vertical: UiDensity.of(context).padY,
             ),
             child: Row(
               children: [

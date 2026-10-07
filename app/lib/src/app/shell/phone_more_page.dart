@@ -62,7 +62,7 @@ class PhoneMoreList extends StatelessWidget {
         PhoneMoreEntry.log => (
           'Log',
           AppIcons.article,
-          (_) => const PhoneLogPage(),
+          (_) => const PaneTitleOverride(child: PhoneLogPage()),
         ),
         PhoneMoreEntry.about => (
           'About',
