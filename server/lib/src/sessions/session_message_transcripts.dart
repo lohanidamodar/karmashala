@@ -92,6 +92,7 @@ class SessionMessageTranscriptSource {
       compaction: _compactionOf(row.messageId),
       parentToolUseId: _parentIn(row.toolJson),
       images: attached,
+      model: row.role == SessionMessageRole.agent ? row.model : null,
     );
   }
 

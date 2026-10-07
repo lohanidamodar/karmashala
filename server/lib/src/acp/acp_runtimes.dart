@@ -5,6 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        ActiveModelSource,
         SessionCommandsChanged,
         SessionNoticed,
         SessionConfigOptionsChanged,
@@ -18,6 +19,7 @@ import 'package:karmashala_session_engine/store.dart'
 
 import '../checkpoints/daemon_checkpoints.dart';
 import '../data/data_service.dart';
+import '../sessions/session_active_models.dart';
 import '../status/daemon_agent_status.dart';
 import 'acp_login_link.dart';
 import 'acp_path_scope.dart';
@@ -203,6 +205,13 @@ class ServerAcpHost extends AcpRuntimeHost {
 
   /// Set once the transcripts exist; they are built after the launcher.
   void Function(String sessionId)? transcriptsChanged;
+
+  /// Where each agent's word on the model it runs is kept; set by `serve`.
+  SessionActiveModels? activeModels;
+
+  @override
+  void activeModelChanged(String sessionId, String modelId) =>
+      activeModels?.report(sessionId, modelId, source: ActiveModelSource.agent);
 
   /// What reads an agent's answer for the artifacts it names, and what the
   /// answer reads as with them taken out; set by `serve`.

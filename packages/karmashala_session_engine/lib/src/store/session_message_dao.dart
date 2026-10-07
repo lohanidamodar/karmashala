@@ -24,6 +24,7 @@ class SessionMessage {
     this.planJson,
     this.messageId,
     this.revision = 0,
+    this.model,
   });
 
   final String id;
@@ -47,6 +48,9 @@ class SessionMessage {
 
   /// The session's revision when this row last changed.
   final int revision;
+
+  /// The model the agent said it was running when it wrote an agent row.
+  final String? model;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -59,6 +63,7 @@ class SessionMessage {
     String? messageId,
     int? revision,
     DateTime? updatedAt,
+    String? model,
   }) => SessionMessage(
     id: id,
     sessionId: sessionId,
@@ -72,6 +77,7 @@ class SessionMessage {
     revision: revision ?? this.revision,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    model: model ?? this.model,
   );
 }
 
@@ -99,7 +105,7 @@ class SessionMessageDao {
       _db.execute(
         'INSERT INTO session_messages (id, session_id, ordinal, role, text, '
         'thinking, tool_json, plan_json, message_id, revision, created_at, '
-        'updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'updated_at, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           message.id,
           message.sessionId,
@@ -113,6 +119,7 @@ class SessionMessageDao {
           revision,
           isoFromDate(message.createdAt),
           isoFromDate(message.updatedAt),
+          message.model,
         ],
       );
       return message.copyWith(ordinal: ordinal, revision: revision);
@@ -132,6 +139,7 @@ class SessionMessageDao {
     String? toolJson,
     String? planJson,
     String? status,
+    String? model,
   }) {
     return _db.transaction(() {
       final current = getById(id);
@@ -157,10 +165,11 @@ class SessionMessageDao {
         planJson: planJson ?? current.planJson,
         revision: revision,
         updatedAt: _now(),
+        model: model,
       );
       _db.execute(
         'UPDATE session_messages SET text = ?, thinking = ?, tool_json = ?, '
-        'plan_json = ?, revision = ?, updated_at = ? WHERE id = ?;',
+        'plan_json = ?, revision = ?, updated_at = ?, model = ? WHERE id = ?;',
         [
           next.text,
           next.thinking,
@@ -168,6 +177,7 @@ class SessionMessageDao {
           next.planJson,
           next.revision,
           isoFromDate(next.updatedAt),
+          next.model,
           id,
         ],
       );
@@ -244,6 +254,7 @@ class SessionMessageDao {
     planJson: row['plan_json'] as String?,
     messageId: row['message_id'] as String?,
     revision: row['revision']! as int,
+    model: row['model'] as String?,
     createdAt: dateFromIso(row['created_at']),
     updatedAt: dateFromIso(row['updated_at']),
   );

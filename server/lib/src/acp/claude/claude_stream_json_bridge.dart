@@ -372,6 +372,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _openParams = params;
     _sessionId = id;
     _announceCommands();
+    _announceModel();
     return {
       'sessionId': id,
       'modes': _modes(),
@@ -391,8 +392,14 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _openParams = params;
     _sessionId = id;
     _announceCommands();
+    _announceModel();
     return {'modes': _modes(), 'configOptions': _configOptions()};
   }
+
+  /// What `default` resolves to, before Claude has replied with it. After the
+  /// answer that names the session, so it is the session's.
+  void _announceModel() =>
+      scheduleMicrotask(() => _reportModel(_resolvedOf(_model)));
 
   void _resetConversation() {
     _turn = null;
@@ -406,6 +413,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _planCalls.clear();
     _tasks.clear();
     _model = 'default';
+    _reportedModel = null;
   }
 
   Future<JsonMap> _prompt(JsonMap params) async {
@@ -554,6 +562,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       throw AcpRpcError(JsonRpcErrorCodes.invalidParams, error.message);
     }
     _model = value;
+    _reportModel(_resolvedOf(value) ?? (value == 'default' ? null : value));
     return {'configOptions': _configOptions()};
   }
 
@@ -626,15 +635,28 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _update({'sessionUpdate': 'current_mode_update', 'currentModeId': mode});
   }
 
-  void _followModel(String resolved) {
-    String? resolvedOf(String value) {
-      for (final model in _models) {
-        if (model['value'] == value) return model['resolvedModel'] as String?;
-      }
-      return null;
+  String? _resolvedOf(String value) {
+    for (final model in _models) {
+      if (model['value'] == value) return model['resolvedModel'] as String?;
     }
+    return null;
+  }
 
-    if (resolvedOf(_model) == resolved) return;
+  /// The model last told as running, so a reply naming it again says nothing.
+  String? _reportedModel;
+
+  /// Tells the client which model Claude is actually running: the option's
+  /// value may be an alias such as `default`.
+  void _reportModel(String? model) {
+    if (model == null || model.isEmpty || model == '<synthetic>') return;
+    if (model == _reportedModel || _sessionId.isEmpty) return;
+    _reportedModel = model;
+    _update({'sessionUpdate': AcpExtensions.activeModel, 'modelId': model});
+  }
+
+  void _followModel(String resolved) {
+    _reportModel(resolved);
+    if (_resolvedOf(_model) == resolved) return;
     for (final model in _models) {
       if (model['resolvedModel'] == resolved || model['value'] == resolved) {
         _model = '${model['value']}';
@@ -756,6 +778,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       final usage = jsonObject(message['usage']);
       if (usage != null) _lastUsage = usage;
     }
+    if (parent == null) _reportModel(message['model'] as String?);
     final streamed = id != null && _streamed.contains(id);
     for (final block in jsonObjects(message['content'])) {
       switch (block['type']) {

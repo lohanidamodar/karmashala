@@ -3171,7 +3171,7 @@ WorkbenchView
                                                                                                   GestureDetector
                                                                                                     RawGestureDetector
                                                                                                       Listener
-                                                                                                        Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                                        Tooltip tooltip="Model not recorded yet: Claude Code has not said which model it is running.\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
                                                                                                           RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                             OverlayPortal
                                                                                                               _OverlayPortal
@@ -3195,7 +3195,7 @@ WorkbenchView
                                                                                                                                       SizedBox
                                                                                                                                       Flexible
                                                                                                                                         ConstrainedBox
-                                                                                                                                          Text text="default"
+                                                                                                                                          Text text="Model not recorded yet"
                                                                                                                                             RichText
                                                                                                                                       Icon
                                                                                                                                         Semantics
@@ -4420,7 +4420,7 @@ WorkbenchView
                                                                                                   GestureDetector
                                                                                                     RawGestureDetector
                                                                                                       Listener
-                                                                                                        Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                                        Tooltip tooltip="Model not recorded yet: Claude Code has not said which model it is running.\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
                                                                                                           RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                             OverlayPortal
                                                                                                               _OverlayPortal
@@ -4444,7 +4444,7 @@ WorkbenchView
                                                                                                                                       SizedBox
                                                                                                                                       Flexible
                                                                                                                                         ConstrainedBox
-                                                                                                                                          Text text="default"
+                                                                                                                                          Text text="Model not recorded yet"
                                                                                                                                             RichText
                                                                                                                                       Icon
                                                                                                                                         Semantics
@@ -5262,7 +5262,7 @@ WorkbenchView
                                                                                                   GestureDetector
                                                                                                     RawGestureDetector
                                                                                                       Listener
-                                                                                                        Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                                        Tooltip tooltip="Model not recorded yet: Claude Code has not said which model it is running.\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
                                                                                                           RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                             OverlayPortal
                                                                                                               _OverlayPortal
@@ -5286,7 +5286,7 @@ WorkbenchView
                                                                                                                                       SizedBox
                                                                                                                                       Flexible
                                                                                                                                         ConstrainedBox
-                                                                                                                                          Text text="default"
+                                                                                                                                          Text text="Model not recorded yet"
                                                                                                                                             RichText
                                                                                                                                       Icon
                                                                                                                                         Semantics
@@ -6120,7 +6120,7 @@ WorkbenchView
                                                                                                                           GestureDetector
                                                                                                                             RawGestureDetector
                                                                                                                               Listener
-                                                                                                                                Tooltip tooltip="Agent default\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
+                                                                                                                                Tooltip tooltip="Model not recorded yet: Claude Code has not said which model it is running.\nNo model is set for this session, and Settings leaves the choice to Claude Code, so it starts on whatever it is configured to use.\nPicking one switches the session running now when Claude Code is at its prompt, and otherwise applies on the next launch."
                                                                                                                                   RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                                     OverlayPortal
                                                                                                                                       _OverlayPortal
@@ -6144,7 +6144,7 @@ WorkbenchView
                                                                                                                                                               SizedBox
                                                                                                                                                               Flexible
                                                                                                                                                                 ConstrainedBox
-                                                                                                                                                                  Text text="default"
+                                                                                                                                                                  Text text="Model not recorded yet"
                                                                                                                                                                     RichText
                                                                                                                                                               Icon
                                                                                                                                                                 Semantics

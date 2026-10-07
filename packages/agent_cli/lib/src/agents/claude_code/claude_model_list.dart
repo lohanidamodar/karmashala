@@ -76,9 +76,11 @@ AgentModel? _claudeModel(Map<String, Object?> row) {
   if (row['disabled'] == true) return null;
   final label = row['displayName'];
   final summary = row['description'];
+  final resolved = row['resolvedModel'];
   return AgentModel(
     id: id,
     label: label is String && label.isNotEmpty ? label : id,
     summary: summary is String ? summary : '',
+    resolvedId: resolved is String && resolved.isNotEmpty ? resolved : null,
   );
 }

@@ -2,6 +2,7 @@ import '../../ask/cli_invocation.dart';
 import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
 import '../adapter/agent_accounts.dart';
+import '../adapter/agent_active_model.dart';
 import '../adapter/agent_adapter.dart';
 import '../adapter/agent_presentation.dart';
 import '../adapter/agent_chat_protocol.dart';
@@ -88,4 +89,8 @@ class ClaudeCodeAdapter extends AgentAdapter {
 
   @override
   AgentModelLister get modelLister => const ClaudeModelLister();
+
+  @override
+  AgentActiveModel get activeModel =>
+      const TranscriptActiveModel(TranscriptDialect.claudeJsonl);
 }

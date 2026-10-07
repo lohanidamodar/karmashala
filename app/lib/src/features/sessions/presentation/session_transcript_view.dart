@@ -1,3 +1,6 @@
+import '../../agents/application/session_model_providers.dart';
+import '../application/session_active_model_providers.dart';
+import '../application/session_config_options_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -1074,6 +1077,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       subagents: subagents,
       earlier: earlier,
       agentOf: _agentsIn(messages),
+      modelLabelOf: (id) => modelLabelIn(
+        id,
+        options: ref.read(sessionConfigOptionsProvider(widget.sessionId)),
+        support: ref.read(sessionModelProvider(widget.sessionId))?.support,
+      ),
     );
     final delegations = delegationGroups(out);
     if (!mapEquals(subagents, _subagents) ||
@@ -1318,6 +1326,7 @@ List<ChatMessage> chatMessagesFromTranscript(
   Map<int, SubagentRef>? subagents,
   int earlier = 0,
   TranscriptAgent? Function(String installationId)? agentOf,
+  String Function(String modelId)? modelLabelOf,
 }) {
   // The **last** boundary: a session compacted twice has restated its history
   // twice, and only the newest summary covers all of it. [earlier] rows come
@@ -1365,6 +1374,8 @@ List<ChatMessage> chatMessagesFromTranscript(
   // thread's first agent row, and the first after each switch — not on every
   // turn it goes on taking: the divider already says who took over.
   String? lastNamed;
+  // A turn names its model only where it changed, as the first one does.
+  String? lastModel;
   for (var i = from; i < messages.length; i++) {
     final message = messages[i];
     // A subagent's own call: drawn as a step on its Agent row.
@@ -1398,6 +1409,9 @@ List<ChatMessage> chatMessagesFromTranscript(
     } else if (named) {
       lastNamed = installation;
     }
+    final model = message.role == 'agent' ? message.model : null;
+    final modelChanged = model != null && model != lastModel;
+    if (modelChanged) lastModel = model;
     out.add(
       ChatMessage(
         role: switching ? kAgentSwitchNoticeRole : message.role,
@@ -1415,6 +1429,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         agentId: agent?.agentId,
         queued: message.queued,
         images: message.images,
+        model: modelChanged ? modelLabelOf?.call(model) ?? model : null,
       ),
     );
   }

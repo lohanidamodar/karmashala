@@ -44,6 +44,8 @@ void main() {
   late HostedSessionWait waits;
   // A child's open prompt as a test sets it; one not set reads the screen.
   late Map<String, String?> asks;
+  // What each child's agent said it runs, as the server's keeper holds it.
+  final models = <String, String>{};
   late Directory temp;
   var clock = t0;
 
@@ -90,11 +92,13 @@ void main() {
     restoreGrace: const Duration(milliseconds: 60),
     endChild: (childId) async => ended.add(childId),
     batchWindow: const Duration(milliseconds: 40),
+    modelOf: (id) => models[id] ?? 'not recorded',
     now: () => clock,
   );
 
   setUp(() {
     clock = t0;
+    models.clear();
     temp = Directory.systemTemp.createTempSync('delegation_results_test');
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -251,6 +255,7 @@ void main() {
     await pumpEventQueue();
     clock = t0.add(const Duration(minutes: 2, seconds: 5));
     answers['c1'] = 'The bug is in cart.dart line 40.';
+    models['c1'] = 'claude-haiku-4-5-20251001';
     hook('c1', 'Stop');
     await settle();
 
@@ -259,7 +264,8 @@ void main() {
     expect(message, contains('c1'));
     expect(message, contains('Task c1'));
     expect(message, contains('Claude Code'));
-    expect(message, contains('claude-haiku'));
+    // What the agent said it ran, not the alias it was set to start on.
+    expect(message, contains('model claude-haiku-4-5-20251001 ·'));
     expect(message, contains('2m 5s'));
     expect(message, contains('The bug is in cart.dart line 40.'));
     expect(message, contains('session_transcript'));
@@ -382,6 +388,9 @@ void main() {
     final message = delivered['parent']!.single;
     expect(message, contains('From the terminal.'));
     expect(message, contains('From ACP.'));
+    // Neither agent has said which model it runs: never "default".
+    expect(message, contains('model not recorded ·'));
+    expect(message, isNot(contains('default')));
   });
 
   test('an answer past the bound is cut, with a pointer to the rest; a '
@@ -402,13 +411,14 @@ void main() {
     hook('c1', 'UserPromptSubmit');
     await pumpEventQueue();
     answers['c1'] = 'x' * (kDelegationAnswerMaxChars + 500);
+    models['c1'] = 'claude-opus-5-5';
     hook('c1', 'Stop');
     await settle();
 
     final message = delivered['parent']!.single;
     expect(message, isNot(contains('x' * (kDelegationAnswerMaxChars + 1))));
     expect(message, contains('cut at $kDelegationAnswerMaxChars'));
-    expect(message, contains("the agent's default"));
+    expect(message, contains('model claude-opus-5-5 ·'));
     expect(ended, ['c1']);
   });
 

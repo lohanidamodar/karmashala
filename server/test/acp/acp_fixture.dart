@@ -22,6 +22,9 @@ class RecordingHost extends AcpRuntimeHost {
   final modes = <SessionModesChanged>[];
   final configOptions = <SessionConfigOptionsChanged>[];
   final usage = <SessionUsageChanged>[];
+
+  /// Each model the runtime said its agent runs, in order.
+  final activeModels = <String>[];
   var messagesChangedCount = 0;
   final logged = <String>[];
   final agentMessages = <(String, String, String)>[];
@@ -68,6 +71,10 @@ class RecordingHost extends AcpRuntimeHost {
 
   @override
   void usageChanged(SessionUsageChanged change) => usage.add(change);
+
+  @override
+  void activeModelChanged(String sessionId, String modelId) =>
+      activeModels.add(modelId);
 
   @override
   void messagesChanged(String sessionId) => messagesChangedCount++;

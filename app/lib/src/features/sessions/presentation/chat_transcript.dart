@@ -53,6 +53,7 @@ class ChatMessage {
     this.detail,
     this.queued = false,
     this.images = const [],
+    this.model,
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -91,6 +92,10 @@ class ChatMessage {
   /// machine.
   final List<String> images;
 
+  /// The label of the model that wrote this agent turn, set only where it
+  /// differs from the turn before (and on the first); null everywhere else.
+  final String? model;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -106,6 +111,7 @@ class ChatMessage {
           other.thinking == thinking &&
           other.detail == detail &&
           other.queued == queued &&
+          other.model == model &&
           _samePaths(other.images, images) &&
           _sameTool(other.tool, tool) &&
           other.text == text;

@@ -9,7 +9,7 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 82', () => expect(db.schemaVersion, 82));
+  test('the head is 83', () => expect(db.schemaVersion, 83));
 
   test('v77 adds the report and closing columns', () {
     final columns = db

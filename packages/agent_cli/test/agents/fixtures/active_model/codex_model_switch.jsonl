@@ -1,0 +1,8 @@
+{"timestamp":"2026-10-07T05:05:30.000Z","type":"session_meta","payload":{"id":"01a114c0-acf6-7e12-bb4d-81a37c3437b5","timestamp":"2026-10-07T05:05:30.000Z","cwd":"C:\\work","originator":"codex_cli_rs","cli_version":"0.130.0","source":"cli","model_provider":"openai","model":"gpt-6-astra"}}
+{"timestamp":"2026-10-07T05:05:36.000Z","type":"turn_context","payload":{"turn_id":"t1","cwd":"C:\\work","approval_policy":"on-request","model":"gpt-6-astra","effort":"medium","summary":"auto"}}
+{"timestamp":"2026-10-07T05:05:37.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello"}]}}
+{"timestamp":"2026-10-07T05:05:40.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi from astra."}]}}
+{"timestamp":"2026-10-07T05:06:00.000Z","type":"turn_context","payload":{"turn_id":"t2","cwd":"C:\\work","approval_policy":"on-request","model":"gpt-6-astra-mini","effort":"low","summary":"auto"}}
+{"timestamp":"2026-10-07T05:06:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Smaller now"}]}}
+{"timestamp":"2026-10-07T05:06:04.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi from mini."}]}}
+{"timestamp":"2026-10-07T05:06:05.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"t2"}}

@@ -1,19 +1,41 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/migrations.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
-/// v65: `session_messages`, the rows an ACP session's conversation is kept in.
+/// v65: `session_messages`, the rows an ACP session's conversation is kept in;
+/// v83: `session_messages.model`, the model that wrote an agent row.
 void main() {
   late AppDatabase db;
 
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 82 and the keys stay contiguous', () {
+  test('v83 adds model, null for every row written before, once', () {
+    final raw = sqlite3.openInMemory();
+    addTearDown(raw.close);
+    for (var v = 1; v <= 82; v++) {
+      schemaMigrations[v]!(raw);
+    }
+    raw.execute('PRAGMA foreign_keys = OFF;');
+    raw.execute(
+      'INSERT INTO session_messages (id, session_id, ordinal, role, text, '
+      "revision, created_at, updated_at) VALUES ('m1', 's1', 0, 'agent', "
+      "'hi', 1, 't', 't');",
+    );
+    schemaMigrations[83]!(raw);
+    expect(() => schemaMigrations[83]!(raw), returnsNormally);
+    expect(
+      raw.select('SELECT model FROM session_messages;').single['model'],
+      isNull,
+    );
+  });
+
+  test('the head is 83 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 82);
+    expect(db.schemaVersion, 83);
   });
 
   test('v65 creates session_messages with its revision index', () {
@@ -34,6 +56,7 @@ void main() {
       'revision',
       'created_at',
       'updated_at',
+      'model',
     ]);
     final indexes = db
         .query("PRAGMA index_list('session_messages');")

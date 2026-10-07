@@ -31,6 +31,21 @@ void main() {
       expect(models.first.summary, 'Opus 5.5 with 1M context');
     });
 
+    test('a row naming the model it resolves to is found by that id, which '
+        'is what a running session reports', () {
+      final models = parseClaudeModelList(
+        '{"type":"control_response","response":{"subtype":"success",'
+        '"request_id":"karmashala-models","response":{"models":['
+        '{"value":"sonnet","displayName":"Sonnet 5.5",'
+        '"resolvedModel":"claude-sonnet-5-5"}]}}}',
+      )!;
+      expect(models.single.resolvedId, 'claude-sonnet-5-5');
+      final support = const AgentModelSupport.unsupported().withModels(models);
+      expect(support.modelFor('claude-sonnet-5-5')?.label, 'Sonnet 5.5');
+      expect(support.modelFor('sonnet')?.label, 'Sonnet 5.5');
+      expect(support.modelFor('claude-opus-5-5'), isNull);
+    });
+
     test('`default` is not a model, and a disabled row is not offered', () {
       final ids = parseClaudeModelList(answer)!.map((m) => m.id);
       expect(ids, isNot(contains('default')));

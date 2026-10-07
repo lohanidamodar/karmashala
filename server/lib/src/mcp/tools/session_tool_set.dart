@@ -554,6 +554,7 @@ class SessionToolSet extends ServerToolSet {
       'sessionId': sessionId,
       'title': session.title,
       'status': session.status.name,
+      'model': _context.modelOf(sessionId),
       'live': held,
       // Beside `turns`, not in it: a relay is a message that crossed from
       // another session, recorded by Karmashala, and never a turn of the

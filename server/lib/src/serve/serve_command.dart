@@ -87,6 +87,7 @@ import '../sessions/launch/session_continuations.dart';
 import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
 import '../sessions/delegation_results.dart';
+import '../sessions/session_active_models.dart';
 import '../sessions/session_queue.dart';
 import '../status/turn_settlement.dart';
 import '../sessions/session_ends_with_server.dart';
@@ -458,6 +459,12 @@ Future<int> _serve(
       return onBox != null && !onBox.lifecycle.hasEnded;
     },
   )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
+  // The model each session's agent last said it runs: what every client
+  // and every agent tool shows, never a setting.
+  final activeModels = SessionActiveModels(
+    announce: (change) => data.announce([change]),
+  );
+  data.greeters.add(activeModels.greeting);
   // The agents' registry: the shipped agents plus the ACP agents a person
   // added, recomposed as those rows change (ACP design, C2).
   final agentRegistry = AgentRegistryHolder.composed(data.acpAgents)
@@ -642,7 +649,7 @@ Future<int> _serve(
     data: data,
     dataDirectory: dataDirectory,
     log: (message) => errSink.writeln('karmashala_host: $message'),
-  );
+  )..activeModels = activeModels;
   final reach = CheckoutReach(database, runners: ssh.runners);
   // A project an agent adds imports the CLI history of its new checkouts.
   final folders = ProjectFolders(
@@ -990,7 +997,7 @@ Future<int> _serve(
     data: data,
     titles: AcpTitles(sessionSync.rows),
     log: (message) => errSink.writeln('karmashala_host: $message'),
-  );
+  )..activeModels = activeModels;
   // What an agent names in its own answer — Codex's `$visualize` marker — is
   // shown as an artifact of its session; one refused is said in the chat.
   final artifactMarkers = ServerArtifactMarkers(
@@ -1511,6 +1518,15 @@ Future<int> _serve(
     speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
+  // A CLI in a terminal names its model in its record: read again on each
+  // status edge of a session this server runs.
+  activeModels.readRecord = sessionRecordReadings.activeModel;
+  attention.status.statusChanges.listen((entry) {
+    final id = entry.openId;
+    if (status.holds(id) && !speaksAcp(id)) {
+      unawaited(activeModels.refresh(id));
+    }
+  });
   prompts.readQuestion = sessionRecordReadings.openQuestion;
   attention.attention.readQuestion = sessionRecordReadings.openQuestion;
   // Sessions' pictures (Stage 0 step 10), extracted from the same records.
@@ -1587,6 +1603,7 @@ Future<int> _serve(
     openAskOf: sessionWaits.openAskOf,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    modelOf: activeModels.modelWords,
   )..start();
   sessionQueue.restate = delegations.restate;
   sessionInput.interrupted = delegations.stopped;

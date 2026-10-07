@@ -49,7 +49,8 @@ class DelegatedChild {
   /// The agent's display name.
   final String agent;
 
-  /// Null when the child runs its agent's default model.
+  /// The model it was set to start on; null when none was set. What it runs
+  /// is the agent's own word, read when it reports.
   final String? model;
   final DateTime startedAt;
 
@@ -217,6 +218,7 @@ class DelegationResults {
     this.endChild,
     this.batchWindow = const Duration(seconds: 2),
     this.log,
+    this.modelOf,
     DateTime Function()? now,
   }) : _now = now ?? (() => DateTime.now().toUtc()),
        parentReachable = parentReachable ?? isLive;
@@ -257,6 +259,10 @@ class DelegationResults {
   /// ended.
   final Duration restoreGrace;
   final Future<void> Function(String childId)? endChild;
+
+  /// The model row [String]'s agent last said it runs, in words: read as a
+  /// report goes, a batch window after the turn ended.
+  final String Function(String sessionId)? modelOf;
   final Duration batchWindow;
   final void Function(String message)? log;
   final DateTime Function() _now;
@@ -720,7 +726,7 @@ class DelegationResults {
       return '';
     }
     _batches[head.sessionId] = (rowId: batch.rowId, results: kept);
-    return delegationMessage(kept);
+    return delegationMessage(kept, modelOf: modelOf);
   }
 
   void _flush(String parentId) {
@@ -756,7 +762,7 @@ class DelegationResults {
       ];
       final row = queue.postDelegation(
         parentId,
-        delegationMessage(results),
+        delegationMessage(results, modelOf: modelOf),
         replacing: growing ? batch.rowId : null,
         originId: fresh.last.$1.child.childId,
       );
@@ -802,7 +808,10 @@ class DelegationResults {
 
 /// The message a parent is given for [results]: who reported, on which agent
 /// and model, how long it took, and its answer, bounded.
-String delegationMessage(List<DelegationResult> results) {
+String delegationMessage(
+  List<DelegationResult> results, {
+  String Function(String sessionId)? modelOf,
+}) {
   final out = StringBuffer(
     results.length == 1
         ? '[Karmashala] A session you delegated has reported back.'
@@ -821,7 +830,7 @@ String delegationMessage(List<DelegationResult> results) {
       )
       ..writeln(
         'Session $id · ${child.agent} · '
-        'model ${child.model ?? "the agent's default"} · '
+        'model ${modelOf?.call(id) ?? 'not recorded'} · '
         'took ${formatTook(result.took)}',
       );
     final answer = result.answer;

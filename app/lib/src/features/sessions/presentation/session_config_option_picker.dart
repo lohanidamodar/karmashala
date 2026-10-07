@@ -6,7 +6,9 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
+import '../application/session_active_model_providers.dart';
 import '../application/session_config_options_providers.dart';
+import 'model_chip.dart' show kModelNotRecorded, kModelRunningBadge;
 
 /// **One `select` config option of the session's agent**: its
 /// choices by name, the one the agent holds selected, set through
@@ -28,23 +30,29 @@ class SessionConfigOptionPicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = option.current;
-    final label =
-        current?.name ?? option.currentValue?.toString() ?? option.name;
+    final active = option.isModel
+        ? ref.watch(sessionActiveModelProvider(sessionId))
+        : null;
+    final face = configOptionFace(option, active: active);
     return PopupMenuButton<String>(
       tooltip: '',
       position: PopupMenuPosition.over,
       onSelected: (value) => _apply(context, ref, value),
-      itemBuilder: (context) => _items(),
+      itemBuilder: (context) => _items(active?.modelId),
       child: Tooltip(
         message: [
-          '${option.name}: $label',
-          ?current?.description,
+          '${option.name}: ${face.label}',
+          if (active != null)
+            'What the agent last said it runs.'
+          else if (option.isModel)
+            'The agent has not said which model it runs yet.',
+          ?option.current?.description,
           ?option.description,
         ].join('\n'),
         child: PickerFace(
           icon: option.isModel ? AppIcons.robot : AppIcons.slidersHorizontal,
-          label: label,
+          label: face.label,
+          qualifiers: [?face.qualifier],
           maxLabelWidth: maxLabelWidth,
         ),
       ),
@@ -52,8 +60,9 @@ class SessionConfigOptionPicker extends ConsumerWidget {
   }
 
   /// Choices in the agent's order; a group heading once, before its first
-  /// choice, only when the agent grouped them.
-  List<PopupMenuEntry<String>> _items() {
+  /// choice, only when the agent grouped them. The one [running] names says
+  /// so.
+  List<PopupMenuEntry<String>> _items(String? running) {
     final items = <PopupMenuEntry<String>>[];
     String? heading;
     for (final choice in option.choices) {
@@ -66,6 +75,7 @@ class SessionConfigOptionPicker extends ConsumerWidget {
           value: choice.value,
           selected: choice.value == option.currentValue,
           label: choice.name,
+          badge: choice.value == running ? kModelRunningBadge : null,
           detail: choice.description ?? 'The agent\'s own "${choice.value}".',
         ),
       );
@@ -81,6 +91,23 @@ class SessionConfigOptionPicker extends ConsumerWidget {
     if (refusal == null) return;
     messenger?.showSnackBar(SnackBar(content: Text(refusal)));
   }
+}
+
+/// What [option]'s picker face says. A model option names the model the agent
+/// says it runs, with `default` beside it while the option holds its default;
+/// a `default` nothing has resolved yet is [kModelNotRecorded], never bare.
+({String label, String? qualifier}) configOptionFace(
+  SessionConfigOption option, {
+  SessionActiveModel? active,
+}) {
+  final named =
+      option.current?.name ?? option.currentValue?.toString() ?? option.name;
+  if (!option.isModel) return (label: named, qualifier: null);
+  final followsDefault = option.currentValue == 'default';
+  return (
+    label: active?.label ?? (followsDefault ? kModelNotRecorded : named),
+    qualifier: followsDefault && active != null ? 'default' : null,
+  );
 }
 
 /// A picker per `select` option the session's agent exposes, the `model`
