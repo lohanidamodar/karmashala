@@ -136,6 +136,39 @@ class _OutputPanel extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
 
+  /// Output as a terminal drew it: its ANSI colours where it has any, never
+  /// the raw escapes.
+  static Widget _outputText(
+    String text,
+    TextStyle style, {
+    Key? key,
+    int? maxLines,
+    bool softWrap = true,
+  }) {
+    if (!hasAnsi(text)) {
+      return Text(
+        text,
+        key: key,
+        style: style,
+        maxLines: maxLines,
+        overflow: maxLines == null ? null : TextOverflow.ellipsis,
+      );
+    }
+    return Builder(
+      key: key,
+      builder: (context) => Text.rich(
+        ansiSpan(
+          text,
+          base: style,
+          palette: AnsiPalette.of(Theme.of(context).brightness),
+        ),
+        maxLines: maxLines,
+        overflow: maxLines == null ? null : TextOverflow.ellipsis,
+        softWrap: softWrap,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -176,7 +209,11 @@ class _OutputPanel extends StatelessWidget {
                   ),
                   const SizedBox(width: Insets.xs),
                   Text(
-                    'Failed',
+                    switch (commandExitCode(output)) {
+                      final code? => 'Failed · exit $code',
+                      null => 'Failed',
+                    },
+                    key: const ValueKey('tool-output-failed'),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: failure,
                       fontWeight: FontWeight.w700,
@@ -198,16 +235,22 @@ class _OutputPanel extends StatelessWidget {
                     // Rendered terminal output: re-flowing it would break the
                     // columns it was drawn with, so it scrolls sideways.
                     scrollDirection: Axis.horizontal,
-                    child: Text(output, style: mono),
+                    child: _outputText(output, mono, softWrap: true),
                   ),
                 ),
               )
             else
-              Text(
-                lines.take(kInlineOutputLines).join('\n'),
-                style: mono,
+              // A failure says why at its end, so its tail is what shows.
+              _outputText(
+                (activity.isError
+                        ? lines.skip(hidden > 0 ? hidden : 0)
+                        : lines.take(kInlineOutputLines))
+                    .join('\n'),
+                mono,
+                key: ValueKey(
+                  activity.isError ? 'tool-output-tail' : 'tool-output-head',
+                ),
                 maxLines: kInlineOutputLines,
-                overflow: TextOverflow.ellipsis,
               ),
           if (activity.outputTruncated)
             Padding(
@@ -396,3 +439,10 @@ class _PathLinkTextState extends State<_PathLinkText> {
     );
   }
 }
+
+final _exitCode = RegExp(r'^\s*Exit code:? (-?\d+)', caseSensitive: false);
+
+/// The exit code a failed command's output opens with ("Exit code 2"), as
+/// Claude Code writes it, or null where the output names none.
+int? commandExitCode(String output) =>
+    int.tryParse(_exitCode.firstMatch(output)?.group(1) ?? '');

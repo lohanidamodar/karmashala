@@ -37,6 +37,8 @@ class MarkdownMessage extends StatelessWidget {
     this.onLinkTap,
     this.selectable = true,
     this.foldLong = false,
+    this.foldAt = kMessageFoldLines,
+    this.foldTo = kMessageHeadLines,
     super.key,
   });
 
@@ -58,20 +60,24 @@ class MarkdownMessage extends StatelessWidget {
   /// Whether a message past [kMessageFoldLines] lines folds behind "Show all".
   final bool foldLong;
 
+  /// The lines past which [foldLong] folds, and how many stay in sight.
+  final int foldAt;
+  final int foldTo;
+
   @override
   Widget build(BuildContext context) {
     if (!foldLong) return _render(context, data);
     final lines = '\n'.allMatches(data).length + 1;
-    if (lines <= kMessageFoldLines) return _render(context, data);
+    if (lines <= foldAt) return _render(context, data);
     return _FoldedMarkdown(
       lines: lines,
-      head: markdownHead(data, kMessageHeadLines),
+      head: markdownHead(data, foldTo),
       render: (context, all) => _render(context, all ? data : null),
     );
   }
 
   Widget _render(BuildContext context, String? text) {
-    final data = text ?? markdownHead(this.data, kMessageHeadLines);
+    final data = text ?? markdownHead(this.data, foldTo);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;

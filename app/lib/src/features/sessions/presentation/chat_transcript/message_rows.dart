@@ -291,6 +291,9 @@ class _UserMessageCard extends StatelessWidget {
                       onLinkTap: onLinkTap,
                       selectable: false,
                       foldLong: true,
+                      // A long paste reads as the prompt it is, not a page.
+                      foldAt: 12,
+                      foldTo: 8,
                     ),
                 ],
               ),

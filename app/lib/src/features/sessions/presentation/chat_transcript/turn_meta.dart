@@ -7,16 +7,42 @@ class _MessageAge extends StatelessWidget {
   final DateTime at;
 
   @override
-  Widget build(BuildContext context) => Text(
-    compactAge(_TranscriptNow.of(context).difference(at)),
-    maxLines: 1,
-    softWrap: false,
-    overflow: TextOverflow.ellipsis,
-    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
+  Widget build(BuildContext context) => Tooltip(
+    // The age says how long ago; the moment itself is a hover away.
+    message: messageMoment(at.toLocal()),
+    child: Text(
+      compactAge(_TranscriptNow.of(context).difference(at)),
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     ),
   );
 }
+
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// [at] as a person reads a moment: `Tue 7 Oct 2026, 18:07`.
+String messageMoment(DateTime at) =>
+    '${_weekdays[at.weekday - 1]} ${at.day} ${_months[at.month - 1]} '
+    '${at.year}, ${at.hour.toString().padLeft(2, '0')}:'
+    '${at.minute.toString().padLeft(2, '0')}';
 
 /// Save-as-note, when notes are on, then Copy, then Copy turn where offered.
 List<Widget> _messageActions(
