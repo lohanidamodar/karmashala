@@ -20,6 +20,7 @@ import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
 import 'overview_queue_card.dart';
+import 'overview_resume_picker.dart';
 import 'overview_triage.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/approval_request_card.dart';
@@ -53,6 +54,7 @@ class OverviewTabView extends ConsumerWidget {
         ),
       ],
       actions: [
+        const _ResumeButton(),
         const _NewSessionButton(),
         if (view == OverviewView.board) const OverviewFilterButton(),
       ],
@@ -61,6 +63,34 @@ class OverviewTabView extends ConsumerWidget {
         OverviewView.timeline => const _TimelineBody(),
       },
     );
+  }
+}
+
+/// **Resume…**: a stopped or ended session brought back from here, kept on
+/// the dashboard unless the person unticks it, which this device remembers.
+class _ResumeButton extends ConsumerWidget {
+  const _ResumeButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void resume() => unawaited(showOverviewResume(context, ref));
+    final narrow = MediaQuery.sizeOf(context).width < WidthClass.mediumMin;
+    return narrow
+        ? IconButton(
+            key: const ValueKey('overview-resume'),
+            tooltip: 'Resume… (R)',
+            onPressed: resume,
+            icon: const Icon(AppIcons.clockCounterClockwise),
+          )
+        : Tooltip(
+            message: 'Resume a stopped or ended session (R)',
+            child: TextButton.icon(
+              key: const ValueKey('overview-resume'),
+              onPressed: resume,
+              icon: const Icon(AppIcons.clockCounterClockwise),
+              label: const Text('Resume…'),
+            ),
+          );
   }
 }
 
@@ -465,6 +495,9 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     ),
     OverviewShowKeysIntent: _Triage<OverviewShowKeysIntent>(
       (_) => showOverviewKeys(context),
+    ),
+    OverviewResumeIntent: _Triage<OverviewResumeIntent>(
+      (_) => unawaited(showOverviewResume(context, ref)),
     ),
   };
 

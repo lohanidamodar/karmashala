@@ -9,7 +9,6 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/phone_shell.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/imported_session_view.dart';
-import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/workspace_session_entry.dart';
 import '../../git/presentation/diff_view.dart';
@@ -31,10 +30,12 @@ import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
 import '../application/overview_tiles.dart';
 import 'overview_card_parts.dart';
+import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
 /// The session's own conversation, as its tab draws it: streaming, with its
-/// asks and its composer. A test puts a stand-in here.
+/// asks and its composer — which, for a session nothing runs, resumes it
+/// here rather than in a tab. A test puts a stand-in here.
 final overviewPeekChatProvider =
     Provider<Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)>(
       (ref) =>
@@ -43,6 +44,7 @@ final overviewPeekChatProvider =
               key: ValueKey('overview-peek-chat:${entry.id}'),
               sessionId: entry.id,
               seenUntil: seenUntil,
+              resumesInBackground: true,
             )
           : ImportedSessionView(
               key: ValueKey('overview-peek-chat:${entry.id}'),
@@ -261,7 +263,7 @@ class _PeekHeader extends ConsumerWidget {
     final live = native != null && sessionHasLiveProcess(ref, id);
     final archivable =
         native != null && !native.isArchived && !sessionIsLive(ref, native);
-    final ended = card.state == AgentState.ended;
+    final resumable = watchOverviewResumable(ref, card);
     final plan = ref.watch(overviewGlanceProvider(id)).asData?.value?.plan;
     final parentId = native?.parentSessionId;
     final parent = parentId == null
@@ -362,6 +364,14 @@ class _PeekHeader extends ConsumerWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 OverviewStatePill(card: card),
+                OverviewResumingLabel(sessionId: id),
+                if (resumable)
+                  FilledButton.tonalIcon(
+                    key: const ValueKey('overview-peek-resume'),
+                    onPressed: () => resumeOnDashboard(context, ref, id),
+                    icon: const Icon(AppIcons.play),
+                    label: const Text('Resume'),
+                  ),
                 if (live)
                   TextButton.icon(
                     key: const ValueKey('overview-peek-stop'),
@@ -382,7 +392,7 @@ class _PeekHeader extends ConsumerWidget {
                   key: const ValueKey('overview-peek-open'),
                   onPressed: () => openOverviewSession(context, ref, entry),
                   icon: const Icon(AppIcons.arrowSquareOut),
-                  label: Text(ended && native != null ? 'Resume' : 'Open tab'),
+                  label: const Text('Open tab'),
                 ),
               ],
             ),

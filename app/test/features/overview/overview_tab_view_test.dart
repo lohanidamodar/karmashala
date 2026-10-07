@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,9 +12,15 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_triage.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -55,6 +62,8 @@ void main() {
     SessionStatus status = SessionStatus.running,
     Duration age = const Duration(hours: 1),
     String repo = 'r1',
+    String? conversation,
+    bool archived = false,
   }) => db.server.sessionRows.insert(
     Session(
       id: id,
@@ -64,6 +73,9 @@ void main() {
       useWorktree: false,
       status: status,
       createdAt: testTime.subtract(age),
+    ).copyWith(
+      externalSessionId: conversation,
+      archivedAt: archived ? testTime.subtract(age) : null,
     ),
   );
 
@@ -119,6 +131,14 @@ void main() {
         overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
         explorerActionsProvider.overrideWith(
           (ref) => actions = _SpyActions(ref),
+        ),
+        // What the server runs is what its fake says it started.
+        sessionRunningOnHostProvider.overrideWithValue(
+          server.sessionWork.running.contains,
+        ),
+        // A peeked chat with a conversation would read the CLI's own store.
+        sessionChatTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const <TranscriptMessage>[]),
         ),
         overviewReaderProvider.overrideWithValue(FakeOverviewReader()),
       ],
@@ -318,10 +338,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('overview-done:done')));
     await settle(tester);
 
+    // Resume keeps it here (below); Open tab is the lists' own open.
+    expect(find.byKey(const ValueKey('overview-peek-resume')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('overview-peek-open')));
     await settle(tester);
     expect(actions.opened, ['done']);
-    expect(find.text('Resume'), findsOneWidget);
+    expect(find.text('Open tab'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('overview-peek-archive')));
     await settle(tester);
@@ -345,6 +367,301 @@ void main() {
     await settle(tester);
 
     expect(find.byKey(const ValueKey('overview-peek:ask')), findsOneWidget);
+  });
+
+  group('Resume…', () {
+    Finder row(String id) => find.byKey(ValueKey('overview-resume-row:$id'));
+    Finder byKey(String key) => find.byKey(ValueKey(key));
+
+    List<SessionStartSpec> starts() => [
+      for (final request in server.sessionWork.asked)
+        if (request is SessionStart) request.spec,
+    ];
+
+    /// Nothing opened in this window and nothing selected in the lists.
+    void expectStayedPut(ProviderContainer c) {
+      expect(c.read(terminalSessionsControllerProvider).tabs, isEmpty);
+      expect(c.read(selectedSessionIdProvider), isNull);
+      expect(find.byType(OverviewTabView), findsOneWidget);
+    }
+
+    setUp(() {
+      // The live ones run at the server; the rest are stopped or ended.
+      server.sessionWork.running.addAll(['ask', 'busy', 'idle']);
+      insert(
+        'parked',
+        status: SessionStatus.completed,
+        age: const Duration(days: 2),
+        conversation: 'conv-parked',
+      );
+    });
+
+    Future<void> openPicker(WidgetTester tester) async {
+      await tester.tap(byKey('overview-resume'));
+      await settle(tester);
+      expect(byKey('overview-resume-picker'), findsOneWidget);
+    }
+
+    testBoard('lists only what nothing runs, newest first, with search and '
+        'filters', (tester) async {
+      insert(
+        'shelved',
+        status: SessionStatus.completed,
+        conversation: 'conv-shelved',
+        archived: true,
+      );
+      await pump(tester, const Size(1440, 900));
+      await openPicker(tester);
+
+      for (final id in ['done', 'beta-done', 'old', 'parked']) {
+        expect(row(id), findsOneWidget, reason: id);
+      }
+      for (final id in ['ask', 'busy', 'idle', 'shelved']) {
+        expect(row(id), findsNothing, reason: id);
+      }
+      expect(
+        tester.getTopLeft(row('done')).dy,
+        lessThan(tester.getTopLeft(row('parked')).dy),
+      );
+      expect(
+        tester.getTopLeft(row('parked')).dy,
+        lessThan(tester.getTopLeft(row('old')).dy),
+      );
+      // Agent · project, then its age.
+      expect(
+        find.descendant(
+          of: row('done'),
+          matching: find.text('Claude Code · Alpha'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(byKey('overview-resume-archived'));
+      await settle(tester);
+      expect(row('shelved'), findsOneWidget);
+
+      await tester.enterText(byKey('overview-resume-search'), 'beta');
+      await settle(tester);
+      expect(row('beta-done'), findsOneWidget);
+      expect(row('done'), findsNothing);
+      await tester.enterText(byKey('overview-resume-search'), '');
+      await settle(tester);
+
+      await tester.tap(byKey('overview-resume-project'));
+      await settle(tester);
+      await tester.tap(find.text('Beta').last);
+      await settle(tester);
+      expect(row('beta-done'), findsOneWidget);
+      expect(row('done'), findsNothing);
+      expect(row('old'), findsNothing);
+    });
+
+    testBoard('Resume keeps you here: no tab, nothing selected, the peek '
+        'opens and the agent comes back idle', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      await openPicker(tester);
+      await tester.tap(row('parked'));
+      await settle(tester);
+      expect(byKey('overview-resume-cost'), findsOneWidget);
+      expect(
+        tester
+            .widget<CheckboxListTile>(byKey('overview-resume-keep-here'))
+            .value,
+        isTrue,
+      );
+      await tester.tap(byKey('overview-resume-idle'));
+      await settle(tester);
+
+      final spec = starts().single;
+      expect(spec.resumeConversationId, 'conv-parked');
+      expect(spec.prompt, isNull);
+      expect(server.sessionWork.sent, isEmpty);
+      expect(server.sessionWork.running, contains('parked'));
+      expect(byKey('overview-resume-picker'), findsNothing);
+      expect(c.read(overviewFocusProvider).peeked, 'parked');
+      expect(byKey('overview-peek:parked'), findsOneWidget);
+      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isTrue);
+      expectStayedPut(c);
+    });
+
+    testBoard('Resume and send delivers the message, with Enter', (
+      tester,
+    ) async {
+      final c = await pump(tester, const Size(1440, 900));
+      await openPicker(tester);
+      await tester.tap(row('parked'));
+      await settle(tester);
+      expect(
+        tester.widget<FilledButton>(byKey('overview-resume-send')).onPressed,
+        isNull,
+      );
+      await tester.enterText(
+        byKey('overview-resume-message'),
+        'pick up the tests',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+
+      expect(starts().single.prompt, 'pick up the tests');
+      expect(c.read(overviewFocusProvider).peeked, 'parked');
+      expectStayedPut(c);
+    });
+
+    testBoard('an archived session is unarchived, and the picker says so', (
+      tester,
+    ) async {
+      insert(
+        'shelved',
+        status: SessionStatus.completed,
+        conversation: 'conv-shelved',
+        archived: true,
+      );
+      final c = await pump(tester, const Size(1440, 900));
+      await openPicker(tester);
+      await tester.tap(byKey('overview-resume-archived'));
+      await settle(tester);
+      await tester.tap(row('shelved'));
+      await settle(tester);
+      expect(byKey('overview-resume-unarchives'), findsOneWidget);
+      await tester.tap(byKey('overview-resume-idle'));
+      await settle(tester);
+
+      expect(db.server.sessionRows.getById('shelved')!.isArchived, isFalse);
+      expect(starts().single.resumeConversationId, 'conv-shelved');
+      expect(find.textContaining('unarchived'), findsOneWidget);
+      expectStayedPut(c);
+    });
+
+    testBoard('unticked, it opens a tab and remembers that', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      await openPicker(tester);
+      await tester.tap(row('parked'));
+      await settle(tester);
+      await tester.tap(byKey('overview-resume-keep-here'));
+      await settle(tester);
+      await tester.tap(byKey('overview-resume-idle'));
+      await settle(tester);
+
+      expect(actions.opened, ['parked']);
+      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isFalse);
+    });
+
+    testBoard('on a phone it is a full-screen sheet, and resuming keeps you '
+        'on the dashboard', (tester) async {
+      final c = await pump(tester, const Size(390, 844));
+      await openPicker(tester);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(
+        tester.getSize(byKey('overview-resume-picker')).height,
+        greaterThan(844 * 0.75),
+      );
+      await tester.tap(row('parked'));
+      await settle(tester);
+      await tester.tap(byKey('overview-resume-idle'));
+      await settle(tester);
+
+      expect(starts().single.resumeConversationId, 'conv-parked');
+      expect(c.read(overviewFocusProvider).peeked, 'parked');
+      expectStayedPut(c);
+    });
+
+    testBoard('R opens it, and "?" lists R', (tester) async {
+      await pump(tester, const Size(1440, 900));
+      await tester.tap(find.text('Chat busy').first);
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+      await settle(tester);
+      expect(byKey('overview-resume-picker'), findsOneWidget);
+      expect(kOverviewTriageKeys.map((k) => k.$1), contains('R'));
+    });
+
+    group('from the peek and the cards', () {
+      setUp(() {
+        insert(
+          'paused',
+          status: SessionStatus.completed,
+          age: const Duration(minutes: 30),
+          conversation: 'conv-paused',
+        );
+      });
+
+      Future<void> peekPaused(WidgetTester tester) async {
+        await tester.scrollUntilVisible(
+          byKey('overview-done-fold'),
+          200,
+          scrollable: hybridList,
+        );
+        await openDone(tester);
+        await tester.tap(byKey('overview-done:paused'));
+        await settle(tester);
+        expect(byKey('overview-peek:paused'), findsOneWidget);
+      }
+
+      testBoard("the peek's Resume brings it back here, idle", (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        await peekPaused(tester);
+        await tester.tap(byKey('overview-peek-resume'));
+        await settle(tester);
+
+        final spec = starts().single;
+        expect(spec.resumeConversationId, 'conv-paused');
+        expect(spec.prompt, isNull);
+        // Running now: the button gives way to Stop.
+        expect(byKey('overview-peek-resume'), findsNothing);
+        expectStayedPut(c);
+      });
+
+      testBoard('a card\'s ⋯ offers Resume', (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        await tester.scrollUntilVisible(
+          byKey('overview-done-fold'),
+          200,
+          scrollable: hybridList,
+        );
+        await openDone(tester);
+        await tester.tap(byKey('overview-card-menu:paused'));
+        await settle(tester);
+        await tester.tap(find.text('Resume').last);
+        await settle(tester);
+
+        expect(starts().single.resumeConversationId, 'conv-paused');
+        expect(c.read(overviewFocusProvider).peeked, 'paused');
+        expectStayedPut(c);
+      });
+
+      testBoard("typing into a stopped session's peek resumes it here and "
+          'sends', (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        await peekPaused(tester);
+        final box = find.descendant(
+          of: byKey('overview-peek:paused'),
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(box.last, 'and the docs');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await settle(tester);
+
+        final spec = starts().single;
+        expect(spec.resumeConversationId, 'conv-paused');
+        expect(spec.prompt, 'and the docs');
+        expectStayedPut(c);
+      });
+
+      testBoard('"Resuming…" shows while it comes back', (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        await peekPaused(tester);
+        c.read(sessionsStartingProvider.notifier).add('paused');
+        await settle(tester);
+        expect(byKey('overview-resuming:paused'), findsOneWidget);
+        expect(byKey('overview-peek-resume'), findsNothing);
+        c.read(sessionsStartingProvider.notifier).remove('paused');
+        await settle(tester);
+        expect(byKey('overview-resuming:paused'), findsNothing);
+      });
+    });
   });
 }
 

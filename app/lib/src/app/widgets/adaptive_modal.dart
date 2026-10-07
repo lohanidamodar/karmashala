@@ -10,12 +10,14 @@ import 'package:karmashala_ui/tokens.dart';
 ///
 /// With [heightFactor] the sheet is that share of the window's height, and
 /// the body fills what the title leaves, for a body that scrolls itself.
-/// Without it the sheet fits the body, which scrolls if it must.
+/// Without it the sheet fits the body, which scrolls if it must. [width] is
+/// the dialog's.
 Future<T?> showAdaptiveModal<T>({
   required BuildContext context,
   required String title,
   required WidgetBuilder builder,
   double? heightFactor,
+  double width = DialogWidth.narrow,
 }) {
   // The window's width, not the caller's: the shell picks its layout by it.
   final compact = WidthClass.of(MediaQuery.sizeOf(context).width).isCompact;
@@ -77,7 +79,7 @@ Future<T?> showAdaptiveModal<T>({
         title: Text(title),
         contentPadding: const EdgeInsets.symmetric(vertical: Insets.md),
         content: BoundedDialogContent(
-          width: DialogWidth.narrow,
+          width: width,
           child: factor == null
               ? builder(context)
               // A dialog keeps room for its own title and margins.

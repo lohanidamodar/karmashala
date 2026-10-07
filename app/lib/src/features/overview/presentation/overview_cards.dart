@@ -8,6 +8,7 @@ import '../../explorer/application/agent_states.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import 'overview_card_parts.dart';
+import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
 /// The edge a card of [state] is drawn with: colour only where the owner is
@@ -84,7 +85,7 @@ class OverviewCardHeader extends ConsumerWidget {
     final place = watchOverviewPlace(ref, card);
     final agent = watchOverviewAgentName(ref, card);
     final parent = card.breadcrumb;
-    return Semantics(
+    final header = Semantics(
       header: true,
       label: [
         card.entry.title,
@@ -130,6 +131,13 @@ class OverviewCardHeader extends ConsumerWidget {
           chip ?? OverviewStatePill(card: card),
         ],
       ),
+    );
+    // Outside the header's one label, so the menu stays its own button.
+    return Row(
+      children: [
+        Expanded(child: header),
+        OverviewCardMenu(card: card),
+      ],
     );
   }
 }
@@ -213,6 +221,7 @@ class OverviewDoneRow extends ConsumerWidget {
               compactAge(now.difference(card.entry.activityAt)),
               style: theme.textTheme.labelSmall?.copyWith(color: muted),
             ),
+            OverviewCardMenu(card: card),
           ],
         ),
       ),
