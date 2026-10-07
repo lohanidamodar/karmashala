@@ -1,6 +1,7 @@
 import '../../ask/cli_invocation.dart';
 import '../../process/command_runner_factory.dart';
 import '../domain/agent_descriptor.dart';
+import 'agent_active_model.dart';
 import 'agent_artifact_markers.dart';
 import 'agent_accounts.dart';
 import 'agent_chat_protocol.dart';
@@ -129,6 +130,10 @@ abstract class AgentAdapter {
 
   /// How the CLI reports the models this account may use, or null.
   AgentModelLister? get modelLister => null;
+
+  /// How the model a session is running is read from its record, or null
+  /// when this agent's record names none.
+  AgentActiveModel? get activeModel => null;
 
   /// How records an older import took that were not conversations are told
   /// apart, or null when every record this agent's store keeps is one.
