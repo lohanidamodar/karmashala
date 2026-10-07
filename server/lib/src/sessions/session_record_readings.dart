@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/descriptors.dart'
     show
         ActiveModelReading,
+        AgentStoreActiveModel,
         AgentQuestionSet,
         AgentRegistry,
         AgentRewindPoints,
@@ -351,6 +352,13 @@ class SessionRecordReadings {
     if (path == null || agentId == null) return null;
     final reader = registry.adapterFor(agentId)?.activeModel;
     if (reader == null) return null;
+    if (reader case final AgentStoreActiveModel store) {
+      try {
+        return await store.latestInStore(path, readRows);
+      } on Object {
+        return null;
+      }
+    }
     final file = File(transcriptFileFor(path, agentId) ?? path);
     try {
       final size = await file.length();

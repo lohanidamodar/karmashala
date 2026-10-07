@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart' show SqliteRowReader;
 import 'package:agent_cli/src/cli_detection/data/cli_transcript_reader.dart';
 import 'package:test/test.dart';
 
@@ -58,8 +59,87 @@ void main() {
       expect(claudeReader.latestIn(const ['not json', '{"model": 3}']), isNull);
     });
 
-    test('Antigravity reads no model', () {
-      expect(registry.adapterFor(AgentIds.antigravity)?.activeModel, isNull);
+    test('Antigravity names none in its lines', () {
+      expect(
+        reader(AgentIds.antigravity).latestIn(const ['{"model":"x"}']),
+        isNull,
+      );
+    });
+  });
+
+  group('Antigravity: the newest gen_metadata row of its .db', () {
+    // A length-delimited protobuf field, as the store writes them.
+    List<int> varint(int v) => [
+      for (; v >= 0x80; v >>= 7) (v & 0x7f) | 0x80,
+      v,
+    ];
+    List<int> field(int n, List<int> payload) => [
+      ...varint(n << 3 | 2),
+      ...varint(payload.length),
+      ...payload,
+    ];
+    List<int> generation({
+      String? configured,
+      String base = 'gemini-3.8-flash',
+    }) => [
+      ...field(1, field(19, base.codeUnits)),
+      if (configured != null) ...field(3, field(28, configured.codeUnits)),
+    ];
+
+    const db = '/home/me/.gemini/antigravity-cli/conversations/c1.db';
+    final asked = <String>[];
+    SqliteRowReader rows(List<List<int>> newestFirst) => (path, sql) async {
+      asked.add(path);
+      return [
+        for (final data in newestFirst) {'data': data},
+      ];
+    };
+    final store =
+        registry.adapterFor(AgentIds.antigravity)!.activeModel!
+            as AgentStoreActiveModel;
+
+    test('names the model it was set to run', () async {
+      expect(
+        await store.latestInStore(
+          db,
+          rows([generation(configured: 'gemini-3.8-flash-high')]),
+        ),
+        const ActiveModelReading('gemini-3.8-flash-high'),
+      );
+      expect(asked.last, db);
+    });
+
+    test('past newer rows that carry only the base model', () async {
+      expect(
+        (await store.latestInStore(
+          db,
+          rows([generation(), generation(configured: 'gemini-3.7-flash')]),
+        ))?.modelId,
+        'gemini-3.7-flash',
+      );
+    });
+
+    test('none named, an unreadable store, or a .pb: not recorded', () async {
+      expect(await store.latestInStore(db, rows([generation()])), isNull);
+      expect(await store.latestInStore(db, (_, _) async => null), isNull);
+      expect(
+        await store.latestInStore(
+          db,
+          rows([
+            [0xff, 0xff, 0xff],
+          ]),
+        ),
+        isNull,
+      );
+      asked.clear();
+      expect(
+        await store.latestInStore(
+          db.replaceFirst('.db', '.pb'),
+          rows([generation(configured: 'gemini-3.8-flash-high')]),
+        ),
+        isNull,
+      );
+      expect(asked, isEmpty);
     });
   });
 

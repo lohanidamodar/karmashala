@@ -1,6 +1,7 @@
 import '../../ask/cli_invocation.dart';
 import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
+import '../adapter/agent_active_model.dart';
 import '../adapter/agent_adapter.dart';
 import '../adapter/agent_presentation.dart';
 import '../adapter/agent_chat_protocol.dart';
@@ -9,6 +10,7 @@ import '../adapter/agent_store.dart';
 import '../adapter/agent_transcripts.dart';
 import '../adapter/agent_usage_support.dart';
 import '../domain/agent_descriptor.dart';
+import 'antigravity_active_model.dart';
 import 'antigravity_chat_protocol.dart';
 import 'antigravity_descriptor.dart';
 import 'antigravity_directory_conversations.dart';
@@ -54,6 +56,9 @@ class AntigravityAdapter extends AgentAdapter {
     buildsChatView: false,
     redirect: antigravityTranscriptPathFor,
   );
+
+  @override
+  AgentActiveModel get activeModel => const AntigravityActiveModel();
 
   @override
   AgentUsageSupport get usage =>

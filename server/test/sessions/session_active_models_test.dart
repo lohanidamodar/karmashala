@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart' show CommandRunnerFactory;
+import 'package:agent_cli/read.dart' show SqliteRowReader, noSqliteBinding;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/sessions/session_active_models.dart';
@@ -90,14 +91,18 @@ void main() {
       temp.deleteSync(recursive: true);
     });
 
-    SessionRecordReadings readings(String path, String agentId) =>
-        SessionRecordReadings(
-          lookUp: (_) async => (path: path, agentId: agentId, absence: null),
-          registry: AgentRegistry.builtIn,
-          sessions: SessionDao(db),
-          rows: CheckoutRows(db),
-          runners: const CommandRunnerFactory(),
-        );
+    SessionRecordReadings readings(
+      String path,
+      String agentId, {
+      SqliteRowReader? readRows,
+    }) => SessionRecordReadings(
+      lookUp: (_) async => (path: path, agentId: agentId, absence: null),
+      registry: AgentRegistry.builtIn,
+      sessions: SessionDao(db),
+      rows: CheckoutRows(db),
+      runners: const CommandRunnerFactory(),
+      readRows: readRows ?? noSqliteBinding,
+    );
 
     test('Claude Code: the newest reply past a long tail', () async {
       final path = '${temp.path}/s1.jsonl';
@@ -130,6 +135,33 @@ void main() {
         (await readings(path, AgentIds.codex).activeModel('s1'))?.modelId,
         'gpt-6-astra-mini',
       );
+    });
+
+    test("Antigravity: the model its .db's newest generation names", () async {
+      // Field 3 -> 28 of a gen_metadata row, as the store writes it.
+      List<int> field(int n, List<int> payload) => [
+        n << 3 | 2,
+        payload.length,
+        ...payload,
+      ];
+      final row = field(3, [
+        0xe2,
+        0x01,
+        21,
+        ...'gemini-3.8-flash-high'.codeUnits,
+      ]);
+      expect(row.length, lessThan(128));
+      final db = '${temp.path}/conversations/c1.db';
+      final read = readings(
+        db,
+        AgentIds.antigravity,
+        readRows: (path, sql) async => path == db
+            ? [
+                {'data': row},
+              ]
+            : null,
+      );
+      expect((await read.activeModel('s1'))?.modelId, 'gemini-3.8-flash-high');
     });
 
     test('a record gone from disk reads as none', () async {

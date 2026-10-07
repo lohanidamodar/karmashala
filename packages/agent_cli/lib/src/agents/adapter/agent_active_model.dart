@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../cli_detection/data/transcript_dialect.dart';
+import '../../util/sqlite_rows.dart';
 import '../claude_code/claude_reply_model.dart';
 import '../codex/codex_turn_model.dart';
 
@@ -29,6 +30,16 @@ abstract interface class AgentActiveModel {
   /// The newest model [lines] name (a record's end, oldest first), or null
   /// when none of them names one.
   ActiveModelReading? latestIn(Iterable<String> lines);
+}
+
+/// For an agent whose record is a SQLite store rather than lines: the newest
+/// model it names, read with the host's [SqliteRowReader]; null when it names
+/// none or cannot be read.
+abstract interface class AgentStoreActiveModel {
+  Future<ActiveModelReading?> latestInStore(
+    String recordPath,
+    SqliteRowReader readRows,
+  );
 }
 
 /// [AgentActiveModel] for a transcript written in [dialect].
