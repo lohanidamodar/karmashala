@@ -70,6 +70,9 @@ void main() {
       find.widgetWithText(TextField, 'Folder path').first,
       r'C:\ws',
     );
+    // The folder names the project ("ws") as it is typed; let that frame
+    // land before the name is typed over it.
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Project name').first,
       'Workspace',
