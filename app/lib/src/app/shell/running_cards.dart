@@ -148,26 +148,21 @@ IconData _iconFor(PortKind kind) => switch (kind) {
   PortKind.other => AppIcons.linkSimple,
 };
 
-/// Opens [url] where the person last chose — or, with [target], there, which
-/// is remembered when [remember]. From a phone the desktop's Browser pane
-/// shows it.
+/// Opens [url] in the system's browser at once — or, [inPane], in
+/// Karmashala's Browser pane. From a phone the desktop's Browser pane shows
+/// it, and says so.
 Future<void> openRunningUrl(
   WidgetRef ref,
   String url, {
-  RunningOpenTarget? target,
-  bool remember = true,
+  bool inPane = false,
   ScaffoldMessengerState? messenger,
 }) async {
   final phone = ref.read(phoneShellRouterProvider).current != null;
-  if (target != null && remember) {
-    ref.read(runningOpenTargetProvider.notifier).choose(target);
-  }
-  final where = target ?? ref.read(runningOpenTargetProvider);
-  if (!phone && where == RunningOpenTarget.systemBrowser) {
-    await ref.read(openExternalUrlProvider)(url);
+  if (phone || inPane) {
+    await openPortInBrowserPane(ref, url, messenger: messenger);
     return;
   }
-  await openPortInBrowserPane(ref, url, messenger: messenger);
+  await ref.read(openExternalUrlProvider)(url);
 }
 
 /// One listening port: its address (a link when a browser can open it), what
@@ -211,7 +206,12 @@ class RunningPortCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.only(top: 3),
+                // On the link's centre-line when there is one.
+                padding: EdgeInsets.only(
+                  top: url == null
+                      ? 3
+                      : ((phone ? Touch.target : 32) - Chrome.iconSmall) / 2,
+                ),
                 child: Icon(
                   _iconFor(port.label.kind),
                   size: Chrome.iconSmall,
@@ -240,14 +240,11 @@ class RunningPortCard extends ConsumerWidget {
                                 'WSL forwards this port to Windows\' localhost',
                               _ => null,
                             },
-                            onOpen: (system) => openRunningUrl(
+                            minHeight: phone ? Touch.target : 32,
+                            onOpen: (inPane) => openRunningUrl(
                               ref,
                               url,
-                              target: system
-                                  ? RunningOpenTarget.systemBrowser
-                                  : null,
-                              // Ctrl/Cmd-click is for this once.
-                              remember: false,
+                              inPane: inPane,
                               messenger: messenger,
                             ),
                           )
@@ -255,9 +252,7 @@ class RunningPortCard extends ConsumerWidget {
                           SelectableText(
                             port.address,
                             key: ValueKey('running-address-$number'),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: theme.textTheme.titleSmall,
                           ),
                         if (unforwarded)
                           Icon(
@@ -277,48 +272,24 @@ class RunningPortCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (url != null)
-                IconButton(
-                  key: ValueKey('running-open-$number'),
-                  tooltip: phone
-                      ? 'Show in the desktop\'s Browser'
-                      : switch (ref.watch(runningOpenTargetProvider)) {
-                          RunningOpenTarget.browserPane =>
-                            'Open in the Browser pane',
-                          RunningOpenTarget.systemBrowser =>
-                            'Open in the system browser',
-                        },
-                  icon: const Icon(AppIcons.arrowSquareOut),
-                  onPressed: () =>
-                      openRunningUrl(ref, url, messenger: messenger),
-                ),
+              // The phone's link already goes to the desktop's Browser pane.
               if (url != null && !phone)
-                PopupMenuButton<RunningOpenTarget>(
-                  key: ValueKey('running-open-menu-$number'),
-                  tooltip: 'Open in…',
-                  icon: const Icon(AppIcons.caretDown, size: Chrome.iconSmall),
-                  onSelected: (target) => openRunningUrl(
+                IconButton(
+                  key: ValueKey('running-open-pane-$number'),
+                  tooltip: 'Open in Karmashala\'s browser',
+                  iconSize: Chrome.iconSmall,
+                  icon: const Icon(AppIcons.globe),
+                  onPressed: () => openRunningUrl(
                     ref,
                     url,
-                    target: target,
+                    inPane: true,
                     messenger: messenger,
                   ),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      key: ValueKey('running-browser-pane-$number'),
-                      value: RunningOpenTarget.browserPane,
-                      child: const Text('Open in the Browser pane'),
-                    ),
-                    PopupMenuItem(
-                      key: ValueKey('running-system-browser-$number'),
-                      value: RunningOpenTarget.systemBrowser,
-                      child: const Text('Open in the system browser'),
-                    ),
-                  ],
                 ),
               IconButton(
                 key: ValueKey('running-copy-$number'),
                 tooltip: url == null ? 'Copy address' : 'Copy URL',
+                iconSize: Chrome.iconSmall,
                 icon: const Icon(AppIcons.copy),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: copied));
@@ -383,14 +354,16 @@ class _PortOwnerLine extends ConsumerWidget {
   }
 }
 
-/// An address that is a link: underlined on hover, a pointer, one click to
-/// open where the person last chose; Ctrl/Cmd-click opens the system browser.
+/// An address that is a link: the row's most prominent words, a pointer, one
+/// click to open it in the system browser; Ctrl/Cmd-click opens it in
+/// Karmashala's Browser pane.
 class RunningLink extends StatefulWidget {
   const RunningLink({
     required this.text,
     required this.url,
     required this.onOpen,
     this.tooltip,
+    this.minHeight = 32,
     super.key,
   });
 
@@ -398,8 +371,11 @@ class RunningLink extends StatefulWidget {
   final String url;
   final String? tooltip;
 
-  /// Told whether the system browser was asked for.
-  final void Function(bool systemBrowser) onOpen;
+  /// The hit target's height: a pointer's 32, a thumb's [Touch.target].
+  final double minHeight;
+
+  /// Told whether the Browser pane was asked for.
+  final void Function(bool inPane) onOpen;
 
   @override
   State<RunningLink> createState() => _RunningLinkState();
@@ -424,16 +400,26 @@ class _RunningLinkState extends State<RunningLink> {
           final keys = HardwareKeyboard.instance;
           widget.onOpen(keys.isControlPressed || keys.isMetaPressed);
         },
-        child: Text(
-          widget.text,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.primary,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.underline,
-            decorationColor: _hovered
-                ? scheme.primary
-                : StateLayers.linkUnderline(scheme),
-            decorationThickness: _hovered ? 2 : 1,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: widget.minHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: 1,
+              child: Text(
+                widget.text,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: _hovered
+                      ? scheme.primary
+                      : StateLayers.linkUnderline(scheme),
+                  decorationThickness: _hovered ? 2 : 1,
+                ),
+              ),
+            ),
           ),
         ),
       ),

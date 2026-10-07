@@ -63,39 +63,133 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
     final filter = ref.watch(runningFilterProvider);
     final localId = ref.watch(localEnvironmentProvider)?.id ?? 'local';
     final reading = snapshot.reading;
-    return PaneScaffold(
-      title: 'Running',
-      icon: AppIcons.listMagnifyingGlass,
-      actions: [
-        if (snapshot.loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: Insets.sm),
-            child: InlineSpinner(semanticsLabel: 'Reading what runs'),
-          ),
-        IconButton(
-          key: const ValueKey('running-refresh'),
-          tooltip: 'Refresh',
-          icon: const Icon(AppIcons.arrowClockwise),
-          onPressed: _refresh,
-        ),
-      ],
-      body: reading == null
-          ? Center(
-              child: snapshot.error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(Insets.lg),
-                      child: RunningMuted(
-                        'Could not read what runs: ${snapshot.error}',
-                      ),
-                    )
-                  : const InlineSpinner(semanticsLabel: 'Reading what runs'),
-            )
-          : _RunningBody(
-              reading: reading,
-              filter: filter,
-              localEnvironmentId: localId,
-              error: snapshot.error,
+    final theme = Theme.of(context);
+    // The Stores page's header: under a page that already names it (the
+    // phone's More), no second title.
+    final untitled = PaneTitleOverride.maybeOf(context) != null;
+    return Scaffold(
+      appBar: untitled
+          ? null
+          : AppBar(
+              toolbarHeight: 44,
+              // A workbench tab: an implied back button would pop the app's
+              // route.
+              automaticallyImplyLeading: false,
+              title: Row(
+                children: [
+                  Icon(
+                    AppIcons.listMagnifyingGlass,
+                    color: theme.colorScheme.tertiary,
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  const Flexible(
+                    child: Text(
+                      'Running',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _StatusRow(
+            reading: reading,
+            loading: snapshot.loading,
+            onRefresh: _refresh,
+          ),
+          Expanded(child: _bodyOf(snapshot, filter, localId)),
+        ],
+      ),
+    );
+  }
+
+  Widget _bodyOf(
+    RunningSnapshot snapshot,
+    RunningFilter filter,
+    String localId,
+  ) {
+    final reading = snapshot.reading;
+    return reading == null
+        ? Center(
+            child: snapshot.error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(Insets.lg),
+                    child: RunningMuted(
+                      'Could not read what runs: ${snapshot.error}',
+                    ),
+                  )
+                : const InlineSpinner(semanticsLabel: 'Reading what runs'),
+          )
+        : _RunningBody(
+            reading: reading,
+            filter: filter,
+            localEnvironmentId: localId,
+            error: snapshot.error,
+          );
+  }
+}
+
+/// When it was read, how much it found, and Refresh — the Stores page's
+/// status row.
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.reading,
+    required this.loading,
+    required this.onRefresh,
+  });
+
+  final RunningReading? reading;
+  final bool loading;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final at = reading?.checkedAt.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final age = at == null
+        ? (loading ? 'Reading what runs…' : 'Not read yet')
+        : 'Read ${two(at.hour)}:${two(at.minute)}:${two(at.second)}';
+    final ports = reading?.processes.fold<int>(
+      0,
+      (sum, p) => p.role == RunningRole.server ? sum : sum + p.ports.length,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.lg,
+        Insets.xs,
+        Insets.sm,
+        Insets.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              ports == null
+                  ? age
+                  : '$age · $ports ${ports == 1 ? 'port' : 'ports'}',
+              key: const ValueKey('running-read-at'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          TextButton.icon(
+            key: const ValueKey('running-refresh'),
+            onPressed: loading ? null : onRefresh,
+            icon: loading
+                ? const InlineSpinner(semanticsLabel: 'Reading what runs')
+                : const Icon(AppIcons.arrowClockwise),
+            label: const Text('Refresh'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -227,6 +321,15 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
             ),
           if (board.server case final server? when server.pid > 0)
             RunningServerCard(server: server),
+          if (board.unseen.isNotEmpty)
+            Padding(
+              key: const ValueKey('running-unseen'),
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: RunningMuted(
+                'Also listening, by processes this user cannot see: '
+                '${board.unseen.map((p) => '${p.port.port} (${label(p.machine)})').join(', ')}.',
+              ),
+            ),
         ];
         final running = <Widget>[
           RunningSectionHeading(
@@ -337,56 +440,50 @@ class _Header extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The app's search box, as the Stores picker draws it: the theme's own
+    // filled, outlined field.
     final search = SearchField(
       key: const ValueKey('running-search'),
       onChanged: onQuery,
       decoration: const InputDecoration(
-        isDense: true,
+        prefixIcon: Icon(AppIcons.magnifyingGlass),
         hintText: 'Filter ports and processes',
-        prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.iconSmall),
+        isDense: true,
       ),
     );
-    final at = reading.checkedAt.toLocal();
-    final clock =
-        '${at.hour.toString().padLeft(2, '0')}:'
-        '${at.minute.toString().padLeft(2, '0')}:'
-        '${at.second.toString().padLeft(2, '0')}';
+    final picked = machines.contains(filter.environmentId)
+        ? filter.environmentId
+        : null;
+    final picker = _MachinePicker(
+      machines: machines,
+      picked: picked,
+      label: label,
+      onPick: (id) => ref.read(runningFilterProvider.notifier).machine(id),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: Insets.md,
-          runSpacing: Insets.xs,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
           children: [
-            SizedBox(
-              width: 220,
-              child: DropdownButton<String?>(
-                key: const ValueKey('running-machine-filter'),
-                isExpanded: true,
-                value: machines.contains(filter.environmentId)
-                    ? filter.environmentId
-                    : null,
-                onChanged: (id) =>
-                    ref.read(runningFilterProvider.notifier).machine(id),
-                items: [
-                  const DropdownMenuItem(
-                    child: Text(
-                      'All machines',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  for (final id in machines)
-                    DropdownMenuItem(
-                      value: id,
-                      child: Text(label(id), overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+            picker,
+            const SizedBox(width: Insets.sm),
+            if (compact)
+              Expanded(child: search)
+            else
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: search,
+                ),
               ),
-            ),
-            if (!compact) SizedBox(width: 320, child: search),
-            if (filter.sessionId case final sessionId?)
-              InputChip(
+          ],
+        ),
+        if (filter.sessionId case final sessionId?)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.sm),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
                 key: const ValueKey('running-session-filter'),
                 label: Text(
                   'One session: ${_sessionTitle(reading, sessionId)}',
@@ -394,13 +491,7 @@ class _Header extends ConsumerWidget {
                 onDeleted: () =>
                     ref.read(runningFilterProvider.notifier).session(null),
               ),
-            RunningMuted('Read $clock'),
-          ],
-        ),
-        if (compact)
-          Padding(
-            padding: const EdgeInsets.only(top: Insets.sm),
-            child: search,
+            ),
           ),
       ],
     );
@@ -413,6 +504,86 @@ class _Header extends ConsumerWidget {
           .nonNulls
           .firstOrNull ??
       sessionId;
+}
+
+/// Which machine the tab shows, as a chip with a menu: the theme's chip
+/// surface and outline, not Material's underlined dropdown.
+class _MachinePicker extends StatelessWidget {
+  const _MachinePicker({
+    required this.machines,
+    required this.picked,
+    required this.label,
+    required this.onPick,
+  });
+
+  final List<String> machines;
+  final String? picked;
+  final MachineLabel label;
+  final ValueChanged<String?> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final name = picked == null ? 'All machines' : label(picked!);
+    return MenuAnchor(
+      menuChildren: [
+        for (final id in <String?>[null, ...machines])
+          MenuItemButton(
+            key: ValueKey('running-machine-${id ?? 'all'}'),
+            leadingIcon: Icon(
+              id == picked ? AppIcons.check : null,
+              size: Chrome.iconAction,
+            ),
+            onPressed: () => onPick(id),
+            child: Text(id == null ? 'All machines' : label(id)),
+          ),
+      ],
+      builder: (context, controller, _) => Semantics(
+        button: true,
+        label: 'Machine: $name',
+        excludeSemantics: true,
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            side: BorderSide(color: scheme.outlineVariant),
+          ),
+          child: InkWell(
+            key: const ValueKey('running-machine-filter'),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 32, maxWidth: 220),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium,
+                      ),
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Icon(
+                      AppIcons.caretDown,
+                      size: Chrome.iconAction,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Shows [url] in the Browser pane. The page is the server machine's

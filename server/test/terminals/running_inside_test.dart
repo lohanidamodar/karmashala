@@ -158,6 +158,17 @@ void main() {
       expect(vite.pidMachine, 'ssh:h1');
     });
 
+    test('a process is named by the program it runs, not its thread\'s '
+        'name', () {
+      final listing = parseLinuxListing(
+        _listing.replaceFirst('  421 node\n', '  421 node-MainThread\n'),
+      );
+      final named = {for (final p in listing.processes) p.pid: p.name};
+      expect(named[421], 'node');
+      expect(named[420], 'npm');
+      expect(named[600], 'karmashala_host');
+    });
+
     test('a probe cut short is refused, not read as nothing running', () {
       expect(
         () => parseLinuxListing(_listing.replaceFirst('@@end', '')),

@@ -99,23 +99,9 @@ class _Routes implements PhoneShellRoutes {
   void showWorkbench() {}
 }
 
-class _Preferences implements PreferenceStore {
-  final values = <String, String>{};
-
-  @override
-  String? read(String key) => values[key];
-
-  @override
-  void write(String key, String value) => values[key] = value;
-
-  @override
-  void remove(String key) => values.remove(key);
-}
-
 void main() {
   late _Terminals terminals;
   late _Browser browser;
-  late _Preferences preferences;
   late List<String> opened;
   late PhoneShellRouter phone;
   String? copied;
@@ -123,7 +109,6 @@ void main() {
   setUp(() {
     terminals = _Terminals(runningFixture);
     browser = _Browser();
-    preferences = _Preferences();
     opened = [];
     phone = PhoneShellRouter();
     copied = null;
@@ -159,7 +144,6 @@ void main() {
         sessionBackgroundRunsProvider.overrideWith((ref, _) => const []),
         sessionAgentIdProvider.overrideWith((ref, _) => 'claudeCode'),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
-        runningPreferencesProvider.overrideWithValue(preferences),
         openExternalUrlProvider.overrideWithValue((url) async {
           opened.add(url);
           return true;
@@ -213,43 +197,31 @@ void main() {
     expect(find.byKey(const ValueKey('running-address-5432')), findsOneWidget);
   });
 
-  testWidgets('a link opens where the person last chose, Ctrl-click opens the '
-      'system browser once, and Copy copies the URL', (tester) async {
+  testWidgets('one click on a link opens the system browser at once and not '
+      'the pane; the small globe and Ctrl-click open the pane; Copy copies', (
+    tester,
+  ) async {
     final container = await pump(tester);
-    await tester.tap(find.byKey(const ValueKey('running-link-3000')));
+    final link = find.byKey(const ValueKey('running-link-3000'));
+    expect(tester.getSize(link).height, greaterThanOrEqualTo(32));
+    await tester.tap(link);
+    await tester.pumpAndSettle();
+    expect(opened, ['http://localhost:3000']);
+    expect(browser.navigated, isEmpty);
+    expect(container.read(sidePanelProvider), isNull);
+    expect(find.byType(PopupMenuItem<Object?>), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('running-open-pane-3000')));
     await tester.pumpAndSettle();
     expect(browser.navigated, ['http://localhost:3000']);
     expect(container.read(sidePanelProvider), SidePanelSurface.browser);
 
-    await tester.tap(find.byKey(const ValueKey('running-open-menu-3000')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('running-system-browser-3000')));
-    await tester.pumpAndSettle();
-    expect(opened, ['http://localhost:3000']);
-    expect(preferences.values[RunningOpenTargetController.key], 'system');
-
-    // Remembered: one click now goes to the system browser.
-    await tester.tap(find.byKey(const ValueKey('running-link-3000')));
-    await tester.pumpAndSettle();
-    expect(opened, hasLength(2));
-    expect(browser.navigated, hasLength(1));
-
-    await tester.tap(find.byKey(const ValueKey('running-open-menu-3000')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('running-browser-pane-3000')));
-    await tester.pumpAndSettle();
-    expect(browser.navigated, hasLength(2));
-
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.tap(find.byKey(const ValueKey('running-link-3000')));
+    await tester.tap(link);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(opened, hasLength(3));
-    expect(
-      preferences.values[RunningOpenTargetController.key],
-      'pane',
-      reason: 'a Ctrl-click is for this once',
-    );
+    expect(browser.navigated, hasLength(2));
+    expect(opened, hasLength(1));
 
     await tester.tap(find.byKey(const ValueKey('running-copy-3000')));
     expect(copied, 'http://localhost:3000');
@@ -261,7 +233,7 @@ void main() {
       'as this machine\'s localhost', (tester) async {
     await pump(tester);
     expect(find.byKey(const ValueKey('running-link-8080')), findsNothing);
-    expect(find.byKey(const ValueKey('running-open-8080')), findsNothing);
+    expect(find.byKey(const ValueKey('running-open-pane-8080')), findsNothing);
     expect(find.text('box.example:8080'), findsOneWidget);
     expect(find.textContaining('not forwarded here'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('running-copy-8080')));
@@ -440,7 +412,11 @@ void main() {
     final container = await pump(tester, size: const Size(390, 844));
     expect(tester.takeException(), isNull);
     expect(
-      find.byKey(const ValueKey('running-open-menu-3000')),
+      tester.getSize(find.byKey(const ValueKey('running-link-3000'))).height,
+      greaterThanOrEqualTo(44),
+    );
+    expect(
+      find.byKey(const ValueKey('running-open-pane-3000')),
       findsNothing,
       reason: 'the phone\'s own browser would reach the phone',
     );

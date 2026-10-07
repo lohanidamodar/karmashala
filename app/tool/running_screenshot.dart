@@ -65,15 +65,6 @@ class _Routes implements PhoneShellRoutes {
   void showWorkbench() {}
 }
 
-class _Preferences implements PreferenceStore {
-  @override
-  String? read(String key) => null;
-  @override
-  void write(String key, String value) {}
-  @override
-  void remove(String key) {}
-}
-
 /// The app's own faces, from the asset bundle: flutter_test draws boxes
 /// otherwise.
 Future<void> _loadFonts() async {
@@ -139,7 +130,6 @@ void main() {
             (ref, id) => id == 'sd' ? 'codex' : 'claudeCode',
           ),
           agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
-          runningPreferencesProvider.overrideWithValue(_Preferences()),
           phoneShellRouterProvider.overrideWithValue(router),
         ],
         child: RepaintBoundary(

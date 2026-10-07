@@ -135,7 +135,7 @@ LinuxListing parseLinuxListing(String output) {
         (
           pid: pid,
           parent: row.parent,
-          name: names[pid] ?? _firstWord(row.line),
+          name: _nameOf(row.line, names[pid]),
           commandLine: row.line.trim(),
           sessionId: sessions[pid],
         ),
@@ -145,8 +145,16 @@ LinuxListing parseLinuxListing(String output) {
   );
 }
 
-String _firstWord(String line) =>
-    line.trim().split(RegExp(r'\s+')).first.split('/').last;
+/// The program [line] runs, by its argv[0]: `comm` is a thread's name once a
+/// runtime renames it (Node's reads `node-MainThread`). A kernel thread's
+/// bracketed line keeps [comm].
+String _nameOf(String line, String? comm) {
+  final first = line.trim().split(RegExp(r'\s+')).first;
+  if (first.isEmpty || first.startsWith('[')) return comm ?? first;
+  final base = first.split('/').last;
+  final name = base.endsWith(':') ? base.substring(0, base.length - 1) : base;
+  return name.isEmpty ? (comm ?? first) : name;
+}
 
 /// The processes and ports of one probe, by pid, with the session each one
 /// belongs to: its own `KARMASHALA_SESSION_ID`, else its nearest ancestor's.

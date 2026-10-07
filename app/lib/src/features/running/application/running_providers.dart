@@ -1,7 +1,6 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/data/data_providers.dart';
 import '../../flutter_apps/application/attached_apps.dart';
 import '../../terminal/data/terminals_client.dart';
 import '../domain/port_label.dart';
@@ -126,39 +125,6 @@ class RunningFilterController extends Notifier<RunningFilter> {
 final runningFilterProvider =
     NotifierProvider<RunningFilterController, RunningFilter>(
       RunningFilterController.new,
-    );
-
-/// Where a port's link opens on the desktop: the last place a person chose.
-enum RunningOpenTarget { browserPane, systemBrowser }
-
-/// Where [RunningOpenTarget] is kept; an older build ignores the key.
-final runningPreferencesProvider = Provider<PreferenceStore>(
-  (ref) => ref.watch(appPreferencesProvider),
-);
-
-class RunningOpenTargetController extends Notifier<RunningOpenTarget> {
-  static const String key = 'running.open_in.v1';
-
-  @override
-  RunningOpenTarget build() =>
-      ref.read(runningPreferencesProvider).read(key) == 'system'
-      ? RunningOpenTarget.systemBrowser
-      : RunningOpenTarget.browserPane;
-
-  void choose(RunningOpenTarget target) {
-    state = target;
-    ref
-        .read(runningPreferencesProvider)
-        .write(
-          key,
-          target == RunningOpenTarget.systemBrowser ? 'system' : 'pane',
-        );
-  }
-}
-
-final runningOpenTargetProvider =
-    NotifierProvider<RunningOpenTargetController, RunningOpenTarget>(
-      RunningOpenTargetController.new,
     );
 
 /// The ports the app already knows by what they are: each found Flutter app's

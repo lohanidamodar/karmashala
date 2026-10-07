@@ -134,4 +134,35 @@ void main() {
     expect(bound('[::]').forwardedFromWsl, isTrue);
     expect(bound('127.0.0.53').forwardedFromWsl, isTrue);
   });
+
+  test('a port whose process cannot be seen is said once, not a card; a '
+      'path as a title reads as its file name', () {
+    final reading = RunningReading(
+      serverPid: 1,
+      checkedAt: DateTime.utc(2026),
+      processes: const [
+        RunningProcess(
+          pid: 0,
+          parent: 0,
+          role: RunningRole.listener,
+          environmentId: 'wsl:archlinux',
+          pidMachine: 'wsl:archlinux',
+          ports: [RunningPort(port: 53, address: '10.255.255.254')],
+        ),
+        RunningProcess(
+          pid: 9,
+          parent: 1,
+          name: 'powershell.exe',
+          role: RunningRole.pane,
+          paneId: 'p1',
+          title: r'C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe',
+        ),
+      ],
+    );
+    final read = buildRunningBoard(reading, localEnvironmentId: 'windows');
+    expect(read.ports, isEmpty);
+    expect(read.unseen.single.port.port, 53);
+    expect(read.sessions.single.title, 'powershell.exe');
+    expect(displayTitle('Fix the build'), 'Fix the build');
+  });
 }

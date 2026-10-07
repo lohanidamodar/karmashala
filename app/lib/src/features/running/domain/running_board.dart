@@ -110,6 +110,7 @@ class BoardSession {
 class RunningBoard {
   const RunningBoard({
     required this.ports,
+    this.unseen = const [],
     required this.sessions,
     this.server,
     this.devices = const [],
@@ -121,6 +122,10 @@ class RunningBoard {
 
   /// Every listening port but the server's own, sessions' first.
   final List<BoardPort> ports;
+
+  /// Ports whose process this user cannot see (a distribution's DNS, say):
+  /// said in one line rather than a card each.
+  final List<BoardPort> unseen;
   final List<BoardSession> sessions;
 
   /// Device mirroring that listens on nothing.
@@ -278,7 +283,8 @@ RunningBoard buildRunningBoard(
   final sessions = <BoardSession>[];
   for (final MapEntry(key: key, value: all) in byPane.entries) {
     final first = all.first;
-    final title = all.map((p) => p.title).nonNulls.firstOrNull;
+    final named = all.map((p) => p.title).nonNulls.firstOrNull;
+    final title = displayTitle(named);
     final titleMatches = needle.isNotEmpty && holds(title);
     final processes = [
       ...all.where((p) => p.role == RunningRole.pane),
@@ -296,8 +302,8 @@ RunningBoard buildRunningBoard(
     );
     final mine = [
       for (final note in notes)
-        if (title != null &&
-            note.text.startsWith('"$title"') &&
+        if (named != null &&
+            note.text.startsWith('"$named"') &&
             (note.environmentId ?? localEnvironmentId) == machine)
           note,
     ];
@@ -340,7 +346,11 @@ RunningBoard buildRunningBoard(
   });
   return RunningBoard(
     server: needle.isEmpty ? server : null,
-    ports: ports,
+    ports: [
+      for (final port in ports)
+        if (!_unseen(port)) port,
+    ],
+    unseen: ports.where(_unseen).toList(),
     sessions: sessions,
     devices: needle.isEmpty ? devices : const [],
     notes: notes,
@@ -365,4 +375,16 @@ List<ProcessGroup> _groupByName(Iterable<RunningProcess> processes) {
     return byCount != 0 ? byCount : a.name.compareTo(b.name);
   });
   return groups;
+}
+
+bool _unseen(BoardPort port) =>
+    port.owner == PortOwner.machine && port.process.pid <= 0;
+
+/// A pane title that is an executable's path (`C:\WINDOWS\…\powershell.exe`)
+/// by its file name; any other title as it is.
+String? displayTitle(String? title) {
+  if (title == null || title.contains(' ')) return title;
+  if (!title.contains(r'\') && !title.contains('/')) return title;
+  final last = title.split(RegExp(r'[\\/]')).last;
+  return last.isEmpty ? title : last;
 }
