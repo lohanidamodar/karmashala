@@ -51,6 +51,17 @@ class NotificationsSection extends ConsumerWidget {
               onChanged: controller.setOnlyWhenUnfocused,
             ),
           ),
+          SettingsSwitchRow(
+            key: const ValueKey('settings-chime'),
+            label: 'Chime when something needs you',
+            help:
+                'The system sound, once for each new question, approval or '
+                'failed turn. Not while the Agent dashboard is in front of '
+                'you, in Focus, with Notify me at Never, or while Windows '
+                'asks for quiet.',
+            value: settings.chime,
+            onChanged: controller.setChime,
+          ),
         ],
       ),
     );

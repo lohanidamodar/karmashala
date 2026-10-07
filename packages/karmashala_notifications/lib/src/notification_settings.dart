@@ -53,9 +53,14 @@ class NotificationSettings {
     this.level = NotifyLevel.everything,
     this.onlyWhenUnfocused = true,
     this.focus,
+    this.chime = false,
   });
 
   final NotifyLevel level;
+
+  /// A soft sound once for each new thing that needs the person; off unless
+  /// they turn it on.
+  final bool chime;
 
   /// Only deliver while the app window does not have OS focus.
   final bool onlyWhenUnfocused;
@@ -72,10 +77,12 @@ class NotificationSettings {
     bool? onlyWhenUnfocused,
     FocusMemory? focus,
     bool endFocus = false,
+    bool? chime,
   }) => NotificationSettings(
     level: level ?? this.level,
     onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
     focus: endFocus ? null : focus ?? this.focus,
+    chime: chime ?? this.chime,
   );
 
   /// The level, and the three switches it replaced, so an app from before
@@ -87,6 +94,7 @@ class NotificationSettings {
     'notifyWhenFinished': level == NotifyLevel.everything,
     'notifyWhenAttentionNeeded': enabled,
     'focus': focus?.toJson(),
+    'chime': chime,
   };
 
   /// Reads [json], falling back to the default for any absent or malformed
@@ -106,6 +114,8 @@ class NotificationSettings {
             ),
       onlyWhenUnfocused: flag('onlyWhenUnfocused'),
       focus: FocusMemory.fromJson(json['focus']),
+      // Off unless written on: a sound is never turned on by a missing key.
+      chime: json['chime'] == true,
     );
   }
 
@@ -126,8 +136,9 @@ class NotificationSettings {
       other is NotificationSettings &&
       other.level == level &&
       other.onlyWhenUnfocused == onlyWhenUnfocused &&
-      other.focus == focus;
+      other.focus == focus &&
+      other.chime == chime;
 
   @override
-  int get hashCode => Object.hash(level, onlyWhenUnfocused, focus);
+  int get hashCode => Object.hash(level, onlyWhenUnfocused, focus, chime);
 }
