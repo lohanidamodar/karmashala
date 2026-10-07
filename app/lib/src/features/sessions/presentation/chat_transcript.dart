@@ -173,6 +173,7 @@ class ChatTranscriptView extends StatefulWidget {
   const ChatTranscriptView({
     required this.messages,
     this.footer,
+    this.workingLine,
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
     this.resolveHostPath,
@@ -218,6 +219,11 @@ class ChatTranscriptView extends StatefulWidget {
   /// key (and its open state) when [onLoadEarlier] puts older ones above it.
   final int firstOrdinal;
   final Widget? footer;
+
+  /// The live line under the last message while [turn] is working — outside
+  /// the scroll, so it and its Stop stay in sight as the terminal's spinner
+  /// does. Null draws none.
+  final Widget? workingLine;
   final String emptyHint;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
@@ -594,6 +600,21 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                   ),
                 ),
               ),
+              if (widget.workingLine case final line?
+                  when widget.turn == TranscriptTurn.working)
+                Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: Chrome.chatWidth,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: gutter),
+                      child: line,
+                    ),
+                  ),
+                ),
               if (widget.footer != null)
                 ConstrainedBox(
                   constraints: BoxConstraints(

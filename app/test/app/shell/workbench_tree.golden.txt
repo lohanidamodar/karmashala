@@ -3912,8 +3912,6 @@ WorkbenchView
                                                                                       Flexible
                                                                                         BackgroundRunsStrip
                                                                                           SizedBox
-                                                                                      ActivityStrip
-                                                                                        SizedBox
                                                                                       ConstrainedBox
                                                                                         Consumer
                                                                                           MessageComposer

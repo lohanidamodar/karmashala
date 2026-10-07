@@ -69,7 +69,7 @@ import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
-import 'activity_strip.dart';
+import 'working_line.dart';
 import 'chat_cards/chat_tool_ask.dart';
 import 'chat_cards/pinned_plan_strip.dart';
 import 'chat_transcript.dart';
@@ -793,6 +793,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Null when Notes is off: the transcript never learns the
           // feature exists, so there is nothing left behind to hide.
           onSaveNote: notesEnabled ? _saveNote : null,
+          workingLine: WorkingLine(
+            sessionId: widget.sessionId,
+            onStop: _interruptTurn,
+          ),
           footer: unplaced.isEmpty
               ? footer
               : Column(
@@ -911,8 +915,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ),
   ];
 
-  /// The activity line over the composer. The delivery strip sits on the
-  /// composer's channel: its prompt actions send through `continueSession`.
+  /// The strips over the composer. The delivery strip sits on the composer's
+  /// channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
     // A phone's grants are watched here: the footer is built once.
     Widget composer({required bool prompted}) => Consumer(
@@ -984,7 +988,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Flexible like the queue: with the keyboard up it gives way, and
           // the box stays in sight.
           Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
-          ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
             constraints: BoxConstraints(
