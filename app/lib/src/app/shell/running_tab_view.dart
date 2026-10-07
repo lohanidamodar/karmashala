@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:agent_cli/process.dart'
-    show EnvironmentKind, ExecutionEnvironment;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -12,7 +10,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/browser/application/browser_pane_controller.dart';
 import '../../features/environments/application/environment_providers.dart';
-import '../../features/environments/application/environments_controller.dart';
 import '../../features/running/application/running_providers.dart';
 import '../../features/running/domain/running_board.dart';
 import '../../features/running/domain/running_groups.dart';
@@ -66,10 +63,7 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
     final localId = ref.watch(localEnvironmentProvider)?.id ?? 'local';
     final reading = snapshot.reading;
     final theme = Theme.of(context);
-    final label = runningMachineLabel(
-      ref.watch(environmentsControllerProvider),
-      localId,
-    );
+    final label = ref.watch(runningMachinesProvider).label;
     final machines = reading == null
         ? const <String>[]
         : groupByMachine(
@@ -168,25 +162,6 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
           );
   }
 }
-
-/// How [environments] name a machine: `This machine`, `WSL · archlinux`.
-MachineLabel runningMachineLabel(
-  List<ExecutionEnvironment> environments,
-  String localId,
-) => (id) {
-  if (id == localId) return 'This machine';
-  final environment = environments.where((e) => e.id == id).firstOrNull;
-  final name =
-      environment?.name ??
-      (id.contains(':') ? id.substring(id.indexOf(':') + 1) : id);
-  return switch (environment?.kind) {
-    EnvironmentKind.wsl => 'WSL · $name',
-    EnvironmentKind.ssh => 'SSH · $name',
-    _ when id.startsWith('wsl:') => 'WSL · $name',
-    _ when id.startsWith('ssh:') => 'SSH · $name',
-    _ => name,
-  };
-};
 
 /// The machine filter, behind a funnel as Overview's filters are: choice
 /// chips in a sheet on a phone, a dialog elsewhere.
@@ -329,11 +304,9 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
     final reading = widget.reading;
     final filter = widget.filter;
     final localId = widget.localEnvironmentId;
-    final environments = ref.watch(environmentsControllerProvider);
-    final kinds = {for (final e in environments) e.id: e.kind};
-    final label = runningMachineLabel(environments, localId);
-    bool isWsl(String id) =>
-        kinds[id] == EnvironmentKind.wsl || id.startsWith('wsl:');
+    final machines = ref.watch(runningMachinesProvider);
+    final label = machines.label;
+    final isWsl = machines.isWsl;
     final board = buildRunningBoard(
       reading,
       localEnvironmentId: localId,

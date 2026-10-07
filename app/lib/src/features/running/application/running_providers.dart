@@ -1,6 +1,10 @@
+import 'package:agent_cli/process.dart'
+    show EnvironmentKind, ExecutionEnvironment;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../flutter_apps/application/attached_apps.dart';
 import '../../terminal/data/terminals_client.dart';
 import '../domain/port_label.dart';
@@ -126,6 +130,46 @@ final runningFilterProvider =
     NotifierProvider<RunningFilterController, RunningFilter>(
       RunningFilterController.new,
     );
+
+/// How the Running tab names a machine: `This machine`, `WSL · archlinux`.
+typedef MachineLabel = String Function(String environmentId);
+
+/// The machines the Running tab names, and which of them are WSL.
+class RunningMachines {
+  const RunningMachines(this._environments, this.localId);
+
+  final List<ExecutionEnvironment> _environments;
+
+  /// This machine's environment id.
+  final String localId;
+
+  String label(String id) {
+    if (id == localId) return 'This machine';
+    final environment = _environments.where((e) => e.id == id).firstOrNull;
+    final name =
+        environment?.name ??
+        (id.contains(':') ? id.substring(id.indexOf(':') + 1) : id);
+    return switch (environment?.kind) {
+      EnvironmentKind.wsl => 'WSL · $name',
+      EnvironmentKind.ssh => 'SSH · $name',
+      _ when id.startsWith('wsl:') => 'WSL · $name',
+      _ when id.startsWith('ssh:') => 'SSH · $name',
+      _ => name,
+    };
+  }
+
+  bool isWsl(String id) =>
+      _environments.where((e) => e.id == id).firstOrNull?.kind ==
+          EnvironmentKind.wsl ||
+      id.startsWith('wsl:');
+}
+
+final runningMachinesProvider = Provider<RunningMachines>(
+  (ref) => RunningMachines(
+    ref.watch(environmentsControllerProvider),
+    ref.watch(localEnvironmentProvider)?.id ?? 'local',
+  ),
+);
 
 /// The ports the app already knows by what they are: each found Flutter app's
 /// VM service.

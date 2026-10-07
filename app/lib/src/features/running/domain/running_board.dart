@@ -2,6 +2,7 @@
 /// per session with its wrappers hidden and its duplicates grouped.
 library;
 
+import 'package:karmashala_core/util.dart' show matchesSearch;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import 'port_label.dart';
@@ -200,9 +201,8 @@ RunningBoard buildRunningBoard(
       process.environmentId ?? localEnvironmentId;
   bool onMachine(String machine) =>
       environmentId == null || machine == environmentId;
-  final needle = query.trim().toLowerCase();
-  bool holds(String? text) =>
-      text != null && text.toLowerCase().contains(needle);
+  final needle = query.trim();
+  bool holds(String? text) => matchesSearch(needle, text);
   bool processMatches(RunningProcess process) =>
       needle.isEmpty ||
       holds(process.name) ||

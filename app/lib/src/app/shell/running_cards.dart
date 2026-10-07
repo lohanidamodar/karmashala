@@ -21,9 +21,6 @@ import 'phone_routes.dart';
 import 'running_tab_view.dart' show openPortInBrowserPane;
 import 'workbench_tabs.dart' show openSettingsTab;
 
-/// How the Running tab names a machine: `This machine`, `WSL · archlinux`.
-typedef MachineLabel = String Function(String environmentId);
-
 /// A section's heading: its name and how many it holds.
 class RunningSectionHeading extends StatelessWidget {
   const RunningSectionHeading(this.text, {this.count, super.key});
