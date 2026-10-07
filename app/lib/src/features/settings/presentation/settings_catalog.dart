@@ -488,9 +488,8 @@ enum SettingsAnchor {
     'project check',
     'checks',
     'verification',
-  ]),
-  scheduledResumes(SettingsSectionId.automations, 'Scheduled resumes', [
     'resume',
+    'resumes',
     'usage limit',
     'rate limit',
     'reset',
@@ -1093,14 +1092,14 @@ const settingsEntries = <SettingsEntry>[
   ),
   SettingsEntry(
     'Scheduled resumes',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'Sessions waiting to be resumed when their usage window resets.',
     keywords: ['resume', 'pending', 'cancel', 'reset', 'limit'],
   ),
   SettingsEntry(
     'When an agent hits its usage limit',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'Resume automatically at the reset (the default), ask first, or do '
         'nothing — where automatic resume is turned off.',
@@ -1116,7 +1115,7 @@ const settingsEntries = <SettingsEntry>[
   ),
   SettingsEntry(
     'Continue turns cut off when the session host stops',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'A turn running when the session host stopped or crashed is resumed '
         'when it starts again.',
@@ -1131,7 +1130,7 @@ const settingsEntries = <SettingsEntry>[
   ),
   SettingsEntry(
     'Default resume message',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description: 'What a resumed session is told, unless you say otherwise.',
     keywords: ['continue', 'message', 'prompt'],
   ),

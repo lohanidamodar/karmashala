@@ -53,43 +53,51 @@ class AutomationRunsView extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.lg,
-            Insets.sm,
-            Insets.sm,
-            Insets.xs,
-          ),
-          child: Wrap(
-            spacing: Touch.gap,
-            runSpacing: Insets.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              CompactSegmented<RunsShown>(
-                key: const ValueKey('runs-shown'),
-                segments: [
-                  const ButtonSegment(value: RunsShown.all, label: Text('All')),
-                  ButtonSegment(
-                    value: RunsShown.failed,
-                    label: Text('Failed · $failed'),
-                  ),
-                  ButtonSegment(
-                    value: RunsShown.running,
-                    label: Text('Running · $live'),
-                  ),
-                ],
-                selected: filter.shown,
-                onChanged: ref.read(runsFilterProvider.notifier).show,
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.lg,
+                Insets.sm,
+                Insets.sm,
+                Insets.xs,
               ),
-              _AutomationFilter(automations: automations, selected: named),
-              if (named != null)
-                InputChip(
-                  key: const ValueKey('runs-automation-chip'),
-                  label: Text(named.name),
-                  onDeleted: () =>
-                      ref.read(runsFilterProvider.notifier).only(null),
-                ),
-            ],
+              child: Wrap(
+                spacing: Touch.gap,
+                runSpacing: Insets.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  CompactSegmented<RunsShown>(
+                    key: const ValueKey('runs-shown'),
+                    segments: [
+                      const ButtonSegment(
+                        value: RunsShown.all,
+                        label: Text('All'),
+                      ),
+                      ButtonSegment(
+                        value: RunsShown.failed,
+                        label: Text('Failed · $failed'),
+                      ),
+                      ButtonSegment(
+                        value: RunsShown.running,
+                        label: Text('Running · $live'),
+                      ),
+                    ],
+                    selected: filter.shown,
+                    onChanged: ref.read(runsFilterProvider.notifier).show,
+                  ),
+                  _AutomationFilter(automations: automations, selected: named),
+                  if (named != null)
+                    InputChip(
+                      key: const ValueKey('runs-automation-chip'),
+                      label: Text(named.name),
+                      onDeleted: () =>
+                          ref.read(runsFilterProvider.notifier).only(null),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
         Expanded(

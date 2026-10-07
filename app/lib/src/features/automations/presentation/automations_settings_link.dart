@@ -23,11 +23,7 @@ class AutomationsSettingsLink extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => SettingsSection(
     title: anchor.heading,
     child: SettingsRow(
-      label: switch (section) {
-        AutomationsSection.resumes =>
-          'Scheduled resumes, and what happens at a usage limit',
-        _ => 'Automations, webhooks and their runs',
-      },
+      label: 'Automations, webhooks, runs, checks and scheduled resumes',
       help: 'They have their own tab, Automations.',
       control: FilledButton.tonal(
         key: ValueKey('open-automations-${section.name}'),

@@ -171,10 +171,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
     anchor: SettingsAnchor.automations,
     section: AutomationsSection.automations,
   ),
-  SettingsAnchor.scheduledResumes => const AutomationsSettingsLink(
-    anchor: SettingsAnchor.scheduledResumes,
-    section: AutomationsSection.resumes,
-  ),
+
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),

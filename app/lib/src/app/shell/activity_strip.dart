@@ -18,6 +18,9 @@ import 'workbench_tabs.dart';
 /// Width of the strip, the leftmost column of the window.
 const double kActivityStripWidth = 52;
 
+/// The height one strip button takes.
+const double _buttonExtent = 40;
+
 /// **The activity strip** (spec §4): one glyph per area, Usage and Settings
 /// at the foot.
 /// Pressing the area the sidebar already shows hides the sidebar; pressing
@@ -61,6 +64,7 @@ class ShellActivityStrip extends ConsumerWidget {
       overviewHint: shellChordLabel<OpenOverviewIntent>(),
       onStores: () => openStoresTab(ref),
       onRunning: () => openRunningTab(ref),
+      onAutomations: () => openAutomationsTab(ref),
       // A diagnostic, not a daily tool: in the strip only while debug mode is
       // on. Quick open, Settings and a keymap reach it either way.
       onLogs: ref.watch(settingsControllerProvider.select((s) => s.debugMode))
@@ -87,6 +91,7 @@ class ActivityStrip extends StatelessWidget {
     this.usageHint,
     this.onStores,
     this.onRunning,
+    this.onAutomations,
     this.onLogs,
     this.onOverview,
     this.overviewHint,
@@ -120,6 +125,9 @@ class ActivityStrip extends StatelessWidget {
   /// Opens the Running tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onRunning;
 
+  /// Opens the Automations tab. Null leaves its glyph out, as [onUsage] does.
+  final VoidCallback? onAutomations;
+
   /// Opens the Logs tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onLogs;
 
@@ -136,7 +144,22 @@ class ActivityStrip extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      // The Automations launcher is the one left out of a strip too short to
+      // hold it; quick open reaches it either way.
+      final buttons =
+          areas.length +
+          [onOverview, onLogs, onRunning, onStores, onUsage].nonNulls.length +
+          2;
+      final roomy =
+          constraints.maxHeight >=
+          buttons * (_buttonExtent + Insets.xs) + Insets.sm * 2;
+      return _strip(context, automations: roomy ? onAutomations : null);
+    },
+  );
+
+  Widget _strip(BuildContext context, {required VoidCallback? automations}) {
     final tones = SurfaceTones.of(context);
     return Container(
       width: kActivityStripWidth,
@@ -180,6 +203,13 @@ class ActivityStrip extends StatelessWidget {
               label: 'Running',
               selected: false,
               onPressed: onRunning,
+            ),
+          if (automations case final automations?)
+            _StripButton(
+              icon: AppIcons.lightning,
+              label: 'Automations',
+              selected: false,
+              onPressed: automations,
             ),
           if (onStores case final onStores?)
             _StripButton(
@@ -259,7 +289,7 @@ class _StripButton extends StatelessWidget {
           excludeSemantics: true,
           child: SizedBox(
             width: kActivityStripWidth,
-            height: 40,
+            height: _buttonExtent,
             child: Stack(
               alignment: Alignment.center,
               children: [

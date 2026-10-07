@@ -2,7 +2,9 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/shell/activity_strip.dart';
 import 'package:karmashala/src/app/shell/phone_more_page.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_runs_view.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_settings_link.dart';
@@ -155,7 +157,7 @@ void main() {
       }
       expect(
         searchSettings('usage limit').map((e) => e.anchor),
-        contains(SettingsAnchor.scheduledResumes),
+        contains(SettingsAnchor.automations),
       );
     },
   );
@@ -175,6 +177,39 @@ void main() {
         reason: '"$query" should find Automations',
       );
     }
+  });
+
+  testWidgets('the side rail opens it, and leaves it out when it cannot fit', (
+    tester,
+  ) async {
+    Future<void> rail(double height) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: height,
+              child: ActivityStrip(
+                selected: null,
+                onSelect: (_) {},
+                onSettings: () {},
+                onUsage: () {},
+                onStores: () {},
+                onRunning: () {},
+                onOverview: () {},
+                onAutomations: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await rail(900);
+    expect(find.byIcon(AppIcons.lightning), findsOneWidget);
+    // Room for every other button, not for one more.
+    await rail(470);
+    expect(find.byIcon(AppIcons.lightning), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the phone lists it under More', (tester) async {
