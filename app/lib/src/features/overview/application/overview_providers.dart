@@ -128,7 +128,7 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
 ) {
   final prefs = ref.watch(overviewPrefsProvider);
   final filter = prefs.filter;
-  if (filter.columns == null) return ref.watch(overviewBoardProvider);
+  if (filter.allStates) return ref.watch(overviewBoardProvider);
   return buildOverviewBoard(
     ref.watch(agentStateGroupsProvider),
     facts: ref.watch(overviewFactsProvider),

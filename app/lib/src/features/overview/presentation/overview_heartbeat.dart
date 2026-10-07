@@ -1,65 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/charts.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/overview_activity_strips.dart';
-import '../application/overview_providers.dart';
-import '../timeline/domain/timeline_model.dart';
 import 'overview_counters.dart';
 
-/// **The fleet's heartbeat**: how many agents worked and waited on you over
-/// the last two hours, the live counters that filter the cards, and the facts
-/// worth a line.
-class OverviewHeartbeat extends ConsumerWidget {
+/// **The fleet's heartbeat**, one slim row: the counters that filter the
+/// cards, the facts worth a word, and the last two hours as a sparkline —
+/// folded behind a toggle where the row is narrow.
+class OverviewHeartbeat extends ConsumerStatefulWidget {
   const OverviewHeartbeat({super.key});
 
-  /// The width under which the chart goes below the counters.
+  @override
+  ConsumerState<OverviewHeartbeat> createState() => _OverviewHeartbeatState();
+}
+
+class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
+  var _chartOpen = false;
+
+  /// The width under which the sparkline folds away.
   static const _sideBySide = WidthClass.mediumMin;
 
+  /// The sparkline's least width beside the counters.
+  static const _chartMin = WidthClass.mediumMin / 3;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final model = ref.watch(overviewActivityProvider);
-    final (:strip, :doneToday) = ref.watch(overviewCountersProvider);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
+    final chart = model.recorded
+        ? _Spark(
+            model: model,
+            working: semantic.working,
+            waiting: semantic.attention,
+          )
+        : null;
+    const counters = Wrap(
+      spacing: Insets.md,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [OverviewCounters(), OverviewFactsLine()],
     );
-    final worked = model.workedTotal;
-    final summary = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const OverviewCounters(),
-        const SizedBox(height: Insets.sm),
-        Text(
-          model.recorded
-              ? worked == Duration.zero
-                    ? 'No agent worked in the last 2 hours.'
-                    : '${describeDuration(worked)} of agent time in the last '
-                          '2 hours · $doneToday done today'
-              : 'The activity log could not be read, so the last 2 hours '
-                    'are not drawn.',
-          key: const ValueKey('overview-heartbeat-said'),
-          style: muted,
-        ),
-        const Padding(
-          padding: EdgeInsets.only(top: Insets.xs),
-          child: OverviewFactsLine(),
-        ),
-      ],
-    );
-    final chart = !model.recorded
-        ? null
-        : _Chart(model: model, working: semantic.working, waiting: semantic.attention);
     return Container(
       key: const ValueKey('overview-heartbeat'),
-      padding: const EdgeInsets.all(Insets.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xs,
+      ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.lg),
+        borderRadius: BorderRadius.circular(Radii.md),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: LayoutBuilder(
@@ -70,19 +64,48 @@ class OverviewHeartbeat extends ConsumerWidget {
                 _sideBySide,
                 MediaQuery.textScalerOf(context),
               );
-          if (chart == null) return summary;
-          if (!wide) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [summary, const SizedBox(height: Insets.md), chart],
+          if (chart == null) return counters;
+          if (wide) {
+            return Row(
+              children: [
+                const Flexible(child: counters),
+                const SizedBox(width: Insets.md),
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: _chartMin),
+                    child: chart,
+                  ),
+                ),
+              ],
             );
           }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(flex: 5, child: summary),
-              const SizedBox(width: Insets.xl),
-              Expanded(flex: 6, child: chart),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Expanded(child: counters),
+                  IconButton(
+                    key: const ValueKey('overview-chart-toggle'),
+                    tooltip: _chartOpen
+                        ? 'Hide the 2-hour chart'
+                        : 'Show the 2-hour chart',
+                    visualDensity: VisualDensity.compact,
+                    iconSize: UiDensity.of(context).icon,
+                    onPressed: () => setState(() => _chartOpen = !_chartOpen),
+                    icon: Icon(
+                      _chartOpen ? AppIcons.caretUp : AppIcons.caretDown,
+                    ),
+                  ),
+                ],
+              ),
+              if (_chartOpen)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Insets.xs),
+                  child: chart,
+                ),
             ],
           );
         },
@@ -91,8 +114,9 @@ class OverviewHeartbeat extends ConsumerWidget {
   }
 }
 
-class _Chart extends StatelessWidget {
-  const _Chart({
+/// "2h ▁▂▃▅▆ now": agents working and waiting on you over the window.
+class _Spark extends StatelessWidget {
+  const _Spark({
     required this.model,
     required this.working,
     required this.waiting,
@@ -104,9 +128,8 @@ class _Chart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
+    final muted = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
     final most = [
       for (var i = 0; i < model.working.length; i++)
@@ -114,58 +137,29 @@ class _Chart extends StatelessWidget {
     ].fold(0, (a, b) => a > b ? a : b);
     final nowWorking = model.working.isEmpty ? 0 : model.working.last;
     final nowWaiting = model.waiting.isEmpty ? 0 : model.waiting.last;
-    Widget key(Color color, String label) => Row(
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: [
-        Container(
-          width: Insets.sm + Insets.xxs,
-          height: Insets.sm + Insets.xxs,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(Insets.xxs),
+        Text('2h', style: muted),
+        const SizedBox(width: Insets.sm),
+        Expanded(
+          child: Sparkline(
+            key: const ValueKey('overview-heartbeat-chart'),
+            values: [
+              for (var i = 0; i < model.working.length; i++)
+                (model.working[i] + model.waiting[i]).toDouble(),
+            ],
+            secondaryValues: [for (final n in model.waiting) n.toDouble()],
+            color: working,
+            secondaryColor: waiting,
+            maxValue: most < 2 ? 2 : most.toDouble(),
+            height: Insets.xl,
+            semanticsLabel:
+                'Agents over the last 2 hours: up to $most at once; now '
+                '$nowWorking working and $nowWaiting waiting on you',
           ),
         ),
-        const SizedBox(width: Insets.xs),
-        Text(label, style: muted),
-      ],
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Sparkline(
-          key: const ValueKey('overview-heartbeat-chart'),
-          values: [
-            for (var i = 0; i < model.working.length; i++)
-              (model.working[i] + model.waiting[i]).toDouble(),
-          ],
-          secondaryValues: [for (final n in model.waiting) n.toDouble()],
-          color: working,
-          secondaryColor: waiting,
-          maxValue: most < 2 ? 2 : most.toDouble(),
-          height: Insets.xxl + Insets.xl,
-          semanticsLabel:
-              'Agents over the last 2 hours: up to $most at once; now '
-              '$nowWorking working and $nowWaiting waiting on you',
-        ),
-        const SizedBox(height: Insets.xs),
-        Row(
-          children: [
-            Text('2h ago', style: muted),
-            const Spacer(),
-            Text('1h', style: muted),
-            const Spacer(),
-            Text('now', style: muted?.copyWith(fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: Insets.xs),
-        Wrap(
-          spacing: Insets.md,
-          children: [
-            key(working, 'working'),
-            key(waiting, 'waiting on you'),
-          ],
-        ),
+        const SizedBox(width: Insets.sm),
+        Text('now', style: muted),
       ],
     );
   }

@@ -7,6 +7,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/paths/app_support_directory.dart';
+import '../../explorer/application/agent_states.dart';
 import 'overview_board.dart';
 
 /// The Overview tab's two views.
@@ -47,6 +48,7 @@ class OverviewPrefs {
     'agents': ?filter.agents?.toList(),
     'machines': ?filter.machines?.toList(),
     'columns': ?filter.columns?.map((c) => c.name).toList(),
+    'states': ?filter.states?.map((s) => s.name).toList(),
     'groupBy': groupBy.name,
     'density': density.name,
     'view': view.name,
@@ -59,6 +61,7 @@ class OverviewPrefs {
     T named<T extends Enum>(List<T> values, Object? name, T fallback) =>
         values.where((v) => v.name == name).firstOrNull ?? fallback;
     final columns = strings(json['columns']);
+    final states = strings(json['states']);
     return OverviewPrefs(
       filter: OverviewFilter(
         projects: strings(json['projects']),
@@ -69,6 +72,12 @@ class OverviewPrefs {
             : {
                 for (final column in BoardColumn.values)
                   if (columns.contains(column.name)) column,
+              },
+        states: states == null
+            ? null
+            : {
+                for (final state in AgentState.values)
+                  if (states.contains(state.name)) state,
               },
       ),
       groupBy: named(
@@ -138,7 +147,18 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
       _setFilter(machines: machines, keepMachines: false);
 
   void setColumns(Set<BoardColumn>? columns) =>
-      _setFilter(columns: columns, keepColumns: false);
+      _setFilter(columns: columns, keepColumns: false, keepStates: false);
+
+  /// Shows only what [counter] counts, or every state for null.
+  void setCounter(OverviewCounter? counter) => _setFilter(
+    columns: counter == null ? null : {counter.column},
+    states: switch (counter?.state) {
+      final state? => {state},
+      null => null,
+    },
+    keepColumns: false,
+    keepStates: false,
+  );
 
   void setGroupBy(OverviewGroupBy groupBy) {
     if (state.groupBy != groupBy) _set(state.copyWith(groupBy: groupBy));
@@ -157,10 +177,12 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
     Set<String>? agents,
     Set<String>? machines,
     Set<BoardColumn>? columns,
+    Set<AgentState>? states,
     bool keepProjects = true,
     bool keepAgents = true,
     bool keepMachines = true,
     bool keepColumns = true,
+    bool keepStates = true,
   }) {
     final now = state.filter;
     _set(
@@ -170,6 +192,7 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
           agents: keepAgents ? now.agents : agents,
           machines: keepMachines ? now.machines : machines,
           columns: keepColumns ? now.columns : columns,
+          states: keepStates ? now.states : states,
         ),
       ),
     );

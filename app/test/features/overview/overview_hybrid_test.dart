@@ -611,6 +611,71 @@ void main() {
     await unmountMission(tester);
   });
 
+  group('heartbeat', () {
+    testWidgets('failed has its own counter, and it shows failures alone', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final c = await pump(tester);
+      expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'^Failed, 1, ')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:failed')));
+      await settleMission(tester);
+      expect(c.read(overviewPrefsProvider).filter.states, {AgentState.failed});
+      expect(queueCard('store-reviews'), findsOneWidget);
+      expect(queueCard('ks-r21'), findsNothing);
+      expect(workCard('ks-r32'), findsNothing);
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Failed, 1, showing only these')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await settleMission(tester);
+      expect(queueCard('ks-r21'), findsOneWidget);
+      expect(queueCard('store-reviews'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await settleMission(tester);
+      expect(c.read(overviewPrefsProvider).filter.allStates, isTrue);
+      expect(queueCard('store-reviews'), findsOneWidget);
+      handle.dispose();
+      await unmountMission(tester);
+    });
+
+    testWidgets('one slim row with the sparkline beside the counters', (
+      tester,
+    ) async {
+      await pump(tester);
+      final heart = find.byKey(const ValueKey('overview-heartbeat'));
+      final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
+      expect(chart, findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-chart-toggle')), findsNothing);
+      expect(tester.getSize(heart).height, lessThan(64));
+      expect(
+        tester.getCenter(chart).dx,
+        greaterThan(
+          tester.getCenter(find.byKey(const ValueKey('overview-counters'))).dx,
+        ),
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('on a phone the sparkline folds behind a toggle', (
+      tester,
+    ) async {
+      await pump(tester, size: const Size(390, 844), phone: true);
+      final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
+      expect(chart, findsNothing);
+      await tester.tap(find.byKey(const ValueKey('overview-chart-toggle')));
+      await settleMission(tester);
+      expect(chart, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+  });
+
   group('group by context', () {
     MissionFixture filed() => MissionFixture(
       activity: MissionFixture.realisticActivity(),

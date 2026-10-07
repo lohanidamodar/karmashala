@@ -103,8 +103,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       waitingSince: (id) => statusOf(id)?.waitingSince,
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
-    final columns = ref.watch(
-      overviewPrefsProvider.select((p) => p.filter.columns),
+    final allStates = ref.watch(
+      overviewPrefsProvider.select((p) => p.filter.allStates),
     );
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
@@ -158,7 +158,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             ),
             if (sections.work.isEmpty)
               Text(
-                columns == null
+                allStates
                     ? 'Nothing is running or ready right now.'
                     : 'Nothing here right now.',
                 key: const ValueKey('overview-none-at-work'),
