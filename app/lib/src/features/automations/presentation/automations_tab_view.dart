@@ -5,6 +5,10 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../application/automation_draft.dart';
+import '../application/automation_editor_state.dart';
+import '../application/automation_providers.dart';
+import 'automation_editor.dart';
 import 'automation_runs_view.dart';
 import 'automations_page.dart';
 import 'automations_tab_state.dart';
@@ -21,6 +25,7 @@ class AutomationsTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final section = ref.watch(automationsSectionProvider);
+    final editing = ref.watch(automationEditorProvider);
     return WorkbenchTabScaffold(
       icon: AppIcons.lightning,
       title: 'Automations',
@@ -35,7 +40,33 @@ class AutomationsTabView extends ConsumerWidget {
           onChanged: ref.read(automationsSectionProvider.notifier).show,
         ),
       ],
+      actions: [
+        IconButton(
+          key: const ValueKey('automation-new'),
+          tooltip: 'New automation',
+          icon: const Icon(AppIcons.plus),
+          onPressed: () {
+            ref
+                .read(automationsSectionProvider.notifier)
+                .show(AutomationsSection.automations);
+            ref
+                .read(automationEditorProvider.notifier)
+                .open(
+                  AutomationDraft(
+                    repositoryId: ref
+                        .read(automationCheckoutsProvider)
+                        .firstOrNull
+                        ?.id,
+                  ),
+                );
+          },
+        ),
+      ],
       body: switch (section) {
+        AutomationsSection.automations when editing != null => AutomationEditor(
+          key: ValueKey('editor-${editing.generation}'),
+          initial: editing.draft,
+        ),
         AutomationsSection.automations => const _Readable(
           child: AutomationsPage(),
         ),

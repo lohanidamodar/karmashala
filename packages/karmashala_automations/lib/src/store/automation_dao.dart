@@ -262,8 +262,8 @@ class AutomationDao implements AutomationRecords {
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
     'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
-    'event_session_id, started_by, step_results) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'event_session_id, started_by, step_results, prompt) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -279,6 +279,7 @@ class AutomationDao implements AutomationRecords {
       run.eventSessionId,
       run.startedBy?.name,
       _stepResultsColumn(run),
+      run.prompt,
     ],
   );
 
@@ -593,5 +594,6 @@ class AutomationDao implements AutomationRecords {
     stepResults: AutomationStepResult.listFromColumn(
       row['step_results'] as String?,
     ),
+    prompt: row['prompt'] as String?,
   );
 }

@@ -96,7 +96,7 @@ class _CheckoutChecks extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => _addCheck(context, ref, repository),
+              onPressed: () => addProjectCheck(context, ref, repository),
               child: const Text('Add a check'),
             ),
           ),
@@ -145,19 +145,22 @@ class _CheckLine extends ConsumerWidget {
   }
 }
 
-Future<void> _addCheck(
+/// Asks for a check for [repository] and adds it; [turnOn] also turns its
+/// checks on, as making an automation ready means.
+Future<void> addProjectCheck(
   BuildContext context,
   WidgetRef ref,
-  Repository repository,
-) async {
+  Repository repository, {
+  bool turnOn = false,
+}) async {
   final result = await showDialog<({String name, List<String> command})>(
     context: context,
     builder: (_) => _AddCheckDialog(checkoutName: repository.name),
   );
   if (result == null) return;
-  ref
-      .read(automationControllerProvider)
-      .addCheck(repository.id, result.name, result.command);
+  final controller = ref.read(automationControllerProvider)
+    ..addCheck(repository.id, result.name, result.command);
+  if (turnOn) controller.setVerificationEnabled(repository.id, enabled: true);
 }
 
 class _AddCheckDialog extends StatefulWidget {

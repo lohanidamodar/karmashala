@@ -85,6 +85,7 @@ class AutomationRun {
     this.eventSessionId,
     this.startedBy,
     this.stepResults = const [],
+    this.prompt,
   });
 
   final String id;
@@ -134,6 +135,10 @@ class AutomationRun {
   /// What its tell and notify steps did, in the order they ran.
   final List<AutomationStepResult> stepResults;
 
+  /// What a webhook's run told its agent: the template, filled. Null for
+  /// every other run, whose prompt is its automation's.
+  final String? prompt;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -161,6 +166,7 @@ class AutomationRun {
     eventSessionId: eventSessionId,
     startedBy: startedBy,
     stepResults: stepResults ?? this.stepResults,
+    prompt: prompt,
   );
 
   @override

@@ -249,6 +249,45 @@ class DaemonAutomations implements ChecksWork {
       return session == null || session.lifecycle.hasEnded ? null : session;
     }
 
+    final followUps = AutomationFollowUps(
+      automations: automations,
+      resumes: resumes,
+      repositoryName: (id) => facts.repository(id)?.name ?? 'this checkout',
+      notify: (automation, run, text, {required failed}) {
+        final file = raise;
+        if (file == null) {
+          throw StateError('This server files no notifications.');
+        }
+        final sessionId = run.sessionId ?? run.eventSessionId;
+        final session = sessionId == null ? null : sessions.getById(sessionId);
+        final agentId = session == null
+            ? null
+            : rows.installation(session.agentInstallationId)?.agentId;
+        final external = session?.externalSessionId;
+        file(
+          InboxItem(
+            session: WatchedSession(
+              key: AgentSessionKey(
+                agentId ?? 'automation',
+                external == null || external.isEmpty
+                    ? session?.id ?? run.id
+                    : external,
+              ),
+              label: session?.title ?? automation.name,
+              openId: session?.id ?? '',
+              imported: false,
+            ),
+            kind: failed ? InboxItemKind.checksFailed : InboxItemKind.finished,
+            at: now(),
+            id: 'automation:${run.id}',
+            detail: text,
+          ),
+        );
+      },
+      now: now,
+      newId: ids,
+      onChanged: _changed,
+    );
     eventRules = ServerEventRules(
       automations: automations,
       scheduler: scheduler,
@@ -259,6 +298,7 @@ class DaemonAutomations implements ChecksWork {
       now: now,
       newId: ids,
       log: _log,
+      afterRun: followUps.after,
     );
     usageLimits = ServerUsageLimits(
       sessionOf: sessions.getById,
@@ -282,49 +322,7 @@ class DaemonAutomations implements ChecksWork {
       facts: facts,
       automations: automations,
       sessionOf: sessions.getById,
-      followUps: AutomationFollowUps(
-        automations: automations,
-        resumes: resumes,
-        repositoryName: (id) => facts.repository(id)?.name ?? 'this checkout',
-        notify: (automation, run, text, {required failed}) {
-          final file = raise;
-          if (file == null) {
-            throw StateError('This server files no notifications.');
-          }
-          final sessionId = run.sessionId;
-          final session = sessionId == null
-              ? null
-              : sessions.getById(sessionId);
-          final agentId = session == null
-              ? null
-              : rows.installation(session.agentInstallationId)?.agentId;
-          final external = session?.externalSessionId;
-          file(
-            InboxItem(
-              session: WatchedSession(
-                key: AgentSessionKey(
-                  agentId ?? 'automation',
-                  external == null || external.isEmpty
-                      ? session?.id ?? run.id
-                      : external,
-                ),
-                label: session?.title ?? automation.name,
-                openId: session?.id ?? '',
-                imported: false,
-              ),
-              kind: failed
-                  ? InboxItemKind.checksFailed
-                  : InboxItemKind.finished,
-              at: now(),
-              id: 'automation:${run.id}',
-              detail: text,
-            ),
-          );
-        },
-        now: now,
-        newId: ids,
-        onChanged: _changed,
-      ),
+      followUps: followUps,
     );
     settler = AutomationRunSettler(
       automations: automations,

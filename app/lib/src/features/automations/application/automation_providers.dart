@@ -8,7 +8,10 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/capabilities/capabilities.dart' show capabilitiesProvider;
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../data/automations_data.dart';
+import 'package:karmashala_git/repositories.dart';
 
 export '../data/automations_data.dart'
     show
@@ -16,6 +19,13 @@ export '../data/automations_data.dart'
         automationsRevisionProvider,
         projectChecksDataProvider,
         resumesDataProvider;
+
+/// Every checkout an automation can run in, kept fresh as projects are
+/// added or rescanned.
+final automationCheckoutsProvider = Provider<List<Repository>>((ref) {
+  ref.watch(projectsControllerProvider);
+  return ref.watch(workspaceDataProvider).repositories;
+});
 
 final automationsProvider = Provider<List<Automation>>((ref) {
   ref.watch(automationsRevisionProvider);

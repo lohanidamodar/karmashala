@@ -60,6 +60,8 @@ class AutomationRunner implements AutomationFiring {
             firedAt: now,
             state: AutomationRunState.running,
             reason: note,
+            // A webhook's prompt is its call's, filled; keep what was sent.
+            prompt: automation.isWebhook ? automation.prompt : null,
           )
         : queued.copyWith(
             state: AutomationRunState.running,

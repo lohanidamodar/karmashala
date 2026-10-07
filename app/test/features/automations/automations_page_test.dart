@@ -8,7 +8,8 @@ import 'package:karmashala/src/features/automations/application/automation_provi
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/resumes.dart';
-import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
+import 'package:karmashala/src/features/automations/application/automation_draft.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_editor.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -113,7 +114,7 @@ void main() {
     await pumpPage(tester);
     expect(find.text('AUTOMATIONS'), findsOneWidget);
     expect(find.text('Nothing is armed.'), findsOneWidget);
-    expect(find.text('Arm an automation'), findsOneWidget);
+    expect(find.text('New automation'), findsOneWidget);
     expect(find.text('Nothing is armed or waiting.'), findsOneWidget);
   });
 
@@ -170,33 +171,29 @@ void main() {
     );
   });
 
-  testWidgets('the arm form names each rung beside the CLI own word', (
+  testWidgets('the editor names each rung beside the CLI own word', (
     tester,
   ) async {
-    // The form picks whole selections rather than axes, so the name it pairs
-    // is the composed rung's — the one the unattended gate reads.
+    // The editor picks whole selections rather than axes, so the name it
+    // pairs is the composed rung's — the one the unattended gate reads.
     makeReady();
+    await tester.binding.setSurfaceSize(const Size(1440, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
           home: Scaffold(
-            body: AutomationDialog(
-              repository: repository(),
-              // An armed automation, so the form opens with an agent chosen
-              // and the mode picker drawn — a blank form has neither.
-              existing: nightly(),
-            ),
+            // A saved automation, so it opens with an agent chosen and the
+            // mode picker drawn — a blank one has neither.
+            body: AutomationEditor(initial: AutomationDraft.from(nightly())),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(
-      tester.widget<DesktopDialogTitle>(find.byType(DesktopDialogTitle)).title,
-      'Edit "Nightly sweep"',
-    );
+    expect(find.text('Nightly sweep'), findsOneWidget);
 
     // The mode dropdown, not the agent one above it. Scrolled to first: the
     // form is longer than the dialog now that the schedule has three shapes.

@@ -235,7 +235,7 @@ class Automation {
   /// Whether a run needs an agent of its own. A message goes into a session
   /// that already has one, so that rule names none.
   bool get startsAgent =>
-      trigger?.action != AutomationEventAction.messageSession;
+      trigger == null || trigger!.action == AutomationEventAction.startSession;
 
   /// Whether [consecutiveFailures] has reached the limit this was armed with.
   bool get hasFailedOut =>

@@ -66,6 +66,20 @@ void main() {
     expect(hook.single['run_in_worktree'], 1);
   });
 
+  test('v85 keeps the prompt a webhook run was given, on the run', () {
+    final raw = upTo(85);
+    addTearDown(raw.close);
+    final columns = raw
+        .select('PRAGMA table_info(automation_runs);')
+        .map((row) => row['name']);
+    expect(columns, contains('prompt'));
+    final calls = raw
+        .select('PRAGMA table_info(webhook_calls);')
+        .map((row) => row['name']);
+    expect(calls, isNot(contains('prompt')), reason: 'the call log keeps none');
+    schemaMigrations[85]!(raw);
+  });
+
   test('the step is idempotent', () {
     final raw = upTo(84);
     addTearDown(raw.close);

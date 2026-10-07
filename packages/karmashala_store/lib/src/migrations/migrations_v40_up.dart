@@ -1158,3 +1158,14 @@ void _migrateToV84(Database db) {
     db.execute('ALTER TABLE automation_runs ADD COLUMN step_results TEXT;');
   }
 }
+
+/// The prompt a webhook's run was started with — its template filled with
+/// the call's fields — so Deliveries can show what the agent was told. On the
+/// run, not the call log, which keeps no part of a body.
+void _migrateToV85(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('prompt')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN prompt TEXT;');
+}

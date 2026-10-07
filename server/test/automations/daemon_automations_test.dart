@@ -389,6 +389,8 @@ void main() {
       final run = runs('auto-hook').single;
       expect(run.state, AutomationRunState.running);
       expect(run.baseCheckpointId, 'cp-${run.id}');
+      // What the agent was told is kept on the run, never on the call log.
+      expect(run.prompt, startsWith('Triage [webhook field 1]'));
       expect(answer.body, {'session': run.sessionId, 'run': run.id});
       final spawn = launcher.started.single;
       expect(spawn.argv, containsAllInOrder(['--permission-mode', 'plan']));

@@ -131,6 +131,7 @@ Map<String, Object?> automationRunToJson(AutomationRun r) => {
   'origin': r.origin,
   'eventSessionId': r.eventSessionId,
   'startedBy': r.startedBy?.name,
+  'prompt': ?r.prompt,
   if (r.stepResults.isNotEmpty)
     'stepResults': [for (final step in r.stepResults) step.toJson()],
 };
@@ -151,6 +152,7 @@ AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   eventSessionId: json['eventSessionId'] as String?,
   startedBy: AutomationRunCause.fromName(json['startedBy'] as String?),
   stepResults: AutomationStepResult.listFromJson(json['stepResults']),
+  prompt: json['prompt'] as String?,
 );
 
 Map<String, Object?> checkVerdictToJson(AutomationCheckVerdict v) => {

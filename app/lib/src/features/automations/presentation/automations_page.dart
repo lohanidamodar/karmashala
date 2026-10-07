@@ -21,13 +21,13 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/schedules.dart';
+import '../application/automation_draft.dart';
+import '../application/automation_editor_state.dart';
 import 'active_schedules_section.dart';
-import 'automation_dialog.dart';
 import 'automation_dry_run_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
-import 'webhook_dialog.dart';
-import 'webhook_panel.dart';
+import 'webhook_parts.dart';
 
 /// Settings → Checkpoints and automations: where a run is armed, paused,
 /// deleted, and where "did it run last night" is answered. Arming happens here
@@ -101,13 +101,15 @@ class _ArmButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => PopupMenuButton<String>(
-    tooltip: webhook ? 'New webhook' : 'Arm an automation',
-    onSelected: (id) {
-      final repository = checkouts.firstWhere((r) => r.id == id);
-      webhook
-          ? WebhookDialog.show(context, repository: repository)
-          : AutomationDialog.show(context, repository: repository);
-    },
+    tooltip: webhook ? 'New webhook' : 'New automation',
+    onSelected: (id) => ref
+        .read(automationEditorProvider.notifier)
+        .open(
+          AutomationDraft(
+            repositoryId: id,
+            trigger: webhook ? DraftTrigger.webhook : DraftTrigger.schedule,
+          ),
+        ),
     itemBuilder: (_) => [
       for (final repository in checkouts)
         PopupMenuItem(
@@ -125,7 +127,7 @@ class _ArmButton extends ConsumerWidget {
         children: [
           Icon(webhook ? AppIcons.globe : AppIcons.plus),
           const SizedBox(width: Insets.xs),
-          Text(webhook ? 'New webhook' : 'Arm an automation'),
+          Text(webhook ? 'New webhook' : 'New automation'),
         ],
       ),
     ),
@@ -241,21 +243,12 @@ class AutomationCard extends ConsumerWidget {
           ),
         if (automation.isWebhook)
           TextButton(
-            onPressed: () => WebhookPanel.show(context, automation),
-            child: const Text('Webhook…'),
+            onPressed: () => WebhookDeliveriesDialog.show(context, automation),
+            child: const Text('Deliveries'),
           ),
         TextButton(
-          onPressed: () => automation.isWebhook
-              ? WebhookDialog.show(
-                  context,
-                  repository: repository,
-                  existing: automation,
-                )
-              : AutomationDialog.show(
-                  context,
-                  repository: repository,
-                  existing: automation,
-                ),
+          onPressed: () =>
+              ref.read(automationEditorProvider.notifier).edit(automation),
           child: const Text('Edit'),
         ),
         TextButton(
