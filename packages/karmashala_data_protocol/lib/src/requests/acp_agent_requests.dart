@@ -21,6 +21,9 @@ DataRequest<Object?>? _acpAgentsRequestFromJson(String kind, _Arguments args) =>
         },
         registryId: args.optionalString('registryId'),
         iconUrl: args.optionalString('iconUrl'),
+        modeRungs: args.values['modeRungs'] == null
+            ? null
+            : _modeRungs(args, 'modeRungs'),
       ),
       AcpAgentDelete.name => AcpAgentDelete(args.string('id')),
       _ => null,
@@ -33,6 +36,14 @@ Map<String, String> _stringMap(_Arguments args, String key) {
     return value.cast<String, String>();
   }
   throw DataRefused.invalid('${args.kind}: "$key" must map names to strings');
+}
+
+Map<String, PermissionRisk> _modeRungs(_Arguments args, String key) {
+  try {
+    return acpModeRungsFromJson(args.values[key], key);
+  } on FormatException catch (e) {
+    throw DataRefused.invalid('${args.kind}: ${e.message}');
+  }
 }
 
 /// A request of the person-added ACP agents.
@@ -76,6 +87,7 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
     this.source = AcpAgentSource.custom,
     this.registryId,
     this.iconUrl,
+    this.modeRungs,
   });
 
   static const String name = 'acpAgents.put';
@@ -91,6 +103,9 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
   /// The registry entry's icon URL, kept so the agent is drawn with it.
   final String? iconUrl;
 
+  /// The rung each mode stands for; null keeps what the row holds.
+  final Map<String, PermissionRisk>? modeRungs;
+
   @override
   String get kind => name;
 
@@ -104,6 +119,8 @@ final class AcpAgentPut extends AcpAgentsRequest<AcpAgentRow> {
     'source': source.name,
     'registryId': ?registryId,
     'iconUrl': ?iconUrl,
+    if (modeRungs case final rungs?)
+      'modeRungs': {for (final e in rungs.entries) e.key: e.value.name},
   };
 
   @override

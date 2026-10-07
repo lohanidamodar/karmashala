@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:agent_cli/descriptors.dart' show PermissionRisk;
 import 'package:agent_cli/discovery.dart' show AgentDiscoveryReport;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:test/test.dart';
@@ -17,6 +18,7 @@ void main() {
     registryId: 'my-agent',
     iconUrl: 'https://cdn.example.test/registry/my-agent.svg',
     createdAt: t0,
+    modeRungs: const {'Agent': PermissionRisk.ask},
   );
   final custom = AcpAgentRow(
     id: 'c1',
@@ -36,6 +38,7 @@ void main() {
     expect(wire.containsKey('registryId'), isFalse);
     expect(wire.containsKey('iconUrl'), isFalse);
     expect(wire['source'], 'custom');
+    expect(wire.containsKey('modeRungs'), isFalse);
     expect(acpAgentRowFromJson(wire), custom);
     // A row an older server sent, with no icon field at all.
     final older = overTheWire(acpAgentRowToJson(row))..remove('iconUrl');
@@ -78,6 +81,12 @@ void main() {
         iconUrl: 'https://cdn.example.test/registry/my-agent.svg',
       ),
       const AcpAgentPut(id: 'r1', agentName: 'Renamed', command: 'x'),
+      const AcpAgentPut(
+        id: 'r1',
+        agentName: 'Placed',
+        command: 'x',
+        modeRungs: {'Plan': PermissionRisk.readOnly},
+      ),
       const AcpAgentDelete('r1'),
     ];
     for (final request in requests) {
@@ -98,7 +107,7 @@ void main() {
         'acpAgents.list',
         'acpAgents.put',
         'acpAgents.delete',
-      ].expand((k) => k == 'acpAgents.put' ? [k, k] : [k]),
+      ].expand((k) => k == 'acpAgents.put' ? [k, k, k] : [k]),
     );
   });
 

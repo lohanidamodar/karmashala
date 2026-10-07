@@ -157,6 +157,11 @@ class SessionQueue implements ResumeQueue {
   /// Throws [DataRefused] when it cannot.
   Future<void> Function(String sessionId, String text)? deliver;
 
+  /// A delegation row's text as it should go now, read as it is delivered:
+  /// null keeps it, empty means nothing in it still holds and it is
+  /// cancelled. Set by `DelegationResults`.
+  String? Function(QueuedMessage head)? restate;
+
   final DateTime Function() _now;
   final String Function() _newId;
 
@@ -633,11 +638,33 @@ class SessionQueue implements ResumeQueue {
   /// why not, in words — the head then queued again or failed.
   Future<String?> _deliverHead(String sessionId) async {
     final deliver = this.deliver;
-    final head = dao.head(sessionId);
+    var head = dao.head(sessionId);
     if (deliver == null) return 'this server delivers no messages';
     if (head == null) {
       _withQueued.remove(sessionId);
       return null;
+    }
+    if (head.origin == QueuedMessageOrigin.delegation &&
+        head.state == QueuedMessageState.queued) {
+      switch (restate?.call(head)) {
+        case '':
+          if (!dao.transition(
+            head.id,
+            from: QueuedMessageState.queued,
+            to: QueuedMessageState.cancelled,
+            now: _now(),
+            error: 'nothing in it still held when it was due',
+          )) {
+            return 'the next message is already on its way';
+          }
+          log?.call('queue $sessionId: ${head.id} out of date; cancelled');
+          _announce(sessionId);
+          return _deliverHead(sessionId);
+        case final text? when text != head.text:
+          if (dao.editText(head.id, text, now: _now())) {
+            head = dao.getById(head.id)!;
+          }
+      }
     }
     if (!dao.transition(
       head.id,

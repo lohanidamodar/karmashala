@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
@@ -37,3 +38,18 @@ bool installationSpeaksAcp(Ref ref, String installationId) {
   if (agentId == null) return false;
   return agentSpeaksAcp(ref.read(agentRegistryProvider), agentId);
 }
+
+/// How [sessionId]'s ACP agent is driven — where its modes are placed on
+/// rungs — or null for a session that is not ACP or not yet known.
+final sessionAcpSpecProvider = Provider.autoDispose
+    .family<AcpLaunchSpec?, String>((ref, sessionId) {
+      if (!ref.watch(isAcpSessionProvider(sessionId))) return null;
+      final row = ref.read(sessionsDataProvider).getById(sessionId);
+      if (row == null) return null;
+      final agentId = ref
+          .read(agentInstallationsDataProvider)
+          .getById(row.agentInstallationId)
+          ?.agentId;
+      if (agentId == null) return null;
+      return ref.watch(agentRegistryProvider).adapterFor(agentId)?.acp;
+    });

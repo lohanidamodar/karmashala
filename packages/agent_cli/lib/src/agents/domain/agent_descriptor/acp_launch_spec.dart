@@ -158,6 +158,24 @@ class AcpLaunchSpec {
     return null;
   }
 
+  /// [modeFor] over the modes an agent offers, matched by id and then by
+  /// name, so a person can name a mode whose id is a URL by its name.
+  String? modeForOffered(
+    PermissionRisk risk,
+    Iterable<({String id, String name})> offered,
+  ) {
+    final byId = modeFor(risk, offered.map((mode) => mode.id));
+    if (byId != null) return byId;
+    final byName = modeFor(risk, offered.map((mode) => mode.name));
+    if (byName == null) return null;
+    return offered.firstWhere((mode) => mode.name == byName).id;
+  }
+
+  /// [rungOfMode] for an offered mode, read by its id and then its [name].
+  PermissionRisk? rungOfOffered(String modeId, String? name) =>
+      rungOfMode(modeId) ??
+      (name == null || name.isEmpty ? null : rungOfMode(name));
+
   /// Permission option ids → the mode each one switches the agent to, for an
   /// agent whose option ids are not its mode ids. An id named nowhere here is
   /// read as a mode id itself.

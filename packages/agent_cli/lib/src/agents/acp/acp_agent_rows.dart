@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import '../../permissions/permission_risk.dart';
 import '../adapter/agent_adapter.dart';
 import '../adapter/agent_presentation.dart';
 import '../adapter/data_only_agent_adapter.dart';
@@ -21,6 +24,7 @@ class AcpAgentRow {
     this.source = AcpAgentSource.custom,
     this.registryId,
     this.iconUrl,
+    this.modeRungs = const {},
   });
 
   final String id;
@@ -37,6 +41,10 @@ class AcpAgentRow {
   final String? iconUrl;
   final DateTime createdAt;
 
+  /// The rung each of the agent's modes stands for, keyed by the mode's id
+  /// or name as the person wrote it; empty when they placed none.
+  final Map<String, PermissionRisk> modeRungs;
+
   /// The adapter id this row is known by everywhere an agent id is kept.
   String get agentId => acpAgentIdFor(id);
 
@@ -51,6 +59,7 @@ class AcpAgentRow {
     String? iconUrl,
     bool clearIconUrl = false,
     DateTime? createdAt,
+    Map<String, PermissionRisk>? modeRungs,
   }) => AcpAgentRow(
     id: id,
     name: name ?? this.name,
@@ -61,6 +70,7 @@ class AcpAgentRow {
     registryId: clearRegistryId ? null : registryId ?? this.registryId,
     iconUrl: clearIconUrl ? null : iconUrl ?? this.iconUrl,
     createdAt: createdAt ?? this.createdAt,
+    modeRungs: modeRungs ?? this.modeRungs,
   );
 
   @override
@@ -74,7 +84,8 @@ class AcpAgentRow {
       other.source == source &&
       other.registryId == registryId &&
       other.iconUrl == iconUrl &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      _sameMap(other.modeRungs, modeRungs);
 
   @override
   int get hashCode => Object.hash(
@@ -89,6 +100,10 @@ class AcpAgentRow {
     registryId,
     iconUrl,
     createdAt,
+    Object.hashAllUnordered([
+      for (final entry in modeRungs.entries)
+        Object.hash(entry.key, entry.value),
+    ]),
   );
 
   static bool _sameList(List<String> a, List<String> b) {
@@ -99,7 +114,7 @@ class AcpAgentRow {
     return true;
   }
 
-  static bool _sameMap(Map<String, String> a, Map<String, String> b) {
+  static bool _sameMap<V>(Map<String, V> a, Map<String, V> b) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {
       if (b[entry.key] != entry.value) return false;
@@ -129,7 +144,65 @@ AgentAdapter acpAgentAdapter(AcpAgentRow row) => DataOnlyAgentAdapter(
     displayName: row.name,
     binaries: AgentBinaries(windows: [row.command], posix: [row.command]),
     discovery: const AgentDiscoveryRules(probeVersion: false),
-    acp: AcpLaunchSpec(arguments: row.args, environment: row.env),
+    acp: AcpLaunchSpec(
+      arguments: row.args,
+      environment: row.env,
+      modeNames: {
+        for (final rung in PermissionRisk.values)
+          if (row.modeRungs.entries.where((e) => e.value == rung).isNotEmpty)
+            rung: [
+              for (final e in row.modeRungs.entries)
+                if (e.value == rung) e.key,
+            ],
+      },
+    ),
   ),
   presentation: AgentPresentation.of(row.name, iconUrl: row.iconUrl),
 );
+
+/// The words a person writes for each rung in a mode line, as in
+/// `Plan = read-only`.
+const Map<PermissionRisk, String> acpModeRungWords = {
+  PermissionRisk.readOnly: 'read-only',
+  PermissionRisk.ask: 'ask',
+  PermissionRisk.acceptEdits: 'accept-edits',
+  PermissionRisk.autoRun: 'auto',
+  PermissionRisk.bypass: 'bypass',
+};
+
+/// `<mode id or name> = <rung>`, one per line, blank lines skipped; the rung
+/// is one of [acpModeRungWords]. A line out of shape is refused in words.
+({Map<String, PermissionRisk> rungs, String? refusal}) parseAcpModeRungLines(
+  String text,
+) {
+  final byWord = {
+    for (final entry in acpModeRungWords.entries) entry.value: entry.key,
+  };
+  final rungs = <String, PermissionRisk>{};
+  for (final raw in const LineSplitter().convert(text)) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    final split = line.lastIndexOf('=');
+    final mode = split < 0 ? '' : line.substring(0, split).trim();
+    final word = split < 0
+        ? ''
+        : line.substring(split + 1).trim().toLowerCase();
+    final rung = byWord[word];
+    if (mode.isEmpty || rung == null) {
+      return (
+        rungs: const {},
+        refusal:
+            '"$line" is not a mode line: write <mode> = <rung>, where the '
+            'rung is one of ${acpModeRungWords.values.join(', ')}.',
+      );
+    }
+    rungs[mode] = rung;
+  }
+  return (rungs: rungs, refusal: null);
+}
+
+/// [parseAcpModeRungLines] undone.
+String formatAcpModeRungLines(Map<String, PermissionRisk> rungs) => rungs
+    .entries
+    .map((e) => '${e.key} = ${acpModeRungWords[e.value]}')
+    .join('\n');

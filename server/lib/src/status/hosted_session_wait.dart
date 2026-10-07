@@ -50,6 +50,22 @@ class HostedSessionWait {
     return null;
   }
 
+  /// **Which prompt or question [sessionId] has open now**, as a key that
+  /// differs for the next one asked; null when none is open.
+  String? openAskOf(String sessionId) {
+    final report = status.statusOf(sessionId)?.report;
+    if (report == null || !(report.hasOpenPrompt || report.hasOpenQuestion)) {
+      return null;
+    }
+    final ask = report.toolAsk;
+    final which =
+        ask?.toolUseId ??
+        report.waitingSince?.toIso8601String() ??
+        ask?.at.toIso8601String() ??
+        '';
+    return '${report.waiting.name}:$which';
+  }
+
   /// Blocks until [sessionId] settles, ends, or [bound] elapses. [inputSent]
   /// is carried through so a timed-out caller knows whether its send went in.
   Future<SessionWaitOutcome> wait(

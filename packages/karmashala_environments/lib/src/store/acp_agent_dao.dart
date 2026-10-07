@@ -15,12 +15,13 @@ class AcpAgentDao {
     _db.execute(
       'INSERT INTO acp_agents '
       '(id, name, command, args, env, source, registry_id, icon_url, '
-      'created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
+      'created_at, mode_rungs) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
       'ON CONFLICT(id) DO UPDATE SET name = excluded.name, '
       'command = excluded.command, args = excluded.args, env = excluded.env, '
       'source = excluded.source, registry_id = excluded.registry_id, '
-      'icon_url = excluded.icon_url, created_at = excluded.created_at;',
+      'icon_url = excluded.icon_url, created_at = excluded.created_at, '
+      'mode_rungs = excluded.mode_rungs;',
       [
         row.id,
         row.name,
@@ -31,6 +32,9 @@ class AcpAgentDao {
         row.registryId,
         row.iconUrl,
         isoFromDate(row.createdAt),
+        jsonEncode({
+          for (final e in row.modeRungs.entries) e.key: e.value.name,
+        }),
       ],
     );
   }
@@ -63,6 +67,11 @@ class AcpAgentDao {
     registryId: row['registry_id'] as String?,
     iconUrl: row['icon_url'] as String?,
     createdAt: dateFromIso(row['created_at']),
+    // A rung this build has no name for is dropped, like bad JSON.
+    modeRungs: {
+      for (final e in stringMapFromJson(row['mode_rungs']).entries)
+        e.key: ?PermissionRisk.values.asNameMap()[e.value],
+    },
   );
 }
 

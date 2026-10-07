@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:agent_cli/descriptors.dart'
-    show AgentQuestionSet, AgentRewindPoints;
+    show AgentQuestionSet, AgentRewindPoints, PermissionRisk;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
