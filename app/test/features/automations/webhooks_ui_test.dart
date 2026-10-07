@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
+import 'package:karmashala/src/features/automations/presentation/automations_list_view.dart';
 import 'package:karmashala/src/features/automations/presentation/webhook_parts.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -91,18 +91,27 @@ void main() {
     ('desktop', const Size(1440, 900)),
     ('phone', const Size(390, 844)),
   ]) {
-    testWidgets('on a $name, the page lists a webhook as a webhook, with '
-        'its panel, pause and the way to arm another', (tester) async {
+    testWidgets('on a $name, the list says a webhook listens for calls, with '
+        'its switch', (tester) async {
       server.automationRows.insert(hook());
-      await pump(tester, const AutomationsPage(), size: size);
+      await pump(
+        tester,
+        SizedBox(height: size.height, child: const AutomationsListView()),
+        size: size,
+      );
       expect(find.text('triage-issue'), findsWidgets);
       expect(
-        find.textContaining('A call to its URL starts a session'),
+        find.textContaining('When its webhook URL is called (signed)'),
         findsOne,
       );
-      expect(find.text('Deliveries'), findsOneWidget);
-      expect(find.text('Pause'), findsOneWidget);
-      expect(find.byKey(const ValueKey('new-webhook')), findsOneWidget);
+      expect(find.textContaining('Listening'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AutomationRow),
+          matching: find.byType(Switch),
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
 

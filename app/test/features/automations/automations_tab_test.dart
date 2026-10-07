@@ -160,6 +160,23 @@ void main() {
     },
   );
 
+  test('the words a person would search Settings for still find it', () {
+    for (final query in const [
+      'automation',
+      'schedule',
+      'cron',
+      'nightly',
+      'unattended',
+      'webhook',
+    ]) {
+      expect(
+        SettingsSectionId.automations.matches(query),
+        isTrue,
+        reason: '"$query" should find Automations',
+      );
+    }
+  });
+
   testWidgets('the phone lists it under More', (tester) async {
     await pump(tester, const PhoneMoreList(), size: const Size(390, 844));
     expect(find.text('Automations'), findsOneWidget);

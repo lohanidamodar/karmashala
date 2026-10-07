@@ -312,6 +312,36 @@ class AutomationDraft {
     maxRuntimeMinutes: maxRuntimeMinutes,
   );
 
+  /// This automation as a new one to create, its name marked a copy; a
+  /// webhook gets a URL of its own when it is created.
+  AutomationDraft asNewCopy() => AutomationDraft(
+    name: '$name (copy)',
+    repositoryId: repositoryId,
+    trigger: trigger,
+    mode: mode,
+    hour: hour,
+    minute: minute,
+    days: days,
+    everyMinutes: everyMinutes,
+    cron: cron,
+    latePolicy: latePolicy,
+    eventKind: eventKind,
+    startsAgent: startsAgent,
+    notifyOnly: notifyOnly,
+    requireSignature: requireSignature,
+    callsPerHour: callsPerHour,
+    once: once,
+    installationId: installationId,
+    modelId: modelId,
+    permissionMode: permissionMode,
+    prefersReadOnly: prefersReadOnly,
+    worktree: worktree,
+    prompt: prompt,
+    steps: steps,
+    stopAfterFailures: stopAfterFailures,
+    maxRuntimeMinutes: maxRuntimeMinutes,
+  );
+
   /// What is still missing before this can be saved, in words, or null.
   String? get missing {
     if (name.trim().isEmpty) return 'Name it first.';

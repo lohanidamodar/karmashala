@@ -7,7 +7,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_undo.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_undo_dialog.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
+import 'package:karmashala/src/features/automations/presentation/project_checks_section.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fakes.dart';
@@ -81,7 +81,7 @@ void main() {
           container: container,
           child: const MaterialApp(
             home: Scaffold(
-              body: SingleChildScrollView(child: AutomationsPage()),
+              body: SingleChildScrollView(child: ProjectChecksSection()),
             ),
           ),
         );

@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/automations/application/automation_draft
 import 'package:karmashala/src/features/automations/presentation/automation_agent_fields.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_editor.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
+import 'package:karmashala/src/features/automations/presentation/automations_list_view.dart';
 import 'package:karmashala_automations/automations.dart';
 
 import '../../support/fakes.dart';
@@ -146,21 +146,18 @@ void main() {
     expect(find.byType(AutomationAgentField), findsOneWidget);
   });
 
-  testWidgets('the card says what the rule does and its limits', (
-    tester,
-  ) async {
+  testWidgets('the list says what the rule does, and names the event '
+      'rather than a time', (tester) async {
     serverOf(container).automationRows.insert(eventRule());
-    await pump(tester, const SingleChildScrollView(child: AutomationsPage()));
+    await pump(tester, const AutomationsListView());
     expect(
       find.text(
-        'When a session in app finishes a turn, send it "run the tests".',
+        'When a session finishes a turn, in app → tell that session → check '
+        'the result',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('at most once a second'), findsOneWidget);
-    expect(find.text('Dry run'), findsOneWidget);
-    // The active list names the event rather than inventing a time.
-    expect(find.text('on event'), findsOneWidget);
+    expect(find.text('On the next event'), findsOneWidget);
   });
 
   testWidgets('a dry run shows what would fire, and changes nothing', (
@@ -200,11 +197,7 @@ void main() {
   testWidgets('both surfaces fit a phone and a desktop', (tester) async {
     serverOf(container).automationRows.insert(eventRule());
     for (final size in const [Size(390, 844), Size(1440, 900)]) {
-      await pump(
-        tester,
-        const SingleChildScrollView(child: AutomationsPage()),
-        size: size,
-      );
+      await pump(tester, const AutomationsListView(), size: size);
       expect(tester.takeException(), isNull);
       await pump(
         tester,

@@ -499,6 +499,24 @@ void main() {
     );
   });
 
+  testWidgets('the mode picker names each rung beside the CLI own word', (
+    tester,
+  ) async {
+    // Whole selections rather than axes, so the name it pairs is the
+    // composed rung's — the one the unattended rules read.
+    await pump(
+      tester,
+      const AutomationDraft(repositoryId: 'r1', name: 'N', prompt: 'p'),
+    );
+    await pickAgent(tester);
+    await tester.tap(_field<AutomationPermissionModeField>());
+    await tester.pumpAndSettle();
+    expect(find.text('Plan mode'), findsWidgets);
+    expect(find.text('Build · Accept edits'), findsWidgets);
+    expect(find.text('Build · Automatic'), findsWidgets);
+    expect(find.text('Bypass (full autonomy)'), findsWidgets);
+  });
+
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [
       Size(360, 740),

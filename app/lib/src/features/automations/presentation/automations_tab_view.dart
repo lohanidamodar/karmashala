@@ -8,9 +8,8 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/automation_draft.dart';
 import '../application/automation_editor_state.dart';
 import '../application/automation_providers.dart';
-import 'automation_editor.dart';
 import 'automation_runs_view.dart';
-import 'automations_page.dart';
+import 'automations_list_view.dart';
 import 'automations_tab_state.dart';
 import 'scheduled_resumes_section.dart';
 
@@ -25,7 +24,6 @@ class AutomationsTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final section = ref.watch(automationsSectionProvider);
-    final editing = ref.watch(automationEditorProvider);
     return WorkbenchTabScaffold(
       icon: AppIcons.lightning,
       title: 'Automations',
@@ -63,13 +61,7 @@ class AutomationsTabView extends ConsumerWidget {
         ),
       ],
       body: switch (section) {
-        AutomationsSection.automations when editing != null => AutomationEditor(
-          key: ValueKey('editor-${editing.generation}'),
-          initial: editing.draft,
-        ),
-        AutomationsSection.automations => const _Readable(
-          child: AutomationsPage(),
-        ),
+        AutomationsSection.automations => const AutomationsListView(),
         AutomationsSection.runs => const AutomationRunsView(),
         AutomationsSection.resumes => const _Readable(
           child: ScheduledResumesSection(),
