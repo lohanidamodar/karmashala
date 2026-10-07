@@ -166,7 +166,7 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
         ),
         SettingsSection(
           key: const ValueKey('keyboard-overview-keys'),
-          title: 'On the Overview',
+          title: 'On the Agent dashboard',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

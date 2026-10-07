@@ -760,7 +760,7 @@ Future<ProviderContainer> pumpMission(
   Widget page = const OverviewTabView();
   if (phone) {
     page = Scaffold(
-      appBar: AppBar(title: const Text('Overview')),
+      appBar: AppBar(title: const Text('Agent dashboard')),
       body: const PaneTitleOverride(child: OverviewTabView()),
     );
   }

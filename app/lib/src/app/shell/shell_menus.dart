@@ -448,7 +448,7 @@ List<List<ViewMenuEntry>> viewMenuSections(
         onPressed: actions.openLogs,
       ),
       ViewMenuCommand(
-        label: 'Overview',
+        label: 'Agent dashboard',
         icon: AppIcons.squaresFour,
         command: 'overview.open',
         onPressed: actions.openOverview,

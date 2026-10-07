@@ -115,7 +115,7 @@ const List<(String keys, String does)> kOverviewTriageKeys = [
 
 /// Said wherever the keys are listed.
 const String kOverviewTriageNote =
-    'On the Overview board only, and never while you type in a field. After '
+    'On the Agent dashboard only, and never while you type in a field. After '
     'an answer the next waiting item is selected by itself.';
 
 /// The "?" sheet: the board's keys.
@@ -128,7 +128,7 @@ Future<void> showOverviewKeys(BuildContext context) => showDialog<void>(
       key: const ValueKey('overview-keys'),
       title: const DesktopDialogTitle(
         icon: AppIcons.keyboard,
-        title: 'Overview keys',
+        title: 'Agent dashboard keys',
       ),
       content: SizedBox(
         width: DialogWidth.narrow,

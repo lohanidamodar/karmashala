@@ -107,7 +107,7 @@ void main() {
     final controller = container.read(
       terminalSessionsControllerProvider.notifier,
     );
-    expect(controller.titleForTab(tabId), 'Overview');
+    expect(controller.titleForTab(tabId), 'Agent dashboard');
 
     openSettingsTab(refOf(tester));
     await settle(tester);
@@ -121,16 +121,16 @@ void main() {
     );
   });
 
-  testWidgets('quick open has "Overview", and it opens the tab', (
+  testWidgets('quick open has "Agent dashboard", found by its old name too', (
     tester,
   ) async {
     final container = await launch(tester);
 
     unawaited(QuickOpen.show(tester.element(find.byType(WorkbenchView))));
     await settle(tester);
-    await tester.enterText(find.byType(TextField).last, 'Overview');
+    await tester.enterText(find.byType(TextField).last, 'overview');
     await settle(tester);
-    await tester.tap(find.text('Open Overview'));
+    await tester.tap(find.text('Open Agent dashboard'));
     await settle(tester);
 
     expect(overviewTabsIn(container), hasLength(1));
@@ -140,7 +140,7 @@ void main() {
   testWidgets('the activity strip opens it', (tester) async {
     final container = await launch(tester);
 
-    await tester.tap(find.bySemanticsLabel('Overview'));
+    await tester.tap(find.bySemanticsLabel('Agent dashboard'));
     await settle(tester);
 
     expect(overviewTabsIn(container), hasLength(1));

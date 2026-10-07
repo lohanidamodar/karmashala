@@ -37,7 +37,7 @@ class OverviewTabView extends ConsumerWidget {
     final view = ref.watch(overviewPrefsProvider.select((p) => p.view));
     return WorkbenchTabScaffold(
       icon: AppIcons.squaresFour,
-      title: 'Overview',
+      title: 'Agent dashboard',
       controls: [
         CompactSegmented<OverviewView>(
           key: const ValueKey('overview-view'),
