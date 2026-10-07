@@ -1016,3 +1016,48 @@ class Latency {
   /// to "charlie", after it `h` starts a new search. What file managers use.
   static const typeAhead = Duration(milliseconds: 700);
 }
+
+/// The sixteen ANSI colours a log or a command's output names, in the order
+/// SGR numbers them (black … white, then the bright eight), per brightness.
+abstract final class AnsiPalette {
+  static List<Color> of(Brightness brightness) =>
+      brightness == Brightness.dark ? _dark : _light;
+
+  static const _dark = <Color>[
+    Color(0xFF15161E),
+    Color(0xFFF7768E),
+    Color(0xFF9ECE6A),
+    Color(0xFFE0AF68),
+    Color(0xFF7AA2F7),
+    Color(0xFFBB9AF7),
+    Color(0xFF7DCFFF),
+    Color(0xFFA9B1D6),
+    Color(0xFF414868),
+    Color(0xFFFF899D),
+    Color(0xFFB9F27C),
+    Color(0xFFFFC777),
+    Color(0xFF8DB0FF),
+    Color(0xFFC7A9FF),
+    Color(0xFFA4DAFF),
+    Color(0xFFC0CAF5),
+  ];
+
+  static const _light = <Color>[
+    Color(0xFF3B3F51),
+    Color(0xFFD20F39),
+    Color(0xFF40831E),
+    Color(0xFF8C6C3E),
+    Color(0xFF2E7DE9),
+    Color(0xFF9854F1),
+    Color(0xFF007197),
+    Color(0xFF6172B0),
+    Color(0xFF6C6F85),
+    Color(0xFFF52A65),
+    Color(0xFF587539),
+    Color(0xFFB15C00),
+    Color(0xFF3760BF),
+    Color(0xFF7847BD),
+    Color(0xFF0F7B8A),
+    Color(0xFF3760BF),
+  ];
+}

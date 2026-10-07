@@ -106,7 +106,10 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
           ),
         ],
         if (widget.activity.edits.isNotEmpty)
-          ToolEditDiffCard(activity: widget.activity),
+          ToolEditDiffCard(
+            activity: widget.activity,
+            onPathTap: widget.onPathTap,
+          ),
         if (widget.activity.output != null || widget.activity.isError) ...[
           const SizedBox(height: Insets.xs),
           _OutputPanel(

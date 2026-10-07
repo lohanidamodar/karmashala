@@ -15,7 +15,20 @@ class _MessageRow extends StatefulWidget {
     required this.onLinkTap,
     required this.detailBuilder,
     this.turnText,
+    this.preview,
+    this.onPreview,
+    this.onClosePreview,
+    this.previewBuilder,
   });
+
+  /// The path whose preview hangs under this row, as it was written.
+  final String? preview;
+
+  /// Opens a preview under the row at an ordinal; null leaves path taps to
+  /// [onPathTap].
+  final void Function(int ordinal, String token)? onPreview;
+  final void Function(int ordinal)? onClosePreview;
+  final Widget Function(String token, VoidCallback onClose)? previewBuilder;
 
   final ChatMessage message;
 
@@ -49,7 +62,11 @@ class _MessageRowState extends State<_MessageRow> {
         old.onPathTap != widget.onPathTap ||
         old.onLinkTap != widget.onLinkTap ||
         old.detailBuilder != widget.detailBuilder ||
-        old.turnText != widget.turnText) {
+        old.turnText != widget.turnText ||
+        old.preview != widget.preview ||
+        old.onPreview != widget.onPreview ||
+        old.onClosePreview != widget.onClosePreview ||
+        old.previewBuilder != widget.previewBuilder) {
       _tile = null;
     }
   }
@@ -60,6 +77,10 @@ class _MessageRowState extends State<_MessageRow> {
     final ordinal = widget.ordinal;
     final save = widget.onSaveNote;
     final turn = widget.turnText;
+    final onPreview = widget.onPreview;
+    final token = widget.preview;
+    final builder = widget.previewBuilder;
+    final close = widget.onClosePreview;
     // Its own boundary: one message that cannot be drawn must not take the
     // conversation with it.
     return _tile ??= MessageBoundary(
@@ -68,7 +89,15 @@ class _MessageRowState extends State<_MessageRow> {
         message: message,
         previousPlan: widget.previousPlan,
         resolveHostPath: widget.resolveHostPath,
-        onPathTap: widget.onPathTap,
+        onPathTap: onPreview == null
+            ? widget.onPathTap
+            : (path) => onPreview(ordinal, path),
+        preview: token == null || builder == null
+            ? null
+            : MessageBoundary(
+                raw: token,
+                child: builder(token, () => close?.call(ordinal)),
+              ),
         onLinkTap: widget.onLinkTap,
         detail: widget.detailBuilder?.call(message, ordinal),
         onSaveNote: save == null ? null : () => save(message, ordinal),
@@ -88,9 +117,13 @@ class _ChatMessageTile extends StatelessWidget {
     this.onPathTap,
     this.onLinkTap,
     this.detail,
+    this.preview,
   });
   final ChatMessage message;
   final AgentPlan? previousPlan;
+
+  /// A file the reader opened from this message, under its body.
+  final Widget? preview;
   final VoidCallback? onSaveNote;
   final String Function()? onCopyTurn;
   final String? Function(String path)? resolveHostPath;
@@ -108,64 +141,74 @@ class _ChatMessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     ChatTranscriptView.debugMessageBuildCount++;
+    final body = _body();
+    final preview = this.preview;
     return Padding(
       padding: _tileMargin,
       // Its own group, so a selection that runs into the next message copies
       // with a blank line between the two.
       child: TranscriptSelectionGroup(
         endsTurn: true,
-        child: switch (message.role) {
-          // A plan, whoever filed it: drawn as the agent's checklist.
-          _ when message.role != 'user' && message.tool?.plan != null =>
-            PlanUpdateCard(plan: message.tool!.plan!, previous: previousPlan),
-          // A plan put to the person, once answered: kept, saying how.
-          _
-              when message.tool?.proposedPlan != null &&
-                  !message.pending &&
-                  message.tool!.output != null =>
-            _AnsweredPlanCard(tool: message.tool!),
-          // Questions put to the person, once answered: each with its pick.
-          _
-              when (message.tool?.questions.isNotEmpty ?? false) &&
-                  !message.pending &&
-                  message.tool!.output != null =>
-            _AnsweredQuestionsCard(questions: message.tool!.questions),
-          // Claude Code records an interruption as a user message; it is the
-          // tool's note, not the person's words, so it is no bubble.
-          'user' when _interruptionNote.hasMatch(message.text.trim()) =>
-            _InterruptionNote(text: message.text.trim()),
-          // A background run reporting back: the harness's row, not theirs.
-          'user' when taskNotificationLine(message.text) != null =>
-            _BackgroundRunNote(text: taskNotificationLine(message.text)!),
-          'user' => _UserMessageCard(
-            message: message,
-            onSaveNote: onSaveNote,
-            onPathTap: onPathTap,
-            onLinkTap: onLinkTap,
-            resolveHostPath: resolveHostPath,
-          ),
-          'agent' => _AgentMessageBlock(
-            message: message,
-            onSaveNote: onSaveNote,
-            onCopyTurn: onCopyTurn,
-            onPathTap: onPathTap,
-            onLinkTap: onLinkTap,
-            detail: detail,
-          ),
-          kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
-          kTranscriptNoticeRole => _TranscriptNote(text: message.text),
-          'error' => _ErrorMessageCard(message: message),
-          _ => _ToolMessageCard(
-            message: message,
-            onSaveNote: onSaveNote,
-            resolveHostPath: resolveHostPath,
-            onPathTap: onPathTap,
-            detail: detail,
-          ),
-        },
+        child: preview == null
+            ? body
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [body, preview],
+              ),
       ),
     );
   }
+
+  Widget _body() => switch (message.role) {
+    // A plan, whoever filed it: drawn as the agent's checklist.
+    _ when message.role != 'user' && message.tool?.plan != null =>
+      PlanUpdateCard(plan: message.tool!.plan!, previous: previousPlan),
+    // A plan put to the person, once answered: kept, saying how.
+    _
+        when message.tool?.proposedPlan != null &&
+            !message.pending &&
+            message.tool!.output != null =>
+      _AnsweredPlanCard(tool: message.tool!),
+    // Questions put to the person, once answered: each with its pick.
+    _
+        when (message.tool?.questions.isNotEmpty ?? false) &&
+            !message.pending &&
+            message.tool!.output != null =>
+      _AnsweredQuestionsCard(questions: message.tool!.questions),
+    // Claude Code records an interruption as a user message; it is the
+    // tool's note, not the person's words, so it is no bubble.
+    'user' when _interruptionNote.hasMatch(message.text.trim()) =>
+      _InterruptionNote(text: message.text.trim()),
+    // A background run reporting back: the harness's row, not theirs.
+    'user' when taskNotificationLine(message.text) != null =>
+      _BackgroundRunNote(text: taskNotificationLine(message.text)!),
+    'user' => _UserMessageCard(
+      message: message,
+      onSaveNote: onSaveNote,
+      onPathTap: onPathTap,
+      onLinkTap: onLinkTap,
+      resolveHostPath: resolveHostPath,
+    ),
+    'agent' => _AgentMessageBlock(
+      message: message,
+      onSaveNote: onSaveNote,
+      onCopyTurn: onCopyTurn,
+      onPathTap: onPathTap,
+      onLinkTap: onLinkTap,
+      detail: detail,
+    ),
+    kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
+    kTranscriptNoticeRole => _TranscriptNote(text: message.text),
+    'error' => _ErrorMessageCard(message: message),
+    _ => _ToolMessageCard(
+      message: message,
+      onSaveNote: onSaveNote,
+      resolveHostPath: resolveHostPath,
+      onPathTap: onPathTap,
+      detail: detail,
+    ),
+  };
 }
 
 class _UserMessageCard extends StatelessWidget {

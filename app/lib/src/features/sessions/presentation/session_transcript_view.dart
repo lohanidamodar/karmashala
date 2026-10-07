@@ -77,6 +77,7 @@ import 'session_recap_card.dart';
 import 'message_composer.dart';
 import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
+import 'transcript_file_preview.dart';
 import 'transcript_image_preview.dart';
 import 'stop_children_offer.dart';
 import 'delegation_card.dart';
@@ -437,6 +438,64 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// [token] placed in the session's environment with the line it names, or
+  /// null when there is no record of where the session runs.
+  (EnvironmentPath, int?)? _placeToken(String token) {
+    final parsed = tokenForMatch(token);
+    final base = _workingDirectory();
+    if (base == null) return null;
+    final kind = ref
+        .read(environmentsDataProvider)
+        .getById(base.environmentId)
+        ?.kind;
+    final resolved = resolveTranscriptPath(
+      parsed.path,
+      workingDirectory: base.path,
+      context: transcriptPathContext(kind),
+    );
+    return (
+      EnvironmentPath(environmentId: base.environmentId, path: resolved),
+      parsed.line,
+    );
+  }
+
+  /// Whether [path] is inside the session's checkout, its repository or the
+  /// tree the Files panel shows — what a preview reads without asking.
+  bool _inSessionScope(EnvironmentPath path) {
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
+    final roots = [
+      _workingDirectory(),
+      if (session != null)
+        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path,
+      ref.read(fileTreeRootProvider),
+    ];
+    return roots.any((root) => root != null && isUnderFileTreeRoot(root, path));
+  }
+
+  /// The preview a tapped path opens under its message. A tear-off, so the
+  /// rows it is handed to can tell it has not changed.
+  Widget _filePreview(String token, VoidCallback onClose) {
+    final placed = _placeToken(token);
+    if (placed == null) {
+      return Text(
+        'Karmashala has no record of where this session runs, so it cannot '
+        'place $token.',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    final (path, line) = placed;
+    return TranscriptFilePreview(
+      key: ValueKey('preview-$token'),
+      path: path,
+      line: line,
+      inScope: _inSessionScope(path),
+      onClose: onClose,
+      onOpenInEditor: () =>
+          ref.read(editorTabActionsProvider).openAt(path, line: line),
+      onOpenInFiles: () => _openPath(token),
+    );
   }
 
   /// What a click on a file path does: **it reveals; it does not open**. Also
@@ -813,6 +872,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Paths in the conversation are clickable, and a click reveals
           // rather than opens — see [_openPath].
           onPathTap: _openPath,
+          filePreviewBuilder: _filePreview,
           onLinkTap: onLinkTap,
           // What the parent's `Task(…)` row never showed. Collapsed and
           // unread until opened — one session's turns came to 1,485 MiB.

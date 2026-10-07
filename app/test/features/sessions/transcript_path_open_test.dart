@@ -10,6 +10,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala/src/features/sessions/presentation/transcript_file_preview.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -138,8 +139,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Clicks the first path link in the conversation.
-  Future<void> clickPath(WidgetTester tester) async {
+  /// Clicks the first path link in the conversation, which opens its preview
+  /// under the message, then — unless [reveal] is false — the preview's
+  /// *Open in Files*, which is the reveal these cases are about.
+  Future<void> clickPath(WidgetTester tester, {bool reveal = true}) async {
     TapGestureRecognizer? link;
     // Plain rich text: the transcript's one selection area does the selecting.
     for (final widget in tester.widgetList<RichText>(find.byType(RichText))) {
@@ -151,6 +154,11 @@ void main() {
       });
     }
     link!.onTap!();
+    await tester.pumpAndSettle();
+    expect(find.byType(TranscriptFilePreview), findsOneWidget);
+    if (!reveal) return;
+    probed.clear();
+    await tester.tap(find.byKey(const ValueKey('file-preview-open-files')));
     await tester.pumpAndSettle();
   }
 
@@ -325,8 +333,8 @@ void main() {
       // a `\\wsl.localhost\…` stat costs ~1.2 ms apiece on a two-second poll.
       expect(probed, isEmpty);
 
-      // ...and one click costs exactly one.
-      await clickPath(tester);
+      // ...and one click, which opens its preview, costs exactly one.
+      await clickPath(tester, reveal: false);
       expect(probed, hasLength(1));
     });
   });

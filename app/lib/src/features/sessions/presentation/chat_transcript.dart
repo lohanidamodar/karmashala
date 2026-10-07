@@ -191,6 +191,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.agentId,
     this.emptyBuilder,
     this.toLatest,
+    this.filePreviewBuilder,
     this.seenUntil,
     super.key,
   });
@@ -205,6 +206,11 @@ class ChatTranscriptView extends StatefulWidget {
   /// Each notification takes the list to its newest message, as *Jump to
   /// latest* does — where an open ask hangs.
   final Listenable? toLatest;
+
+  /// Builds the preview a tapped file path opens under its message, handed
+  /// the path as written and how to close it. Null sends taps to
+  /// [onPathTap] instead.
+  final Widget Function(String token, VoidCallback onClose)? filePreviewBuilder;
 
   /// What to show in place of the standard empty state, which it is handed.
   final Widget Function(Widget standard)? emptyBuilder;
@@ -396,6 +402,16 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     }
   }
 
+  /// The file each message has open under it, by its ordinal in the whole
+  /// conversation; one per message, the latest tapped.
+  final _previews = <int, String>{};
+
+  void _openPreview(int ordinal, String token) =>
+      setState(() => _previews[widget.firstOrdinal + ordinal] = token);
+
+  void _closePreview(int ordinal) =>
+      setState(() => _previews.remove(widget.firstOrdinal + ordinal));
+
   String _turnTextAt(int ordinal) =>
       transcriptTurnText(widget.messages, ordinal);
 
@@ -535,6 +551,10 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         previousPlan: planBefore[ordinal],
         ordinal: ordinal,
         turnText: _turnTextAt,
+        preview: _previews[widget.firstOrdinal + ordinal],
+        onPreview: widget.filePreviewBuilder == null ? null : _openPreview,
+        onClosePreview: _closePreview,
+        previewBuilder: widget.filePreviewBuilder,
         onSaveNote: widget.onSaveNote,
         resolveHostPath: widget.resolveHostPath,
         onPathTap: widget.onPathTap,

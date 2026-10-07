@@ -4,6 +4,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/transcript.dart' show PathLinkCallback, pathLinkStyle;
 import '../../git/presentation/diff_line_tile.dart';
 
 /// How many rows an edit's diff draws before the reader asks for the rest.
@@ -79,22 +80,34 @@ List<DiffCardRow> foldUnchangedLines(List<DiffLine> lines) {
 /// The diffs of the files one tool call wrote, drawn under its row in the
 /// chat.
 class ToolEditDiffCard extends StatelessWidget {
-  const ToolEditDiffCard({required this.activity, super.key});
+  const ToolEditDiffCard({required this.activity, this.onPathTap, super.key});
 
   final ToolActivity activity;
 
+  /// Where a tapped file name goes; null leaves the names plain.
+  final PathLinkCallback? onPathTap;
+
   @override
-  Widget build(BuildContext context) =>
-      FileEditDiffs(edits: activity.edits, truncated: activity.editsTruncated);
+  Widget build(BuildContext context) => FileEditDiffs(
+    edits: activity.edits,
+    truncated: activity.editsTruncated,
+    onPathTap: onPathTap,
+  );
 }
 
 /// One section per edit in [edits], each its own collapsed diff, and a line
 /// saying so when [truncated] content was cut before it got here.
 class FileEditDiffs extends StatefulWidget {
-  const FileEditDiffs({required this.edits, this.truncated = false, super.key});
+  const FileEditDiffs({
+    required this.edits,
+    this.truncated = false,
+    this.onPathTap,
+    super.key,
+  });
 
   final List<FileEditRecord> edits;
   final bool truncated;
+  final PathLinkCallback? onPathTap;
 
   @override
   State<FileEditDiffs> createState() => _FileEditDiffsState();
@@ -120,7 +133,7 @@ class _FileEditDiffsState extends State<FileEditDiffs> {
         for (final edit in shown)
           Padding(
             padding: const EdgeInsets.only(top: Insets.xs),
-            child: _EditDiff(edit: edit),
+            child: _EditDiff(edit: edit, onPathTap: widget.onPathTap),
           ),
         if (folds)
           SelectionContainer.disabled(
@@ -159,9 +172,10 @@ class _FileEditDiffsState extends State<FileEditDiffs> {
 }
 
 class _EditDiff extends StatefulWidget {
-  const _EditDiff({required this.edit});
+  const _EditDiff({required this.edit, this.onPathTap});
 
   final FileEditRecord edit;
+  final PathLinkCallback? onPathTap;
 
   @override
   State<_EditDiff> createState() => _EditDiffState();
@@ -234,7 +248,7 @@ class _EditDiffState extends State<_EditDiff> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Header(edit: widget.edit, diff: diff),
+          _Header(edit: widget.edit, diff: diff, onPathTap: widget.onPathTap),
           for (var i = 0; i < shown.length; i++)
             switch (shown[i]) {
               DiffShownRow(:final line) => DiffLineTile(line: line),
@@ -294,10 +308,32 @@ class _EditDiffState extends State<_EditDiff> {
 
 /// The edit's path, what happened to it in words, and its line counts.
 class _Header extends StatelessWidget {
-  const _Header({required this.edit, required this.diff});
+  const _Header({required this.edit, required this.diff, this.onPathTap});
 
   final FileEditRecord edit;
   final FileEditDiff diff;
+  final PathLinkCallback? onPathTap;
+
+  /// The file's name, a link to its preview where taps go anywhere.
+  Widget _name(String name, String path, ColorScheme scheme) {
+    final style = MonoStyles.small.copyWith(color: scheme.onSurface);
+    final tap = onPathTap;
+    final text = Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: tap == null ? style : style.merge(pathLinkStyle(scheme)),
+    );
+    if (tap == null) return text;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        key: const ValueKey('diff-file-link'),
+        onTap: () => tap(path),
+        child: text,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -334,12 +370,7 @@ class _Header extends StatelessWidget {
                 children: [
                   ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: MonoStyles.small.copyWith(color: scheme.onSurface),
-                    ),
+                    child: _name(name, path, scheme),
                   ),
                   const SizedBox(width: Insets.sm),
                   Expanded(
