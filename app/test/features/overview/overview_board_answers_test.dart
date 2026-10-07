@@ -261,7 +261,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await settleMission(tester);
       expect(sent, isEmpty);
-      expect(tester.widget<TextField>(field).controller!.text, startsWith('one'));
+      expect(
+        tester.widget<TextField>(field).controller!.text,
+        startsWith('one'),
+      );
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settleMission(tester);
@@ -494,11 +497,28 @@ void main() {
       tester,
     ) async {
       final (c, _) = await pump(tester);
-      await tester.tap(find.byKey(const ValueKey('overview-queue-title:ks-r21')));
+      await tester.tap(
+        find.byKey(const ValueKey('overview-queue-title:ks-r21')),
+      );
       await settleMission(tester);
       expect(peeked(c), 'ks-r21');
       await press(tester, LogicalKeyboardKey.keyN);
       expect(peeked(c), isIn(['ask-q', 'term']));
+      await unmountMission(tester);
+    });
+
+    testWidgets('a click on the board gives it the keys back', (tester) async {
+      final (c, _) = await pump(tester);
+      // Focus somewhere else — the header's New session, a closed dialog.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), isNull);
+
+      await tester.tapAt(const Offset(900, 800));
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.keyN);
+      expect(selected(c), 'ks-r21');
       await unmountMission(tester);
     });
 
@@ -546,7 +566,9 @@ void main() {
       await press(tester, LogicalKeyboardKey.keyT);
       expect(peeked(c), isNull);
 
-      final button = find.byKey(const ValueKey('overview-answer-terminal:term'));
+      final button = find.byKey(
+        const ValueKey('overview-answer-terminal:term'),
+      );
       await tester.ensureVisible(button);
       await settleMission(tester);
       await tester.tap(button);
@@ -563,8 +585,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await settleMission(tester);
       expect(find.byKey(const ValueKey('overview-keys')), findsOneWidget);
-      expect(find.text('Allow, always allow or deny the selected command'),
-          findsOneWidget);
+      expect(
+        find.text('Allow, always allow or deny the selected command'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Done'));
       await settleMission(tester);
       await unmountMission(tester);

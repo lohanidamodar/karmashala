@@ -432,6 +432,10 @@ class _PeekTerminal extends ConsumerWidget {
         chordOverrides: settings.terminalChordOverrides,
         onKeyEvent: TerminalActions(ref).onPaneKey,
         onSecondaryTapDown: (_, _) {},
+        // A click types here; it does not bring the session's tab forward.
+        claimsPaneFocus: false,
+        // Its own tab sizes the grid; the peek draws it at that size.
+        sizesGrid: false,
       ),
     );
   }

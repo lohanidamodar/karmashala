@@ -470,10 +470,14 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(
-      overviewFocusProvider.select((f) => f.peeked),
-      (_, next) => _followPeek(next),
-    );
+    ref.listen(overviewFocusProvider.select((f) => f.peeked), (_, next) {
+      _followPeek(next);
+      // A peek opened from outside the board — New session — hands the
+      // board the keys, so N, 1–9 and Y work on it at once.
+      if (next != null && !_inSheet && !overviewTyping()) {
+        _focus.requestFocus();
+      }
+    });
     if (_pendingSheet case final id?) {
       ref.watch(overviewBoardProvider);
       _followPeek(id);
@@ -559,7 +563,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         shortcuts: overviewTriageShortcuts,
         child: Actions(
           actions: _actions,
-          child: Focus(focusNode: _focus, autofocus: true, child: laidOut),
+          child: Focus(
+            focusNode: _focus,
+            autofocus: true,
+            // A click anywhere on the board gives it the keys, unless a field
+            // has them; a field or a terminal clicked takes them back after.
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) {
+                if (!overviewTyping()) _focus.requestFocus();
+              },
+              child: laidOut,
+            ),
+          ),
         ),
       );
     },
