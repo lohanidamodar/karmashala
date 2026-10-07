@@ -469,6 +469,7 @@ class ServerSessionStatus {
         waitingSince: said?.waitingSince,
         inFlight: said?.inFlight ?? const [],
         backgroundOnly: said?.backgroundOnly ?? false,
+        working: said?.working,
       ),
       now,
     );
@@ -509,6 +510,7 @@ class ServerSessionStatus {
   /// `working` with that work in flight. An idle not yet checked waits for
   /// the read, so no finish is told that the read would take back.
   void _publish(_Tracked tracked, AgentStatusReport raw, DateTime now) {
+    raw = _withTurnStart(tracked, raw);
     // When it went idle, not when a source last said so: a screen re-read
     // restamps the same idle every tick.
     tracked.idleSince = raw.status == AgentActivityStatus.idle
@@ -537,6 +539,30 @@ class ServerSessionStatus {
     tracked.publish(held, now);
     if (!identical(held, raw) && now.difference(reading.at) >= interval) {
       _readBackground(tracked);
+    }
+  }
+
+  /// [raw] with when its turn began, so a working line can count it: the
+  /// agent's own line or prompt when either said, else the first reading of
+  /// the turn as working. Kept across an ask; an idle or failure ends it.
+  static AgentStatusReport _withTurnStart(
+    _Tracked tracked,
+    AgentStatusReport raw,
+  ) {
+    switch (raw.turnStatus) {
+      case AgentActivityStatus.idle || AgentActivityStatus.failed:
+        tracked.turnSince = null;
+        return raw;
+      case AgentActivityStatus.awaitingApproval || AgentActivityStatus.unknown:
+        return raw;
+      case AgentActivityStatus.working:
+        final said = raw.working?.since;
+        final since = tracked.turnSince =
+            said ?? tracked.turnSince ?? raw.observedAt;
+        if (said != null) return raw;
+        return raw.withWorking(
+          (raw.working ?? const AgentWorkingDetail()).withSince(since),
+        );
     }
   }
 
@@ -752,6 +778,9 @@ class _Tracked {
   /// The last report its sources gave, before any background hold.
   AgentStatusReport? raw;
   DateTime? idleSince;
+
+  /// When the turn running now began, while one runs.
+  DateTime? turnSince;
   ({List<BackgroundRun> runs, DateTime at})? background;
   var backgroundGeneration = 0;
   var readingBackground = false;

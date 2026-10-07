@@ -6,6 +6,7 @@ import '../domain/agent_screen_menu.dart';
 import '../domain/agent_permission_support.dart';
 import '../domain/agent_skill_support.dart';
 import '../domain/agent_status.dart';
+import '../domain/agent_working_line.dart';
 
 /// What Codex is, as data: how to find, launch and observe it.
 /// One part of its adapter.
@@ -650,6 +651,11 @@ const codexDescriptor = AgentDescriptor(
   grid: AgentGridRules(
     awaitingApproval: [GridMatcher('Press enter to continue')],
     working: [GridMatcher('esc to interrupt')],
+    // `• Working (3s • esc to interrupt)`, rendered from `codex-tui.raw`.
+    workingLine: WorkingLineRule(
+      separator: '•',
+      requiredPart: 'esc to interrupt',
+    ),
   ),
   // Only half of one. Codex's prompt says `Press enter to continue` and names
   // no way to decline, so `deny` stays null and the UI sends the user to the
