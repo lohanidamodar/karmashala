@@ -17,6 +17,18 @@ installs claim the same version name.
 
 ---
 
+## 1.33.1 — 2026-10-07 (build 64)
+
+- **Overview, redesigned as mission control.**
+  - Live counters across the top (Needs you with its oldest wait, Working,
+    Ready, Done today) that filter when tapped.
+  - One tile per project or machine, sorted by attention: each session is its
+    agent's mark in a state ring, with sub-sessions as dots. A headline names
+    the session that matters most, and a footer sums the rest.
+  - Quiet projects fold away, and filters sit behind one control with chips
+    for what is set.
+  - The same on the phone, in one column.
+
 ## 1.33.0 — 2026-10-07 (build 63)
 
 The overview release: everything going on at a glance, things that open
