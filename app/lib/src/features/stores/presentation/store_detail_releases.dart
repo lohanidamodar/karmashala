@@ -167,7 +167,7 @@ class StoreBlock extends StatelessWidget {
                 alignment: AlignmentDirectional.centerStart,
                 child: StoreLogo.named(
                   store,
-                  size: 18,
+                  size: Chrome.iconTitle,
                   color: scheme.onSurface,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
@@ -223,7 +223,7 @@ class _ReleaseRow extends ConsumerWidget {
     final now = ref.watch(clockProvider).nowUtc();
     final fraction = release.rolloutFraction;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: Wrap(
         spacing: Insets.sm,
         runSpacing: Insets.xs,
