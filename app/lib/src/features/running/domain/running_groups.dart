@@ -59,7 +59,7 @@ List<RunningMachine> groupByMachine(
         server = process;
       case RunningRole.device:
         devices.add(process);
-      case RunningRole.pane || RunningRole.child:
+      case RunningRole.pane || RunningRole.child || RunningRole.listener:
         if (sessionId != null && process.agentSessionId != sessionId) continue;
         final machine = machineOf(process.environmentId);
         final key =

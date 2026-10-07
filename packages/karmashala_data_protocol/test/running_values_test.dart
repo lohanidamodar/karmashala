@@ -113,4 +113,60 @@ void main() {
     expect(process.role, RunningRole.child);
     expect(process.ports, isEmpty);
   });
+
+  test('a stop inside another machine names it; a local one says nothing new',
+      () {
+    const there = TerminalStopProcess(4242, machine: 'wsl:Ubuntu');
+    final read = DataEnvelope.readRequest(
+      overTheWire(DataEnvelope.request(3, there)),
+    );
+    expect((read.request! as TerminalStopProcess).machine, 'wsl:Ubuntu');
+    expect((read.request! as TerminalStopProcess).pid, 4242);
+    // An older server reads exactly what it always read.
+    expect(const TerminalStopProcess(7).argumentsToJson(), {'pid': 7});
+  });
+
+  test('a process inside WSL or on an SSH box crosses with its machine, its '
+      'command line and a Stop an older app cannot see', () {
+    const inside = RunningProcess(
+      pid: 812,
+      parent: 800,
+      name: 'node',
+      role: RunningRole.child,
+      paneId: 'p2',
+      agentSessionId: 's2',
+      environmentId: 'wsl:Ubuntu',
+      pidMachine: 'wsl:Ubuntu',
+      commandLine: 'node /work/node_modules/.bin/vite',
+      stoppable: true,
+      ports: [RunningPort(port: 3000, address: '0.0.0.0')],
+    );
+    final json = overTheWire(inside.toJson());
+    // An older app offers Stop on `stoppable`, and would send this pid to be
+    // stopped on Windows.
+    expect(json['stoppable'], isFalse);
+    final read = RunningProcess.fromJson(json);
+    expect(read.pidMachine, 'wsl:Ubuntu');
+    expect(read.commandLine, 'node /work/node_modules/.bin/vite');
+    expect(read.stoppable, isTrue);
+    expect(read.ports.single.port, 3000);
+
+    const box = RunningPort(port: 8080, address: '0.0.0.0', host: 'box.lan');
+    expect(RunningPort.fromJson(overTheWire(box.toJson())).host, 'box.lan');
+  });
+
+  test('a listener no session started has a role of its own, which an older '
+      'build reads as a child it cannot stop', () {
+    const listener = RunningProcess(
+      pid: 0,
+      parent: 0,
+      role: RunningRole.listener,
+      environmentId: 'wsl:Ubuntu',
+      pidMachine: 'wsl:Ubuntu',
+      ports: [RunningPort(port: 5432, address: '127.0.0.1')],
+    );
+    final read = RunningProcess.fromJson(overTheWire(listener.toJson()));
+    expect(read.role, RunningRole.listener);
+    expect(read.stoppable, isFalse);
+  });
 }

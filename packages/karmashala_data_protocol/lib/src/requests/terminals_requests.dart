@@ -34,7 +34,10 @@ DataRequest<Object?>? _terminalsRequestFromJson(String kind, _Arguments args) =>
       ),
       TerminalsListeningPorts.name => const TerminalsListeningPorts(),
       TerminalsRunning.name => const TerminalsRunning(),
-      TerminalStopProcess.name => TerminalStopProcess(args.integer('pid')),
+      TerminalStopProcess.name => TerminalStopProcess(
+        args.integer('pid'),
+        machine: args.optionalString('machine'),
+      ),
       _ => null,
     };
 
@@ -251,17 +254,20 @@ final class TerminalsRunning extends TerminalWorkRequest<RunningReading> {
 /// Stops process [pid] and its children. Refused (`denied`) unless it is,
 /// now, under a local pane's root — never a root, never the server.
 final class TerminalStopProcess extends TerminalWorkRequest<DataAck> {
-  const TerminalStopProcess(this.pid);
+  const TerminalStopProcess(this.pid, {this.machine});
 
   static const String name = 'terminals.stopProcess';
 
   final int pid;
 
+  /// The [RunningProcess.pidMachine] [pid] is from; null for the server's own.
+  final String? machine;
+
   @override
   String get kind => name;
 
   @override
-  Map<String, Object?> argumentsToJson() => {'pid': pid};
+  Map<String, Object?> argumentsToJson() => {'pid': pid, 'machine': ?machine};
 
   @override
   Object? resultToJson(DataAck result) => null;
