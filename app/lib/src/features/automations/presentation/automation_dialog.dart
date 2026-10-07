@@ -356,6 +356,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               // The authorisation, dated. Editing one re-dates it: changing
               // what an automation does is authorising the new thing.
               armedAt: controller.now(),
+              latePolicy: candidate.latePolicy,
               trigger: candidate.trigger,
             )
           : candidate.copyWith(armedAt: controller.now()),
