@@ -227,3 +227,14 @@ List<OverviewActiveFilter> activeFiltersOf(
       (kind: OverviewFilterKind.archived, label: 'Archived shown'),
   ];
 }
+
+/// The card [id] names on [board], wherever it is drawn; null when none.
+OverviewCard? overviewCardOf(OverviewBoard board, String? id) {
+  if (id == null) return null;
+  for (final lane in board.lanes) {
+    for (final card in [...marksOf(lane), ...lane.doneOlder]) {
+      if (card.id == id) return card;
+    }
+  }
+  return null;
+}

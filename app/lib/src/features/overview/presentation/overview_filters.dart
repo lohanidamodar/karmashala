@@ -1,20 +1,92 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/adaptive_modal.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../explorer/application/agent_state_providers.dart';
 import '../../sessions/application/session_list_prefs.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_tiles.dart';
 
-/// Rows by, projects (several at once), agent, machine and state, the density
-/// and Show archived. Filters only narrow the picture; there is no search —
-/// the sidebars list and search.
-class OverviewFilterBar extends ConsumerWidget {
-  const OverviewFilterBar({super.key});
+/// The filters that narrow mission control right now, as chips say them.
+final overviewActiveFiltersProvider =
+    Provider.autoDispose<List<OverviewActiveFilter>>((ref) {
+      final facts = ref.watch(overviewFactsProvider);
+      final registry = ref.watch(agentRegistryProvider);
+      return activeFiltersOf(
+        ref.watch(overviewPrefsProvider.select((p) => p.filter)),
+        projects: facts.projects,
+        machines: facts.machines,
+        agentName: registry.displayNameFor,
+        showArchived: ref.watch(showArchivedSessionsProvider),
+      );
+    });
+
+/// The agents mission control's sessions run, by id.
+final _overviewAgentsProvider = Provider.autoDispose<List<String>>((ref) {
+  final facts = ref.watch(overviewFactsProvider);
+  return {
+    for (final entry in ref.watch(workspaceSessionsProvider))
+      ?facts.agentOf(entry),
+  }.toList()..sort();
+});
+
+/// Clears the filter [kind] names.
+void clearOverviewFilter(WidgetRef ref, OverviewFilterKind kind) {
+  final prefs = ref.read(overviewPrefsProvider.notifier);
+  switch (kind) {
+    case OverviewFilterKind.projects:
+      prefs.showAllProjects();
+    case OverviewFilterKind.agents:
+      prefs.setAgents(null);
+    case OverviewFilterKind.machines:
+      prefs.setMachines(null);
+    case OverviewFilterKind.archived:
+      ref.read(sessionListPrefsProvider.notifier).setShowArchived(false);
+  }
+}
+
+Future<void> _showFilters(BuildContext context) => showAdaptiveModal<void>(
+  context: context,
+  title: 'Filters',
+  builder: (_) => const OverviewFilterPanel(),
+);
+
+/// **The one filter control**: a funnel with a count of what is set, opening
+/// the filters as a sheet on a phone and a dialog elsewhere.
+class OverviewFilterButton extends ConsumerWidget {
+  const OverviewFilterButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(overviewActiveFiltersProvider).length;
+    final icon = Icon(count > 0 ? AppIcons.funnelFill : AppIcons.funnel);
+    return IconButton(
+      key: const ValueKey('overview-filter-button'),
+      tooltip: count == 0 ? 'Filters' : 'Filters ($count set)',
+      icon: count == 0
+          ? icon
+          : Badge.count(
+              count: count,
+              // A setting, not an alarm: the accent, never the error red.
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+              child: icon,
+            ),
+      onPressed: () => _showFilters(context),
+    );
+  }
+}
+
+/// Group by, projects, agent, machine and archived sessions. Every change
+/// is kept at once in this device's prefs.
+class OverviewFilterPanel extends ConsumerWidget {
+  const OverviewFilterPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,160 +95,161 @@ class OverviewFilterBar extends ConsumerWidget {
     final facts = ref.watch(overviewFactsProvider);
     final filter = prefs.filter;
     final registry = ref.watch(agentRegistryProvider);
-    final agents = {
-      for (final entry in ref.watch(workspaceSessionsProvider))
-        ?facts.agentOf(entry),
-    }.toList()..sort();
+    final agents = ref.watch(_overviewAgentsProvider);
     final showArchived = ref.watch(showArchivedSessionsProvider);
+    final active = ref.watch(overviewActiveFiltersProvider);
 
-    String summary(Set<Object>? shown, int all, String noun) =>
-        shown == null ? 'All $noun' : '${shown.length} of $all';
-
-    return Wrap(
-      key: const ValueKey('overview-filters'),
+    Widget section(String label, Widget child) => Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EyebrowLabel(label),
+          const SizedBox(height: Insets.sm),
+          child,
+        ],
+      ),
+    );
+    Widget chips(List<(String, String, bool, VoidCallback)> choices) => Wrap(
       spacing: Insets.sm,
-      runSpacing: Insets.xs,
-      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: Insets.sm,
       children: [
-        _Menu<OverviewGroupBy>(
-          label: 'Group by: ${prefs.groupBy.label}',
-          items: [
-            for (final by in OverviewGroupBy.values)
-              (by, by.label, prefs.groupBy == by),
-          ],
-          onPicked: controller.setGroupBy,
-        ),
-        _Menu<String>(
-          key: const ValueKey('overview-filter-projects'),
-          label:
-              'Projects: '
-              '${summary(filter.projects, facts.projects.length, 'projects')}',
-          items: [
-            for (final project in facts.projects)
-              (
-                project.id,
-                project.label,
-                filter.projects?.contains(project.id) ?? true,
+        for (final (key, label, on, tap) in choices)
+          FilterChip(
+            key: ValueKey(key),
+            label: Text(label),
+            selected: on,
+            onSelected: (_) => tap(),
+          ),
+      ],
+    );
+
+    // A dialog does not scroll its content; a long project list must.
+    return SingleChildScrollView(
+      key: const ValueKey('overview-filter-panel'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          section(
+            'Group by',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<OverviewGroupBy>(
+                key: const ValueKey('overview-filter-group'),
+                showSelectedIcon: false,
+                segments: [
+                  for (final by in OverviewGroupBy.values)
+                    ButtonSegment(value: by, label: Text(by.label)),
+                ],
+                selected: {prefs.groupBy},
+                onSelectionChanged: (picked) =>
+                    controller.setGroupBy(picked.single),
               ),
-          ],
-          onPicked: (id) => controller.toggleProject(
-            id,
-            all: [for (final p in facts.projects) p.id],
-          ),
-        ),
-        if (agents.length > 1)
-          _Menu<String>(
-            label: 'Agent: ${summary(filter.agents, agents.length, 'agents')}',
-            items: [
-              for (final agent in agents)
-                (
-                  agent,
-                  registry.displayNameFor(agent),
-                  filter.agents?.contains(agent) ?? true,
-                ),
-            ],
-            onPicked: (agent) =>
-                controller.setAgents(toggledIn(filter.agents, agent, agents)),
-          ),
-        if (facts.machines.length > 1)
-          _Menu<String>(
-            label:
-                'Machine: '
-                '${summary(filter.machines, facts.machines.length, 'machines')}',
-            items: [
-              for (final machine in facts.machines)
-                (
-                  machine.id,
-                  machine.label,
-                  filter.machines?.contains(machine.id) ?? true,
-                ),
-            ],
-            onPicked: (id) => controller.setMachines(
-              toggledIn(filter.machines, id, [
-                for (final m in facts.machines) m.id,
-              ]),
             ),
           ),
-        _Menu<BoardColumn>(
-          label:
-              'State: '
-              '${summary(filter.columns, BoardColumn.values.length, 'states')}',
-          items: [
-            for (final column in BoardColumn.values)
-              (column, column.label, filter.columns?.contains(column) ?? true),
-          ],
-          onPicked: (column) => controller.setColumns(
-            toggledIn(filter.columns, column, BoardColumn.values),
+          section(
+            'Projects',
+            chips([
+              for (final project in facts.projects)
+                (
+                  'overview-filter-project:${project.id}',
+                  project.label,
+                  filter.projects?.contains(project.id) ?? true,
+                  () => controller.toggleProject(
+                    project.id,
+                    all: [for (final p in facts.projects) p.id],
+                  ),
+                ),
+            ]),
           ),
-        ),
-        FilterChip(
-          label: const Text('Show archived'),
-          selected: showArchived,
-          visualDensity: VisualDensity.compact,
-          onSelected: ref
-              .read(sessionListPrefsProvider.notifier)
-              .setShowArchived,
-        ),
-        IconButton(
-          key: const ValueKey('overview-density'),
-          tooltip: prefs.density == OverviewDensity.cards
-              ? 'One line per session'
-              : 'Cards',
-          icon: Icon(
-            prefs.density == OverviewDensity.cards
-                ? AppIcons.list
-                : AppIcons.squaresFour,
+          if (agents.length > 1)
+            section(
+              'Agent',
+              chips([
+                for (final agent in agents)
+                  (
+                    'overview-filter-agent:$agent',
+                    registry.displayNameFor(agent),
+                    filter.agents?.contains(agent) ?? true,
+                    () => controller.setAgents(
+                      toggledIn(filter.agents, agent, agents),
+                    ),
+                  ),
+              ]),
+            ),
+          if (facts.machines.length > 1)
+            section(
+              'Machine',
+              chips([
+                for (final machine in facts.machines)
+                  (
+                    'overview-filter-machine:${machine.id}',
+                    machine.label,
+                    filter.machines?.contains(machine.id) ?? true,
+                    () => controller.setMachines(
+                      toggledIn(filter.machines, machine.id, [
+                        for (final m in facts.machines) m.id,
+                      ]),
+                    ),
+                  ),
+              ]),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.sm),
+            child: SwitchListTile(
+              key: const ValueKey('overview-filter-archived'),
+              title: const Text('Show archived sessions'),
+              value: showArchived,
+              onChanged: ref
+                  .read(sessionListPrefsProvider.notifier)
+                  .setShowArchived,
+            ),
           ),
-          onPressed: () => controller.setDensity(
-            prefs.density == OverviewDensity.cards
-                ? OverviewDensity.lines
-                : OverviewDensity.cards,
-          ),
-        ),
-      ],
+          if (active.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('overview-filter-clear'),
+                  onPressed: () {
+                    for (final chip in active) {
+                      clearOverviewFilter(ref, chip.kind);
+                    }
+                  },
+                  child: const Text('Clear filters'),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-/// A button that opens a menu of ticked choices.
-class _Menu<T> extends StatelessWidget {
-  const _Menu({
-    required this.label,
-    required this.items,
-    required this.onPicked,
-    super.key,
-  });
-
-  final String label;
-
-  /// Value, label, ticked.
-  final List<(T, String, bool)> items;
-  final ValueChanged<T> onPicked;
+/// The filters set, as chips that clear them; nothing when none is set.
+class OverviewActiveFilterChips extends ConsumerWidget {
+  const OverviewActiveFilterChips({super.key});
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<T>(
-    tooltip: label,
-    onSelected: onPicked,
-    itemBuilder: (context) => [
-      for (final (value, text, ticked) in items)
-        CheckedPopupMenuItem<T>(
-          value: value,
-          checked: ticked,
-          child: Text(text),
-        ),
-    ],
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.sm,
-        vertical: Insets.xs,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
-          const Icon(AppIcons.caretDown, size: 12),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(overviewActiveFiltersProvider);
+    if (active.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      key: const ValueKey('overview-active-filters'),
+      spacing: Insets.sm,
+      runSpacing: Insets.xs,
+      children: [
+        for (final chip in active)
+          InputChip(
+            key: ValueKey('overview-active-filter:${chip.kind.name}'),
+            label: Text(chip.label),
+            onPressed: () => _showFilters(context),
+            onDeleted: () => clearOverviewFilter(ref, chip.kind),
+            deleteButtonTooltipMessage: 'Clear ${chip.label}',
+          ),
+      ],
+    );
+  }
 }
