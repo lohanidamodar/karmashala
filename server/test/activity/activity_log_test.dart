@@ -78,7 +78,12 @@ void main() {
     db.execute("DELETE FROM sessions WHERE id = 's1';");
     db.execute("DELETE FROM repositories WHERE id = 'r1';");
     db.execute("DELETE FROM projects WHERE id = 'p1';");
-    final entries = rangeOf().entries;
+    // The delete is logged by the trigger at SQLite's own now, the real clock,
+    // not the test's day: read through to tomorrow so it falls inside the
+    // range whatever date the suite runs on.
+    final entries = rangeOf(
+      to: DateTime.now().toUtc().add(const Duration(days: 1)),
+    ).entries;
     expect(entries.map((e) => e.kind), [
       ActivityKind.sessionStarted,
       ActivityKind.turnStarted,
