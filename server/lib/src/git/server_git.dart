@@ -200,6 +200,9 @@ class ServerGit implements GitWork {
       :final root,
       :final gitUrl,
       :final workspaceId,
+      :final createFolder,
+      :final initGit,
+      :final scan,
     ) =>
       folders.create(
         name: projectName,
@@ -211,6 +214,9 @@ class ServerGit implements GitWork {
         targetPath: root.path,
         gitUrl: gitUrl,
         workspaceId: workspaceId,
+        createFolder: createFolder,
+        initGit: initGit,
+        scan: scan,
       ),
     ProjectRescan(:final projectId) => folders.rediscover(_project(projectId)),
     ScratchCheckoutCreate(:final environmentId, :final hint) =>

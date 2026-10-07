@@ -381,18 +381,26 @@ class GitData {
   // A project's folders.
 
   /// Creates project [name] at [root] — cloning [gitUrl] first when given —
-  /// with a checkout for each repository under it.
+  /// with a checkout for each repository under it, or [root] alone without
+  /// [scan]. [createFolder] makes a missing [root], `git init`ed with
+  /// [initGit]; both and [scan] want [ProjectFoldersCreate.feature].
   Future<ProjectCheckouts> createProject({
     required String name,
     required EnvironmentPath root,
     String? gitUrl,
     String? workspaceId,
+    bool createFolder = false,
+    bool initGit = false,
+    bool scan = true,
   }) => _ask(
     ProjectFoldersCreate(
       projectName: name,
       root: root,
       gitUrl: gitUrl,
       workspaceId: workspaceId,
+      createFolder: createFolder,
+      initGit: initGit,
+      scan: scan,
     ),
   );
 

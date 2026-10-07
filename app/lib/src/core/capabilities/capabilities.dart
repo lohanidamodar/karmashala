@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ProjectFoldersCreate;
 import 'package:karmashala_remote/remote.dart'
     show AttachTier, Capability, CapabilitySet;
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -310,6 +312,10 @@ final class Capabilities {
   /// A session's agent can be switched in place, the same row and chat, and
   /// its transcript names the agent of each turn.
   bool get switchAgent => serverOffers('sessions.switchAgent');
+
+  /// New Project can make a missing folder and record a root without a scan;
+  /// an older server ignores both and scans.
+  bool get createsProjectFolders => serverOffers(ProjectFoldersCreate.feature);
 
   /// Terminals lists every shell the server runs and opens the server's own
   /// shell (Stage 2 step 11). A phone only: a desktop's area is unchanged.

@@ -18,6 +18,7 @@ import '../../sessions/presentation/new_session_dialog.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../files/data/files_client.dart';
 import '../../settings/presentation/path_field_row.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
@@ -79,7 +80,15 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   bool _workspaceChosen = false;
   bool _namingWorkspace = false;
   bool _busy = false;
+
+  /// Which button is working: the spinner goes on that one.
+  bool _busyScanning = false;
   String? _error;
+
+  /// Whether the folder is there on the target; null until the server said.
+  bool? _folderExists;
+  bool _createFolder = true;
+  bool _initGit = true;
 
   /// What the chosen folder holds (spec §5), read after typing pauses.
   late final ProjectSourcePreviewReader _reader;
@@ -121,21 +130,56 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         _preview = null;
         _previewedRoot = null;
         _previewing = false;
+        _folderExists = null;
       });
       return;
     }
-    if (root == _previewedRoot && _preview != null) return;
+    if (root == _previewedRoot &&
+        (_preview != null || _folderExists == false)) {
+      return;
+    }
     setState(() {
       _previewedRoot = root;
       _previewing = true;
+      _folderExists = null;
     });
-    final read = await _reader.read(root, environment);
+    final exists = await _folderThere(root);
     // A later folder has been asked about since: this answer is for no one.
     if (!mounted || _previewedRoot != root) return;
+    if (exists == false) {
+      setState(() {
+        _folderExists = false;
+        _preview = null;
+        _previewing = false;
+      });
+      return;
+    }
+    final read = await _reader.read(root, environment);
+    if (!mounted || _previewedRoot != root) return;
     setState(() {
+      _folderExists = exists;
       _preview = read;
       _previewing = false;
     });
+  }
+
+  /// Whether [root] is on its machine, asked of the server; null when it
+  /// could not say, which shows nothing rather than a guess.
+  Future<bool?> _folderThere(EnvironmentPath root) async {
+    try {
+      final files = ref.read(filesClientProvider);
+      var path = root;
+      if (root.path == '~' || root.path.startsWith('~/')) {
+        final home = await files.home(root.environmentId);
+        path = EnvironmentPath(
+          environmentId: root.environmentId,
+          path: '${home.path}${root.path.substring(1)}',
+        );
+      }
+      return (await files.stat(path)).exists;
+    } on Object {
+      return null;
+    }
   }
 
   @override
@@ -276,7 +320,9 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     return null;
   }
 
-  Future<void> _create() async {
+  /// Records the project: the folder alone, or with [scan] every repository
+  /// beneath it. A clone always scans what it cloned.
+  Future<void> _create({required bool scan}) async {
     var name = _nameController.text.trim();
     final folder = _folderController.text.trim();
     final gitUrl = _gitUrlController.text.trim();
@@ -310,8 +356,16 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       return;
     }
 
+    final cloning = gitUrl.isNotEmpty;
+    final scanning = scan || cloning;
+    final makeFolder =
+        !cloning &&
+        _folderExists == false &&
+        _createFolder &&
+        ref.read(capabilitiesProvider).createsProjectFolders;
     setState(() {
       _busy = true;
+      _busyScanning = scanning && !cloning;
       _error = null;
     });
 
@@ -321,15 +375,18 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       // `createInEnvironment` scans a **Windows** folder and translates; a path
       // already spelled for its own machine must not go through it.
       final nativeToTarget = isSsh || _isPosixAbsolute(folder);
-      if (gitUrl.isNotEmpty || nativeToTarget) {
+      if (cloning || nativeToTarget) {
         result = await ref
             .read(projectsControllerProvider.notifier)
             .createProject(
               name: name,
               targetEnvironmentId: _targetId,
               folderPath: folder,
-              gitRepoUrl: gitUrl.isEmpty ? null : gitUrl,
+              gitRepoUrl: cloning ? gitUrl : null,
               workspaceId: workspaceId,
+              createFolder: makeFolder,
+              initGit: makeFolder && _initGit,
+              scan: scanning,
             );
       } else {
         result = await ref
@@ -339,14 +396,20 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               windowsPath: folder,
               targetEnvironmentId: _targetId,
               workspaceId: workspaceId,
+              createFolder: makeFolder,
+              initGit: makeFolder && _initGit,
+              scan: scanning,
             );
       }
       if (!mounted) return;
+      final found = result.repositories.length;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Created "${result.project.name}" — '
-            '${result.repositories.length} repository(ies) found.',
+            scanning
+                ? 'Created "${result.project.name}": $found '
+                      '${found == 1 ? 'repository' : 'repositories'} found'
+                : 'Created "${result.project.name}"',
           ),
         ),
       );
@@ -360,7 +423,12 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     } catch (e) {
       setState(() => _error = 'Could not create project: $e');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyScanning = false;
+        });
+      }
     }
   }
 
@@ -382,6 +450,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final target = _envById(environments, _targetId);
     final isSsh = target?.kind == EnvironmentKind.ssh;
     final hasGit = _gitUrlController.text.trim().isNotEmpty;
+    final createsFolders = ref
+        .watch(capabilitiesProvider)
+        .createsProjectFolders;
+    final missing = !hasGit && _folderExists == false;
 
     final body = Column(
       mainAxisSize: MainAxisSize.min,
@@ -425,9 +497,15 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         ),
         NewDialogSection(
           label: 'Folder or clone',
-          child: _source(isSsh: isSsh, hasGit: hasGit, preview: preview),
+          child: _source(
+            isSsh: isSsh,
+            hasGit: hasGit,
+            preview: preview,
+            missing: missing,
+            createsFolders: createsFolders,
+          ),
         ),
-        if (hasGit || _folderController.text.trim().isNotEmpty)
+        if (hasGit || (!missing && _folderController.text.trim().isNotEmpty))
           NewDialogSection(
             label: 'What was found',
             child: _ProjectSourceFacts(
@@ -481,16 +559,46 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final VoidCallback? cancel = _busy
         ? null
         : () => Navigator.of(context).pop(false);
+    // Plain Create records the folder alone; scanning is the second choice,
+    // and pointless for a folder about to be made. A server without the
+    // feature always scans, so it gets today's one button.
+    final plain = createsFolders && !hasGit;
     final create = FilledButton(
-      onPressed: _busy ? null : _create,
-      child: _busy
+      key: const ValueKey('new-project-create'),
+      onPressed: _busy ? null : () => _create(scan: !plain),
+      child: _busy && !_busyScanning
           ? const InlineSpinner(size: InlineSpinnerSize.medium)
-          : Text(hasGit ? 'Clone & create' : 'Create & scan'),
+          : Text(
+              hasGit
+                  ? 'Clone & create'
+                  : plain
+                  ? 'Create'
+                  : 'Create & scan',
+            ),
     );
+    final scan = plain && !missing
+        ? OutlinedButton(
+            key: const ValueKey('new-project-create-scan'),
+            onPressed: _busy ? null : () => _create(scan: true),
+            child: _busyScanning
+                ? const InlineSpinner(size: InlineSpinnerSize.medium)
+                : const Text('Create & scan'),
+          )
+        : null;
     if (opensFullScreen(context)) {
       return FullScreenForm(
         title: 'New project',
-        body: body,
+        body: scan == null
+            ? body
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  body,
+                  const SizedBox(height: Insets.lg),
+                  Align(alignment: Alignment.centerRight, child: scan),
+                ],
+              ),
         onClose: cancel,
         primary: create,
       );
@@ -504,6 +612,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       content: BoundedDialogContent(width: DialogWidth.regular, child: body),
       actions: [
         TextButton(onPressed: cancel, child: const Text('Cancel')),
+        ?scan,
         create,
       ],
     );
@@ -516,6 +625,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     required bool isSsh,
     required bool hasGit,
     required String? preview,
+    required bool missing,
+    required bool createsFolders,
   }) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -571,8 +682,84 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             ),
           ),
         ),
+      if (missing)
+        _MissingFolder(
+          createsFolders: createsFolders,
+          createFolder: _createFolder,
+          initGit: _initGit,
+          enabled: !_busy,
+          onCreateFolder: (on) => setState(() => _createFolder = on),
+          onInitGit: (on) => setState(() => _initGit = on),
+        ),
     ],
   );
+}
+
+/// Under a folder that is not there yet: whether to make it, and `git init`
+/// it — or, from a server too old to make one, that it cannot.
+class _MissingFolder extends StatelessWidget {
+  const _MissingFolder({
+    required this.createsFolders,
+    required this.createFolder,
+    required this.initGit,
+    required this.enabled,
+    required this.onCreateFolder,
+    required this.onInitGit,
+  });
+
+  final bool createsFolders;
+  final bool createFolder;
+  final bool initGit;
+  final bool enabled;
+  final ValueChanged<bool> onCreateFolder;
+  final ValueChanged<bool> onInitGit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.xs),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            createsFolders
+                ? "This folder doesn't exist yet."
+                : "This folder doesn't exist yet, and this server is too old "
+                      'to create it. Update the server, or create the folder '
+                      'first.',
+            key: const ValueKey('new-project-missing-folder'),
+            style: muted,
+          ),
+          if (createsFolders) ...[
+            CheckboxListTile(
+              key: const ValueKey('new-project-create-folder'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: createFolder,
+              onChanged: enabled ? (on) => onCreateFolder(on ?? false) : null,
+              title: const Text('Create this folder'),
+            ),
+            if (createFolder)
+              CheckboxListTile(
+                key: const ValueKey('new-project-init-git'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: initGit,
+                onChanged: enabled ? (on) => onInitGit(on ?? false) : null,
+                title: const Text('Initialise Git'),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// The context picker: which of the user's four or five contexts this project
