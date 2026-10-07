@@ -108,4 +108,6 @@ const Set<String> kServerFeatures = <String>{
   // `projects.createFromFolder` takes `createFolder`, `initGit` and
   // `scan: false`: a missing folder made, and the root recorded alone.
   'projects.createFolder',
+  // `activity.range` and `activityAppended`: the log the Timeline draws.
+  'activity',
 };

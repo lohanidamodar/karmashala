@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/overview/timeline/application/timeline_controller.dart';
 import 'package:karmashala/src/features/overview/timeline/data/timeline_data.dart';
 import 'package:karmashala/src/features/overview/timeline/presentation/overview_timeline_view.dart';
@@ -16,6 +17,7 @@ class _FakeTimelineData implements TimelineData {
   final StreamController<List<ActivityEntry>> live = StreamController.broadcast(
     sync: true,
   );
+  Object? refusal;
 
   @override
   Stream<List<ActivityEntry>> get appended => live.stream;
@@ -27,6 +29,7 @@ class _FakeTimelineData implements TimelineData {
     List<String>? projectIds,
   }) async {
     asked.add((from: from, to: to, projects: projectIds));
+    if (refusal case final refusal?) throw refusal;
     return [
       for (final e in entries)
         if (!e.at.isBefore(from) &&
@@ -96,6 +99,8 @@ void main() {
     WidgetTester tester,
     Size size, {
     double textScale = 1,
+    Set<String>? features,
+    VoidCallback? onUpdateServer,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -103,6 +108,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          if (features != null)
+            serverOfferProvider.overrideWithValue(
+              ServerOffer(sameMachine: false, features: features),
+            ),
           timelineDataProvider.overrideWithValue(data),
           timelineProjectChoicesProvider.overrideWithValue(const [
             (id: 'p1', name: 'Alpha'),
@@ -122,6 +131,7 @@ void main() {
           home: Scaffold(
             body: OverviewTimelineView(
               onOpenSession: opened.add,
+              onUpdateServer: onUpdateServer,
               clock: () => h(16),
             ),
           ),
@@ -131,6 +141,55 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  for (final (name, size, scale) in [
+    ('360 px at 1.6x', const Size(360, 780), 1.6),
+    ('desktop', const Size(1440, 900), 1.0),
+  ]) {
+    testWidgets('a server older than the activity log says so, with a way to '
+        'Settings → Server ($name)', (tester) async {
+      data.refusal = const DataRefused.invalid(
+        'unknown request kind activity.range',
+      );
+      var updates = 0;
+      await pump(
+        tester,
+        size,
+        textScale: scale,
+        features: const {'sessions.transcript'},
+        onUpdateServer: () => updates++,
+      );
+      expect(
+        find.text(
+          "This server is older than the app and can't show the Timeline. "
+          'Update the server in Settings → Server.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('DataRefused'), findsNothing);
+      expect(find.textContaining('activity.range'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('timeline-update-server')));
+      expect(updates, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('a server that offers the activity log still names a failure', (
+    tester,
+  ) async {
+    data.refusal = const DataRefused(
+      DataRefusalCode.failed,
+      'the log is locked',
+    );
+    await pump(
+      tester,
+      const Size(1440, 900),
+      features: const {ActivityRange.feature},
+    );
+    expect(find.byKey(const ValueKey('timeline-error')), findsOneWidget);
+    expect(find.textContaining('the log is locked'), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-update-server')), findsNothing);
+  });
 
   testWidgets('the desktop chart at 1440x900: projects as rows, a bar per '
       'session, and a click opens it', (tester) async {

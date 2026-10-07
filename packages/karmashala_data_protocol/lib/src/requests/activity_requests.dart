@@ -33,6 +33,9 @@ final class ActivityRange extends DataRequest<ActivityPage> {
 
   static const String name = 'activity.range';
 
+  /// In `welcome.features` when the server keeps the activity log.
+  static const String feature = 'activity';
+
   final DateTime from;
   final DateTime to;
   final List<String>? projectIds;
