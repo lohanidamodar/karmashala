@@ -75,6 +75,22 @@ class AutomationsData extends AutomationCopyReads {
   Future<WebhookIssued> rotateWebhook(String automationId) async =>
       (await _client.send(WebhookRotate(automationId))).value;
 
+  /// Starts automation [id] now at the server, gated like any run.
+  Future<AutomationRun> runNow(String id) async =>
+      (await _client.send(AutomationRunNow(id))).value;
+
+  /// Runs older than [before], newest first — past the copy this holds.
+  Future<AutomationRunsPageResult> runsPage({
+    DateTime? before,
+    String? automationId,
+  }) async => (await _client.send(
+    AutomationRunsPage(before: before, automationId: automationId),
+  )).value;
+
+  /// Stops run [runId] at the server.
+  Future<AutomationRun> cancelRun(String runId) async =>
+      (await _client.send(AutomationRunCancel(runId))).value;
+
   /// Webhook [automationId]'s URL, whether it is listened for, and its log.
   Future<WebhookStatus> webhookStatus(String automationId) async =>
       (await _client.send(WebhookStatusRead(automationId))).value;

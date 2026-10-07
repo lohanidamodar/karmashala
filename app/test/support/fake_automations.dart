@@ -147,6 +147,21 @@ class FakeAutomationRows extends AutomationCopyReads {
     final told = _Recording(this, changes);
     final result = switch (request) {
       AutomationsList() => _snapshot(),
+      AutomationRunsPage(:final before, :final limit, :final automationId) =>
+        () {
+          final older = [
+            for (final run in runs.values)
+              if ((before == null || run.firedAt.isBefore(before)) &&
+                  (automationId == null || run.automationId == automationId))
+                run,
+          ]..sort(compareRunsNewestFirst);
+          final page = older.take(limit).toList();
+          return AutomationRunsPageResult(
+            runs: page,
+            checks: {for (final run in page) run.id: ?checks[run.id]},
+            more: older.length > limit,
+          );
+        }(),
       AutomationSave(:final automation) => _save(automation, changes),
       AutomationSetEnabled(:final id, :final enabled) => told.run(
         () => setEnabled(id, enabled: enabled),
@@ -237,6 +252,40 @@ class FakeAutomationRows extends AutomationCopyReads {
       case WebhookCallRecorded():
         break;
     }
+  }
+
+  /// Run now and Cancel, as the server answers them minus the agent: a run
+  /// now is recorded running, started by Run now; a cancel fails it.
+  final ranNow = <String>[];
+
+  AutomationRun _work(
+    AutomationWorkRequest<Object?> request,
+    List<DataChange> changes,
+  ) {
+    final at = DateTime.utc(2026, 10, 7, 9);
+    final run = switch (request) {
+      AutomationRunNow(:final id) => () {
+        _rule(id);
+        ranNow.add(id);
+        return AutomationRun(
+          id: 'now-${ranNow.length}',
+          automationId: id,
+          scheduledFor: at,
+          firedAt: at,
+          state: AutomationRunState.running,
+          reason: 'Started with Run now.',
+          startedBy: AutomationRunCause.runNow,
+        );
+      }(),
+      AutomationRunCancel(:final runId) => runs[runId]!.copyWith(
+        state: AutomationRunState.failed,
+        reason: 'Cancelled by you.',
+        finishedAt: at,
+      ),
+    };
+    runs[run.id] = run;
+    changes.add(AutomationRunChanged(run));
+    return run;
   }
 
   Automation _rule(String id) =>

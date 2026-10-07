@@ -24,6 +24,7 @@ class UnattendedPreflight {
         support.resolveStored(automation.permissionMode?.canonical),
     missingCheckout:
         'This automation names a checkout that is no longer in the workspace',
+    hasCheckStep: automation.steps.checks,
   );
 
   /// The gate's inputs for resuming [session] with nobody watching.
@@ -52,6 +53,7 @@ class UnattendedPreflight {
     selectionOf,
     required String missingCheckout,
     bool requiresChecks = true,
+    bool hasCheckStep = true,
   }) {
     final repository = _facts.repository(repositoryId);
     final installation = _facts.installation(agentInstallationId);
@@ -76,7 +78,7 @@ class UnattendedPreflight {
       agentName:
           descriptor?.displayName ??
           installation?.agentId ??
-          'the agent this automation was armed on',
+          'the agent this automation was set up with',
       agentInstalled: installation != null,
       permits: support?.riskOf(selection),
       permissionLabel: support == null
@@ -86,6 +88,7 @@ class UnattendedPreflight {
       reach: reach.reach,
       reachReason: reach.reason,
       requiresChecks: requiresChecks,
+      hasCheckStep: hasCheckStep,
     );
   }
 

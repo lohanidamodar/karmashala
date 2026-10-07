@@ -8,6 +8,7 @@ import 'package:karmashala_device_pane/providers.dart' show AndroidDevice;
 import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
+import '../../features/automations/presentation/automations_tab_state.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/running/application/running_providers.dart';
@@ -123,6 +124,23 @@ void openStoresTab(WidgetRef ref) {
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
       .openStoresTab();
+  activateTerminalTab(ref, tabId);
+}
+
+/// Opens the Automations tab, or brings the open one forward; [section] picks
+/// which of its lists it shows.
+void openAutomationsTab(WidgetRef ref, {AutomationsSection? section}) {
+  if (section != null) {
+    ref.read(automationsSectionProvider.notifier).show(section);
+  }
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showMore(PhoneMoreEntry.automations);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openAutomationsTab();
   activateTerminalTab(ref, tabId);
 }
 

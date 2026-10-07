@@ -42,11 +42,11 @@ void main() {
     permissionMode: null,
     enabled: enabled,
     armedAt: _start,
+    modelId: 'opus',
+    worktree: worktree,
     webhook: AutomationWebhook(
       hookId: _hook,
       requireSignature: signed,
-      modelId: 'opus',
-      worktree: worktree,
       callsPerHour: perHour,
     ),
   );
@@ -152,8 +152,8 @@ void main() {
       expect(answer.body, {'session': 'session-1', 'run': 'run-1'});
       expect(launched, hasLength(1));
       final started = launched.single;
-      expect(started.webhook!.modelId, 'opus');
-      expect(started.webhook!.worktree, isTrue);
+      expect(started.modelId, 'opus');
+      expect(started.worktree, isTrue);
       expect(started.prompt, startsWith('Triage [webhook field 1]'));
       expect(started.prompt, contains('issue.title = "Crash on start"'));
       expect(

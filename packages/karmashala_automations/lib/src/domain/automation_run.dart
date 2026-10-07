@@ -1,3 +1,28 @@
+import 'automation_steps.dart';
+
+/// What started a run. Stored only for [runNow]; the rest are read off the
+/// automation, which is what every run before this said.
+enum AutomationRunCause {
+  schedule,
+  event,
+  webhook,
+  runNow;
+
+  static AutomationRunCause? fromName(String? name) {
+    for (final cause in values) {
+      if (cause.name == name) return cause;
+    }
+    return null;
+  }
+
+  String get label => switch (this) {
+    AutomationRunCause.schedule => 'Schedule',
+    AutomationRunCause.event => 'Event',
+    AutomationRunCause.webhook => 'Webhook',
+    AutomationRunCause.runNow => 'Run now',
+  };
+}
+
 /// What became of one occurrence of an automation. Five values because there
 /// are five things to tell a person; [missed] is the one this feature is for.
 enum AutomationRunState {
@@ -58,6 +83,9 @@ class AutomationRun {
     this.checksObservedAt,
     this.origin = const [],
     this.eventSessionId,
+    this.startedBy,
+    this.stepResults = const [],
+    this.prompt,
   });
 
   final String id;
@@ -101,6 +129,16 @@ class AutomationRun {
   /// session a message went to. Never [sessionId], which is the one it started.
   final String? eventSessionId;
 
+  /// What started it, when that was recorded; null reads off the automation.
+  final AutomationRunCause? startedBy;
+
+  /// What its tell and notify steps did, in the order they ran.
+  final List<AutomationStepResult> stepResults;
+
+  /// What a webhook's run told its agent: the template, filled. Null for
+  /// every other run, whose prompt is its automation's.
+  final String? prompt;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -111,6 +149,7 @@ class AutomationRun {
     DateTime? finishedAt,
     int? commitsMade,
     DateTime? checksObservedAt,
+    List<AutomationStepResult>? stepResults,
   }) => AutomationRun(
     id: id,
     automationId: automationId,
@@ -125,6 +164,9 @@ class AutomationRun {
     checksObservedAt: checksObservedAt ?? this.checksObservedAt,
     origin: origin,
     eventSessionId: eventSessionId,
+    startedBy: startedBy,
+    stepResults: stepResults ?? this.stepResults,
+    prompt: prompt,
   );
 
   @override

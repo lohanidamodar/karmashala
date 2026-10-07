@@ -82,11 +82,13 @@ class AutomationRehearsal {
     return switch (rule.trigger?.action) {
       AutomationEventAction.messageSession =>
         'Would send "${rule.prompt}" to "$title".',
+      AutomationEventAction.notifyOnly => 'Would notify you.',
       _ => 'Would start a new session in this checkout told "${rule.prompt}".',
     };
   }
 
   String? _refusalFor(Automation rule, AutomationEvent event) {
+    if (rule.trigger?.action == AutomationEventAction.notifyOnly) return null;
     if (rule.trigger?.action == AutomationEventAction.messageSession) {
       return messageRefusal(
         _ref.read(sessionsDataProvider).getById(event.sessionId),

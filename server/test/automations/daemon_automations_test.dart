@@ -30,6 +30,8 @@ import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala_host/src/automations/webhooks/webhook_call_handler.dart';
 import 'package:karmashala_relay_protocol/karmashala_relay_protocol.dart'
     show HookCall;
+import 'package:karmashala_notifications/attention.dart'
+    show InboxItem, InboxItemKind;
 import 'package:test/test.dart';
 
 import '../acp/acp_fixture.dart';
@@ -195,12 +197,16 @@ void main() {
   /// What the server started on an SSH box (slice 5d), by launch.
   final onBox = <AgentPaneLaunch>[];
 
+  final raised = <InboxItem>[];
+
   Future<void> startDaemon({
     bool reachesBoxes = false,
     ResumeQueue? queue,
   }) async {
     onBox.clear();
+    raised.clear();
     automations = DaemonAutomations(
+      raise: raised.add,
       reachesBox: reachesBoxes ? (_) => true : null,
       openAgent: reachesBoxes
           ? (launch, columns, rows) async {
@@ -241,22 +247,26 @@ void main() {
     await pump();
   }
 
-  void nightly({String repositoryId = 'r1', DateTime? armedAt}) =>
-      automationDao().insert(
-        Automation(
-          id: 'auto-$repositoryId',
-          repositoryId: repositoryId,
-          name: 'Nightly sweep',
-          schedule: const AutomationSchedule.cron('0 3 * * *'),
-          agentInstallationId: 'a1',
-          prompt: 'Fix what broke.',
-          permissionMode: const PermissionSelection({
-            'mode': 'bypassPermissions',
-          }),
-          enabled: true,
-          armedAt: armedAt ?? due.subtract(const Duration(hours: 2)).toUtc(),
-        ),
-      );
+  void nightly({
+    String repositoryId = 'r1',
+    DateTime? armedAt,
+    AutomationSteps steps = AutomationSteps.standard,
+    String? modelId,
+  }) => automationDao().insert(
+    Automation(
+      id: 'auto-$repositoryId',
+      repositoryId: repositoryId,
+      name: 'Nightly sweep',
+      schedule: const AutomationSchedule.cron('0 3 * * *'),
+      agentInstallationId: 'a1',
+      prompt: 'Fix what broke.',
+      permissionMode: const PermissionSelection({'mode': 'bypassPermissions'}),
+      enabled: true,
+      armedAt: armedAt ?? due.subtract(const Duration(hours: 2)).toUtc(),
+      steps: steps,
+      modelId: modelId,
+    ),
+  );
 
   List<AutomationRun> runs([String id = 'auto-r1']) =>
       automationDao().runsFor(id);
@@ -325,7 +335,7 @@ void main() {
   group('a webhook call', () {
     const hookId = '0123456789abcdef0123456789abcdef';
 
-    void webhook({bool verified = true}) {
+    void webhook({bool verified = true, String mode = 'plan'}) {
       if (!verified) {
         ProjectCheckDao(
           db,
@@ -339,13 +349,13 @@ void main() {
           schedule: AutomationSchedule.once(now),
           agentInstallationId: 'a1',
           prompt: 'Triage {{issue.title}}',
-          permissionMode: const PermissionSelection({'mode': 'plan'}),
+          permissionMode: PermissionSelection({'mode': mode}),
           enabled: true,
           armedAt: now,
+          modelId: 'opus',
           webhook: const AutomationWebhook(
             hookId: hookId,
             requireSignature: false,
-            modelId: 'opus',
           ),
         ),
       );
@@ -379,6 +389,8 @@ void main() {
       final run = runs('auto-hook').single;
       expect(run.state, AutomationRunState.running);
       expect(run.baseCheckpointId, 'cp-${run.id}');
+      // What the agent was told is kept on the run, never on the call log.
+      expect(run.prompt, startsWith('Triage [webhook field 1]'));
       expect(answer.body, {'session': run.sessionId, 'run': run.id});
       final spawn = launcher.started.single;
       expect(spawn.argv, containsAllInOrder(['--permission-mode', 'plan']));
@@ -396,7 +408,8 @@ void main() {
     });
 
     test('a gate refusal starts nothing and answers 500', () async {
-      webhook(verified: false);
+      // Read-only needs no check, so an agent that may edit is refused.
+      webhook(verified: false, mode: 'bypassPermissions');
       await startDaemon();
       final answer = await handlerFor().answer(call('d2'));
       expect(answer.status, 500);
@@ -450,6 +463,50 @@ void main() {
         registry.sessions.where((s) => s.id.startsWith(kCheckSessionPrefix)),
         isEmpty,
       );
+    });
+
+    test('after a failed check it tells the agent and notifies, as its steps '
+        'say, with the model it picked', () async {
+      nightly(
+        modelId: 'sonnet',
+        steps: AutomationSteps(const [
+          AutomationStep(kind: AutomationStepKind.check),
+          AutomationStep(
+            kind: AutomationStepKind.tell,
+            when: AutomationStepWhen.failure,
+            text: 'Fix these:\n{{steps.check.output}}',
+          ),
+          AutomationStep(
+            kind: AutomationStepKind.notify,
+            when: AutomationStepWhen.always,
+            text: '{{automation}} in {{project}}: {{run.status}}',
+          ),
+        ]),
+      );
+      await startDaemon();
+      final run = runs().single;
+      expect(launcher.started.first.argv, contains('sonnet'));
+      launcher.handles.single.finish(0);
+      await pump();
+      launcher.handles.last
+        ..emit('2 tests failed\r\n'.codeUnits)
+        ..finish(1);
+      await pump();
+      await automations.checks.drain();
+      await pump();
+
+      final settled = automationDao().runById(run.id)!;
+      expect(settled.stepResults.map((s) => s.kind), [
+        AutomationStepKind.tell,
+        AutomationStepKind.notify,
+      ]);
+      final told =
+          ScheduledResumeDao(db).lastEndedFor(run.sessionId!) ??
+          ScheduledResumeDao(db).liveFor(run.sessionId!);
+      expect(told!.message, startsWith('Fix these:\nthe tests: Fail.'));
+      expect(told.scheduledBy, 'automation "Nightly sweep"');
+      expect(raised.single.detail, 'Nightly sweep in repo-r1: failed');
+      expect(raised.single.kind, InboxItemKind.checksFailed);
     });
 
     test('an interval is re-armed from the run\'s finish', () async {
@@ -556,6 +613,88 @@ void main() {
       final automation = automationDao().getById('auto-r1')!;
       expect(automation.consecutiveFailures, 0);
       expect(automation.enabled, isTrue);
+    });
+  });
+
+  group('Run now', () {
+    setUp(() => now = due.subtract(const Duration(hours: 1)).toUtc());
+
+    test('starts a real run through the same gate and launch, recorded as '
+        'started by Run now, and Cancel ends it', () async {
+      nightly();
+      await startDaemon();
+      expect(runs(), isEmpty, reason: 'nothing was due');
+
+      final run = await automations.runNow('auto-r1');
+      expect(run.state, AutomationRunState.running);
+      expect(run.startedBy, AutomationRunCause.runNow);
+      expect(run.baseCheckpointId, 'cp-${run.id}');
+      expect(launcher.started, hasLength(1));
+
+      await automations.cancelRun(run.id);
+      await pump();
+      final settled = automationDao().runById(run.id)!;
+      expect(settled.state, AutomationRunState.failed);
+      expect(settled.reason, contains('stopped by you'));
+    });
+
+    test('never passes the gate by hand', () async {
+      nightly();
+      ProjectCheckDao(
+        db,
+      ).setVerificationEnabled('r1', enabled: false, now: now);
+      await startDaemon();
+      final run = await automations.runNow('auto-r1');
+      expect(run.state, AutomationRunState.failed);
+      expect(run.reason, contains('Checks are off'));
+      expect(launcher.started, isEmpty);
+    });
+
+    test(
+      'a rule that tells an event\'s session has no session to tell',
+      () async {
+        automationDao().insert(
+          Automation(
+            id: 'auto-r1',
+            repositoryId: 'r1',
+            name: 'Keep going',
+            schedule: AutomationSchedule.once(now),
+            agentInstallationId: '',
+            prompt: 'continue',
+            permissionMode: null,
+            enabled: true,
+            armedAt: now,
+            trigger: const AutomationEventTrigger(
+              kind: AutomationEventKind.turnFinished,
+              action: AutomationEventAction.messageSession,
+            ),
+          ),
+        );
+        await startDaemon();
+        expect(
+          () => automations.runNow('auto-r1'),
+          throwsA(isA<DataRefused>()),
+        );
+      },
+    );
+
+    test('a queued run is let go by Cancel', () async {
+      nightly();
+      await startDaemon();
+      final run = automationDao().runsFor('auto-r1');
+      expect(run, isEmpty);
+      final queued = AutomationRun(
+        id: 'q1',
+        automationId: 'auto-r1',
+        scheduledFor: now,
+        firedAt: now,
+        state: AutomationRunState.queued,
+        reason: 'waiting',
+      );
+      automationDao().insertRun(queued);
+      final cancelled = await automations.cancelRun('q1');
+      expect(cancelled.state, AutomationRunState.failed);
+      expect(cancelled.reason, 'Cancelled by you before it started.');
     });
   });
 

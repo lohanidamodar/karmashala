@@ -10,7 +10,6 @@ import '../../agents/presentation/usage_chip.dart'
 import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/usage_limit_settings.dart';
-import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
@@ -32,7 +31,7 @@ class ScheduledResumesSection extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
 
     return SettingsSection(
-      title: SettingsAnchor.scheduledResumes.heading,
+      title: 'SCHEDULED RESUMES',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -41,7 +40,7 @@ class ScheduledResumesSection extends ConsumerWidget {
             label: 'When an agent hits its usage limit',
             help: switch (settings.usageLimitBehavior) {
               UsageLimitBehavior.schedule =>
-                'A resume is armed at the reset, with a countdown and Cancel '
+                'A resume is set for the reset, with a countdown and Cancel '
                     'in the session\'s bar, unless the session\'s permission '
                     'mode asks before acting. Choose Ask first or Do nothing '
                     'to turn automatic resume off.',

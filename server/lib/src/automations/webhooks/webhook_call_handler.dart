@@ -156,7 +156,7 @@ class WebhookCallHandler {
         reason: 'Over ${webhook.callsPerHour} accepted calls in an hour.',
       );
     }
-    if (!webhook.worktree && _busy(automation)) {
+    if (!automation.worktree && _busy(automation)) {
       return reply(
         automation,
         HookStatus.slowDown,

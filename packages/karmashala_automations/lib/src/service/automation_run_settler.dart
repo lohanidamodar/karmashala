@@ -115,8 +115,8 @@ class AutomationRunSettler {
     _dao.disable(
       automation.id,
       'Stopped after ${automation.consecutiveFailures} failed runs in a row. '
-      'Nothing was changed about it — look at the runs below, fix what they '
-      'are failing on, and switch it back on.',
+      'Nothing was changed about it — look at its runs, fix what they are '
+      'failing on, and switch it back on.',
     );
     _log(
       'automations: disabled "${automation.name}" (${automation.id}) after '

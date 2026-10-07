@@ -174,7 +174,7 @@ String missedFireReason(MissedFires missed) {
         'run instead of these.';
   }
   return 'Karmashala was not running when this was due — $count were missed, '
-      'the most recent ${_agoLabel(missed.lateBy)} ago. Only a fire within '
+      'the most recent ${_agoLabel(missed.lateBy)} ago. Only a run within '
       '${kMissedFireGrace.inMinutes} minutes is caught up on wake; run it now '
       'if you still want it.';
 }

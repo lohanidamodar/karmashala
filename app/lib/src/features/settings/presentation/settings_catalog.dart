@@ -98,8 +98,8 @@ enum SettingsSectionId {
     'Checkpoints and automations',
     AppIcons.clockCounterClockwise,
     SettingsGroup.agents,
-    'Snapshots of every agent turn, and agent runs armed to start on a '
-        'schedule, with nobody watching.',
+    'Snapshots of every agent turn; automations and resumes have their own '
+        'tab.',
     ['automations', 'checkpoints'],
   ),
   snippets(
@@ -472,9 +472,13 @@ enum SettingsAnchor {
   automations(SettingsSectionId.automations, 'Automations', [
     'automation',
     'automations',
+    'webhook',
+    'webhooks',
     'schedule',
     'scheduled',
     'cron',
+    'run now',
+    'runs',
     'nightly',
     'unattended',
     'event',
@@ -484,9 +488,8 @@ enum SettingsAnchor {
     'project check',
     'checks',
     'verification',
-  ]),
-  scheduledResumes(SettingsSectionId.automations, 'Scheduled resumes', [
     'resume',
+    'resumes',
     'usage limit',
     'rate limit',
     'reset',
@@ -1073,21 +1076,30 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['env', 'secret', 'token', 'api key', 'wslenv'],
   ),
   SettingsEntry(
-    'Scheduled automations',
+    'Automations',
     anchor: SettingsAnchor.automations,
-    description: 'Arm, pause and review agent runs on a schedule.',
-    keywords: ['cron', 'nightly', 'schedule', 'event', 'project check'],
+    description:
+        'Agent runs on a schedule, an event or a webhook, in their own tab.',
+    keywords: [
+      'automation',
+      'webhook',
+      'cron',
+      'nightly',
+      'schedule',
+      'event',
+      'project check',
+    ],
   ),
   SettingsEntry(
     'Scheduled resumes',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'Sessions waiting to be resumed when their usage window resets.',
     keywords: ['resume', 'pending', 'cancel', 'reset', 'limit'],
   ),
   SettingsEntry(
     'When an agent hits its usage limit',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'Resume automatically at the reset (the default), ask first, or do '
         'nothing — where automatic resume is turned off.',
@@ -1103,7 +1115,7 @@ const settingsEntries = <SettingsEntry>[
   ),
   SettingsEntry(
     'Continue turns cut off when the session host stops',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description:
         'A turn running when the session host stopped or crashed is resumed '
         'when it starts again.',
@@ -1118,7 +1130,7 @@ const settingsEntries = <SettingsEntry>[
   ),
   SettingsEntry(
     'Default resume message',
-    anchor: SettingsAnchor.scheduledResumes,
+    anchor: SettingsAnchor.automations,
     description: 'What a resumed session is told, unless you say otherwise.',
     keywords: ['continue', 'message', 'prompt'],
   ),

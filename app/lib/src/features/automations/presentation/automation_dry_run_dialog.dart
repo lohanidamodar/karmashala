@@ -141,7 +141,7 @@ class _AutomationDryRunDialogState
             ),
             const SizedBox(height: Insets.md),
             if (rehearsals.isEmpty)
-              Text('No event rule is armed in this checkout.', style: muted)
+              Text('No event rule is set up in this checkout.', style: muted)
             else
               for (final rehearsal in rehearsals)
                 _RehearsalLine(
@@ -187,7 +187,7 @@ class _RehearsalLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${verdict.fires ? 'Would fire' : 'Would not fire'} · '
+            '${verdict.fires ? 'Would run' : 'Would not run'} · '
             '${verdict.automation.name}',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: verdict.fires ? scheme.primary : scheme.onSurfaceVariant,
@@ -199,7 +199,7 @@ class _RehearsalLine extends StatelessWidget {
           ),
           if (refusal != null)
             Text(
-              'But it would be refused when it fires: $refusal',
+              'But it could not run unattended: $refusal',
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
             ),
         ],

@@ -1,5 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 
+import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
 
@@ -157,6 +158,9 @@ class Automation {
     this.maxRuntime,
     this.trigger,
     this.webhook,
+    this.modelId,
+    this.worktree = false,
+    this.steps = AutomationSteps.standard,
   });
 
   final String id;
@@ -212,6 +216,15 @@ class Automation {
   /// never on a clock or an event.
   final AutomationWebhook? webhook;
 
+  /// The model its agent starts with; null is the agent's default.
+  final String? modelId;
+
+  /// Whether each run's session gets a worktree of its own.
+  final bool worktree;
+
+  /// What follows the agent: its checks, a message to it, a notification.
+  final AutomationSteps steps;
+
   bool get isEventDriven => trigger != null;
 
   bool get isWebhook => webhook != null;
@@ -222,7 +235,7 @@ class Automation {
   /// Whether a run needs an agent of its own. A message goes into a session
   /// that already has one, so that rule names none.
   bool get startsAgent =>
-      trigger?.action != AutomationEventAction.messageSession;
+      trigger == null || trigger!.action == AutomationEventAction.startSession;
 
   /// Whether [consecutiveFailures] has reached the limit this was armed with.
   bool get hasFailedOut =>
@@ -246,6 +259,10 @@ class Automation {
     AutomationEventTrigger? trigger,
     AutomationWebhook? webhook,
     bool clearWebhook = false,
+    String? modelId,
+    bool clearModel = false,
+    bool? worktree,
+    AutomationSteps? steps,
   }) => Automation(
     id: id,
     repositoryId: repositoryId,
@@ -265,6 +282,9 @@ class Automation {
     maxRuntime: clearMaxRuntime ? null : maxRuntime ?? this.maxRuntime,
     trigger: trigger ?? this.trigger,
     webhook: clearWebhook ? null : webhook ?? this.webhook,
+    modelId: clearModel ? null : modelId ?? this.modelId,
+    worktree: worktree ?? this.worktree,
+    steps: steps ?? this.steps,
   );
 
   @override

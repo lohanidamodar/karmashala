@@ -89,7 +89,7 @@ void main() {
     test('a checkout nobody configured is refused', () {
       final refusal = refusalFor(automation())!;
       expect(refusal.kind, UnattendedRefusalKind.verificationDisabled);
-      expect(refusal.reason, contains('Verification is off for app'));
+      expect(refusal.reason, contains('Checks are off for app'));
     });
 
     test('verification on with no check is still refused', () {
@@ -235,7 +235,7 @@ void main() {
       final refusal = refusalFor(automation(repositoryId: 'r2'))!;
       expect(refusal.kind, UnattendedRefusalKind.environmentUnreachable);
       expect(refusal.reason, contains('No SSH connection pool is configured'));
-      expect(refusal.reason, contains('cannot be armed'));
+      expect(refusal.reason, contains('cannot run a command in'));
     });
 
     test('a checkout that left the workspace is refused at the first rule', () {

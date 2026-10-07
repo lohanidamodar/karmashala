@@ -57,15 +57,26 @@ class ProjectCheckRunner {
 
   /// Runs [run]'s checkout's checks and records a verdict for each. Started and
   /// not awaited: a test suite takes minutes and nobody is holding on.
-  void start(AutomationRun run) {
+  /// [directory] is where the run's agent worked, when not the checkout
+  /// itself; [then] follows once every verdict is written.
+  void start(
+    AutomationRun run, {
+    EnvironmentPath? directory,
+    void Function()? then,
+  }) {
     // Not chained: a sequence that never finishes must not hold up the next.
-    _pending = recordRun(run).catchError((Object error) {
-      _log('recording a project check verdict failed: $error');
-    });
+    _pending = recordRun(run, directory: directory)
+        .catchError((Object error) {
+          _log('recording a project check verdict failed: $error');
+        })
+        .whenComplete(() => then?.call());
   }
 
   /// [start], awaited.
-  Future<void> recordRun(AutomationRun run) async {
+  Future<void> recordRun(
+    AutomationRun run, {
+    EnvironmentPath? directory,
+  }) async {
     final automation = _dao.getById(run.automationId);
     if (automation == null) return;
     final checks = _checks.forRepository(automation.repositoryId);
@@ -75,7 +86,7 @@ class ProjectCheckRunner {
       _onChanged();
       return;
     }
-    final directory = _facts.repository(automation.repositoryId)?.path;
+    directory ??= _facts.repository(automation.repositoryId)?.path;
     var ordinal = 0;
     for (final check in checks) {
       ordinal++;

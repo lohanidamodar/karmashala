@@ -48,6 +48,7 @@ class AutomationRunner implements AutomationFiring {
     DateTime scheduledFor, {
     String note = '',
     AutomationRun? queued,
+    AutomationRunCause? startedBy,
   }) async {
     final now = _now();
     // The row exists before anything can fail; a drained queue entry *is*
@@ -60,6 +61,9 @@ class AutomationRunner implements AutomationFiring {
             firedAt: now,
             state: AutomationRunState.running,
             reason: note,
+            // A webhook's prompt is its call's, filled; keep what was sent.
+            prompt: automation.isWebhook ? automation.prompt : null,
+            startedBy: startedBy,
           )
         : queued.copyWith(
             state: AutomationRunState.running,
@@ -89,7 +93,7 @@ class AutomationRunner implements AutomationFiring {
     if (repository == null || installation == null) {
       settle(
         AutomationRunState.failed,
-        'The checkout or the agent went away between the gate and the launch.',
+        'The checkout or the agent went away just before the run started.',
       );
       return run;
     }

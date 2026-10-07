@@ -483,7 +483,9 @@ class AutomationScheduler {
     await _firing.fire(
       automation,
       waiting.scheduledFor,
-      note: waiting.eventSessionId != null && !waitedBehind
+      note:
+          (waiting.eventSessionId != null || waiting.startedBy != null) &&
+              !waitedBehind
           ? waiting.reason
           : 'Queued behind another run in this checkout, then started when '
                 'it came free.',

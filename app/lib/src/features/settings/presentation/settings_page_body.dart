@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/capabilities/capabilities.dart';
 
 import '../../app_projects/presentation/project_kinds_section.dart';
-import '../../automations/presentation/automations_page.dart';
-import '../../automations/presentation/scheduled_resumes_section.dart';
+import '../../automations/presentation/automations_settings_link.dart';
+import '../../automations/presentation/automations_tab_state.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
@@ -167,8 +167,11 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.iosSimulators => const IosSimulatorsSection(),
   SettingsAnchor.snippets => const SnippetsSettingsPage(),
   SettingsAnchor.variables => const EnvSecretsPage(),
-  SettingsAnchor.automations => const AutomationsPage(),
-  SettingsAnchor.scheduledResumes => const ScheduledResumesSection(),
+  SettingsAnchor.automations => const AutomationsSettingsLink(
+    anchor: SettingsAnchor.automations,
+    section: AutomationsSection.automations,
+  ),
+
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),

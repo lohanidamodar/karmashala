@@ -9,6 +9,7 @@ enum PhoneMoreEntry {
   overview,
   usage,
   stores,
+  automations,
   running,
   notes,
   settings,

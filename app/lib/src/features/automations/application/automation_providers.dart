@@ -1,12 +1,17 @@
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/records.dart'
+    show compareRunsNewestFirst;
 import 'package:karmashala_automations/runs.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart' show capabilitiesProvider;
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../data/automations_data.dart';
+import 'package:karmashala_git/repositories.dart';
 
 export '../data/automations_data.dart'
     show
@@ -14,6 +19,13 @@ export '../data/automations_data.dart'
         automationsRevisionProvider,
         projectChecksDataProvider,
         resumesDataProvider;
+
+/// Every checkout an automation can run in, kept fresh as projects are
+/// added or rescanned.
+final automationCheckoutsProvider = Provider<List<Repository>>((ref) {
+  ref.watch(projectsControllerProvider);
+  return ref.watch(workspaceDataProvider).repositories;
+});
 
 final automationsProvider = Provider<List<Automation>>((ref) {
   ref.watch(automationsRevisionProvider);
@@ -23,6 +35,11 @@ final automationsProvider = Provider<List<Automation>>((ref) {
 /// Whether the server this app talks to takes webhook calls.
 final webhooksOfferedProvider = Provider<bool>(
   (ref) => ref.watch(capabilitiesProvider).serverOffers('automations.webhooks'),
+);
+
+/// Whether the server this app talks to runs an automation on request.
+final runNowOfferedProvider = Provider<bool>(
+  (ref) => ref.watch(capabilitiesProvider).serverOffers('automations.runNow'),
 );
 
 /// How a session came to be when an automation started it: "from webhook
@@ -40,6 +57,13 @@ final sessionAutomationOriginProvider = Provider.family<String?, String>((
   return automation.isWebhook
       ? 'from webhook ${automation.name}'
       : 'from automation ${automation.name}';
+});
+
+/// Every run the client holds, across every automation, newest first.
+final allAutomationRunsProvider = Provider<List<AutomationRun>>((ref) {
+  ref.watch(automationsRevisionProvider);
+  return [...ref.watch(automationsDataProvider).runRows]
+    ..sort(compareRunsNewestFirst);
 });
 
 final automationRunsProvider = Provider.family<List<AutomationRun>, String>((

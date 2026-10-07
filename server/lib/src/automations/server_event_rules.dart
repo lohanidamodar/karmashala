@@ -35,6 +35,7 @@ class ServerEventRules {
     this.statusOf,
     this.enterDelay = const Duration(milliseconds: 150),
     this.log,
+    this.afterRun,
     AutomationRateLimiter? limiter,
   }) : limiter = limiter ?? AutomationRateLimiter();
 
@@ -52,6 +53,9 @@ class ServerEventRules {
   final String Function() newId;
   final Duration enterDelay;
   final void Function(String message)? log;
+
+  /// The steps after a run that started nothing: a notify-only rule's.
+  final void Function(AutomationRun run)? afterRun;
   final AutomationRateLimiter limiter;
 
   final Map<AgentSessionKey, AgentActivityStatus> _last = {};
@@ -144,6 +148,13 @@ class ServerEventRules {
         await scheduler.drain(rule.repositoryId);
       case AutomationEventAction.messageSession:
         _message(rule, run, session);
+      case AutomationEventAction.notifyOnly:
+        final done = run.copyWith(
+          state: AutomationRunState.finished,
+          finishedAt: now(),
+        );
+        automations.insertRun(done);
+        afterRun?.call(done);
     }
   }
 

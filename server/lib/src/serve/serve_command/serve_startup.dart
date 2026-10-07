@@ -167,6 +167,7 @@ Future<DaemonAutomations?> _startAutomations({
     );
     // A session's checks asked for by a client (`checks.run`).
     data.checksWork = automations;
+    data.automationWork = automations;
     return automations;
   } on Object catch (error) {
     await automations.close();

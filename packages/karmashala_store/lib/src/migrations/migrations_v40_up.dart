@@ -1131,3 +1131,41 @@ void _migrateToV83(Database db) {
   if (columns.contains('model')) return;
   db.execute('ALTER TABLE session_messages ADD COLUMN model TEXT;');
 }
+
+/// Every automation picks a model and a worktree, as only webhooks could, and
+/// keeps the steps after its agent (null: its checks, as before); a run keeps
+/// what started it and what its steps did. A webhook's model is copied over.
+void _migrateToV84(Database db) {
+  Set<String> columnsOf(String table) => db
+      .select('PRAGMA table_info($table);')
+      .map((row) => row['name'] as String)
+      .toSet();
+  if (!columnsOf('automations').contains('model_id')) {
+    db.execute('ALTER TABLE automations ADD COLUMN model_id TEXT;');
+    db.execute(
+      'ALTER TABLE automations ADD COLUMN run_in_worktree INTEGER NOT NULL '
+      'DEFAULT 0;',
+    );
+    db.execute('ALTER TABLE automations ADD COLUMN steps TEXT;');
+    db.execute(
+      'UPDATE automations SET model_id = webhook_model, '
+      'run_in_worktree = COALESCE(webhook_worktree, 0) '
+      'WHERE webhook_id IS NOT NULL;',
+    );
+  }
+  if (!columnsOf('automation_runs').contains('started_by')) {
+    db.execute('ALTER TABLE automation_runs ADD COLUMN started_by TEXT;');
+    db.execute('ALTER TABLE automation_runs ADD COLUMN step_results TEXT;');
+  }
+}
+
+/// The prompt a webhook's run was started with — its template filled with
+/// the call's fields — so Deliveries can show what the agent was told. On the
+/// run, not the call log, which keeps no part of a body.
+void _migrateToV85(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('prompt')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN prompt TEXT;');
+}

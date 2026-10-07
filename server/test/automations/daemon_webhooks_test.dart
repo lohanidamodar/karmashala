@@ -59,7 +59,8 @@ void main() {
     permissionMode: null,
     enabled: enabled,
     armedAt: now,
-    webhook: AutomationWebhook(hookId: hookId, worktree: true),
+    worktree: true,
+    webhook: AutomationWebhook(hookId: hookId),
   );
 
   setUp(() async {

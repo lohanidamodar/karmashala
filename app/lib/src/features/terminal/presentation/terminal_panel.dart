@@ -20,6 +20,7 @@ import '../../git/application/diff_tab_actions.dart';
 import '../../git/presentation/diff_tab_view.dart';
 import '../../settings/presentation/settings_tab_view.dart';
 import '../../agents/presentation/usage_tab/usage_tab_view.dart';
+import '../../automations/presentation/automations_tab_view.dart';
 import '../../stores/presentation/stores_tab_view.dart';
 import '../../../app/shell/logs_tab_view.dart';
 import '../../overview/presentation/overview_tab_view.dart';
