@@ -20,6 +20,15 @@ abstract class HostDeployTarget {
   Future<RemoteChannel> exec(String command);
 }
 
+/// [command] for `sh -c`, whatever the account's login shell. Everything this
+/// package sends is POSIX sh (`remote_scripts_syntax_test` parses it with a
+/// real `sh`), but sshd hands it to the login shell, and zsh stops a glob
+/// that matches nothing ("no matches found") before the script says a word —
+/// the install listing on a fresh zsh account. Quoted whole, so the login
+/// shell only starts `sh`.
+String posixShellCommand(String command) =>
+    "sh -c '${command.replaceAll("'", r"'\''")}'";
+
 /// [HostDeployTarget] over the app's [SshConnection]. **Untested**: it needs a
 /// real sshd, and the stand-in WSL distribution does not run one.
 class SshHostDeployTarget implements HostDeployTarget {
@@ -34,7 +43,7 @@ class SshHostDeployTarget implements HostDeployTarget {
   Future<RemoteRun> run(String command) => _connection.runOnChannel((
     client,
   ) async {
-    final session = await client.execute(command);
+    final session = await client.execute(posixShellCommand(command));
     final out = StringBuffer();
     final err = StringBuffer();
     final collecting = Future.wait([
