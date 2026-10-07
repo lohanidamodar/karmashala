@@ -9,6 +9,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
@@ -25,9 +26,10 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 
-/// **The Overview tab, drawn**: the Board at desktop sizes and the list on a
-/// phone, the strip's numbers, Done folded to today's count, and the peek's
-/// actions reaching the paths every other surface uses.
+/// **The Overview tab, drawn** over the real data path: the counters and a
+/// tile per project at desktop and phone sizes, the counters filtering, the
+/// one filter control and its chips, and the peek's actions reaching the paths
+/// every other surface uses.
 void main() {
   late TestMachine db;
   late FakeDataServer server;
@@ -158,61 +160,110 @@ void main() {
   Finder card(String lane, String id) =>
       find.byKey(ValueKey('overview:$lane:$id'));
 
+  Finder counter(BoardColumn column) =>
+      find.byKey(ValueKey('overview-counter:${column.name}'));
+
   for (final (name, size) in [
     ('1440×900', const Size(1440, 900)),
     ('1024×768', const Size(1024, 768)),
+    ('390×844', const Size(390, 844)),
   ]) {
-    testBoard('$name: a Board of lanes and four columns', (tester) async {
+    testBoard('$name: counters, then a tile per project with its marks', (
+      tester,
+    ) async {
       await pump(tester, size);
 
-      expect(find.byKey(const ValueKey('overview-board')), findsOneWidget);
-      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-mission')), findsOneWidget);
+      for (final column in BoardColumn.values) {
+        expect(counter(column), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('overview-lane:p1')), findsOneWidget);
       expect(card('p1', 'ask'), findsOneWidget);
       expect(card('p1', 'busy'), findsOneWidget);
       expect(card('p1', 'idle'), findsOneWidget);
-      // Beta has nothing live: it folds into one line.
-      expect(find.text('1 quiet project'), findsOneWidget);
-      expect(find.text('Beta'), findsNothing);
+      // Done today is a mark; what ended before today is not.
+      expect(card('p1', 'done'), findsOneWidget);
+      expect(card('p1', 'old'), findsNothing);
+      // Beta only finished today: still a tile, not a quiet line.
+      expect(find.byKey(const ValueKey('overview-lane:p2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-quiet-lanes')), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testBoard('390×844: one list grouped by state', (tester) async {
-    await pump(tester, const Size(390, 844));
+  testBoard('the counters count what the tiles hold, spend left out', (
+    tester,
+  ) async {
+    await pump(tester, const Size(1440, 900));
 
-    expect(find.byKey(const ValueKey('overview-list')), findsOneWidget);
-    expect(find.byKey(const ValueKey('overview-board')), findsNothing);
-    expect(find.text('Needs you · 1'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Working, 1, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Ready, 1, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Done today, 2, ')), findsOneWidget);
+    // No agent here reports cost over a protocol: nothing is said about it.
+    expect(find.textContaining('spend'), findsNothing);
+    expect(find.byKey(const ValueKey('overview-facts')), findsNothing);
+  });
+
+  testBoard('a counter shows only its state; tapped again, all of them', (
+    tester,
+  ) async {
+    final c = await pump(tester, const Size(1440, 900));
+
+    await tester.tap(counter(BoardColumn.working));
+    await settle(tester);
+    expect(c.read(overviewPrefsProvider).filter.columns, {BoardColumn.working});
+    expect(card('p1', 'busy'), findsOneWidget);
+    expect(card('p1', 'ask'), findsNothing);
+    expect(find.byKey(const ValueKey('overview-lane:p2')), findsNothing);
+    // The other counters keep their numbers.
+    expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Working, 1, showing only these')),
+      findsOneWidget,
+    );
+
+    await tester.tap(counter(BoardColumn.working));
+    await settle(tester);
+    expect(c.read(overviewPrefsProvider).filter.columns, isNull);
     expect(card('p1', 'ask'), findsOneWidget);
-    expect(tester.takeException(), isNull);
   });
 
-  testBoard('the strip counts what the Board holds', (tester) async {
-    await pump(tester, const Size(1440, 900));
+  testBoard('the filter control sets the prefs; a chip clears its filter', (
+    tester,
+  ) async {
+    final c = await pump(tester, const Size(1440, 900));
+    expect(find.byKey(const ValueKey('overview-active-filters')), findsNothing);
 
-    expect(find.text('1 need you'), findsOneWidget);
-    expect(find.text('1 working'), findsOneWidget);
-    expect(find.text('1 ready'), findsOneWidget);
-    // No agent here reports cost over a protocol.
-    expect(find.text('spend not recorded'), findsOneWidget);
-  });
-
-  testBoard("Done is today's count until opened; older ones behind Show "
-      'all', (tester) async {
-    await pump(tester, const Size(1440, 900));
-
-    expect(card('p1', 'done'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('overview-done:p1')));
+    await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
     await settle(tester);
-    expect(card('p1', 'done'), findsOneWidget);
-    expect(card('p1', 'old'), findsNothing);
-
-    await tester.tap(find.text('Show all (1 older)'));
+    expect(find.byKey(const ValueKey('overview-filter-panel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('overview-filter-project:p2')));
     await settle(tester);
-    expect(card('p1', 'old'), findsOneWidget);
+    expect(c.read(overviewPrefsProvider).filter.projects, {'p1'});
+    await tester.tap(find.text('Machine').last);
+    await settle(tester);
+    expect(c.read(overviewPrefsProvider).groupBy, OverviewGroupBy.machine);
+    await tester.tap(find.text('Project').last);
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+
+    expect(find.text('Projects: Alpha'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-lane:p2')), findsNothing);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('overview-active-filter:projects')),
+        matching: find.byTooltip('Clear Projects: Alpha'),
+      ),
+    );
+    await settle(tester);
+    expect(c.read(overviewPrefsProvider).filter.projects, isNull);
+    expect(find.byKey(const ValueKey('overview-active-filters')), findsNothing);
+    expect(find.byKey(const ValueKey('overview-lane:p2')), findsOneWidget);
   });
 
-  testBoard('a waiting card peeks into the ask path the dock uses', (
+  testBoard('a waiting mark peeks into the ask path the dock uses', (
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
@@ -228,12 +279,18 @@ void main() {
     expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
   });
 
+  testBoard('the headline peeks the session that matters most', (tester) async {
+    await pump(tester, const Size(1440, 900));
+
+    await tester.tap(find.byKey(const ValueKey('overview-headline:ask')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('overview-peek:ask')), findsOneWidget);
+  });
+
   testBoard("the peek's Resume and Archive reach the lists' own paths", (
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
-    await tester.tap(find.byKey(const ValueKey('overview-done:p1')));
-    await settle(tester);
     await tester.tap(card('p1', 'done'));
     await settle(tester);
 
@@ -250,8 +307,8 @@ void main() {
     );
   });
 
-  testBoard('the arrows move between cards and Enter peeks', (tester) async {
-    final c = await pump(tester, const Size(1440, 900));
+  testBoard('the arrows move between marks and Enter peeks', (tester) async {
+    await pump(tester, const Size(1440, 900));
     // Click once to give the Board the keyboard, then close what it opened.
     await tester.tap(card('p1', 'busy'));
     await settle(tester);
@@ -263,7 +320,6 @@ void main() {
     await settle(tester);
 
     expect(find.byKey(const ValueKey('overview-peek:ask')), findsOneWidget);
-    expect(c, isNotNull);
   });
 }
 

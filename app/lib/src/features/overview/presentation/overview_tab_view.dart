@@ -11,10 +11,10 @@ import '../../sessions/application/session_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import 'overview_board_view.dart';
+import '../application/overview_tiles.dart';
 import 'overview_filters.dart';
+import 'overview_mission_control.dart';
 import 'overview_peek.dart';
-import 'overview_strip.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 
 /// **The Overview tab**: what is going on across all the work, as a Board
@@ -60,19 +60,32 @@ class OverviewTabView extends ConsumerWidget {
                   switcher,
                 ],
               ),
+              actions: [
+                if (view == OverviewView.board) const OverviewFilterButton(),
+                const SizedBox(width: Insets.sm),
+              ],
             ),
       body: untitled
           ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     Insets.lg,
                     Insets.sm,
-                    Insets.lg,
+                    Insets.sm,
                     0,
                   ),
-                  child: switcher,
+                  // Large text can push the filter under the switcher.
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      switcher,
+                      if (view == OverviewView.board)
+                        const OverviewFilterButton(),
+                    ],
+                  ),
                 ),
                 Expanded(child: body),
               ],
@@ -103,16 +116,12 @@ class _ViewSwitcher extends StatelessWidget {
   );
 }
 
-/// Below this pane width four columns do not fit, and the Board is a list
-/// grouped by state, as on the phone.
+/// The least width mission control keeps beside a docked peek.
 const double kOverviewBoardMinWidth = 720;
 
 /// The docked peek's width.
 const double _peekWidth = 340;
 
-/// The filters, the strip, then the Board (or its list) with the peek beside
-/// it — or, narrow, in a sheet. Arrows move between cards, Enter peeks, Esc
-/// closes the peek.
 /// The Timeline, opening a bar's session as the Board does. Its log outlives
 /// the sessions it draws, so a bar can name one that has since been deleted:
 /// that is said, not treated as a failure.
@@ -158,6 +167,8 @@ Future<void> openTimelineSession(
   }
 }
 
+/// Mission control with the peek docked beside it, or in a sheet where it
+/// would crowd. Arrows move between marks, Enter peeks, Esc closes the peek.
 class _BoardBody extends ConsumerStatefulWidget {
   const _BoardBody();
 
@@ -219,11 +230,8 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       _ => null,
     };
     if (move != null) {
-      final grid = drawnGrid(
-        ref.read(overviewBoardProvider),
-        ref.read(overviewFoldsProvider),
-      );
-      controller.select(moveOnBoard(grid, focus.selected, move));
+      final marks = drawnMarks(ref.read(overviewBoardProvider));
+      controller.select(moveOnTiles(marks, focus.selected, move));
       return KeyEventResult.handled;
     }
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -253,7 +261,6 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final wide = constraints.maxWidth >= kOverviewBoardMinWidth;
       _docks = constraints.maxWidth >= kOverviewBoardMinWidth + _peekWidth;
       final peeked = _docks
           ? overviewCardOf(
@@ -261,26 +268,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             )
           : null;
-      final gutter = constraints.maxWidth < 560 ? Insets.lg : Insets.xl;
-      final main = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(gutter, Insets.sm, gutter, 0),
-            child: const OverviewFilterBar(),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(gutter, Insets.xs, gutter, Insets.sm),
-            child: const OverviewStripBar(),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: wide
-                ? OverviewBoardView(onOpen: _open)
-                : OverviewListView(onOpen: _open),
-          ),
-        ],
-      );
+      final main = OverviewMissionControl(onOpen: _open);
       return Focus(
         focusNode: _focus,
         onKeyEvent: _key,

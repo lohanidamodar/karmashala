@@ -341,35 +341,4 @@ void main() {
       expect(strip.oldestWait, isNull);
     });
   });
-
-  group("keyboard", () {
-    final grid = [
-      [
-        ["a1", "a2"],
-        <String>[],
-        ["a3"],
-      ],
-      [
-        ["b1"],
-        ["b2"],
-        <String>[],
-      ],
-    ];
-
-    test("no card yet picks the first", () {
-      expect(moveOnBoard(grid, null, BoardMove.down), "a1");
-    });
-
-    test("up and down run through a column across lanes", () {
-      expect(moveOnBoard(grid, "a2", BoardMove.down), "b1");
-      expect(moveOnBoard(grid, "b1", BoardMove.up), "a2");
-      expect(moveOnBoard(grid, "b1", BoardMove.down), "b1");
-    });
-
-    test("left and right skip empty columns in the lane", () {
-      expect(moveOnBoard(grid, "a2", BoardMove.right), "a3");
-      expect(moveOnBoard(grid, "a3", BoardMove.left), "a1");
-      expect(moveOnBoard(grid, "b2", BoardMove.right), "b2");
-    });
-  });
 }

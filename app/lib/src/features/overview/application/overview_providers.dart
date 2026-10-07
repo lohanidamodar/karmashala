@@ -20,6 +20,7 @@ import '../../sessions/application/session_status_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
+import 'overview_tiles.dart';
 
 /// What the Board files sessions by: each session's project, machine and
 /// agent, and the lanes in reading order — this machine, then WSL, then SSH.
@@ -93,9 +94,46 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
   );
 });
 
+final _overviewCountsOrderProvider = Provider.autoDispose<BoardOrderMemo>(
+  (ref) => BoardOrderMemo(),
+);
+
+/// The Board as [overviewBoardProvider] draws it but with every state in:
+/// what the counters count, so picking one state does not zero the others.
+final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
+  ref,
+) {
+  final prefs = ref.watch(overviewPrefsProvider);
+  final filter = prefs.filter;
+  if (filter.columns == null) return ref.watch(overviewBoardProvider);
+  return buildOverviewBoard(
+    ref.watch(agentStateGroupsProvider),
+    facts: ref.watch(overviewFactsProvider),
+    filter: OverviewFilter(
+      projects: filter.projects,
+      agents: filter.agents,
+      machines: filter.machines,
+    ),
+    groupBy: prefs.groupBy,
+    startOfToday: _startOfToday(ref),
+    memo: ref.watch(_overviewCountsOrderProvider),
+  );
+});
+
+/// The counters over the tiles: the strip's numbers and what ended today,
+/// whatever state the tiles are narrowed to.
+final overviewCountersProvider =
+    Provider.autoDispose<({OverviewStrip strip, int doneToday})>((ref) {
+      final board = ref.watch(overviewAllStatesBoardProvider);
+      return (strip: _stripOf(ref, board), doneToday: doneTodayOf(board));
+    });
+
 /// The numbers over the Board, for the sessions it holds.
-final overviewStripProvider = Provider.autoDispose<OverviewStrip>((ref) {
-  final board = ref.watch(overviewBoardProvider);
+final overviewStripProvider = Provider.autoDispose<OverviewStrip>(
+  (ref) => _stripOf(ref, ref.watch(overviewBoardProvider)),
+);
+
+OverviewStrip _stripOf(Ref ref, OverviewBoard board) {
   final items = ref.watch(attentionInboxProvider).items;
   final client = ref.watch(dataClientProvider);
   final told = client.sessionUsageChanges.listen((_) => ref.invalidateSelf());
@@ -122,7 +160,7 @@ final overviewStripProvider = Provider.autoDispose<OverviewStrip>((ref) {
           : (amount: amount, currency: usage!.costCurrency);
     },
   );
-});
+}
 
 /// The inbox's words about one session, by kind.
 @immutable
@@ -218,3 +256,19 @@ final overviewKnownBranchProvider = Provider.autoDispose
       if (!ref.exists(delivery)) return null;
       return ref.read(delivery).asData?.value.branch;
     });
+
+/// Where a machine is, as mission control draws it.
+enum OverviewMachineKind { local, wsl, ssh }
+
+/// Each known machine's kind, by environment id.
+final overviewMachineKindsProvider =
+    Provider.autoDispose<Map<String, OverviewMachineKind>>(
+      (ref) => {
+        for (final environment in ref.watch(environmentsControllerProvider))
+          environment.id: switch (environment.kind) {
+            EnvironmentKind.wsl => OverviewMachineKind.wsl,
+            EnvironmentKind.ssh => OverviewMachineKind.ssh,
+            _ => OverviewMachineKind.local,
+          },
+      },
+    );
